@@ -1,0 +1,17 @@
+[package]
+name = "citry_core_py"
+description = "Singular Python API for Rust code used by Citry"
+version = "1.1.0"
+edition = "2024"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+name = "citry_core_py"
+crate-type = ["cdylib"]
+
+[dependencies]
+citry_html_transform = { path = "../citry_html_transform" }
+python_safe_eval = { path = "../python_safe_eval" }
+citry_template_parser = { path = "../citry_template_parser" }
+pyo3 = { workspace = true }
+quick-xml = { workspace = true }

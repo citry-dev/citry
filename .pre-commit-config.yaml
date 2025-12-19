@@ -1,0 +1,42 @@
+# Pre-commit hooks configuration
+# See https://pre-commit.com for more information
+
+repos:
+  # Local hooks (defined in this repository)
+  - repo: local
+    hooks:
+
+      ######################################
+      # PYTHON CHECKS
+      ######################################
+
+      # Check that each Python package in `packages/py/` has a Dependabot entry
+      - id: python-package-dependabot-check
+        name: Check Dependabot package entries
+        entry: python scripts/precommit/python_package_dependabot.py
+        language: system
+        files: ^(packages/py/.*|\.github/dependabot\.yml)$
+        pass_filenames: false
+        always_run: true
+
+      ######################################
+      # RUST CHECKS
+      ######################################
+
+      # Check that Rust toolchain version matches between rust-toolchain.toml and .github/workflows/tests.yml
+      - id: rust-toolchain-consistency-check
+        name: Check Rust toolchain version consistency
+        entry: python scripts/precommit/rust_toolchain_check.py
+        language: system
+        files: ^(rust-toolchain\.toml|\.github/workflows/tests\.yml)$
+        pass_filenames: false
+        always_run: true
+
+      # Check that each Rust crate in `crates/` is listed in workspace.members
+      - id: rust-crate-member-check
+        name: Check Rust crate workspace members
+        entry: python scripts/precommit/rust_crate_member.py
+        language: system
+        files: ^(Cargo\.toml|crates/.*)$
+        pass_filenames: false
+        always_run: true

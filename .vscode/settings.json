@@ -1,0 +1,7 @@
+{
+  "rust-analyzer.files.excludeDirs": [
+    // Avoid linting third-party Rust code
+    // NOTE: `ruff` was especially slow.
+    "third_party/**"
+  ]
+}
