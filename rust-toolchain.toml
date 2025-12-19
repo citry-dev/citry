@@ -1,0 +1,8 @@
+# Rust toolchain configuration
+[toolchain]
+# This codebase uses Rust edition 2024, which requires rustc/cargo v1.93 or higher.
+# This is currently available only as the "nightly" version.
+# Setting `channel=nightly` automatically selects this toolchain when running
+# cargo/rustc commands in this directory.
+channel = "nightly"
+components = ["rustfmt", "clippy"]

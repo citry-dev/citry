@@ -16,10 +16,10 @@ Third-party dependencies are organized by language:
 
 ### Rust
 
-- **ruff** (`rust/ruff/`) - Python parser and AST library used by `djc-safe-eval`
+- **ruff** (`rust/ruff/`) - Python parser and AST library used by `python_safe_eval`
 
   - **URL**: https://github.com/astral-sh/ruff.git
-  - **Used by**: `crates/djc-safe-eval`
+  - **Used by**: `crates/python_safe_eval`
   - **License**: MIT
   - **Update policy**: Pin to specific tags/commits, update intentionally
 

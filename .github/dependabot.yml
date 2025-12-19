@@ -5,9 +5,19 @@
 
 version: 2
 updates:
-  #  Python - root pyproject.toml
-  - package-ecosystem: "pip" # See documentation for possible values
-    directory: "/" # Location of package manifests
+  ######################################
+  # ROOT / TOOLING
+  ######################################
+
+  # Rust workspace (all crates share dependencies from root Cargo.toml)
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Python - root pyproject.toml (tooling dependencies)
+  - package-ecosystem: "pip"
+    directory: "/"
     schedule:
       interval: "weekly"
 

@@ -1,0 +1,15 @@
+[package]
+name = "python_safe_eval"
+version = "1.0.0"
+description = "Safe Python expression eval"
+# NOTE: To use this edition, run
+#       `rustup toolchain install nightly && rustup override set nightly`
+edition = "2024"
+
+[dependencies]
+ruff_python_parser = { workspace = true }
+ruff_python_ast = { workspace = true }
+ruff_python_codegen = { workspace = true }
+ruff_source_file = { workspace = true }
+ruff_text_size = { workspace = true }
+regex = { workspace = true }
