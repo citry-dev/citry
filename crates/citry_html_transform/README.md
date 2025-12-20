@@ -72,11 +72,11 @@ let (transformed_html, captured) = transform_html(&config, html)?;
 ### Python API
 
 ```python
-from citry_core.html_transformer import set_html_attributes
+from citry_core.html_transform import transform_html
 
 # Transform HTML with attributes
 html = '<div id="xyz"><p>Hello</p></div>'
-result, captured = set_html_attributes(
+result, captured = transform_html(
     html,
     root_attributes=['data-djc-c12345'],
     all_attributes=['data-v-123'],

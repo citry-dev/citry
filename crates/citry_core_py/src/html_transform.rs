@@ -1,7 +1,7 @@
 /// Python interface for the citry_html_transform crate.
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict, PyString, PyTuple};
+use pyo3::types::{PyDict, PyString, PyTuple};
 
 use citry_html_transform::{HtmlTransformerConfig, transform_html as transform_html_rust};
 
@@ -63,7 +63,7 @@ pub fn transform_html(
     all_attributes: Vec<String>,
     check_end_names: Option<bool>,
     track_added_attributes_for_tags_with_this_attribute: Option<String>,
-) -> PyResult<Py<PyAny>> {
+) -> PyResult<Py<PyTuple>> {
     let config = HtmlTransformerConfig::new(
         root_attributes,
         all_attributes,
@@ -80,10 +80,10 @@ pub fn transform_html(
             }
 
             // Convert items to Bound<PyAny> for the tuple
-            let html_obj = PyString::new(py, &html).as_any().clone();
-            let dict_obj = captured_dict.as_any().clone();
+            let html_obj = PyString::new(py, &html).into_any();
+            let dict_obj = captured_dict.into_any();
             let result = PyTuple::new(py, vec![html_obj, dict_obj])?;
-            Ok(result.into_any().unbind())
+            Ok(result.unbind())
         }
         Err(e) => Err(PyValueError::new_err(e.to_string())),
     }

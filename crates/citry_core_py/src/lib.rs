@@ -8,8 +8,11 @@ use crate::html_transform::transform_html;
 
 /// Singular Python API that brings togther all the other Rust crates.
 /// Each crate is exposed as a submodule.
+///
+/// NOTE: The name of this function will be the name of the Python module.
+///       It MUST match the `module-name` setting in `pyproject.toml` in `packages/py/citry_core/`.
 #[pymodule]
-fn citry_core_py(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // HTML transformer
     let html_transform_mod = PyModule::new(m.py(), "html_transform")?;
     m.add_submodule(&html_transform_mod)?;

@@ -1,0 +1,113 @@
+[build-system]
+requires = ["maturin>=1.8,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "citry_core"
+version = "1.2.0"
+requires-python = ">=3.8, <4.0"
+description = "Singular Python API for Rust code used by Citry"
+keywords = [
+    "citry",
+    "frontend",
+    "html",
+    "web development",
+    "templating",
+    "template engine",
+]
+readme = "README.md"
+authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: Implementation :: PyPy",
+]
+license = { text = "MIT" }
+dependencies = []
+
+[dependency-groups]
+dev = ["maturin>=1.10.2", "pytest>=8.3.5"]
+
+# See https://docs.pypi.org/project_metadata/#icons
+[project.urls]
+Homepage = "https://github.com/JuroOravec/citry/"
+Changelog = "https://github.com/JuroOravec/citry/blob/main/CHANGELOG.md"
+Issues = "https://github.com/JuroOravec/citry/issues"
+Donate = "https://github.com/sponsors/JuroOravec"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+# !!!IMPORTANT!!!
+# This is the corresponding Rust crate for which we are building the Python bindings.
+manifest-path = "../../../crates/citry_core_py/Cargo.toml"
+# !!!IMPORTANT!!!
+# By default maturin generates a Python module binary and gives it the name of the Rust crate.
+# In our case, it would be `citry_core_py`.
+# The problem is that maturin then automatically creates the following wheel directory layout:
+# ```
+# wheel/
+# ├── <rust_crate_name>/
+# │   ├── __init__.py
+# │   └── <pymodule_name>.cpython.so
+# ```
+# Maturin then searches for the `<rust_crate_name>` in the Python project directory,
+# and copies the contents to the wheel above.
+#
+# The implication is that for `maturin` to nicely merge the contents,
+# we'd have name both the Python and Rust projects the same. So either:
+# 1. Name this Python project `citry_core_py`.
+# 2. Or rename the Rust crate to `citry_core`.
+#
+# Neither is great, because:
+# 1. We want to publish this Python package as `citry_core`, not `citry_core_py`.
+# 2. We want to keep the Rust crate name as `citry_core_py`, because similar
+#    pattern may be used for other languages, e.g. `citry_core_js`.
+#
+# The solution is to configure maturin to change the name of the directory
+# it creates within the Python wheel. We do so by using the `module-name` option.
+# See https://www.maturin.rs/project_layout.html#mixed-rustpython-project
+#
+# The setting is a string in format `<python_package_name>.<rust_module_name>`.
+# E.g. with `"citry_core._rust"`, maturin will create the following wheel directory layout:
+# ```
+# wheel/
+# ├── citry_core/
+# │   ├── __init__.py
+# │   └── _rust.cpython.so
+# ```
+#
+# This way, maturin will then copy our `./citry_core/` directory to the wheel above,
+# and we'll end up with:
+# ```
+# wheel/
+# ├── citry_core/
+# │   ├── __init__.py
+# │   ├── _rust.cpython.so
+# │   │
+# │   │   # Python code from `./citry_core/`
+# │   │
+# │   ├── html_transform/
+# │   │   ├── __init__.py
+# │   │   └── ...
+# │   ├── safe_eval/
+# │   │   ├── __init__.py
+# │   │   └── ...
+# │   ├── template_parser/
+# │   │   ├── __init__.py
+# │   │   └── ...
+# │   ├── _rust.pyi
+# │   └── py.typed
+# │   └── ...
+# ```
+#
+# NOTE: This way, maturin automatically includes also `py.typed` and `.pyi` files.
+module-name = "citry_core._rust"
