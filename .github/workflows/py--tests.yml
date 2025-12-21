@@ -1,0 +1,79 @@
+# Run tests for all Python packages
+name: Python tests
+
+on:
+  push:
+    branches:
+      - "main"
+      - "dev"
+    # Run Python tests when any of following changes:
+    # - Python code
+    # - Rust code (because some Python packages depend on Rust crates)
+    # - Workflows themselves (e.g. this file)
+    # - Third-party dependencies (e.g., Ruff submodule) used by both Rust and Python
+    # - Submodule configuration changes (e.g. .gitmodules)
+    paths:
+      - "packages/py/**"
+      - "crates/**"
+      - "third_party/**"
+      - ".github/**"
+      - ".gitmodules"
+  pull_request:
+    paths:
+      - "packages/py/**"
+      - "crates/**"
+      - "third_party/**"
+      - ".github/**"
+      - ".gitmodules"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Initialize Ruff submodule
+          submodules: recursive
+
+      # Install Python dependencies
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Python dependencies
+        run: |
+          uv sync --extra ci
+
+      # Install Rust deps (required for maturin to build Rust extensions)
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: This should match the value in `rust-toolchain.toml`
+          toolchain: nightly
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # Build any Python packages that need building
+      - name: Build Python package
+        working-directory: packages/py/citry_core
+        run: |
+          uv run maturin develop
+
+      # Run Python tests
+      - name: Run Python tests
+        run: |
+          uv run pytest

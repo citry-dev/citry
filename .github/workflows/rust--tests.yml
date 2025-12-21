@@ -1,0 +1,66 @@
+# Run tests for all Rust packages
+name: Rust tests
+
+on:
+  push:
+    branches:
+      - "main"
+      - "dev"
+    # Run Rust tests when any of following changes:
+    # - Rust code
+    # - Workflows themselves (e.g. this file)
+    # - Third-party dependencies (e.g., Ruff submodule) that our Rust code depends on
+    # - Submodule configuration changes (e.g. .gitmodules)
+    paths:
+      - "crates/**"
+      - ".github/**"
+      - "third_party/**"
+      - ".gitmodules"
+  pull_request:
+    paths:
+      - "crates/**"
+      - ".github/**"
+      - "third_party/**"
+      - ".gitmodules"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # Initialize Ruff submodule
+          submodules: recursive
+
+      # Install Rust deps
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: This should match the value in `rust-toolchain.toml`
+          toolchain: nightly
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # Run Rust tests
+      - name: Run Rust tests
+        shell: bash
+        run: |
+          # Build cargo test command with -p flags for each package
+          # We do so because the ruff submodule also contains crates and those will
+          # run if we don't limit the tests to only our packages.
+          # And `cargo test` command doesn't allow to exclude crates based on patterns.
+          #
+          # 1. Get all directories in our `crates/` folder
+          packages=$(find crates -maxdepth 1 -mindepth 1 -type d | \
+            sed 's/crates\///' | \
+            tr '\n' ' ')
+          echo "Running tests for packages: $packages"
+          # 2. Format as `cargo test -p <package> -p <package> ...`
+          cargo test $(echo "$packages" | sed 's/\([^ ]*\)/-p \1/g')
