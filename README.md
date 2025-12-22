@@ -1,10 +1,8 @@
-# Citry
-
-**Refreshingly elegant templating**
+# Citry - Refreshingly elegant templating
 
 Citry is a templating engine that brings the best of **Vue**, **React**, **Django**, and **Jinja** to every language.
 
-Use the same Vue-like API to write templates everywhere - **Python**, **JS/TS**, **PHP**, **Go**, and **Rust**:
+Use the same Vue-like API to write templates everywhere - **Python**, **JS/TS**, **PHP**, **Go**, or **Rust**:
 
 ```html
 <c-Card title="Welcome" c-class="card_classes">
