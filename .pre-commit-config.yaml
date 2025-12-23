@@ -32,12 +32,12 @@ repos:
       # RUST CHECKS
       ######################################
 
-      # Check that Rust toolchain version matches between rust-toolchain.toml and .github/workflows/tests.yml
+      # Check that Rust toolchain version matches between rust-toolchain.toml and .github/workflows/rust--tests.yml
       - id: rust-toolchain-consistency-check
         name: Check Rust toolchain version consistency
         entry: python scripts/precommit/rust_toolchain_check.py
         language: system
-        files: ^(rust-toolchain\.toml|\.github/workflows/tests\.yml)$
+        files: ^(rust-toolchain\.toml|\.github/workflows/rust--tests\.yml)$
         pass_filenames: false
         always_run: true
 

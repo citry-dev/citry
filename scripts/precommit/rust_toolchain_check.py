@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Check that the Rust toolchain version in rust-toolchain.toml matches
-the version specified in .github/workflows/tests.yml
+the version specified in .github/workflows/rust--tests.yml
 """
 
 import argparse
@@ -24,16 +24,23 @@ except ImportError:
     try:
         import tomli as tomllib  # type: ignore[import-untyped]
     except ImportError:
-        log.error(
+        log.exception(
             "[rust_toolchain_check] tomllib (Python 3.11+) or tomli package required"
         )
-        log.error("[rust_toolchain_check] Install with: pip install tomli pyyaml")
+        log.exception("[rust_toolchain_check] Install with: pip install tomli pyyaml")
         sys.exit(1)
 
 
-def parse_args():
+RUST_CI_PATH = Path(".github/workflows/rust--tests.yml")
+RUST_TOOLCHAIN_PATH = Path("rust-toolchain.toml")
+
+
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Check that Rust toolchain versions match between rust-toolchain.toml and .github/workflows/tests.yml"
+        description=(
+            f"Check that Rust toolchain versions match between {RUST_TOOLCHAIN_PATH} "
+            f"and {RUST_CI_PATH}"
+        )
     )
     parser.add_argument(
         "-q",
@@ -52,7 +59,7 @@ def parse_args():
     return args
 
 
-def main():
+def main() -> int:
     args = parse_args()
 
     # Set log level based on flags (quiet takes precedence over verbose)
@@ -76,7 +83,7 @@ def main():
         sys.exit(1)
 
     # Read rust-toolchain.toml
-    rust_toolchain_file = repo_root / "rust-toolchain.toml"
+    rust_toolchain_file = repo_root / RUST_TOOLCHAIN_PATH
     if not rust_toolchain_file.exists():
         log.error(f"[rust_toolchain_check] {rust_toolchain_file} not found")
         sys.exit(1)
@@ -88,8 +95,8 @@ def main():
     toolchain_channel = rust_toolchain_data.get("toolchain", {}).get("channel", "")
     log.debug(f"[rust_toolchain_check] toolchain_channel = {toolchain_channel}")
 
-    # Read .github/workflows/tests.yml
-    workflow_file = repo_root / ".github" / "workflows" / "tests.yml"
+    # Read .github/workflows/rust--tests.yml
+    workflow_file = repo_root / RUST_CI_PATH
     if not workflow_file.exists():
         log.error(f"[rust_toolchain_check] {workflow_file} not found")
         sys.exit(1)
@@ -129,9 +136,9 @@ def main():
     # Compare values
     if toolchain_channel != workflow_toolchain:
         log.error("[rust_toolchain_check] Rust toolchain version mismatch!")
-        log.error(f"[rust_toolchain_check]   rust-toolchain.toml: {toolchain_channel}")
+        log.error(f"[rust_toolchain_check]   {RUST_TOOLCHAIN_PATH}: {toolchain_channel}")
         log.error(
-            f"[rust_toolchain_check]   .github/workflows/tests.yml: {workflow_toolchain}"
+            f"[rust_toolchain_check]   {RUST_CI_PATH}: {workflow_toolchain}"
         )
         sys.exit(1)
 
