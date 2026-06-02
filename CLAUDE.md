@@ -22,7 +22,7 @@ The active frontier is the **V3 template parser** in
 [`crates/citry_template_parser/`](crates/citry_template_parser/). V3 is the
 HTML-like `<c-*>` tag syntax described in [`README.md`](README.md). See the
 agent INDEX for the V1/V2/V3 version model and the current status
-snapshot in [`docs/project_status_june_2026.md`](docs/project_status_june_2026.md).
+snapshot in [`TODO/project_status_june_2026.md`](TODO/project_status_june_2026.md).
 
 This is a monorepo. Per-language packages live under [`packages/`](packages/);
 dev/build/release conventions are documented in
@@ -225,5 +225,5 @@ abstract framing of the failure mode.)
 - Cross-crate architecture -> [`docs/agent/INDEX.md`](docs/agent/INDEX.md)
 - Why the rules exist -> [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md)
 - Monorepo dev / build / release -> [`docs/codebase.md`](docs/codebase.md)
-- Current status snapshot -> [`docs/project_status_june_2026.md`](docs/project_status_june_2026.md)
+- Current status snapshot -> [`TODO/project_status_june_2026.md`](TODO/project_status_june_2026.md)
 - Changelog -> [`CHANGELOG.md`](CHANGELOG.md)

@@ -27,7 +27,7 @@ each entry to one paragraph and link to longer docs rather than copying them.
 | HTML attribute transformer | [`crates/citry_html_transform/AGENTS.md`](../../crates/citry_html_transform/AGENTS.md) |
 | Python package surface (`citry_core` on PyPI) | [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md) |
 | Monorepo dev / build / release conventions | [`docs/codebase.md`](../codebase.md) |
-| Current status snapshot (dated) | [`docs/project_status_june_2026.md`](../project_status_june_2026.md) |
+| Current status snapshot (dated) | [`docs/../TODO/project_status_june_2026.md`](../../TODO/project_status_june_2026.md) |
 
 ---
 
@@ -133,7 +133,7 @@ the `_rust.pyi` stub for the V3 API; enable and rewrite the disabled
 `_test_template_parser__*.py` tests. After that, implement the Python-side
 runtime node classes the compiler output references. The detailed, dated
 snapshot of where this stands is
-[`docs/project_status_june_2026.md`](../project_status_june_2026.md).
+[`docs/../TODO/project_status_june_2026.md`](../../TODO/project_status_june_2026.md).
 
 ---
 
