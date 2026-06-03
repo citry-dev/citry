@@ -4,9 +4,15 @@ pub mod template_parser;
 
 use pyo3::prelude::*;
 
-use crate::html_transform::transform_html;
+use citry_template_parser::{
+    Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot,
+    TagRules, Template, TemplateElement, Text, Token,
+};
 
-/// Singular Python API that brings togther all the other Rust crates.
+use crate::html_transform::transform_html;
+use crate::template_parser::{compile_template, parse_template};
+
+/// Singular Python API that brings together all the other Rust crates.
 /// Each crate is exposed as a submodule.
 ///
 /// NOTE: The name of this function will be the name of the Python module.
@@ -25,6 +31,30 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         crate::safe_eval::safe_eval,
         &safe_eval_mod
     )?)?;
+
+    // Template parser
+    let template_parser_mod = PyModule::new(m.py(), "template_parser")?;
+    m.add_submodule(&template_parser_mod)?;
+    // Functions
+    template_parser_mod
+        .add_function(wrap_pyfunction!(parse_template, &template_parser_mod)?)?;
+    template_parser_mod
+        .add_function(wrap_pyfunction!(compile_template, &template_parser_mod)?)?;
+    // AST classes
+    template_parser_mod.add_class::<Token>()?;
+    template_parser_mod.add_class::<Comment>()?;
+    template_parser_mod.add_class::<HtmlAttrKind>()?;
+    template_parser_mod.add_class::<HtmlAttr>()?;
+    template_parser_mod.add_class::<HtmlStartTag>()?;
+    template_parser_mod.add_class::<HtmlEndTag>()?;
+    template_parser_mod.add_class::<Expr>()?;
+    template_parser_mod.add_class::<Text>()?;
+    template_parser_mod.add_class::<Node>()?;
+    template_parser_mod.add_class::<TemplateElement>()?;
+    template_parser_mod.add_class::<StaticNamedSlot>()?;
+    template_parser_mod.add_class::<Template>()?;
+    // Config
+    template_parser_mod.add_class::<TagRules>()?;
 
     Ok(())
 }

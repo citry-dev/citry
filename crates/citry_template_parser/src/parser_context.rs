@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use pyo3::prelude::*;
+
 use crate::ast::{Comment, Token};
 use crate::error::ParseError;
 use crate::grammar::Rule;
@@ -26,6 +28,7 @@ use crate::lang::lang::LangImpl;
 ///
 /// let template = parse_template("<my-tag id=\"test\"></my-tag>", None, Some(&rules))?;
 /// ```
+#[pyclass]
 #[derive(Debug, Clone)]
 pub struct TagRules {
     /// Allowed attributes. List of lists where inner lists mean "one of" (mutually exclusive).
@@ -34,6 +37,7 @@ pub struct TagRules {
     /// - If `Some([["c-name", "name"]])`, the tag can have either "c-name" OR "name", but not both.
     /// - If `Some([["c-name", "name"], ["data"]])`, the tag can have either "c-name" OR "name", but not both,
     ///   and can have "data" as well.
+    #[pyo3(get)]
     pub allowed_attrs: Option<Vec<Vec<String>>>,
     /// Required attributes. List of lists where inner lists mean "one of"
     /// (at least one from each inner list must be present).
@@ -41,17 +45,46 @@ pub struct TagRules {
     /// - If `[["id", "c-id"]]`, at least one of "id" or "c-id" must be present.
     /// - If `[["id", "c-id", "c-bind"], ["data"]]`, at least one of "id" or "c-id" or "c-bind" must be present,
     ///   and "data" can be present as well.
+    #[pyo3(get)]
     pub required_attrs: Vec<Vec<String>>,
     /// Allowed slot names (for `<c-fill>` tags).
     /// - If `None`, any slot names allowed.
     /// - If `Some(vec![])`, no slots allowed (component cannot have fills).
     /// - If `Some(vec!["default", "footer"])`, only "default" and "footer" slots are allowed.
+    #[pyo3(get)]
     pub allowed_slots: Option<Vec<String>>,
     /// Required slot names.
     /// - If `[]`, no slots required.
     /// - If `vec!["default"]`, the "default" slot must be present (either as explicit `<c-fill name="default">` or as body content).
     /// - If `vec!["default", "footer"]`, both "default" and "footer" slots must be present.
+    #[pyo3(get)]
     pub required_slots: Vec<String>,
+}
+
+#[pymethods]
+impl TagRules {
+    #[new]
+    #[pyo3(signature = (allowed_attrs=None, required_attrs=Vec::new(), allowed_slots=None, required_slots=Vec::new()))]
+    fn new(
+        allowed_attrs: Option<Vec<Vec<String>>>,
+        required_attrs: Vec<Vec<String>>,
+        allowed_slots: Option<Vec<String>>,
+        required_slots: Vec<String>,
+    ) -> Self {
+        Self {
+            allowed_attrs,
+            required_attrs,
+            allowed_slots,
+            required_slots,
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "TagRules(allowed_attrs={:?}, required_attrs={:?}, allowed_slots={:?}, required_slots={:?})",
+            self.allowed_attrs, self.required_attrs, self.allowed_slots, self.required_slots
+        )
+    }
 }
 
 /// Global context for parsing templates and tags
