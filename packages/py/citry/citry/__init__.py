@@ -13,6 +13,7 @@ from citry.citry import (
 from citry.citry_element import CitryElement
 from citry.component import Component
 from citry.component_registry import AlreadyRegistered, ComponentRegistry, NotRegistered
+from citry.constness import Const
 from citry.nodes import (
     ComponentNode,
     ExprHtmlAttr,
@@ -33,6 +34,7 @@ __all__ = [
     "Component",
     "ComponentNode",
     "ComponentRegistry",
+    "Const",
     "ExprHtmlAttr",
     "ExprNode",
     "FillNode",

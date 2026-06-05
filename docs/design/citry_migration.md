@@ -101,8 +101,10 @@ designed. Grouped by which part of the architecture they impact.
 
 The `Const()` (#1083), expression-caching (#1473), and render-body-caching
 design (and its many edge cases) is captured separately in
-[`constness.md`](constness.md). It is parked; only the foundation
-(class-level body generator) is built.
+[`constness.md`](constness.md). The const *flow* skeleton is built (a
+transparent `wrapt.ObjectProxy`-based `Const` marker, detection, and a
+`Citry`-scoped body cache keyed by const signature); the fold pass and phase-2
+taint are parked.
 
 ### Component class
 
@@ -717,6 +719,56 @@ class Hello(Component):
 
 # A static template renders to its text (no dynamic nodes involved).
 assert Hello().render() == "<p>Hello!</p>"
+```
+
+### Const flow, skeleton (`citry/constness.py`, render pipeline, `Citry`)
+
+**What:** The plumbing for the const-folding feature: a `Const(value)` marker,
+detection of const-marked context variables, a const signature, and a
+`Citry`-scoped body cache keyed by `(component class, signature)`.
+
+**Why:** Const-folding (DJC #1083) lets the engine reuse an optimized body for
+inputs the author marks constant. This lands the *flow* (so the render pipeline
+is const-aware and loads the body via the signature) without the optimization
+itself. The full design and its edge cases are in
+[`constness.md`](constness.md).
+
+**Design decisions:**
+- **Detection on the `template_data` output, not kwargs.** `Const` flows into
+  the component and through `template_data` (pass-through); `render_impl` scans
+  the resulting context for const-marked values. This matches the design's
+  rejection of keying on raw kwargs.
+- **`Citry`-scoped body cache.** Keyed by `(component class, const signature)`
+  and cleared by `Citry.clear()`. The signature is the frozenset of
+  `(variable name, const value)` pairs; an unhashable value falls back to a
+  repr stand-in for now.
+- **No folding yet.** The cached body is the unoptimized node list, equivalent
+  across signatures, so the cache provides the lookup structure but no speedup
+  yet. Folding (replacing all-const nodes with their results) slots into the
+  `_compile_body_generator` / `_render_body` seam later.
+- **Markers are never unwrapped during rendering.** The `Const` markers stay
+  in the render context so they flow down to descendant components, each of
+  which can detect const-ness and key its own cache on it. Unwrapping would
+  defeat that propagation.
+- **`Const` is a `wrapt.ObjectProxy` subclass.** It is fully transparent, so
+  user code and template expressions treat a const value exactly like the
+  underlying value (only `repr` is overridden to show `Const(...)` for
+  debugging); detection is `isinstance(x, Const)`. This adds `wrapt` as a
+  runtime dependency of the `citry` package.
+
+**Usage:**
+
+```python
+from citry import Component, Const
+
+class Card(Component):
+    template = "<p>{{ cols }}</p>"
+
+    def template_data(self, kwargs, slots=None, context=None):
+        return {"cols": kwargs["cols"]}   # passes the marker through
+
+# Same const signature -> same cache entry; a different value -> a new entry.
+Card(cols=Const(3)).render()
 ```
 
 ## Impl notes (things to be done)

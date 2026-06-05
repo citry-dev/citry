@@ -1,11 +1,17 @@
 # Design: const-ness and render-body caching
 
-**Status: parked (design only, not implemented as of 2026-06-05).**
+**Status (2026-06-05): skeleton built; folding and taint parked.** The const
+*flow* is wired: a transparent `Const` marker (a `wrapt.ObjectProxy` subclass,
+`citry/constness.py`) that flows down the tree without being unwrapped,
+detection on the `template_data` output, a const signature, and a
+`Citry`-scoped body cache keyed by `(component class, signature)` in
+`render_impl`. What is NOT built: the fold pass (so the cached body is not yet
+specialized per signature, every signature maps to an equivalent node list) and
+phase-2 taint. This document is the target to build toward.
 
 This document captures the design for the `Const()` optimization and the
-render-body caching it enables. It exists so the idea can be parked without
-losing the reasoning and the (many) edge cases. Only the foundation is built
-today; this is the target to build toward.
+render-body caching it enables. It records the reasoning and the (many) edge
+cases.
 
 For the broader migration context see
 [`citry_migration.md`](citry_migration.md). For operating rules see

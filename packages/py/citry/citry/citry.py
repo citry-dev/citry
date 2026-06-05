@@ -42,6 +42,8 @@ from typing import TYPE_CHECKING, Any
 from citry.component_registry import ComponentRegistry
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from citry.component import Component
 
 
@@ -69,6 +71,10 @@ class Citry:
         # TODO - Add type once known
         self._settings = settings
         self.registry = ComponentRegistry()
+        # Const-keyed body cache: (component class, const signature) -> body.
+        # Skeleton for the const-folding feature (docs/design/constness.md);
+        # the body is not yet specialized per signature.
+        self._const_body_cache: dict[tuple[type[Component], frozenset[tuple[str, Any]]], list[Any]] = {}
 
     # Convenience delegations so users can write citry.get("card")
     # instead of citry.registry.get("card").
@@ -94,9 +100,29 @@ class Citry:
         """All registered components as a name -> class mapping."""
         return self.registry.all()
 
+    def _const_body(
+        self,
+        comp_cls: type[Component],
+        signature: frozenset[tuple[str, Any]],
+        build: Callable[[], list[Any]],
+    ) -> list[Any]:
+        """
+        Return the cached body for ``(comp_cls, signature)``, building it once.
+
+        Skeleton: the body is the unoptimized node list, equivalent across
+        signatures for now (no folding). See ``docs/design/constness.md``.
+        """
+        key = (comp_cls, signature)
+        cached = self._const_body_cache.get(key)
+        if cached is None:
+            cached = build()
+            self._const_body_cache[key] = cached
+        return cached
+
     def clear(self) -> None:
         """Clear all state: registered components, caches, etc."""
         self.registry.clear()
+        self._const_body_cache.clear()
 
     def __repr__(self) -> str:
         return f"Citry(components={len(self.registry)})"

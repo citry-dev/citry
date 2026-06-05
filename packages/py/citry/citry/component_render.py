@@ -25,6 +25,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from citry.constants import COMP_ID_PREFIX, UID_LENGTH
+from citry.constness import const_value, is_const
 from citry.nodes import (
     ComponentNode,
     ExprHtmlAttr,
@@ -114,14 +115,27 @@ def render_impl(
 
     # 3. Build the body (node list) and render it. The body-generating
     #    function is parsed+compiled+exec'd once per component class (cached on
-    #    the class); calling it yields a fresh node list each render. Reusing
-    #    an already-optimized body across renders is the job of the parked
-    #    const-folding cache (docs/design/constness.md), not implemented here.
+    #    the class). The body is then loaded from the Citry-scoped cache keyed
+    #    by the component class plus the *const signature* (which context
+    #    variables are marked Const, and to what values). The body is NOT yet
+    #    specialized per signature (no folding), so every signature maps to an
+    #    equivalent node list for now; this wires up the const flow so folding
+    #    can slot in later. See docs/design/constness.md.
     generator = _get_body_generator(comp_cls)
     if generator is None:
         return ""
-    body = generator()
 
+    signature = _const_signature(tpl_data)
+    citry_instance = comp_cls.citry
+    if citry_instance is not None:
+        body = citry_instance._const_body(comp_cls, signature, generator)
+    else:
+        body = generator()
+
+    # The Const markers stay in the context so they flow down to descendant
+    # components, each of which can detect const-ness and cache accordingly.
+    # Const is a transparent proxy, so nodes treat a const value exactly like
+    # the underlying value.
     return _render_body(body, tpl_data)
 
 
@@ -224,3 +238,25 @@ def _render_body(body: list[Any], context: dict[str, Any]) -> str:
             parts.append(repr(item))
 
     return "".join(parts)
+
+
+def _const_signature(context: dict[str, Any]) -> frozenset[tuple[str, Any]]:
+    """
+    Build a hashable signature of the const-marked context variables.
+
+    Keys the const body cache: a different set of const variables, or different
+    const values, is a different signature. Unhashable const values fall back to
+    their ``repr`` (a placeholder; see the hashing notes in
+    ``docs/design/constness.md`` for the intended canonical form).
+    """
+    return frozenset((name, _freeze(const_value(value))) for name, value in context.items() if is_const(value))
+
+
+def _freeze(value: Any) -> Any:
+    """Return ``value`` if hashable, else a stable-ish string stand-in."""
+    try:
+        hash(value)
+    except TypeError:
+        return repr(value)
+    else:
+        return value
