@@ -304,11 +304,21 @@ fn _byte_offset_to_line_col(source: &str, byte_offset: usize) -> (usize, usize) 
 
 /// Escape text content for use in Python triple-quoted strings.
 ///
-/// This escapes backslashes and double quotes (including triple-quote sequences).
-/// Always uses triple double quotes `"""` for consistency.
+/// This escapes backslashes, double quotes (including triple-quote sequences),
+/// and carriage returns. Always uses triple double quotes `"""` for consistency.
+///
+/// A literal newline is left as-is: it is legal inside a triple-quoted string and
+/// round-trips faithfully. A carriage return must be escaped as `\r`, because
+/// Python applies universal-newline normalization to *source* before tokenizing,
+/// so a raw `\r` (or `\r\n`) inside a literal would be silently rewritten to `\n`,
+/// losing the original bytes.
 fn escape_text_in_triple_quotes(text: &str) -> String {
-    // Escape backslashes first (so we don't double-escape), then escape double quotes
-    // We escape all `"` as `\"` so that even `"""` becomes `\"\"\"` and won't terminate the string
-    let escaped = text.replace('\\', "\\\\").replace('"', "\\\"");
+    // Escape backslashes first (so we don't double-escape), then escape double
+    // quotes (so even `"""` becomes `\"\"\"` and won't terminate the string),
+    // then carriage returns (so they survive Python's universal-newline handling).
+    let escaped = text
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\r', "\\r");
     format!("\"\"\"{}\"\"\"", escaped)
 }

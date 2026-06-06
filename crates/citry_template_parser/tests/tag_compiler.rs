@@ -403,4 +403,75 @@ mod tests {
         // Leading text whitespace (not after a closing tag) is preserved.
         assert_compile("Hi <div>x</div>", r#"["""Hi <div>x</div>""",]"#);
     }
+
+    // =============================================================================
+    // CONTROL CHARACTER / BACKSLASH ESCAPING IN STRING VALUES
+    // =============================================================================
+    // String values (text, HTML attr values, component kwargs) are emitted as
+    // Python triple-quoted strings. Triple quotes legally span lines, so a
+    // literal `\n` is preserved as-is. But a literal carriage return must be
+    // escaped: Python applies universal-newline normalization to *source* before
+    // tokenizing, so a raw `\r` (or `\r\n`) inside a literal would be silently
+    // rewritten to `\n`, losing the original bytes. Backslashes must be escaped
+    // so a trailing `\` can't escape the closing quote.
+    //
+    // This mirrors django-components/djc-core#37 (multiline / control-char kwarg
+    // values producing wrong generated code).
+
+    #[test]
+    fn test_text_with_literal_newline_is_preserved() {
+        // A literal newline is valid inside `"""..."""` and is kept verbatim.
+        assert_compile("line1\nline2", "[\"\"\"line1\nline2\"\"\",]");
+    }
+
+    #[test]
+    fn test_text_with_carriage_return_is_escaped() {
+        // A literal `\r` must be emitted as the escape sequence `\r`, otherwise
+        // Python's universal-newline handling rewrites it to `\n`.
+        assert_compile("line1\rline2", r#"["""line1\rline2""",]"#);
+    }
+
+    #[test]
+    fn test_text_with_crlf_is_escaped() {
+        // CRLF: the `\r` is escaped, the `\n` stays a literal newline.
+        assert_compile("a\r\nb", "[\"\"\"a\\r\nb\"\"\",]");
+    }
+
+    #[test]
+    fn test_text_with_backslash_is_escaped() {
+        assert_compile("a\\b", r#"["""a\\b""",]"#);
+    }
+
+    #[test]
+    fn test_text_with_trailing_backslash_is_escaped() {
+        // Without escaping, a trailing `\` would escape the closing `"""`.
+        assert_compile("a\\", r#"["""a\\""",]"#);
+    }
+
+    #[test]
+    fn test_html_attr_value_with_carriage_return_is_escaped() {
+        // Same class of bug on the inline static-HTML-attr path.
+        assert_compile(
+            "<div class=\"a\rb\">x</div>",
+            r#"["""<div class=\"a\rb\">x</div>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_component_kwarg_with_literal_newline_is_preserved() {
+        // The direct djc-core#37 analog: a multiline string kwarg value.
+        // Triple quotes preserve the newline, so this already compiles correctly.
+        assert_compile(
+            "<c-foo key=\"a\nb\" />",
+            "[ComponentNode(source, (0, 19,), (StaticHtmlAttr(source, (7, 16,), \"\"\"key\"\"\", \"\"\"a\nb\"\"\", ()),), [], (), \"\"\"foo\"\"\", False),]",
+        );
+    }
+
+    #[test]
+    fn test_component_kwarg_with_carriage_return_is_escaped() {
+        assert_compile(
+            "<c-foo key=\"a\rb\" />",
+            r#"[ComponentNode(source, (0, 19,), (StaticHtmlAttr(source, (7, 16,), """key""", """a\rb""", ()),), [], (), """foo""", False),]"#,
+        );
+    }
 }
