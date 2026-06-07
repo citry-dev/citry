@@ -48,7 +48,10 @@ Example:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeAlias
+from typing import TYPE_CHECKING, Any, TypeAlias
+
+from citry.citry_element import CitryElement
+from citry.util.html import escape
 
 if TYPE_CHECKING:
     from citry.citry_context import CitryContext
@@ -97,3 +100,29 @@ class CitryRender:
 
     def __repr__(self) -> str:
         return f"CitryRender(parts={len(self.parts)})"
+
+
+def _render_value(value: Any) -> RenderPart:
+    """
+    Convert an evaluated expression value into a body part.
+
+    This is the bridge from an arbitrary Python value (the result of evaluating
+    a ``{{ ... }}`` expression, or a value handed into an attribute) to a
+    ``RenderPart``. The rules (see docs/design/rendering.md section 3.1):
+
+    - ``None`` renders as the empty string (not the literal ``"None"``).
+    - A ``CitryElement`` (a composed-but-unrendered element handed into an
+      expression) is rendered now, so its output and dependencies flow into the
+      surrounding tree.
+    - A ``CitryRender`` (an already-rendered subtree) is inlined as-is; it is
+      trusted HTML, and the surrounding ``_render_body`` merges its dependencies.
+    - Anything else is autoescaped. ``escape`` respects the ``__html__``
+      protocol, so a ``SafeString`` (trusted HTML) passes through unescaped.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, CitryElement):
+        value = value.render()
+    if isinstance(value, CitryRender):
+        return value
+    return escape(value)

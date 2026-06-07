@@ -795,6 +795,265 @@ class Card(Component):
 Card(cols=Const(3)).render()
 ```
 
+### Render output: `CitryRender` and `CitryContext` (`citry/citry_render.py`, `citry/citry_context.py`)
+
+**What:** The two render-phase structs. `CitryRender` is what `.render()`
+returns: an ordered `parts` list (each part a `str` or a nested `CitryRender`)
+plus the `CitryContext` used during the render. `serialize()` joins the parts
+into an HTML string; `str()`/`bytes()` coerce. `CitryContext` is the
+render-scoped state threaded down `_render_body`: the per-component `variables`
+(the `template_data` output), the current `component`, and an `extra` bag for
+extensions.
+
+**Why:** The render output must be an object, not a string, so a pre-rendered
+subtree stays composable and carries metadata (JS/CSS dependencies) as data
+rather than as marker strings smuggled through HTML (the DJC workaround). The
+full design and reasoning are in [`rendering.md`](rendering.md); this entry
+records what is built.
+
+**Design decisions:**
+- **Three-phase pipeline.** `Component()` -> `CitryElement` -> `.render()` ->
+  `CitryRender` -> `.serialize()` -> HTML. Convenience coercions fall through
+  with defaults: `str(CitryRender)` serializes, and `str(CitryElement)` (so
+  `str(Component(...))`) renders then serializes.
+- **Heterogeneous parts, deferred join.** A part is a `str` or a nested
+  `CitryRender`; joining happens only in `serialize()`, which recurses. This
+  keeps an embedded subtree composable until the final HTML is produced.
+- **Two scopes, kept separate.** `CitryContext.variables` is per-component and
+  does not cross a component boundary (a child gets fresh variables from its own
+  `template_data`); `CitryContext.extra` is tree-wide scratch for extensions
+  (dependencies bubble up). Conflating them is the thing to avoid.
+- **`component` stored on the context.** This resolves the open question in
+  [`rendering.md`](rendering.md) section 4.1: the current component is on the
+  context, giving nodes the registry (to resolve child names) and parent/root
+  linkage. Each component render gets its own `CitryContext`.
+- **Serialization is the recursive join only, for now.** Placing collected
+  dependencies into `<head>`/`<body>`, document-vs-fragment mode, and the
+  injection strategy are future work (see [`rendering.md`](rendering.md)
+  sections 5-6).
+
+**Usage:**
+
+```python
+from citry import Component
+
+class Hello(Component):
+    template = "<p>Hello!</p>"
+
+rendered = Hello().render()        # -> CitryRender
+assert rendered.serialize() == "<p>Hello!</p>"
+assert str(rendered) == "<p>Hello!</p>"
+assert str(Hello()) == "<p>Hello!</p>"   # element -> render -> serialize
+```
+
+### Value nodes and autoescaping (`citry/nodes/__init__.py`, `citry/util/html.py`)
+
+**What:** The body value nodes. `ExprNode` evaluates a `{{ expr }}` with
+`safe_eval` against the context variables and returns an autoescaped string (or
+inlines an embedded render). `TemplateNode` renders a nested template (a `c-*`
+attribute whose value is itself a template) against the same context. Escaping
+lives in `citry/util/html.py`, a thin layer over `markupsafe` exporting
+`escape` and `Markup` (aliased `SafeString`).
+
+**Why:** Makes dynamic templates actually render, with correct HTML escaping.
+
+**Design decisions:**
+- **`safe_eval`, compiled once (lazily).** Each node compiles its
+  expression/template on first render and caches the result; the node is reused
+  across renders via the body cache, so it compiles once. This is lazy rather
+  than at construction (the compiler's note suggested "at initialization"); lazy
+  still compiles once and avoids paying for nodes that never render (for example
+  a branch folded away once const-folding exists).
+- **`markupsafe` for escaping.** `escape()` escapes `& < > ' "`, which is safe
+  in both body-text and double-quoted attribute positions. This matters because
+  the compiler inlines a dynamic attribute on a plain HTML element as an
+  `ExprNode` between literal quote strings, so the same node and escaper serve
+  both positions. `SafeString` (= `Markup`) passes through unescaped via the
+  `__html__` protocol. Adds `markupsafe` as a runtime dependency of `citry`.
+  Rationale: HTML escaping is security-sensitive, so reuse the battle-tested
+  standard rather than hand-roll it.
+- **`_render_value` rules.** `None` renders as `""` (not the literal `"None"`);
+  a `CitryElement` handed into an expression is auto-rendered; a `CitryRender`
+  is inlined as trusted HTML (and `_render_body` merges its dependencies);
+  anything else is escaped. `Const` flows transparently, so `escape` sees the
+  underlying value.
+
+**Usage:**
+
+```python
+# {{ }} is evaluated and escaped:
+#   <p>{{ x }}</p>  with x="<b>"  ->  "<p>&lt;b&gt;</p>"
+# A nested template in a c-* attribute renders against the same context:
+#   <div c-body="<span>{{ x }}</span>">  with x="hi"  ->  '<div body="<span>hi</span>">'
+```
+
+### `ComponentNode` and the component boundary (`citry/nodes/__init__.py`)
+
+**What:** `ComponentNode.render` resolves its attribute nodes into the child's
+kwargs, looks the child up in the parent's Citry registry, and renders it
+through `render_impl` (a context boundary). The attribute nodes
+(`StaticHtmlAttr`, `ExprHtmlAttr`, `TemplateHtmlAttr`) gained `resolve(context)`.
+
+**Why:** Lets a component template compose other components.
+
+**Design decisions:**
+- **attrs -> kwargs.** A dynamic attribute key drops its leading `c-`
+  (`c-foo` -> `foo`); `c-bind` is a spread (its evaluated mapping merges into
+  kwargs rather than producing a `bind` kwarg); a static boolean attribute
+  passes `True`. `ExprHtmlAttr`/`TemplateHtmlAttr` resolve to **raw** Python
+  values (not escaped or stringified) because they become component inputs;
+  escaping happens later, when the child renders the value through an `ExprNode`.
+- **Registry lookup via the context's component.** `context.component.citry`
+  resolves the child name (case-insensitive). The child is rendered with
+  `parent=context.component`, so parent/root linkage and the cross-boundary
+  dependency merge both work.
+- **`TemplateHtmlAttr` renders in the parent scope.** `c-body="<b>{{ x }}</b>"`
+  on a component renders the nested template against the parent's context and
+  passes the resulting `CitryRender` as the kwarg, mirroring a Vue/React
+  fragment prop.
+- **Body deferred.** A component with body content (default-slot text or
+  `<c-fill>` nodes) raises `NotImplementedError`; slots are a later phase with
+  their own design doc (many edge cases).
+- **`ComponentMeta.__call__(cls, /, **kwargs)`.** `cls` is positional-only so a
+  component may take a keyword argument named `cls` (for example an HTML class,
+  `MyComp(cls="card")`) without colliding with the metaclass's first parameter.
+
+**Usage:**
+
+```python
+from citry import Citry, Component
+
+c = Citry()
+
+class Card(Component):
+    citry = c
+    template = "<span>{{ title }}</span>"
+
+    def template_data(self, kwargs, slots=None, context=None):
+        return {"title": kwargs["title"]}
+
+class Page(Component):
+    citry = c
+    template = '<main><c-card title="Hi" /></main>'
+
+assert str(Page()) == "<main><span>Hi</span></main>"
+```
+
+### Node / HtmlAttr hierarchy and render typing (`citry/nodes/__init__.py`)
+
+**What:** Two base classes plus tighter types over the node taxonomy. `Node` is
+the base for the seven runtime nodes; `HtmlAttr` is the base for the three
+attribute nodes. Type aliases `RenderPart` (`str | CitryRender`,
+in `citry/citry_render.py`) and `BodyItem` (`Node | str`) replace the previous
+`Any` typing of bodies and parts.
+
+**Why:** Housekeeping (`issubclass(x, Node)` / `issubclass(x, HtmlAttr)` checks)
+and real typing of the compiler-output contract (a compiled body is
+`list[BodyItem]`; a rendered/parts list is `list[RenderPart]`; component/slot
+`attrs` are `tuple[HtmlAttr, ...]`).
+
+**Design decisions:**
+- **Bases are NOT abstract.** The compiler builds the whole node tree up front,
+  including nodes inside branches that may never render, so a not-yet-implemented
+  node must still be instantiable. The base `Node.render` (and `HtmlAttr.resolve`)
+  raises `NotImplementedError` instead of being `@abstractmethod`, so a
+  not-yet-implemented node (`SlotNode`, `FillNode`) inherits the base and fails
+  only when actually rendered, rather than at construction.
+- **Attribute nodes are not `Node`s.** They `resolve` to a value (a component
+  kwarg), they do not `render` to a part, so `HtmlAttr` is a separate hierarchy.
+- **Leaf classes are `@final`; overrides use `@override`.** The node taxonomy is
+  fixed: extensions subclass `Node`/`HtmlAttr`, never the leaves. `@override`
+  (from `typing_extensions`, since the floor is Python 3.10) marks the six
+  overriding `render`/`resolve` methods, which mypy verifies and which lets ruff
+  stop flagging base-dictated unused arguments.
+- **Runtime dependencies added to `citry`:** `markupsafe` (escaping, see the
+  value-nodes entry) and `typing-extensions` (`@override` on 3.10/3.11).
+  `wrapt` was already present (for `Const`).
+
+### Control-flow nodes: `IfNode` and `ForNode` (`citry/nodes/__init__.py`, parser, `LangImpl`)
+
+**What:** The two control-flow runtime nodes render. `IfNode` picks the first
+branch whose `cond` is truthy (the `c-else` branch always matches); `ForNode`
+renders its body once per item of the `each` clause, or its `c-empty` branch
+when there are none. Authoring works in both forms: the explicit tags
+(`<c-if cond=...>`, `<c-for each=...>`) and the shorthand attributes
+(`<div c-if=...>`, `<li c-for=...>`).
+
+**Why:** Makes templates branch and loop. The work spanned the cross-language
+contract (parser + `LangImpl` + compiler output + Python runtime), so a key part
+was making the two authoring forms produce *identical* variable metadata.
+
+**Design decisions:**
+- **The loop runs via a generator expression, not a hand-rolled iterator.** The
+  `each` clause is a Python comprehension clause, so `ForNode` evaluates it by
+  wrapping the loop targets in a tuple and the clause in a generator:
+  `each="x in xs if x > 0"` becomes `((x,) for x in xs if x > 0)`, run through
+  `safe_eval`. This reuses Python's own comprehension semantics, so multi-target
+  unpacking (`k, v in d.items()`) and `if` filters work for free, and the full
+  comprehension grammar the parser already accepts is supported with no extra
+  code. The generator-expression evaluator is compiled lazily on first render and
+  cached on the node (which is itself reused across renders via the body cache),
+  so it compiles once. Wrapping a single target as a 1-tuple (`(x,)`) keeps single
+  and multi-target binding uniform.
+- **The loop body renders in a child `CitryContext`.** Each iteration overlays
+  the loop bindings on the surrounding `variables` in a fresh child context that
+  shares the parent's `component` and `extra` bag. So the loop introduces a
+  variable scope without crossing a component boundary: the loop variable does
+  not leak out, but dependencies still bubble through the shared `extra`. `IfNode`
+  reuses the surrounding context unchanged (an `<c-if>` introduces nothing).
+- **`cond` is resolved through the attribute node.** Post-enrichment (below) the
+  `cond` attribute is an `ExprHtmlAttr`, so `IfNode` just calls
+  `cond_attr.resolve(context)` and tests truthiness; a `cond` with no value
+  (`<c-if cond>`) stays a boolean `True`. No separate expression machinery in the
+  node.
+- **The explicit and shorthand forms are unified at parse time.** Variable
+  tracking diverged between the forms, and both feed the *same* compiler-emitted
+  `IfNode`/`ForNode`, so the fix belongs upstream of codegen. The parser keeps the
+  AST faithful (it does not rewrite `<div c-if>` into `<c-if>`; that structural
+  expansion stays in the compiler) but enriches the variable metadata in place so
+  the forms agree:
+  - The explicit `cond`/`each` attributes are not `c-` prefixed, so they parsed as
+    `Static` with no tracked variables. They are upgraded to `Expression` with
+    their used variables populated.
+  - The shorthand `c-for="x in xs"` attribute parsed as a generic expression, so
+    its used variables wrongly counted the loop target (`x` *and* `xs`). They are
+    recomputed as the clause's free variables (`xs`), and the loop targets (`x`)
+    are recorded as the host element's *introduced* variables. The compiler's
+    control-flow expansion then inherits the correct introduced variables, so
+    `<div c-for>` and `<c-for>` compile to identical `ForNode`s.
+- **For-loop variable analysis is language-specific and returns both halves
+  together.** A single `LangImpl` method, `parse_forloop_variables`, returns a
+  `ForLoopVars { introduced, used }`: the loop targets the clause binds and the
+  free variables of its iterable/condition clauses. Bundling them mirrors
+  `parse_expression` (which returns its variable categories together) and keeps
+  them consistent (a target is never also reported as used). The Python
+  implementation analyses the clause wrapped in a generator
+  (`(None for <clause>)`): it walks the comprehension targets for `introduced`,
+  and reuses the scope-aware expression analyser for `used` (the targets are
+  bound, so the reported used variables are exactly the free variables). The
+  JS/PHP/Go/Rust implementations are stubs. The parser calls this once per
+  for-clause (in `process_control_flow_metadata`, which sets the attribute's
+  used-vars and returns the host node's introduced-vars in one pass; the
+  introduced set is carried from the start tag to the node via the tag stack), so
+  each clause is parsed a single time.
+- **Tests updated to the corrected contract.** The Rust parser/compiler tests
+  that locked `cond`/`each` as `Static` (and the shorthand `c-for` as counting its
+  loop target among used variables) encoded the pre-fix behavior; they were
+  updated to assert the unified contract, not worked around.
+
+**Usage:**
+
+```python
+# Explicit tags
+"<c-if cond=\"n > 2\">big</c-if><c-else>small</c-else>"
+"<c-for each=\"k, v in d.items()\">{{ k }}={{ v }} </c-for>"
+"<c-for each=\"x in xs if x % 2 == 0\">{{ x }}</c-for><c-empty>none</c-empty>"
+
+# Shorthand attributes (compile to the same IfNode/ForNode)
+"<p c-if=\"show\">hi</p>"
+"<li c-for=\"item in items\">{{ item }}</li>"
+```
+
 ## Impl notes (things to be done)
 
 - DO NOT PASS CONTEXT BETWEEN NODES. ONLY PROPS AND SLOTS.

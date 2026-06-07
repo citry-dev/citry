@@ -3,11 +3,18 @@ Stub runtime node classes for the Citry template compiler output.
 
 The V3 compiler generates Python source code that instantiates these classes.
 Each class accepts the exact arguments the compiler emits and stores them as
-attributes. The ``render`` method raises ``NotImplementedError`` - actual
-rendering is a separate task.
+attributes.
 
-These stubs are enough to ``exec()`` the generated code and inspect the
-resulting node tree.
+The value nodes ``ExprNode`` and ``TemplateNode`` render against a
+``CitryContext`` (see docs/design/rendering.md), and the attribute nodes
+(``StaticHtmlAttr``, ``ExprHtmlAttr``, ``TemplateHtmlAttr``) ``resolve`` to
+their values. ``ComponentNode`` renders a child component across a context
+boundary (attributes become the child's kwargs); its body content
+(default-slot text or ``<c-fill>`` nodes) is not handled yet, since slots are a
+later phase with their own design. The control-flow nodes (``IfNode``,
+``ForNode``) render their matching branch / per-item body. The slot nodes
+(``SlotNode``, ``FillNode``) are still stubs whose ``render`` raises
+``NotImplementedError``.
 
 See the compiler module docstring in
 ``crates/citry_template_parser/src/compiler.rs`` for the full node taxonomy
@@ -49,10 +56,71 @@ Example:
 
 """
 
-from typing import Any
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, TypeAlias, final
+
+from typing_extensions import override
+
+from citry.citry_context import CitryContext
+from citry.citry_element import CitryElement
+from citry.citry_render import CitryRender, _render_value
+from citry_core.safe_eval import safe_eval
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from citry.citry_render import RenderPart
 
 
-class ExprNode:
+
+# NOTE: Not abstract on purpose: the compiler builds the whole node tree up front
+# (including nodes inside branches that may never render), so a
+# not-yet-implemented node must still be instantiable. The default ``render``
+# therefore raises ``NotImplementedError`` only when the node is actually
+# rendered, not when it is constructed.
+class Node:
+    """
+    Base class for the runtime nodes the V3 compiler output instantiates.
+
+    A node renders to a body part (a ``str`` or a nested ``CitryRender``) against
+    the render-scoped ``CitryContext``. Concrete nodes override ``render``.
+    """
+
+    def render(self, context: CitryContext) -> RenderPart:
+        raise NotImplementedError(f"{type(self).__name__}.render is not implemented")
+
+
+# One item in a compiled template body: a runtime Node or a static text run.
+BodyItem: TypeAlias = "Node | str"
+
+
+class HtmlAttr:
+    """
+    Base class for HTML attribute nodes (a component's or slot's inputs).
+
+    An attribute resolves to a value (which becomes a component kwarg), not to a
+    rendered body part. Concrete attributes override ``resolve``.
+    """
+
+    # Set by every concrete attribute's __init__; declared here so code iterating
+    # a ``tuple[HtmlAttr, ...]`` can read ``.key``.
+    key: str
+
+    def resolve(self, context: CitryContext) -> Any:
+        raise NotImplementedError(f"{type(self).__name__}.resolve is not implemented")
+
+
+def _find_attr(attrs: tuple[HtmlAttr, ...], key: str) -> HtmlAttr | None:
+    """Return the first attribute with the given key, or ``None``."""
+    for attr in attrs:
+        if attr.key == key:
+            return attr
+    return None
+
+
+@final
+class ExprNode(Node):
     """
     A ``{{ expr }}`` expression node.
 
@@ -70,44 +138,75 @@ class ExprNode:
         self.position = position
         self.expr = expr
         self.used_vars = used_vars
+        # The safe-eval function for `expr`, compiled lazily on first render and
+        # reused afterwards (the node is cached across renders, so this compiles
+        # once). Compiling lazily avoids paying for nodes that are never
+        # rendered, e.g. a dead control-flow branch once folding exists.
+        self._eval: Callable[[Any], Any] | None = None
 
-    def render(self, context: Any) -> str:
-        raise NotImplementedError("ExprNode.render")
+    @override
+    def render(self, context: CitryContext) -> RenderPart:
+        if self._eval is None:
+            self._eval = safe_eval(self.expr)
+        value = self._eval(context.variables)
+        return _render_value(value)
 
     def __repr__(self) -> str:
         return f"ExprNode(position={self.position}, expr={self.expr!r}, used_vars={self.used_vars})"
 
 
-class TemplateNode:
+@final
+class TemplateNode(Node):
     """
-    A nested template expression on an HTML tag's dynamic attribute.
+    A nested template value on an HTML tag's dynamic attribute.
 
-    Generated as: ``TemplateNode(source, (start, end), "expr", ("var1", ...))``
+    Emitted when a ``c-*`` attribute value is itself a template (starts with a
+    tag and ends with a closing tag), as opposed to a plain expression (which
+    becomes an ``ExprNode``). The ``expr`` field holds the nested template
+    source string.
+
+    Generated as: ``TemplateNode(source, (start, end), "template", ("var1", ...))``
 
     Example:
-        Template ``<a c-href="url">`` compiles the ``c-href`` value to::
+        Template ``<div c-body="<span>{{ x }}</span>">`` compiles the
+        ``c-body`` value to::
 
-            TemplateNode(source, (11, 14,), "url", ("url",))
-
-        (on regular HTML tags, dynamic attrs are split inline rather than
-        wrapped in ``ExprHtmlAttr``.)
+            TemplateNode(source, (13, 33,), "<span>{{ x }}</span>", ("x",))
 
     """
 
     def __init__(self, source: Any, position: tuple[int, int], expr: str, used_vars: tuple[str, ...]) -> None:
         self.source = source
         self.position = position
+        # `expr` is the nested template SOURCE STRING (for example
+        # "<span>{{ x }}</span>"), not a Python expression.
         self.expr = expr
         self.used_vars = used_vars
+        # The body-generating function for the nested template, compiled lazily
+        # on first render and reused afterwards (compile once per node).
+        self._generator: Callable[[], list[Any]] | None = None
 
-    def render(self, context: Any) -> str:
-        raise NotImplementedError("TemplateNode.render")
+    @override
+    def render(self, context: CitryContext) -> CitryRender:
+        # A nested template is not a component boundary: it shares the
+        # surrounding component's context, so it renders against the same
+        # variables and writes any dependencies into the same context.
+        #
+        # Imported lazily because component_render imports the node classes:
+        # importing the body pipeline at module load would be circular.
+        from citry.component_render import _compile_body_generator, _render_body  # noqa: PLC0415
+
+        if self._generator is None:
+            self._generator = _compile_body_generator(self.expr)
+        parts = _render_body(self._generator(), context)
+        return CitryRender(parts=parts, context=context)
 
     def __repr__(self) -> str:
         return f"TemplateNode(position={self.position}, expr={self.expr!r})"
 
 
-class StaticHtmlAttr:
+@final
+class StaticHtmlAttr(HtmlAttr):
     """
     A static HTML attribute (``key="value"``).
 
@@ -120,18 +219,26 @@ class StaticHtmlAttr:
 
     """
 
-    def __init__(self, source: Any, position: tuple[int, int], key: str, value: str, used_vars: tuple[str, ...]) -> None:
+    def __init__(
+        self, source: Any, position: tuple[int, int], key: str, value: str, used_vars: tuple[str, ...]
+    ) -> None:
         self.source = source
         self.position = position
         self.key = key
         self.value = value
         self.used_vars = used_vars
 
+    @override
+    def resolve(self, context: CitryContext) -> Any:
+        """Return the static value (a string, or ``True`` for a boolean attribute)."""
+        return self.value
+
     def __repr__(self) -> str:
         return f"StaticHtmlAttr(key={self.key!r}, value={self.value!r})"
 
 
-class ExprHtmlAttr:
+@final
+class ExprHtmlAttr(HtmlAttr):
     """
     A dynamic expression attribute (``c-class="expr"``).
 
@@ -144,18 +251,38 @@ class ExprHtmlAttr:
 
     """
 
-    def __init__(self, source: Any, position: tuple[int, int], key: str, expr: str, used_vars: tuple[str, ...]) -> None:
+    def __init__(
+        self, source: Any, position: tuple[int, int], key: str, expr: str, used_vars: tuple[str, ...]
+    ) -> None:
         self.source = source
         self.position = position
         self.key = key
         self.expr = expr
         self.used_vars = used_vars
+        # The safe-eval function for `expr`, compiled lazily on first resolve and
+        # reused afterwards (the node is cached across renders, so this compiles
+        # once).
+        self._eval: Callable[[Any], Any] | None = None
+
+    @override
+    def resolve(self, context: CitryContext) -> Any:
+        """
+        Evaluate the expression and return the raw value.
+
+        The value is NOT escaped or stringified: it becomes a component kwarg (a
+        Python object). Escaping happens later, when the child component renders
+        the value through an ``ExprNode``.
+        """
+        if self._eval is None:
+            self._eval = safe_eval(self.expr)
+        return self._eval(context.variables)
 
     def __repr__(self) -> str:
         return f"ExprHtmlAttr(key={self.key!r}, expr={self.expr!r})"
 
 
-class TemplateHtmlAttr:
+@final
+class TemplateHtmlAttr(HtmlAttr):
     """
     A nested template attribute (``c-body="<div>...</div>"``).
 
@@ -168,18 +295,39 @@ class TemplateHtmlAttr:
 
     """
 
-    def __init__(self, source: Any, position: tuple[int, int], key: str, template: str, used_vars: tuple[str, ...]) -> None:
+    def __init__(
+        self, source: Any, position: tuple[int, int], key: str, template: str, used_vars: tuple[str, ...]
+    ) -> None:
         self.source = source
         self.position = position
         self.key = key
         self.template = template
         self.used_vars = used_vars
+        # The body-generating function for the nested template, compiled lazily
+        # on first resolve and reused afterwards (compile once per node).
+        self._generator: Callable[[], list[Any]] | None = None
+
+    @override
+    def resolve(self, context: CitryContext) -> CitryRender:
+        """
+        Render the nested template and return it as a ``CitryRender`` kwarg value.
+
+        The template is defined in the parent's scope, so it renders against the
+        surrounding component's context (the same rule as ``TemplateNode``).
+        """
+        from citry.component_render import _compile_body_generator, _render_body  # noqa: PLC0415
+
+        if self._generator is None:
+            self._generator = _compile_body_generator(self.template)
+        parts = _render_body(self._generator(), context)
+        return CitryRender(parts=parts, context=context)
 
     def __repr__(self) -> str:
         return f"TemplateHtmlAttr(key={self.key!r})"
 
 
-class ComponentNode:
+@final
+class ComponentNode(Node):
     """
     A component node (``<c-Card>``, ``<c-component>``, any ``<c-*>``).
 
@@ -206,8 +354,8 @@ class ComponentNode:
         self,
         source: Any,
         position: tuple[int, int],
-        attrs: tuple[Any, ...],
-        body: list[Any],
+        attrs: tuple[HtmlAttr, ...],
+        body: list[BodyItem],
         used_vars: tuple[str, ...],
         name: str,
         contains_fills: bool,
