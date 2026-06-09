@@ -55,10 +55,10 @@ class TestIfNode:
         assert _html('<c-if cond="items">has</c-if><c-else>none</c-else>', items=[]) == "none"
 
     def test_body_renders_expressions(self):
-        assert _html('<c-if cond="x"><b>{{ msg }}</b></c-if>', x=True, msg="hi") == "<b>hi</b>"
+        assert _html('<c-if cond="x"><b>{{ msg }}</b></c-if>', x=True, msg="hi") == '<b data-cid-c1="">hi</b>'
 
     def test_shorthand_attribute_form(self):
-        assert _html('<p c-if="x">hi</p>', x=True) == "<p>hi</p>"
+        assert _html('<p c-if="x">hi</p>', x=True) == '<p data-cid-c1="">hi</p>'
         assert _html('<p c-if="x">hi</p>', x=False) == ""
 
 
@@ -103,7 +103,10 @@ class TestForNode:
         assert _html('<c-for each="x in xs">{{ x }}</c-for>', xs=["<b>"]) == "&lt;b&gt;"
 
     def test_shorthand_attribute_form(self):
-        assert _html('<li c-for="i in items">{{ i }}</li>', items=["a", "b"]) == "<li>a</li><li>b</li>"
+        assert (
+            _html('<li c-for="i in items">{{ i }}</li>', items=["a", "b"])
+            == '<li data-cid-c1="">a</li><li data-cid-c1="">b</li>'
+        )
 
     def test_shorthand_empty(self):
         assert _html('<li c-for="i in items">{{ i }}</li>', items=[]) == ""
@@ -122,5 +125,5 @@ class TestNestedControlFlow:
     def test_shorthand_if_and_for_on_same_element(self):
         # IF wraps FOR: when the condition is false, nothing renders.
         tpl = '<li c-if="show" c-for="i in items">{{ i }}</li>'
-        assert _html(tpl, show=True, items=["a", "b"]) == "<li>a</li><li>b</li>"
+        assert _html(tpl, show=True, items=["a", "b"]) == '<li data-cid-c1="">a</li><li data-cid-c1="">b</li>'
         assert _html(tpl, show=False, items=["a", "b"]) == ""

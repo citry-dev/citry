@@ -1,16 +1,20 @@
 # Design: deferred rendering (infinite depth, top-down passes, component-id markers)
 
-**Status (2026-06-09): Phase A built (infinite depth + the deferred queue);
-Phase B (markers) not yet built.** This document specifies how citry renders a
-component tree without recursion limits, in a top-down order, and how it tags
-each component's root element(s) with a component-id marker. It is the citry port
-of the two django-components features: infinite render depth and the multi-pass
-render that powers per-instance JS/CSS attribute passing. Phase A lives in
+**Status (2026-06-09): Phase A and Phase B built.** This document specifies how
+citry renders a component tree without recursion limits, in a top-down order, and
+how it tags each component's root element(s) with a component-id marker. It is the
+citry port of the two django-components features: infinite render depth and the
+multi-pass render that powers per-instance JS/CSS attribute passing. Phase A (the
+deferred queue) lives in
 [`component_render.py`](../../packages/py/citry/citry/component_render.py)
 (`render_impl` drive loop, `_render_one`, the `_RenderTask`/`_FinalizeTask`
 queue) and [`citry_render.py`](../../packages/py/citry/citry/citry_render.py)
-(`DeferredComponent`); tests in
-[`test_deferred_render.py`](../../packages/py/citry/tests/test_deferred_render.py).
+(`DeferredComponent`). Phase B (the `data-cid-<ID>` markers) lives in
+[`serialize.py`](../../packages/py/citry/citry/serialize.py). Tests in
+[`test_deferred_render.py`](../../packages/py/citry/tests/test_deferred_render.py)
+and [`test_markers.py`](../../packages/py/citry/tests/test_markers.py). The only
+part still deferred is the CSS-scoping attribute (`all_attributes`, section 6.2.1),
+which lands with the dependency extension.
 
 It extends [`rendering.md`](rendering.md), which defines the three-phase
 pipeline (`CitryElement` -> `CitryRender` -> serialize) and the `CitryContext`.
@@ -260,15 +264,20 @@ without any ambient stack state.
 
 ## 6. Phase B: component-id markers via `transform_html`
 
-Built on the Phase A queue, and only when the JS/CSS dependency extension is
-being built (the markers exist to let the browser runtime scope CSS and run
-per-instance JS; nothing reads them before then).
+**Status (2026-06-09): built.** The id markers are added on every `serialize()`,
+implemented in [`serialize.py`](../../packages/py/citry/citry/serialize.py) and
+covered by [`test_markers.py`](../../packages/py/citry/tests/test_markers.py).
+The CSS-scoping half (the `all_attributes` set, section 6.2.1) is still deferred
+to the dependency extension; for now `all_attributes` is empty, so only the id
+marker is added. The markers let the future browser runtime scope CSS and run
+per-instance JS.
 
 The marker attribute is **`data-cid-<ID>`**, a valueless (boolean) attribute,
 where `<ID>` is the component render id (already `c`-prefixed, see
-[`constants.py`](../../packages/py/citry/citry/constants.py), so a marker reads
-`data-cid-cAb3d9`). Boolean form lets multiple component ids sit on one element,
-which is what the parent-root-is-child case (6.1) requires.
+[`constants.py`](../../packages/py/citry/citry/constants.py)). `transform_html`
+writes a boolean attribute in its empty-value form, so a marker reads
+`data-cid-cAb3d9=""`. The boolean form lets multiple component ids sit on one
+element, which is what the parent-root-is-child case (6.1) requires.
 
 ### 6.1 The structural fact to reproduce
 
@@ -283,44 +292,49 @@ Parent template "<div><c-child/></div>"  ->  <div data-cid-cParent><span data-ci
 Root elements compile to static strings, not nodes (section 3), so this needs
 HTML-structure awareness, which is exactly what `transform_html` provides.
 
-### 6.2 The model: top-down, parse each frame once, at serialize time
+### 6.2 The model: top-down marking, then bottom-up assembly, at serialize time
 
 The render output stays a `CitryRender` tree (no strings) until `serialize()` is
-called. Serialization is a **top-down recursion** that transforms each component
-frame exactly once. For a component-boundary `CitryRender` `r` (its component is
-`comp`), given the `inherited_root_attrs` passed down from its parent:
+called. Marking each component's frame exactly once needs a parent processed
+before its children (a child's markers depend on the parent's watch-map), while
+joining the final string needs a child finished before its parent. So
+[`serialize.py`](../../packages/py/citry/citry/serialize.py) does it in two
+passes, neither of which calls itself (the same reason the render side uses a
+queue, so depth is not capped by Python's recursion limit):
 
-1. Build `comp`'s frame string by joining `r.parts`. A nested part that is itself
-   a child-component render (detected structurally by
-   `part.context.component is not comp`, the same predicate the deferred-scan
-   uses, section 4.4) is emitted as a transient placeholder
-   `<template c-render-id="<child id>"></template>`, and the child render is kept
-   in a local `{id: child_render}` map. A nested control-flow render
-   (`part.context.component is comp`) is serialized inline into the same frame.
+**Pass 1 (top-down), for each component frame, given the markers it inherited
+from its parent:**
+
+1. Build the frame string by joining the component's parts. A nested part that is
+   a child component (detected structurally by `part.context.component is not
+   comp`, the same predicate the deferred-scan uses, section 4.4) is emitted as a
+   placeholder `<template c-render-id="<child id>"></template>`, and the child is
+   recorded. A nested control-flow render (`part.context.component is comp`, or a
+   component-less render) is joined in directly.
 2. Run
-   `transform_html(frame, root_attributes=[...], all_attributes=[...], watch_on_attribute="c-render-id")`,
+   `transform_html(frame, root_attributes=[...], all_attributes=[...], track_added_attributes_for_tags_with_this_attribute="c-render-id")`,
    where the two attribute sets are distinct (see 6.2.1):
-   - `root_attributes`: the `data-cid-<id>` id marker, the per-instance
-     CSS-variables binding, plus `inherited_root_attrs` from the parent. These go
-     on `comp`'s real root element(s) only.
-   - `all_attributes`: the CSS-scoping attribute. This goes on *every* element of
-     `comp`'s own frame.
+   - `root_attributes`: the component's `data-cid-<id>` marker plus the markers
+     inherited from the parent. These go on the component's root element(s) only.
+   - `all_attributes`: the CSS-scoping attribute, on *every* element of the
+     frame. Empty for now (deferred to the dependency extension, 6.2.1).
 
    The call returns the marked frame plus a watch-map: for each child placeholder,
-   the attributes that landed on it (non-empty only when that child placeholder
-   was itself at the root, so only `root_attributes` can land there).
-3. Recurse into each child render top-down, passing the watch-map's attrs for
-   that child as its `inherited_root_attrs`. The child injects them onto its own
-   root in its step 2, producing the stacked `<div data-cid-<child> data-cid-<parent>>`.
-4. Replace each placeholder with the child's returned serialized string.
+   the attributes added to it (non-empty only when that placeholder was itself at
+   the root). Each such child inherits those markers, processed next.
+
+**Pass 2 (bottom-up):** walk the components in reverse of pass-1 order (so a
+child is finished before its parent) and replace each placeholder with the
+child's finished HTML.
 
 The placeholder is a temporary token used only while serializing, never stored on
-a render object. The component's own id and css-scoping inputs are read from
-`r.context.component`, so no marker state lives on the render objects. Each frame
-is parsed once (a child is still just a placeholder when its parent is
-transformed), so the pass is `O(total size)`, and per-component CSS scoping is
-correct because a
-parent's `all_attributes` never reaches a child's interior elements.
+a render object. The component's own id is read from `r.context.component`, so no
+marker state lives on the render objects. Each frame is parsed once (a child is
+still just a placeholder when its parent is marked), so the pass is `O(total
+size)`, and per-component CSS scoping stays correct because a parent's
+`all_attributes` never reaches a child's interior elements. The stacked result is
+`<div data-cid-<child>="" data-cid-<parent>="">` (child marker first, then
+inherited).
 
 This is DJC's `component_post_render` marking algorithm
 ([`_djc_reference/component_render.py`](../../packages/py/citry/_djc_reference/component_render.py),
@@ -409,10 +423,14 @@ stacks the `data-cid` markers automatically. It is rejected because:
    deps bubbling to root `extra`, children-first and sibling-source-order
    finalize, the serialize-time unresolved-deferred guard, and nested
    `on_component_rendered` replace/raise.
-2. **Phase B** (section 6.2): `data-cid-<ID>` markers via the top-down, parse-once
-   serialization pass (`<template c-render-id>` placeholders + watch-map +
-   inherited root attrs). Reuses the existing `citry_html_transform` crate, no
-   compiler change. Lands with the dependency extension, since per-component CSS
-   scoping shares the same pass. Tests: single root, multiple roots,
-   parent-root-is-child stacking, and CSS-scope attributes confined to a
-   component's own elements.
+2. **Phase B (built).** `data-cid-<ID>` markers, added on every `serialize()` via
+   the two-pass (top-down marking, bottom-up assembly) pass in
+   [`serialize.py`](../../packages/py/citry/citry/serialize.py): `<template
+   c-render-id>` placeholders, the watch-map, and inherited root attributes.
+   Reuses the existing `citry_html_transform` crate, no compiler change.
+   [`test_markers.py`](../../packages/py/citry/tests/test_markers.py) covers single
+   root, multiple roots, nested-not-at-root, two- and three-level
+   parent-root-is-child stacking, text-only (no marker), and fresh-id-per-render.
+3. **Phase C** (with the dependency extension): the CSS-scoping `all_attributes`
+   set (section 6.2.1), confined per-component by the same pass. Until then
+   `all_attributes` is empty.

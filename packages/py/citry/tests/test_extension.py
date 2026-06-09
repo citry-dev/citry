@@ -185,7 +185,7 @@ class TestRenderHooks:
             citry = app
             template = "<p>Hello {{ who }}</p>"
 
-        assert str(Card()) == "<p>Hello world</p>"
+        assert str(Card()) == '<p data-cid-c1="">Hello world</p>'
 
     def test_rendered_replace_with_string(self):
         class E(Extension):
@@ -200,7 +200,7 @@ class TestRenderHooks:
             citry = app
             template = "<p>hi</p>"
 
-        assert str(Card()) == "<wrapped/>"
+        assert str(Card()) == '<wrapped data-cid-c1=""/>'
 
     def test_rendered_receives_citryrender(self):
         captured = {}
@@ -251,7 +251,7 @@ class TestTemplateHooks:
             citry = app
             template = "<p>Hello</p>"
 
-        assert str(Card()) == "<p>Hi</p>"
+        assert str(Card()) == '<p data-cid-c1="">Hi</p>'
 
     def test_template_loaded_threads_in_order(self):
         class E1(Extension):

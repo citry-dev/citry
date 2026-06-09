@@ -1130,6 +1130,73 @@ class Card(Component):
 str(Card())   # prints "Card rendered"; returns "<p>Hello world</p>"
 ```
 
+### Deferred rendering: infinite depth + component-id markers (`citry/component_render.py`, `citry/citry_render.py`, `citry/nodes/__init__.py`, `citry/serialize.py`)
+
+**What:** Two changes that together let a component tree render to any depth and
+tag each component's HTML. (1) `ComponentNode` no longer renders a child inline;
+it returns a `DeferredComponent` part, and `render_impl` works through a stack of
+pending components instead of calling itself. (2) `serialize()` now adds a
+`data-cid-<id>=""` marker to each component's root element(s), recording which
+component produced which part of the page. (Note: with this change `serialize()`
+output carries markers, so the marker-free examples in earlier log entries show
+pre-marker output.)
+
+**Why:** Rendering a child inline made one component call the next, capping
+nesting at Python's recursion limit (about 60 component levels). Working through a
+list makes depth heap-bound. The markers are how a browser runtime will later
+scope CSS and run per-instance JS; they are the citry form of django-components'
+`data-djc-id` attributes. Full design and reasoning in
+[`deferred_rendering.md`](deferred_rendering.md).
+
+**Design decisions:**
+- **`DeferredComponent` is the deferral point.** `ComponentNode.render` resolves
+  the child's kwargs now (while the parent context, including `<c-for>` loop
+  variables, is live) and returns a `DeferredComponent(element, parent)`. Only the
+  child's render is deferred, not its inputs.
+- **`render_impl` = `_render_one` + a drive loop.** `_render_one` renders one
+  component, leaving children as `DeferredComponent` parts. The loop is an explicit
+  stack of `_RenderTask` (render a child, put it where the placeholder was) and
+  `_FinalizeTask` (run `on_component_rendered`, merge deps up). A component's
+  children are added above its own `_FinalizeTask`, so the component and everything
+  inside it finish first. This is django-components' `component_post_render`
+  structure, on objects instead of strings, so no `<!-- _RENDERED -->` comments or
+  `<template>` placeholder parsing are needed.
+- **`on_component_rendered` fires children-first**, the moment each subtree is
+  done, matching DJC. It moved out of `_render_one` onto `_FinalizeTask`.
+- **Deps merge at finalize, into the parent context.** A child's `extra` is only
+  complete after its descendants finalize, so the merge happens at the child's
+  `_FinalizeTask`, not when it is first resolved.
+- **Markers are added at serialize, on by default.** `serialize.py` does a
+  two-pass, non-recursive marker pass (top-down marking, then bottom-up assembly)
+  so serialize depth is also unbounded. Each component frame is transformed once
+  via the existing `citry_html_transform` crate (`transform_html`), with child
+  components as `<template c-render-id>` placeholders; the watch-map reports which
+  children are at the root and inherit the parent's markers. When a parent's root
+  is a child, the child's root carries both, e.g.
+  `<div data-cid-c2="" data-cid-c1="">` (child marker first, then inherited).
+- **CSS scoping (`all_attributes`) deferred.** Only the id marker is added for now;
+  the per-element CSS-scoping attribute lands with the dependency extension.
+- **Tests use deterministic render ids.** An autouse fixture in `tests/conftest.py`
+  makes ids a per-test counter (`c1`, `c2`, ...), so tests assert the real marker
+  output. A `TypeAlias` annotation on `citry_core`'s `transform_html` re-export,
+  which made it non-callable under mypy, was changed to a plain re-export in
+  passing.
+
+**Usage:**
+
+```python
+class Inner(Component):
+    citry = app
+    template = "<div>x</div>"
+
+class Outer(Component):
+    citry = app
+    template = "<c-inner />"          # Inner's <div> is Outer's root element
+
+# Inner's root carries both ids (child first, then the inherited parent):
+str(Outer())   # '<div data-cid-c2="" data-cid-c1="">x</div>'
+```
+
 ## Impl notes (things to be done)
 
 - DO NOT PASS CONTEXT BETWEEN NODES. ONLY PROPS AND SLOTS.

@@ -340,7 +340,7 @@ class TestTemplateDataNormalization:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"title": "Hello"}
 
-        assert MyComp(title="x").render().serialize() == "<p>hi</p>"
+        assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
 
     def test_namedtuple_template_data_renders(self):
         # Before normalization `dict(namedtuple)` raised ValueError.
@@ -358,7 +358,7 @@ class TestTemplateDataNormalization:
             def template_data(self, kwargs, slots=None, context=None):
                 return Data(title="Hello")
 
-        assert MyComp(title="x").render().serialize() == "<p>hi</p>"
+        assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
 
     def test_dataclass_template_data_renders(self):
         from dataclasses import dataclass
@@ -376,7 +376,7 @@ class TestTemplateDataNormalization:
             def template_data(self, kwargs, slots=None, context=None):
                 return Data(title="Hello")
 
-        assert MyComp(title="x").render().serialize() == "<p>hi</p>"
+        assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
 
 
 class TestTemplateDataValidation:
@@ -395,7 +395,7 @@ class TestTemplateDataValidation:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"title": "Hello"}
 
-        assert MyComp(title="x").render().serialize() == "<p>hi</p>"
+        assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
 
     def test_missing_required_field_raises(self):
         c = Citry()
@@ -442,7 +442,7 @@ class TestTemplateDataValidation:
             def template_data(self, kwargs, slots=None, context=None):
                 return MyComp.TemplateData(title="Hello")
 
-        assert MyComp(title="x").render().serialize() == "<p>hi</p>"
+        assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
 
     def test_no_template_data_schema_skips_validation(self):
         c = Citry()
@@ -454,7 +454,7 @@ class TestTemplateDataValidation:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"anything": "goes", "count": 3}
 
-        assert MyComp(title="x").render().serialize() == "<p>hi</p>"
+        assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
 
 
 class TestGeneratorCaching:
@@ -468,8 +468,8 @@ class TestGeneratorCaching:
             template = "<p>hi</p>"
 
         ro = MyComp(title="x")
-        assert ro.render().serialize() == "<p>hi</p>"
-        assert ro.render().serialize() == "<p>hi</p>"  # repeatable
+        assert ro.render().serialize() == '<p data-cid-c1="">hi</p>'
+        assert ro.render().serialize() == '<p data-cid-c2="">hi</p>'  # fresh id per render
 
     def test_generator_cached_on_class_and_shared(self):
         c = Citry()
@@ -502,5 +502,5 @@ class TestGeneratorCaching:
         Child(x=1).render()
 
         assert Base.__dict__["_template_body_generator"] is not Child.__dict__["_template_body_generator"]
-        assert Base(x=1).render().serialize() == "<p>base</p>"
-        assert Child(x=1).render().serialize() == "<p>child</p>"
+        assert Base(x=1).render().serialize() == '<p data-cid-c3="">base</p>'
+        assert Child(x=1).render().serialize() == '<p data-cid-c4="">child</p>'

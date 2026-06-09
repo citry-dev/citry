@@ -36,7 +36,7 @@ class TestConstFlow:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"cols": kwargs["cols"]}
 
-        assert Card(cols=Const(3)).render().serialize() == "<p>hi</p>"
+        assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">hi</p>'
 
     def test_const_signature_keys_the_cache(self):
         c = Citry()
@@ -114,5 +114,5 @@ class TestConstFlow:
                 return {"rows": kwargs["rows"]}
 
         # A list is unhashable; the signature falls back to a repr stand-in.
-        assert Card(rows=Const([1, 2, 3])).render().serialize() == "<p>hi</p>"
+        assert Card(rows=Const([1, 2, 3])).render().serialize() == '<p data-cid-c1="">hi</p>'
         assert len(c._const_body_cache) == 1

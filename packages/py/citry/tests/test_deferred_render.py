@@ -36,7 +36,7 @@ class TestInfiniteDepth:
             globals()[f"_C{i}"] = Component_i
 
         out = globals()["_C0"]().render().serialize()
-        assert out.count("<span>") == depth + 1
+        assert out.count("<span ") == depth + 1
         assert out.endswith("leaf" + "</span>" * (depth + 1))
 
 
@@ -60,7 +60,9 @@ class TestLoopVarKwargs:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"items": [1, 2, 3]}
 
-        assert Page().render().serialize() == "<ul><b>1</b><b>2</b><b>3</b></ul>"
+        assert Page().render().serialize() == (
+            '<ul data-cid-c1=""><b data-cid-c2="">1</b><b data-cid-c3="">2</b><b data-cid-c4="">3</b></ul>'
+        )
 
 
 class TestFinalizeOrder:
@@ -175,7 +177,7 @@ class TestNestedRenderedHook:
             citry = c
             template = "<main><c-leaf /></main>"
 
-        assert Root().render().serialize() == "<main><leaf-wrapped/></main>"
+        assert Root().render().serialize() == '<main data-cid-c1=""><leaf-wrapped data-cid-c2=""/></main>'
 
     def test_raise_through_nested_tree_propagates(self):
         class BoomLeaf(Extension):

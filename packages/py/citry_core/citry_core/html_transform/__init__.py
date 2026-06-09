@@ -1,8 +1,8 @@
-from typing import TypeAlias
-
 from citry_core import _rust
 
-transform_html: TypeAlias = _rust.html_transform.transform_html
+# Re-export the Rust `transform_html` function as a plain callable, so call
+# sites type-check correctly.
+transform_html = _rust.html_transform.transform_html
 
 
 __all__ = ["transform_html"]

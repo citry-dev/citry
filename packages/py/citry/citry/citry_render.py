@@ -83,29 +83,23 @@ class CitryRender:
 
     def serialize(self) -> str:
         """
-        Join the parts into a final HTML string.
+        Turn this render into a final HTML string.
 
-        Nested ``CitryRender`` parts are serialized recursively. Placement of
-        collected dependencies (head/body) and serialization strategies
-        (document vs fragment mode) are not implemented yet; see
-        docs/design/rendering.md.
+        Each component's root element(s) get a ``data-cid-<id>`` marker so the
+        rendered HTML records which component produced which part of the page
+        (see docs/design/deferred_rendering.md section 6). Placement of collected
+        dependencies (head/body) and serialization modes (document vs fragment)
+        are not implemented yet; see docs/design/rendering.md.
+
+        Raises ``RuntimeError`` if any child component was left unrendered (a
+        ``DeferredComponent`` still in the parts), which can only happen if this
+        render did not come from ``render()``.
         """
-        out: list[str] = []
-        for part in self.parts:
-            if isinstance(part, CitryRender):
-                out.append(part.serialize())
-            elif isinstance(part, str):
-                out.append(part)
-            else:
-                # The part is a DeferredComponent, so a child component was never
-                # rendered. render() renders all of them, so reaching here means
-                # serialize() ran on a render that did not come from render()
-                # (see docs/design/deferred_rendering.md section 4). It is a
-                # RuntimeError, not a TypeError: the render is just unfinished,
-                # nothing was given the wrong type.
-                msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
-                raise RuntimeError(msg)  # noqa: TRY004
-        return "".join(out)
+        # Imported here, not at module load, to avoid an import cycle:
+        # serialize.py imports CitryRender from this module.
+        from citry.serialize import serialize_render  # noqa: PLC0415
+
+        return serialize_render(self)
 
     def __str__(self) -> str:
         return self.serialize()

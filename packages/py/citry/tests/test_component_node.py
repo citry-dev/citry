@@ -26,7 +26,7 @@ class TestComponentNodeBasic:
             citry = c
             template = "<main><c-card /></main>"
 
-        assert Page().render().serialize() == "<main><span>card</span></main>"
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">card</span></main>'
 
     def test_name_lookup_is_case_insensitive(self):
         c = Citry()
@@ -39,7 +39,7 @@ class TestComponentNodeBasic:
             citry = c
             template = "<main><c-my-card /></main>"
 
-        assert Page().render().serialize() == "<main><span>ok</span></main>"
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">ok</span></main>'
 
 
 class TestComponentNodeAttrs:
@@ -63,7 +63,7 @@ class TestComponentNodeAttrs:
             citry = c
             template = '<main><c-card title="Hi" /></main>'
 
-        assert Page().render().serialize() == "<main><span>Hi</span></main>"
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">Hi</span></main>'
 
     def test_dynamic_attr_is_evaluated(self):
         c = Citry()
@@ -76,7 +76,7 @@ class TestComponentNodeAttrs:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"who": "World"}
 
-        assert Page().render().serialize() == "<main><span>World</span></main>"
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">World</span></main>'
 
     def test_boolean_attr_becomes_true(self):
         c = Citry()
@@ -86,7 +86,7 @@ class TestComponentNodeAttrs:
             citry = c
             template = "<main><c-card disabled /></main>"
 
-        assert Page().render().serialize() == "<main><span>True</span></main>"
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">True</span></main>'
 
     def test_c_bind_spreads_mapping_into_kwargs(self):
         c = Citry()
@@ -105,7 +105,7 @@ class TestComponentNodeAttrs:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"extra": {"a": 1, "b": 2}}
 
-        assert Page().render().serialize() == "<main><span>1-2</span></main>"
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">1-2</span></main>'
 
     def test_dynamic_attr_value_is_escaped_by_the_child(self):
         # The attr resolves to a raw Python value (unescaped); the child escapes
@@ -120,7 +120,7 @@ class TestComponentNodeAttrs:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"raw": "<b>"}
 
-        assert Page().render().serialize() == "<main><span>&lt;b&gt;</span></main>"
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">&lt;b&gt;</span></main>'
 
     def test_template_attr_becomes_rendered_kwarg(self):
         # c-body on a component is a nested template, rendered in the parent's
@@ -141,7 +141,10 @@ class TestComponentNodeAttrs:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"x": "hi"}
 
-        assert Page().render().serialize() == "<main><span><b>hi</b></span></main>"
+        assert (
+            Page().render().serialize()
+            == '<main data-cid-c1=""><span data-cid-c2=""><b data-cid-c1="">hi</b></span></main>'
+        )
 
 
 class TestComponentNodeBoundary:

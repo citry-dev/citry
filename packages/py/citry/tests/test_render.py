@@ -43,12 +43,12 @@ class TestRenderReturnsCitryRender:
 
 class TestSerialize:
     def test_serialize_joins_static_template(self):
-        assert _card("<p>hi</p>").render().serialize() == "<p>hi</p>"
+        assert _card("<p>hi</p>").render().serialize() == '<p data-cid-c1="">hi</p>'
 
     def test_serialize_is_repeatable(self):
         rendered = _card("<p>hi</p>").render()
-        assert rendered.serialize() == "<p>hi</p>"
-        assert rendered.serialize() == "<p>hi</p>"
+        assert rendered.serialize() == '<p data-cid-c1="">hi</p>'
+        assert rendered.serialize() == '<p data-cid-c1="">hi</p>'
 
     def test_serialize_joins_multiple_parts(self):
         # A CitryRender joins its parts in order...
@@ -68,17 +68,17 @@ class TestSerialize:
 class TestCoercions:
     def test_str_of_render_serializes(self):
         rendered = _card("<p>hi</p>").render()
-        assert str(rendered) == "<p>hi</p>"
+        assert str(rendered) == '<p data-cid-c1="">hi</p>'
 
     def test_bytes_of_render_serializes(self):
         rendered = _card("<p>hi</p>").render()
-        assert bytes(rendered) == b"<p>hi</p>"
+        assert bytes(rendered) == b'<p data-cid-c1="">hi</p>'
 
     def test_str_of_element_runs_full_chain(self):
         # str(Component(...)) goes element -> render -> serialize with defaults.
         el = _card("<p>hi</p>")
         assert isinstance(el, CitryElement)
-        assert str(el) == "<p>hi</p>"
+        assert str(el) == '<p data-cid-c1="">hi</p>'
 
 
 class TestContext:
