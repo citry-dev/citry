@@ -1,0 +1,418 @@
+# Design: deferred rendering (infinite depth, top-down passes, component-id markers)
+
+**Status (2026-06-09): Phase A built (infinite depth + the deferred queue);
+Phase B (markers) not yet built.** This document specifies how citry renders a
+component tree without recursion limits, in a top-down order, and how it tags
+each component's root element(s) with a component-id marker. It is the citry port
+of the two django-components features: infinite render depth and the multi-pass
+render that powers per-instance JS/CSS attribute passing. Phase A lives in
+[`component_render.py`](../../packages/py/citry/citry/component_render.py)
+(`render_impl` drive loop, `_render_one`, the `_RenderTask`/`_FinalizeTask`
+queue) and [`citry_render.py`](../../packages/py/citry/citry/citry_render.py)
+(`DeferredComponent`); tests in
+[`test_deferred_render.py`](../../packages/py/citry/tests/test_deferred_render.py).
+
+It extends [`rendering.md`](rendering.md), which defines the three-phase
+pipeline (`CitryElement` -> `CitryRender` -> serialize) and the `CitryContext`.
+That doc's section 10 phasing stops before this work. For the const-folding
+interaction see [`constness.md`](constness.md); for the extension lifecycle that
+owns the dependency flow see [`extensions.md`](extensions.md). Operating rules
+are in [`/CLAUDE.md`](../../CLAUDE.md).
+
+Upstream reference: the django-components implementation studied for this design
+is [`_djc_reference/component_render.py`](../../packages/py/citry/_djc_reference/component_render.py)
+(the `component_post_render` queue) and
+[`_djc_reference/dependencies.py`](../../packages/py/citry/_djc_reference/dependencies.py)
+(`set_component_attrs_for_js_and_css`, `insert_component_dependencies_comment`).
+
+---
+
+## 1. The two problems, kept separate
+
+These are easy to conflate, but they are independent and only one of them is
+foundational:
+
+1. **Render depth.** Rendering a component recursively renders its nested
+   components, which renders theirs, and so on. Each level consumes Python
+   stack, so a naive recursive renderer caps out at roughly 60 component levels.
+   citry has this limit today: [`ComponentNode.render`](../../packages/py/citry/citry/nodes/__init__.py)
+   ends with `return render_impl(element, parent=component)`, a direct recursive
+   call.
+
+2. **Marker stacking order.** To tag a component's root element(s) with a marker
+   attribute, and to let a parent's marker reach a child that *is* the parent's
+   root (the `<div data-cid-parent data-cid-child>` case), the markers must stack
+   in a definite order. citry serializes **top-down, parsing each frame once**,
+   with child-component frames emitted as `<template c-render-id>` placeholders so
+   `transform_html` can report (via its watch-map) which children sit at the root
+   and must inherit the parent's root attributes (section 6). This order concerns
+   the markers (problem-2 feature) only; depth (problem 1) does not require any
+   particular order.
+
+Because of this split, the work phases cleanly: deferred queue rendering first
+(solves depth), markers second (built on top, decided at serialization, and only
+consumed by the JS/CSS dependency runtime). The render queue commits to no
+ordering: it just builds the resolved `CitryRender` tree. The top-down order is a
+property of the *serialization step*, which runs after the queue has finished
+(section 6.2).
+
+## 2. What django-components needed that citry does not
+
+DJC operates over strings. To carry "which components rendered" across a string
+boundary it embeds `<!-- _RENDERED ... -->` comments and regex-scans the final
+document ([`dependencies.py` `insert_component_dependencies_comment`](../../packages/py/citry/_djc_reference/dependencies.py),
+`COMPONENT_COMMENT_REGEX`). To assemble a deep tree without recursion it emits
+`<template djc-render-id="...">` placeholder strings and re-parses them out of
+each component's HTML in a flat queue ([`component_post_render`](../../packages/py/citry/_djc_reference/component_render.py)).
+
+citry keeps the render output as a struct, `CitryRender.parts` (a heterogeneous
+`list[str | CitryRender]`, see [`citry_render.py`](../../packages/py/citry/citry/citry_render.py)).
+So citry does not need comment markers or placeholder-string parsing to know
+which components rendered or to assemble the tree: ownership is already encoded
+structurally, and the dependency bag rides on `CitryContext.extra`. The string
+machinery in DJC exists only because its medium was a string.
+
+DJC also needs a `ContextVar` render stack
+([`_component_render_stack`](../../packages/py/citry/_djc_reference/component_render.py))
+to detect "am I nested inside another render," because `{% component %}` calls
+`render()` recursively. citry does not, see section 5.
+
+## 3. What citry already has for the markers
+
+The hardest sub-problem of the marker feature is locating a component's **root
+element(s)** so the attribute can be attached. citry compiles plain HTML
+elements into static strings, not nodes: `<div class="card" data-x="{{ v }}">`
+compiles to `["<div class=\"card\" data-x=\"", ExprNode(...), "\">...", ...]`.
+There is no element node to target, so root detection needs HTML structure
+awareness.
+
+citry already ships that primitive. The Rust crate
+[`citry_html_transform`](../../crates/citry_html_transform) exposes
+`transform_html(html, root_attributes, all_attributes, watch_on_attribute)`
+(surfaced as
+[`citry_core.html_transform.transform_html`](../../packages/py/citry_core/citry_core/html_transform/__init__.py)).
+It injects attributes onto the root element(s) and onto all elements, handles
+multiple roots, and returns a watch-map keyed by a chosen attribute, the exact
+capability DJC gets from `set_html_attributes`. Its tests
+([`test_html_transformer.py`](../../packages/py/citry_core/tests/test_html_transformer.py))
+cover multi-root and nested cases. So the markers can be built by reusing this
+crate, with no compiler change.
+
+## 4. Phase A: the deferred render queue (infinite render depth)
+
+Phase A is pure Python in the `citry` package. It touches no grammar, AST,
+compiler output, `LangImpl`, or PyO3 surface, so it is outside the plan-mode and
+prior-art gate in [`/CLAUDE.md`](../../CLAUDE.md). It delivers unbounded render
+depth and the children-first `on_component_rendered` finalization, with no
+markers. The serialize-time marker ordering (section 6) is independent of it.
+
+### 4.1 A new render part: `DeferredComponent`
+
+Add a third member to the `RenderPart` union (today `str | CitryRender` in
+[`citry_render.py`](../../packages/py/citry/citry/citry_render.py)):
+
+```python
+class DeferredComponent:
+    __slots__ = ("element", "parent", "inherited_attrs", "resolved")
+    # element:         CitryElement, with kwargs ALREADY resolved against the
+    #                  live context (see 4.2). Slots/body are carried here too
+    #                  once the slot subsystem lands.
+    # parent:          Component, for parent/root linkage on the child render.
+    # resolved:        CitryRender | None, filled when the queue resolves it.
+```
+
+`DeferredComponent` carries no marker state. Markers are applied at serialize
+time (section 6.2): a component's own id is read from
+`resolved.context.component.id`, and the inherited root attributes are passed as a
+parameter of the serialization recursion, never stored on a render-phase struct.
+
+### 4.2 Resolve kwargs eagerly, defer only the render
+
+The one correctness rule: a `ComponentNode`'s kwargs must be resolved in the
+first pass, while the surrounding context is live. Kwargs can reference
+variables that exist only transiently, most importantly `ForNode` loop bindings,
+which are built into a per-iteration child context in
+[`ForNode.render`](../../packages/py/citry/citry/nodes/__init__.py). If kwarg
+resolution were deferred to a later pass, those bindings would be gone.
+
+So [`ComponentNode._resolve_kwargs`](../../packages/py/citry/citry/nodes/__init__.py)
+still runs in pass 1. Only the child's *render* (its `template_data`, its body
+walk) is deferred. `ComponentNode.render` stops recursing: instead of calling
+`render_impl`, it resolves kwargs, builds the `CitryElement`, and returns a
+`DeferredComponent` part.
+
+### 4.3 Split the render entry point
+
+Split today's [`render_impl`](../../packages/py/citry/citry/component_render.py)
+into two:
+
+- `_render_one(element, parent) -> CitryRender`: render a single component's body
+  into a parts list. Nested components in that body surface as
+  `DeferredComponent` parts. No recursion into children, no queue drive.
+- `render_impl(element) -> CitryRender`: the user/root entry. Calls
+  `_render_one` for the root, then drives the queue (4.4) to completion, and
+  returns a `CitryRender` with no `DeferredComponent` parts remaining.
+
+### 4.4 The drive loop
+
+Heap-bound, non-recursive **depth-first with per-component finalize markers**.
+This is DJC's `component_post_render` structure
+([`_djc_reference/component_render.py`](../../packages/py/citry/_djc_reference/component_render.py)),
+with the strings removed: a `DeferredComponent` *is* DJC's `ComponentPart` (no
+regex `parse_component_result` needed), and splicing a child's `CitryRender` into
+its parent's parts *is* DJC's "append result to parent" step (the struct linkage
+does it). Firing the hook on the finalize marker reproduces DJC's `is_last`
+finalization (section 7).
+
+A `position` (the `_DeferredComponentPosition` type) is a
+`(containing_list, index, parent_context)` triple: the list and index say where
+the `DeferredComponent` sits, so we can put its result there, and
+`parent_context` is the `CitryContext` of the component that owns it (where its
+dependencies are copied, section 4.5). For the root, `position` is `None`. The
+stack holds two kinds of work item:
+
+```
+def scan(render):  # the DeferredComponents directly owned by `render`'s component
+    walk render.parts; for nested CitryRenders that SHARE render.context.component
+    (control-flow: IfNode/ForNode/TemplateNode) descend in; STOP at component
+    boundaries (a nested render whose context.component differs); yield each
+    DeferredComponent as Render(deferred, position=(its list, its index, render.context)).
+
+def locate(containing_list, index, target):  # index is only a hint
+    check containing_list[index] first; if it is not `target`, scan the whole
+    list for it (the list may have been edited)
+    # each step swaps one item for one item, so other items keep their positions
+
+stack = []
+root_render = _render_one(element, parent=None)
+push Finalize(root_render, position=None)
+push reversed(scan(root_render))         # source order: first child popped first
+while stack:
+    item = stack.pop()
+    if item is Render(deferred, position):
+        child_render = _render_one(deferred.element, deferred.parent)
+        locate + replace the deferred in position.list with child_render
+        push Finalize(child_render, position)
+        push reversed(scan(child_render))   # grandchildren land above this Finalize
+    elif item is Finalize(render, position):
+        comp = render.context.component
+        final = apply on_component_rendered(comp, render)   # str->wrap, None->render, raise->raise
+        if position is None:             # root
+            root_result = final
+        else:
+            locate + replace child_render in position.list with final
+            merge final.context deps into position.parent_context     # section 4.5
+return root_result
+```
+
+Because each `Render` adds its children *above* its own `Finalize`, and we always
+take from the top of the stack, a component and everything inside it finish (and
+get finalized) before we return to the parent's `Finalize`. So
+`on_component_rendered` runs children-first, the moment each component is done,
+without waiting for the whole page and without counting children. Adding
+`reversed(scan(...))` keeps siblings in source order (first child taken first),
+which the dependency de-duplication relies on. The result is the same hook order
+as the old approach where one component rendered the next directly
+(`on_component_input` -> `on_component_data` -> `on_component_rendered`, children
+before parents); the only difference is the depth limit is gone. Checking the
+remembered index first and otherwise scanning the list keeps the position correct
+even if user code or an extension edited `.parts` in between.
+
+Marker ordering (section 6) is a separate, serialize-time concern; it does not
+depend on this drive order. The drive's job is only to produce a fully-resolved,
+finalized `CitryRender` tree.
+
+### 4.5 The dependency merge: two sites, not one
+
+There are two distinct merges, and only one moves:
+
+- **Embedded eager renders stay in `_render_body`.** A `{{ element }}` expression
+  whose value is a `CitryElement`/`CitryRender` is rendered eagerly by
+  `_render_value` (its own complete `render_impl` drive) and surfaces as a
+  `CitryRender` from a *different* context. `_render_body`'s existing check
+  (`isinstance(part, CitryRender) and part.context is not context`) merges its
+  deps, unchanged. A `DeferredComponent` is not a `CitryRender`, so it passes that
+  check untouched.
+- **Deferred components merge at `Finalize`, in the drive loop.** A child's
+  `extra` is only fully populated once its own descendants have finalized (each
+  grandchild merges up at *its* `Finalize`). So the merge of a child's deps into
+  its parent happens at the child's `Finalize` (section 4.4), *not* when the child
+  is first resolved. Merging at resolution time would capture an empty `extra`.
+
+Both reuse [`_merge_dependencies`](../../packages/py/citry/citry/component_render.py)
+(the documented hook-conversion seam). Control-flow `CitryRender`s that share the
+parent context still need no merge, same rule as today.
+
+## 5. Why citry needs no render-stack ContextVar
+
+DJC's recursion goes through `{% component %}` -> `render()`, so any code path
+(including a user calling `.render()` inside `get_template_data`) can re-enter
+the renderer, and DJC tracks that with a `ContextVar` to pick the right
+dependency strategy.
+
+In citry, `ComponentNode.render` never calls `render_impl`; it only ever
+produces a `DeferredComponent`. The only callers of `render_impl` are the user
+(via `CitryElement.render`) and nothing else. A user who calls `Inner.render()`
+inside `Outer.template_data` gets a self-contained, fully-driven subtree (its own
+queue), which then embeds as a part of `Outer`'s render and merges its deps
+upward through the same section-4.5 path. Composability and depth-safety fall out
+without any ambient stack state.
+
+## 6. Phase B: component-id markers via `transform_html`
+
+Built on the Phase A queue, and only when the JS/CSS dependency extension is
+being built (the markers exist to let the browser runtime scope CSS and run
+per-instance JS; nothing reads them before then).
+
+The marker attribute is **`data-cid-<ID>`**, a valueless (boolean) attribute,
+where `<ID>` is the component render id (already `c`-prefixed, see
+[`constants.py`](../../packages/py/citry/citry/constants.py), so a marker reads
+`data-cid-cAb3d9`). Boolean form lets multiple component ids sit on one element,
+which is what the parent-root-is-child case (6.1) requires.
+
+### 6.1 The structural fact to reproduce
+
+A component's marker goes on its **root element(s)**, and when a parent's root
+*is* a child component, the child's root element carries both ids:
+
+```
+Parent template "<c-child/>"   ->  <div data-cid-cChild data-cid-cParent>...</div>
+Parent template "<div><c-child/></div>"  ->  <div data-cid-cParent><span data-cid-cChild>...
+```
+
+Root elements compile to static strings, not nodes (section 3), so this needs
+HTML-structure awareness, which is exactly what `transform_html` provides.
+
+### 6.2 The model: top-down, parse each frame once, at serialize time
+
+The render output stays a `CitryRender` tree (no strings) until `serialize()` is
+called. Serialization is a **top-down recursion** that transforms each component
+frame exactly once. For a component-boundary `CitryRender` `r` (its component is
+`comp`), given the `inherited_root_attrs` passed down from its parent:
+
+1. Build `comp`'s frame string by joining `r.parts`. A nested part that is itself
+   a child-component render (detected structurally by
+   `part.context.component is not comp`, the same predicate the deferred-scan
+   uses, section 4.4) is emitted as a transient placeholder
+   `<template c-render-id="<child id>"></template>`, and the child render is kept
+   in a local `{id: child_render}` map. A nested control-flow render
+   (`part.context.component is comp`) is serialized inline into the same frame.
+2. Run
+   `transform_html(frame, root_attributes=[...], all_attributes=[...], watch_on_attribute="c-render-id")`,
+   where the two attribute sets are distinct (see 6.2.1):
+   - `root_attributes`: the `data-cid-<id>` id marker, the per-instance
+     CSS-variables binding, plus `inherited_root_attrs` from the parent. These go
+     on `comp`'s real root element(s) only.
+   - `all_attributes`: the CSS-scoping attribute. This goes on *every* element of
+     `comp`'s own frame.
+
+   The call returns the marked frame plus a watch-map: for each child placeholder,
+   the attributes that landed on it (non-empty only when that child placeholder
+   was itself at the root, so only `root_attributes` can land there).
+3. Recurse into each child render top-down, passing the watch-map's attrs for
+   that child as its `inherited_root_attrs`. The child injects them onto its own
+   root in its step 2, producing the stacked `<div data-cid-<child> data-cid-<parent>>`.
+4. Replace each placeholder with the child's returned serialized string.
+
+The placeholder is a temporary token used only while serializing, never stored on
+a render object. The component's own id and css-scoping inputs are read from
+`r.context.component`, so no marker state lives on the render objects. Each frame
+is parsed once (a child is still just a placeholder when its parent is
+transformed), so the pass is `O(total size)`, and per-component CSS scoping is
+correct because a
+parent's `all_attributes` never reaches a child's interior elements.
+
+This is DJC's `component_post_render` marking algorithm
+([`_djc_reference/component_render.py`](../../packages/py/citry/_djc_reference/component_render.py),
+[`dependencies.py` `set_component_attrs_for_js_and_css`](../../packages/py/citry/_djc_reference/dependencies.py)),
+minus the `<!-- _RENDERED -->` dependency comments: citry collects deps
+structurally in `extra`, so only the attribute-marking half of DJC's string pass
+is reproduced, and the tree assembly itself stays struct-based.
+
+#### 6.2.1 The two attribute kinds
+
+Two distinct CSS-related attributes attach to different element sets, and the
+top-down pass is what keeps them correctly scoped:
+
+- **CSS-scoping attribute** (`all_attributes`): goes on **every** element of a
+  component's own frame, so the component's CSS rules select only its own
+  elements. This is the case that *requires* the top-down pass: a frame is
+  transformed while its children are still placeholders, so a parent's
+  scoping attribute never leaks onto a child's interior elements.
+- **CSS-variables binding** (`root_attributes`): the per-instance attribute that
+  binds CSS custom properties (computed from the component's css data) onto the
+  component's **root** element(s), alongside the `data-cid-<id>` id marker.
+
+In the captured reference, `set_component_attrs_for_js_and_css` puts the id marker
+and the CSS-variables binding into `root_attributes` and passes `all_attributes=[]`
+([`dependencies.py`](../../packages/py/citry/_djc_reference/dependencies.py)); the
+scoping-attribute (`all_attributes`) case is the one citry adds. Both ride the same
+single per-frame `transform_html` call.
+
+### 6.3 Why not bottom-up
+
+A bottom-up alternative (serialize children first, inline them, then
+`transform_html` the parent's full frame) needs no placeholder or watch-map and
+stacks the `data-cid` markers automatically. It is rejected because:
+
+- **CSS scoping is a core feature.** Per-component CSS scoping uses `all_attributes`
+  to tag a component's own elements; inlining the children first and then
+  transforming would also tag the children's inner elements with the parent's
+  scope, which is wrong. Correct scoping needs each frame transformed while its
+  children are still placeholders, which is the top-down model.
+- **Re-parse cost.** Bottom-up re-parses each ancestor's inlined children, making
+  it `O(depth x size)`; the top-down pass is `O(total size)`.
+
+## 7. Interactions
+
+- **Slots.** `ComponentNode` with body content still raises today (slots are a
+  later phase with their own design, see
+  [`nodes/__init__.py`](../../packages/py/citry/citry/nodes/__init__.py)).
+  `DeferredComponent` carries the element's slots/body so deferred rendering is
+  slot-ready, but slot resolution itself is out of scope here.
+- **Const-folding.** A folded component boundary must still mint a fresh render
+  id and re-merge its deps each render
+  ([`constness.md`](constness.md) section 6, [`rendering.md`](rendering.md)
+  section 7). A folded placeholder therefore produces a `DeferredComponent` each
+  render, not a baked string. The two designs agree.
+- **`on_component_rendered` timing.** This hook fires **the moment a component's
+  nested subtree is fully resolved** (children before parent), matching DJC, so a
+  post-processing hook sees fully-resolved children. Today it fires inside
+  [`render_impl`](../../packages/py/citry/citry/component_render.py) (step 8)
+  before any child is rendered; under deferral it moves out of `_render_one` onto
+  the `Finalize` work item (section 4.4). Because each component's `Render` adds
+  its children above its own `Finalize` on the stack, the `Finalize` is reached
+  only after everything inside the component has been rendered, which is exactly
+  DJC's `is_last` finalization in [`next_renderer_result`](../../packages/py/citry/_djc_reference/component_render.py).
+  A replacement returned by the hook (`CitryRender`/`str`) is put back at the
+  component's recorded position. Error interception (a child's error bubbling into an ancestor's
+  `Finalize`, as DJC allows) is a follow-up; the current skeleton re-raises, which
+  is retained for now.
+
+## 8. Open decisions
+
+- **Error interception across the post-order hook pass** (section 7): whether an
+  ancestor `on_component_rendered` may catch a descendant's error and substitute
+  HTML, as DJC does. Deferred; current behavior re-raises.
+- **Exact attribute spellings** for the CSS-scoping attribute (`all_attributes`)
+  and the CSS-variables binding (`root_attributes`), section 6.2.1. The element
+  sets they attach to are settled (all elements vs root); only the concrete
+  attribute names are decided with the dependency extension.
+
+## 9. Suggested phasing
+
+1. **Phase A (built).** `DeferredComponent`, the `_render_one`/`render_impl`
+   split, the `_RenderTask`/`_FinalizeTask` drive loop, the finalize-time dep
+   merge, and the children-first `on_component_rendered` (section 7). Pure Python.
+   Delivers infinite depth. Tests cover deep nesting (600 levels, well past the
+   old recursion limit), loop-variable kwargs resolved correctly under deferral,
+   deps bubbling to root `extra`, children-first and sibling-source-order
+   finalize, the serialize-time unresolved-deferred guard, and nested
+   `on_component_rendered` replace/raise.
+2. **Phase B** (section 6.2): `data-cid-<ID>` markers via the top-down, parse-once
+   serialization pass (`<template c-render-id>` placeholders + watch-map +
+   inherited root attrs). Reuses the existing `citry_html_transform` crate, no
+   compiler change. Lands with the dependency extension, since per-component CSS
+   scoping shares the same pass. Tests: single root, multiple roots,
+   parent-root-is-child stacking, and CSS-scope attributes confined to a
+   component's own elements.

@@ -130,9 +130,10 @@ class ComponentMeta(type):
         # or the inherited default (the base ``Component.citry``). Always set.
         citry_instance = cls.citry
 
-        # Fire the class-created hook and let extensions reparent their nested
-        # config classes (e.g. ``class View:`` -> a subclass of the view
-        # extension's Config), before registration. Extensions are present at
+        # Fire the class-created hook and let extensions rebuild their nested
+        # config classes as subclasses of their Config base (e.g. ``class View:``
+        # -> a subclass of the view extension's Config), before registration.
+        # Extensions are present at
         # class-definition time, so no deferral is needed (docs/design/extensions.md).
         extensions = citry_instance.extensions
         extensions.on_component_class_created(cls)

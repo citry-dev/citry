@@ -547,7 +547,7 @@ class ExtensionManager:
                 config_cls = getattr(component_class, extension.class_name)
             setattr(component, extension.name, config_cls(component))
 
-    # ----- Lifecycle hook fan-out -----
+    # ----- Lifecycle hooks -----
 
     def on_extension_created(self) -> None:
         # Each extension receives a context naming itself, so this cannot go
@@ -579,7 +579,7 @@ class ExtensionManager:
             OnComponentUnregisteredContext(citry=self.citry, name=name, component_class=component_class),
         )
 
-    # ----- Render hook fan-out -----
+    # ----- Render hooks -----
 
     def on_component_input(self, component: Component) -> None:
         self.emit(
@@ -619,7 +619,7 @@ class ExtensionManager:
                     ctx = replace(ctx, render=out, error=None)
         return ctx.render, ctx.error
 
-    # ----- Template hook fan-out -----
+    # ----- Template hooks -----
 
     def on_template_loaded(self, component_class: type[Component], content: str) -> str:
         return self.emit(

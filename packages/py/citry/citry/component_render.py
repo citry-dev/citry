@@ -15,11 +15,11 @@ rendered (via ``.render()``), it calls ``render_impl`` which:
 happens later, via ``CitryRender.serialize()`` (or ``str()``). See
 docs/design/rendering.md for the three-phase model.
 
-The expensive step, the body-generating function (parse + compile + exec of
-the template), is built once per **component class** and cached on the class,
-since it is invariant for a given template. Calling it yields a fresh node
-list each render. (Per-element/per-signature body caching belongs to the
-parked const-folding design; see docs/design/constness.md.)
+The slow step, the body-generating function (parse + compile + exec of the
+template), is built once per **component class** and cached on the class, since
+it is the same for a given template. Calling it yields a fresh node list each
+render. (Per-element/per-signature body caching belongs to the parked
+const-folding design; see docs/design/constness.md.)
 
 This is a skeleton. Many features from django-components are not yet
 ported (extensions/hooks, context snapshotting, deferred rendering,
@@ -28,10 +28,10 @@ JS/CSS media, provide/inject). They will be added iteratively.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from citry.citry_context import CitryContext
-from citry.citry_render import CitryRender
+from citry.citry_render import CitryRender, DeferredComponent
 from citry.constants import COMP_ID_PREFIX, UID_LENGTH
 from citry.constness import const_value, is_const
 from citry.nodes import (
@@ -77,11 +77,167 @@ def render_impl(
     parent: Component | None = None,
 ) -> CitryRender:
     """
-    Core render implementation.
+    Render a component and everything inside it, returning a finished CitryRender.
 
-    This is the internal entry point called by ``CitryElement.render()``.
-    It creates a real Component instance, calls the data methods, builds (or
-    reuses) the template body, and walks it into a ``CitryRender``.
+    Called by ``CitryElement.render()``. It renders the top component with
+    ``_render_one``, which leaves each nested ``<c-child>`` as an unrendered
+    ``DeferredComponent``. This function then renders those children one at a
+    time, working through a list instead of calling itself, so a deeply nested
+    page never hits Python's recursion limit (see
+    docs/design/deferred_rendering.md).
+
+    A component's ``on_component_rendered`` hook runs once everything inside that
+    component has been rendered (so children run before their parents), and at
+    that same point the child's collected dependencies are copied into its
+    parent.
+
+    Args:
+        element: The component to render (its class, kwargs, slots, and cached
+            template body).
+        parent: The parent Component instance when rendering inside another
+            component's template. Sets the parent/root links.
+
+    Returns:
+        A finished ``CitryRender`` with every child rendered (no
+        ``DeferredComponent`` parts left). Call ``.serialize()`` (or ``str()``)
+        on it to get the HTML.
+
+    """
+    root_render = _render_one(element, parent)
+
+    # We keep a stack of two kinds of work:
+    #   - _RenderTask: render one deferred child, and put its result where the
+    #     DeferredComponent was.
+    #   - _FinalizeTask: run that child's after-render hook and copy its
+    #     dependencies into the parent.
+    # When we render a child we add its _FinalizeTask first, then its own
+    # children on top. We always take from the top of the stack, so a child and
+    # everything inside it finish before we run the parent's _FinalizeTask. (This
+    # is the approach django-components uses, but on objects instead of HTML
+    # strings.)
+    stack: list[_RenderTask | _FinalizeTask] = [_FinalizeTask(root_render, None)]
+    stack.extend(reversed(_scan_deferred(root_render)))
+
+    root_result = root_render
+    while stack:
+        task = stack.pop()
+        # Case: Render nested component
+        if isinstance(task, _RenderTask):
+            child_render = _render_one(task.deferred.element, task.deferred.parent)
+            _replace_in_parts(task.position.parts, task.position.idx, task.deferred, child_render)
+            stack.append(_FinalizeTask(child_render, task.position))
+            stack.extend(reversed(_scan_deferred(child_render)))
+        # Case: Finalize nested component
+        else:
+            final = _finalize(task.render)
+            if task.position is None:
+                root_result = final
+            else:
+                _replace_in_parts(task.position.parts, task.position.idx, task.render, final)
+                _merge_dependencies(task.position.parent_context, final.context)
+
+    return root_result
+
+
+class _DeferredComponentPosition(NamedTuple):
+    """Where a ``DeferredComponent`` sits, so we can put its rendered result there."""
+
+    parts: list[RenderPart]  # the list the DeferredComponent is in
+    idx: int  # its position in that list (named `idx`, not `index`, so it doesn't hide tuple.index)
+    parent_context: CitryContext  # the parent component's context; where this child's dependencies go
+
+
+class _RenderTask(NamedTuple):
+    """Render one deferred child component."""
+
+    deferred: DeferredComponent
+    position: _DeferredComponentPosition
+
+
+class _FinalizeTask(NamedTuple):
+    """Run a rendered component's after-render hook and copy its dependencies up."""
+
+    render: CitryRender
+    position: _DeferredComponentPosition | None  # None for the top (root) component
+
+
+def _scan_deferred(render: CitryRender) -> list[_RenderTask]:
+    """
+    Find the child components inside ``render`` that still need rendering.
+
+    Returns one ``_RenderTask`` per ``DeferredComponent`` that belongs to this
+    component. It looks through nested renders made by ``<c-if>``, ``<c-for>``,
+    and nested templates (which use the same component and context), but not
+    inside another component's render: that component finds and renders its own
+    children. The task's ``parent_context`` is this render's context, which is
+    where the child's dependencies will be copied.
+    """
+    owner = render.context.component
+    tasks: list[_RenderTask] = []
+
+    def walk(parts: list[RenderPart]) -> None:
+        for i, part in enumerate(parts):
+            if isinstance(part, DeferredComponent):
+                tasks.append(_RenderTask(part, _DeferredComponentPosition(parts, i, render.context)))
+            elif isinstance(part, CitryRender) and part.context.component is owner:
+                walk(part.parts)
+
+    walk(render.parts)
+    return tasks
+
+
+def _replace_in_parts(parts: list[RenderPart], index: int, target: object, new: RenderPart) -> None:
+    """
+    Put ``new`` where ``target`` currently is in ``parts``.
+
+    ``index`` is where ``target`` was last seen, so we check that spot first. If
+    the list has changed (for example user code or an extension edited
+    ``parts``), we scan the whole list for ``target`` instead. Each render step
+    swaps one item for one item, so positions normally stay put.
+    """
+    if 0 <= index < len(parts) and parts[index] is target:
+        parts[index] = new
+        return
+    for i, part in enumerate(parts):
+        if part is target:
+            parts[i] = new
+            return
+    msg = "deferred part vanished from its .parts list before resolution"
+    raise RuntimeError(msg)
+
+
+def _finalize(render: CitryRender) -> CitryRender:
+    """
+    Run a rendered component's ``on_component_rendered`` hook and apply the result.
+
+    An extension may return a new ``CitryRender`` or ``str`` to replace the
+    output, or raise to turn it into an error that propagates. This runs once the
+    component and everything inside it have been rendered.
+    """
+    component = render.context.component
+    if component is None:
+        return render
+    new_render, error = component.citry.extensions.on_component_rendered(component, render, None)
+    if error is not None:
+        raise error
+    if isinstance(new_render, str):
+        return CitryRender(parts=[new_render], context=render.context)
+    if new_render is not None:
+        return new_render
+    return render
+
+
+def _render_one(
+    element: CitryElement,
+    parent: Component | None = None,
+) -> CitryRender:
+    """
+    Render one component, without rendering the components inside it.
+
+    Creates the Component instance, runs the data methods, builds (or reuses) the
+    template body, and turns it into a ``CitryRender``. Any ``<c-child>`` tags in
+    the template become unrendered ``DeferredComponent`` parts; rendering those,
+    and running ``on_component_rendered``, is done by ``render_impl``.
 
     Args:
         element: The CitryElement to render. Carries the component class,
@@ -90,9 +246,8 @@ def render_impl(
             component's template. Used to set parent/root references.
 
     Returns:
-        A ``CitryRender`` holding the rendered parts and the ``CitryContext``
-        used during the render. Call ``.serialize()`` (or ``str()``) on it to
-        get the HTML string.
+        A ``CitryRender`` whose parts may contain unresolved ``DeferredComponent``
+        parts, plus the ``CitryContext`` used during the render.
 
     """
     comp_cls = element.comp_cls
@@ -172,20 +327,12 @@ def render_impl(
         signature = _const_signature(tpl_data)
         body = citry_instance._const_body(comp_cls, signature, build)
 
-    # 7. Walk the body into a parts list and wrap it in a CitryRender.
+    # 7. Walk the body into a parts list and wrap it in a CitryRender. Any nested
+    #    components are left as unrendered DeferredComponent parts; render_impl
+    #    renders them and runs on_component_rendered for each one once everything
+    #    inside it has been rendered.
     parts = _render_body(body, context)
-    rendered = CitryRender(parts=parts, context=context)
-
-    # 8. on_component_rendered: extensions may post-process the render (return a
-    #    new CitryRender/str) or replace the result with an error (raise).
-    new_render, error = extensions.on_component_rendered(component, rendered, None)
-    if error is not None:
-        raise error
-    if isinstance(new_render, str):
-        return CitryRender(parts=[new_render], context=context)
-    if new_render is not None:
-        return new_render
-    return rendered
+    return CitryRender(parts=parts, context=context)
 
 
 def _get_template_string(comp_cls: type[Component]) -> str | None:
@@ -243,10 +390,9 @@ def _compile_body_generator(template_str: str) -> Callable[[], list[BodyItem]]:
     ``generate_template`` function from the exec'd namespace; calling it
     returns a fresh list of static strings and runtime node objects.
 
-    The compiled code references node classes (ExprNode, ComponentNode, etc.).
-    For now these are stubs that store their arguments but raise
-    NotImplementedError on render; they will be replaced with real
-    implementations as the rendering pipeline matures.
+    The compiled code creates node objects (ExprNode, ComponentNode, etc.) by
+    name. Those names are supplied through the ``ns`` namespace below, so the
+    generated code can find them.
     """
     ast = parse_template(template_str)
     code = compile_template(ast)
@@ -274,21 +420,21 @@ def _compile_body_generator(template_str: str) -> Callable[[], list[BodyItem]]:
 
 def _render_body(body: list[BodyItem], context: CitryContext) -> list[RenderPart]:
     """
-    Walk a body (list of static strings and node objects) into a parts list.
+    Render a body (a list of static strings and nodes) into a list of parts.
 
-    Strings are static text and pass through unchanged. Node objects are
-    rendered with the render-scoped ``context``; each contributes a ``str`` or a
-    nested ``CitryRender`` to the parts.
+    Static strings pass through unchanged. Each node is rendered with
+    ``context`` and adds a part: a ``str``, a nested ``CitryRender``, or a
+    ``DeferredComponent`` (a ``<c-child>`` tag, rendered later by ``render_impl``).
 
-    When a node returns a ``CitryRender`` produced by a *different* render (an
-    embedded pre-rendered subtree, for example a value found in an expression),
-    its collected metadata is merged into this render's context. A
-    ``CitryRender`` carrying *this* context (for example a nested template, which
-    shares the surrounding component's context) needs no merge.
+    A node may return a ``CitryRender`` from a *different* render: an
+    already-rendered value found in a ``{{ ... }}`` expression. When that happens
+    its dependencies are copied into this render's context. A ``CitryRender`` from
+    *this* render (for example a ``<c-if>`` block or a nested template, which use
+    the same context) does not need copying.
 
-    Returns a list of parts (``str`` or nested ``CitryRender``) for a
-    ``CitryRender`` to hold, rather than a joined string: joining is deferred to
-    ``CitryRender.serialize()`` so embedded subtrees stay composable.
+    The parts are returned as a list, not joined into one string, so that an
+    already-rendered value embedded in the middle can still be read later. Joining
+    happens in ``CitryRender.serialize()``.
     """
     parts: list[RenderPart] = []
     for item in body:
@@ -305,31 +451,32 @@ def _render_body(body: list[BodyItem], context: CitryContext) -> list[RenderPart
 
 def _merge_dependencies(into: CitryContext, source: CitryContext) -> None:
     """
-    Merge an embedded subtree's collected metadata into the consuming context.
+    Copy one render's collected data into the render that contains it.
 
-    This is the seam for the JS/CSS dependency flow (docs/design/rendering.md
-    section 6): a pre-rendered subtree's dependencies must bubble up into the
-    tree that embeds it. No extension populates ``extra`` yet, so this is
-    currently a structural no-op; the dependency extension will define the merge
-    semantics (ordered de-duplication across the tree, not last-writer-wins).
+    This is where the JS/CSS dependency flow will live (docs/design/rendering.md
+    section 6): a child render's dependencies need to reach the page that
+    includes it. Nothing fills ``extra`` yet, so this does nothing for now; the
+    dependency extension will decide the real rules (keep tree order, drop
+    duplicates, rather than letting the last write win).
     """
     into.extra.update(source.extra)
 
 
 def _const_signature(context: dict[str, Any]) -> frozenset[tuple[str, Any]]:
     """
-    Build a hashable signature of the const-marked context variables.
+    Build a cache key from the variables marked ``Const``.
 
-    Keys the const body cache: a different set of const variables, or different
-    const values, is a different signature. Unhashable const values fall back to
-    their ``repr`` (a placeholder; see the hashing notes in
-    ``docs/design/constness.md`` for the intended canonical form).
+    The body cache uses this key: a different set of ``Const`` variables, or the
+    same ones with different values, gives a different key and so a different
+    cached body. A ``Const`` value that cannot be used as a dict/set key falls
+    back to its ``repr`` (a stand-in; see the hashing notes in
+    ``docs/design/constness.md`` for the intended final form).
     """
     return frozenset((name, _freeze(const_value(value))) for name, value in context.items() if is_const(value))
 
 
 def _freeze(value: Any) -> Any:
-    """Return ``value`` if hashable, else a stable-ish string stand-in."""
+    """Return ``value`` unchanged if it can be a dict/set key, else its ``repr`` string."""
     try:
         hash(value)
     except TypeError:

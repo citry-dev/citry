@@ -329,3 +329,10 @@ Adjacent work: the **control-flow nodes** (`IfNode`, `ForNode`) are built (they
 were self-contained and done independently of phases 4-5). The **slot
 subsystem** (`SlotNode`, `FillNode`, default vs named slots) needs its own
 design doc before implementation (many edge cases).
+
+**Deferred rendering** (infinite render depth and the `data-cid-<ID>`
+component-id markers) is specified separately in
+[`deferred_rendering.md`](deferred_rendering.md). It replaces `ComponentNode`'s
+current recursive child render (which inherits Django's ~60-level limit) with a
+heap-bound queue over the `parts` tree, and moves the `_merge_dependencies` call
+site into that queue. It is the natural successor to phase 4 here.

@@ -8,24 +8,23 @@ docs/design/rendering.md):
     CitryElement.render()     -> CitryRender    render: parts + collected metadata
     CitryRender.serialize()   -> str (HTML)     serialize: join + place deps
 
-``CitryRender`` is the middle struct. It is deliberately NOT a string: keeping
-the render output as an object is what lets a pre-rendered subtree stay
-composable. A ``CitryRender`` can be handed to another component (as a kwarg,
-inside ``{{ ... }}``, or in an attribute); the consuming tree detects it,
-merges its collected metadata (JS/CSS deps) upward, and inlines its HTML. Only
-coercing to a string (``str()``/``serialize()``) collapses it to final HTML.
-This is the citry form of django-components #1650 ("cache the render object,
-not the string").
+``CitryRender`` is the middle struct, and on purpose it is NOT a string. Keeping
+the render output as an object lets an already-rendered piece be reused. You can
+pass a ``CitryRender`` to another component (as a kwarg, inside ``{{ ... }}``, or
+in an attribute); the component that receives it pulls in its HTML and copies up
+its collected data (JS/CSS dependencies). Turning it into a string
+(``str()``/``serialize()``) is the final step that produces the HTML. This is the
+citry form of django-components #1650 ("cache the render object, not the string").
 
 A ``CitryRender`` holds:
 
-- ``parts``: an ordered, heterogeneous list. Each part is either a ``str``
-  (static or already-serialized text) or a nested ``CitryRender`` (an embedded
-  subtree not yet joined). Deferring the join keeps embedding cheap and keeps
-  the deps recoverable until the final serialize.
+- ``parts``: an ordered list whose items can be different types. Each part is a
+  ``str`` (static or already-rendered text) or a nested ``CitryRender`` (a piece
+  not yet joined into text). Joining only at the end keeps reuse cheap and keeps
+  the dependencies readable until the final serialize.
 - ``context``: the ``CitryContext`` used during the render. For now the whole
-  context is kept (the collected metadata lives in its ``extra``); this can be
-  narrowed to specific fields once serialization needs are known.
+  context is kept (the collected data lives in its ``extra``); this can be
+  narrowed to specific fields once we know what serialize needs.
 
 Serialization is currently just the recursive join of the parts. Placing
 collected dependencies into ``<head>``/``<body>`` (document mode) and the
@@ -55,11 +54,15 @@ from citry.util.html import escape
 
 if TYPE_CHECKING:
     from citry.citry_context import CitryContext
+    from citry.component import Component
 
-# A single piece of rendered output: either final text, or a nested CitryRender
-# (an embedded subtree whose serialization is deferred). A CitryRender's parts
-# and a node's render() result are both made of these.
-RenderPart: TypeAlias = "str | CitryRender"
+# One piece of rendered output. It is one of:
+#   - str: final text.
+#   - CitryRender: a nested render not yet joined into text.
+#   - DeferredComponent: a child component not yet rendered (render() renders it
+#     before any serialize()).
+# A CitryRender's `parts`, and what a node's render() returns, are made of these.
+RenderPart: TypeAlias = "str | CitryRender | DeferredComponent"
 
 
 class CitryRender:
@@ -89,7 +92,19 @@ class CitryRender:
         """
         out: list[str] = []
         for part in self.parts:
-            out.append(part.serialize() if isinstance(part, CitryRender) else part)
+            if isinstance(part, CitryRender):
+                out.append(part.serialize())
+            elif isinstance(part, str):
+                out.append(part)
+            else:
+                # The part is a DeferredComponent, so a child component was never
+                # rendered. render() renders all of them, so reaching here means
+                # serialize() ran on a render that did not come from render()
+                # (see docs/design/deferred_rendering.md section 4). It is a
+                # RuntimeError, not a TypeError: the render is just unfinished,
+                # nothing was given the wrong type.
+                msg = "unresolved DeferredComponent at serialize(); render() must process the queue first"
+                raise RuntimeError(msg)  # noqa: TRY004
         return "".join(out)
 
     def __str__(self) -> str:
@@ -100,6 +115,38 @@ class CitryRender:
 
     def __repr__(self) -> str:
         return f"CitryRender(parts={len(self.parts)})"
+
+
+class DeferredComponent:
+    """
+    A child component that has not been rendered yet.
+
+    When the parent's template reaches a ``<c-child>`` tag, citry does not render
+    the child right there. Doing so would mean one component renders the next,
+    which renders the next, so a deeply nested page would hit Python's recursion
+    limit. Instead the parent records the child as a ``DeferredComponent`` (with
+    its inputs already worked out) and carries on. ``render_impl`` later renders
+    the recorded children one at a time, swapping each ``DeferredComponent`` for
+    the child's ``CitryRender``. See docs/design/deferred_rendering.md section 4.
+
+    Attributes:
+        element: The child to render: its component class plus the inputs
+            (kwargs/slots), already worked out. The inputs are read while the
+            parent is still rendering, so a loop variable from an enclosing
+            ``<c-for>`` keeps the right value.
+        parent: The parent ``Component`` instance. Used to set the child's
+            ``parent``/``root`` links when it is rendered.
+
+    """
+
+    __slots__ = ("element", "parent")
+
+    def __init__(self, element: CitryElement, parent: Component) -> None:
+        self.element = element
+        self.parent = parent
+
+    def __repr__(self) -> str:
+        return f"DeferredComponent({self.element!r})"
 
 
 def _render_value(value: Any) -> RenderPart:

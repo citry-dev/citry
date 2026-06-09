@@ -1054,6 +1054,82 @@ was making the two authoring forms produce *identical* variable metadata.
 "<li c-for=\"item in items\">{{ item }}</li>"
 ```
 
+### Extension system, skeleton (`citry/extension.py`, `citry/settings.py`, `Citry`, render pipeline)
+
+**What:** Phase 1 of the extension (plugin) system: an `Extension` base with the
+lifecycle/registration/render/template hooks, a per-`Citry` `ExtensionManager`
+that fans each hook out (smart dispatch + a generic `emit`), the
+`Extension.Config` per-component nested-class mechanism, an `ExtensionCommand`
+stub, the lean frozen-dataclass `On*Context` types, and a `CitrySettings` schema
+object. Full design and the DJC divergences are in
+[`extensions.md`](extensions.md); this entry records what is built.
+
+**Why:** Extensions are the foundational, lightest-coupling subsystem (DJC #829),
+and Django, the media/JS/CSS subsystem (#1144), scoped CSS (#1230), and caching
+all become extensions on top of this surface.
+
+**Design decisions:**
+- **Scoped to the `Citry` instance** (#1413). `Citry(extensions=[...])` builds an
+  `ExtensionManager`; `citry.extensions` is the manager and the raw spec lives in
+  `citry.settings.extensions` as an immutable tuple. This deletes DJC's
+  `store_events`/`_init_app` deferral machinery (no Django app-load race: a
+  component class is bound to its `Citry`, and thus its extensions, at definition
+  time in the metaclass).
+- **Smart dispatch.** For each hook name the manager calls only the extensions
+  that actually override it (cached `_extensions_with_hook`). `emit(name, ctx, result=...)`
+  is the generic dispatcher (`result` is `"none"` / `"map"` / `"first"`); the
+  named hook methods route through it. `emit` is also the seam for later
+  extension-owned custom hooks (dependencies, caching).
+- **Frozen-dataclass contexts, lean surface.** `@dataclass(frozen=True,
+  slots=True)`, threaded with `dataclasses.replace`. Contexts carry `citry` plus
+  (for render hooks) `component`; `component_class`/`component_id`/`registry` are
+  derived, not duplicated. Class-lifecycle contexts carry `citry` +
+  `component_class` (full name).
+- **`CitrySettings` is a real schema object**, not a loose dict. `Citry` accepts
+  only its known fields (`extensions`, `extensions_defaults`); arbitrary kwargs
+  are rejected. The old `self._settings` dict is gone (`test_settings_stored`
+  updated to the new contract).
+- **`Extension.Config`** (shortened from DJC's `ComponentConfig`): the nested
+  `class View:` is rebuilt as a subclass of `(user, GlobalDefaults, ext.Config)` so config
+  precedence is component-level > `extensions_defaults` > factory. The component
+  back-reference is a weakref with an optional `component` (an out-of-lifecycle
+  extension such as a future Storybook port has `component=None`). The DJC
+  `<name>_class` escape hatch (a `media_class` legacy mirror) is dropped.
+- **Hooks wired this phase:** `on_extension_created`,
+  `on_component_class_created`/`deleted`, `on_component_registered`/
+  `unregistered`, `on_component_input` (mutate-only), `on_component_data`,
+  `on_component_rendered` (operates on the `CitryRender`; return replaces, raise
+  errors), `on_template_loaded` (per class, before parse),
+  `on_template_compiled` (per built body, at the node list, before caching).
+  **Deferred:** the short-circuit/caching split (django-components#1141 R6), the
+  dependency/`on_render_merge`/`on_dependencies` hooks, slots, and CSS/JS hooks.
+- **Known skeleton caveat:** `on_component_input` mutations land on
+  `raw_kwargs`/`raw_slots` but do not yet propagate to the already-built typed
+  `kwargs`/`slots`; that propagation is deferred (see [`extensions.md`](extensions.md) 7.1).
+
+**Usage:**
+
+```python
+from citry import Citry, Component, Extension
+
+class Timing(Extension):
+    name = "timing"
+
+    def on_component_rendered(self, ctx):
+        print(f"{type(ctx.component).__name__} rendered")
+
+app = Citry(extensions=[Timing])
+
+class Card(Component):
+    citry = app
+    template = "<p>Hello {{ who }}</p>"
+
+    def template_data(self, kwargs, slots=None, context=None):
+        return {"who": "world"}
+
+str(Card())   # prints "Card rendered"; returns "<p>Hello world</p>"
+```
+
 ## Impl notes (things to be done)
 
 - DO NOT PASS CONTEXT BETWEEN NODES. ONLY PROPS AND SLOTS.

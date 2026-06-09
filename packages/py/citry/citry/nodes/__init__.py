@@ -64,14 +64,13 @@ from typing_extensions import override
 
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
-from citry.citry_render import CitryRender, _render_value
+from citry.citry_render import CitryRender, DeferredComponent, _render_value
 from citry_core.safe_eval import safe_eval
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from citry.citry_render import RenderPart
-
 
 
 # NOTE: Not abstract on purpose: the compiler builds the whole node tree up front
@@ -369,22 +368,23 @@ class ComponentNode(Node):
         self.contains_fills = contains_fills
 
     @override
-    def render(self, context: CitryContext) -> CitryRender:
+    def render(self, context: CitryContext) -> DeferredComponent:
         """
-        Resolve attributes into kwargs, look up the child component, render it.
+        Work out the child's inputs, but don't render the child yet.
 
-        The child is a context boundary: it is rendered through ``render_impl``,
-        which mints the child its own ``CitryContext`` (fresh variables from the
-        child's ``template_data``). The returned ``CitryRender`` carries the
-        child's output; ``_render_body`` merges its dependencies into the parent.
+        This turns the tag's attributes into the child's kwargs and returns a
+        ``DeferredComponent``. It does not render the child here: doing so would
+        make one component render the next and so on, hitting Python's recursion
+        limit on deeply nested pages. ``render_impl`` renders the child later,
+        with its own ``CitryContext``, and copies its dependencies into the
+        parent (see docs/design/deferred_rendering.md section 4).
+
+        The attributes are read now, while this component is still rendering, so
+        a loop variable from an enclosing ``<c-for>`` has the right value.
 
         Body content (default-slot text or ``<c-fill>`` nodes) is not handled
         yet; the slot subsystem is a later phase with its own design.
         """
-        # Imported lazily: component_render imports the node classes, so importing
-        # the render entry point at module load would be circular.
-        from citry.component_render import render_impl  # noqa: PLC0415
-
         if self.body:
             raise NotImplementedError(
                 f"<c-{self.name}> has body content (slots/fills), which is not yet "
@@ -392,14 +392,14 @@ class ComponentNode(Node):
             )
 
         component = context.component
-        if component is None or component.citry is None:
+        if component is None:
             msg = "ComponentNode.render requires a component context bound to a Citry instance."
             raise RuntimeError(msg)
 
         kwargs = self._resolve_kwargs(context)
         child_cls = component.citry.get(self.name)
         element = CitryElement(child_cls, kwargs)
-        return render_impl(element, parent=component)
+        return DeferredComponent(element, component)
 
     def _resolve_kwargs(self, context: CitryContext) -> dict[str, Any]:
         """
