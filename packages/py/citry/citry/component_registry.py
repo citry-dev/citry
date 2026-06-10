@@ -131,8 +131,7 @@ class ComponentRegistry:
                 if existing is comp_cls:
                     continue
                 raise AlreadyRegistered(
-                    f"Cannot register {comp_cls.__name__!r} as {n!r}: "
-                    f"already taken by {existing.__name__!r}."
+                    f"Cannot register {comp_cls.__name__!r} as {n!r}: already taken by {existing.__name__!r}."
                 )
             self._name_to_cls[n] = comp_cls
             if cls_id not in self._cls_to_names:
@@ -168,9 +167,7 @@ class ComponentRegistry:
         cls_id = id(comp_cls)
         names_to_remove = self._cls_to_names.pop(cls_id, None)
         if not names_to_remove:
-            raise NotRegistered(
-                f"Component {comp_cls.__name__!r} is not registered."
-            )
+            raise NotRegistered(f"Component {comp_cls.__name__!r} is not registered.")
         for n in names_to_remove:
             self._name_to_cls.pop(n, None)
 
@@ -202,7 +199,7 @@ class ComponentRegistry:
 
     def __len__(self) -> int:
         """Number of unique component classes registered."""
-        return len(set(id(c) for c in self._name_to_cls.values()))
+        return len({id(c) for c in self._name_to_cls.values()})
 
     def __repr__(self) -> str:
         return f"ComponentRegistry({len(self)} components)"

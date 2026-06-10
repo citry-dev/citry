@@ -1197,6 +1197,199 @@ class Outer(Component):
 str(Outer())   # '<div data-cid-c2="" data-cid-c1="">x</div>'
 ```
 
+### The Slot value (`citry/slots.py`)
+
+**What:** The `Slot` class plus its surface: `SlotContext` (the single
+argument a slot function receives), `normalize_slot_fills` (the Python-input
+boundary), the typing aliases (`SlotResult`, `SlotFunc`, `SlotInput`), and the
+`Slot` detection in `_render_value` so `{{ my_slot }}` renders slot content in
+place. This is phase 2 of [`slots.md`](slots.md); fill collection at the
+component boundary and `<c-slot>` resolution are the next phases.
+
+**Why:** Every form of slot content (a string, a function, a composed
+`CitryElement`, a rendered `CitryRender`, and later a `<c-fill>` body)
+normalizes to one lazy, repeatable, standalone callable, so the rest of the
+engine handles exactly one type. Ported from django-components' `Slot` with
+the DJC scope machinery removed.
+
+**Design decisions:**
+- **Calling a Slot returns a `RenderPart`, not a string.** The result goes
+  through `_render_value`, so a slot wrapping a component element re-renders
+  it per call (fresh ids), an already-rendered subtree is inlined with its
+  dependencies intact, and plain text is escaped.
+- **The fallback handle is a Slot** (`SlotContext.fallback: Slot | None`),
+  not a separate type. `{{ fallback }}` rides the same `_render_value`
+  detection as any slot value; `str(slot)` (via `Slot.__str__`) renders and
+  serializes in one step, with the same one-shot caveat as
+  `CitryRender.serialize`.
+- **Escaping at the earliest sensible point.** String/scalar contents are
+  escaped at construction; a function's return value is escaped per call
+  (`escape` honors `__html__`, so `SafeString` stays trusted). Matches
+  `{{ expr }}` escaping.
+- **`Slot(Slot(...))` raises** (ambiguous metadata, as in DJC);
+  `normalize_slot_fills` copies an incomplete Slot (filling in
+  `component_name`/`slot_name`, copying `extra`) rather than mutating the
+  caller's instance.
+- **Import direction:** `slots.py` has no module-load imports from
+  `citry_render` (lazy inside methods), so `citry_render` imports `Slot` at
+  the top and the hot `_render_value` path needs no per-call import.
+- **`SlotFunc.__call__`'s `ctx` parameter is positional-only**, so slot
+  functions may name the parameter anything.
+
+**Usage:**
+
+```python
+from citry import Slot
+
+slot = Slot(lambda ctx: f"Hello, {ctx.data['name']}!")
+slot({"name": "John"})        # 'Hello, John!' - standalone, repeatable
+
+MyPage(slots={"header": "Hi", "footer": slot})   # normalized at the boundary
+
+# Inside a template, a Slot value renders in place:
+#   {{ my_slot }}      - invoked with no data
+#   {{ my_slot(d) }}   - invoked with data (Slot is callable in expressions)
+```
+
+### Fill collection and the `slots=` channel (`nodes/__init__.py`, `component.py`, `component_render.py`, `serialize.py`)
+
+**What:** Slot content now travels from both channels into a component.
+`MyComp(title="x", slots={...})` reserves the `slots` kwarg (extracted in
+`ComponentMeta.__call__`); `Component.__init__` normalizes the inputs to
+`Slot` values before building the typed `Slots` view. In templates,
+`ComponentNode.render` turns its body into the child's slots: a body without
+fills is the implicit `"default"` slot, and a fill group is collected by
+executing control flow against the live context (an `<c-if>` contributes its
+matching branch, a `<c-for>` contributes per iteration, each fill closing over
+its own iteration's bindings). Until `<c-slot>` resolution lands, components
+consume slots via `template_data(kwargs, slots)` and `{{ slot_var }}` /
+`{{ slot_var(data) }}` expressions. This is phase 3 of
+[`slots.md`](slots.md).
+
+**Why:** The component boundary is where "what fills exist" must be decided
+(loop variables and conditions are only live in the parent's render), while
+fill *bodies* must stay lazy (slot data arrives at the slot site). Eager
+collection + lazy Slots is the split that supports both.
+
+**Design decisions:**
+- **Fills close over the writer's scope.** A fill body renders against the
+  context where it was written (parent variables, loop bindings), overlaid
+  with the fill's `data`/`fallback` variables when the child passes them. The
+  overlay shares the captured `extra` bag, so dependencies reach the fill's
+  lexical owner.
+- **Collection dispatches polymorphically.** `Node.collect_fills(context, sink)` is the second method of the node contract: the base rejects the node
+  (nothing but fills, control flow, and whitespace may sit in a fill group),
+  `IfNode`/`ForNode` contribute their matching branch / per-iteration fills,
+  and `FillNode` resolves its own attributes and registers its body into the
+  `FillSink`. Open dispatch means extension-injected node kinds can
+  participate without the collector enumerating node types; collection still
+  never calls `render`, so an invalid template fails before any side effect
+  runs. The alternatives (a closed `isinstance` walk; collecting by rendering
+  with a channel on the context) and why they lost are recorded in
+  [`slots.md`](slots.md) sections 4.4 and 13.
+- **`IfNode.active_branch_body` / `ForNode.iter_bodies`** extract the
+  branch/iteration logic so rendering and fill collection cannot drift.
+- **Runtime validation mirrors the parser:** duplicate materialized names,
+  non-whitespace text/expressions beside fills, invalid `name`/`data`/
+  `fallback` values, and `c-bind` spreads limited to `name`/`data`/`fallback`.
+  In step, the parser's duplicate-fill checks were narrowed to fills outside
+  control flow (the same name in exclusive `c-if`/`c-else` branches is valid;
+  see [`slots.md`](slots.md) 11.4a).
+- **`CitryRender.is_component_root`** distinguishes a component's whole output
+  from interior renders. Serialization frames child components by this flag
+  (not by context identity, which slot-fill content breaks: it carries the
+  writer's context while rendering inside another component's frame), and
+  `_scan_deferred` now descends into every nested render so components inside
+  slot content defer correctly, with dependencies merged into the lexical
+  owner's context. Side effect: a prop-template (`c-body="<b>...</b>"`) no
+  longer stamps the parent's `data-cid` marker on its interior elements; only
+  component roots are marked.
+- **Unused slot content is silently ignored** (matching django-components:
+  surplus fills are not an error, because slot names can be dynamic).
+
+**Usage:**
+
+```python
+class Card(Component):
+    template = "<div>{{ h }}</div>"
+
+    def template_data(self, kwargs, slots=None, context=None):
+        return {"h": slots.get("header", "")}
+
+# Python channel:
+Card(slots={"header": "Hi"})
+
+# Template channel (collected by the parent's ComponentNode):
+class Page(Component):
+    template = '<c-card><c-fill name="header">Hello {{ name }}</c-fill></c-card>'
+```
+
+### Asset loading: template, JS, and CSS files (`citry/media.py`, `citry/citry_template.py`)
+
+**What:** Components declare assets in three inline/file pairs
+(`template`/`template_file`, `js`/`js_file`, `css`/`css_file`) plus the nested
+`Media` class for secondary assets. `citry/media.py` resolves the declarations:
+`get_template(cls)` returns a `CitryTemplate` (source + origin + filepath),
+`get_js`/`get_css` return loaded content, `get_media` returns the merged
+`CitryMedia`. File paths resolve relative to the component's own `.py` file
+first, then `Citry(dirs=...)`. Hot-reload seam: a file-to-component weakref
+index on `Citry` plus `reset_template`/`reset_files`. Full design in
+[`asset_loading.md`](asset_loading.md).
+
+**Why:** Completes the file-loading half of DJC's `component_media.py` without
+its Django coupling. Also the prerequisite for the dependency extension: it is
+the `js`/`css` source that `on_js_loaded`/`on_css_loaded` (now wired) and the
+future `CitryContext.extra` dependency flow consume.
+
+**Design decisions:**
+- **Fields stay raw; accessors resolve.** DJC's lazy descriptors existed for a
+  Django settings race citry does not have. Citry keeps `MyComp.js` exactly as
+  declared and resolves through module functions, cached once per class in the
+  class `__dict__` (the body-generator pattern).
+- **The pair is one inheritance unit.** Resolution walks the MRO for the first
+  class whose own `__dict__` declares either member; explicit `None` stops the
+  walk ("no asset"), absence continues to the parent. Presence in `__dict__`
+  replaces DJC's `UNSET` sentinel. Both members set non-`None` on one class
+  raise at class definition.
+- **Paths resolve to absolute and files are read directly** (utf8). No
+  staticfiles tier, no Django template loaders, no comp-dir-relative rewriting
+  (DJC's own `TODO_v3` direction).
+- **`CitryTemplate` struct** carries source (post-`on_template_loaded`),
+  origin (file path, or `module::Class` for inline), and filepath. The hook
+  firing moved from `_get_body_generator` into the loader, so inline and file
+  content enter the engine through one place.
+- **`Media` is loaded by core, emitted by the dependency extension.** Entries
+  (str/Path/glob/callable/`__html__` objects) resolve to absolute paths where
+  they exist locally; URLs and unresolved paths pass through. Merging
+  (`extend` True/False/list) de-duplicates preserving first-seen order; globs
+  are sorted (determinism rule). What entries mean in output is deferred to
+  the dependency extension, keeping the DJC #1144 door open. Divergences from
+  DJC: the user's `Media` class is not mutated, callables run lazily at
+  resolution, `bytes` entries dropped.
+- **Hot reload:** every resolved file registers in `Citry._file_index`
+  (weakrefs); `Citry.get_components_for_file` is what a future watcher drives.
+  `reset_template` also clears the compiled body generator and the class's
+  const-body cache entries (new `Citry._evict_component_cache`).
+
+**Usage:**
+
+```python
+app = Citry(dirs=["/proj/components"])
+
+class Card(Component):           # /proj/components/card/card.py
+    citry = app
+    template_file = "card.html"  # found next to card.py
+    js_file = "card.js"
+    css_file = "card.css"
+
+    class Media:
+        js = ["vendor/*.js"]
+        css = {"all": "theme.css", "print": "print.css"}
+
+get_template(Card).source        # file content, hooks applied
+get_media(Card).js               # merged, absolute paths
+```
+
 ## Impl notes (things to be done)
 
 - DO NOT PASS CONTEXT BETWEEN NODES. ONLY PROPS AND SLOTS.

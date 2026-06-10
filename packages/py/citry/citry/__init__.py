@@ -47,6 +47,14 @@ from citry.nodes import (
     TemplateNode,
 )
 from citry.settings import CitrySettings
+from citry.slots import (
+    Slot,
+    SlotContext,
+    SlotFunc,
+    SlotInput,
+    SlotResult,
+    normalize_slot_fills,
+)
 
 __all__ = [
     "AlreadyRegistered",
@@ -81,9 +89,15 @@ __all__ = [
     "OnExtensionCreatedContext",
     "OnTemplateCompiledContext",
     "OnTemplateLoadedContext",
+    "Slot",
+    "SlotContext",
+    "SlotFunc",
+    "SlotInput",
     "SlotNode",
+    "SlotResult",
     "StaticHtmlAttr",
     "TemplateHtmlAttr",
     "TemplateNode",
     "citry",
+    "normalize_slot_fills",
 ]

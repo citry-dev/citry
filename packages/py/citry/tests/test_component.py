@@ -4,7 +4,7 @@
 
 import pytest
 
-from citry import Citry, CitryElement, Component
+from citry import Citry, CitryElement, Component, Slot
 
 
 class TestComponentFields:
@@ -292,7 +292,10 @@ class TestInputNormalization:
             header: str
 
         inst = MyComp._create_instance(slots=S(header="H"))
-        assert inst.raw_slots == {"header": "H"}
+        # Slot inputs normalize to Slot values (docs/design/slots.md section 9.2).
+        assert set(inst.raw_slots) == {"header"}
+        assert isinstance(inst.raw_slots["header"], Slot)
+        assert inst.raw_slots["header"]() == "H"
 
     def test_none_inputs_default_to_empty_dicts(self):
         c = Citry()

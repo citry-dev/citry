@@ -50,6 +50,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from citry.citry_element import CitryElement
+from citry.slots import Slot
 from citry.util.html import escape
 
 if TYPE_CHECKING:
@@ -72,14 +73,31 @@ class CitryRender:
     Attributes:
         parts: Ordered list of ``str`` or nested ``CitryRender`` fragments.
         context: The ``CitryContext`` used to produce this render.
+        is_component_root: True only for the render that is a component's whole
+            output (produced by the render pipeline, one per component
+            instance). Interior renders (a ``<c-if>``/``<c-for>`` block, a
+            nested template, slot-fill content rendered in the enclosing
+            scope) are False. Serialization uses this to tell a completed
+            child-component subtree (which becomes its own marked frame) from
+            content that joins into the surrounding frame; the component on
+            the context cannot tell these apart, because slot-fill content
+            carries the context of the component that wrote it, not the one
+            it renders inside.
 
     """
 
-    __slots__ = ("context", "parts")
+    __slots__ = ("context", "is_component_root", "parts")
 
-    def __init__(self, parts: list[RenderPart], context: CitryContext) -> None:
+    def __init__(
+        self,
+        parts: list[RenderPart],
+        context: CitryContext,
+        *,
+        is_component_root: bool = False,
+    ) -> None:
         self.parts = parts
         self.context = context
+        self.is_component_root = is_component_root
 
     def serialize(self) -> str:
         """
@@ -149,9 +167,15 @@ def _render_value(value: Any) -> RenderPart:
 
     This is the bridge from an arbitrary Python value (the result of evaluating
     a ``{{ ... }}`` expression, or a value handed into an attribute) to a
-    ``RenderPart``. The rules (see docs/design/rendering.md section 3.1):
+    ``RenderPart``. The rules (see docs/design/rendering.md section 3.1 and
+    docs/design/slots.md section 3.5):
 
     - ``None`` renders as the empty string (not the literal ``"None"``).
+    - A ``Slot`` is invoked with no data, so ``{{ my_slot }}`` renders slot
+      content in place. (Calling it with data, ``{{ my_slot(d) }}``, also lands
+      here: the call already produced a render part, handled by the rules
+      below.) The slot's fallback handle is a Slot too, so ``{{ fallback }}``
+      renders through this same branch.
     - A ``CitryElement`` (a composed-but-unrendered element handed into an
       expression) is rendered now, so its output and dependencies flow into the
       surrounding tree.
@@ -162,6 +186,8 @@ def _render_value(value: Any) -> RenderPart:
     """
     if value is None:
         return ""
+    if isinstance(value, Slot):
+        return value()
     if isinstance(value, CitryElement):
         value = value.render()
     if isinstance(value, CitryRender):

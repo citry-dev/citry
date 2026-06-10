@@ -165,24 +165,30 @@ def _scan_deferred(render: CitryRender) -> list[_RenderTask]:
     """
     Find the child components inside ``render`` that still need rendering.
 
-    Returns one ``_RenderTask`` per ``DeferredComponent`` that belongs to this
-    component. It looks through nested renders made by ``<c-if>``, ``<c-for>``,
-    and nested templates (which use the same component and context), but not
-    inside another component's render: that component finds and renders its own
-    children. The task's ``parent_context`` is this render's context, which is
-    where the child's dependencies will be copied.
+    Returns one ``_RenderTask`` per ``DeferredComponent``, descending into
+    every nested ``CitryRender``. Most nested renders share this component's
+    context (``<c-if>``/``<c-for>`` blocks, nested templates), but slot-fill
+    content invoked during this render carries the context of the component
+    that *wrote* the fill, and components inside it defer like any other, so
+    cross-context renders are searched too. Descending into an embedded,
+    already-completed subtree is harmless: ``render_impl`` finished its queue,
+    so it contains no ``DeferredComponent`` parts.
+
+    Each task's ``parent_context`` is the context of the nested render the
+    deferred sits in: that is the lexical owner (for fill content, the
+    component whose template wrote it), which is where the child's
+    dependencies belong (see docs/design/slots.md section 8).
     """
-    owner = render.context.component
     tasks: list[_RenderTask] = []
 
-    def walk(parts: list[RenderPart]) -> None:
+    def walk(parts: list[RenderPart], parent_context: CitryContext) -> None:
         for i, part in enumerate(parts):
             if isinstance(part, DeferredComponent):
-                tasks.append(_RenderTask(part, _DeferredComponentPosition(parts, i, render.context)))
-            elif isinstance(part, CitryRender) and part.context.component is owner:
-                walk(part.parts)
+                tasks.append(_RenderTask(part, _DeferredComponentPosition(parts, i, parent_context)))
+            elif isinstance(part, CitryRender):
+                walk(part.parts, part.context)
 
-    walk(render.parts)
+    walk(render.parts, render.context)
     return tasks
 
 
@@ -221,8 +227,11 @@ def _finalize(render: CitryRender) -> CitryRender:
     if error is not None:
         raise error
     if isinstance(new_render, str):
-        return CitryRender(parts=[new_render], context=render.context)
+        return CitryRender(parts=[new_render], context=render.context, is_component_root=render.is_component_root)
     if new_render is not None:
+        # The replacement stands in for the component's whole output, so it
+        # inherits the root-render marking (serialization frames depend on it).
+        new_render.is_component_root = render.is_component_root
         return new_render
     return render
 
@@ -330,9 +339,11 @@ def _render_one(
     # 7. Walk the body into a parts list and wrap it in a CitryRender. Any nested
     #    components are left as unrendered DeferredComponent parts; render_impl
     #    renders them and runs on_component_rendered for each one once everything
-    #    inside it has been rendered.
+    #    inside it has been rendered. This render is the component's whole
+    #    output, so it is marked as the component's root render (serialization
+    #    relies on the flag to find component frame boundaries).
     parts = _render_body(body, context)
-    return CitryRender(parts=parts, context=context)
+    return CitryRender(parts=parts, context=context, is_component_root=True)
 
 
 def _get_template_string(comp_cls: type[Component]) -> str | None:

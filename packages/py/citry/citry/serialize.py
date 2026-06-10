@@ -109,12 +109,15 @@ def _build_frame(
     """
     Join one component's parts into an HTML string.
 
-    Plain text passes through. A nested render from the same component (a
-    ``<c-if>``/``<c-for>`` block or a nested template) is joined in directly. A
-    nested render from a *different* component is a child component: it becomes a
-    ``<template c-render-id="...">`` placeholder, and is recorded in ``children``
-    for pass 2 to fill in. Walking the same-component blocks only follows the
-    template's own nesting, so it does not recurse deeply.
+    Plain text passes through. A nested render that is another component's
+    completed root render (``is_component_root``) is a child component: it
+    becomes a ``<template c-render-id="...">`` placeholder, recorded in
+    ``children`` for pass 2 to fill in. Every other nested render joins in
+    directly: ``<c-if>``/``<c-for>`` blocks and nested templates (same
+    component), and slot-fill content (which carries the context of the
+    component that *wrote* the fill, but renders as part of this frame).
+    Walking the joined-in blocks only follows the template's own nesting, so it
+    does not recurse deeply.
     """
     out: list[str] = []
 
@@ -124,13 +127,14 @@ def _build_frame(
                 out.append(part)
             elif isinstance(part, CitryRender):
                 part_component = part.context.component
-                if part_component is None or part_component is component:
-                    # Same component (or a component-less render): join in directly.
-                    walk(part.parts)
-                else:
-                    # A different component: leave a placeholder for pass 2.
+                if part.is_component_root and part_component is not None and part_component is not component:
+                    # Another component's whole output: leave a placeholder for pass 2.
                     out.append(f'<template c-render-id="{part_component.id}"></template>')
                     children.append((part, part_component.id))
+                else:
+                    # Interior content (control flow, nested template, slot-fill
+                    # content) or a component-less render: join in directly.
+                    walk(part.parts)
             else:
                 # A DeferredComponent here means render() never resolved it.
                 # RuntimeError (not TypeError): the render is unfinished, nothing

@@ -9,12 +9,13 @@ The value nodes ``ExprNode`` and ``TemplateNode`` render against a
 ``CitryContext`` (see docs/design/rendering.md), and the attribute nodes
 (``StaticHtmlAttr``, ``ExprHtmlAttr``, ``TemplateHtmlAttr``) ``resolve`` to
 their values. ``ComponentNode`` renders a child component across a context
-boundary (attributes become the child's kwargs); its body content
-(default-slot text or ``<c-fill>`` nodes) is not handled yet, since slots are a
-later phase with their own design. The control-flow nodes (``IfNode``,
-``ForNode``) render their matching branch / per-item body. The slot nodes
-(``SlotNode``, ``FillNode``) are still stubs whose ``render`` raises
-``NotImplementedError``.
+boundary: attributes become the child's kwargs, and its body content becomes
+the child's slots (the implicit default slot, or the collected ``<c-fill>``
+tags; see docs/design/slots.md section 4). The control-flow nodes (``IfNode``,
+``ForNode``) render their matching branch / per-item body. ``SlotNode``
+(resolution at the slot site) is the remaining stub; ``FillNode`` is consumed
+during fill collection and is never rendered directly, so its inherited
+``render`` raising is intentional.
 
 See the compiler module docstring in
 ``crates/citry_template_parser/src/compiler.rs`` for the full node taxonomy
@@ -58,6 +59,7 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, TypeAlias, final
 
 from typing_extensions import override
@@ -65,10 +67,11 @@ from typing_extensions import override
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender, DeferredComponent, _render_value
+from citry.slots import Slot
 from citry_core.safe_eval import safe_eval
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
     from citry.citry_render import RenderPart
 
@@ -84,10 +87,36 @@ class Node:
 
     A node renders to a body part (a ``str`` or a nested ``CitryRender``) against
     the render-scoped ``CitryContext``. Concrete nodes override ``render``.
+
+    A node sitting in a *fill group* (a component body that contains
+    ``<c-fill>`` tags) takes part in fill collection through
+    ``Node.collect_fills()`` instead of ``Node.render()``. The default says
+    the node is not allowed there; nodes that are (``FillNode``, the control-flow nodes)
+    override it. See docs/design/slots.md section 4.4.
     """
 
     def render(self, context: CitryContext) -> RenderPart:
         raise NotImplementedError(f"{type(self).__name__}.render is not implemented")
+
+    # `context` is unused here (the base only raises) but is the documented
+    # signature for overriding nodes, hence the noqa.
+    def collect_fills(self, context: CitryContext, sink: FillSink) -> None:  # noqa: ARG002
+        """
+        Register this node's fills into ``sink``.
+
+        Called instead of ``render`` when the node sits in a fill group. The
+        base implementation rejects the node: when a component body contains
+        ``<c-fill>`` tags, all other content must be inside the fills. A node
+        kind that may sit beside fills (for example one injected by an
+        extension via ``on_template_compiled``) overrides this to register its
+        fills with ``sink.add(...)``, recursing into its own bodies with
+        ``collect_fills_from_body``.
+        """
+        msg = (
+            f"Tag ({type(self).__name__}) cannot appear next to '<c-fill>' tags in the body of "
+            f"<c-{sink.component_name}>. All other content must be inside the fills."
+        )
+        raise RuntimeError(msg)
 
 
 # One item in a compiled template body: a runtime Node or a static text run.
@@ -116,6 +145,106 @@ def _find_attr(attrs: tuple[HtmlAttr, ...], key: str) -> HtmlAttr | None:
         if attr.key == key:
             return attr
     return None
+
+
+class FillSink:
+    """
+    Where ``collect_fills`` registers the fills of one component tag.
+
+    Created by ``ComponentNode`` when it collects its body's fills, and passed
+    down through ``Node.collect_fills``. Carries the name of the component
+    receiving the fills (for error messages and slot metadata) and enforces
+    that each materialized slot name appears only once.
+    """
+
+    __slots__ = ("component_name", "fills")
+
+    def __init__(self, component_name: str) -> None:
+        self.component_name = component_name
+        self.fills: dict[str, Slot] = {}
+
+    def add(self, name: str, slot: Slot) -> None:
+        """Register one fill. Raises if the slot name is already taken."""
+        if name in self.fills:
+            msg = f"Multiple fills target the same slot name {name!r} in the body of <c-{self.component_name}>."
+            raise RuntimeError(msg)
+        self.fills[name] = slot
+
+
+def collect_fills_from_body(body: list[BodyItem], context: CitryContext, sink: FillSink) -> None:
+    """
+    Walk one level of a fill-group body, collecting fills into ``sink``.
+
+    Whitespace strings between fills are formatting only: neither captured
+    into a slot nor rendered. Non-whitespace text is rejected (when a
+    component body contains ``<c-fill>`` tags, all other content must be
+    inside the fills). Each node dispatches through its own
+    ``collect_fills``, so what a node contributes (a fill, a taken branch,
+    one pass per loop iteration, or an error) is the node's own business.
+
+    The parser already rejects most content beside fills; the checks on this
+    path are the runtime half of that contract (dynamic fill names make some
+    shapes undecidable statically), so the errors mirror the parser's.
+    """
+    for item in body:
+        if isinstance(item, str):
+            if item.strip():
+                msg = (
+                    f"Text cannot appear next to '<c-fill>' tags in the body of "
+                    f"<c-{sink.component_name}>. All other content must be inside the fills."
+                )
+                raise RuntimeError(msg)
+        else:
+            item.collect_fills(context, sink)
+
+
+def _make_body_slot(
+    body: list[BodyItem],
+    context: CitryContext,
+    component_name: str,
+    slot_name: str,
+    data_var: str | None,
+    fallback_var: str | None,
+    position: tuple[int, int] | None,
+) -> Slot:
+    """
+    Wrap a fill body (or a component's implicit default body) as a ``Slot``.
+
+    The Slot closes over ``context``, the scope where the fill was written,
+    so the body renders against the writer's variables no matter when or
+    how often the child invokes it. When the child passes slot data or the
+    fallback handle, they are overlaid under the fill's ``data``/
+    ``fallback`` variable names; the overlay context shares the captured
+    ``extra`` bag, so dependencies collected while the fill renders reach
+    the fill's lexical owner.
+    """
+    # Imported lazily: component_render imports the node classes, so importing
+    # the body walker at module load would be circular.
+    from citry.component_render import _render_body  # noqa: PLC0415
+
+    def content_func(ctx: Any) -> CitryRender:
+        if data_var is not None or fallback_var is not None:
+            overlay: dict[str, Any] = {}
+            if data_var is not None:
+                overlay[data_var] = ctx.data
+            if fallback_var is not None:
+                overlay[fallback_var] = ctx.fallback
+            render_context = CitryContext(
+                variables={**context.variables, **overlay},
+                extra=context.extra,
+                component=context.component,
+            )
+        else:
+            render_context = context
+        return CitryRender(parts=_render_body(body, render_context), context=render_context)
+
+    return Slot(
+        body,
+        content_func=content_func,
+        component_name=component_name,
+        slot_name=slot_name,
+        source_position=position,
+    )
 
 
 @final
@@ -149,6 +278,15 @@ class ExprNode(Node):
             self._eval = safe_eval(self.expr)
         value = self._eval(context.variables)
         return _render_value(value)
+
+    @override
+    def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
+        # Same rule as the base, with a friendlier name for what the user wrote.
+        msg = (
+            f"Expression cannot appear next to '<c-fill>' tags in the body of "
+            f"<c-{sink.component_name}>. All other content must be inside the fills."
+        )
+        raise RuntimeError(msg)
 
     def __repr__(self) -> str:
         return f"ExprNode(position={self.position}, expr={self.expr!r}, used_vars={self.used_vars})"
@@ -372,33 +510,29 @@ class ComponentNode(Node):
         """
         Work out the child's inputs, but don't render the child yet.
 
-        This turns the tag's attributes into the child's kwargs and returns a
-        ``DeferredComponent``. It does not render the child here: doing so would
-        make one component render the next and so on, hitting Python's recursion
-        limit on deeply nested pages. ``render_impl`` renders the child later,
-        with its own ``CitryContext``, and copies its dependencies into the
-        parent (see docs/design/deferred_rendering.md section 4).
+        This turns the tag's attributes into the child's kwargs, collects the
+        body into the child's slots, and returns a ``DeferredComponent``. It
+        does not render the child here: doing so would make one component
+        render the next and so on, hitting Python's recursion limit on deeply
+        nested pages. ``render_impl`` renders the child later, with its own
+        ``CitryContext``, and copies its dependencies into the parent (see
+        docs/design/deferred_rendering.md section 4).
 
-        The attributes are read now, while this component is still rendering, so
-        a loop variable from an enclosing ``<c-for>`` has the right value.
-
-        Body content (default-slot text or ``<c-fill>`` nodes) is not handled
-        yet; the slot subsystem is a later phase with its own design.
+        The attributes and fill structure are read now, while this component is
+        still rendering, so a loop variable from an enclosing ``<c-for>`` has
+        the right value. Fill *bodies* stay lazy: each becomes a ``Slot`` that
+        closes over the current scope and renders only when the child invokes
+        it (see docs/design/slots.md section 4).
         """
-        if self.body:
-            raise NotImplementedError(
-                f"<c-{self.name}> has body content (slots/fills), which is not yet "
-                "implemented. The slot subsystem is a later phase.",
-            )
-
         component = context.component
         if component is None:
             msg = "ComponentNode.render requires a component context bound to a Citry instance."
             raise RuntimeError(msg)
 
         kwargs = self._resolve_kwargs(context)
+        slots = self._collect_slots(context)
         child_cls = component.citry.get(self.name)
-        element = CitryElement(child_cls, kwargs)
+        element = CitryElement(child_cls, kwargs, slots)
         return DeferredComponent(element, component)
 
     def _resolve_kwargs(self, context: CitryContext) -> dict[str, Any]:
@@ -418,6 +552,32 @@ class ComponentNode(Node):
             else:
                 kwargs[key.removeprefix("c-")] = attr.resolve(context)
         return kwargs
+
+    def _collect_slots(self, context: CitryContext) -> dict[str, Slot]:
+        """
+        Turn the tag's body into the child component's slots.
+
+        Two body modes, split by the compiler's ``contains_fills`` flag (see
+        docs/design/slots.md section 4):
+
+        - No fills: the whole body is the implicit default slot, registered
+          under ``"default"``. A whitespace-only body is formatting, not
+          content, and produces no slot.
+        - Fills: the body is a fill group. Each ``<c-fill>`` becomes one slot;
+          control flow between fills is evaluated now, against the live
+          context, to decide which fills exist.
+        """
+        if not self.body:
+            return {}
+
+        if not self.contains_fills:
+            if all(isinstance(item, str) and not item.strip() for item in self.body):
+                return {}
+            return {"default": _make_body_slot(self.body, context, self.name, "default", None, None, self.position)}
+
+        sink = FillSink(self.name)
+        collect_fills_from_body(self.body, context, sink)
+        return sink.fills
 
     def __repr__(self) -> str:
         return f"ComponentNode(name={self.name!r}, attrs={len(self.attrs)}, body={len(self.body)} items)"
@@ -448,30 +608,50 @@ class IfNode(Node):
         self.branches = branches
         self.used_vars = used_vars
 
-    @override
-    def render(self, context: CitryContext) -> CitryRender:
+    def active_branch_body(self, context: CitryContext) -> list[BodyItem] | None:
         """
-        Render the first branch whose ``cond`` is truthy.
+        Return the body of the first branch that matches, or ``None``.
 
         Branches are tried in source order (``c-if`` then each ``c-elif`` then
         ``c-else``). A branch's ``cond`` attribute is resolved against the
         context; the first truthy one wins. A branch with no ``cond`` (the
-        ``c-else``) always matches. If none match, the render is empty.
+        ``c-else``) always matches.
 
-        The body renders against the surrounding ``context`` unchanged: an
-        ``<c-if>`` introduces no variables, so there is no new scope.
+        Shared by ``render`` and by fill collection (``ComponentNode`` walks
+        the matching branch when gathering ``<c-fill>`` tags).
         """
-        # Imported lazily: component_render imports the node classes, so importing
-        # the body walker at module load would be circular.
-        from citry.component_render import _render_body  # noqa: PLC0415
-
         for branch in self.branches:
             attrs: tuple[HtmlAttr, ...] = branch[1]
             body: list[BodyItem] = branch[2]
             cond_attr = _find_attr(attrs, "cond")
             if cond_attr is None or cond_attr.resolve(context):
-                return CitryRender(parts=_render_body(body, context), context=context)
-        return CitryRender(parts=[], context=context)
+                return body
+        return None
+
+    @override
+    def render(self, context: CitryContext) -> CitryRender:
+        """
+        Render the first branch whose ``cond`` is truthy.
+
+        If no branch matches, the render is empty. The body renders against the
+        surrounding ``context`` unchanged: an ``<c-if>`` introduces no
+        variables, so there is no new scope.
+        """
+        # Imported lazily: component_render imports the node classes, so importing
+        # the body walker at module load would be circular.
+        from citry.component_render import _render_body  # noqa: PLC0415
+
+        body = self.active_branch_body(context)
+        if body is None:
+            return CitryRender(parts=[], context=context)
+        return CitryRender(parts=_render_body(body, context), context=context)
+
+    @override
+    def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
+        """In a fill group, an ``<c-if>`` contributes the fills of its matching branch."""
+        body = self.active_branch_body(context)
+        if body is not None:
+            collect_fills_from_body(body, context, sink)
 
     def __repr__(self) -> str:
         return f"IfNode(branches={len(self.branches)})"
@@ -507,10 +687,9 @@ class ForNode(Node):
         # renders, so this compiles once).
         self._iter_eval: Callable[[Any], Any] | None = None
 
-    @override
-    def render(self, context: CitryContext) -> CitryRender:
+    def iter_bodies(self, context: CitryContext) -> Iterator[tuple[list[BodyItem], CitryContext]]:
         """
-        Render the loop body once per item; the empty branch if there are none.
+        Yield ``(body, context)`` once per loop iteration.
 
         The ``each`` clause is a Python comprehension clause, so the loop is
         evaluated by wrapping it in a generator expression that yields the loop
@@ -518,14 +697,16 @@ class ForNode(Node):
         ``((x,) for x in xs if x > 0)``. This reuses Python's own comprehension
         semantics, so multi-target unpacking and ``if`` filters work for free.
 
-        Each iteration renders the body against a child context whose
-        ``variables`` are the surrounding ones overlaid with the loop bindings.
-        The child shares the parent's ``component`` and ``extra`` bag, so the
-        loop introduces a variable scope without crossing a component boundary
-        (dependencies still bubble through the shared ``extra``).
-        """
-        from citry.component_render import _render_body  # noqa: PLC0415
+        Each iteration's context overlays the loop bindings on the surrounding
+        ``variables``; it shares the parent's ``component`` and ``extra`` bag,
+        so the loop introduces a variable scope without crossing a component
+        boundary. With no iterations, the optional ``<c-empty>`` branch's body
+        is yielded once, with the surrounding context.
 
+        Shared by ``render`` and by fill collection (``ComponentNode`` walks
+        the iterations when gathering ``<c-fill>`` tags, so each collected fill
+        closes over its own iteration's bindings).
+        """
         for_branch = self.branches[0]
         targets: tuple[str, ...] = for_branch[3]
         body: list[BodyItem] = for_branch[2]
@@ -542,7 +723,6 @@ class ForNode(Node):
             gen_src = f"(({', '.join(targets)},) for {clause})"
             self._iter_eval = safe_eval(gen_src)
 
-        parts: list[RenderPart] = []
         count = 0
         for values in self._iter_eval(context.variables):
             count += 1
@@ -551,14 +731,37 @@ class ForNode(Node):
                 extra=context.extra,
                 component=context.component,
             )
-            parts.extend(_render_body(body, child))
+            yield body, child
 
-        # No iterations: render the optional <c-empty> branch (second branch).
+        # No iterations: the optional <c-empty> branch (second branch).
         if count == 0 and len(self.branches) > 1:
-            empty_branch = self.branches[1]
-            parts.extend(_render_body(empty_branch[2], context))
+            yield self.branches[1][2], context
 
+    @override
+    def render(self, context: CitryContext) -> CitryRender:
+        """
+        Render the loop body once per item; the empty branch if there are none.
+
+        See ``iter_bodies`` for the loop evaluation and scoping rules.
+        """
+        from citry.component_render import _render_body  # noqa: PLC0415
+
+        parts: list[RenderPart] = []
+        for body, body_context in self.iter_bodies(context):
+            parts.extend(_render_body(body, body_context))
         return CitryRender(parts=parts, context=context)
+
+    @override
+    def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
+        """
+        In a fill group, a ``<c-for>`` contributes its fills once per iteration.
+
+        Each iteration's fills close over that iteration's loop bindings, so a
+        fill body using the loop variable keeps the right value no matter when
+        the child invokes it.
+        """
+        for body, body_context in self.iter_bodies(context):
+            collect_fills_from_body(body, body_context, sink)
 
     def __repr__(self) -> str:
         return f"ForNode(branches={len(self.branches)})"
@@ -614,8 +817,10 @@ class FillNode(Node):
 
             FillNode(source, (0, 40,), (StaticHtmlAttr(...),), ["content"], (), ())
 
-    Rendering is not implemented yet; it inherits ``Node.render`` (raises
-    ``NotImplementedError``) until the slots phase.
+    A fill is consumed during fill collection (``collect_fills`` wraps its body
+    as a ``Slot`` and registers it), so it is never rendered as output; it
+    inherits ``Node.render`` raising, and reaching it would mean a
+    parser/runtime bug.
 
     """
 
@@ -634,6 +839,68 @@ class FillNode(Node):
         self.body = body
         self.used_vars = used_vars
         self.introduced_vars = introduced_vars
+
+    @override
+    def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
+        """
+        Resolve this fill's attributes and register its body as a ``Slot``.
+
+        The Slot closes over ``context``, the scope where the fill was written
+        (including any loop bindings from an enclosing ``<c-for>``); the body
+        stays unrendered until the child component invokes the slot.
+        """
+        name, data_var, fallback_var = self._resolve_props(context)
+        slot = _make_body_slot(self.body, context, sink.component_name, name, data_var, fallback_var, self.position)
+        sink.add(name, slot)
+
+    def _resolve_props(self, context: CitryContext) -> tuple[str, str | None, str | None]:
+        """
+        Resolve the fill's attributes to ``(slot_name, data_var, fallback_var)``.
+
+        Attributes are applied left to right, so the rightmost write wins
+        (matching the parser's identity rules): ``name`` and ``data``/
+        ``fallback`` are static values, ``c-name`` is evaluated, and ``c-bind``
+        spreads a mapping whose recognized keys are ``name``, ``data``, and
+        ``fallback``.
+        """
+        props: dict[str, Any] = {}
+        for attr in self.attrs:
+            key = attr.key
+            if key == "c-bind":
+                spread = attr.resolve(context)
+                if not isinstance(spread, Mapping):
+                    msg = f"'c-bind' on <c-fill> must resolve to a mapping, got {type(spread).__name__}."
+                    raise RuntimeError(msg)
+                for spread_key, spread_value in spread.items():
+                    if spread_key not in ("name", "data", "fallback"):
+                        msg = (
+                            f"'c-bind' on <c-fill> got an unsupported key {spread_key!r}. "
+                            "Allowed keys: 'name', 'data', 'fallback'."
+                        )
+                        raise RuntimeError(msg)
+                    props[spread_key] = spread_value
+            elif key == "c-name":
+                props["name"] = attr.resolve(context)
+            else:
+                # The parser only lets "name", "data", and "fallback" through.
+                props[key] = attr.resolve(context)
+
+        name = props.get("name")
+        if not isinstance(name, str) or not name:
+            msg = f"<c-fill> 'name' must resolve to a non-empty string, got {name!r}."
+            raise RuntimeError(msg)
+
+        data_var = props.get("data")
+        fallback_var = props.get("fallback")
+        for label, var in (("data", data_var), ("fallback", fallback_var)):
+            if var is not None and (not isinstance(var, str) or not var.isidentifier()):
+                msg = f"<c-fill> {label!r} must be a valid Python identifier, got {var!r}."
+                raise RuntimeError(msg)
+        if data_var is not None and data_var == fallback_var:
+            msg = f"<c-fill name=\"{name}\"> binds 'data' and 'fallback' to the same variable {data_var!r}."
+            raise RuntimeError(msg)
+
+        return name, data_var, fallback_var
 
     def __repr__(self) -> str:
         return f"FillNode(attrs={len(self.attrs)})"

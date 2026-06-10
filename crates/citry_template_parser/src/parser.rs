@@ -2161,58 +2161,76 @@ fn validate_fill_names(
                         static_fills_in_allowed.insert(name_value.clone());
                     }
 
-                    // Check for duplicate static name values
-                    if seen_static_names.contains_key(name_value) {
-                        return format_error(
-                            fill_node,
-                            format!(
-                                "Duplicate <c-fill> with name='{}' found. Each fill name can only appear once.",
-                                name_value
-                            ),
-                        );
+                    // Check for duplicate static name values.
+                    //
+                    // Duplicate detection only covers fills OUTSIDE control flow:
+                    // the same name in mutually exclusive branches (c-if/c-else)
+                    // is valid, since at most one branch materializes at runtime.
+                    // Duplicates that DO materialize together are caught at
+                    // runtime, during fill collection.
+                    //
+                    // NOTE: A future improvement could analyze branches to catch
+                    // guaranteed duplicates (e.g. two same-name fills in ONE
+                    // branch) statically, but this is not implemented yet.
+                    if !fill_info.inside_control_flow {
+                        if seen_static_names.contains_key(name_value) {
+                            return format_error(
+                                fill_node,
+                                format!(
+                                    "Duplicate <c-fill> with name='{}' found. Each fill name can only appear once.",
+                                    name_value
+                                ),
+                            );
+                        }
+                        seen_static_names.insert(name_value.clone(), fill_node);
                     }
-                    seen_static_names.insert(name_value.clone(), fill_node);
                     found_slots.insert(name_value.clone());
                 }
                 FillIdentity::DynamicName(name_value) => {
-                    // Check for duplicate c-name values
-                    if seen_dynamic_names.contains_key(name_value) {
-                        return format_error(
-                            fill_node,
-                            format!(
-                                "Duplicate <c-fill> with c-name='{}' found. Each fill name can only appear once.",
-                                name_value
-                            ),
-                        );
-                    }
-                    seen_dynamic_names.insert(name_value.clone(), fill_node);
-                    found_slots.insert(name_value.clone());
-
-                    // Track dynamic fills not inside control flow for overflow detection
+                    // Check for duplicate c-name values.
+                    // Like the static-name check, this only covers fills outside
+                    // control flow (two fills with the same c-name expression in
+                    // different branches may never materialize together; a loop
+                    // re-binds the expression per iteration). Materialized
+                    // duplicates are caught at runtime, during fill collection.
                     if !fill_info.inside_control_flow {
+                        if seen_dynamic_names.contains_key(name_value) {
+                            return format_error(
+                                fill_node,
+                                format!(
+                                    "Duplicate <c-fill> with c-name='{}' found. Each fill name can only appear once.",
+                                    name_value
+                                ),
+                            );
+                        }
+                        seen_dynamic_names.insert(name_value.clone(), fill_node);
+
+                        // Track dynamic fills not inside control flow for overflow detection
                         dynamic_fills_outside_control_flow += 1;
                     }
+                    found_slots.insert(name_value.clone());
                 }
                 FillIdentity::DynamicBind(pairs) => {
-                    // Check for duplicate c-bind tuples (same ordered list of (key, value) pairs)
-                    if seen_bind_tuples.contains_key(pairs) {
-                        let pairs_str = pairs
-                            .iter()
-                            .map(|(k, v)| format!("{}=\"{}\"", k, v))
-                            .collect::<Vec<_>>()
-                            .join(" ");
-                        return format_error(
-                            fill_node,
-                            format!(
-                                "Duplicate <c-fill> with identical bind identity ({}) found. Each fill must have a unique identity.",
-                                pairs_str
-                            ),
-                        );
-                    }
-                    seen_bind_tuples.insert(pairs.clone(), fill_node);
-
-                    // Track dynamic fills not inside control flow for overflow detection
+                    // Check for duplicate c-bind tuples (same ordered list of (key, value) pairs).
+                    // Only fills outside control flow, same rule as the name checks.
                     if !fill_info.inside_control_flow {
+                        if seen_bind_tuples.contains_key(pairs) {
+                            let pairs_str = pairs
+                                .iter()
+                                .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            return format_error(
+                                fill_node,
+                                format!(
+                                    "Duplicate <c-fill> with identical bind identity ({}) found. Each fill must have a unique identity.",
+                                    pairs_str
+                                ),
+                            );
+                        }
+                        seen_bind_tuples.insert(pairs.clone(), fill_node);
+
+                        // Track dynamic fills not inside control flow for overflow detection
                         dynamic_fills_outside_control_flow += 1;
                     }
                 }

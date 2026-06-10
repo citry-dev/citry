@@ -59,7 +59,13 @@ class CitryElement:
     Attributes:
         comp_cls: The Component subclass to render.
         kwargs: The keyword arguments passed to the component.
-        slots: The slot fills passed to the component.
+        slots: The slot fills passed to the component. Filled from either
+            channel: the reserved ``slots=`` kwarg when composing from Python
+            (``MyComp(title="x", slots={...})``), or the collected ``<c-fill>``
+            tags / implicit default body when composed by a parent template.
+            Values are raw inputs here (strings, functions, elements, Slots);
+            they normalize to ``Slot`` instances when the component instance is
+            created at render time.
 
     """
 

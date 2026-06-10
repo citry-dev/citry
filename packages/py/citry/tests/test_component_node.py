@@ -141,10 +141,10 @@ class TestComponentNodeAttrs:
             def template_data(self, kwargs, slots=None, context=None):
                 return {"x": "hi"}
 
-        assert (
-            Page().render().serialize()
-            == '<main data-cid-c1=""><span data-cid-c2=""><b data-cid-c1="">hi</b></span></main>'
-        )
+        # The prop template renders in Page's scope but is interior content of
+        # Card's frame: it is no component's root render, so the <b> carries no
+        # data-cid marker (only component roots are marked).
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2=""><b>hi</b></span></main>'
 
 
 class TestComponentNodeBoundary:
@@ -188,8 +188,12 @@ class TestComponentNodeBoundary:
         assert seen["root"] is seen["parent"]  # parent is the root of this tree
 
 
-class TestComponentNodeBodyDeferred:
-    def test_body_content_raises_not_implemented(self):
+class TestComponentNodeBody:
+    # Body content becomes the child's slots (docs/design/slots.md section 4).
+    # A child that never invokes a slot silently ignores its content, matching
+    # django-components (surplus fills are not an error). Slot collection and
+    # consumption are covered in depth in test_slot_fills.py.
+    def test_unused_default_slot_content_is_ignored(self):
         c = Citry()
 
         class Card(Component):
@@ -200,10 +204,9 @@ class TestComponentNodeBodyDeferred:
             citry = c
             template = "<main><c-card>body</c-card></main>"
 
-        with pytest.raises(NotImplementedError):
-            Page().render().serialize()
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">x</span></main>'
 
-    def test_fill_body_raises_not_implemented(self):
+    def test_unused_fill_is_ignored(self):
         c = Citry()
 
         class Card(Component):
@@ -214,5 +217,4 @@ class TestComponentNodeBodyDeferred:
             citry = c
             template = '<main><c-card><c-fill name="h">f</c-fill></c-card></main>'
 
-        with pytest.raises(NotImplementedError):
-            Page().render().serialize()
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">x</span></main>'

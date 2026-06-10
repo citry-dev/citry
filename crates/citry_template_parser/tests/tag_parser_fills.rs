@@ -396,6 +396,28 @@ mod tests {
             "Different fill names should succeed: {:?}",
             result.err()
         );
+
+        // The same name in mutually exclusive control flow branches is fine:
+        // at most one branch materializes at runtime. (Duplicates that DO
+        // materialize together are caught at runtime, during fill collection.)
+        let input = r#"<c-my-comp><c-if cond="x"><c-fill name="header">A</c-fill></c-if><c-else><c-fill name="header">B</c-fill></c-else></c-my-comp>"#;
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Same fill name in exclusive branches should succeed: {:?}",
+            result.err()
+        );
+
+        // Same rule for a control-flow fill duplicating a top-level one: the
+        // parser cannot know whether the branch is taken, so it defers to the
+        // runtime check.
+        let input = r#"<c-my-comp><c-fill name="header">A</c-fill><c-if cond="x"><c-fill name="header">B</c-fill></c-if></c-my-comp>"#;
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Control-flow fill duplicating a top-level fill parses (runtime checks it): {:?}",
+            result.err()
+        );
     }
 
     // #######################################

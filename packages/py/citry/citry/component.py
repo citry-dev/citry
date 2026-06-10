@@ -62,6 +62,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 from citry.citry import Citry, citry
 from citry.citry_element import CitryElement
 from citry.component_render import gen_render_id
+from citry.slots import Slot, normalize_slot_fills
 from citry.util.misc import to_dict
 
 if TYPE_CHECKING:
@@ -156,6 +157,12 @@ class ComponentMeta(type):
         ``MyComp(cls="card")``) without colliding with the metaclass's own
         first parameter.
 
+        ``slots`` is a reserved input name: it is taken out of the kwargs and
+        carried separately as the component's slot fills
+        (``MyComp(title="Hi", slots={"header": ...})``), so a component cannot
+        take a regular kwarg named ``slots``. See docs/design/slots.md
+        section 9.
+
         In citry, calling a Component class is the **composition** phase.
         It creates a CitryElement that describes what to render, without
         rendering it yet. Actual Component instances are created later
@@ -164,7 +171,8 @@ class ComponentMeta(type):
         This is analogous to React's ``<MyComp title="Hi" />`` producing
         a RenderElement, not a rendered DOM node.
         """
-        return CitryElement(cls, kwargs)  # type: ignore[arg-type]
+        slots = kwargs.pop("slots", None)
+        return CitryElement(cls, kwargs, slots)  # type: ignore[arg-type]
 
     def _create_instance(cls, **init_kwargs: Any) -> Component:
         """
@@ -294,15 +302,15 @@ class Component(metaclass=ComponentMeta):
     """
 
     slots: Any
-    """The resolved slot fills.
+    """The resolved slot fills, with every value normalized to a ``Slot``.
 
     If the component defines a ``Slots`` dataclass, this is an instance
     of that class. Otherwise, a plain dict.
     """
 
-    raw_slots: dict[str, Any]
-    """The slot fills as a plain dict, even if a ``Slots`` dataclass
-    is defined. Useful when you need dict access regardless
+    raw_slots: dict[str, Slot]
+    """The slot fills as a plain dict of ``Slot`` values, even if a ``Slots``
+    dataclass is defined. Useful when you need dict access regardless
     of typing.
     """
 
@@ -317,7 +325,8 @@ class Component(metaclass=ComponentMeta):
 
     def __init__(
         self,
-        id: str | None = None,
+        # The public field is `component.id`, so the parameter shadows the builtin on purpose.
+        id: str | None = None,  # noqa: A002
         kwargs: Any = None,
         slots: Any = None,
         parent: Component | None = None,
@@ -332,7 +341,12 @@ class Component(metaclass=ComponentMeta):
         # copies, so mutations during one render never leak back into a
         # CitryElement that may be rendered again.
         raw_kwargs: dict[str, Any] = dict(to_dict(kwargs)) if kwargs is not None else {}
-        raw_slots: dict[str, Any] = dict(to_dict(slots)) if slots is not None else {}
+        # Slot inputs (strings, functions, elements, renders, Slot instances)
+        # additionally normalize to `Slot` values; `normalize_slot_fills`
+        # builds a fresh dict, so the copy is preserved.
+        raw_slots: dict[str, Slot] = (
+            normalize_slot_fills(to_dict(slots), component_name=cls.__name__) if slots is not None else {}
+        )
 
         # Set typed kwargs/slots if the component defines a dataclass,
         # otherwise keep as plain dict.
@@ -346,11 +360,13 @@ class Component(metaclass=ComponentMeta):
         self.parent = parent
         self.root = parent.root if parent is not None else self
 
+    # The base implementation ignores its arguments (it returns None); they are
+    # the documented signature for subclasses to override, hence the noqa's.
     def template_data(
         self,
-        kwargs: Any,
-        slots: Any | None = None,
-        context: Any | None = None,
+        kwargs: Any,  # noqa: ARG002
+        slots: Any | None = None,  # noqa: ARG002
+        context: Any | None = None,  # noqa: ARG002
     ) -> dict[str, Any] | None:
         """
         Return the template context variables.

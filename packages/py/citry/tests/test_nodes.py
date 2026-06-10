@@ -90,8 +90,7 @@ class TestExprNodeEmbedding:
         rendered = self._card()().render()  # a CitryRender
         # Inlined as trusted HTML (the inner <span> tags are NOT re-escaped).
         assert (
-            _html("<main>{{ c }}</main>", c=rendered)
-            == '<main data-cid-c2=""><span data-cid-c1="">IN</span></main>'
+            _html("<main>{{ c }}</main>", c=rendered) == '<main data-cid-c2=""><span data-cid-c1="">IN</span></main>'
         )
 
     def test_auto_renders_a_citry_element(self):
