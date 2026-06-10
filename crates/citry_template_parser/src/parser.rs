@@ -39,7 +39,7 @@ struct TagStackEntry {
     /// The body content (template elements inside the tag)
     body: Template,
     /// Variables this tag introduces into its body scope (loop targets for
-    /// `c-for`, slot data/default for `c-fill`), computed once when the start
+    /// `c-for`, slot data/fallback for `c-fill`), computed once when the start
     /// tag is processed and carried here until the node is finalized at its end
     /// tag.
     introduced_variables: Vec<Token>,
@@ -1403,6 +1403,70 @@ fn _contains_only_fills_and_control_flow(template: &Template) -> bool {
     true
 }
 
+/// Validate that a component body holding `<c-fill>` tags contains nothing else.
+///
+/// When a component body contains `<c-fill>` tags, the body is a "fill group":
+/// every element in it must be a `<c-fill>`, a control flow tag whose body
+/// recursively satisfies the same rule, or whitespace-only text. The whitespace
+/// is formatting only - the runtime neither captures it into a slot nor renders
+/// it. Anything else (non-whitespace text, a `{{ expr }}`, a regular tag) must
+/// live inside one of the fills.
+///
+/// This runs when the component node is closed, so it sees the full body. The
+/// per-sibling [`validate_fill_exclusivity`] catches node-vs-node mixing earlier
+/// (with errors pointing at the later sibling); this check is the authoritative
+/// one and additionally covers text and expression elements, and non-fill
+/// content inside a control flow tag at a level with no direct `<c-fill>`
+/// sibling.
+fn validate_fill_group_content(template: &Template) -> Result<(), ParseError> {
+    for element in &template.elements {
+        match element {
+            TemplateElement::Text(text) => {
+                if !text.token.content.trim().is_empty() {
+                    return Err(ParseError::from_span(
+                        text.token.as_span().unwrap(),
+                        "Text cannot appear next to '<c-fill>' tags. When a component body \
+                        contains '<c-fill>' tags, all other content must be inside the fills \
+                        (whitespace-only text is allowed for formatting)."
+                            .to_string(),
+                    ));
+                }
+            }
+            TemplateElement::Expr(expr) => {
+                return Err(ParseError::from_span(
+                    expr.token.as_span().unwrap(),
+                    "Expression cannot appear next to '<c-fill>' tags. When a component body \
+                    contains '<c-fill>' tags, all other content must be inside the fills."
+                        .to_string(),
+                ));
+            }
+            TemplateElement::Node(node) => {
+                let tag_name = node.tag_name();
+                if tag_name == C_FILL_TAG {
+                    // A fill's body IS the slot content - don't descend.
+                    continue;
+                } else if CONTROL_FLOW_TAGS.contains(tag_name) {
+                    // Control flow may hold nested fills; its body must satisfy
+                    // the same rule.
+                    if let Node::WithBody { body, .. } = node {
+                        validate_fill_group_content(body)?;
+                    }
+                } else {
+                    return Err(ParseError::from_span(
+                        node.start_tag().token.as_span().unwrap(),
+                        format!(
+                            "Tag '<{}>' cannot appear next to '<c-fill>' tags. When a component \
+                            body contains '<c-fill>' tags, all other content must be inside the fills.",
+                            tag_name
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Validate that introduced variables don't conflict with used variables.
 ///
 /// This prevents variable shadowing where a node introduces a variable that is already
@@ -1465,7 +1529,7 @@ fn validate_variable_shadowing(node: &Node) -> Result<(), ParseError> {
 ///   loop's free variables (`xs`), matching the explicit `each` form.
 ///
 /// The returned vector is the node's introduced variables: the loop targets for
-/// a `c-for` (explicit or shorthand) and the data/default variables for a
+/// a `c-for` (explicit or shorthand) and the data/fallback variables for a
 /// `<c-fill>`. For a for-loop clause both the used and introduced variables come
 /// from one [`extract_forloop_variables`] call, so the clause is analysed once.
 ///
@@ -1477,11 +1541,11 @@ fn process_control_flow_metadata(
     attrs: &mut [HtmlAttr],
     context: &ParserContext,
 ) -> Result<Vec<Token>, ParseError> {
-    // `<c-fill>` introduces its data/default variables; nothing to enrich.
+    // `<c-fill>` introduces its data/fallback variables; nothing to enrich.
     if tag_name == C_FILL_TAG {
         let mut introduced = Vec::new();
         for attr in attrs.iter() {
-            if attr.key.content == "data" || attr.key.content == "default" {
+            if attr.key.content == "data" || attr.key.content == "fallback" {
                 if let Some(inner_value) = &attr.inner_value {
                     introduced.push(inner_value.clone());
                 }
@@ -1652,11 +1716,14 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
                 .copied()
                 .collect();
 
-            // Raise error if any attributes are invalid
+            // Raise error if any attributes are invalid.
+            // The allowed names are listed in definition order (from the rule
+            // groups), NOT by iterating the HashSet - set iteration order varies
+            // between runs and error messages must be reproducible.
             if !invalid_attrs.is_empty() {
-                let allowed_str = allowed_set
-                    .clone()
-                    .into_iter()
+                let allowed_str = allowed_groups
+                    .iter()
+                    .flat_map(|group| group.iter().map(|s| s.as_str()))
                     .collect::<Vec<&str>>()
                     .join("', '");
                 return Err(ParseError::from_span(
@@ -2046,7 +2113,13 @@ fn validate_fill_names(
             }
         }
     } else {
-        // Explicit <c-fill> tags found - validate them
+        // Explicit <c-fill> tags found - the body is a fill group, so nothing
+        // outside the fills is allowed (whitespace-only text is formatting).
+        if let Node::WithBody { body, .. } = node {
+            validate_fill_group_content(body)?;
+        }
+
+        // Validate the fills themselves.
         // Track identities for duplicate detection, one set per variant type
         let mut seen_static_names: HashMap<String, &Node> = HashMap::new();
         let mut seen_dynamic_names: HashMap<String, &Node> = HashMap::new();
@@ -2482,9 +2555,14 @@ fn _extract_fill_identity(node: &Node) -> FillIdentity {
 ///
 /// Returns `Some(StaticNamedSlot)` if:
 /// - The node is a `<c-slot>` tag
-/// - It has a static `name` attribute (not `c-name` or `c-bind`)
+/// - Its name is statically known: either a static `name` attribute, or no
+///   name-providing attribute at all (no `name`, `c-name`, nor `c-bind`), in
+///   which case the slot is the default slot, named `"default"`. The synthesized
+///   name token carries the start-tag token's position (there is no name in the
+///   source to point at).
 ///
-/// Returns `None` otherwise.
+/// Returns `None` when the name is dynamic (`c-name`, or `c-bind` which may
+/// supply a name at runtime).
 ///
 /// The `required` field is determined as:
 /// - `Some(true)`: required (has static `required` attribute)
@@ -2499,6 +2577,7 @@ fn extract_slot_from_node(node: &Node) -> Option<StaticNamedSlot> {
     let attrs = node.attrs();
     let mut name_token: Option<Token> = None;
     let mut has_required = false;
+    let mut has_c_name = false;
     let mut has_c_bind = false;
     let mut has_c_required = false;
 
@@ -2515,6 +2594,10 @@ fn extract_slot_from_node(node: &Node) -> Option<StaticNamedSlot> {
                 // Found "required" attribute
                 has_required = true;
             }
+            "c-name" => {
+                // Found "c-name" attribute - name is dynamic
+                has_c_name = true;
+            }
             "c-bind" => {
                 // Found "c-bind" attribute
                 has_c_bind = true;
@@ -2527,8 +2610,23 @@ fn extract_slot_from_node(node: &Node) -> Option<StaticNamedSlot> {
         }
     }
 
-    // Only create slot if we found a static "name" attribute
-    let name_token = name_token?;
+    // A dynamic name (c-name, or c-bind which may supply one) cannot be
+    // collected statically.
+    if name_token.is_none() && (has_c_name || has_c_bind) {
+        return None;
+    }
+
+    // No name attribute at all: this is the default slot. Synthesize the
+    // "default" name, anchored at the start-tag token for diagnostics.
+    let name_token = name_token.unwrap_or_else(|| {
+        let tag_token = &node.start_tag().token;
+        Token {
+            content: "default".to_string(),
+            start_index: tag_token.start_index,
+            end_index: tag_token.end_index,
+            line_col: tag_token.line_col,
+        }
+    });
 
     // Determine required field
     let required = if has_required {

@@ -182,9 +182,12 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   lazy-import "just in case."
 - **Run checks repo-wide before declaring done.** Scoping a linter or test run
   to the files you touched is fine for iteration, but a final pass must run the
-  way CI does (`cargo test`, `cargo clippy`, `cargo fmt --check`, `uv run ruff
-  check .`, `uv run mypy`, `uv run pytest`). A scoped pass hides failures in
-  files you changed indirectly.
+  way CI does (`cargo test` with one `-p` per crate under `crates/`, `cargo
+  clippy`, `cargo fmt --check`, `uv run ruff check .`, `uv run mypy`, `uv run
+  pytest`). A scoped pass hides failures in files you changed indirectly. The
+  `-p` flags matter: the vendored ruff submodule's crates are workspace members,
+  so a bare `cargo test` runs ruff's own test suite too (see
+  [`docs/codebase.md`](docs/codebase.md) "Running tests").
 - **Don't preserve incorrect behavior to keep tests passing.** When a fix makes
   the more correct choice, update the failing tests to match the new contract,
   and call the update out explicitly. A failing test under a deliberate change

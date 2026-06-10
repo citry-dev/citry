@@ -327,8 +327,8 @@ the implementation log in [`citry_migration.md`](citry_migration.md)). Phases
 
 Adjacent work: the **control-flow nodes** (`IfNode`, `ForNode`) are built (they
 were self-contained and done independently of phases 4-5). The **slot
-subsystem** (`SlotNode`, `FillNode`, default vs named slots) needs its own
-design doc before implementation (many edge cases).
+subsystem** (`SlotNode`, `FillNode`, default vs named slots) is designed in
+[`slots.md`](slots.md).
 
 **Deferred rendering** (infinite render depth and the `data-cid-<ID>`
 component-id markers) is specified separately in

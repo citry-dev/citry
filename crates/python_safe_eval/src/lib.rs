@@ -28,13 +28,20 @@ pub use transformer::{
 /// ### Examples
 ///
 /// ```rust
+/// use python_safe_eval::safe_eval;
+///
 /// let result = safe_eval("1 + my_var.foo");
-/// assert_eq!(result, Ok("1 + variable(attribute(my_var, 'foo'))".to_string()));
+/// assert_eq!(
+///     result,
+///     Ok("1 + attribute(context, source, (4, 14), variable(context, source, (4, 10), 'my_var'), 'foo')".to_string()),
+/// );
 /// ```
 ///
 /// ### Transformations
 ///
-/// The following transformations are applied to make expressions safe for evaluation:
+/// The following transformations are applied to make expressions safe for evaluation.
+/// The list shows simplified forms; the actual generated calls also receive `context`,
+/// `source`, and the source span as leading arguments (see the example above):
 ///
 /// 1. **Variable access** - `my_var` → `variable("my_var")`
 /// 2. **Function calls** - `foo(1, 2, a=3, *args, **kwargs)` → `call(foo, 1, 2, a=x, *args, **kwargs)`

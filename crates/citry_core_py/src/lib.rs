@@ -36,10 +36,8 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let template_parser_mod = PyModule::new(m.py(), "template_parser")?;
     m.add_submodule(&template_parser_mod)?;
     // Functions
-    template_parser_mod
-        .add_function(wrap_pyfunction!(parse_template, &template_parser_mod)?)?;
-    template_parser_mod
-        .add_function(wrap_pyfunction!(compile_template, &template_parser_mod)?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(parse_template, &template_parser_mod)?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(compile_template, &template_parser_mod)?)?;
     // AST classes
     template_parser_mod.add_class::<Token>()?;
     template_parser_mod.add_class::<Comment>()?;

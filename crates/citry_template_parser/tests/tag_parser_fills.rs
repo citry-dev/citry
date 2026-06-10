@@ -242,7 +242,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fill_with_data_and_default_attrs() {
+    fn test_fill_with_data_and_fallback_attrs() {
         // <c-fill> with data attr introduces a variable that is available in the body.
         // The introduced variable is excluded from the node's used_variables (not propagated to parent).
         let input = r#"<c-my-comp><c-fill name="header" data="x">{{ x }}</c-fill></c-my-comp>"#;
@@ -260,8 +260,8 @@ mod tests {
             used_var_names
         );
 
-        // Same for default attr
-        let input = r#"<c-my-comp><c-fill name="header" default="y">{{ y }}</c-fill></c-my-comp>"#;
+        // Same for fallback attr
+        let input = r#"<c-my-comp><c-fill name="header" fallback="y">{{ y }}</c-fill></c-my-comp>"#;
         let template = parse_template(input, None, None).unwrap();
 
         let used_var_names: Vec<&str> = template
@@ -271,7 +271,7 @@ mod tests {
             .collect();
         assert!(
             !used_var_names.contains(&"y"),
-            "template.used_variables should NOT contain 'y' (introduced by default attr): {:?}",
+            "template.used_variables should NOT contain 'y' (introduced by fallback attr): {:?}",
             used_var_names
         );
 
@@ -295,9 +295,87 @@ mod tests {
             used_var_names
         );
 
-        // Other attributes on c-fill should fail (only name, c-name, data, default, c-bind are allowed)
+        // Other attributes on c-fill should fail (only name, c-name, data, fallback, c-bind are allowed)
         let input = r#"<c-my-comp><c-fill name="header" class="foo">X</c-fill></c-my-comp>"#;
         assert_parse_error(input, "can only have");
+
+        // "default" is not an allowed c-fill attribute (the fallback-variable attr is "fallback")
+        let input = r#"<c-my-comp><c-fill name="header" default="y">{{ y }}</c-fill></c-my-comp>"#;
+        assert_parse_error(input, "can only have");
+    }
+
+    #[test]
+    fn test_slot_without_name_is_default_slot() {
+        // A <c-slot> with no name-providing attribute is the default slot,
+        // collected in template.slots under the name "default".
+        let template = parse_template("<c-slot />", None, None).unwrap();
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "default");
+        assert_eq!(template.slots[0].required, Some(false));
+
+        // The synthesized name token is anchored at the start-tag token
+        // (there is no name in the source to point at).
+        assert_eq!(template.slots[0].token.start_index, 0);
+        assert_eq!(template.slots[0].token.end_index, 10);
+
+        // The required flag works on the bare form too.
+        let template = parse_template("<c-slot required>fb</c-slot>", None, None).unwrap();
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "default");
+        assert_eq!(template.slots[0].required, Some(true));
+
+        // A dynamic name (c-name, or c-bind which may supply one) is not
+        // statically known, so the slot is not collected.
+        let template = parse_template(r#"<c-slot c-name="x" />"#, None, None).unwrap();
+        assert_eq!(template.slots.len(), 0);
+        let template = parse_template(r#"<c-slot c-bind="b" />"#, None, None).unwrap();
+        assert_eq!(template.slots.len(), 0);
+
+        // c-required makes requiredness unknown, but the name stays static.
+        let template =
+            parse_template(r#"<c-slot name="hdr" c-required="x" />"#, None, None).unwrap();
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "hdr");
+        assert_eq!(template.slots[0].required, None);
+    }
+
+    #[test]
+    fn test_fill_cannot_mix_with_text_or_expr() {
+        // Non-whitespace text before a fill
+        let input = r#"<c-my-comp>text<c-fill name="x">hi</c-fill></c-my-comp>"#;
+        assert_parse_error(input, "Text cannot appear next to '<c-fill>'");
+
+        // Non-whitespace text after a fill
+        let input = r#"<c-my-comp><c-fill name="x">hi</c-fill>tail</c-my-comp>"#;
+        assert_parse_error(input, "Text cannot appear next to '<c-fill>'");
+
+        // An expression next to a fill
+        let input = r#"<c-my-comp>{{ x }}<c-fill name="x">hi</c-fill></c-my-comp>"#;
+        assert_parse_error(input, "Expression cannot appear next to '<c-fill>'");
+
+        // Whitespace-only text around fills is fine (formatting only; the
+        // runtime neither captures nor renders it).
+        let input = "<c-my-comp>\n  <c-fill name=\"x\">hi</c-fill>\n</c-my-comp>";
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Whitespace around fills should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_fill_group_content_checked_inside_control_flow() {
+        // Text next to a fill INSIDE a control flow tag (no direct fill sibling
+        // at the top level, so the per-sibling check alone would miss it).
+        let input =
+            r#"<c-my-comp><c-if cond="x">text<c-fill name="a">hi</c-fill></c-if></c-my-comp>"#;
+        assert_parse_error(input, "Text cannot appear next to '<c-fill>'");
+
+        // A non-fill tag inside a control flow sibling, where the fills live in
+        // a DIFFERENT control flow tag (again no direct fill sibling).
+        let input = r#"<c-my-comp><c-if cond="x"><c-fill name="a">hi</c-fill></c-if><c-if cond="y"><div>hi</div></c-if></c-my-comp>"#;
+        assert_parse_error(input, "Tag '<div>' cannot appear next to '<c-fill>'");
     }
 
     #[test]

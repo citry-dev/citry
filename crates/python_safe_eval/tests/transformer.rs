@@ -85,7 +85,7 @@ mod tests {
         let result = transform_expression_string("x\n y").unwrap_err();
         assert_eq!(
             result,
-            "Parse error: Expected ')', found name at byte range 3..4: 'y'"
+            "Parse error: Expected `)`, found name at byte range 3..4: 'y'"
         );
     }
 
@@ -122,7 +122,7 @@ mod tests {
         let result = transform_expression_string("def fn(x): x + 2)(5").unwrap_err();
         assert_eq!(
             result,
-            "Parse error: Expected an identifier, but found a keyword 'def' that cannot be used here at byte range 0..3: 'def'"
+            "Parse error: Expected an identifier, but found a keyword `def` that cannot be used here at byte range 0..3: 'def'"
         );
     }
 

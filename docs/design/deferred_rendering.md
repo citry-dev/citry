@@ -379,11 +379,11 @@ stacks the `data-cid` markers automatically. It is rejected because:
 
 ## 7. Interactions
 
-- **Slots.** `ComponentNode` with body content still raises today (slots are a
-  later phase with their own design, see
-  [`nodes/__init__.py`](../../packages/py/citry/citry/nodes/__init__.py)).
+- **Slots.** `ComponentNode` with body content still raises today.
   `DeferredComponent` carries the element's slots/body so deferred rendering is
-  slot-ready, but slot resolution itself is out of scope here.
+  slot-ready; slot resolution is specified in [`slots.md`](slots.md), whose
+  section 8 also extends `_scan_deferred` to descend into cross-owner renders
+  (fill bodies can defer grandchildren).
 - **Const-folding.** A folded component boundary must still mint a fresh render
   id and re-merge its deps each render
   ([`constness.md`](constness.md) section 6, [`rendering.md`](rendering.md)

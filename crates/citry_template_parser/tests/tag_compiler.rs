@@ -372,6 +372,38 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_slot_used_vars_deduped() {
+        // A variable used in both an attribute and the body appears once in the
+        // node's used_vars tuple (deduped, first-seen order).
+        assert_compile(
+            r#"<c-slot name="item" required c-user="user">fallback {{ user }}</c-slot>"#,
+            r#"[SlotNode(source, (0, 71,), (StaticHtmlAttr(source, (8, 19,), """name""", """item""", ()), StaticHtmlAttr(source, (20, 28,), """required""", True, ()), ExprHtmlAttr(source, (29, 42,), """c-user""", """user""", ("user",)),), ["""fallback """, ExprNode(source, (52, 62,), """user """, ("user",)),], ("user",), ()),]"#,
+        );
+    }
+
+    #[test]
+    fn test_fill_data_and_fallback_introduced_vars() {
+        // The fill's data/fallback attribute values are variable NAMES: they
+        // compile as static attrs and land in introduced_vars, excluded from
+        // the fill's (and component's) used_vars.
+        assert_compile(
+            r#"<c-Card><c-fill name="header" data="d" fallback="fb">{{ d }} {{ fb }}</c-fill></c-Card>"#,
+            r#"[ComponentNode(source, (0, 87,), (), [FillNode(source, (8, 78,), (StaticHtmlAttr(source, (16, 29,), """name""", """header""", ()), StaticHtmlAttr(source, (30, 38,), """data""", """d""", ()), StaticHtmlAttr(source, (39, 52,), """fallback""", """fb""", ()),), [ExprNode(source, (53, 60,), """d """, ("d",)), """ """, ExprNode(source, (61, 69,), """fb """, ("fb",)),], (), ("d", "fb",)),], (), """card""", True),]"#,
+        );
+    }
+
+    #[test]
+    fn test_slot_without_name_compiles() {
+        // The bare default slot compiles like any slot: no name attr is
+        // synthesized into the output (the runtime treats a missing name as
+        // "default").
+        assert_compile(
+            r#"<c-slot>fb</c-slot>"#,
+            r#"[SlotNode(source, (0, 19,), (), ["""fb""",], (), ()),]"#,
+        );
+    }
+
     // =============================================================================
     // RAW
     // =============================================================================

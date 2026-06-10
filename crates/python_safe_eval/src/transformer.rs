@@ -257,7 +257,7 @@ use crate::utils::python_ast::{
 use regex::Regex;
 use ruff_python_ast::visitor::transformer::Transformer;
 use ruff_python_ast::{self as ast, Expr, Stmt};
-use ruff_python_parser::{parse_expression, Parsed};
+use ruff_python_parser::{Parsed, parse_expression};
 use ruff_source_file::LineIndex;
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -360,7 +360,11 @@ fn adjust_token_position(
     (adjusted_start, adjusted_end, adjusted_line, adjusted_col)
 }
 
-pub fn parse_expression_with_adjusted_error_ranges(wrapped_source: &str, source: &str, wrap_prefix_len: usize) -> Result<Parsed<ast::ModExpression>, String> {
+pub fn parse_expression_with_adjusted_error_ranges(
+    wrapped_source: &str,
+    source: &str,
+    wrap_prefix_len: usize,
+) -> Result<Parsed<ast::ModExpression>, String> {
     parse_expression(&wrapped_source).map_err(|e| {
         let error_msg = format!("Parse error: {}", e);
         adjust_error_ranges(&error_msg, wrap_prefix_len, source)
@@ -386,7 +390,8 @@ pub fn transform_expression_string(source: &str) -> Result<TransformResult, Stri
     let wrap_prefix_len = 2; // "(\n" = 2 characters
 
     let transformer = SandboxTransformer::new(wrap_prefix_len);
-    let ast = parse_expression_with_adjusted_error_ranges(&wrapped_source, source, wrap_prefix_len )?;
+    let ast =
+        parse_expression_with_adjusted_error_ranges(&wrapped_source, source, wrap_prefix_len)?;
 
     // Create a LineIndex to convert byte offsets to line/column positions
     let line_index = LineIndex::from_source_text(&wrapped_source);

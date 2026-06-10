@@ -164,18 +164,19 @@ pub const TAG_ATTR_RULES_DATA: &[(&str, (Option<&[&[&str]]>, &[&[&str]]))] = &[
     (C_EMPTY_TAG, (Some(&[]), &[])),
     // c-raw: nothing allowed, nothing required
     (C_RAW_TAG, (Some(&[]), &[])),
-    // c-fill: any of ["name", "c-name", "data", "default", "c-bind"] allowed,
+    // c-fill: any of ["name", "c-name", "data", "fallback", "c-bind"] allowed,
     //         but ["name", "c-name"] are mutually exclusive.
     //         also one of ["name", "c-name", "c-bind"] is required.
     (
         C_FILL_TAG,
         (
-            Some(&[&["name", "c-name"], &["data"], &["default"], &["c-bind"]]),
+            Some(&[&["name", "c-name"], &["data"], &["fallback"], &["c-bind"]]),
             &[&["name", "c-name", "c-bind"]],
         ),
     ),
-    // c-slot: any attributes allowed, but one of ["name", "c-name", "c-bind"] required
-    (C_SLOT_TAG, (None, &[&["name", "c-name", "c-bind"]])),
+    // c-slot: any attributes allowed, nothing required. A slot with no "name",
+    // "c-name", nor "c-bind" attribute is the default slot, named "default".
+    (C_SLOT_TAG, (None, &[])),
     // c-component: any attributes allowed, but one of ["is", "c-is", "c-bind"] required
     (C_COMPONENT_TAG, (None, &[&["is", "c-is", "c-bind"]])),
     // NOTE: `<c-provide>`, `<c-js>`, and `<c-css>` are not included here

@@ -534,6 +534,23 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
     Ok(items)
 }
 
+/// Map variable tokens to their names, deduped, preserving first-seen (source) order.
+///
+/// The AST tracks one token per variable occurrence (each carries its own
+/// position), so a variable used in both an attribute and the body appears
+/// twice. The emitted code is a contract, so the name lists it carries must be
+/// unique and in a reproducible order (never via a bare `HashSet` iteration).
+fn dedupe_variable_names(tokens: &[Token]) -> Vec<String> {
+    let mut seen = HashSet::new();
+    let mut names: Vec<String> = Vec::new();
+    for token in tokens {
+        if seen.insert(token.content.clone()) {
+            names.push(token.content.clone());
+        }
+    }
+    names
+}
+
 /// Compile a simple node (e.g., `<c-slot>`, `<c-fill>`) into a LangSpecArgument.
 ///
 /// Generates code like:
@@ -593,7 +610,7 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
 /// The introduced variables contains all variables introduced by this node.
 /// These variables are not available to other nodes outside this one.
 /// - `<c-for>` introduces loop variables.
-/// - `<c-fill>` introduces data/default variables.
+/// - `<c-fill>` introduces data/fallback variables.
 ///
 /// Introduced variables need to be passed to runtime so that it can assign values to those variables.
 fn compile_simple_node(
@@ -616,19 +633,14 @@ fn compile_simple_node(
         attr_args.push(compile_html_attr(attr));
     }
 
-    // Get used variables from the node
-    let used_variables: Vec<String> = node
-        .used_variables()
-        .iter()
-        .map(|token| token.content.clone())
-        .collect();
+    // Get used variables from the node. The AST tracks one token per
+    // occurrence (each has its own position), so the names are deduped here,
+    // preserving first-seen (source) order - the emitted code is a contract
+    // and must not repeat names.
+    let used_variables = dedupe_variable_names(node.used_variables());
 
     // Get introduced variables from the node
-    let introduced_variables: Vec<String> = node
-        .introduced_variables()
-        .iter()
-        .map(|token| token.content.clone())
-        .collect();
+    let introduced_variables = dedupe_variable_names(node.introduced_variables());
 
     // Compile body content as a list: `[item1, item2, ...]`
     // NOTE: We use a list here NOT tuple, so the nodelist is mutable.
@@ -777,12 +789,9 @@ fn compile_component_node(node: Node) -> Result<LangSpecArgument, CompileError> 
         attr_args.push(compile_html_attr(attr));
     }
 
-    // Get used variables from the node
-    let used_variables: Vec<String> = node
-        .used_variables()
-        .iter()
-        .map(|token| token.content.clone())
-        .collect();
+    // Get used variables from the node, deduped while preserving first-seen
+    // (source) order - the AST tracks one token per occurrence.
+    let used_variables = dedupe_variable_names(node.used_variables());
 
     // Compile body content as a list: `[item1, item2, ...]`
     let body_items = match node {
@@ -927,11 +936,7 @@ fn compile_control_flow_node(
             }
         }
 
-        let introduced_var_names: Vec<String> = node
-            .introduced_variables()
-            .iter()
-            .map(|token| token.content.clone())
-            .collect();
+        let introduced_var_names = dedupe_variable_names(node.introduced_variables());
 
         // Compile body content
         let body_items = match node {
