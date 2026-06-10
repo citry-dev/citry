@@ -1448,6 +1448,71 @@ class Page(Component):
     '''
 ```
 
+### Parse-time validation of component usage (`citry/tag_rules.py`, `Citry._tag_rules`)
+
+**What:** A component's `Kwargs`/`Slots` declarations become parser
+`user_rules`: every template parsed under a `Citry` instance validates its
+component tags against the registered components' declarations, so an unknown
+kwarg attribute, a missing required kwarg, an unknown `<c-fill>` name, or a
+missing required slot fails at template compile time (the parent's first
+render), with the Rust parser's existing checks and error messages. Covers
+component templates and nested templates (`c-body="..."`).
+
+**Why:** The runtime already rejects these (`Kwargs(**raw)` / `Slots(**raw)`
+raise on unknown or missing fields); this moves the same error to where the
+template is written. django-components cannot do this: its fills resolve only
+at render time. Tracked as the follow-up in [`slots.md`](slots.md)
+section 12, extended here to kwargs as well.
+
+**Design decisions:**
+- **Opt-in per dimension.** No `Kwargs` class = any attributes accepted; no
+  `Slots` class = any fills; neither = no rules entry. The parse-time check
+  never tightens beyond the runtime contract.
+- **Derivation:** a no-default field is required; each kwarg allows its
+  static and dynamic spellings as one mutually exclusive group
+  (`["title", "c-title"]`); control-flow shorthand attributes
+  (`c-if`/`c-elif`/`c-else`/`c-for`/`c-empty`) are always allowed. The
+  parser's own escape hatches stay: `c-bind` bypasses attribute checks, and
+  dynamic fill names defer per-name slot checks to runtime, so no template
+  that could be valid at runtime is rejected.
+- **Declaration styles match the runtime.** Fields are read via
+  `util.misc.get_fields`, which understands dataclasses (the metaclass
+  product), Pydantic v1/v2 models, and NamedTuples; Pydantic is recognized
+  by its attribute protocol (`model_fields` / `__fields__`) without being
+  imported, so it stays out of citry's dependencies. An unrecognized style
+  means "undeclared" (no rules), never rejection. In step, `to_dict` gained
+  the same protocol support, so a Pydantic `template_data()` return or
+  input instance normalizes like a dataclass one.
+- **Case-insensitive matching.** The parser's `user_rules` lookups now
+  lowercase the tag name (a small Rust change), so `<c-MyCard>` validates
+  against the rules keyed `c-mycard`/`c-my-card`, consistent with how
+  component tags resolve everywhere else. Rule keys must be lowercase.
+- **Cached per `Citry` instance** (`_tag_rules()`, internal), invalidated on
+  register/unregister/clear. Rules are built at parse time (first render),
+  so components declared after the consuming class but before its first
+  render are still seen.
+
+**Usage:**
+
+```python
+class Card(Component):
+    template = '<div>{{ title }}<c-slot name="header" /></div>'
+
+    class Kwargs:
+        title: str          # required
+        size: int = 10      # optional
+
+    class Slots:
+        header: SlotInput   # required
+        footer: "SlotInput | None" = None
+
+# Each of these now fails at the parent template's parse:
+#   <c-card title="x" bogus="1">...   unknown kwarg
+#   <c-card>...                       missing required `title`
+#   <c-fill name="bogus">             unknown slot
+#   (no header fill)                  missing required slot
+```
+
 ## Impl notes (things to be done)
 
 - DO NOT PASS CONTEXT BETWEEN NODES. ONLY PROPS AND SLOTS.

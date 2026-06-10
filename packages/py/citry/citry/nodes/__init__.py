@@ -336,7 +336,11 @@ class TemplateNode(Node):
         from citry.component_render import _compile_body_generator, _render_body  # noqa: PLC0415
 
         if self._generator is None:
-            self._generator = _compile_body_generator(self.expr)
+            # The nested template is validated like any other: the parse gets
+            # the rules derived from the registered components' declarations.
+            component = context.component
+            user_rules = component.citry._tag_rules() if component is not None else None
+            self._generator = _compile_body_generator(self.expr, user_rules)
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -457,7 +461,11 @@ class TemplateHtmlAttr(HtmlAttr):
         from citry.component_render import _compile_body_generator, _render_body  # noqa: PLC0415
 
         if self._generator is None:
-            self._generator = _compile_body_generator(self.template)
+            # The nested template is validated like any other: the parse gets
+            # the rules derived from the registered components' declarations.
+            component = context.component
+            user_rules = component.citry._tag_rules() if component is not None else None
+            self._generator = _compile_body_generator(self.template, user_rules)
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 

@@ -1679,12 +1679,16 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
     let attr_names_set: HashSet<&str> = attr_names.iter().copied().collect();
     let has_c_bind = attrs.iter().any(|attr| attr.key.content == "c-bind");
 
-    // Check if this tag has validation rules - first check built-in rules, then user-provided rules
+    // Check if this tag has validation rules - first check built-in rules, then user-provided rules.
+    // User rules are keyed by lowercase tag name: component tags match case-insensitively
+    // everywhere else (the compiler lowercases component names), so `<c-MyCard>` and
+    // `<c-mycard>` validate against the same rules.
+    let tag_name_lower = tag_name.to_lowercase();
     let (allowed_attrs, required_attrs) = if let Some(builtin_rules) = TAG_ATTR_RULES.get(tag_name)
     {
         // Use built-in rules directly
         (&builtin_rules.allowed_attrs, &builtin_rules.required_attrs)
-    } else if let Some(user_rules) = context.user_rules.get(tag_name) {
+    } else if let Some(user_rules) = context.user_rules.get(tag_name_lower.as_str()) {
         // Use user-provided rules
         (&user_rules.allowed_attrs, &user_rules.required_attrs)
     } else {
@@ -2041,12 +2045,15 @@ fn validate_fill_names(
 
     // Get slot rules for this tag (if any).
     // Even without rules, we still validate duplicates - that's always an error.
+    // User rules are keyed by lowercase tag name (same rule as the attribute
+    // validation: component tags match case-insensitively).
     let no_required: Vec<String> = vec![];
+    let tag_name_lower = tag_name.to_lowercase();
     let (allowed_slots, required_slots) = if let Some(builtin_rules) = TAG_ATTR_RULES.get(tag_name)
     {
         // Built-in rules for built-in tags
         (&builtin_rules.allowed_slots, &builtin_rules.required_slots)
-    } else if let Some(user_rules) = context.user_rules.get(tag_name) {
+    } else if let Some(user_rules) = context.user_rules.get(tag_name_lower.as_str()) {
         // User-defined rules for user-defined tags
         (&user_rules.allowed_slots, &user_rules.required_slots)
     } else {

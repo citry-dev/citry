@@ -41,6 +41,50 @@ mod tests {
     }
 
     #[test]
+    fn test_user_rules_match_tags_case_insensitively() {
+        // Rules are keyed by lowercase tag name; a PascalCase spelling of the
+        // same component tag validates against the same rules (component tags
+        // match case-insensitively everywhere, e.g. the compiler lowercases
+        // component names).
+        let mut rules = HashMap::new();
+        rules.insert(
+            "c-my-comp".to_string(),
+            TagRules {
+                allowed_attrs: Some(vec![vec!["id".to_string()]]),
+                required_attrs: vec![],
+                allowed_slots: Some(vec!["header".to_string()]),
+                required_slots: vec![],
+            },
+        );
+        let rules_rc = Rc::new(rules);
+
+        // Attr validation applies to the PascalCase spelling
+        let input = r#"<c-My-Comp data="x"></c-My-Comp>"#;
+        let result = parse_template(input, None, Some(&rules_rc));
+        assert!(
+            result.is_err(),
+            "Invalid attr should fail for PascalCase tag spelling"
+        );
+
+        // Slot validation applies to the PascalCase spelling
+        let input = r#"<c-My-Comp><c-fill name="bogus">X</c-fill></c-My-Comp>"#;
+        let result = parse_template(input, None, Some(&rules_rc));
+        assert!(
+            result.is_err(),
+            "Invalid slot should fail for PascalCase tag spelling"
+        );
+
+        // Valid usage of the PascalCase spelling still parses
+        let input = r#"<c-My-Comp id="1"><c-fill name="header">X</c-fill></c-My-Comp>"#;
+        let result = parse_template(input, None, Some(&rules_rc));
+        assert!(
+            result.is_ok(),
+            "Valid PascalCase usage should succeed: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
     fn test_user_rules_required_attrs() {
         // Define rules that require 'id' for c-my-comp
         let mut rules = HashMap::new();

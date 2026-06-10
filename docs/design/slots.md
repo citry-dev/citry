@@ -650,13 +650,28 @@ The repo rule is dedupe-preserving-first-seen-order; fix while in
 
 ## 12. Out of scope (follow-ups this design enables)
 
-- **Parse-time fill validation against component slot declarations.** Feed
-  each registered component's slots (from `Component.Slots` or its template's
-  `template.slots`) into `parse_template(user_rules=...)` when parsing
-  *parent* templates, so `<c-fill name="typo">` fails at template compile
-  with the already-implemented Rust checks. A flagship DX feature DJC's
-  architecture cannot reach; needs the registry/parse plumbing, not slot
-  runtime work.
+- **Parse-time validation against component declarations.** **Built
+  (2026-06-10), extended to kwargs.** Each registered component's `Slots`
+  AND `Kwargs` declarations become parser `user_rules`
+  ([`tag_rules.py`](../../packages/py/citry/citry/tag_rules.py), cached per
+  `Citry` instance, invalidated on registry changes), fed into every template
+  parse (component templates and nested templates alike). So `<c-fill
+  name="typo">`, an unknown kwarg attribute, or a missing required
+  kwarg/slot fails at template compile with the already-implemented Rust
+  checks; a flagship DX feature DJC's architecture cannot reach. Opt-in per
+  dimension (no `Kwargs` class = any attributes; no `Slots` class = any
+  fills), mirroring the runtime typed-input contract exactly. Declarations
+  are read via `util.misc.get_fields`, which understands every style the
+  runtime accepts (dataclasses, Pydantic v1/v2 models by attribute protocol
+  without importing pydantic, NamedTuples); unrecognized styles mean
+  "undeclared", never rejection. The parser's
+  `user_rules` lookups are case-insensitive (lowercase keys), matching how
+  component tags resolve everywhere else. Derivation rules: a no-default
+  field is required; each kwarg allows its static and `c-` spellings as a
+  mutually exclusive pair; control-flow shorthand attributes are always
+  allowed; `c-bind` and dynamic fill names keep their parser-native escape
+  hatches, so no template that could be valid at runtime is rejected. Tests
+  in `tests/test_tag_rules.py`.
 - **Provide/inject across slots**, with the `<c-provide>` design.
 - **Slot metadata consumers** (CSS scoping via `Slot.extra` +
   `on_slot_rendered`), with the dependency extension.

@@ -42,12 +42,14 @@ from typing import TYPE_CHECKING, Any
 from citry.component_registry import ComponentRegistry
 from citry.extension import ExtensionManager
 from citry.settings import CitrySettings
+from citry.tag_rules import build_tag_rules
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
     from citry.component import Component
     from citry.extension import Extension
+    from citry_core.template_parser import TagRules
 
 
 class Citry:
@@ -85,6 +87,11 @@ class Citry:
         # the body is not yet specialized per signature.
         self._const_body_cache: dict[tuple[type[Component], frozenset[tuple[str, Any]]], list[Any]] = {}
 
+        # Parse-time validation rules derived from the registered components'
+        # Kwargs/Slots declarations (see citry/tag_rules.py). Built on first
+        # template parse; invalidated whenever the registry changes.
+        self._tag_rules_cache: dict[str, TagRules] | None = None
+
         # The extension/hook system, scoped to this Citry instance (DJC #1413).
         # Extensions are present from construction, so hooks fire immediately.
         self.extensions = ExtensionManager(self, self.settings.extensions)
@@ -104,6 +111,7 @@ class Citry:
         accepts the class.
         """
         self.registry.register(comp_cls, name)
+        self._tag_rules_cache = None
         registered_name = name or getattr(comp_cls, "name", None) or comp_cls.__name__
         self.extensions.on_component_registered(registered_name, comp_cls)
 
@@ -123,6 +131,7 @@ class Citry:
             comp_cls = comp_cls_or_name
             removed_name = getattr(comp_cls, "name", None) or comp_cls.__name__
         self.registry.unregister(comp_cls_or_name)
+        self._tag_rules_cache = None
         self.extensions.on_component_unregistered(removed_name, comp_cls)
 
     def get(self, name: str) -> type[Component]:
@@ -137,6 +146,20 @@ class Citry:
     def components(self) -> dict[str, type[Component]]:
         """All registered components as a name -> class mapping."""
         return self.registry.all()
+
+    def _tag_rules(self) -> dict[str, TagRules]:
+        """
+        Parse-time validation rules for templates parsed under this instance.
+
+        Derived from the registered components' ``Kwargs``/``Slots``
+        declarations (see ``citry/tag_rules.py``), so a template using a
+        declared component fails at parse time on unknown or missing
+        kwargs/fills. Cached; the cache resets whenever a component is
+        registered or unregistered.
+        """
+        if self._tag_rules_cache is None:
+            self._tag_rules_cache = build_tag_rules(self)
+        return self._tag_rules_cache
 
     def _const_body(
         self,
@@ -161,6 +184,7 @@ class Citry:
         """Clear all state: registered components, caches, etc."""
         self.registry.clear()
         self._const_body_cache.clear()
+        self._tag_rules_cache = None
 
 
 # The default Citry instance, used when Component.citry is not set.
