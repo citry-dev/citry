@@ -92,7 +92,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping
 
     from citry.component import Component
-    from citry.nodes import BodyItem, ExprNode, ForNode, IfNode
+    from citry.nodes import BodyItem, ElementAttrsNode, ExprNode, ForNode, IfNode
 
 _T = TypeVar("_T")
 
@@ -391,7 +391,7 @@ normally each time.
 """
 
 
-def fold_body(body: list[BodyItem], const_vars: dict[str, Any]) -> list[BodyItem]:
+def fold_body(body: list[BodyItem], const_vars: dict[str, Any], *, fold_attrs: bool = True) -> list[BodyItem]:
     """
     Pre-compute the parts of ``body`` that depend only on ``const_vars``.
 
@@ -404,6 +404,13 @@ def fold_body(body: list[BodyItem], const_vars: dict[str, Any]) -> list[BodyItem
 
     - A ``{{ expr }}`` node whose variables are all const is evaluated once
       and replaced with its escaped text.
+    - An HTML element's dynamic attribute region (``ElementAttrsNode``) whose
+      variables are all const is rendered once and replaced with its text.
+      Pass ``fold_attrs=False`` to keep these regions live: the caller does
+      that when an installed extension implements ``on_attrs_resolved``,
+      because baking the region would hide it from the extension. A region
+      holding a nested-template attribute value also stays live (it renders
+      fresh parts each time).
     - A ``<c-if>`` whose branch conditions use only const variables is
       decided once: only the matching branch's content remains (itself
       folded), the other branches are dropped.
@@ -476,18 +483,20 @@ def fold_body(body: list[BodyItem], const_vars: dict[str, Any]) -> list[BodyItem
     """
     const_names = frozenset(const_vars)
     fold_context = CitryContext(variables=dict(const_vars))
-    return _fold_into(body, const_names, fold_context)
+    return _fold_into(body, const_names, fold_context, fold_attrs=fold_attrs)
 
 
 def _fold_into(
     body: list[BodyItem],
     const_names: frozenset[str],
     fold_context: CitryContext,
+    *,
+    fold_attrs: bool,
 ) -> list[BodyItem]:
     """Fold one body list (the recursion step of ``fold_body``)."""
     folded: list[BodyItem] = []
     for item in body:
-        _fold_item(item, const_names, fold_context, folded)
+        _fold_item(item, const_names, fold_context, folded, fold_attrs=fold_attrs)
     return _merge_static(folded)
 
 
@@ -496,10 +505,20 @@ def _fold_item(
     const_names: frozenset[str],
     fold_context: CitryContext,
     out: list[BodyItem],
+    *,
+    fold_attrs: bool,
 ) -> None:
     """Fold one body item, appending the result(s) to ``out``."""
     # Imported lazily to break the import cycle; see the NOTE above fold_body.
-    from citry.nodes import ComponentNode, ExprNode, FillNode, ForNode, IfNode, SlotNode  # noqa: PLC0415
+    from citry.nodes import (  # noqa: PLC0415
+        ComponentNode,
+        ElementAttrsNode,
+        ExprNode,
+        FillNode,
+        ForNode,
+        IfNode,
+        SlotNode,
+    )
 
     if isinstance(item, str):
         out.append(item)
@@ -507,6 +526,13 @@ def _fold_item(
 
     if isinstance(item, ExprNode) and set(item.used_vars) <= const_names:
         out.append(_fold_expr(item, fold_context))
+        return
+
+    if isinstance(item, ElementAttrsNode):
+        if fold_attrs and set(item.used_vars) <= const_names:
+            out.append(_fold_element_attrs(item, fold_context))
+        else:
+            out.append(item)
         return
 
     if isinstance(item, ComponentNode):
@@ -517,7 +543,7 @@ def _fold_item(
         # other. A fill's own data/fallback variables can never be const
         # names (the parser rejects reusing an outer variable's name), so
         # expressions using them stay live.
-        folded = _fold_into(item.body, const_names, fold_context)
+        folded = _fold_into(item.body, const_names, fold_context, fold_attrs=fold_attrs)
         if _body_changed(item.body, folded):
             item = ComponentNode(
                 item.source, item.position, item.attrs, folded, item.used_vars, item.name, item.contains_fills
@@ -529,7 +555,7 @@ def _fold_item(
         # Same reasoning: the node stays (which fill a slot renders is
         # per-render state), but a fill's body and a slot's fallback body
         # render against this component's variables, so their insides fold.
-        folded = _fold_into(item.body, const_names, fold_context)
+        folded = _fold_into(item.body, const_names, fold_context, fold_attrs=fold_attrs)
         if _body_changed(item.body, folded):
             item = type(item)(item.source, item.position, item.attrs, folded, item.used_vars, item.introduced_vars)
         out.append(item)
@@ -548,19 +574,19 @@ def _fold_item(
                 # remains at all.
                 if branch_body is not None:
                     for child in branch_body:
-                        _fold_item(child, const_names, fold_context, out)
+                        _fold_item(child, const_names, fold_context, out, fold_attrs=fold_attrs)
                 return
         # Dynamic (or failing) conditions: keep the node, fold inside the
         # branch bodies.
-        out.append(_fold_branch_bodies(item, const_names, fold_context))
+        out.append(_fold_branch_bodies(item, const_names, fold_context, fold_attrs=fold_attrs))
         return
 
     if isinstance(item, ForNode):
-        unrolled = _try_unroll_for(item, const_names, fold_context)
+        unrolled = _try_unroll_for(item, const_names, fold_context, fold_attrs=fold_attrs)
         if unrolled is not None:
             out.extend(unrolled)
             return
-        out.append(_fold_branch_bodies(item, const_names, fold_context))
+        out.append(_fold_branch_bodies(item, const_names, fold_context, fold_attrs=fold_attrs))
         return
 
     out.append(item)
@@ -595,6 +621,27 @@ def _fold_expr(node: ExprNode, fold_context: CitryContext) -> BodyItem:
         return node
 
 
+def _fold_element_attrs(node: ElementAttrsNode, fold_context: CitryContext) -> BodyItem:
+    """
+    Render an all-const attribute region once; replace it with text when possible.
+
+    Mirrors ``_fold_expr``: the region renders to the same string on every
+    render that shares the cache entry, so it is safe to bake in. A region
+    holding a nested-template attribute value renders to a ``CitryRender``
+    (fresh parts each render), so the node is kept; a failing resolve also
+    keeps the node, so the error surfaces at render time through the normal
+    path. The ``on_attrs_resolved`` hook is not a concern here: the caller
+    only folds these regions when no installed extension implements it.
+    """
+    try:
+        rendered = node.render(fold_context)
+    except Exception:  # noqa: BLE001 (deliberate: defer the error to render, see fold_body)
+        return node
+    if isinstance(rendered, str):
+        return str(rendered)
+    return node
+
+
 def _body_changed(old: list[BodyItem], new: list[BodyItem]) -> bool:
     """True when folding produced a different body list (so the node must be rebuilt)."""
     return len(new) != len(old) or any(n is not o for n, o in zip(new, old, strict=True))
@@ -604,6 +651,8 @@ def _fold_branch_bodies(
     node: IfNode | ForNode,
     const_names: frozenset[str],
     fold_context: CitryContext,
+    *,
+    fold_attrs: bool,
 ) -> BodyItem:
     """
     Fold inside a kept ``IfNode``/``ForNode``: same node, folded branch bodies.
@@ -622,7 +671,7 @@ def _fold_branch_bodies(
     changed = False
     for branch in node.branches:
         body: list[BodyItem] = branch[2]
-        folded = _fold_into(body, const_names, fold_context)
+        folded = _fold_into(body, const_names, fold_context, fold_attrs=fold_attrs)
         if _body_changed(body, folded):
             changed = True
             new_branches.append((branch[0], branch[1], folded, branch[3]))
@@ -637,6 +686,8 @@ def _try_unroll_for(
     node: ForNode,
     const_names: frozenset[str],
     fold_context: CitryContext,
+    *,
+    fold_attrs: bool,
 ) -> list[BodyItem] | None:
     """
     Run an all-const loop once, ahead of time; return its text, or ``None``.
@@ -666,7 +717,7 @@ def _try_unroll_for(
         return None
 
     inner_names = const_names | set(targets)
-    if not all(_statically_foldable(branch[2], inner_names) for branch in node.branches):
+    if not all(_statically_foldable(branch[2], inner_names, fold_attrs=fold_attrs) for branch in node.branches):
         return None
 
     parts: list[BodyItem] = []
@@ -674,7 +725,7 @@ def _try_unroll_for(
         for count, (body, body_context) in enumerate(node.iter_bodies(fold_context), start=1):
             if count > _MAX_UNROLL_ITERATIONS:
                 return None
-            folded = _fold_into(body, inner_names, body_context)
+            folded = _fold_into(body, inner_names, body_context, fold_attrs=fold_attrs)
             if not all(isinstance(part, str) for part in folded):
                 # A value turned out to need per-render rendering (a Slot or
                 # element in a const variable); the static check cannot see
@@ -686,27 +737,31 @@ def _try_unroll_for(
     return parts
 
 
-def _statically_foldable(body: list[BodyItem], names: frozenset[str]) -> bool:
+def _statically_foldable(body: list[BodyItem], names: frozenset[str], *, fold_attrs: bool) -> bool:
     """
     True when every item in ``body`` can fold to text given const ``names``.
 
-    A shape check only (no evaluation): text always fits; an expression fits
-    when its variables fit; an ``<c-if>`` fits when its conditions and every
-    branch body fit. Any other node kind (component, slot, fill, nested
-    template, extension-injected) does not fold to text, so the body fails.
+    A shape check only (no evaluation): text always fits; an expression or an
+    attribute region fits when its variables fit (and, for attribute regions,
+    when folding them is allowed at all); an ``<c-if>`` fits when its
+    conditions and every branch body fit. Any other node kind (component,
+    slot, fill, nested template, extension-injected) does not fold to text,
+    so the body fails.
     """
     # Imported lazily to break the import cycle; see the NOTE above fold_body.
-    from citry.nodes import ExprNode, IfNode  # noqa: PLC0415
+    from citry.nodes import ElementAttrsNode, ExprNode, IfNode  # noqa: PLC0415
 
     for item in body:
         if isinstance(item, str):
             continue
         if isinstance(item, ExprNode) and set(item.used_vars) <= names:
             continue
+        if fold_attrs and isinstance(item, ElementAttrsNode) and set(item.used_vars) <= names:
+            continue
         if (
             isinstance(item, IfNode)
             and _conds_are_const(item, names)
-            and all(_statically_foldable(branch[2], names) for branch in item.branches)
+            and all(_statically_foldable(branch[2], names, fold_attrs=fold_attrs) for branch in item.branches)
         ):
             continue
         return False

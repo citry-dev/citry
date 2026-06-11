@@ -11,6 +11,13 @@
 # (citry.slots, citry.nodes, ...) may be imported from, but their contents
 # are internal and free to change between releases.
 
+from citry.attrs import (
+    format_attrs,
+    merge_attrs,
+    normalize_class,
+    normalize_style,
+    parse_string_style,
+)
 from citry.citry import (
     Citry,
     citry,
@@ -26,6 +33,7 @@ from citry.extension import (
     ExtensionCommand,
     ExtensionConfig,
     ExtensionManager,
+    OnAttrsResolvedContext,
     OnComponentClassCreatedContext,
     OnComponentClassDeletedContext,
     OnComponentDataContext,
@@ -40,6 +48,7 @@ from citry.extension import (
 )
 from citry.nodes import (
     ComponentNode,
+    ElementAttrsNode,
     ExprHtmlAttr,
     ExprNode,
     FillNode,
@@ -72,6 +81,7 @@ __all__ = [
     "ComponentNode",
     "ComponentRegistry",
     "Const",
+    "ElementAttrsNode",
     "ExprHtmlAttr",
     "ExprNode",
     "Extension",
@@ -84,6 +94,7 @@ __all__ = [
     "IfNode",
     "Node",
     "NotRegistered",
+    "OnAttrsResolvedContext",
     "OnComponentClassCreatedContext",
     "OnComponentClassDeletedContext",
     "OnComponentDataContext",
@@ -105,4 +116,9 @@ __all__ = [
     "TemplateHtmlAttr",
     "TemplateNode",
     "citry",
+    "format_attrs",
+    "merge_attrs",
+    "normalize_class",
+    "normalize_style",
+    "parse_string_style",
 ]

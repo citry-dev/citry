@@ -8,9 +8,9 @@ use crate::ast::{
     Template, TemplateElement, Text, Token,
 };
 use crate::constants::{
-    CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELIF_TAG, C_FILL_TAG, C_FOR_TAG,
-    C_IF_TAG, C_SLOT_TAG, FORBIDDEN_HTML_TAG_NAMES, HTML_VOID_ELEMENTS, RESERVED_TAG_NAMES,
-    TAG_ATTR_RULES, TAG_ORDERING_RULES,
+    CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG,
+    C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_SLOT_TAG, FORBIDDEN_HTML_TAG_NAMES, HTML_VOID_ELEMENTS,
+    RESERVED_TAG_NAMES, TAG_ATTR_RULES, TAG_ORDERING_RULES,
 };
 use crate::error::{assert_rule, assert_rules, ParseError};
 use crate::grammar::{GrammarParser, Rule};
@@ -1044,33 +1044,56 @@ fn validate_node(
     validate_fill_placement(&node, tag_stack)?;
     validate_attributes_present(&node, context)?;
     validate_attribute_conflicts(&node)?;
-    validate_c_bind_attrs(&node)?;
+    validate_dynamic_attr_values(&node)?;
     validate_fill_names(&node, fill_nodes, context)?;
     validate_variable_shadowing(&node)?;
 
     Ok(())
 }
 
-/// Validate that all `c-bind` attributes have a non-empty value.
+/// Validate that every dynamic (`c-*`) attribute has a non-empty value.
 ///
-/// `c-bind` is used to spread a dictionary as attributes (similar to Vue's `v-bind`),
-/// so it must have a value that evaluates to a dict. Boolean `c-bind` (no value),
-/// empty `c-bind=""`, and whitespace-only `c-bind="   "` are all invalid.
-fn validate_c_bind_attrs(node: &Node) -> Result<(), ParseError> {
+/// A dynamic attribute's value is an expression (or a nested template), so a
+/// bare `c-foo`, an empty `c-foo=""`, or a whitespace-only `c-foo="   "` has
+/// nothing to evaluate and is almost certainly a mistake: the user either
+/// meant the static boolean attribute (`foo`) or forgot the value.
+///
+/// The exceptions are the control-flow shorthand attributes that take no
+/// value by design (`c-else`, `c-empty`).
+fn validate_dynamic_attr_values(node: &Node) -> Result<(), ParseError> {
     for attr in node.attrs() {
-        if attr.key.content == "c-bind" {
-            let has_nonempty_value = attr
-                .inner_value
-                .as_ref()
-                .is_some_and(|v| !v.content.trim().is_empty());
-
-            if !has_nonempty_value {
-                return Err(ParseError::from_span(
-                    attr.token.as_span().unwrap(),
-                    "'c-bind' attribute must have a non-empty value.".to_string(),
-                ));
-            }
+        if attr.kind == HtmlAttrKind::Static {
+            continue;
         }
+        let attr_name = &attr.key.content;
+        if attr_name == C_ELSE_TAG || attr_name == C_EMPTY_TAG {
+            continue;
+        }
+
+        let has_nonempty_value = attr
+            .inner_value
+            .as_ref()
+            .is_some_and(|v| !v.content.trim().is_empty());
+        if has_nonempty_value {
+            continue;
+        }
+
+        // Control-flow attrs (c-if, c-elif, c-for) miss their condition or
+        // iterable; suggesting a static attribute would mislead there.
+        let message = if attr_name == "c-bind" || CONTROL_FLOW_TAGS.contains(&attr_name.as_str()) {
+            format!("'{}' attribute must have a non-empty value.", attr_name)
+        } else {
+            format!(
+                "Dynamic attribute '{}' must have a non-empty value. Write '{}' for a static boolean attribute, or give it an expression: {}=\"...\".",
+                attr_name,
+                &attr_name[2..],
+                attr_name
+            )
+        };
+        return Err(ParseError::from_span(
+            attr.token.as_span().unwrap(),
+            message,
+        ));
     }
     Ok(())
 }
@@ -1811,19 +1834,19 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
     Ok(())
 }
 
-/// Validate that a tag does not have duplicate attributes or conflicting c-* and non-c-* variants.
+/// Validate that a tag does not have duplicate or conflicting attributes.
+///
+/// A static and a dynamic form of the same attribute (`class` + `c-class`)
+/// is allowed: attributes resolve left to right, so duplicates across forms
+/// have well-defined semantics (last one wins; `class`/`style` merge). See
+/// docs/design/html_attrs.md section 4.
 ///
 /// **Case 1: Duplicate attributes**
 ///
 /// A tag cannot have multiple attributes with the same name, except `c-bind`.
 /// E.g., `<div class="x" class="y">` is invalid, but `<div c-bind="..." c-bind="...">` is allowed.
 ///
-/// **Case 2: Conflicting variants**
-///
-/// A tag cannot have both `c-xxx` and `xxx` variants, except `c-bind`.
-/// E.g., `<div class="x" c-class="y">` is invalid, but `<div c-bind="..." bind="...">` is allowed.
-///
-/// **Case 3: Control flow attribute conflicts**
+/// **Case 2: Control flow attribute conflicts**
 ///
 /// A tag cannot have multiple attributes from the same control flow group:
 /// - `[c-if, c-elif, c-else]` - only one allowed
@@ -1831,7 +1854,7 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
 ///
 /// However, attributes from different groups can coexist (e.g., `c-if` and `c-for` together is allowed).
 ///
-/// **Case 4: Control flow priorities conflicts**
+/// **Case 3: Control flow priorities conflicts**
 ///
 /// If a single tag uses attributes from several control flow group (e.g. IF and FOR),
 /// then only the group with the highest priority can be non-first.
@@ -1849,14 +1872,10 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
 /// **Errors**
 ///
 /// - If duplicate attribute names are found (except c-bind)
-/// - If both `c-xxx` and `xxx` variants are found (except c-bind)
 /// - If multiple control flow attributes from the same group are found
 fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
     let attrs = node.attrs();
 
-    // Track seen attribute base names (for non-c-* attrs, use the name as-is;
-    // for c-* attrs, use the name without the "c-" prefix, except c-bind)
-    let mut seen_base_names = HashSet::new();
     // Track full attribute names for duplicate detection (except c-bind)
     let mut seen_full_names = HashSet::new();
 
@@ -1884,28 +1903,14 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
             ));
         }
 
-        // Case 2: Check for conflicting c-* and non-c-* variants,
-        // e.g. `<div class="x" c-class="y">` is invalid.
-        let base_name = if attr_name.starts_with("c-") {
-            // This is a c-* attribute - use the base name (without "c-" prefix)
-            &attr_name[2..]
-        } else {
-            // This is a non-c-* attribute - use the name as-is
-            attr_name
-        };
+        // NOTE: A static and a dynamic form of the same attribute on one tag
+        // (`<div class="x" c-class="y">`) is allowed: attributes resolve left
+        // to right in source order, duplicates are last-one-wins (`class` and
+        // `style` merge instead), the same rule as `c-bind` interlacing. See
+        // docs/design/html_attrs.md section 4 and the README's "Attribute
+        // spreading" examples.
 
-        let base_name_already_present = !seen_base_names.insert(base_name.to_string());
-        if base_name_already_present {
-            return Err(ParseError::from_span(
-                attr.token.as_span().unwrap(),
-                format!(
-                    "Cannot have both '{}' and 'c-{}' attributes on the same tag (except 'c-bind').",
-                    attr_name, attr_name
-                ),
-            ));
-        }
-
-        // Case 3: Check for control flow attribute conflicts
+        // Case 2: Check for control flow attribute conflicts
         //
         // Multiple attrs from same group is invalid:
         // - ❌ <div c-if="x" c-elif="y">
@@ -1953,7 +1958,7 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
         }
     }
 
-    // Case 4: Check for control flow priorities conflicts
+    // Case 3: Check for control flow priorities conflicts
     //
     // If a single tag uses attributes from several control flow group (e.g. IF and FOR),
     // then only the group with the highest priority can be non-first.

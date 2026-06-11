@@ -39,6 +39,7 @@ from citry.constness import extract_const_vars, fold_body
 from citry.media import get_template
 from citry.nodes import (
     ComponentNode,
+    ElementAttrsNode,
     ExprHtmlAttr,
     ExprNode,
     FillNode,
@@ -366,7 +367,13 @@ def _render_one(
         const_vars, signature = extract_const_vars(tpl_data, used_vars=compiled.used_vars)
 
         def build() -> list[BodyItem]:
-            return fold_body(extensions.on_template_compiled(comp_cls, compiled.generate()), const_vars)
+            return fold_body(
+                extensions.on_template_compiled(comp_cls, compiled.generate()),
+                const_vars,
+                # Folding an attribute region bakes its dict before extensions
+                # see it, so keep the regions live when anyone subscribes.
+                fold_attrs=not extensions.has_hook("on_attrs_resolved"),
+            )
 
         body = citry_instance._const_body_cache.get_or_build(comp_cls, signature, build)
 
@@ -457,6 +464,7 @@ def _compile_template(
         "ExprNode": ExprNode,
         "TemplateNode": TemplateNode,
         "ComponentNode": ComponentNode,
+        "ElementAttrsNode": ElementAttrsNode,
         "IfNode": IfNode,
         "ForNode": ForNode,
         "SlotNode": SlotNode,

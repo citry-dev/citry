@@ -156,21 +156,25 @@ mod tests {
     // =============================================================================
     // DYNAMIC ATTRIBUTES ON HTML TAGS
     // =============================================================================
-    // On a regular HTML tag, a dynamic `c-*` attribute is split: the static
-    // parts become string fragments and the dynamic value becomes an ExprNode
-    // embedded inline (concatenated into the surrounding HTML string at runtime).
+    // An HTML tag with at least one dynamic attribute (`c-*` value or `c-bind`)
+    // keeps its whole attribute set structured: the compiler emits one
+    // ElementAttrsNode covering the attribute region, and the runtime decides
+    // spreads, True/False/None handling, and class/style merging
+    // (docs/design/html_attrs.md section 5). Signature:
+    //   ElementAttrsNode(source, (start, end,), (attrs,), (used_vars,))
 
     #[test]
     fn test_html_expr_attr() {
         assert_compile(
             r#"<div c-class="cls">hi</div>"#,
-            r#"["""<div class=\"""", ExprNode(source, (14, 17,), """cls""", ("cls",)), """\">hi</div>""",]"#,
+            r#"["""<div""", ElementAttrsNode(source, (0, 19,), (ExprHtmlAttr(source, (5, 18,), """c-class""", """cls""", ("cls",)),), ("cls",)), """>hi</div>""",]"#,
         );
     }
 
     #[test]
     fn test_html_empty_attr_becomes_boolean() {
         // `class=""` is normalized to a bare boolean attribute `class`.
+        // A purely static tag keeps the flattened fast path.
         assert_compile(
             r#"<div class="">hi</div>"#,
             r#"["""<div class>hi</div>""",]"#,
@@ -178,11 +182,11 @@ mod tests {
     }
 
     #[test]
-    fn test_html_c_bind_strips_prefix() {
-        // On an HTML tag, c-bind has its `c-` prefix stripped like any c-* attr.
+    fn test_html_c_bind_kept_structured() {
+        // `c-bind` keeps its key; the runtime spreads its mapping.
         assert_compile(
             r#"<div c-bind="attrs">hi</div>"#,
-            r#"["""<div bind=\"""", ExprNode(source, (13, 18,), """attrs""", ("attrs",)), """\">hi</div>""",]"#,
+            r#"["""<div""", ElementAttrsNode(source, (0, 20,), (ExprHtmlAttr(source, (5, 19,), """c-bind""", """attrs""", ("attrs",)),), ("attrs",)), """>hi</div>""",]"#,
         );
     }
 
@@ -190,7 +194,27 @@ mod tests {
     fn test_html_expr_attr_with_trailing_text() {
         assert_compile(
             r#"<a c-href="url">link</a>"#,
-            r#"["""<a href=\"""", ExprNode(source, (11, 14,), """url""", ("url",)), """\">link</a>""",]"#,
+            r#"["""<a""", ElementAttrsNode(source, (0, 16,), (ExprHtmlAttr(source, (3, 15,), """c-href""", """url""", ("url",)),), ("url",)), """>link</a>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_html_static_attr_joins_element_attrs_node() {
+        // One dynamic attribute pulls the static ones into the node too,
+        // in source order (the merge is order-sensitive).
+        assert_compile(
+            r#"<div id="x" c-class="cls">hi</div>"#,
+            r#"["""<div""", ElementAttrsNode(source, (0, 26,), (StaticHtmlAttr(source, (5, 11,), """id""", """x""", ()), ExprHtmlAttr(source, (12, 25,), """c-class""", """cls""", ("cls",)),), ("cls",)), """>hi</div>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_html_used_vars_deduped_across_attrs() {
+        // The node's used-vars tuple dedupes across attributes,
+        // preserving first-seen order.
+        assert_compile(
+            r#"<div c-id="a" c-title="a + b">hi</div>"#,
+            r#"["""<div""", ElementAttrsNode(source, (0, 30,), (ExprHtmlAttr(source, (5, 13,), """c-id""", """a""", ("a",)), ExprHtmlAttr(source, (14, 29,), """c-title""", """a + b""", ("a", "b",)),), ("a", "b",)), """>hi</div>""",]"#,
         );
     }
 

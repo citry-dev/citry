@@ -41,6 +41,7 @@ Example:
             "ExprNode": ExprNode,
             "TemplateNode": TemplateNode,
             "ComponentNode": ComponentNode,
+            "ElementAttrsNode": ElementAttrsNode,
             "IfNode": IfNode,
             "ForNode": ForNode,
             "SlotNode": SlotNode,
@@ -66,11 +67,13 @@ from typing import TYPE_CHECKING, Any, TypeAlias, final
 
 from typing_extensions import override
 
+from citry.attrs import format_attrs, merge_attrs
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender, DeferredComponent, _render_value
-from citry.constness import Const
+from citry.constness import Const, const_value
 from citry.slots import Slot
+from citry.util.html import escape
 from citry_core.safe_eval import safe_eval
 
 if TYPE_CHECKING:
@@ -432,11 +435,12 @@ class ExprHtmlAttr(HtmlAttr):
     """
 
     def __init__(
-        self, source: Any, position: tuple[int, int], key: str, expr: str, used_vars: tuple[str, ...]
+        self, source: Any, position: tuple[int, int], key: str, expr: str | bool, used_vars: tuple[str, ...]
     ) -> None:
         self.source = source
         self.position = position
         self.key = key
+        # The expression string, or `True` for a value-less attribute (`c-foo`).
         self.expr = expr
         self.used_vars = used_vars
         # The safe-eval function for `expr`, compiled lazily on first resolve and
@@ -456,6 +460,12 @@ class ExprHtmlAttr(HtmlAttr):
         written in the template), ``ComponentNode._resolve_kwargs`` adds the
         marker where the value becomes a component input.
         """
+        # The parser rejects a value-less `c-*` attribute, but node classes
+        # are public API: an extension building an ExprHtmlAttr by hand (via
+        # on_template_compiled) may pass `True` as the boolean form. There is
+        # nothing to evaluate then; the attribute is simply on.
+        if not isinstance(self.expr, str):
+            return True
         if self._eval is None:
             self._eval = safe_eval(self.expr)
         return self._eval(context.variables)
@@ -511,6 +521,128 @@ class TemplateHtmlAttr(HtmlAttr):
 
     def __repr__(self) -> str:
         return f"TemplateHtmlAttr(key={self.key!r})"
+
+
+@final
+class ElementAttrsNode(Node):
+    """
+    The attribute region of a plain HTML start tag with dynamic attributes.
+
+    Generated as: ``ElementAttrsNode(source, (start, end), (attrs...), ("var1", ...))``
+
+    Emitted when an HTML element (not a component) has at least one dynamic
+    attribute: a ``c-*`` value or a ``c-bind`` spread. The node covers ALL of
+    the tag's attributes, static ones included, because the set resolves as
+    one unit (docs/design/html_attrs.md sections 3 and 4):
+
+    - Contributions collect left to right in source order; ``c-bind``
+      contributes each entry of its mapping (which must be a ``Mapping``).
+    - ``class`` and ``style`` merge across contributions and accept the
+      structured value forms (string / dict / nested list); every other key
+      resolves last-one-wins.
+    - ``True`` renders the bare attribute, ``False`` and ``None`` omit it,
+      everything else renders escaped (``__html__`` values pass through).
+
+    Renders to one string like ``' class="btn" disabled'`` (leading space
+    included) or ``""`` when every attribute resolved away.
+
+    Example:
+        Template ``<div id="x" c-class="cls">hi</div>`` produces::
+
+            ElementAttrsNode(source, (0, 26,), (StaticHtmlAttr(...), ExprHtmlAttr(...),), ("cls",))
+
+    """
+
+    def __init__(
+        self, source: Any, position: tuple[int, int], attrs: tuple[HtmlAttr, ...], used_vars: tuple[str, ...]
+    ) -> None:
+        self.source = source
+        self.position = position
+        self.attrs = attrs
+        self.used_vars = used_vars
+        # The tag name, read lazily from the template source on first use
+        # (the compiler emits the tag name as a separate static chunk, so the
+        # node itself does not receive it).
+        self._tag_name: str | None = None
+
+    @property
+    def tag_name(self) -> str:
+        """The element's tag name (e.g. ``"div"``), read from the source slice."""
+        if self._tag_name is None:
+            # The position spans the start tag, e.g. `<div c-class="cls">`.
+            name = str(self.source)[self.position[0] + 1 : self.position[1]]
+            for index, char in enumerate(name):
+                if char.isspace() or char in "/>":
+                    name = name[:index]
+                    break
+            self._tag_name = name
+        return self._tag_name
+
+    @override
+    def render(self, context: CitryContext) -> RenderPart:
+        resolved = self._resolve(context)
+
+        # Let extensions rewrite the resolved dict (e.g. class dedup). Fires
+        # only when an installed extension implements the hook; the manager
+        # short-cuts otherwise (docs/design/html_attrs.md section 5.5).
+        component = context.component
+        if component is not None:
+            resolved = component.citry.extensions.on_attrs_resolved(
+                component=component,
+                tag_name=self.tag_name,
+                attrs=resolved,
+            )
+
+        return self._format(resolved, context)
+
+    def _resolve(self, context: CitryContext) -> dict[str, Any]:
+        """
+        Collect the attribute contributions and merge them into one dict.
+
+        ``False`` and ``None`` values are dropped here, so the merged dict
+        holds only the attributes that will appear in the output (the
+        ``on_attrs_resolved`` hook sees them already gone). A ``Const``
+        marker is unwrapped so the normalizers see the real value.
+        """
+        contributions: list[Mapping[str, Any]] = []
+        for attr in self.attrs:
+            if attr.key == "c-bind":
+                value = const_value(attr.resolve(context))
+                if not isinstance(value, Mapping):
+                    msg = (
+                        f"c-bind on <{self.tag_name}> must resolve to a mapping of attributes, "
+                        f"got {type(value).__name__}"
+                    )
+                    raise TypeError(msg)
+                contributions.append({key: const_value(item) for key, item in value.items()})
+            else:
+                contributions.append({attr.key.removeprefix("c-"): const_value(attr.resolve(context))})
+        merged = merge_attrs(*contributions)
+        return {key: value for key, value in merged.items() if value is not None and value is not False}
+
+    def _format(self, resolved: Mapping[str, Any], context: CitryContext) -> RenderPart:
+        """Format the merged dict into the output part(s)."""
+        parts: list[RenderPart] = []
+        for key, value in resolved.items():
+            if isinstance(value, CitryRender):
+                # A nested-template attribute value (`c-foo="<div>...</div>"`)
+                # keeps its parts, so components inside it stay deferred and
+                # render through the queue like anywhere else.
+                parts.append(f' {escape(key)}="')
+                parts.append(value)
+                parts.append('"')
+            else:
+                chunk = format_attrs({key: value})
+                if chunk:
+                    parts.append(" " + chunk)
+        if not parts:
+            return ""
+        if all(isinstance(part, str) for part in parts):
+            return "".join(str(part) for part in parts)
+        return CitryRender(parts=parts, context=context)
+
+    def __repr__(self) -> str:
+        return f"ElementAttrsNode(attrs={len(self.attrs)}, used_vars={self.used_vars})"
 
 
 @final

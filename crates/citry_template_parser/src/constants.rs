@@ -40,6 +40,9 @@ pub const IF_NODE: &str = "IfNode";
 pub const FOR_NODE: &str = "ForNode";
 pub const SLOT_NODE: &str = "SlotNode";
 pub const FILL_NODE: &str = "FillNode";
+// Renders the whole attribute region of an HTML start tag that has at least
+// one dynamic attribute (c-* value or c-bind spread). See compile_html_node.
+pub const ELEMENT_ATTRS_NODE: &str = "ElementAttrsNode";
 
 // Attribute class name constants
 // These are the class/struct names that need to be defined in each language implementation.

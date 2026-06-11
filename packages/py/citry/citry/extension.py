@@ -154,6 +154,19 @@ class OnSlotRenderedContext:
 
 
 @dataclass(frozen=True, slots=True)
+class OnAttrsResolvedContext:
+    citry: Citry
+    """The ``Citry`` instance the component belongs to."""
+    component: Component
+    """The component whose template holds the element."""
+    tag_name: str
+    """The HTML tag the attributes belong to (e.g. ``"div"``)."""
+    attrs: dict[str, Any]
+    """The resolved attribute dict: ``class``/``style`` already normalized to
+    strings, booleans still ``True``, omitted attributes already absent."""
+
+
+@dataclass(frozen=True, slots=True)
 class OnTemplateLoadedContext:
     citry: Citry
     """The ``Citry`` instance the component class belongs to."""
@@ -335,6 +348,17 @@ class Extension:
 
         Return a new render part (``str`` or ``CitryRender``) to replace the
         output, or ``None`` to keep the original. Raising propagates.
+        """
+
+    def on_attrs_resolved(self, ctx: OnAttrsResolvedContext) -> dict[str, Any] | None:
+        """
+        Called after an HTML element's dynamic attributes resolved to their
+        final dict, before it is formatted into the output (see
+        docs/design/html_attrs.md section 5.5). Return a new dict to replace
+        the attributes, or ``None`` to keep them.
+
+        Fires per element per render, only for elements with at least one
+        dynamic attribute (a ``c-*`` value or a ``c-bind`` spread).
         """
 
     # ----- Template -----
@@ -672,6 +696,37 @@ class ExtensionManager:
             ),
             result="map",
             field="result",
+        )
+
+    def has_hook(self, name: str) -> bool:
+        """Whether any installed extension implements the hook ``name``."""
+        return bool(self._extensions_with_hook(name))
+
+    def on_attrs_resolved(
+        self,
+        component: Component,
+        tag_name: str,
+        attrs: dict[str, Any],
+    ) -> dict[str, Any]:
+        """
+        Thread an element's resolved attribute dict through the extensions; a
+        return replaces the dict, a raise propagates.
+
+        This sits on a per-element per-render hot path, so when no extension
+        implements the hook the dict is returned without building a context.
+        """
+        if not self._extensions_with_hook("on_attrs_resolved"):
+            return attrs
+        return self.emit(
+            "on_attrs_resolved",
+            OnAttrsResolvedContext(
+                citry=self.citry,
+                component=component,
+                tag_name=tag_name,
+                attrs=attrs,
+            ),
+            result="map",
+            field="attrs",
         )
 
     # ----- Template hooks -----

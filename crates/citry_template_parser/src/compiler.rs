@@ -72,9 +72,9 @@ use crate::ast::{
 };
 use crate::constants::{
     COMPONENT_NODE, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELIF_TAG,
-    C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_SLOT_TAG, EXPR_ATTR_NODE,
-    EXPR_NODE, FILL_NODE, FOR_NODE, HTML_VOID_ELEMENTS, IF_NODE, SLOT_NODE, STATIC_ATTR_NODE,
-    TAG_ATTR_RULES, TEMPLATE_ATTR_NODE, TEMPLATE_NODE,
+    C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_SLOT_TAG, ELEMENT_ATTRS_NODE,
+    EXPR_ATTR_NODE, EXPR_NODE, FILL_NODE, FOR_NODE, HTML_VOID_ELEMENTS, IF_NODE, SLOT_NODE,
+    STATIC_ATTR_NODE, TAG_ATTR_RULES, TEMPLATE_ATTR_NODE,
 };
 use crate::error::CompileError;
 use crate::lang::lang::{Lang, LangImpl, LangSpecArgument, LangSpecStruct};
@@ -447,75 +447,74 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
     // The tag name can technically contain quote characters, so we escape the string.
     items.push(LangSpecArgument::UnsafeString(format!("<{}", tag_name)));
 
-    // Process attributes like `class="..."`, `c-class="..."`, `disabled`, etc.
-    for attr in start_tag_attrs {
-        match attr.kind {
-            // Static attribute: add as string with leading space
-            // Format: ` key="value"` or ` key` (for boolean)
-            // Note: HTML escaping of quotes in values will be handled at runtime
-            HtmlAttrKind::Static => {
-                // Note: Use `HtmlAttr.value` so we format also quotes around the value.
-                // In HTML, `key=""` and `key=''` are boolean attributes (same as bare `key`),
-                // so we normalize empty values to boolean form.
-                let has_nonempty_value = attr
-                    .inner_value
-                    .as_ref()
-                    .is_some_and(|v| !v.content.is_empty());
-                let attr_str = if has_nonempty_value {
-                    format!(
-                        " {}={}",
-                        attr.key.content,
-                        attr.value.as_ref().unwrap().content
-                    )
-                } else {
-                    format!(" {}", attr.key.content)
-                };
-                items.push(LangSpecArgument::UnsafeString(attr_str));
-            }
-            HtmlAttrKind::Expression | HtmlAttrKind::Template => {
-                let attr_key_without_prefix = attr.key.content.strip_prefix("c-").unwrap();
+    // When any attribute is dynamic (a `c-*` expression/template value, which
+    // includes `c-bind`), the whole attribute set must stay structured until
+    // render time: spreads, True/False/None values, and class/style merging
+    // are all decided by runtime values (docs/design/html_attrs.md section 5).
+    // Emit one ElementAttrsNode covering the attribute region; it renders to
+    // ` key="value" ...` (with a leading space) or to an empty string.
+    // Purely static tags keep the flattened fast path below.
+    let has_dynamic_attr = start_tag_attrs
+        .iter()
+        .any(|attr| matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template));
 
-                // Dynamic attribute with non-empty value: To get the actual value, we'll need to
-                // render the attribute expression at runtime. But the scaffolding
-                // around the dynamic value is static, so we end up with:
-                // `[' key=\"', ExprNode(...), '"']`
-                // In HTML, `key=""` is boolean, so empty values are treated as no-value.
-                let has_nonempty_value = attr
-                    .inner_value
-                    .as_ref()
-                    .is_some_and(|v| !v.content.is_empty());
-                if has_nonempty_value {
-                    let inner_value = attr.inner_value.as_ref().unwrap();
-                    // ` key="`
-                    let attr_start = format!(" {}=\"", attr_key_without_prefix);
-                    items.push(LangSpecArgument::UnsafeString(attr_start));
+    if has_dynamic_attr {
+        let start_tag = node.start_tag();
+        let attr_args: Vec<LangSpecArgument> =
+            start_tag_attrs.iter().map(compile_html_attr).collect();
+        // Used variables for the node are those of its attributes (the tag's
+        // body is compiled separately below). Deduped in first-seen order.
+        let attr_var_tokens: Vec<Token> = start_tag_attrs
+            .iter()
+            .flat_map(|attr| attr.used_variables.iter().cloned())
+            .collect();
+        let used_variables = dedupe_variable_names(&attr_var_tokens);
 
-                    // ExprNode/TemplateNode call
-                    let node_call = if attr.kind == HtmlAttrKind::Expression {
-                        format_expr_node(
-                            EXPR_NODE,
-                            &inner_value,
-                            &inner_value.content,
-                            &attr.used_variables,
-                        )
-                    } else {
-                        format_expr_node(
-                            TEMPLATE_NODE,
-                            &inner_value,
-                            &inner_value.content,
-                            &attr.used_variables,
-                        )
-                    };
-                    items.push(node_call);
-
-                    // `"`
-                    items.push(LangSpecArgument::UnsafeString("\"".to_string()));
-                // Expression attribute without value (or empty value): Just add the attribute key as is.
-                } else {
-                    let attr_str = format!(" {}", attr_key_without_prefix);
-                    items.push(LangSpecArgument::UnsafeString(attr_str));
-                };
-            }
+        // `ElementAttrsNode(source, (start, end), (HtmlAttr(...), ...), ("var1", ...))`
+        items.push(LangSpecArgument::Struct(LangSpecStruct {
+            name: ELEMENT_ATTRS_NODE.to_string(),
+            arguments: vec![
+                // Argument 1: `source` - original template source string, for error reporting
+                LangSpecArgument::Variable("source".to_string()),
+                // Argument 2: `(start, end)` - position of the start tag, for error reporting
+                LangSpecArgument::Tuple(vec![
+                    LangSpecArgument::Int(start_tag.token.start_index),
+                    LangSpecArgument::Int(start_tag.token.end_index),
+                ]),
+                // Argument 3: `(HtmlAttr(...), ...)` - all attributes, static ones included,
+                // in source order (the merge is order-sensitive)
+                LangSpecArgument::Tuple(attr_args),
+                // Argument 4: `("var1", ...)` - used variables across the attributes
+                LangSpecArgument::Tuple(
+                    used_variables
+                        .iter()
+                        .map(|name| LangSpecArgument::SafeString(name.clone()))
+                        .collect(),
+                ),
+            ],
+        }));
+    } else {
+        // All attributes are static: emit them as plain string chunks.
+        // Format: ` key="value"` or ` key` (for boolean)
+        // Note: HTML escaping of quotes in values will be handled at runtime
+        for attr in start_tag_attrs {
+            // Note: Use `HtmlAttr.value` so we format also quotes around the value.
+            // In HTML, `key=""` and `key=''` are boolean attributes (same as bare `key`),
+            // so we normalize empty values to boolean form.
+            let has_nonempty_value = attr
+                .inner_value
+                .as_ref()
+                .is_some_and(|v| !v.content.is_empty());
+            let attr_str = if has_nonempty_value {
+                format!(
+                    " {}={}",
+                    attr.key.content,
+                    attr.value.as_ref().unwrap().content
+                )
+            } else {
+                format!(" {}", attr.key.content)
+            };
+            items.push(LangSpecArgument::UnsafeString(attr_str));
         }
     }
 
