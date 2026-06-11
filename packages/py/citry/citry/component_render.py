@@ -15,11 +15,14 @@ rendered (via ``.render()``), it calls ``render_impl`` which:
 happens later, via ``CitryRender.serialize()`` (or ``str()``). See
 docs/design/rendering.md for the three-phase model.
 
-The slow step, the body-generating function (parse + compile + exec of the
-template), is built once per **component class** and cached on the class, since
-it is the same for a given template. Calling it yields a fresh node list each
-render. (Per-element/per-signature body caching belongs to the parked
-const-folding design; see docs/design/constness.md.)
+The slow step, compiling the template (parse + compile + exec) into a
+body-generating function, runs once per **component class** and is cached on
+the class, since it is the same for a given template. On top of that sits the
+``Const`` optimization: parts of the template that depend only on inputs
+marked ``Const()`` ("same value on every render") are computed once and the
+result is cached per component class and per set of ``Const`` values, so
+repeat renders skip that work. See docs/design/constness.md and
+citry/constness.py.
 
 This is a skeleton. Some features from django-components are not yet
 ported (context snapshotting, JS/CSS media). They will be added iteratively.
@@ -32,7 +35,8 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 from citry.citry_context import CitryContext
 from citry.citry_render import CitryRender, DeferredComponent
 from citry.constants import COMP_ID_PREFIX, UID_LENGTH
-from citry.constness import const_value, is_const
+from citry.constness import extract_const_vars, fold_body
+from citry.media import get_template
 from citry.nodes import (
     ComponentNode,
     ExprHtmlAttr,
@@ -329,30 +333,42 @@ def _render_one(
         active_provides = {**active_provides, **component._provides_own}
     context = CitryContext(variables=tpl_data, component=component, provides=active_provides)
 
-    # 6. Build the body (node list). The body-generating function is
-    #    parsed+compiled+exec'd once per component class (cached on the class).
-    #    The body is then loaded from the Citry-scoped cache keyed by the
-    #    component class plus the *const signature* (which context variables are
-    #    marked Const, and to what values). The body is NOT yet specialized per
-    #    signature (no folding), so every signature maps to an equivalent node
-    #    list for now; this wires up the const flow so folding can slot in
-    #    later. See docs/design/constness.md.
+    # 6. Build the body (the list of static strings and node objects the
+    #    template compiles to). Parsing and compiling the template runs once
+    #    per component class (cached on the class).
     #
-    #    on_template_compiled fires here (per built body, before caching), so an
-    #    extension can transform the node list once and have the transform
-    #    cached. See docs/design/extensions.md section 7.4.
-    generator = _get_body_generator(comp_cls)
-    if generator is None:
+    #    Then the Const optimization kicks in. extract_const_vars() collects
+    #    the template variables wrapped in Const() ("same value on every
+    #    render") and turns them into a cache key. The first render with a
+    #    given set of Const values builds the node list and runs fold_body()
+    #    on it, which does the work that depends only on those values right
+    #    away: e.g. "{{ cols }}" with cols=Const(3) becomes the text "3", and
+    #    a <c-if> whose condition uses only Const values keeps just the
+    #    branch that matches. The result is cached, so later renders with the
+    #    same Const values reuse it and skip all of that work. See
+    #    docs/design/constness.md and citry/constness.py.
+    #
+    #    on_template_compiled fires here (per built node list, before the
+    #    optimization and caching), so an extension can transform the node
+    #    list once and have the transform cached. See
+    #    docs/design/extensions.md section 7.4.
+    #
+    #    Only variables the template actually uses (``compiled.used_vars``)
+    #    go into the cache key; a Const value the template never reads cannot
+    #    change the output, so keying on it would only create duplicate cache
+    #    entries. A node injected by an extension may use a variable outside
+    #    that set; such a variable simply stays un-optimized and re-evaluates
+    #    each render, which is always safe.
+    compiled = _get_compiled_template(comp_cls)
+    if compiled is None:
         body: list[BodyItem] = []
     else:
+        const_vars, signature = extract_const_vars(tpl_data, used_vars=compiled.used_vars)
 
         def build() -> list[BodyItem]:
-            return extensions.on_template_compiled(comp_cls, generator())
+            return fold_body(extensions.on_template_compiled(comp_cls, compiled.generate()), const_vars)
 
-        # If the template_data() returned any `Const` fields,
-        # this is where we build/load the cached optimized body.
-        signature = _const_signature(tpl_data)
-        body = citry_instance._const_body(comp_cls, signature, build)
+        body = citry_instance._const_body_cache.get_or_build(comp_cls, signature, build)
 
     # 7. Walk the body into a parts list and wrap it in a CitryRender. Any nested
     #    components are left as unrendered DeferredComponent parts; render_impl
@@ -365,65 +381,59 @@ def _render_one(
     parts = _render_body(body, context)
     return CitryRender(parts=parts, context=context, is_component_root=not comp_cls.transparent)
 
-def _get_template_string(comp_cls: type[Component]) -> str | None:
+
+class _CompiledTemplate(NamedTuple):
+    """A component's compiled template: the body generator plus parse-time metadata."""
+
+    # Calling this yields a fresh node list (one per body build).
+    generate: Callable[[], list[BodyItem]]
+    # Every variable name the template uses, including in nested tags (the
+    # parse-time ``Template.used_variables``). The Const optimization keys
+    # its cache only on these, so a Const value the template never reads
+    # does not create duplicate cache entries.
+    used_vars: frozenset[str]
+
+
+def _get_compiled_template(comp_cls: type[Component]) -> _CompiledTemplate | None:
     """
-    Resolve the component's template to a string.
+    Return the cached compiled template for a component class.
 
-    For now, supports only ``Component.template`` (inline string).
-    ``Component.template_file`` (loading from disk) will be added later,
-    along with template caching at the class level (per DJC #1326).
-    """
-    if comp_cls.template is not None:
-        return comp_cls.template
-
-    if comp_cls.template_file is not None:
-        raise NotImplementedError(
-            f"Component {comp_cls.__name__} uses template_file={comp_cls.template_file!r}, "
-            f"but file-based templates are not yet implemented."
-        )
-
-    return None
-
-
-def _get_body_generator(comp_cls: type[Component]) -> Callable[[], list[BodyItem]] | None:
-    """
-    Return the cached body-generating function for a component's template.
-
-    The template is parsed, compiled, and exec'd once per component class; the
-    resulting ``generate_template`` function is cached on the class. Each call
-    to it produces a fresh node list (one per render). Returns ``None`` when the
+    The template is loaded via ``media.get_template``, which resolves
+    ``template`` / ``template_file``, reads the file when needed, and fires
+    ``on_template_loaded`` (see docs/design/asset_loading.md). Its source is
+    then parsed, compiled, and exec'd once per component class; the resulting
+    ``_CompiledTemplate`` is cached on the class. Each call to its
+    ``generate`` produces a fresh node list. Returns ``None`` when the
     component has no template.
 
     The cache is read and written via the class's own ``__dict__`` (not via
     attribute access), so it is keyed to the specific class: a subclass that
-    overrides ``template`` builds its own generator instead of inheriting the
-    parent's. (Accessing it as an attribute would also bind it as a method,
-    since it holds a plain function.)
+    overrides ``template`` builds its own compiled template instead of
+    inheriting the parent's. ``media.reset_template`` clears this cache
+    together with the loaded template.
     """
     if "_template_body_generator" not in comp_cls.__dict__:
-        template_str = _get_template_string(comp_cls)
-
-        # on_template_loaded fires once per class, since the generator is cached
-        # on the class. This hook lets extensions modify the template string before parse.
-        if template_str is not None:
-            template_str = comp_cls.citry.extensions.on_template_loaded(comp_cls, template_str)
+        template = get_template(comp_cls)
+        template_str = template.source if template is not None else None
 
         comp_cls._template_body_generator = (
-            _compile_body_generator(template_str, comp_cls.citry._tag_rules()) if template_str is not None else None
+            _compile_template(template_str, comp_cls.citry._tag_rules()) if template_str is not None else None
         )
     return comp_cls.__dict__["_template_body_generator"]
 
 
-def _compile_body_generator(
+def _compile_template(
     template_str: str,
     user_rules: dict[str, TagRules] | None = None,
-) -> Callable[[], list[BodyItem]]:
+) -> _CompiledTemplate:
     """
-    Parse, compile, and exec a template string into a body-generating function.
+    Parse, compile, and exec a template string into a ``_CompiledTemplate``.
 
-    Uses the citry_core pipeline: parse -> compile -> exec. Returns the
-    ``generate_template`` function from the exec'd namespace; calling it
-    returns a fresh list of static strings and runtime node objects.
+    Uses the citry_core pipeline: parse -> compile -> exec. The
+    ``generate_template`` function from the exec'd namespace becomes
+    ``generate``; calling it returns a fresh list of static strings and
+    runtime node objects. The parsed AST's root ``used_variables`` (which are
+    transitive) become ``used_vars``.
 
     ``user_rules`` are the parse-time validation rules derived from the
     registered components' declarations (``Citry._tag_rules()``), so a
@@ -435,6 +445,7 @@ def _compile_body_generator(
     generated code can find them.
     """
     ast = parse_template(template_str, user_rules=user_rules)
+    used_vars = frozenset(token.content for token in ast.used_variables)
     code = compile_template(ast)
 
     # Build the namespace for exec. "source" is the original template string,
@@ -455,7 +466,7 @@ def _compile_body_generator(
         "TemplateHtmlAttr": TemplateHtmlAttr,
     }
     exec(code, ns)  # noqa: S102
-    return ns["generate_template"]
+    return _CompiledTemplate(generate=ns["generate_template"], used_vars=used_vars)
 
 
 def _render_body(body: list[BodyItem], context: CitryContext) -> list[RenderPart]:
@@ -500,26 +511,3 @@ def _merge_dependencies(into: CitryContext, source: CitryContext) -> None:
     duplicates, rather than letting the last write win).
     """
     into.extra.update(source.extra)
-
-
-def _const_signature(context: dict[str, Any]) -> frozenset[tuple[str, Any]]:
-    """
-    Build a cache key from the variables marked ``Const``.
-
-    The body cache uses this key: a different set of ``Const`` variables, or the
-    same ones with different values, gives a different key and so a different
-    cached body. A ``Const`` value that cannot be used as a dict/set key falls
-    back to its ``repr`` (a stand-in; see the hashing notes in
-    ``docs/design/constness.md`` for the intended final form).
-    """
-    return frozenset((name, _freeze(const_value(value))) for name, value in context.items() if is_const(value))
-
-
-def _freeze(value: Any) -> Any:
-    """Return ``value`` unchanged if it can be a dict/set key, else its ``repr`` string."""
-    try:
-        hash(value)
-    except TypeError:
-        return repr(value)
-    else:
-        return value

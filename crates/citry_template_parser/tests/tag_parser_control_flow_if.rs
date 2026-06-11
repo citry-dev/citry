@@ -334,6 +334,49 @@ mod tests {
     }
 
     // =========================================================================
+    // Content between branches
+    // =========================================================================
+    // Whitespace-only text between branches is formatting and is allowed
+    // (the compiler drops it when grouping; see the compiler tests). Anything
+    // else in between breaks the group and is rejected at parse time.
+
+    #[test]
+    fn test_whitespace_between_branches_is_allowed() {
+        parse_template(
+            "<c-if cond=\"a\">A</c-if>\n  <c-else>B</c-else>",
+            None,
+            None,
+        )
+        .expect("whitespace between branches must parse");
+    }
+
+    #[test]
+    fn test_text_between_branches_is_rejected() {
+        assert_parse_error(
+            r#"<c-if cond="a">A</c-if>text<c-else>B</c-else>"#,
+            "Found other content in between",
+        );
+    }
+
+    #[test]
+    fn test_expr_between_branches_is_rejected() {
+        assert_parse_error(
+            r#"<c-if cond="a">A</c-if>{{ x }}<c-else>B</c-else>"#,
+            "Found other content in between",
+        );
+    }
+
+    #[test]
+    fn test_comment_between_branches_is_rejected() {
+        // An HTML comment renders to the output (it parses as a Text
+        // element), so it counts as content, not formatting.
+        assert_parse_error(
+            r#"<c-if cond="a">A</c-if><!-- note --><c-else>B</c-else>"#,
+            "Found other content in between",
+        );
+    }
+
+    // =========================================================================
     // Error: missing cond attribute
     // =========================================================================
 

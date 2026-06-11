@@ -484,12 +484,12 @@ class TestGeneratorCaching:
         assert "_template_body_generator" not in MyComp.__dict__
 
         MyComp(title="a").render()
-        gen = MyComp.__dict__["_template_body_generator"]
-        assert callable(gen)
+        compiled = MyComp.__dict__["_template_body_generator"]
+        assert callable(compiled.generate)
 
-        # A second CitryElement reuses the same class-level generator.
+        # A second CitryElement reuses the same class-level compiled template.
         MyComp(title="b").render()
-        assert MyComp.__dict__["_template_body_generator"] is gen
+        assert MyComp.__dict__["_template_body_generator"] is compiled
 
     def test_subclass_template_override_gets_own_generator(self):
         c = Citry()

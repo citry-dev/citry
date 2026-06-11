@@ -1,13 +1,48 @@
 # Design: const-ness and render-body caching
 
-**Status (2026-06-05): skeleton built; folding and taint parked.** The const
-*flow* is wired: a transparent `Const` marker (a `wrapt.ObjectProxy` subclass,
-`citry/constness.py`) that flows down the tree without being unwrapped,
-detection on the `template_data` output, a const signature, and a
-`Citry`-scoped body cache keyed by `(component class, signature)` in
-`render_impl`. What is NOT built: the fold pass (so the cached body is not yet
-specialized per signature, every signature maps to an equivalent node list) and
-phase-2 taint. This document is the target to build toward.
+**Status (2026-06-11): phases 1 and 2 built; taint parked.** In plain terms,
+the feature is: mark a component input as "this never changes between
+renders" (`Const(value)`), and the engine computes the parts of the template
+that depend only on such inputs once, caches the result, and reuses it on
+every later render with the same values. That pre-computing step is called
+**folding** throughout this doc and the code.
+
+What exists (all in `citry/constness.py`):
+
+- The `Const` marker: a transparent wrapper that behaves exactly like the
+  value inside, detected on the `template_data` output, and carried into
+  child components so they get the optimization too.
+- The cache key (`freeze_const` / `extract_const_vars`): built from the
+  const variables' names and values, value-based (equal values share an
+  entry; computed once per marker and remembered). A value that cannot be
+  keyed safely is simply treated as not const. Only variables the template
+  actually uses go into the key.
+- The cache (`ConstBodyCache`): one pre-computed template per component
+  class per combination of const values, scoped to the `Citry` instance,
+  capped in size (the least recently used entry drops first), guarded by a
+  lock.
+- Folding itself (`fold_body`): const expressions become escaped text; a
+  const `<c-if>` keeps only its winning branch; an `<c-if>`/`<c-for>` that
+  must stay still gets its insides folded; an all-const `<c-for>` runs once
+  and its text is baked in (capped); slot content folds inside (fill bodies,
+  default-slot bodies, slot fallbacks render against the writer's variables,
+  so const expressions in them fold even though the slot machinery itself
+  stays per-render); neighboring static strings join. Folding never raises:
+  anything that fails just stays un-optimized and errors (if any) surface at
+  render, as they would have anyway.
+- Values written literally in the template (`age="30"`, `c-age="30"`) are
+  marked const automatically when they become a component input.
+- Ergonomics: `Const(x)` has `x`'s type for type checkers;
+  `cols: int = Const(3)` on a typed `Kwargs` makes a default const; Pydantic
+  `Kwargs`/`Slots` models work, but their validation strips the marker (the
+  value then safely renders without the optimization).
+
+Sections 3-5 and 7-9 describe what is built; measured results are in
+section 13. What is NOT built: folding across the slot boundary (a constant
+fill folding the child's `<c-slot>` away) was designed, falsified, and
+parked, see section 14; the component-boundary placeholder (section 5.1)
+stays parked (low value for now, the child takes its own cache hit since
+the marker flows down); phase-2 taint (section 4.1) stays parked.
 
 This document captures the design for the `Const()` optimization and the
 render-body caching it enables. It records the reasoning and the (many) edge
@@ -74,7 +109,7 @@ Three layers, from most-shared to least:
 
 1. **Class: the body-generating function.** Parsing + compiling + exec of the
    template, cached once per component class (this exists today, see
-   `_get_body_generator` in
+   `_get_compiled_template` in
    [`packages/py/citry/citry/component_render.py`](../../packages/py/citry/citry/component_render.py)).
    Calling it yields a fresh, unoptimized node list.
 2. **Const cache: the optimized body.** Keyed by `(component class, const
@@ -376,28 +411,48 @@ already tracked in the AST.
   different dynamic inputs, the non-const nodes in a shared body must be
   stateless re-evaluators; any expression cache is a separate, value-keyed
   layer that only applies to truly-unshared nodes.
-- **Slots and fills are non-const by default.** Slot content is usually
-  dynamic child render content, so a component with a dynamically-filled slot
-  is not fully foldable. Treat slots as non-const for now and exclude them from
-  the const signature. Later they could become `Const`-compatible: when a slot
-  comes from a `<c-fill>`, the possible states of the slot output depend on the
-  inputs to the nodes inside the fill body, so const-ness could be derived from
-  those inputs. That is a later phase.
-- **Defaults as implicit const (with a caveat).** A kwarg with a constant
-  default that is not passed is effectively const, so `MyCard(title=Const("hi"))`
-  with `cols: int = 3` could fold `cols` too. The caveat is that defaults can be
-  **dynamic**: a `default_factory` may produce a fresh value each call (for
-  example a random uuid), which is not const. So defaults cannot be marked const
-  blindly. Because const-ness is observed on the `template_data` output (section
-  4), a stable default value can flow through and be detected naturally; the
-  genuinely problematic case is a user who intends a dynamic default factory,
-  whose output must not be treated as const. Concretely: a constant (literal)
-  default is safe to treat as const; a factory default is not, since the engine
-  cannot tell a pure factory from `uuid4`.
-- **Typing ergonomics.** `title=Const("hi")` should still type-check against
-  `title: str`. That usually means typing `Const` as `def Const(x: T) -> T`
-  (transparent to the checker, wraps at runtime) or having `Kwargs` accept
-  `T | Const[T]`. Prototype this early; it shapes the API surface.
+- **Slot content folds inside; the slot boundary stays dynamic.** Folding
+  descends into fill bodies, the implicit default-slot body, and slot
+  fallback bodies: they render against the variables of the component whose
+  template wrote them, so const expressions inside them are pre-computed
+  like any other. The slot boundary itself (which fill a `<c-slot>` renders,
+  the per-render fill collection) is per-render state and is excluded from
+  the cache key. Crossing that boundary, so that a constant fill folds the
+  child's `<c-slot>` away entirely, was designed, checked, and parked: see
+  section 14 for the design and the reasons it lost.
+- **Template literals are implicitly const (built).** A static attribute
+  (`age="30"`, unquoted `age=30`, boolean `compact=""`) and a zero-variable
+  expression attribute (`c-age="30"`, `c-items="[1, 2]"`) are written in the
+  template, so they cannot change between renders: `ComponentNode` marks them
+  `Const` when building the child's kwargs. The marking happens at the
+  component-input boundary only (the level where const-ness is consumed, see
+  section 11), so values that become engine identifiers elsewhere (slot and
+  fill names, provide keys) stay plain. This gives every static component
+  usage body-cache folding with no opt-in, and it composes: a const container
+  literal can unroll a `<c-for>` in the child. Because these markers are
+  engine-injected, the proxy's `repr` forwards to the wrapped value, so a
+  marked value inside a container reprs identically to the plain one.
+- **Validating Kwargs models strip the marker (safe).** A Pydantic `Kwargs`
+  model accepts a `Const`-marked input, but validation produces a new
+  (coerced) value, so the typed view holds a plain value and it renders as
+  dynamic. To keep const-ness with a validating model, read the marked value
+  from `raw_kwargs`. The auto-converted dataclass `Kwargs` stores values
+  as-is, so it preserves the marker.
+- **Defaults are const by explicit marking (resolved).** Auto-marking
+  defaults was rejected: defaults can be **dynamic** (a `default_factory` may
+  produce a fresh value each call, for example a random uuid), and the engine
+  cannot tell a pure factory from `uuid4`, so a blanket rule would be
+  unsound. Instead a default is made const the same way any value is, by
+  marking it: `cols: int = Const(3)` on the typed `Kwargs`. The dataclass
+  stores the marker as-is, so an omitted kwarg flows the marked default
+  through `template_data` and folds, while a passed kwarg renders with the
+  caller's (marked or unmarked) value.
+- **Typing ergonomics (resolved).** `title=Const("hi")` type-checks against
+  `title: str`: to checkers, `Const` is `def Const(x: T) -> T` (transparent
+  to the checker, wraps at runtime). Annotating the class itself does not
+  work, because wrapt ships no stubs (so the proxy base is `Any` to checkers)
+  and mypy does not honor a `__new__` returning a bare TypeVar.
+  `is_const`/`const_value` are the sanctioned detection points.
 - **Thread-safety.** The shared cache is read and written during render;
   concurrent renders need a lock or a concurrent map. First-render folding
   under a lock.
@@ -450,3 +505,165 @@ already tracked in the AST.
 
 Defer phase 2 taint and slot const-ness until the phase 1 pieces are in place
 and measured.
+
+---
+
+## 13. Measured results (2026-06-10, slot row 2026-06-11)
+
+Measured on an M-series Mac, CPython 3.13, **release** build of the Rust
+extension (`maturin develop --release`; the default debug build skews any
+benchmark that touches `transform_html` by ~12x). Each case compares the
+same component called with `Const(...)`-marked inputs vs plain inputs, after
+warmup (cache hits, not first-render folding). The scenarios are
+reproducible:
+
+```bash
+.venv/bin/python packages/py/citry/tests/benchmark_const.py            # the table below
+.venv/bin/python packages/py/citry/tests/benchmark_const.py --profile  # plus the section 14.5 breakdown
+```
+
+| Template | Render only | Render + serialize |
+|---|---|---|
+| Expression-heavy (35 const exprs, 5 const ifs, 1 dynamic expr) | **2.38x** (27.5 -> 11.6 us) | **1.98x** (36.1 -> 18.3 us) |
+| Small card (4 const exprs, 1 const if, 1 dynamic expr) | **1.48x** (8.7 -> 5.9 us) | **1.37x** (11.6 -> 8.5 us) |
+| Nav with const 20-link loop, fold v2 unroll (1 dynamic expr) | - | **2.83x** (44.1 -> 15.5 us) |
+| Slot-heavy layout (layout + card, 4 slot sites, const fills folding inside) | **1.56x** (47.5 -> 30.5 us) | **1.64x** (68.8 -> 42.0 us) |
+
+The render-phase number matches the ~50% upstream claim (django-components
+#1083). Two findings from profiling:
+
+- Per-render signature freezing grows with the number of const variables; the
+  frozen key is therefore memoized on the `Const` proxy itself (sound because
+  `Const` is a promise the value does not change). Without the memo, 35
+  markers ate roughly half the folding win.
+- After folding, serialization (the `transform_html` marker pass) is the
+  largest single remaining cost, ~37% of end-to-end; tracked separately in
+  [#7](https://github.com/JuroOravec/citry/issues/7).
+
+---
+
+## 14. Const slots: folding across the slot boundary (considered, parked)
+
+**Verdict (2026-06-11): parked.** The falsifier checks in 14.5 were carried
+out and the design lost on all three counts; the measured results are
+recorded there. The deciding argument is behavioral, not just numbers:
+folding away `<c-slot>` tags makes core slot machinery (fill invocation,
+the `on_slot_rendered` hook) conditional on an optimization, and an
+extension implementing that hook (likely, possibly a built-in) would
+disable the feature wholesale anyway. What slot-heavy pages actually
+needed, folding INSIDE slot content, is built and unaffected (14.1).
+The design below is kept as the record of what was considered and why it
+was rejected.
+
+Real pages are slot-heavy: a layout component exposes sidebar and main
+slots, the main slot holds a card with title and body slots, the body holds
+a button with a content slot. If the optimization stops at slot boundaries,
+it misses most of such a page. This section designs the crossing.
+
+### 14.1 What is already built
+
+Folding descends INTO slot content (fill bodies, the implicit default-slot
+body, slot fallback bodies), because that content renders against the
+variables of the component whose template wrote it, and those are fixed per
+cache entry. So a fill like `<c-fill name="title">{{ heading }}</c-fill>`
+with `heading` const already folds to plain text inside the parent's cached
+body. What does NOT yet happen: the child component still renders its
+`<c-slot name="title">` dynamically on every render, looking up and
+invoking the fill, even though the fill's output is a fixed string.
+
+### 14.2 The key insight: a const slot is a fill that folded to pure text
+
+There is no need for separate "is this slot const" reasoning (tracking the
+fill's used variables, for example): after the parent's body is folded, a
+constant fill is simply one whose body list contains nothing but strings.
+That test is more precise than any static analysis (it benefits from
+`<c-if>` pruning inside the fill) and the constant VALUE (the text) falls
+out for free. A fill containing a nested component can never be const: the
+child mints fresh render ids every render.
+
+### 14.3 Design
+
+1. **Detect at fill collection.** When `ComponentNode` collects fills, a
+   fill whose (already-folded) body is all strings produces a `Slot` tagged
+   with its constant text (e.g. a `const_text: str | None` field). The same
+   tag applies to plain-string fills from the Python API
+   (`slots={"title": "Hello"}`): a string fill is inherently constant, the
+   slot counterpart of the template-literal rule of section 10.
+2. **Let const slots into the child's cache key.** `_CompiledTemplate`
+   additionally captures the template's statically declared slot names (the
+   parsed AST already exposes `Template.slots`). The child's key then
+   records, for each declared slot: the constant text when the fill is
+   const, an explicit ABSENT marker when no fill was given, and NOTHING when
+   the fill is dynamic.
+3. **Why absent and dynamic must be distinct keys.** Folding the fallback
+   body into place is only sound for renders that have NO fill for that
+   slot. If "absent" and "dynamic fill" shared a cache entry, a render that
+   passes a dynamic fill would be served the baked fallback. With distinct
+   keys, the ABSENT entry can inline the (already folded) fallback, and
+   dynamic-fill renders keep a live `<c-slot>`.
+4. **Fold the child's `<c-slot>`.** During the child's fold, a slot node
+   whose name is static and maps to a const-text entry is replaced by that
+   text; one that maps to ABSENT is replaced by its folded fallback body.
+   Slots with dynamic names (`c-name`) never fold.
+5. **Hook gate.** `on_slot_rendered` fires once per slot render today;
+   folding the slot away would skip it. Only fold slot nodes when no
+   registered extension implements `on_slot_rendered` (the extension
+   manager knows). This keeps the extension contract intact at the cost of
+   the optimization, which is the right default.
+
+In the layout scenario this bakes: the card's title ("Dashboard"), a pure
+static sidebar nav, a button whose content slot is plain text (the button's
+whole body becomes static). What stays live, correctly: any fill containing
+a component or a dynamic expression, and all per-render component machinery
+(instances, fill collection, the render queue, serialization), which is the
+component-boundary placeholder's territory (section 5.1, still parked).
+
+### 14.4 Alternatives considered
+
+- **Expose `used_vars` on `Slot` and reason from them.** Subsumed by 14.2:
+  template fills already carry parser-computed used variables internally,
+  but "try folding and check the result" is strictly more precise, and for
+  Python-API slots there is no template scope for `used_vars` to refer to.
+- **A generic `Const(slot)` wrapper as the user API.** Works as a promise
+  for values whose output can be keyed (strings, which are auto-marked
+  instead), but an arbitrary slot function's output cannot become a stable
+  cache key without calling it, and function objects are typically
+  recreated per render, so identity keying would never hit (the same
+  reasoning that rejected `id()` keys in section 4.1). A
+  const-promised slot *function* API is deferred until someone needs it.
+- **Keying the child's cache on `Slot` object identity.** Rejected: fill
+  collection builds fresh `Slot` closures every render, so identity is
+  never stable.
+
+### 14.5 The falsifier checks (carried out 2026-06-11; all three fired)
+
+- **Fill-collection cost dominates.** Checked by profiling a representative
+  layout page (layout + card, four slot sites, const sidebar links and
+  title, dynamic body; reproducible with
+  `packages/py/citry/tests/benchmark_const.py --profile`).
+  `SlotNode` rendering was 32.7% of render time, but
+  only two of the four slots would fold, so the realistic ceiling was
+  roughly 10-16%. Fill collection (~12%) is paid regardless: fills must be
+  collected as long as any slot stays dynamic. The remaining per-render
+  costs (instances, queue, serialize) are the component-boundary
+  placeholder's territory, not this design's.
+- **Low hit rate in real templates.** Worse than the raw rate suggests: the
+  slots that CAN fold are systematically the cheap ones (titles, labels,
+  short static fills), while the expensive slots (main/body content) are
+  exactly the ones that contain components and can never fold. The win
+  concentrates where there is least to win.
+- **`on_slot_rendered` becomes ubiquitous.** Confirmed as likely: a built-in
+  extension (the dependency extension is the natural candidate) is expected
+  to implement the hook, which would trip the gate in 14.3 everywhere and
+  leave the feature as dead complexity.
+
+### 14.6 Open points
+
+- Const slot texts live inside cache keys; a large static fill (a whole
+  sidebar) makes a large key. The bounded cache contains the memory cost,
+  but it is worth a note in the guidance.
+- Cardinality guidance is the same as for const kwargs: a slot whose text
+  differs on every render should not be const (and won't be detected as
+  such unless its inputs are wrongly marked).
+- A child using the same slot name in several `<c-slot>` tags bakes the
+  text in each place; that is correct and needs no special handling.

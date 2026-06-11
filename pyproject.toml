@@ -18,8 +18,13 @@ dev = [
     "ruff>=0.8.0",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
+    # Test dependency of packages/py/citry (users may declare Kwargs/Slots as
+    # Pydantic models), declared there in [dependency-groups].dev and mirrored
+    # here because this extra is what the shared venv and CI install from.
+    # The mirroring goes away with the uv workspace conversion (issue #8).
+    "pydantic>=2.0",
 ]
-ci = ["maturin>=1.8,<2.0", "pytest>=8.0", "pre-commit>=3.0.0"]
+ci = ["maturin>=1.8,<2.0", "pytest>=8.0", "pre-commit>=3.0.0", "pydantic>=2.0"]
 
 # Tool configurations (codebase-wide)
 [tool.ruff]
@@ -108,6 +113,9 @@ ignore = [
     "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
     "S101",    # Use of `assert` detected
     "TRY002",  # Create your own exception
+]
+"packages/py/**/tests/benchmark*" = [
+    "T201",    # Benchmark scripts print their results
 ]
 
 [tool.ruff.lint.isort]

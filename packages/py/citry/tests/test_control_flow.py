@@ -9,6 +9,8 @@ unpacking and ``if`` filters), the empty branch, the loop variable scope, and
 escaping of loop output.
 """
 
+import pytest
+
 from citry import Citry, Component
 
 
@@ -61,6 +63,21 @@ class TestIfNode:
         assert _html('<p c-if="x">hi</p>', x=True) == '<p data-cid-c1="">hi</p>'
         assert _html('<p c-if="x">hi</p>', x=False) == ""
 
+    def test_branches_group_across_whitespace(self):
+        # Whitespace-only text between branches is formatting: the branches
+        # group as if written back to back, and the whitespace is dropped.
+        tpl = '<c-if cond="x">yes</c-if>\n  <c-else>no</c-else>'
+        assert _html(tpl, x=True) == "yes"
+        assert _html(tpl, x=False) == "no"
+
+        tpl3 = '<c-if cond="a">A</c-if>\n<c-elif cond="b">B</c-elif>\n<c-else>C</c-else>'
+        assert _html(tpl3, a=False, b=True) == "B"
+        assert _html(tpl3, a=False, b=False) == "C"
+
+    def test_content_between_branches_is_a_parse_error(self):
+        with pytest.raises(SyntaxError, match="must follow one of"):
+            _html('<c-if cond="x">yes</c-if>text<c-else>no</c-else>', x=True)
+
 
 class TestForNode:
     def test_simple_loop(self):
@@ -73,6 +90,13 @@ class TestForNode:
         tpl = '<c-for each="i in items">[{{ i }}]</c-for><c-empty>none</c-empty>'
         assert _html(tpl, items=[]) == "none"
         assert _html(tpl, items=[1]) == "[1]"
+
+    def test_empty_branch_groups_across_whitespace(self):
+        # Same rule as if/else: whitespace-only text between the branches is
+        # formatting and is dropped when the branches group.
+        tpl = '<c-for each="i in items">[{{ i }}]</c-for>\n<c-empty>none</c-empty>'
+        assert _html(tpl, items=[]) == "none"
+        assert _html(tpl, items=[1, 2]) == "[1][2]"
 
     def test_multi_target_unpacking(self):
         tpl = '<c-for each="k, v in pairs">{{ k }}={{ v }};</c-for>'

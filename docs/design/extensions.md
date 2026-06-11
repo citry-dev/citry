@@ -69,7 +69,7 @@ Places in citry where hooks will attach: `ComponentMeta.__new__`/`__del__`
 ([`component.py:83`](../../packages/py/citry/citry/component.py), `:180`);
 `Citry.register`/`unregister` ([`citry.py:82`](../../packages/py/citry/citry/citry.py));
 `render_impl` ([`component_render.py:75`](../../packages/py/citry/citry/component_render.py));
-`_get_body_generator`/`_compile_body_generator` (`:185`,`:206`);
+`_get_compiled_template`/`_compile_template` (`:185`,`:206`);
 the `_merge_dependencies` call (`:277`, already TODO-marked "replace this direct
 call with an extension hook"); and `CitryContext.extra`, the tree-wide bag
 reserved "for extensions."

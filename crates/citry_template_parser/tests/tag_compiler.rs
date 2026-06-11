@@ -294,6 +294,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_if_else_whitespace_between_branches_groups() {
+        // Whitespace-only text between branches is formatting: the branches
+        // group into one IfNode and the whitespace is dropped (it sits outside
+        // every branch, so it has nowhere to render).
+        assert_compile(
+            "<c-if cond=\"x\">a</c-if>\n  <c-else>b</c-else>",
+            r#"[IfNode(source, (((0, 23,), (ExprHtmlAttr(source, (6, 14,), """cond""", """x""", ("x",)),), ["""a""",], (),), ((26, 44,), (), ["""b""",], (),),), ("x",)),]"#,
+        );
+    }
+
+    #[test]
+    fn test_if_elif_else_whitespace_between_branches_groups() {
+        assert_compile(
+            "<c-if cond=\"x\">a</c-if>\n<c-elif cond=\"y\">b</c-elif>\n<c-else>c</c-else>",
+            r#"[IfNode(source, (((0, 23,), (ExprHtmlAttr(source, (6, 14,), """cond""", """x""", ("x",)),), ["""a""",], (),), ((24, 51,), (ExprHtmlAttr(source, (32, 40,), """cond""", """y""", ("y",)),), ["""b""",], (),), ((52, 70,), (), ["""c""",], (),),), ("x", "y",)),]"#,
+        );
+    }
+
+    #[test]
+    fn test_if_trailing_whitespace_after_group_is_kept() {
+        // Whitespace AFTER the group is content, not branch formatting: it
+        // stays in the output (coalesced with the following text).
+        assert_compile(
+            "<c-if cond=\"x\">a</c-if>\n<div>z</div>",
+            "[IfNode(source, (((0, 23,), (ExprHtmlAttr(source, (6, 14,), \"\"\"cond\"\"\", \"\"\"x\"\"\", (\"x\",)),), [\"\"\"a\"\"\",], (),),), (\"x\",)), \"\"\"\n<div>z</div>\"\"\",]",
+        );
+    }
+
     // =============================================================================
     // CONTROL FLOW: FOR / EMPTY
     // =============================================================================
@@ -312,6 +341,16 @@ mod tests {
         assert_compile(
             r#"<c-for each="item in items">{{ item }}</c-for><c-empty>none</c-empty>"#,
             r#"[ForNode(source, (((0, 46,), (ExprHtmlAttr(source, (7, 27,), """each""", """item in items""", ("items",)),), [ExprNode(source, (28, 38,), """item """, ("item",)),], ("item",),), ((46, 69,), (), ["""none""",], (),),), ("items",)),]"#,
+        );
+    }
+
+    #[test]
+    fn test_for_empty_whitespace_between_branches_groups() {
+        // Same rule as if/else: whitespace-only text between the branches is
+        // formatting and is dropped when the branches group.
+        assert_compile(
+            "<c-for each=\"item in items\">{{ item }}</c-for>\n<c-empty>none</c-empty>",
+            r#"[ForNode(source, (((0, 46,), (ExprHtmlAttr(source, (7, 27,), """each""", """item in items""", ("items",)),), [ExprNode(source, (28, 38,), """item """, ("item",)),], ("item",),), ((47, 70,), (), ["""none""",], (),),), ("items",)),]"#,
         );
     }
 

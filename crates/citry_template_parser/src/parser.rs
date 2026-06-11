@@ -2715,30 +2715,49 @@ fn validate_tag_grouping(node: &Node, template: &Template) -> Result<(), ParseEr
             .join(", ")
     };
 
-    // Find the last Node in parent's template.elements (skip Text and Expr)
+    // Find the previous element sibling in the parent's template.elements.
     // We are constructing the template as we go, so the last Node in the template will be the last FINISHED Node.
     // The Node that is being validated is NOT YET FINISHED, so it's not part of the template.
-    // So the `previous_node` is practically the "previous element sibling"
     // See: https://developer.mozilla.org/en-US/docs/Web/API/Element/previousElementSibling
-    let previous_node = template
-        .elements
-        .iter()
-        .rev()
-        .find_map(|elem| match elem {
-            TemplateElement::Node(n) => Some(n),
-            _ => None,
-        })
-        .ok_or_else(|| {
-            // No previous node found
-            ParseError::from_span(
-                start_tag_span,
-                format!(
-                    "Tag '<{}>' must follow one of: {}. No previous tag found.",
-                    tag_name,
-                    allowed_tags_str()
-                ),
-            )
-        })?;
+    //
+    // Whitespace-only text between the branches of one group is formatting,
+    // not content (the compiler drops it when grouping the branches), so it is
+    // skipped here. Anything else in between (text, an HTML comment, which
+    // parses as a Text element, or a `{{ ... }}` expression) breaks the group:
+    // the branches must act as a single node, and content between them would
+    // have nowhere to render. That is rejected here, at parse time, instead of
+    // compiling the orphaned branch tag into an unknown component.
+    let mut previous_node: Option<&Node> = None;
+    for elem in template.elements.iter().rev() {
+        match elem {
+            TemplateElement::Node(n) => {
+                previous_node = Some(n);
+                break;
+            }
+            TemplateElement::Text(text) if text.token.content.trim().is_empty() => continue,
+            TemplateElement::Text(_) | TemplateElement::Expr(_) => {
+                return Err(ParseError::from_span(
+                    start_tag_span,
+                    format!(
+                        "Tag '<{}>' must follow one of: {}. Found other content in between.",
+                        tag_name,
+                        allowed_tags_str()
+                    ),
+                ));
+            }
+        }
+    }
+    let previous_node = previous_node.ok_or_else(|| {
+        // No previous node found
+        ParseError::from_span(
+            start_tag_span,
+            format!(
+                "Tag '<{}>' must follow one of: {}. No previous tag found.",
+                tag_name,
+                allowed_tags_str()
+            ),
+        )
+    })?;
 
     // We've found the previous node. Now check if it's allowed
     let prev_tag_name = previous_node.tag_name();

@@ -711,11 +711,11 @@ ported.
 - **Class-level body generator (DJC #1326).** Parsing + compiling + `exec` of a
   template happens once per component class; the resulting `generate_template`
   function is cached on the class (`_template_body_generator`, via
-  `_get_body_generator`). That expensive step is invariant for a template, so it
+  `_get_compiled_template`). That expensive step is invariant for a template, so it
   runs once; calling the cached function yields a fresh node list each render.
   The cache lives in the class's own `__dict__`, so a subclass overriding
   `template` builds its own generator.
-- **Generation decoupled from rendering.** `_compile_body_generator` (parse +
+- **Generation decoupled from rendering.** `_compile_template` (parse +
   compile + exec) is separate from `_render_body` (walk the node list, emit the
   string). This seam is where the parked const-folding cache will slot in.
 - **No per-element body cache.** An earlier iteration cached the node list on
@@ -772,7 +772,7 @@ itself. The full design and its edge cases are in
 - **No folding yet.** The cached body is the unoptimized node list, equivalent
   across signatures, so the cache provides the lookup structure but no speedup
   yet. Folding (replacing all-const nodes with their results) slots into the
-  `_compile_body_generator` / `_render_body` seam later.
+  `_compile_template` / `_render_body` seam later.
 - **Markers are never unwrapped during rendering.** The `Const` markers stay
   in the render context so they flow down to descendant components, each of
   which can detect const-ness and key its own cache on it. Unwrapping would
@@ -1359,7 +1359,7 @@ future `CitryContext.extra` dependency flow consume.
   (DJC's own `TODO_v3` direction).
 - **`CitryTemplate` struct** carries source (post-`on_template_loaded`),
   origin (file path, or `module::Class` for inline), and filepath. The hook
-  firing moved from `_get_body_generator` into the loader, so inline and file
+  firing moved from `_get_compiled_template` into the loader, so inline and file
   content enter the engine through one place.
 - **`Media` is loaded by core, emitted by the dependency extension.** Entries
   (str/Path/glob/callable/`__html__` objects) resolve to absolute paths where

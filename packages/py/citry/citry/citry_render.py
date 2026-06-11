@@ -50,6 +50,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from citry.citry_element import CitryElement
+from citry.constness import const_value
 from citry.slots import Slot
 from citry.util.html import escape
 
@@ -198,7 +199,12 @@ def _render_value(value: Any, provides: dict[str, Any] | None = None) -> RenderP
     found; an element rendered here inherits them, so a component embedded
     via ``{{ element }}`` or slot content can ``inject`` what its render site
     provides (docs/design/provide.md section 4.4).
+
+    A ``Const`` marker is unwrapped first: the value is becoming output here,
+    so the marker has no further role, and the identity check below
+    (``value is None``) must see the real value, not the proxy.
     """
+    value = const_value(value)
     if value is None:
         return ""
     if isinstance(value, Slot):

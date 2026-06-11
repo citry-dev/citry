@@ -39,7 +39,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from citry.component_registry import AlreadyRegistered, ComponentRegistry, _normalize_name, _pascal_to_kebab
+from citry.component_registry import ComponentRegistry
+from citry.constness import ConstBodyCache
 from citry.extension import ExtensionManager
 from citry.settings import CitrySettings
 from citry.tag_rules import build_tag_rules
@@ -85,10 +86,15 @@ class Citry:
         # its first lookup, through this factory, so they exist in every
         # Citry instance. See ComponentRegistry._ensure_builtins.
         self.registry = ComponentRegistry(builtins_factory=self._create_builtin_components)
-        # Const-keyed body cache: (component class, const signature) -> body.
-        # Skeleton for the const-folding feature (docs/design/constness.md);
-        # the body is not yet specialized per signature.
-        self._const_body_cache: dict[tuple[type[Component], frozenset[tuple[str, Any]]], list[Any]] = {}
+
+        # When a component is rendered and some of its template data is
+        # wrapped in `Const()` ("this value is the same on every render"),
+        # the parts of the template that depend only on those values are
+        # computed once and stored here, so later renders reuse them instead
+        # of re-computing. One entry per component class and combination of
+        # Const values; old entries are dropped when the cache is full.
+        # See citry/constness.py.
+        self._const_body_cache = ConstBodyCache()
 
         # Parse-time validation rules derived from the registered components'
         # Kwargs/Slots declarations (see citry/tag_rules.py). Built on first
@@ -178,24 +184,9 @@ class Citry:
             self._tag_rules_cache = build_tag_rules(self)
         return self._tag_rules_cache
 
-    def _const_body(
-        self,
-        comp_cls: type[Component],
-        signature: frozenset[tuple[str, Any]],
-        build: Callable[[], list[Any]],
-    ) -> list[Any]:
-        """
-        Return the cached body for ``(comp_cls, signature)``, building it once.
-
-        Skeleton: the body is the unoptimized node list, equivalent across
-        signatures for now (no folding). See ``docs/design/constness.md``.
-        """
-        key = (comp_cls, signature)
-        cached = self._const_body_cache.get(key)
-        if cached is None:
-            cached = build()
-            self._const_body_cache[key] = cached
-        return cached
+    def _evict_component_cache(self, comp_cls: type[Component]) -> None:
+        """Forget one component class's cached template work (see ``_const_body_cache``)."""
+        self._const_body_cache.evict_component(comp_cls)
 
     def clear(self) -> None:
         """Clear all state: registered components, caches, etc."""

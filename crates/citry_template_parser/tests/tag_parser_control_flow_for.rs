@@ -167,6 +167,26 @@ mod tests {
     }
 
     #[test]
+    fn test_whitespace_between_for_and_empty_is_allowed() {
+        // Same rule as if/else: whitespace-only text between branches is
+        // formatting; real content between them is rejected.
+        parse_template(
+            "<c-for each=\"i in items\">x</c-for>\n<c-empty>none</c-empty>",
+            None,
+            None,
+        )
+        .expect("whitespace between branches must parse");
+    }
+
+    #[test]
+    fn test_text_between_for_and_empty_is_rejected() {
+        assert_parse_error(
+            r#"<c-for each="i in items">x</c-for>text<c-empty>none</c-empty>"#,
+            "Found other content in between",
+        );
+    }
+
+    #[test]
     fn test_c_for_without_each() {
         assert_parse_error("<c-for><li>item</li></c-for>", "'each'");
     }

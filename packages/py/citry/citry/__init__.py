@@ -34,6 +34,7 @@ from citry.extension import (
     OnComponentRenderedContext,
     OnComponentUnregisteredContext,
     OnExtensionCreatedContext,
+    OnSlotRenderedContext,
     OnTemplateCompiledContext,
     OnTemplateLoadedContext,
 )
@@ -91,6 +92,7 @@ __all__ = [
     "OnComponentRenderedContext",
     "OnComponentUnregisteredContext",
     "OnExtensionCreatedContext",
+    "OnSlotRenderedContext",
     "OnTemplateCompiledContext",
     "OnTemplateLoadedContext",
     "Slot",

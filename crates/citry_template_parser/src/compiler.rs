@@ -221,22 +221,32 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                     C_FOR_TAG => {
                         // Collect c-for and c-empty nodes into a group
                         let mut for_group = vec![node];
-                        let for_empty_nodes =
+                        let (for_empty_nodes, trailing_text) =
                             consume_nodes_into_group(&mut elements_iter, &[C_EMPTY_TAG]);
                         for_group.extend(for_empty_nodes);
 
                         let for_node = compile_control_flow_node(for_group, FOR_NODE, C_FOR_TAG)?;
                         body_items.push(for_node);
+                        // Whitespace read past the end of the group is content
+                        // after it, so it is emitted in place.
+                        if let Some(TemplateElement::Text(text)) = trailing_text {
+                            body_items.push(LangSpecArgument::UnsafeString(text.token.content));
+                        }
                     }
                     C_IF_TAG => {
                         // Collect c-if, c-elif, and c-else nodes into a group
                         let mut if_group = vec![node];
-                        let elif_and_else_nodes =
+                        let (elif_and_else_nodes, trailing_text) =
                             consume_nodes_into_group(&mut elements_iter, &[C_ELIF_TAG, C_ELSE_TAG]);
                         if_group.extend(elif_and_else_nodes);
 
                         let if_node = compile_control_flow_node(if_group, IF_NODE, C_IF_TAG)?;
                         body_items.push(if_node);
+                        // Whitespace read past the end of the group is content
+                        // after it, so it is emitted in place.
+                        if let Some(TemplateElement::Text(text)) = trailing_text {
+                            body_items.push(LangSpecArgument::UnsafeString(text.token.content));
+                        }
                     }
 
                     // Special c-* tags
@@ -1229,36 +1239,54 @@ fn format_expr_node(
 /// Given a mutable iterator of TemplateElements, consume the following nodes
 /// for as long as they are Nodes and match `node_names`.
 ///
+/// Whitespace-only text between matching nodes is formatting, not content
+/// (the branches of one control-flow group act as a single node): it is
+/// consumed and DROPPED, so `<c-if>..</c-if>\n<c-else>..</c-else>` groups the
+/// same way as the branches written back to back. The parser guarantees that
+/// only whitespace can sit between branches (see `validate_tag_grouping`).
+///
 /// Stop consuming when:
-/// - The next element is not a Node
+/// - The next element is not a Node (ignoring whitespace-only text)
 /// - The next element is a Node, but does not match `node_names`
 ///
-/// Return a vector of the consumed nodes, or an empty vector if no nodes were consumed.
+/// Returns the consumed nodes, plus a buffered whitespace-only text element
+/// when one was read but turned out to FOLLOW the group rather than separate
+/// two branches; the caller must emit it after the group so output order is
+/// preserved.
 fn consume_nodes_into_group(
     elements_iter: &mut Peekable<IntoIter<TemplateElement>>,
     node_names: &[&str],
-) -> Vec<Node> {
+) -> (Vec<Node>, Option<TemplateElement>) {
     let mut group = Vec::new();
 
-    // Consume following nodes while the next element is a Node and matches `node_names`
-    while let Some(next_element) = elements_iter.peek() {
-        if let TemplateElement::Node(next_node) = next_element {
-            if node_names.contains(&next_node.tag_name()) {
-                // Pull this node from the iterator and add it to the group
+    loop {
+        // Buffer one whitespace-only text element; whether it is dropped
+        // (between two branches) or returned (after the group) depends on
+        // what comes next.
+        let mut pending_whitespace: Option<TemplateElement> = None;
+        if let Some(TemplateElement::Text(text)) = elements_iter.peek() {
+            if text.token.content.trim().is_empty() {
+                pending_whitespace = elements_iter.next();
+            }
+        }
+
+        match elements_iter.peek() {
+            Some(TemplateElement::Node(next_node))
+                if node_names.contains(&next_node.tag_name()) =>
+            {
+                // Part of the group; any buffered whitespace sat between two
+                // branches and is dropped.
                 if let Some(TemplateElement::Node(node)) = elements_iter.next() {
                     group.push(node);
                 }
-            } else {
-                // Not part of the group, stop consuming
-                break;
             }
-        } else {
-            // Not a node, stop consuming
-            break;
+            _ => {
+                // Not part of the group. The buffered whitespace (if any)
+                // belongs to the content after the group.
+                return (group, pending_whitespace);
+            }
         }
     }
-
-    group
 }
 
 /// Wraps elements to convert control flow attributes (`c-if="..."`)

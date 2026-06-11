@@ -69,6 +69,7 @@ from typing_extensions import override
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender, DeferredComponent, _render_value
+from citry.constness import Const
 from citry.slots import Slot
 from citry_core.safe_eval import safe_eval
 
@@ -283,14 +284,26 @@ class ExprNode(Node):
         # The safe-eval function for `expr`, compiled lazily on first render and
         # reused afterwards (the node is cached across renders, so this compiles
         # once). Compiling lazily avoids paying for nodes that are never
-        # rendered, e.g. a dead control-flow branch once folding exists.
+        # rendered, e.g. an expression in an `<c-if>` branch that is never taken.
         self._eval: Callable[[Any], Any] | None = None
+
+    def evaluate(self, variables: Mapping[str, Any]) -> Any:
+        """
+        Evaluate the expression against ``variables`` and return the raw value.
+
+        The compiled evaluator is built on first use and reused (the node is
+        cached across renders, so the expression compiles once). Called by
+        ``render``, and by the ``Const`` optimization (``citry/constness.py``),
+        which evaluates an expression ahead of time when all of its variables
+        are marked constant.
+        """
+        if self._eval is None:
+            self._eval = safe_eval(self.expr)
+        return self._eval(variables)
 
     @override
     def render(self, context: CitryContext) -> RenderPart:
-        if self._eval is None:
-            self._eval = safe_eval(self.expr)
-        value = self._eval(context.variables)
+        value = self.evaluate(context.variables)
         # An element or Slot found in the expression renders with the
         # provide/inject entries active here, so it can inject what this
         # render site provides (docs/design/provide.md section 4.4).
@@ -348,14 +361,14 @@ class TemplateNode(Node):
         #
         # Imported lazily because component_render imports the node classes:
         # importing the body pipeline at module load would be circular.
-        from citry.component_render import _compile_body_generator, _render_body  # noqa: PLC0415
+        from citry.component_render import _compile_template, _render_body  # noqa: PLC0415
 
         if self._generator is None:
             # The nested template is validated like any other: the parse gets
             # the rules derived from the registered components' declarations.
             component = context.component
             user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_body_generator(self.expr, user_rules)
+            self._generator = _compile_template(self.expr, user_rules).generate
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -388,7 +401,16 @@ class StaticHtmlAttr(HtmlAttr):
 
     @override
     def resolve(self, context: CitryContext) -> Any:
-        """Return the static value (a string, or ``True`` for a boolean attribute)."""
+        """
+        Return the static value (a string, or ``True`` for a boolean attribute).
+
+        The value is returned as-is, without the ``Const`` marker ("this is
+        the same on every render"). Attribute values serve double duty: they
+        can be slot and fill names, provide keys, or component inputs, and
+        only the component-input use benefits from the marker. So the marking
+        happens in ``ComponentNode._resolve_kwargs``, where the value becomes
+        a component input, not here.
+        """
         return self.value
 
     def __repr__(self) -> str:
@@ -429,7 +451,10 @@ class ExprHtmlAttr(HtmlAttr):
 
         The value is NOT escaped or stringified: it becomes a component kwarg (a
         Python object). Escaping happens later, when the child component renders
-        the value through an ``ExprNode``.
+        the value through an ``ExprNode``. The value is returned without the
+        ``Const`` marker; for an expression that uses no variables (a literal
+        written in the template), ``ComponentNode._resolve_kwargs`` adds the
+        marker where the value becomes a component input.
         """
         if self._eval is None:
             self._eval = safe_eval(self.expr)
@@ -473,14 +498,14 @@ class TemplateHtmlAttr(HtmlAttr):
         The template is defined in the parent's scope, so it renders against the
         surrounding component's context (the same rule as ``TemplateNode``).
         """
-        from citry.component_render import _compile_body_generator, _render_body  # noqa: PLC0415
+        from citry.component_render import _compile_template, _render_body  # noqa: PLC0415
 
         if self._generator is None:
             # The nested template is validated like any other: the parse gets
             # the rules derived from the registered components' declarations.
             component = context.component
             user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_body_generator(self.template, user_rules)
+            self._generator = _compile_template(self.template, user_rules).generate
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -571,14 +596,35 @@ class ComponentNode(Node):
           rather than producing a ``bind`` kwarg.
         - Other dynamic attrs carry a leading ``c-`` (``c-foo`` -> ``foo``);
           static attrs have a plain key. ``removeprefix`` handles both.
+
+        A value written literally in the template is marked ``Const`` here
+        ("this is the same on every render"): a static attribute
+        (``age="30"``) and an expression attribute that uses no variables
+        (``c-age="30"``, ``c-items="[1, 2]"``) cannot produce a different
+        value from one render to the next, so the child component can reuse
+        its pre-computed template work for them without anyone opting in
+        (see docs/design/constness.md). The marking happens here, where a
+        value becomes a component input, and nowhere else, so values used as
+        names or keys (slot/fill names, provide keys) stay plain. The marker
+        is applied fresh on each render, so a mutable literal (a list) is
+        still a new object every render; equal values still land on the same
+        cache entry.
         """
         kwargs: dict[str, Any] = {}
         for attr in self.attrs:
             key: str = attr.key
             if key == "c-bind":
                 kwargs.update(attr.resolve(context))
-            else:
-                kwargs[key.removeprefix("c-")] = attr.resolve(context)
+                continue
+            value = attr.resolve(context)
+            # Only these two attr kinds are literals. A TemplateHtmlAttr also
+            # uses no variables, but it resolves to a freshly rendered piece
+            # of output each render, so it is never "the same value". Unknown
+            # attr kinds (an extension may add its own) stay unmarked, to be
+            # safe.
+            if isinstance(attr, StaticHtmlAttr) or (isinstance(attr, ExprHtmlAttr) and not attr.used_vars):
+                value = Const(value)
+            kwargs[key.removeprefix("c-")] = value
         return kwargs
 
     def _collect_slots(self, context: CitryContext) -> dict[str, Slot]:

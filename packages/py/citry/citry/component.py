@@ -67,9 +67,7 @@ from citry.slots import Slot, normalize_slot_fills
 from citry.util.misc import to_dict
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from citry.nodes import BodyItem
+    from citry.component_render import _CompiledTemplate
 
 
 class ComponentMeta(type):
@@ -280,12 +278,13 @@ class Component(metaclass=ComponentMeta):
     TemplateData: ClassVar[type | None] = None
     """Optional typed template data output."""
 
-    _template_body_generator: ClassVar[Callable[[], list[BodyItem]] | None] = None
-    """Internal: the parsed+compiled body-generating function for this
-    component's template, built once per class on first render and cached
-    here (the Citry analog of Django's ``Component._template``). Calling it
-    yields a fresh node list. Populated and read via ``__dict__`` by the
-    render pipeline; not a user-facing field.
+    _template_body_generator: ClassVar[_CompiledTemplate | None] = None
+    """Internal: the compiled form of this component's template (the
+    body-generating function plus parse-time metadata), built once per class
+    on first render and cached here (the Citry analog of Django's
+    ``Component._template``). Calling its ``generate`` yields a fresh node
+    list. Populated and read via ``__dict__`` by the render pipeline; not a
+    user-facing field.
     """
 
     # ----- Instance fields -----
