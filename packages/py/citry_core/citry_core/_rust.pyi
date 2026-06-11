@@ -31,6 +31,61 @@ from typing import Literal
 ########################################################
 
 class html_transform:
+    def mark_html(
+        html: str,
+        root_attributes: list[str],
+        placeholder_attr: str,
+    ) -> tuple[list[str], list[tuple[str, str, list[str]]]]:
+        """
+        Splice attributes onto root-level tags and split the HTML around child
+        placeholder elements, in a single scan.
+
+        This is the serializer's fast path. Each attribute in `root_attributes`
+        is added (as `attr=""`) to every root-level (depth 0) tag. A placeholder
+        is a `<template>` element carrying `placeholder_attr` with a
+        whitespace-only body; the output is split around placeholders so the
+        caller can join in each child's finished HTML without scanning again.
+
+        Unlike `transform_html`, bytes outside root-level tags are copied
+        through verbatim (no re-serialization or normalization), and malformed
+        markup is treated as text rather than raising.
+
+        **Arguments**
+
+        - `html` (str): The HTML string to mark. Can be a fragment or full document.
+        - `root_attributes` (List[str]): Attribute names to add to root-level tags.
+        - `placeholder_attr` (str): The attribute that identifies placeholder elements.
+
+        **Returns**
+
+        A tuple `(segments, placeholders)`:
+            - `segments` (List[str]): the marked HTML split around placeholders;
+                always exactly `len(placeholders) + 1` entries.
+            - `placeholders` (List[Tuple[str, str, List[str]]]): one entry per
+                placeholder, in document order: `(id, placeholder_html, added_attributes)`
+                where `id` is the placeholder attribute's value, `placeholder_html`
+                is the placeholder element's text (with any spliced attributes,
+                for callers that leave unknown ids in place), and
+                `added_attributes` lists the attributes spliced into it
+                (non-empty only for root-level placeholders).
+
+        The marked HTML is `segments[0] + placeholders[0][1] + segments[1] + ...`.
+
+        **Example**
+
+        ```python
+        >>> segments, placeholders = mark_html(
+        ...     '<div><template c-render-id="c2"></template></div>',
+        ...     ['data-cid-c1'],
+        ...     'c-render-id',
+        ... )
+        >>> segments
+        ['<div data-cid-c1="">', '</div>']
+        >>> placeholders
+        [('c2', '<template c-render-id="c2"></template>', [])]
+        ```
+        """
+
     def transform_html(
         html: str,
         root_attributes: list[str],

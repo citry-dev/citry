@@ -15,38 +15,36 @@ a queue):
 
 1. Top-down: for each component, build its own HTML with its child components
    left as ``<template c-render-id="...">`` placeholders, then call
-   ``transform_html`` once to add the markers to that component's root
-   element(s). ``transform_html`` also reports which child placeholders ended up
-   at the root; those children inherit the parent's markers (that is how a
+   ``mark_html`` once. In a single scan it splices the markers onto that
+   component's root element(s) and splits the HTML around the child
+   placeholders, reporting which markers each placeholder received (a
+   placeholder at the root inherits the parent's markers; that is how a
    parent's marker reaches a child that is its root element).
-2. Bottom-up: replace each placeholder with the child's finished HTML.
+2. Bottom-up: join each component's segments back together with each child's
+   finished HTML in its placeholder's slot.
 
 See docs/design/deferred_rendering.md section 6.
 """
 
 from __future__ import annotations
 
-import re
 from typing import TYPE_CHECKING
 
 from citry.citry_render import CitryRender
-from citry_core.html_transform import transform_html
+from citry_core.html_transform import mark_html
 
 if TYPE_CHECKING:
     from citry.citry_render import RenderPart
     from citry.component import Component
 
-# The attribute name the placeholder carries, and that transform_html watches so
-# it can report which markers were added to each child placeholder.
+# The attribute name the placeholders carry, and that mark_html splits the
+# HTML around.
 _RENDER_ID_ATTR = "c-render-id"
 
-# Matches a child placeholder element, e.g.
-# `<template c-render-id="cAb3d9"></template>` or, after transform_html has added
-# the parent's markers to it, `<template c-render-id="cAb3d9" data-cid-cP=""></template>`.
-# Any extra attributes around c-render-id are allowed.
-_PLACEHOLDER_RE = re.compile(
-    r'<template\b[^>]*?\bc-render-id="(?P<cid>[^"]+)"[^>]*?>\s*</template>',
-)
+# One scanned frame: the HTML split around child placeholders (always one more
+# segment than placeholders), and per placeholder its id, its own text (with
+# any spliced markers), and the markers it received.
+_Frame = tuple[list[str], list[tuple[str, str, list[str]]]]
 
 
 def serialize_render(root: CitryRender) -> str:
@@ -55,11 +53,12 @@ def serialize_render(root: CitryRender) -> str:
     # placeholders, add its markers, and work out which markers each child
     # inherits. An explicit stack keeps depth off the Python call stack.
     #
-    # `marked_by_key` holds each component's HTML (children still placeholders),
-    # keyed by the component's render id. `order` records the order components
-    # were reached, so pass 2 can walk it in reverse (children before parents).
-    # The root has no parent and may have no component, so it uses the key "".
-    marked_by_key: dict[str, str] = {}
+    # `frame_by_key` holds each component's scanned frame (children still
+    # placeholders), keyed by the component's render id. `order` records the
+    # order components were reached, so pass 2 can walk it in reverse (children
+    # before parents). The root has no parent and may have no component, so it
+    # uses the key "".
+    frame_by_key: dict[str, _Frame] = {}
     order: list[str] = []
     root_key = ""
 
@@ -77,29 +76,32 @@ def serialize_render(root: CitryRender) -> str:
         # False, e.g. <c-provide>) stays unmarked even when serialized directly.
         own_marker = [f"data-cid-{component.id}"] if component is not None and render.is_component_root else []
         root_markers = own_marker + inherited
-        if root_markers and frame:
-            frame, added_to_child = transform_html(frame, root_markers, [], None, _RENDER_ID_ATTR)
+        if frame and (root_markers or children):
+            segments, placeholders = mark_html(frame, root_markers, _RENDER_ID_ATTR)
         else:
-            # No markers to add (a render with no component, e.g. a manually
-            # built CitryRender), or an empty frame: nothing to transform.
-            added_to_child = {}
+            # Nothing to mark and no placeholders to find (a render with no
+            # component and no children, e.g. a manually built CitryRender),
+            # or an empty frame: the frame is a single segment as-is.
+            segments, placeholders = [frame], []
 
-        marked_by_key[key] = frame
+        frame_by_key[key] = (segments, placeholders)
         order.append(key)
+        added_by_child = {child_id: added for child_id, _, added in placeholders}
         for child_render, child_id in children:
-            stack.append((child_render, added_to_child.get(child_id, []), child_id))
+            stack.append((child_render, added_by_child.get(child_id, []), child_id))
 
-    # Pass 2 (bottom-up): replace each child placeholder with the child's
-    # finished HTML. Walking `order` in reverse means a child is finished before
-    # its parent needs it.
+    # Pass 2 (bottom-up): join each frame's segments with its children's
+    # finished HTML in the placeholder slots. Walking `order` in reverse means
+    # a child is finished before its parent needs it. An unknown id (a literal
+    # <template c-render-id> a user wrote) keeps its placeholder text as-is.
     finished: dict[str, str] = {}
-
-    def fill_placeholder(match: re.Match[str]) -> str:
-        # An unknown id (a literal <template c-render-id> a user wrote) is left as-is.
-        return finished.get(match.group("cid"), match.group(0))
-
     for key in reversed(order):
-        finished[key] = _PLACEHOLDER_RE.sub(fill_placeholder, marked_by_key[key])
+        segments, placeholders = frame_by_key[key]
+        parts = [segments[0]]
+        for (child_id, placeholder_html, _), segment in zip(placeholders, segments[1:], strict=True):
+            parts.append(finished.get(child_id, placeholder_html))
+            parts.append(segment)
+        finished[key] = "".join(parts)
 
     return finished[root_key]
 

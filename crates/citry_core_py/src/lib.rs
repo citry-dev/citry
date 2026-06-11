@@ -9,7 +9,7 @@ use citry_template_parser::{
     TagRules, Template, TemplateElement, Text, Token,
 };
 
-use crate::html_transform::transform_html;
+use crate::html_transform::{mark_html, transform_html};
 use crate::template_parser::{compile_template, parse_template};
 
 /// Singular Python API that brings together all the other Rust crates.
@@ -23,6 +23,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let html_transform_mod = PyModule::new(m.py(), "html_transform")?;
     m.add_submodule(&html_transform_mod)?;
     html_transform_mod.add_function(wrap_pyfunction!(transform_html, &html_transform_mod)?)?;
+    html_transform_mod.add_function(wrap_pyfunction!(mark_html, &html_transform_mod)?)?;
 
     // Safe eval
     let safe_eval_mod = PyModule::new(m.py(), "safe_eval")?;

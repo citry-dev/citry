@@ -3,7 +3,7 @@
 
 from typing import Dict, List
 
-from citry_core.html_transform import transform_html
+from citry_core.html_transform import mark_html, transform_html
 
 
 def test_basic_transformation():
@@ -164,3 +164,36 @@ def test_whitespace_preservation():
         <span data-all=""> Text with spaces </span>
     </div>"""
     assert result == expected
+
+
+# The behavior depth of `mark_html` is covered by the Rust tests
+# (crates/citry_html_transform/tests/marker.rs); these check the shapes that
+# cross the Python boundary.
+
+
+def test_mark_html_roots_and_placeholder():
+    segments, placeholders = mark_html(
+        '<div>a</div><template c-render-id="c2"></template>',
+        ["data-cid-c1"],
+        "c-render-id",
+    )
+    assert segments == ['<div data-cid-c1="">a</div>', ""]
+    assert placeholders == [
+        ("c2", '<template c-render-id="c2" data-cid-c1=""></template>', ["data-cid-c1"]),
+    ]
+
+
+def test_mark_html_nested_placeholder_gets_no_attributes():
+    segments, placeholders = mark_html(
+        '<div><template c-render-id="c2"></template></div>',
+        ["data-cid-c1"],
+        "c-render-id",
+    )
+    assert segments == ['<div data-cid-c1="">', "</div>"]
+    assert placeholders == [("c2", '<template c-render-id="c2"></template>', [])]
+
+
+def test_mark_html_no_attributes_no_placeholders():
+    segments, placeholders = mark_html("hello", [], "c-render-id")
+    assert segments == ["hello"]
+    assert placeholders == []

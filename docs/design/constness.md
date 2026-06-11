@@ -536,9 +536,10 @@ The render-phase number matches the ~50% upstream claim (django-components
   frozen key is therefore memoized on the `Const` proxy itself (sound because
   `Const` is a promise the value does not change). Without the memo, 35
   markers ate roughly half the folding win.
-- After folding, serialization (the `transform_html` marker pass) is the
-  largest single remaining cost, ~37% of end-to-end; tracked separately in
-  [#7](https://github.com/JuroOravec/citry/issues/7).
+- After folding, serialization (the marker pass) was the largest single
+  remaining cost, ~37% of end-to-end; addressed in
+  [#7](https://github.com/JuroOravec/citry/issues/7) by `mark_html`, a
+  single-pass root scan in `citry_html_transform`.
 
 ---
 

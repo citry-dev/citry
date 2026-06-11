@@ -1,7 +1,6 @@
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 use quick_xml::writer::Writer;
-use std::collections::HashSet;
 use std::io::Cursor;
 
 // List of HTML5 void elements. These can be written as `<tag>` or `<tag />`,
@@ -11,14 +10,19 @@ const VOID_ELEMENTS: [&str; 14] = [
     "track", "wbr",
 ];
 
+/// Whether a tag name (as raw bytes, any ASCII case) is an HTML5 void element.
+pub(crate) fn is_void_element(name: &[u8]) -> bool {
+    VOID_ELEMENTS
+        .iter()
+        .any(|v| v.as_bytes().eq_ignore_ascii_case(name))
+}
+
 /// Configuration for HTML transformation
 pub struct HtmlTransformerConfig {
     /// Attributes to add to root elements only
     root_attributes: Vec<String>,
     /// Attributes to add to all elements
     all_attributes: Vec<String>,
-    /// Known void elements. These will NOT be expanded to start and end tags.
-    void_elements: HashSet<String>,
     /// Whether mismatched closing tag names should be detected. If enabled, in
     /// case of mismatch the [`quick_xml::reader::Config::check_end_names`] is returned from
     /// read methods.
@@ -35,12 +39,9 @@ impl HtmlTransformerConfig {
         check_end_names: bool,
         track_added_attributes_for_tags_with_this_attribute: Option<String>,
     ) -> Self {
-        let void_elements = VOID_ELEMENTS.iter().map(|&s| s.to_string()).collect();
-
         HtmlTransformerConfig {
             root_attributes,
             all_attributes,
-            void_elements,
             check_end_names,
             track_added_attributes_for_tags_with_this_attribute,
         }
@@ -100,14 +101,12 @@ pub fn transform_html(
         match reader.read_event() {
             // Start tag
             Ok(Event::Start(e)) => {
-                let tag_name = String::from_utf8_lossy(e.name().as_ref())
-                    .to_string()
-                    .to_lowercase();
+                let is_void = is_void_element(e.name().as_ref());
                 let mut elem = e.into_owned();
                 _add_attributes(config, &mut elem, depth == 0, &mut captured_attributes);
 
                 // For void elements, write as Empty event
-                if config.void_elements.contains(&tag_name) {
+                if is_void {
                     writer.write_event(Event::Empty(elem))?;
                 } else {
                     writer.write_event(Event::Start(elem))?;
@@ -117,12 +116,8 @@ pub fn transform_html(
 
             // End tag
             Ok(Event::End(e)) => {
-                let tag_name = String::from_utf8_lossy(e.name().as_ref())
-                    .to_string()
-                    .to_lowercase();
-
                 // Skip end tags for void elements
-                if !config.void_elements.contains(&tag_name) {
+                if !is_void_element(e.name().as_ref()) {
                     writer.write_event(Event::End(e))?;
                     depth -= 1;
                 }
@@ -177,7 +172,7 @@ fn _add_attributes(
             .attributes()
             .find(|a| {
                 if let Ok(attr) = a {
-                    String::from_utf8_lossy(attr.key.as_ref()) == *watch_attr
+                    attr.key.as_ref() == watch_attr.as_bytes()
                 } else {
                     false
                 }

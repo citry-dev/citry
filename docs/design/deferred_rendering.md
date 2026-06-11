@@ -48,7 +48,7 @@ foundational:
    root (the `<div data-cid-parent data-cid-child>` case), the markers must stack
    in a definite order. citry serializes **top-down, parsing each frame once**,
    with child-component frames emitted as `<template c-render-id>` placeholders so
-   `transform_html` can report (via its watch-map) which children sit at the root
+   the marking scan (`mark_html`) can report which children sit at the root
    and must inherit the parent's root attributes (section 6). This order concerns
    the markers (problem-2 feature) only; depth (problem 1) does not require any
    particular order.
@@ -91,14 +91,18 @@ There is no element node to target, so root detection needs HTML structure
 awareness.
 
 citry already ships that primitive. The Rust crate
-[`citry_html_transform`](../../crates/citry_html_transform) exposes
-`transform_html(html, root_attributes, all_attributes, watch_on_attribute)`
-(surfaced as
-[`citry_core.html_transform.transform_html`](../../packages/py/citry_core/citry_core/html_transform/__init__.py)).
-It injects attributes onto the root element(s) and onto all elements, handles
-multiple roots, and returns a watch-map keyed by a chosen attribute, the exact
-capability DJC gets from `set_html_attributes`. Its tests
-([`test_html_transformer.py`](../../packages/py/citry_core/tests/test_html_transformer.py))
+[`citry_html_transform`](../../crates/citry_html_transform) exposes two entry
+points (surfaced under
+[`citry_core.html_transform`](../../packages/py/citry_core/citry_core/html_transform/__init__.py)):
+`mark_html(html, root_attributes, placeholder_attr)`, a single-pass scan that
+splices attributes onto the root element(s), reports which placeholders sat at
+the root, and splits the output around the placeholders; and
+`transform_html(html, root_attributes, all_attributes, watch_on_attribute)`,
+a full rewrite that can also inject attributes onto *all* elements. Both
+handle multiple roots, the exact capability DJC gets from
+`set_html_attributes`. Their tests
+([`marker.rs`](../../crates/citry_html_transform/tests/marker.rs),
+[`test_html_transformer.py`](../../packages/py/citry_core/tests/test_html_transformer.py))
 cover multi-root and nested cases. So the markers can be built by reusing this
 crate, with no compiler change.
 
@@ -262,19 +266,21 @@ queue), which then embeds as a part of `Outer`'s render and merges its deps
 upward through the same section-4.5 path. Composability and depth-safety fall out
 without any ambient stack state.
 
-## 6. Phase B: component-id markers via `transform_html`
+## 6. Phase B: component-id markers via `mark_html`
 
-**Status (2026-06-09): built.** The id markers are added on every `serialize()`,
+**Status (2026-06-09, updated 2026-06-11): built.** The id markers are added on
+every `serialize()`,
 implemented in [`serialize.py`](../../packages/py/citry/citry/serialize.py) and
 covered by [`test_markers.py`](../../packages/py/citry/tests/test_markers.py).
-The CSS-scoping half (the `all_attributes` set, section 6.2.1) is still deferred
-to the dependency extension; for now `all_attributes` is empty, so only the id
-marker is added. The markers let the future browser runtime scope CSS and run
-per-instance JS.
+Marking uses `mark_html`, the single-pass root scan (see section 3); the
+CSS-scoping half (the `all_attributes` set, section 6.2.1) is still deferred
+to the dependency extension and will ride the every-element `transform_html`
+pass when it lands. The markers let the future browser runtime scope CSS and
+run per-instance JS.
 
 The marker attribute is **`data-cid-<ID>`**, a valueless (boolean) attribute,
 where `<ID>` is the component render id (already `c`-prefixed, see
-[`constants.py`](../../packages/py/citry/citry/constants.py)). `transform_html`
+[`constants.py`](../../packages/py/citry/citry/constants.py)). `mark_html`
 writes a boolean attribute in its empty-value form, so a marker reads
 `data-cid-cAb3d9=""`. The boolean form lets multiple component ids sit on one
 element, which is what the parent-root-is-child case (6.1) requires.
@@ -290,13 +296,14 @@ Parent template "<div><c-child/></div>"  ->  <div data-cid-cParent><span data-ci
 ```
 
 Root elements compile to static strings, not nodes (section 3), so this needs
-HTML-structure awareness, which is exactly what `transform_html` provides.
+HTML-structure awareness, which is exactly what the `citry_html_transform`
+crate provides.
 
 ### 6.2 The model: top-down marking, then bottom-up assembly, at serialize time
 
 The render output stays a `CitryRender` tree (no strings) until `serialize()` is
 called. Marking each component's frame exactly once needs a parent processed
-before its children (a child's markers depend on the parent's watch-map), while
+before its children (a child's markers depend on the parent's scan report), while
 joining the final string needs a child finished before its parent. So
 [`serialize.py`](../../packages/py/citry/citry/serialize.py) does it in two
 passes, neither of which calls itself (the same reason the render side uses a
@@ -311,28 +318,28 @@ from its parent:**
    placeholder `<template c-render-id="<child id>"></template>`, and the child is
    recorded. A nested control-flow render (`part.context.component is comp`, or a
    component-less render) is joined in directly.
-2. Run
-   `transform_html(frame, root_attributes=[...], all_attributes=[...], track_added_attributes_for_tags_with_this_attribute="c-render-id")`,
-   where the two attribute sets are distinct (see 6.2.1):
-   - `root_attributes`: the component's `data-cid-<id>` marker plus the markers
-     inherited from the parent. These go on the component's root element(s) only.
-   - `all_attributes`: the CSS-scoping attribute, on *every* element of the
-     frame. Empty for now (deferred to the dependency extension, 6.2.1).
+2. Run `mark_html(frame, root_attributes=[...], placeholder_attr="c-render-id")`,
+   where `root_attributes` is the component's `data-cid-<id>` marker plus the
+   markers inherited from the parent. These go on the component's root
+   element(s) only. (The CSS-scoping attribute, which goes on *every* element
+   of the frame, is deferred to the dependency extension and uses the
+   every-element `transform_html` pass; see 6.2.1.)
 
-   The call returns the marked frame plus a watch-map: for each child placeholder,
-   the attributes added to it (non-empty only when that placeholder was itself at
-   the root). Each such child inherits those markers, processed next.
+   In one scan, the call splices the markers onto the root tags and splits the
+   frame around the child placeholders, reporting per placeholder the
+   attributes spliced into it (non-empty only when that placeholder was itself
+   at the root). Each such child inherits those markers, processed next.
 
 **Pass 2 (bottom-up):** walk the components in reverse of pass-1 order (so a
-child is finished before its parent) and replace each placeholder with the
-child's finished HTML.
+child is finished before its parent) and join each frame's segments with its
+children's finished HTML in the placeholder slots.
 
 The placeholder is a temporary token used only while serializing, never stored on
 a render object. The component's own id is read from `r.context.component`, so no
-marker state lives on the render objects. Each frame is parsed once (a child is
+marker state lives on the render objects. Each frame is scanned once (a child is
 still just a placeholder when its parent is marked), so the pass is `O(total
 size)`, and per-component CSS scoping stays correct because a parent's
-`all_attributes` never reaches a child's interior elements. The stacked result is
+scoping attribute never reaches a child's interior elements. The stacked result is
 `<div data-cid-<child>="" data-cid-<parent>="">` (child marker first, then
 inherited).
 
@@ -360,8 +367,9 @@ top-down pass is what keeps them correctly scoped:
 In the captured reference, `set_component_attrs_for_js_and_css` puts the id marker
 and the CSS-variables binding into `root_attributes` and passes `all_attributes=[]`
 ([`dependencies.py`](../../packages/py/citry/_djc_reference/dependencies.py)); the
-scoping-attribute (`all_attributes`) case is the one citry adds. Both ride the same
-single per-frame `transform_html` call.
+scoping-attribute (`all_attributes`) case is the one citry adds. The root-only
+attributes ride the per-frame `mark_html` scan; a frame that also needs the
+scoping attribute uses the every-element `transform_html` pass instead.
 
 ### 6.3 Why not bottom-up
 
@@ -426,7 +434,8 @@ stacks the `data-cid` markers automatically. It is rejected because:
 2. **Phase B (built).** `data-cid-<ID>` markers, added on every `serialize()` via
    the two-pass (top-down marking, bottom-up assembly) pass in
    [`serialize.py`](../../packages/py/citry/citry/serialize.py): `<template
-   c-render-id>` placeholders, the watch-map, and inherited root attributes.
+   c-render-id>` placeholders, the per-placeholder scan report, and inherited
+   root attributes.
    Reuses the existing `citry_html_transform` crate, no compiler change.
    [`test_markers.py`](../../packages/py/citry/tests/test_markers.py) covers single
    root, multiple roots, nested-not-at-root, two- and three-level
