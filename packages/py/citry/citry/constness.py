@@ -59,6 +59,11 @@ Guidance for using ``Const``:
 - **Transformations drop the marker.** ``Const("hi")`` passed through
   unchanged stays const; ``kwargs["title"].upper()`` returns a plain value.
   Mark the final value if it is the transformed form that is stable.
+- **A few C-level APIs reject the marker.** The marker is a proxy object, and
+  some built-ins demand the exact built-in type rather than something that
+  behaves like it; ``getattr(obj, name)`` is the common case (it raises
+  ``TypeError`` when ``name`` is a marked string). Convert with ``str()``
+  first when passing a marked value somewhere that needs the real type.
 
 Example:
     Mark an input constant::

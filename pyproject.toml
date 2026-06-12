@@ -25,6 +25,14 @@ dev = [
     "pydantic>=2.0",
 ]
 ci = ["maturin>=1.8,<2.0", "pytest>=8.0", "pre-commit>=3.0.0", "pydantic>=2.0"]
+# Baseline engines for the rendering benchmarks (docs/design/benchmarking.md).
+# Mirror of packages/py/citry [dependency-groups].benchmark; this extra is what
+# the shared venv installs from. Keep the two in sync (goes away with issue #8).
+# Pinned exactly: bumping them re-baselines the published benchmark comparison.
+benchmark = [
+    "django==6.0.6",
+    "django-components==0.151.0",
+]
 
 # Tool configurations (codebase-wide)
 [tool.ruff]
@@ -40,6 +48,10 @@ exclude = [
     "__pycache__",
     ".mypy_cache",
     "third_party", # Third-party dependencies (git submodules)
+    # Vendored benchmark scenario files, kept byte-close to upstream
+    # django-components (docs/design/benchmarking.md section 7); not linted.
+    "packages/py/citry/tests/test_benchmark_django*.py",
+    "packages/py/citry/tests/test_benchmark_djc*.py",
 ]
 
 # See https://docs.astral.sh/ruff/linter/#rule-selection
@@ -116,6 +128,9 @@ ignore = [
 ]
 "packages/py/**/tests/benchmark*" = [
     "T201",    # Benchmark scripts print their results
+]
+"benchmarks/*" = [
+    "T201",    # The comparison runner prints its results
 ]
 
 [tool.ruff.lint.isort]

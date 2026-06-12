@@ -44,6 +44,16 @@ dev = [
     # away with the uv workspace conversion (issue #8).
     "pydantic>=2.0",
 ]
+# Baseline engines for the rendering benchmarks (docs/design/benchmarking.md).
+# Pinned exactly: bumping them re-baselines the published comparison, so it is
+# a deliberate act, not a routine update. Not part of the default dev install;
+# tests that need them are skipped when they are absent (tests/conftest.py).
+# Mirrored in the root pyproject's benchmark extra (same mirroring note as
+# above, goes away with issue #8).
+benchmark = [
+    "django==6.0.6",
+    "django-components==0.151.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/JuroOravec/citry/"
