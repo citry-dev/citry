@@ -238,10 +238,11 @@ class ComponentRegistry:
         """
         Create and register the built-in components, once.
 
-        Built-ins (the ``<c-provide>`` component, with ``<c-js>``/``<c-css>``
-        to follow) are ordinary Component subclasses bound to one Citry
-        instance, so each instance needs its own; the owning Citry instance
-        passes a factory that creates them. They are created on the first
+        Built-ins (``<c-provide>``, ``<c-component>``, ``<c-element>``,
+        ``<c-error-fallback>``, ``<c-js>``, ``<c-css>``) are ordinary
+        Component subclasses bound to one Citry instance, so each instance
+        needs its own; the owning Citry instance passes a factory that
+        creates them. They are created on the first
         lookup rather than up front: the default Citry instance is
         constructed while ``citry/citry.py`` is still importing, when the
         component module cannot be imported yet. By the time anything looks

@@ -23,8 +23,19 @@ dev = [
     # here because this extra is what the shared venv and CI install from.
     # The mirroring goes away with the uv workspace conversion (issue #8).
     "pydantic>=2.0",
+    # Test dependencies of packages/py/citry's web-integration tests (the
+    # FastAPI adapter + TestClient); same mirroring note as pydantic above.
+    "fastapi>=0.110",
+    "httpx>=0.27",
 ]
-ci = ["maturin>=1.8,<2.0", "pytest>=8.0", "pre-commit>=3.0.0", "pydantic>=2.0"]
+ci = [
+    "maturin>=1.8,<2.0",
+    "pytest>=8.0",
+    "pre-commit>=3.0.0",
+    "pydantic>=2.0",
+    "fastapi>=0.110",
+    "httpx>=0.27",
+]
 # Baseline engines for the rendering benchmarks (docs/design/benchmarking.md).
 # Mirror of packages/py/citry [dependency-groups].benchmark; this extra is what
 # the shared venv installs from. Keep the two in sync (goes away with issue #8).

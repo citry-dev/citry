@@ -1,11 +1,12 @@
 """
 The extension (plugin) system.
 
-Extensions let third-party code (and citry's own subsystems, such as the future
-JS/CSS dependency handling) hook into the component lifecycle without touching
-the core. An extension is a subclass of :class:`Extension` that implements one or
-more ``on_*`` hook methods and, optionally, exposes a per-component nested config
-class (the ``Component.View`` / ``Component.Cache`` mechanism) and CLI commands.
+Extensions let third-party code (and citry's own subsystems, such as the
+built-in JS/CSS dependency handling) hook into the component lifecycle without
+touching the core. An extension is a subclass of :class:`Extension` that
+implements one or more ``on_*`` hook methods and, optionally, exposes a
+per-component nested config class (the ``Component.View`` / ``Component.Cache``
+mechanism), HTTP routes (``Extension.urls``), and CLI commands.
 
 Extensions are scoped to a :class:`~citry.citry.Citry` instance (per DJC #1413,
 all engine state lives on the ``Citry`` instance). Pass them at construction::
@@ -21,9 +22,11 @@ all engine state lives on the ``Citry`` instance). Pass them at construction::
     app = Citry(extensions=[TimingExtension])
 
 The full design, the hook catalog, and the divergences from django-components
-are in ``docs/design/extensions.md``. This module is the phase-1 skeleton: it
-wires the lifecycle, registration, render, and template hooks. The short-circuit
-/ caching, dependency, slot, and CSS/JS hooks are deferred to later phases.
+are in ``docs/design/extensions.md``. It wires the lifecycle, registration,
+render, template, slot, JS/CSS, merge (``on_render_context_merge``), and
+serialize hooks, plus the ``emit`` mechanism for extension-owned custom hooks
+(the dependencies extension's ``on_dependencies``). The short-circuit /
+caching hooks (a future cache extension) are the main piece still deferred.
 """
 
 from __future__ import annotations
@@ -39,10 +42,12 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from citry.citry import Citry
+    from citry.citry_context import CitryContext
     from citry.citry_render import CitryRender, RenderPart
     from citry.component import Component
     from citry.nodes import BodyItem, SlotNode
     from citry.slots import Slot
+    from citry.util.routing import URLRoute
 
 
 ################################################
@@ -119,8 +124,22 @@ class OnComponentDataContext:
     """The ``Citry`` instance the component belongs to."""
     component: Component
     """The Component instance being rendered."""
+    context: CitryContext
+    """The render-scoped ``CitryContext`` for this component's render.
+    Extensions stash tree-wide state in ``context.extra`` (for example the
+    dependencies extension's render records); it bubbles up through
+    ``on_render_context_merge`` as nested renders are consumed. ``context.provides``
+    is not yet populated when this hook fires."""
     template_data: dict[str, Any]
     """The template variables from ``Component.template_data()`` (mutable)."""
+    js_data: dict[str, Any]
+    """The JS variables from ``Component.js_data()`` (mutable). Consumed by
+    the built-in ``dependencies`` extension (docs/design/dependencies.md
+    section 5)."""
+    css_data: dict[str, Any]
+    """The CSS variables from ``Component.css_data()`` (mutable). Consumed by
+    the built-in ``dependencies`` extension (docs/design/dependencies.md
+    section 5)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -186,6 +205,35 @@ class OnTemplateCompiledContext:
     """The generated body node list."""
 
 
+@dataclass(frozen=True, slots=True)
+class OnRenderContextMergeContext:
+    citry: Citry
+    """The ``Citry`` instance the render belongs to."""
+    parent_context: CitryContext
+    """The context of the render that consumed the nested one."""
+    child_context: CitryContext
+    """The context of the consumed nested render."""
+
+
+@dataclass(frozen=True, slots=True)
+class OnSerializeContext:
+    citry: Citry
+    """The ``Citry`` instance the render belongs to."""
+    context: CitryContext
+    """The root render's ``CitryContext`` (its ``extra`` carries everything
+    that bubbled up during the render)."""
+    html: str
+    """The joined HTML (threaded: return a new string to replace it)."""
+    placeholders: dict[str, str]
+    """The placeholder parts found during serialization: unique placeholder id
+    (the ``Placeholder.key`` plus a counter, e.g. ``"deps:js:1"``) to the exact
+    text standing in for it in ``html``."""
+    deps_strategy: str
+    """The ``serialize(deps_strategy=...)`` argument."""
+    deps_position: str
+    """The ``serialize(deps_position=...)`` argument."""
+
+
 ################################################
 # COMMANDS
 ################################################
@@ -197,8 +245,9 @@ class ExtensionCommand:
 
     A stub for now: an extension lists command classes in ``Extension.commands``,
     and the manager can look one up by name. There is no command *runner* yet;
-    that arrives with the CLI/tooling work. URL routing (DJC's ``Extension.urls``)
-    is not carried over (see docs/design/extensions.md section 11).
+    that arrives with the CLI/tooling work. (Extension HTTP routes are a
+    separate, built surface: ``Extension.urls``, see docs/design/extensions.md
+    section 11.)
     """
 
     name: ClassVar[str]
@@ -287,6 +336,24 @@ class Extension:
     commands: ClassVar[list[type[ExtensionCommand]]] = []
     """CLI commands this extension provides (see :class:`ExtensionCommand`)."""
 
+    citry: Citry
+    """The ``Citry`` instance this extension instance belongs to. Set by the
+    manager when the extension is attached (extensions are per-instance, so
+    the back-reference is unambiguous)."""
+
+    @property
+    def urls(self) -> list[URLRoute]:
+        """
+        HTTP routes this extension provides (see ``citry/util/routing.py``).
+
+        Mounted by the web-integration adapters as part of ``Citry.urls``: a
+        user extension's routes live under ``ext/<extension name>/``;
+        built-in extensions own their paths directly. Override as an
+        attribute or property; handlers can reach engine state through
+        ``self.citry``.
+        """
+        return []
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         if not getattr(cls, "name", None):
@@ -361,6 +428,29 @@ class Extension:
         dynamic attribute (a ``c-*`` value or a ``c-bind`` spread).
         """
 
+    def on_render_context_merge(self, ctx: OnRenderContextMergeContext) -> None:
+        """
+        Called when a nested render's output is consumed by an enclosing
+        render (a child component settling into its parent, or an
+        already-rendered value embedded via an expression or slot).
+
+        Merge your extension's slice of ``ctx.child_context.extra`` into
+        ``ctx.parent_context.extra``, with your own policy (the dependencies
+        extension, for example, appends records preserving order). The core
+        does not merge anything itself.
+        """
+
+    def on_serialize(self, ctx: OnSerializeContext) -> str | None:
+        """
+        Called at the end of ``CitryRender.serialize()`` with the joined HTML.
+
+        Return a new string to replace the output (threaded across
+        extensions), or ``None`` to keep it. This is where serialize-time
+        work that needs the whole page happens; the dependencies extension
+        places the collected JS/CSS here, using ``ctx.placeholders`` for the
+        ``<c-js>``/``<c-css>`` positions.
+        """
+
     # ----- Template -----
 
     def on_template_loaded(self, ctx: OnTemplateLoadedContext) -> str | None:
@@ -383,6 +473,23 @@ class Extension:
 _Result = Literal["none", "map", "first"]
 
 
+def _builtin_extensions() -> tuple[type[Extension], ...]:
+    """
+    The built-in extensions every ``Citry`` instance carries.
+
+    Prepended to the user's extension spec by ``ExtensionManager._build``, so
+    their names are effectively reserved (a user extension reusing one fails
+    the duplicate-name validation). Built-ins cannot be disabled or replaced
+    (docs/design/asset_loading.md section 7.2).
+    """
+    # Imported here, not at module load: the built-in extension modules
+    # subclass Extension from this module, so a top-level import would be
+    # circular.
+    from citry.extensions.dependencies import DependenciesExtension  # noqa: PLC0415
+
+    return (DependenciesExtension,)
+
+
 class ExtensionManager:
     """
     Fans each lifecycle hook out across a ``Citry`` instance's extensions.
@@ -395,7 +502,7 @@ class ExtensionManager:
     Dispatch is *smart*: for each hook name, only the extensions that actually
     override that hook are called (an extension that does not implement a hook
     costs nothing). The same name-keyed dispatch underlies :meth:`emit`, which
-    later phases use for extension-owned custom hooks.
+    extensions use for their own custom hooks (e.g. ``on_dependencies``).
     """
 
     def __init__(
@@ -414,7 +521,7 @@ class ExtensionManager:
         self,
         extensions: Sequence[type[Extension] | Extension | str],
     ) -> tuple[Extension, ...]:
-        instances: list[Extension] = []
+        instances: list[Extension] = [builtin() for builtin in _builtin_extensions()]
         for extension in extensions:
             resolved: type[Extension] | Extension
             # Case: Import path like `my_package.my_module.MyExtension`.
@@ -425,6 +532,10 @@ class ExtensionManager:
             else:
                 resolved = extension
             instances.append(resolved() if isinstance(resolved, type) else resolved)
+        # Attach the Citry back-reference (extensions are per-instance, so
+        # each instance belongs to exactly one Citry).
+        for instance in instances:
+            instance.citry = self.citry
         # Name -> instance map for O(1) ``get_extension``. A duplicate name
         # collapses here, but ``_validate_names`` scans the full tuple and raises
         # on duplicates, so an ambiguous map can never be used.
@@ -433,18 +544,28 @@ class ExtensionManager:
         return tuple(instances)
 
     def _validate_names(self) -> None:
-        if not self._extensions:
-            # No extensions to validate. Importantly, skip the Component import so
-            # the default ``citry = Citry()`` (built while citry.py is still
-            # importing, before component.py exists) does not hit an import cycle.
-            return
-        from citry.component import Component  # noqa: PLC0415
+        # The Component-API conflict check needs the Component class, which is
+        # not importable while the default ``citry = Citry()`` is constructed
+        # (citry.py is still mid-import and component.py imports it back). The
+        # default instance carries only the built-in extensions, whose names
+        # are known not to conflict, so skipping the API check there is safe;
+        # any user-constructed Citry runs the full validation.
+        try:
+            from citry.component import Component  # noqa: PLC0415
+        except ImportError:
+            component: type | None = None
+        else:
+            component = Component
 
         seen: set[str] = set()
         for extension in self._extensions:
-            if hasattr(Component, extension.name) or hasattr(Component, extension.class_name):
+            if component is not None and (
+                hasattr(component, extension.name) or hasattr(component, extension.class_name)
+            ):
                 msg = f"Extension name {extension.name!r} conflicts with existing Component API"
                 raise ValueError(msg)
+            # Built-in names are reserved: the built-ins come first in the
+            # tuple, so a user extension reusing one fails here as a duplicate.
             if extension.name in seen:
                 msg = f"Multiple extensions cannot share the name {extension.name!r}"
                 raise ValueError(msg)
@@ -463,6 +584,33 @@ class ExtensionManager:
                 return command
         msg = f"Command {command_name!r} not found in extension {name!r}"
         raise ValueError(msg)
+
+    @property
+    def urls(self) -> tuple[URLRoute, ...]:
+        """
+        The combined route table of every extension (read as ``Citry.urls``).
+
+        Built-in extensions own their paths directly (e.g. the dependencies
+        extension's ``cache/...`` and ``citry.js``); a user extension's
+        routes are namespaced under ``ext/<extension name>/`` so they cannot
+        collide with citry's own or each other's.
+        """
+        # Imported here, not at module load: routing is only needed when a
+        # web integration asks for the table.
+        from citry.util.routing import URLRoute  # noqa: PLC0415
+
+        builtin_types = _builtin_extensions()
+        routes: list[URLRoute] = []
+        namespaced: list[URLRoute] = []
+        for extension in self._extensions:
+            extension_urls = tuple(extension.urls)
+            if not extension_urls:
+                continue
+            if isinstance(extension, builtin_types):
+                routes.extend(extension_urls)
+            else:
+                namespaced.append(URLRoute(f"ext/{extension.name}/", children=extension_urls))
+        return (*routes, *namespaced)
 
     # ----- Smart dispatch -----
 
@@ -643,10 +791,52 @@ class ExtensionManager:
             ),
         )
 
-    def on_component_data(self, component: Component, template_data: dict[str, Any]) -> None:
+    def on_component_data(
+        self,
+        component: Component,
+        context: CitryContext,
+        template_data: dict[str, Any],
+        js_data: dict[str, Any],
+        css_data: dict[str, Any],
+    ) -> None:
         self.emit(
             "on_component_data",
-            OnComponentDataContext(citry=self.citry, component=component, template_data=template_data),
+            OnComponentDataContext(
+                citry=self.citry,
+                component=component,
+                context=context,
+                template_data=template_data,
+                js_data=js_data,
+                css_data=css_data,
+            ),
+        )
+
+    def on_render_context_merge(self, parent_context: CitryContext, child_context: CitryContext) -> None:
+        self.emit(
+            "on_render_context_merge",
+            OnRenderContextMergeContext(citry=self.citry, parent_context=parent_context, child_context=child_context),
+        )
+
+    def on_serialize(
+        self,
+        context: CitryContext,
+        html: str,
+        placeholders: dict[str, str],
+        deps_strategy: str,
+        deps_position: str,
+    ) -> str:
+        return self.emit(
+            "on_serialize",
+            OnSerializeContext(
+                citry=self.citry,
+                context=context,
+                html=html,
+                placeholders=placeholders,
+                deps_strategy=deps_strategy,
+                deps_position=deps_position,
+            ),
+            result="map",
+            field="html",
         )
 
     def on_component_rendered(

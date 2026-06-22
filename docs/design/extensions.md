@@ -1,14 +1,16 @@
 # Design: the extension (plugin) system
 
-**Status (2026-06-08): phase-1 skeleton built; later phases deferred.** This
+**Status (2026-06-13): built, except the caching/short-circuit phase.** This
 document is the design for citry's extension/hook system, adapted from
 django-components and reshaped for citry's architecture (Citry-instance scoping,
-the `CitryRender` struct pipeline, no Django). The phase-1 skeleton (section
-13.1: `Extension`, `Extension.Config`, `ExtensionManager`, `CitrySettings`,
-`ExtensionCommand`, the lean `On*Context` types, and the lifecycle/registration/
-render/template hooks) is implemented; see the impl-log entry in
-[`citry_migration.md`](citry_migration.md). The short-circuit/caching, dependency,
-slot, and CSS/JS phases are deferred.
+the `CitryRender` struct pipeline, no Django). The system (`Extension`,
+`Extension.Config`, `ExtensionManager`, `CitrySettings`, `ExtensionCommand`,
+the `On*Context` types, the lifecycle/registration/render/template/slot/JS/CSS
+hooks, the `emit` mechanism for extension-owned custom hooks,
+`on_render_context_merge`/`on_serialize`, and `Extension.urls`) is
+implemented; see the impl-log entries in
+[`citry_migration.md`](citry_migration.md). The caching/short-circuit phase
+(a future cache extension) is the main piece still deferred.
 
 For the broader migration context see [`citry_migration.md`](citry_migration.md).
 For the render model the render-hooks plug into see [`rendering.md`](rendering.md).
@@ -89,8 +91,13 @@ app.extensions                 # -> the ExtensionManager (not the raw list)
 app.settings.extensions        # -> the immutable spec tuple (see 2.1)
 ```
 
-The default module-level `citry` instance has no extensions; a user who wants
-them constructs their own `Citry(extensions=[...])` and assigns components to it
+Every instance (including the default module-level `citry`) also carries the
+**built-in extensions**: a fixed set (`extension.py`'s `_builtin_extensions()`) the manager prepends
+to the user's spec, with their names reserved. The first built-in is the
+`dependencies` extension (see [`asset_loading.md`](asset_loading.md) section 7);
+this mirrors the registry's built-in components. Beyond the built-ins, the
+default instance has no extensions; a user who wants more constructs their own
+`Citry(extensions=[...])` and assigns components to it
 (`class C(Component): citry = app`). Same test-isolation model as the registry.
 
 **This deletes DJC's deferral machinery entirely.** There is no `apps.ready()`
@@ -334,15 +341,14 @@ cached body, not per render. May mutate in place or return a new list.
 `on_template_loaded` still fires once per class with the template **string**
 before parse.
 
-### 7.5 JS/CSS data methods are a TODO, not a silent drop
+### 7.5 JS/CSS data methods
 
-DJC's `on_component_data` also carries `js_data` / `css_data`, fed by
-`get_js_data` / `get_css_data`. Citry does not have those data methods **yet**.
-They are **planned** (TODO), not dropped: citry will add `js_data()` /
-`css_data()` alongside `template_data()`, and `on_component_data` will then carry
-`template_data` + `js_data` + `css_data`. Until then the context carries only
-`template_data`, with the other two noted as forthcoming. (DJC's deprecated
-`context_data` is dropped outright.)
+`js_data()` / `css_data()` exist alongside `template_data()` (with typed
+`JsData`/`CssData` schemas), and `on_component_data` carries `template_data`
++ `js_data` + `css_data`, plus the render's `CitryContext` (so extensions can
+stash tree-wide state in `context.extra`). The dependencies extension
+consumes the data as JS/CSS variables ([`dependencies.md`](dependencies.md)
+section 5). (DJC's deprecated `context_data` is dropped outright.)
 
 ---
 
@@ -361,33 +367,49 @@ hooks (section 9) tractable, since dispatch is already name-keyed.
 
 The most structural change. Two coupled ideas:
 
+### 9.0 Convention: namespace `extra` by owner
+
+`CitryContext.extra` is one bag shared by everything in the render tree, so
+its top-level keys are **namespaced by owner** to avoid collisions: an
+extension stashes its data under a key named after itself (the dependencies
+extension uses `extra["dependencies"]`), and citry-core concepts that more
+than one party may contribute to live under `extra["citry"]`
+(`citry_context.EXTRA_CITRY_KEY`). The root-marker seam is the first such
+core concept; the core wraps it in the internal
+`CitryContext._add_root_markers` / `_get_root_markers` rather than exposing
+the raw nested key, so the magic strings stay in one place (underscore-
+prefixed for now: the built-in dependencies extension is the only writer, so
+the contract can firm up before it is offered to third-party extensions).
+The rule keeps two extensions (or an extension and the core) from clobbering
+each other's `extra` entries.
+
 ### 9.1 The dependency-merge step becomes a hook
 
-Today `_render_body` calls `_merge_dependencies(parent_ctx, child_ctx)` directly
-when a child `CitryRender` is consumed. That becomes a core hook
-(working name **`on_render_merge(ctx)`**, `ctx` carrying the parent and child
-`CitryContext`s) so each extension merges *its own* slice of `extra` with its own
-policy (deps want ordered de-dup, not last-writer-wins). The core no longer owns
-the merge semantics.
+`_merge_dependencies(parent_ctx, child_ctx)`, the seam fired when a child
+`CitryRender` is consumed, is a core hook: **`on_render_context_merge(ctx)`**,
+`ctx` carrying the parent and child `CitryContext`s, so each extension merges
+*its own* slice of `extra` with its own policy (deps want ordered de-dup, not
+last-writer-wins). The core no longer owns the merge semantics.
 
 ### 9.2 Extensions can define their own hooks
 
-For a clean layering, **`on_dependencies` is not a core hook** - it belongs to a
-future `DependencyExtension`. So the core must let an extension **declare and
+For a clean layering, **`on_dependencies` is not a core hook** - it belongs to
+the `dependencies` extension. So the core lets an extension **declare and
 fire its own hooks** that other extensions implement. Mechanism (registration is
 duck-typed, leaning on section 8's name-keyed dispatch):
 
-- `manager.emit(name, ctx, *, combine=...)` dispatches `name` to every extension
-  that defines a method `name`, threading results per a `combine` policy.
-- Built-in policies: `first_non_none` (short-circuit), `thread(field)`
-  (replace-and-pass, e.g. content hooks), `collect` (gather all returns),
-  `void` (side-effecting).
+- `manager.emit(name, ctx, result=..., field=...)` dispatches `name` to every
+  extension that defines a method `name`, combining their returns per `result`.
+- Built-in policies: `none` (side-effecting, return `None`), `first` (return
+  the first non-`None` return; short-circuit), `map` (thread `ctx.<field>`,
+  each non-`None` return replacing it via `dataclasses.replace`, returning the
+  final value).
 - The core hooks are just well-known `emit` names with fixed policies; a custom
   hook (like `on_dependencies`) is fired by its owning extension via `emit`, and
   any extension implements it by defining a method of that name.
 
 So the dependency extension owns `on_dependencies` (and fires it at serialize
-time), uses `on_render_merge` to bubble deps up the tree, and stashes into
+time), uses `on_render_context_merge` to bubble deps up the tree, and stashes into
 `CitryContext.extra` - all without the core knowing about JS/CSS.
 
 The **cache short-circuit** (section 7.1) is the second concrete consumer of
@@ -396,9 +418,10 @@ this mechanism: a future `CacheExtension` owns `on_component_cache` and
 core short-circuit hook. This keeps the leak-prone short-circuit logic out of the
 core and lets other extensions observe a cache hit explicitly.
 
-**Skeleton scope:** build the name-keyed dispatch + `emit` mechanism and route
-the core hooks through it; exercise custom-hook ownership when the dependency and
-cache extensions land. Flag `on_render_merge` / `emit` naming as OPEN.
+The name-keyed dispatch + `emit` mechanism is built and the core hooks route
+through it; the dependencies extension exercises custom-hook ownership
+(`on_dependencies`). The cache extension's `emit`-owned hooks remain future
+work (section 7.1).
 
 ---
 
@@ -418,15 +441,17 @@ yet) · **Dropped** · **Renamed/Reshaped**.
 | `on_component_unregistered` | Skeleton | ctx: `citry, name, component_class` |
 | `on_component_input` | Skeleton (reshaped) | mutate-only, `-> None` (django-components#1141 R6, 7.1) |
 | *(short-circuit)* | **Deferred** | not in skeleton; likely cache-extension-owned `on_component_cache` / `on_component_cache_hit` via `emit()` (7.1, 9.2) |
-| `on_component_data` | Skeleton | ctx: `citry, component, template_data`; `js_data`/`css_data` a TODO (7.5) |
+| `on_component_data` | Wired | ctx: `citry, component, context, template_data, js_data, css_data` (7.5) |
 | `on_component_rendered` | Skeleton | operates on `CitryRender`; `-> CitryRender \| str \| None`; short-circuit interaction deferred (7.1) |
 | `on_template_loaded` | Skeleton | ctx: `citry, component_class, content` |
 | `on_template_compiled` | Skeleton (reshaped) | fires at the node list, not a Template (7.4) |
-| `on_css_loaded` | Deferred | pending CSS subsystem + `css()` source |
-| `on_js_loaded` | Deferred | pending JS subsystem + `js()` source |
-| `on_slot_rendered` | Deferred | pending slots subsystem |
-| `on_dependencies` | **Reshaped** | not core; becomes a `DependencyExtension`-owned custom hook (section 9) |
-| *(new)* `on_render_merge` | Deferred (OPEN) | the generalized `_merge_dependencies` step (9.1) |
+| `on_css_loaded` | Skeleton | wired by the asset-loading subsystem ([`asset_loading.md`](asset_loading.md) section 6); ctx: `citry, component_class, content` |
+| `on_js_loaded` | Skeleton | same as `on_css_loaded` |
+| `on_slot_rendered` | Wired | fires at the `<c-slot>` site (docs/design/slots.md section 7) |
+| *(new)* `on_attrs_resolved` | Wired | citry-only; fires per HTML element with dynamic attributes, after the attribute dict resolves and before formatting ([`html_attrs.md`](html_attrs.md) section 5.5); ctx: `citry, component, tag_name, attrs`, threaded on `attrs` |
+| `on_dependencies` | **Reshaped (built)** | not core; the `dependencies` extension fires it via `emit` at serialize time ([`dependencies.md`](dependencies.md) section 7.2) |
+| *(new)* `on_render_context_merge` | Wired | the generalized `_merge_dependencies` step (9.1); core fires it, extensions own their slice of the merge |
+| *(new)* `on_serialize` | Wired | fires at the end of `serialize()` with the joined HTML, threaded; the dependencies extension's placement point ([`dependencies.md`](dependencies.md) section 7.2) |
 
 | DJC non-hook surface | citry status | Note |
 |---|---|---|
@@ -435,7 +460,7 @@ yet) · **Dropped** · **Renamed/Reshaped**.
 | `ExtensionManager` (global) | Reshaped | per-`Citry`; no deferral; smart dispatch + `emit` |
 | `ComponentCommand` | Renamed | `ExtensionCommand` (stub; no runner yet) |
 | `commands` list | Skeleton | kept (framework-agnostic CLI) |
-| `urls` / `URLRoute` / resolvers | **Dropped (TODO)** | Django-specific routing; **not implemented yet**, on the TODO list (section 11) |
+| `urls` / `URLRoute` / resolvers | Wired (reshaped) | framework-neutral `Extension.urls` + `Citry.urls` + contrib adapters (section 11) |
 | `extensions_defaults` | Skeleton | built now as a field on the `CitrySettings` schema object (5.2) |
 | `<name>_class` escape hatch | **Dropped** | legacy `media_class` mirror (5.3) |
 | `store_events` / `_init_app` deferral | **Dropped** | no Django app-load race (section 2) |
@@ -444,13 +469,17 @@ yet) · **Dropped** · **Renamed/Reshaped**.
 
 ---
 
-## 11. URLs: not implemented (TODO)
+## 11. URLs: extension routes (built)
 
-Extension-provided URL routing (DJC's `Extension.urls` + the `_init_app`
-resolver block) is **not implemented in citry yet**. It is Django-coupled in DJC;
-in citry it should return as either a framework-agnostic routing surface or a
-hook owned by a future Django extension. **Tracked as a TODO**, not part of the
-skeleton.
+Extensions provide HTTP endpoints through **`Extension.urls`**: a list (or
+property) of framework-neutral `URLRoute`s (`citry/util/routing.py`). The
+manager combines them into `Citry.urls`, which the web-integration adapters
+(`citry.contrib.asgi`/`wsgi`/`fastapi`) mount into the host app; a user
+extension's routes are namespaced under `ext/<name>/`, built-ins own their
+paths directly. Route handlers reach engine state through `self.citry`, the
+back-reference the manager sets on every extension instance. Full design in
+[`dependencies.md`](dependencies.md) section 9; the dependencies extension's
+script endpoints are the first user.
 
 ---
 
@@ -461,33 +490,42 @@ skeleton.
   `on_component_cache` / `on_component_cache_hit` hooks, and whether (and how)
   `on_component_rendered` participates on a short-circuit. `on_component_input`
   mutate-only is settled.
-- Naming of the merge hook (`on_render_merge`) and the `emit` custom-hook API
-  shape / `combine` policies (section 9).
+- ~~Naming of the merge hook and the `emit` custom-hook API shape~~ settled
+  (section 9): the hook is **`on_render_context_merge`** (it merges the
+  `extra` bag between two `CitryContext`s), and `emit(name, ctx, result=...)`
+  ships with the `none` / `first` / `map` policies, exercised by
+  `on_dependencies` and `on_serialize`.
 - Where `CitrySettings` is validated, and how settings compose with the existing
   per-class fields (5.2). (Decided: it is a real schema object, not a dict.)
-- `js_data` / `css_data` data-method signatures, to mirror `template_data` (7.5).
+- ~~`js_data` / `css_data` data-method signatures~~ settled (7.5):
+  `js_data(kwargs, slots)` / `css_data(kwargs, slots)`, mirroring
+  `template_data`, with optional `JsData` / `CssData` schemas.
 
 ---
 
 ## 13. Suggested phasing
 
-1. **Skeleton (after this review).** `Extension`, `Extension.Config` (weakref +
+1. **Skeleton - built.** `Extension`, `Extension.Config` (weakref +
    optional component), `ExtensionManager` (per-`Citry`, smart dispatch, `emit`),
    `CitrySettings` schema object,
-   `ExtensionCommand`, the `On*Context` dataclasses (lean surface). Wire the
-   **Skeleton** rows of section 10 at their hook points; route core hooks through
-   `emit`. `extensions_defaults` as the first settings entry. Tests for the
-   wired hooks, the config-class mechanism + 3-level defaults, and smart
-   dispatch.
-2. **Dependency extension.** First real `emit`-owned custom hook
-   (`on_dependencies`), the `on_render_merge` hook, `Script`/`Style` types,
-   `CitryContext.extra` population, serialize-time placement (#1144).
-3. **Caching / short-circuit (deferred decision).** Once more of the render
-   skeleton exists, conclude how short-circuiting works and how it interacts with
-   `on_component_rendered` (7.1), then build the `CacheExtension` with its
-   `emit()`-owned `on_component_cache` / `on_component_cache_hit` hooks.
-4. **Slots.** `on_slot_rendered` once the slot subsystem lands.
-5. **CSS/JS.** `css()`/`js()` sources + `js_data`/`css_data` methods, then
-   `on_css_loaded`/`on_js_loaded`.
-6. **URLs / Django extension.** Routing surface + template-tag integration on
-   the hook layer (section 11).
+   `ExtensionCommand`, the `On*Context` dataclasses (lean surface). The
+   **Skeleton** rows of section 10 are wired at their hook points; core hooks
+   route through `emit`. `extensions_defaults` as the first settings entry.
+2. **Dependency extension, emission phase - built.** The first real
+   `emit`-owned custom hook (`on_dependencies`), the `on_render_context_merge` and
+   `on_serialize` core hooks, `Script`/`Style` types, `CitryContext.extra`
+   population, serialize-time placement (#1144). Full design and remaining
+   phases (client runtime, fragments, URLs) in
+   [`dependencies.md`](dependencies.md).
+3. **Caching / short-circuit - not started (deferred decision).** Conclude how
+   short-circuiting works and how it interacts with `on_component_rendered`
+   (7.1), then build the `CacheExtension` with its `emit()`-owned
+   `on_component_cache` / `on_component_cache_hit` hooks.
+4. **Slots - done.** `on_slot_rendered` fires at the `<c-slot>` site.
+5. **CSS/JS - done.** The asset-loading subsystem
+   ([`asset_loading.md`](asset_loading.md)) provides the `js`/`css` sources and
+   fires `on_css_loaded`/`on_js_loaded`; the `js_data`/`css_data` data methods
+   and their delivery are built (7.5, [`dependencies.md`](dependencies.md)).
+6. **URLs - built** (section 11); the Django adapter
+   (`citry.contrib.django`) and the django-components template-tag
+   integration remain ([`dependencies.md`](dependencies.md) phase 5).

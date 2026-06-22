@@ -18,13 +18,21 @@ from citry.attrs import (
     normalize_style,
     parse_string_style,
 )
+from citry.cache import CitryCache, InMemoryCache
 from citry.citry import (
     Citry,
     citry,
 )
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
-from citry.citry_render import CitryRender, OnRenderGenerator, RenderReplacement
+from citry.citry_render import (
+    CitryRender,
+    DepsPosition,
+    DepsStrategy,
+    OnRenderGenerator,
+    Placeholder,
+    RenderReplacement,
+)
 from citry.component import Component
 from citry.component_registry import AlreadyRegistered, ComponentRegistry, NotRegistered
 from citry.constness import Const
@@ -42,9 +50,19 @@ from citry.extension import (
     OnComponentRenderedContext,
     OnComponentUnregisteredContext,
     OnExtensionCreatedContext,
+    OnRenderContextMergeContext,
+    OnSerializeContext,
     OnSlotRenderedContext,
     OnTemplateCompiledContext,
     OnTemplateLoadedContext,
+)
+from citry.extensions.dependencies import (
+    CitryDependencies,
+    Dependency,
+    DependencyRecord,
+    OnDependenciesContext,
+    Script,
+    Style,
 )
 from citry.nodes import (
     ComponentNode,
@@ -69,11 +87,14 @@ from citry.slots import (
     SlotInput,
     SlotResult,
 )
+from citry.util.routing import RouteResponse, URLRoute
 
 __all__ = [
     "AlreadyRegistered",
     "Citry",
+    "CitryCache",
     "CitryContext",
+    "CitryDependencies",
     "CitryElement",
     "CitryRender",
     "CitrySettings",
@@ -81,6 +102,10 @@ __all__ = [
     "ComponentNode",
     "ComponentRegistry",
     "Const",
+    "Dependency",
+    "DependencyRecord",
+    "DepsPosition",
+    "DepsStrategy",
     "ElementAttrsNode",
     "ExprHtmlAttr",
     "ExprNode",
@@ -92,6 +117,7 @@ __all__ = [
     "ForNode",
     "HtmlAttr",
     "IfNode",
+    "InMemoryCache",
     "Node",
     "NotRegistered",
     "OnAttrsResolvedContext",
@@ -102,12 +128,18 @@ __all__ = [
     "OnComponentRegisteredContext",
     "OnComponentRenderedContext",
     "OnComponentUnregisteredContext",
+    "OnDependenciesContext",
     "OnExtensionCreatedContext",
+    "OnRenderContextMergeContext",
     "OnRenderGenerator",
+    "OnSerializeContext",
     "OnSlotRenderedContext",
     "OnTemplateCompiledContext",
     "OnTemplateLoadedContext",
+    "Placeholder",
     "RenderReplacement",
+    "RouteResponse",
+    "Script",
     "Slot",
     "SlotContext",
     "SlotFunc",
@@ -115,8 +147,10 @@ __all__ = [
     "SlotNode",
     "SlotResult",
     "StaticHtmlAttr",
+    "Style",
     "TemplateHtmlAttr",
     "TemplateNode",
+    "URLRoute",
     "citry",
     "format_attrs",
     "merge_attrs",

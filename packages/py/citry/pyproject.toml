@@ -43,6 +43,11 @@ dev = [
     # shared monorepo venv and CI actually install from; the mirroring goes
     # away with the uv workspace conversion (issue #8).
     "pydantic>=2.0",
+    # The web-integration tests (tests/test_contrib_fastapi.py) exercise the
+    # FastAPI adapter through Starlette's TestClient (which needs httpx).
+    # Same mirroring note as pydantic above.
+    "fastapi>=0.110",
+    "httpx>=0.27",
 ]
 # Baseline engines for the rendering benchmarks (docs/design/benchmarking.md).
 # Pinned exactly: bumping them re-baselines the published comparison, so it is
@@ -59,3 +64,9 @@ benchmark = [
 Homepage = "https://github.com/JuroOravec/citry/"
 Changelog = "https://github.com/JuroOravec/citry/blob/main/CHANGELOG.md"
 Issues = "https://github.com/JuroOravec/citry/issues"
+
+[tool.setuptools.package-data]
+# Non-Python files shipped inside the package: the type-checking marker and
+# the client-side dependency manager (inlined into rendered pages, later also
+# served over HTTP by the web integrations).
+citry = ["py.typed", "extensions/dependencies/client/*.js"]

@@ -107,6 +107,19 @@ def get_fields(cls: Any) -> list[FieldSpec] | None:
     return None
 
 
+def get_import_path(cls_or_fn: type | Any) -> str:
+    """
+    Return the full import path of a class or function, e.g. ``"path.to.MyClass"``.
+
+    Built-ins return just the qualified name (``"str"``, not ``"builtins.str"``).
+    """
+    module: str | None = getattr(cls_or_fn, "__module__", None)
+    qualname: str = cls_or_fn.__qualname__
+    if not module or module == "builtins":
+        return qualname
+    return module + "." + qualname
+
+
 def get_module_info(cls_or_fn: type | Any) -> tuple[ModuleType | None, str | None, str | None]:
     """
     Return the module, module name, and module file path where a class or

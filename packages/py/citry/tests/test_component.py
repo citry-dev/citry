@@ -481,15 +481,15 @@ class TestGeneratorCaching:
             citry = c
             template = "<p>hi</p>"
 
-        assert "_template_body_generator" not in MyComp.__dict__
+        assert "_citry_template" not in MyComp.__dict__
 
         MyComp(title="a").render()
-        compiled = MyComp.__dict__["_template_body_generator"]
+        compiled = MyComp.__dict__["_citry_template"]
         assert callable(compiled.generate)
 
         # A second CitryElement reuses the same class-level compiled template.
         MyComp(title="b").render()
-        assert MyComp.__dict__["_template_body_generator"] is compiled
+        assert MyComp.__dict__["_citry_template"] is compiled
 
     def test_subclass_template_override_gets_own_generator(self):
         c = Citry()
@@ -504,7 +504,7 @@ class TestGeneratorCaching:
         Base(x=1).render()
         Child(x=1).render()
 
-        assert Base.__dict__["_template_body_generator"] is not Child.__dict__["_template_body_generator"]
+        assert Base.__dict__["_citry_template"] is not Child.__dict__["_citry_template"]
         assert Base(x=1).render().serialize() == '<p data-cid-c3="">base</p>'
         assert Child(x=1).render().serialize() == '<p data-cid-c4="">child</p>'
 

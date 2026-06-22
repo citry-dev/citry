@@ -24,20 +24,24 @@ result is cached per component class and per set of ``Const`` values, so
 repeat renders skip that work. See docs/design/constness.md and
 citry/constness.py.
 
-This is a skeleton. Some features from django-components are not yet
-ported (context snapshotting, JS/CSS media). They will be added iteratively.
+Rendering is deferred and stack-driven (no recursion limit on nesting depth),
+collects each component's JS/CSS dependencies, and drives the ``on_render``
+hook; see docs/design/deferred_rendering.md and on_render.md. Django's
+context snapshotting is deliberately not ported: a component receives only
+its own props and slots, never an inherited context.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from citry.assets import load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender, DeferredComponent
+from citry.citry_template import CitryTemplate
 from citry.constants import COMP_ID_PREFIX, UID_LENGTH
 from citry.constness import const_value, extract_const_vars, fold_body
-from citry.media import get_template
 from citry.nodes import (
     ComponentNode,
     ElementAttrsNode,
@@ -52,7 +56,11 @@ from citry.nodes import (
     TemplateNode,
 )
 from citry.slots import Slot
-from citry.util.exception import set_component_error_message, set_template_position_error_message
+from citry.util.exception import (
+    set_component_error_message,
+    set_template_origin_error_message,
+    set_template_position_error_message,
+)
 from citry.util.misc import is_generator, to_dict
 from citry.util.nanoid import generate
 from citry_core.template_parser import compile_template, parse_template
@@ -484,40 +492,41 @@ def _render_one(
     extensions._init_component_instance(component)
     extensions.on_component_input(component)
 
-    # 3. Call template_data() (per-render; intentionally not cached).
-    #    The return value may be a dict, a NamedTuple, or the component's
-    #    typed `TemplateData` dataclass, so normalize it with `to_dict`.
-    #    No defensive copy is needed (unlike kwargs/slots): the data is
-    #    produced fresh by user code on every render, not shared state.
-    maybe_data = component.template_data(component.kwargs, component.slots)
-    tpl_data: dict[str, Any] = to_dict(maybe_data) if maybe_data is not None else {}
+    # 3. Call the data methods (per-render; intentionally not cached).
+    #    template_data() feeds the template variables; js_data() / css_data()
+    #    feed the component's JS/CSS variables, consumed by the built-in
+    #    `dependencies` extension (docs/design/dependencies.md section 5).
+    #    Each may return a dict, a NamedTuple, or the component's typed
+    #    dataclass; `_normalize_data` converts to a plain dict and validates
+    #    against the declared schema. No defensive copy is needed (unlike
+    #    kwargs/slots): the data is produced fresh by user code on every
+    #    render, not shared state.
+    tpl_data = _normalize_data(component.template_data(component.kwargs, component.slots), comp_cls.TemplateData)
+    js_data = _normalize_data(component.js_data(component.kwargs, component.slots), comp_cls.JsData)
+    css_data = _normalize_data(component.css_data(component.kwargs, component.slots), comp_cls.CssData)
 
-    #    If the component declares a TemplateData schema, validate the data
-    #    against it. Constructing TemplateData(**data) raises on missing or
-    #    unexpected fields. Skip when template_data() already returned a
-    #    TemplateData instance, since it was validated on construction.
-    template_data_cls = comp_cls.TemplateData
-    if template_data_cls is not None and not isinstance(maybe_data, template_data_cls):
-        template_data_cls(**tpl_data)
-
-    # 4. on_component_data: extensions may add/modify template variables.
-    extensions.on_component_data(component, tpl_data)
-
-    # 5. Build the render-scoped context. ``variables`` are the template
+    # 4. Build the render-scoped context. ``variables`` are the template
     #    variables (the template_data output); ``extra`` is the tree-wide
-    #    scratch space extensions will populate (deps, etc.) - empty for now.
-    #    ``provides`` are the entries this component inherited plus anything
-    #    it registered itself via ``Component.provide`` during template_data;
-    #    a new mapping is built only when the component actually provided
-    #    something (see docs/design/provide.md section 4.1).
+    #    scratch space extensions populate (dependency records, etc.).
     #    The Const markers stay in ``variables`` so they flow down to descendant
     #    components, each of which can detect const-ness and cache accordingly.
     #    Const is a transparent proxy, so nodes treat a const value exactly like
     #    the underlying value.
+    context = CitryContext(variables=tpl_data, component=component)
+
+    # 4.5 on_component_data: extensions may add/modify the data, and stash
+    #     tree-wide state into ``context.extra`` (e.g. the dependencies
+    #     extension's render records).
+    extensions.on_component_data(component, context, tpl_data, js_data, css_data)
+
+    # 5. ``provides`` are the entries this component inherited plus anything
+    #    it registered itself via ``Component.provide`` during template_data;
+    #    a new mapping is built only when the component actually provided
+    #    something (see docs/design/provide.md section 4.1).
     active_provides = component._provides_inherited
     if component._provides_own:
         active_provides = {**active_provides, **component._provides_own}
-    context = CitryContext(variables=tpl_data, component=component, provides=active_provides)
+    context.provides = active_provides
 
     # 5.5 The per-component render hook (docs/design/on_render.md section 3).
     #     Returning None (the default) renders the template as usual.
@@ -571,14 +580,15 @@ def _render_one(
     #    each render, which is always safe.
     try:
         compiled = _get_compiled_template(comp_cls)
-        if compiled is None:
+        generate = compiled.generate if compiled is not None else None
+        if compiled is None or generate is None:
             body: list[BodyItem] = []
         else:
             const_vars, signature = extract_const_vars(tpl_data, used_vars=compiled.used_vars)
 
             def build() -> list[BodyItem]:
                 return fold_body(
-                    extensions.on_template_compiled(comp_cls, compiled.generate()),
+                    extensions.on_template_compiled(comp_cls, generate()),
                     const_vars,
                     # Folding an attribute region bakes its dict before extensions
                     # see it, so keep the regions live when anyone subscribes.
@@ -707,58 +717,47 @@ def _replacement_parts(value: RenderReplacement, context: CitryContext, componen
     raise TypeError(msg)
 
 
-class _CompiledTemplate(NamedTuple):
-    """A component's compiled template: the body generator plus parse-time metadata."""
-
-    # Calling this yields a fresh node list (one per body build).
-    generate: Callable[[], list[BodyItem]]
-    # Every variable name the template uses, including in nested tags (the
-    # parse-time ``Template.used_variables``). The Const optimization keys
-    # its cache only on these, so a Const value the template never reads
-    # does not create duplicate cache entries.
-    used_vars: frozenset[str]
-
-
-def _get_compiled_template(comp_cls: type[Component]) -> _CompiledTemplate | None:
+def _get_compiled_template(comp_cls: type[Component]) -> CitryTemplate | None:
     """
-    Return the cached compiled template for a component class.
+    Return the component's template with its compiled form filled in.
 
-    The template is loaded via ``media.get_template``, which resolves
-    ``template`` / ``template_file``, reads the file when needed, and fires
-    ``on_template_loaded`` (see docs/design/asset_loading.md). Its source is
-    then parsed, compiled, and exec'd once per component class; the resulting
-    ``_CompiledTemplate`` is cached on the class. Each call to its
-    ``generate`` produces a fresh node list. Returns ``None`` when the
-    component has no template.
+    The template is loaded via ``assets.load_template``, which resolves
+    ``template`` / ``template_file``, reads the file when needed, fires
+    ``on_template_loaded``, and caches the ``CitryTemplate`` on the class (see
+    docs/design/asset_loading.md). On the first render this function compiles
+    the source and fills the struct's ``generate`` / ``used_vars`` in place,
+    so the loaded and compiled halves share one cache and one invalidation
+    (``Component.reset_template()``). Each call to ``generate`` produces a
+    fresh node list. Returns ``None`` when the component has no template.
 
-    The cache is read and written via the class's own ``__dict__`` (not via
-    attribute access), so it is keyed to the specific class: a subclass that
-    overrides ``template`` builds its own compiled template instead of
-    inheriting the parent's. ``media.reset_template`` clears this cache
-    together with the loaded template.
+    A parse or compile error is re-raised with the template's origin (the file
+    path, or ``module::Class`` for inline) prefixed to its message, so a
+    syntax error names where the template came from.
     """
-    if "_template_body_generator" not in comp_cls.__dict__:
-        template = get_template(comp_cls)
-        template_str = template.source if template is not None else None
-
-        comp_cls._template_body_generator = (
-            _compile_template(template_str, comp_cls.citry._tag_rules()) if template_str is not None else None
-        )
-    return comp_cls.__dict__["_template_body_generator"]
+    template = load_template(comp_cls)
+    if template is None:
+        return None
+    if template.generate is None:
+        try:
+            _compile_template(template, comp_cls.citry._tag_rules())
+        except Exception as err:
+            set_template_origin_error_message(err, template.origin)
+            raise
+    return template
 
 
 def _compile_template(
-    template_str: str,
+    template: CitryTemplate,
     user_rules: dict[str, TagRules] | None = None,
-) -> _CompiledTemplate:
+) -> None:
     """
-    Parse, compile, and exec a template string into a ``_CompiledTemplate``.
+    Parse, compile, and exec a template's source, filling its compiled form.
 
     Uses the citry_core pipeline: parse -> compile -> exec. The
     ``generate_template`` function from the exec'd namespace becomes
-    ``generate``; calling it returns a fresh list of static strings and
-    runtime node objects. The parsed AST's root ``used_variables`` (which are
-    transitive) become ``used_vars``.
+    ``template.generate``; calling it returns a fresh list of static strings
+    and runtime node objects. The parsed AST's root ``used_variables`` (which
+    are transitive) become ``template.used_vars``.
 
     ``user_rules`` are the parse-time validation rules derived from the
     registered components' declarations (``Citry._tag_rules()``), so a
@@ -769,8 +768,8 @@ def _compile_template(
     name. Those names are supplied through the ``ns`` namespace below, so the
     generated code can find them.
     """
-    ast = parse_template(template_str, user_rules=user_rules)
-    used_vars = frozenset(token.content for token in ast.used_variables)
+    ast = parse_template(template.source, user_rules=user_rules)
+    template.used_vars = frozenset(token.content for token in ast.used_variables)
     code = compile_template(ast)
 
     # Build the namespace for exec. "source" is the original template string,
@@ -778,7 +777,7 @@ def _compile_template(
     # becomes the returned function's globals, so the node classes and source
     # stay bound to it.
     ns: dict[str, Any] = {
-        "source": template_str,
+        "source": template.source,
         "ExprNode": ExprNode,
         "TemplateNode": TemplateNode,
         "ComponentNode": ComponentNode,
@@ -792,7 +791,30 @@ def _compile_template(
         "TemplateHtmlAttr": TemplateHtmlAttr,
     }
     exec(code, ns)  # noqa: S102
-    return _CompiledTemplate(generate=ns["generate_template"], used_vars=used_vars)
+    template.generate = ns["generate_template"]
+
+
+def _compile_nested_template(
+    template_str: str,
+    user_rules: dict[str, TagRules] | None = None,
+) -> Callable[[], list[BodyItem]]:
+    """
+    Compile a nested template fragment into its body-generating function.
+
+    Used by the nodes that carry a template *inside* an attribute value (a
+    ``c-body="<span>{{ x }}</span>"`` on a component). Such a fragment is not
+    a component class's template, so there is no class-level ``CitryTemplate``
+    to fill; a throwaway one wraps the fragment for the shared compile step.
+    Position-in-the-outer-template error context is attached by the node's
+    render wrapper, not here.
+    """
+    template = CitryTemplate(source=template_str, origin="<nested template>")
+    _compile_template(template, user_rules)
+    generate = template.generate
+    if generate is None:  # pragma: no cover - _compile_template always sets it
+        msg = "nested template failed to compile"
+        raise RuntimeError(msg)
+    return generate
 
 
 def _render_body(body: list[BodyItem], context: CitryContext) -> list[RenderPart]:
@@ -852,17 +874,52 @@ def _attach_template_position(err: Exception, node: BodyItem, context: CitryCont
         return
     component = context.component
     component_name = type(component).__name__ if component is not None else None
-    set_template_position_error_message(err, source, position, component_name)
+    # Best-effort: name where the template came from in the snippet header.
+    # The template is already loaded and cached by the time a node renders, so
+    # this is a cache read; any failure just drops the origin from the header.
+    origin: str | None = None
+    if component is not None:
+        try:
+            template = load_template(type(component))
+        except Exception:  # noqa: BLE001 - error reporting must not raise
+            template = None
+        if template is not None:
+            origin = template.origin
+    set_template_position_error_message(err, source, position, component_name, origin)
+
+
+def _normalize_data(maybe_data: Any, schema_cls: type | None) -> dict[str, Any]:
+    """
+    Normalize one data method's result to a plain dict and validate it.
+
+    The result of ``template_data()`` / ``js_data()`` / ``css_data()`` may be
+    a dict, a NamedTuple, or the component's typed dataclass, so convert with
+    ``to_dict``. When the component declares the matching schema class
+    (``TemplateData``/``JsData``/``CssData``), constructing
+    ``schema_cls(**data)`` raises on missing or unexpected fields; skipped
+    when the method already returned a schema instance, since that was
+    validated on construction.
+    """
+    data: dict[str, Any] = to_dict(maybe_data) if maybe_data is not None else {}
+    if schema_cls is not None and not isinstance(maybe_data, schema_cls):
+        schema_cls(**data)
+    return data
 
 
 def _merge_dependencies(into: CitryContext, source: CitryContext) -> None:
     """
-    Copy one render's collected data into the render that contains it.
+    Fire the ``on_render_context_merge`` hook: a nested render's output was consumed
+    by an enclosing render, so each extension merges its own slice of
+    ``source.extra`` into ``into.extra`` with its own policy (the dependencies
+    extension appends its records preserving order; see
+    docs/design/rendering.md section 6 and docs/design/extensions.md section
+    9.1). The core owns only the firing, not the merge semantics.
 
-    This is where the JS/CSS dependency flow will live (docs/design/rendering.md
-    section 6): a child render's dependencies need to reach the page that
-    includes it. Nothing fills ``extra`` yet, so this does nothing for now; the
-    dependency extension will decide the real rules (keep tree order, drop
-    duplicates, rather than letting the last write win).
+    A render with no component on either context has no ``Citry`` instance to
+    reach extensions through; there is nothing to merge for it either, since
+    only component renders collect tree-wide state.
     """
-    into.extra.update(source.extra)
+    component = into.component if into.component is not None else source.component
+    if component is None:
+        return
+    component.citry.extensions.on_render_context_merge(into, source)

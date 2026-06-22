@@ -26,10 +26,10 @@ A ``CitryRender`` holds:
   context is kept (the collected data lives in its ``extra``); this can be
   narrowed to specific fields once we know what serialize needs.
 
-Serialization is currently just the recursive join of the parts. Placing
-collected dependencies into ``<head>``/``<body>`` (document mode) and the
-fragment-mode and injection-strategy choices are future work (see
-docs/design/rendering.md sections 5-6).
+Serialization joins the parts, stamps the ``data-cid-<id>`` markers, and
+places the collected dependencies into the page per the ``deps_strategy`` /
+``deps_position`` arguments (docs/design/dependencies.md section 7),
+including the ``fragment`` strategy for HTML partials.
 
 Example:
     Render and serialize a component::
@@ -47,7 +47,7 @@ Example:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 from citry.citry_element import CitryElement
 from citry.constness import const_value
@@ -65,8 +65,17 @@ if TYPE_CHECKING:
 #   - CitryRender: a nested render not yet joined into text.
 #   - DeferredComponent: a child component not yet rendered (render() renders it
 #     before any serialize()).
+#   - Placeholder: a spot whose final text an extension supplies at serialize
+#     time (the <c-js>/<c-css> built-ins render these).
 # A CitryRender's `parts`, and what a node's render() returns, are made of these.
-RenderPart: TypeAlias = "str | CitryRender | DeferredComponent"
+RenderPart: TypeAlias = "str | CitryRender | DeferredComponent | Placeholder"
+
+# How collected JS/CSS dependencies are handled when serializing (see
+# CitryRender.serialize and docs/design/dependencies.md section 7.1).
+DepsStrategy: TypeAlias = Literal["document", "simple", "fragment", "ignore"]
+
+# Where the dependency tags go for the "document"/"simple" strategies.
+DepsPosition: TypeAlias = Literal["smart", "prepend", "append"]
 
 # What ``Component.on_render`` may return to replace the component's whole
 # output (docs/design/on_render.md section 3): final text (a ``str``, used
@@ -120,25 +129,52 @@ class CitryRender:
         self.context = context
         self.is_component_root = is_component_root
 
-    def serialize(self) -> str:
+    def serialize(self, deps_strategy: DepsStrategy = "document", deps_position: DepsPosition = "smart") -> str:
         """
         Turn this render into a final HTML string.
 
         Each component's root element(s) get a ``data-cid-<id>`` marker so the
         rendered HTML records which component produced which part of the page
-        (see docs/design/deferred_rendering.md section 6). Placement of collected
-        dependencies (head/body) and serialization modes (document vs fragment)
-        are not implemented yet; see docs/design/rendering.md.
+        (see docs/design/deferred_rendering.md section 6), and the JS/CSS
+        collected from the rendered components is placed into the output
+        (docs/design/dependencies.md section 7).
+
+        Args:
+            deps_strategy: How to handle the collected JS/CSS.
+
+                - ``"document"`` (default): emit the tags, plus the
+                  client-side dependency manager and the page manifest when
+                  any component registered a per-instance callback
+                  (``$onComponent``), so ``js_data()`` reaches the browser.
+                - ``"simple"``: the tags only, no JavaScript runtime. For
+                  static pages and emails; per-instance JS does not run
+                  (CSS variables still work, they are pure CSS).
+                - ``"fragment"``: HTML meant to be inserted into an
+                  already-loaded page (an HTMX swap, ``fetch`` +
+                  ``innerHTML``, ...): nothing is inlined; the output ends
+                  with a JSON manifest of URLs the client-side manager
+                  fetches, each once per page however many fragments need
+                  it. Requires a mounted web integration.
+                - ``"ignore"``: no tags inserted.
+            deps_position: Where the tags go (``document``/``simple`` only).
+
+                - ``"smart"`` (default): into the ``<c-js>``/``<c-css>``
+                  placeholders when present, else CSS before the first
+                  ``</head>`` and JS before the last ``</body>``, else
+                  CSS is prepended and JS appended.
+                - ``"prepend"`` / ``"append"``: all tags before/after the
+                  whole output.
 
         Raises ``RuntimeError`` if any child component was left unrendered (a
         ``DeferredComponent`` still in the parts), which can only happen if this
         render did not come from ``render()``.
+
         """
         # Imported here, not at module load, to avoid an import cycle:
         # serialize.py imports CitryRender from this module.
         from citry.serialize import serialize_render  # noqa: PLC0415
 
-        return serialize_render(self)
+        return serialize_render(self, deps_strategy=deps_strategy, deps_position=deps_position)
 
     def __str__(self) -> str:
         return self.serialize()
@@ -148,6 +184,34 @@ class CitryRender:
 
     def __repr__(self) -> str:
         return f"CitryRender(parts={len(self.parts)})"
+
+
+class Placeholder:
+    """
+    A spot in the output whose final text is supplied at serialize time.
+
+    Rendered output is normally text and nested renders, fixed once rendered.
+    A Placeholder marks a position whose content is only known when the whole
+    page is serialized: the ``<c-js>`` / ``<c-css>`` built-ins render one
+    each, and the dependencies extension fills them with the collected
+    script/style tags via the ``on_serialize`` hook
+    (docs/design/dependencies.md section 7.3).
+
+    Attributes:
+        key: What belongs at this spot (e.g. ``"deps:js"``). The serializer
+            reports each occurrence to the ``on_serialize`` hook under this
+            key plus a counter, and an extension that knows the key supplies
+            the text; an occurrence no extension fills serializes to nothing.
+
+    """
+
+    __slots__ = ("key",)
+
+    def __init__(self, key: str) -> None:
+        self.key = key
+
+    def __repr__(self) -> str:
+        return f"Placeholder({self.key!r})"
 
 
 class DeferredComponent:

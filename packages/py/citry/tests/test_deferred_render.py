@@ -118,14 +118,21 @@ class TestFinalizeOrder:
 
 class TestDepsBubble:
     def test_descendant_deps_reach_root_extra(self):
-        # Each component stashes its own marker into its render context's extra
-        # during on_component_rendered. The finalize-time merge (child -> parent)
-        # must carry a deep descendant's marker all the way to the root's extra.
+        # Each component stashes its own marker into its render context's
+        # extra. Bubbling is extension-owned: the finalize-time merge fires
+        # on_render_context_merge, and the extension carries its own slice (here a set
+        # of names) from the child context into the parent, all the way to
+        # the root's extra.
         class Stash(Extension):
             name = "stash"
 
-            def on_component_rendered(self, ctx):
-                ctx.render.context.extra[type(ctx.component).__name__] = True
+            def on_component_data(self, ctx):
+                ctx.context.extra.setdefault("stash", set()).add(type(ctx.component).__name__)
+
+            def on_render_context_merge(self, ctx):
+                child = ctx.child_context.extra.get("stash")
+                if child:
+                    ctx.parent_context.extra.setdefault("stash", set()).update(child)
 
         c = Citry(extensions=[Stash])
 
@@ -142,7 +149,7 @@ class TestDepsBubble:
             template = "<main><c-mid /></main>"
 
         rendered = Root().render()
-        assert rendered.context.extra == {"Leaf": True, "Mid": True, "Root": True}
+        assert rendered.context.extra["stash"] == {"Leaf", "Mid", "Root"}
 
 
 class TestSerializeGuard:

@@ -133,7 +133,7 @@ class TestComponentPath:
 
         msg = exc_info.value.args[0]
         assert msg.startswith(f"{PREFIX} Root > Embedded:\nboom")
-        assert "In template of 'Root':" in msg
+        assert "In template of 'Root' (" in msg
         assert "     1 | <main>{{ em }}</main>" in msg
 
     def test_extension_raise_at_finalize_carries_path(self):
@@ -254,7 +254,7 @@ class TestTemplatePosition:
         # real line number.
         assert msg.startswith(f"{PREFIX} Leaf:\n")
         assert "Error in call: ValueError: boom" in msg
-        assert "In template of 'Leaf':" in msg
+        assert "In template of 'Leaf' (" in msg
         assert "     3 |   <p>{{ broken() }}</p>" in msg
         assert "\n              ^^^^^^^^^^^^^^\n" in msg
 
@@ -291,7 +291,7 @@ class TestTemplatePosition:
 
         msg = exc_info.value.args[0]
         assert msg.startswith(f"{PREFIX} Card:\n")
-        assert "In template of 'Card':" in msg
+        assert "In template of 'Card' (" in msg
         assert '     2 |   <c-slot name="body" required />' in msg
 
     def test_fill_content_error_names_writer_template(self):
@@ -315,7 +315,7 @@ class TestTemplatePosition:
 
         msg = exc_info.value.args[0]
         assert msg.startswith(f"{PREFIX} Page > Frame > Frame(slot:body):\n")
-        assert "In template of 'Page':" in msg
+        assert "In template of 'Page' (" in msg
         assert "     3 |     <em>{{ broken() }}</em>" in msg
 
     def test_node_injected_without_position_is_skipped(self):

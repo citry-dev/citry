@@ -28,9 +28,9 @@ See docs/design/deferred_rendering.md section 6.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, get_args
 
-from citry.citry_render import CitryRender
+from citry.citry_render import CitryRender, DepsPosition, DepsStrategy, Placeholder
 from citry_core.html_transform import mark_html
 
 if TYPE_CHECKING:
@@ -47,8 +47,19 @@ _RENDER_ID_ATTR = "c-render-id"
 _Frame = tuple[list[str], list[tuple[str, str, list[str]]]]
 
 
-def serialize_render(root: CitryRender) -> str:
+def serialize_render(
+    root: CitryRender,
+    *,
+    deps_strategy: DepsStrategy = "document",
+    deps_position: DepsPosition = "smart",
+) -> str:
     """Serialize a render tree to HTML, adding ``data-cid-<id>`` markers (see module doc)."""
+    if deps_strategy not in get_args(DepsStrategy):
+        msg = f"Invalid deps_strategy {deps_strategy!r}; must be one of {get_args(DepsStrategy)}"
+        raise ValueError(msg)
+    if deps_position not in get_args(DepsPosition):
+        msg = f"Invalid deps_position {deps_position!r}; must be one of {get_args(DepsPosition)}"
+        raise ValueError(msg)
     # Pass 1 (top-down): build each component's HTML with its children still as
     # placeholders, add its markers, and work out which markers each child
     # inherits. An explicit stack keeps depth off the Python call stack.
@@ -62,6 +73,13 @@ def serialize_render(root: CitryRender) -> str:
     order: list[str] = []
     root_key = ""
 
+    # Placeholder parts found while building frames: unique placeholder id
+    # (the Placeholder.key plus a counter) -> the exact text standing in for
+    # it. The text rides the same <template c-render-id> machinery as child
+    # components, but nothing fills it during pass 2, so it survives into the
+    # joined HTML; the on_serialize hook replaces it there.
+    placeholder_map: dict[str, str] = {}
+
     # Each stack item is (render, markers_inherited_from_parent, key).
     stack: list[tuple[CitryRender, list[str], str]] = [(root, [], root_key)]
     while stack:
@@ -69,13 +87,18 @@ def serialize_render(root: CitryRender) -> str:
         component = render.context.component
 
         children: list[tuple[CitryRender, str]] = []
-        frame = _build_frame(render, component, children)
+        frame = _build_frame(render, component, children, placeholder_map)
 
         # A render only gets its component's marker when it is that component's
         # root render; a transparent component's output (is_component_root
         # False, e.g. <c-provide>) stays unmarked even when serialized directly.
-        own_marker = [f"data-cid-{component.id}"] if component is not None and render.is_component_root else []
-        root_markers = own_marker + inherited
+        # Extensions add per-instance markers (e.g. the CSS-variables hash)
+        # under the well-known extra key on the component's own context.
+        if component is not None and render.is_component_root:
+            own_markers = [f"data-cid-{component.id}", *render.context._get_root_markers()]
+        else:
+            own_markers = []
+        root_markers = own_markers + inherited
         if frame and (root_markers or children):
             segments, placeholders = mark_html(frame, root_markers, _RENDER_ID_ATTR)
         else:
@@ -89,6 +112,14 @@ def serialize_render(root: CitryRender) -> str:
         added_by_child = {child_id: added for child_id, _, added in placeholders}
         for child_render, child_id in children:
             stack.append((child_render, added_by_child.get(child_id, []), child_id))
+        # mark_html may have spliced markers onto a Placeholder's template
+        # tag (when it sits at a component root); record the exact final
+        # text, since that is what the on_serialize hook must find in the
+        # joined HTML. Markers spliced onto a placeholder are dropped with
+        # it when the hook replaces the text.
+        for child_id, placeholder_html, _ in placeholders:
+            if child_id in placeholder_map:
+                placeholder_map[child_id] = placeholder_html
 
     # Pass 2 (bottom-up): join each frame's segments with its children's
     # finished HTML in the placeholder slots. Walking `order` in reverse means
@@ -103,13 +134,31 @@ def serialize_render(root: CitryRender) -> str:
             parts.append(segment)
         finished[key] = "".join(parts)
 
-    return finished[root_key]
+    html = finished[root_key]
+
+    # The serialize hook: extensions do whole-page work here, e.g. the
+    # dependencies extension places the collected JS/CSS (filling the
+    # placeholder texts and the default head/body locations). A render with
+    # no component has no Citry instance to reach extensions through, and
+    # nothing was collected for it either.
+    root_component = root.context.component
+    if root_component is not None:
+        html = root_component.citry.extensions.on_serialize(
+            context=root.context,
+            html=html,
+            placeholders=placeholder_map,
+            deps_strategy=deps_strategy,
+            deps_position=deps_position,
+        )
+
+    return html
 
 
 def _build_frame(
     render: CitryRender,
     component: Component | None,
     children: list[tuple[CitryRender, str]],
+    placeholder_map: dict[str, str],
 ) -> str:
     """
     Join one component's parts into an HTML string.
@@ -117,12 +166,16 @@ def _build_frame(
     Plain text passes through. A nested render that is another component's
     completed root render (``is_component_root``) is a child component: it
     becomes a ``<template c-render-id="...">`` placeholder, recorded in
-    ``children`` for pass 2 to fill in. Every other nested render joins in
-    directly: ``<c-if>``/``<c-for>`` blocks and nested templates (same
-    component), and slot-fill content (which carries the context of the
-    component that *wrote* the fill, but renders as part of this frame).
-    Walking the joined-in blocks only follows the template's own nesting, so it
-    does not recurse deeply.
+    ``children`` for pass 2 to fill in. A ``Placeholder`` part (a spot an
+    extension fills at serialize time, e.g. ``<c-js>``) becomes the same kind
+    of template tag under a unique id recorded in ``placeholder_map``; pass 2
+    keeps its text, and the ``on_serialize`` hook replaces it in the joined
+    HTML. Every other nested render joins in directly:
+    ``<c-if>``/``<c-for>`` blocks and nested templates (same component), and
+    slot-fill content (which carries the context of the component that
+    *wrote* the fill, but renders as part of this frame). Walking the
+    joined-in blocks only follows the template's own nesting, so it does not
+    recurse deeply.
     """
     out: list[str] = []
 
@@ -140,6 +193,13 @@ def _build_frame(
                     # Interior content (control flow, nested template, slot-fill
                     # content) or a component-less render: join in directly.
                     walk(part.parts)
+            elif isinstance(part, Placeholder):
+                # The counter makes each occurrence's id (and so its text)
+                # unique, so the hook can address occurrences individually.
+                placeholder_id = f"{part.key}:{len(placeholder_map) + 1}"
+                text = f'<template c-render-id="{placeholder_id}"></template>'
+                placeholder_map[placeholder_id] = text
+                out.append(text)
             else:
                 # A DeferredComponent here means render() never resolved it.
                 # RuntimeError (not TypeError): the render is unfinished, nothing

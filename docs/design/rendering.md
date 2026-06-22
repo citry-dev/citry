@@ -1,11 +1,11 @@
 # Design: rendering flow and the `CitryRender` object
 
-**Status (2026-06-06): design agreed; skeleton not yet built.** This document
-captures the rendering-phase model that came out of an exploration session: the
-three-phase pipeline, the `CitryRender` output struct, the `CitryContext`
-render-scoped state, and the JS/CSS dependency flow that drives the whole shape.
-The current code skeleton still returns a plain `str` from `render_impl`; this
-doc is the target to build toward.
+**Status (2026-06-13): built.** This document captures the rendering-phase
+model: the three-phase pipeline, the `CitryRender` output struct, the
+`CitryContext` render-scoped state, and the JS/CSS dependency flow that drives
+the whole shape. All of it is implemented: `render_impl` returns a
+`CitryRender`, and `serialize()` places the collected JS/CSS dependencies
+(see [`dependencies.md`](dependencies.md)).
 
 For the broader migration context see
 [`citry_migration.md`](citry_migration.md). For the const-folding feature that
@@ -199,7 +199,7 @@ final step (not to `render()`):
   The first version may implement document mode only, with fragment mode added
   later. The point is that the mode is a serialize-time argument.
 
-### 5.2 Injection strategy: a deferred fork
+### 5.2 Injection strategy: a fork, resolved as a hybrid
 
 Two ways to place deps:
 
@@ -212,8 +212,10 @@ Two ways to place deps:
   This is the better fit for a struct-based system, but it has hard cases (a
   fragment with no `<head>`, or a `<head>` owned by an outer non-citry host).
 
-Direction: (ii) is preferred, but the decision is deferred until we are actually
-writing the stringification and can see which is cleaner in code.
+Resolved as a hybrid (see [`dependencies.md`](dependencies.md) section 7.3):
+(ii) where the user gave us structure (the `<c-js>`/`<c-css>` placeholders,
+which ride the serializer's existing placeholder machinery), and one bounded
+(i)-style string pass for the default `</head>`/`</body>` locations otherwise.
 
 ### 5.3 One-shot serialization (a contract to document)
 
@@ -300,9 +302,11 @@ extension system is a prerequisite for building it (see the ordering in
 
 ## 10. Suggested phasing
 
-Status as of 2026-06-07: phases 1-3 and the control-flow nodes are built (see
-the implementation log in [`citry_migration.md`](citry_migration.md)). Phases
-4-5 and slots are not started.
+Status as of 2026-06-13: all phases below are built, along with the
+control-flow nodes, the slot subsystem, deferred rendering, and the JS/CSS
+dependency flow (see the implementation log in
+[`citry_migration.md`](citry_migration.md) and
+[`dependencies.md`](dependencies.md)).
 
 1. **Done.** `CitryRender` + `CitryContext` skeleton: `render()` returns a
    `CitryRender` holding a parts list plus the context; `serialize()` joins the
@@ -317,22 +321,23 @@ the implementation log in [`citry_migration.md`](citry_migration.md)). Phases
 3. **Done.** `ComponentNode` as the context boundary: attribute nodes resolve to
    the child's kwargs, registry lookup via `CitryContext.component`, child render
    through the boundary, deps merge (section 4.1). Component body (default-slot
-   text or `<c-fill>`) raises `NotImplementedError` pending the slots phase.
-4. **Not started.** Extension hook points, then the dependency extension
-   populating `extra`, then serialize-time placement in document mode (section
-   6). The merge call site in `_render_body` (`_merge_dependencies`) is the
-   marked seam to convert into a hook.
-5. **Not started.** Fragment mode and the injection-strategy refinement
-   (section 5).
+   text or `<c-fill>`) renders through the slot subsystem.
+4. **Done.** Extension hook points, the dependency extension populating
+   `extra`, and serialize-time placement in document mode (section 6). The
+   `_merge_dependencies` seam now only fires the `on_render_context_merge` hook.
+   Built per [`dependencies.md`](dependencies.md).
+5. **Done.** The injection-strategy fork (section 5.2) resolved as a hybrid:
+   structured `<c-js>`/`<c-css>` placeholder parts, with one string pass over
+   the final HTML for the default `</head>`/`</body>` locations. Fragment mode
+   is built ([`dependencies.md`](dependencies.md) section 8).
 
-Adjacent work: the **control-flow nodes** (`IfNode`, `ForNode`) are built (they
-were self-contained and done independently of phases 4-5). The **slot
-subsystem** (`SlotNode`, `FillNode`, default vs named slots) is designed in
-[`slots.md`](slots.md).
+Adjacent work: the **control-flow nodes** (`IfNode`, `ForNode`) and the **slot
+subsystem** (`SlotNode`, `FillNode`, default vs named slots, designed in
+[`slots.md`](slots.md)) are built.
 
 **Deferred rendering** (infinite render depth and the `data-cid-<ID>`
 component-id markers) is specified separately in
-[`deferred_rendering.md`](deferred_rendering.md). It replaces `ComponentNode`'s
-current recursive child render (which inherits Django's ~60-level limit) with a
-heap-bound queue over the `parts` tree, and moves the `_merge_dependencies` call
-site into that queue. It is the natural successor to phase 4 here.
+[`deferred_rendering.md`](deferred_rendering.md) and is built: it replaced
+`ComponentNode`'s recursive child render (which inherited Django's ~60-level
+limit) with a heap-bound queue over the `parts` tree, and the
+`_merge_dependencies` call site lives in that queue.

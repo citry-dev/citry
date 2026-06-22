@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from citry.cache import CitryCache
     from citry.extension import Extension
 
 
@@ -33,8 +34,14 @@ class CitrySettings:
             extension name. Merged between an extension's factory defaults and a
             component's own nested config class (see the extension system's
             three-level config precedence).
+        cache: The cache backend spec (a :class:`citry.cache.CitryCache`
+            object or a ``"path.to.Cache"`` import string). ``None`` gives the
+            instance its own in-memory cache. The live backend built from this
+            spec is ``Citry.cache``. See docs/design/dependencies.md
+            section 10.
 
     """
 
     extensions: tuple[type[Extension] | Extension | str, ...] = ()
     extensions_defaults: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    cache: CitryCache | str | None = None

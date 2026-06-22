@@ -365,14 +365,14 @@ class TemplateNode(Node):
         #
         # Imported lazily because component_render imports the node classes:
         # importing the body pipeline at module load would be circular.
-        from citry.component_render import _compile_template, _render_body  # noqa: PLC0415
+        from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415
 
         if self._generator is None:
             # The nested template is validated like any other: the parse gets
             # the rules derived from the registered components' declarations.
             component = context.component
             user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_template(self.expr, user_rules).generate
+            self._generator = _compile_nested_template(self.expr, user_rules)
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -509,14 +509,14 @@ class TemplateHtmlAttr(HtmlAttr):
         The template is defined in the parent's scope, so it renders against the
         surrounding component's context (the same rule as ``TemplateNode``).
         """
-        from citry.component_render import _compile_template, _render_body  # noqa: PLC0415
+        from citry.component_render import _compile_nested_template, _render_body  # noqa: PLC0415
 
         if self._generator is None:
             # The nested template is validated like any other: the parse gets
             # the rules derived from the registered components' declarations.
             component = context.component
             user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_template(self.template, user_rules).generate
+            self._generator = _compile_nested_template(self.template, user_rules)
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 

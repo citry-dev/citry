@@ -106,7 +106,7 @@ flow that drives the struct shape) is captured separately in
 `CitryRender`, rendering is deferred (depth-unbounded, stack-driven), and
 `serialize()` stamps the per-component `data-cid-<id>` markers. Placing
 collected JS/CSS dependencies into `<head>`/`<body>` at serialize time is
-still future work (the dependency extension).
+designed in [`dependencies.md`](dependencies.md), not yet built.
 
 The `Const()` (#1083), expression-caching (#1473), and render-body-caching
 design (and its many edge cases) is captured separately in
@@ -188,8 +188,8 @@ with Vue-like `class`/`style` merging.
 | Tag | Purpose | Status |
 |---|---|---|
 | `<c-provide>` | Dependency injection | Implemented (`citry/components/provide.py`, a `transparent` component) |
-| `<c-js>` | JS dependency rendering | Name reserved in the registry; lands with the dependency extension |
-| `<c-css>` | CSS dependency rendering | Name reserved in the registry; lands with the dependency extension |
+| `<c-js>` | JS dependency rendering | Implemented (`citry/components/js_css.py`); renders a `Placeholder` part the dependencies extension fills at serialize ([`dependencies.md`](dependencies.md) section 7.3) |
+| `<c-css>` | CSS dependency rendering | Implemented (`citry/components/js_css.py`); same mechanism |
 | `<c-component>` | Dynamic component (components only) | Implemented (`citry/components/dynamic.py`); design in [`dynamic_component.md`](dynamic_component.md) |
 | `<c-element>` | Dynamic HTML element (any tag name) | Implemented (`citry/components/dynamic.py`); sibling of `<c-component>`, same doc |
 
@@ -329,11 +329,11 @@ Status legend:
 | `Kwargs` / `Slots` / `TemplateData` typed classes | ✅ Done | Auto-dataclass (djc used NamedTuple); also feed parse-time validation via `tag_rules.py` |
 | `get_template_data()` | ✅ Done | As `template_data(kwargs, slots)`; no `args`/`context` params |
 | `js` / `js_file`, `css` / `css_file` declarations | ✅ Done | Loading half only (`media.py`); emission is the dependency extension |
-| `JsData` / `CssData` + `get_js_data()` / `get_css_data()` (JS/CSS variables) | 🚧 To migrate | With the dependency extension and `<c-js>`/`<c-css>`; depends on the [`rendering.md`](rendering.md) dependency flow |
+| `JsData` / `CssData` + `get_js_data()` / `get_css_data()` (JS/CSS variables) | ✅ Done | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` + auto-dataclass schemas, delivered to the browser as hashed variables scripts and `data-ccss`-scoped stylesheets ([`dependencies.md`](dependencies.md) section 5) |
 | `Media` nested class, `media` property | ✅ Done | `CitryMedia` via `get_media()`; user's class not mutated, callables lazy, `bytes` entries dropped |
 | `media_class` | ❌ Drop | Django forms `Media` output class |
 | `on_render_before` / `on_render` (incl. generator form) / `on_render_after` | ✅ Done (diverged) | A single `on_render()` hook; before/after dropped (template_data and the generator's post-yield phase cover them). No `Context`/`Template` args, no lambda yields; the generator receives the completed `CitryRender`. Design in [`on_render.md`](on_render.md) |
-| `Component.on_dependencies()` | 🚧 To migrate | With the dependency extension |
+| `Component.on_dependencies()` | ✅ Done | A classmethod, called per rendered instance at serialize time ([`dependencies.md`](dependencies.md) section 7.2) |
 | `Cache` / `Defaults` / `View` / `DebugHighlight` nested configs | ✅ Done (mechanism) | Generic `Extension.Config` exists; the bundled extensions themselves are reviewed with `extensions/` (View/DebugHighlight likely stay Django) |
 | `Component.name` | ✅ Done | Registers under that name only |
 | `registered_name` | ❌ Drop | Registered names phased out (djc #1195) |
@@ -341,7 +341,7 @@ Status legend:
 | `ComponentInput` / `Component.input` | ♻️ Superseded | Instance exposes `kwargs`/`raw_kwargs`, `slots`/`raw_slots`; no `args`, no `context` |
 | `kwargs` / `raw_kwargs` / `slots` / `raw_slots` accessors | ✅ Done | |
 | `context` / `outer_context` | ⏭️ Skip (Django) | Django `Context`; `outer_context` deprecated (djc #1259). citry passes only props + slots between components |
-| `deps_strategy` (`document`/`fragment`/...) | 🚧 To migrate | Becomes an argument to `render()`/`serialize()`, not context state (see impl notes); lands with the dependency extension |
+| `deps_strategy` (`document`/`fragment`/...) | ✅ Done (diverged) | `serialize(deps_strategy=..., deps_position=...)`, not context state; `fragment` raises until the client-runtime phase |
 | `Component.registry` / `Component.node` | ♻️ Superseded / ❓ Ambiguous | Registry reached via `component.citry.registry`. A back-reference to the originating `ComponentNode` is extension metadata; decide if/when an extension needs it |
 | `is_filled` / `ComponentVars` (`{{ component_vars.* }}`) | ♻️ Superseded | djc injected template globals; in citry slots are explicit `template_data` inputs, so "is filled" is `slots.get(...)` |
 | `request`, `context_processors_data`, `as_view()`, `render_to_response()`, `response_class` | ⏭️ Skip (Django) | The view extension stays in django-components |
@@ -349,9 +349,9 @@ Status legend:
 | `ancestors` generator | ✅ Done | Property walking the `parent` links, nearest first up to and including the root (djc's docstring says the root is excluded, but its code includes it; citry matches the code). The chain follows who wrote the component, same as `parent` |
 | `inject()` | ✅ Done | `MISSING` sentinel so `inject(key, None)` genuinely defaults to `None`; did-you-mean hint |
 | `provide()` | ✅ Done | citry addition: djc only had the `{% provide %}` tag |
-| `Component.render()` classmethod (args/kwargs/slots/deps_strategy/request/...) | ♻️ Superseded | `Component(...)` -> `CitryElement` -> `.render()` -> `.serialize()`; `deps_strategy` pending (above) |
+| `Component.render()` classmethod (args/kwargs/slots/deps_strategy/request/...) | ♻️ Superseded | `Component(...)` -> `CitryElement` -> `.render()` -> `.serialize(deps_strategy=...)` |
 | `all_components()` | ♻️ Superseded | `Citry.components` |
-| `get_component_by_class_id()` / `_class_hash` | ❓ Ambiguous | djc uses the class hash to key JS/CSS variables and caches; revisit with the dependency extension |
+| `get_component_by_class_id()` / `_class_hash` | ✅ Done | `Component.class_id` + `Citry.get_component_by_class_id()` ([`dependencies.md`](dependencies.md) section 4.1) |
 | `ComponentMeta` registration at class definition | ✅ Done | |
 | `ComponentMeta.__del__` -> class-deleted hook | ✅ Done | Fires `on_component_class_deleted` |
 | `on_component_garbage_collected` (provide cache cleanup) | ♻️ Superseded | Provides travel on `CitryContext.provides`; no global cache to clean |
@@ -372,7 +372,7 @@ Status legend:
 | Render error tracing with component path (`render_with_error_trace`, `ErrorPart`, "MyComp > slot > Child" paths) | ✅ Done (diverged) | Paths derive from the instance `parent` chain (no `full_path` threading); errors bubble by unwinding the task stack, no `ErrorPart` queue items. Plus template-position snippets djc could not show ([`on_render.md`](on_render.md) sections 5-6) |
 | `on_render` generator driving (`make_renderer_generator`, `GeneratorResult`, `_call_generator`) | ✅ Done (diverged) | The `settle` step in `render_impl`: no lambda yields (the framework owns rendering), no version bookkeeping (object parts are swapped and re-queued), generator settles before extensions ([`on_render.md`](on_render.md) section 4) |
 | `on_component_intermediate` per-part callbacks | ♻️ Superseded | `_FinalizeTask` |
-| `on_component_tree_rendered` + final dependency pass (`render_dependencies`) | 🚧 To migrate | The serialize-phase half of the dependency extension |
+| `on_component_tree_rendered` + final dependency pass (`render_dependencies`) | ✅ Done (diverged) | The `on_serialize` core hook + the dependencies extension's emission ([`dependencies.md`](dependencies.md) section 7); operates on collected records, not regex over HTML |
 | `ComponentTreeContext` / `ComponentContext` structs | ♻️ Superseded | `CitryContext` |
 | Deps strategy threading via context key | ♻️ Superseded | Becomes a render/serialize argument (impl notes) |
 | `_get_parent_component_context` | ♻️ Superseded | `parent` is on the instance |
@@ -415,7 +415,7 @@ Status legend:
 |---|---|---|
 | `ComponentExtension` base + hook surface | ✅ Done | As `Extension`; hooks wired: extension-created, class created/deleted, registered/unregistered, input, data, rendered, slot-rendered, template loaded/compiled, js/css loaded, plus citry-only `on_attrs_resolved` |
 | `on_registry_created` / `on_registry_deleted` | ❓ Ambiguous | The registry is 1:1 with a `Citry` instance now; decide whether a Citry-created hook is needed at all |
-| `on_dependencies` hook | 🚧 To migrate | With the dependency extension |
+| `on_dependencies` hook | ✅ Done | Extension-owned custom hook fired via `emit` at serialize time; the first real consumer of the custom-hook mechanism |
 | `ExtensionComponentConfig` (nested per-component config) | ✅ Done | As `ExtensionConfig`; the `<name>_class` escape hatch dropped |
 | `ExtensionManager` dispatch | ✅ Done (diverged) | Smart dispatch (only extensions that override a hook) + generic `emit` |
 | `store_events` / `_init_app` deferral | ♻️ Superseded | No Django app-load race: components bind to their `Citry` at class definition |
@@ -423,7 +423,7 @@ Status legend:
 | `extensions_defaults` | ✅ Done | |
 | `get_extension(name)` / `get_extension_command(name, cmd)` | ✅ Done | |
 | `ComponentCommand` (CLI commands) | 🚧 To migrate | `ExtensionCommand` stub exists; full CLI integration is a later phase |
-| `add_extension_urls` / `remove_extension_urls` (`URLRoute`) | ❓ Ambiguous | HTTP surface. Decide whether citry owns a framework-agnostic route registry (djc's `util/routing.py` is framework-free) or this stays in django-components |
+| `add_extension_urls` / `remove_extension_urls` (`URLRoute`) | ✅ Done (reshaped) | `Extension.urls` (list or property) combined into `Citry.urls`; user extensions namespaced under `ext/<name>/` ([`dependencies.md`](dependencies.md) section 9.1) |
 | `mark_extension_hook_api` doc marker | ♻️ Superseded | Docs tooling concern |
 
 </details>
@@ -478,16 +478,16 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 
 | Feature | Status | Notes |
 |---|---|---|
-| `Script` / `Style` / `Dependency` structs (url-or-content, attrs, `to_json`/`from_json`, dedupe by url/content) | 🚧 To migrate | The data model for dependencies flowing through `CitryContext.extra`; re-shape per [`rendering.md`](rendering.md) |
-| Caching of processed component JS/CSS + JS/CSS variables (`cache_component_js`, `cache_component_js_vars`, eviction) | 🚧 To migrate | With `JsData`/`CssData`; storage depends on the cache-backend decision (❓ in the `cache.py` table) |
-| `render_dependencies()` + six strategies (`document`/`fragment`/`simple`/`prepend`/`append`/`ignore`) | 🚧 To migrate | Becomes `serialize()` options operating on parts, not regex over HTML ([`rendering.md`](rendering.md) sections 5-6; the `deps_strategy` rows above) |
-| `_insert_js_css_to_default_locations` (`<head>`/`<body>` insertion) | 🚧 To migrate | Serialize-phase placement |
-| `{% component_js_dependencies %}` / `{% component_css_dependencies %}` placeholder tags | 🚧 To migrate | As the `<c-js>` / `<c-css>` built-ins (names already reserved in the registry) |
-| Per-component attr injection for JS/CSS scoping (`set_component_attrs_for_js_and_css`) | 🚧 To migrate (half done) | The id-marker half is done (`data-cid-<id>` at serialize); the CSS-scoping `all_attributes` half is deferred to the dependency extension |
+| `Script` / `Style` / `Dependency` structs (url-or-content, attrs, `to_json`/`from_json`, dedupe by url/content) | ✅ Done | Plus first-class use as `Dependencies` entries ([`dependencies.md`](dependencies.md) section 3); no string re-parsing |
+| Caching of processed component JS/CSS + JS/CSS variables (`cache_component_js`, `cache_component_js_vars`, eviction) | ✅ Done | Class scripts with lazy repopulation; variables scripts hashed and cached per distinct data ([`dependencies.md`](dependencies.md) sections 4-5) |
+| `render_dependencies()` + six strategies (`document`/`fragment`/`simple`/`prepend`/`append`/`ignore`) | ✅ Done (diverged) | `serialize(deps_strategy=..., deps_position=...)`: four strategies + positions, implementing djc's own TODO; `fragment` raises until the client-runtime phase ([`dependencies.md`](dependencies.md) section 7.1) |
+| `_insert_js_css_to_default_locations` (`<head>`/`<body>` insertion) | ✅ Done | Plus a no-`<head>`/`<body>` fallback (prepend CSS, append JS) instead of djc's silent drop |
+| `{% component_js_dependencies %}` / `{% component_css_dependencies %}` placeholder tags | ✅ Done | The `<c-js>` / `<c-css>` built-ins, rendering a core `Placeholder` part; first occurrence wins, later ones render nothing |
+| Per-component attr injection for JS/CSS scoping (`set_component_attrs_for_js_and_css`) | ✅ Done | `data-cid-<id>` at serialize plus `data-ccss-<hash>` via the root-marker seam (internal `CitryContext._add_root_markers`); the every-element `all_attributes` mode belongs to scoped CSS (#1230), a separate feature |
 | `<!-- _RENDERED ... -->` dependency comments + `insert_component_dependencies_comment` | ♻️ Superseded | Dependencies travel as data on the render objects, not marker strings |
 | `TagAttrParser` / `_parse_html_tag_attrs` | ♻️ Superseded | No re-parsing of rendered HTML in the object pipeline |
-| Client-side runtime (`_core_js`, pre-loader, `Components.onComponent` transform, exec-script manifests) | ❓ Ambiguous | citry needs its own browser-runtime story (per-instance JS, fragment loading); `data-cid` markers are its seed. Decide the runtime contract before porting the manifest/exec-script transport |
-| `cached_script_view` + `urlpatterns` (serving cached JS/CSS over HTTP) | ⏭️ Skip (Django) | The "serve component media" endpoint needs a host adapter per framework; the citry side is just the cache lookup |
+| Client-side runtime (`_core_js`, pre-loader, `Components.onComponent` transform, exec-script manifests) | ✅ Done (rewritten) | Citry's own runtime (`extensions/dependencies/client/citry.js`, `globalThis.Citry.manager`): `$onComponent` callbacks called with `{id, els, data}` per instance via `data-cid` markers; `data-citry` JSON manifests, base64-armored. The fragment pre-loader lands with the fragments phase |
+| `cached_script_view` + `urlpatterns` (serving cached JS/CSS over HTTP) | ✅ Done (reshaped) | Framework-neutral endpoints in the extension (`routes.py`: cache + runtime), with lazy repopulation for class scripts; served by the `citry.contrib` adapters ([`dependencies.md`](dependencies.md) section 9) |
 
 </details>
 
@@ -580,7 +580,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 | Feature | Status | Notes |
 |---|---|---|
 | `template_cache` (LRU of parsed templates) | ❌ Drop | Marked TODO_V1 in djc; superseded by the class-level compiled-template cache + const body cache |
-| `component_media_cache` (pluggable cache for inlined/processed JS & CSS) | ❓ Ambiguous | The *concept* (where processed JS/CSS lives, user-pluggable backend) returns with the dependency extension; Django's `BaseCache`/`LocMemCache` do not. Needs a citry cache-backend protocol decision |
+| `component_media_cache` (pluggable cache for inlined/processed JS & CSS) | ✅ Done (mechanism) | The `CitryCache` protocol + `Citry(cache=...)`, in-memory default ([`dependencies.md`](dependencies.md) section 10); the JS/CSS script caching that uses it lands with the emission phase |
 
 </details>
 
@@ -612,7 +612,7 @@ stays in django-components; the verdicts below are about each *field*.
 | `dirs` | ✅ Done | `Citry(dirs=...)`; djc's `(prefix, dir)` tuple form not carried (prefix only matters for staticfiles) |
 | `app_dirs` | ⏭️ Skip (Django) | Per-app `[app]/components` dirs need Django's app registry; django-components can feed the resolved dirs into `Citry(dirs=...)` |
 | `autodiscover` / `libraries` | ⏭️ Skip (Django) | Goes with `autodiscovery.py` (see below) |
-| `cache` (named cache backend for component media) | ❓ Ambiguous | Same decision as the `component_media_cache` row above: citry needs a cache-backend protocol before this means anything |
+| `cache` (named cache backend for component media) | ✅ Done | `Citry(cache=...)` / `CitrySettings.cache` ([`dependencies.md`](dependencies.md) section 10); `citry.contrib.django.DjangoCache` adapts any configured Django cache |
 | `context_behavior` (`django` / `isolated`) | ❌ Drop | citry passes only props + slots; there is one behavior |
 | `debug_highlight_components` / `debug_highlight_slots` | ⏭️ Skip (Django) | Belongs to the debug-highlight extension (reviewed with `extensions/`) |
 | `dynamic_component_name` | ❌ Drop | The `<c-component>` built-in's name is reserved in the registry, so the name conflict this setting solved cannot arise; see [`dynamic_component.md`](dynamic_component.md) section 6 |
@@ -732,7 +732,7 @@ stays in django-components; the verdicts below are about each *field*.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Mounting dependency + extension URL patterns | ⏭️ Skip (Django) | The framework-neutral half of this is the `URLRoute` question (❓ row in `extension.py` above) |
+| Mounting dependency + extension URL patterns | ♻️ Superseded | Citry owns the combined route table (`Citry.urls`); the Django mounting becomes the `citry.contrib.django` adapter ([`dependencies.md`](dependencies.md) sections 9.1-9.2) |
 
 </details>
 
@@ -767,7 +767,7 @@ stays in django-components; the verdicts below are about each *field*.
 | Feature | Status | Notes |
 |---|---|---|
 | `load_as_django_command` (`ComponentCommand` -> Django management command) | ⏭️ Skip (Django) | The host-side half of the CLI question |
-| `routes_to_django` (`URLRoute` -> Django urlpatterns) | ⏭️ Skip (Django) | The host-side half of the `URLRoute` question; stays regardless of where `URLRoute` lands |
+| `routes_to_django` (`URLRoute` -> Django urlpatterns) | ✅ Done | `citry.contrib.django.urlpatterns()`; uses `re_path` where two parameters share a path segment ([`dependencies.md`](dependencies.md) section 9.2) |
 
 </details>
 
@@ -850,10 +850,10 @@ Ported function by function, on demand. Current state:
 | `get_module_info` | ✅ Done | |
 | `is_glob` | ✅ Done | |
 | `snake_to_pascal` | ✅ Done | |
-| `get_import_path` | 🚧 To migrate | Trivial; needed when extension/class full-path naming or the CLI wants it |
+| `get_import_path` | ✅ Done | `citry/util/misc.py`; feeds `Component.class_id` |
 | `format_url` | 🚧 To migrate | Used by `get_script_url`; goes with the dependency extension |
 | `is_generator` | ✅ Done | `citry/util/misc.py`; returns `TypeIs` so type checkers narrow both branches |
-| `hash_comp_cls` | ❓ Ambiguous | Same decision as the `_class_hash` row in `component.py` |
+| `hash_comp_cls` | ✅ Done | As the `Component.class_id` metaclass property ([`dependencies.md`](dependencies.md) section 4.1) |
 | `format_as_ascii_table` | ❓ Ambiguous | Only the CLI uses it; goes with the CLI decision |
 | `is_str_wrapped_in_quotes`, `get_index` / `get_last_index`, `convert_class_to_namedtuple`, `extract_regex_matches` | ♻️ Superseded | All served Django tag parsing, Context-stack surgery, NamedTuple inputs, or regex-over-HTML; none exist in the citry design |
 | `is_identifier`, `is_nonempty_str`, `default`, `flatten` | ♻️ Superseded | One-liners; citry call sites use the plain Python idiom (`key.isidentifier()`, `or`, comprehensions) |
@@ -923,7 +923,7 @@ Ported function by function, on demand. Current state:
 
 | Feature | Status | Notes |
 |---|---|---|
-| `is_css_func` / `serialize_css_var_value` (serialize CSS variable values) | 🚧 To migrate | Goes with `CssData` / CSS variables in the dependency extension |
+| `is_css_func` / `serialize_css_var_value` (serialize CSS variable values) | ✅ Done | `citry/util/css.py`; feeds the generated CSS-variables stylesheets |
 
 </details>
 
@@ -934,7 +934,7 @@ Ported function by function, on demand. Current state:
 
 | Feature | Status | Notes |
 |---|---|---|
-| `URLRoute` / `URLRouteHandler` (framework-neutral route description) | ❓ Ambiguous | The data structures are already framework-free; whether citry owns them is the extension-URLs decision (❓ row in `extension.py`) |
+| `URLRoute` / `URLRouteHandler` (framework-neutral route description) | ✅ Done | `citry/util/routing.py`, plus `RouteResponse`, an explicit `methods` field, `{param}` paths, and a small first-wins router the generic adapters share ([`dependencies.md`](dependencies.md) section 9.1) |
 
 </details>
 
@@ -1066,7 +1066,7 @@ extension and a good dogfood test for citry's hook system.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Eagerly cache component JS/CSS at class creation (so assets survive a server restart mid-session) | 🚧 To migrate | With the dependency extension. The restart concern only applies once the cache backend is pluggable/persistent (the ❓ cache-backend decision) |
+| Eagerly cache component JS/CSS at class creation (so assets survive a server restart mid-session) | ♻️ Superseded | Replaced by lazy repopulation at the script endpoint, keeping citry's no-I/O-at-import rule ([`dependencies.md`](dependencies.md) section 4.3); variables scripts still need a shared cache in multi-worker setups |
 
 </details>
 
@@ -1091,8 +1091,8 @@ extension and a good dogfood test for citry's hook system.
 
 | Feature | Status | Notes |
 |---|---|---|
-| `ComponentView` (`Component.View` with get/post/..., `as_view()`) | ⏭️ Skip (Django) | HTTP layer; stays in django-components |
-| `get_component_url()` / public view auto-registration | ⏭️ Skip (Django) | The framework-neutral fragment underneath ties back to the `URLRoute` decision (❓ rows in `extension.py` / `util/routing.py`) |
+| `ComponentView` (`Component.View` with get/post/..., `as_view()`) | ❌ Drop (API shape) | The HTTP-method-named handler API is not ported; the concept returns redesigned as `Component.Events` (planned-features table above; [`dependencies.md`](dependencies.md) section 9.5) |
+| `get_component_url()` / public view auto-registration | 🚧 To migrate (later) | Returns with the `Component.Events` design, on `Extension.urls` + the fragment strategy ([`dependencies.md`](dependencies.md) section 9.5) |
 
 </details>
 
@@ -1981,7 +1981,7 @@ all become extensions on top of this surface.
   errors), `on_template_loaded` (per class, before parse),
   `on_template_compiled` (per built body, at the node list, before caching).
   **Deferred:** the short-circuit/caching split (django-components#1141 R6), the
-  dependency/`on_render_merge`/`on_dependencies` hooks, slots, and CSS/JS hooks.
+  dependency/`on_render_context_merge`/`on_dependencies` hooks, slots, and CSS/JS hooks.
 - **Known skeleton caveat:** `on_component_input` mutations land on
   `raw_kwargs`/`raw_slots` but do not yet propagate to the already-built typed
   `kwargs`/`slots`; that propagation is deferred (see [`extensions.md`](extensions.md) 7.1).
@@ -2203,28 +2203,31 @@ class Page(Component):
     template = '<c-card><c-fill name="header">Hello {{ name }}</c-fill></c-card>'
 ```
 
-### Asset loading: template, JS, and CSS files (`citry/media.py`, `citry/citry_template.py`)
+### Asset loading: template, JS, and CSS files (`citry/assets.py`, `citry/citry_template.py`, `citry/extensions/dependencies.py`)
 
-**What:** Components declare assets in three inline/file pairs
+**What:** Components declare primary assets in three inline/file pairs
 (`template`/`template_file`, `js`/`js_file`, `css`/`css_file`) plus the nested
-`Media` class for secondary assets. `citry/media.py` resolves the declarations:
-`get_template(cls)` returns a `CitryTemplate` (source + origin + filepath),
-`get_js`/`get_css` return loaded content, `get_media` returns the merged
-`CitryMedia`. File paths resolve relative to the component's own `.py` file
-first, then `Citry(dirs=...)`. Hot-reload seam: a file-to-component weakref
-index on `Citry` plus `reset_template`/`reset_files`. Full design in
-[`asset_loading.md`](asset_loading.md).
+`Dependencies` class for secondary assets. Loaded values are read through
+classmethods: `Card.get_template()` returns a `CitryTemplate` (source + origin
++ filepath + lazily-filled compiled form), `Card.get_js()`/`get_css()` return
+loaded content, `Card.get_dependencies()` returns the merged
+`CitryDependencies`. File paths resolve relative to the component's own `.py`
+file first, then `Citry(dirs=...)`. Hot-reload seam: a file-to-component
+weakref index on `Citry` plus `Card.reset_template()`/`reset_files()`. Full
+design in [`asset_loading.md`](asset_loading.md).
 
-**Why:** Completes the file-loading half of DJC's `component_media.py` without
-its Django coupling. Also the prerequisite for the dependency extension: it is
-the `js`/`css` source that `on_js_loaded`/`on_css_loaded` (now wired) and the
-future `CitryContext.extra` dependency flow consume.
+**Why:** Ports DJC's `component_media.py` without its Django coupling, and
+realizes DJC #1144 (media as an extension) from the start: the secondary-asset
+concern lives in a built-in extension, so the later emission phase adds to it
+without any user-facing migration. The loaded `js`/`css` are the sources the
+`CitryContext.extra` dependency flow will consume.
 
 **Design decisions:**
-- **Fields stay raw; accessors resolve.** DJC's lazy descriptors existed for a
-  Django settings race citry does not have. Citry keeps `MyComp.js` exactly as
-  declared and resolves through module functions, cached once per class in the
-  class `__dict__` (the body-generator pattern).
+- **Fields stay raw; classmethods resolve.** DJC's lazy descriptors existed
+  for a Django settings race citry does not have. Citry keeps `MyComp.js`
+  exactly as declared; the `get_*` classmethods are thin delegates into
+  `citry/assets.py`, cached once per class. They are accessors, not override
+  points.
 - **The pair is one inheritance unit.** Resolution walks the MRO for the first
   class whose own `__dict__` declares either member; explicit `None` stops the
   walk ("no asset"), absence continues to the parent. Presence in `__dict__`
@@ -2233,22 +2236,33 @@ future `CitryContext.extra` dependency flow consume.
 - **Paths resolve to absolute and files are read directly** (utf8). No
   staticfiles tier, no Django template loaders, no comp-dir-relative rewriting
   (DJC's own `TODO_v3` direction).
-- **`CitryTemplate` struct** carries source (post-`on_template_loaded`),
-  origin (file path, or `module::Class` for inline), and filepath. The hook
-  firing moved from `_get_compiled_template` into the loader, so inline and file
-  content enter the engine through one place.
-- **`Media` is loaded by core, emitted by the dependency extension.** Entries
-  (str/Path/glob/callable/`__html__` objects) resolve to absolute paths where
-  they exist locally; URLs and unresolved paths pass through. Merging
-  (`extend` True/False/list) de-duplicates preserving first-seen order; globs
-  are sorted (determinism rule). What entries mean in output is deferred to
-  the dependency extension, keeping the DJC #1144 door open. Divergences from
-  DJC: the user's `Media` class is not mutated, callables run lazily at
+- **`CitryTemplate` is one object for source and compiled form.** It carries
+  source (post-`on_template_loaded`), origin (file path, or `module::Class`
+  for inline), filepath, and the compiled `generate`/`used_vars`, filled in
+  place by the render pipeline on first render. One per-class cache
+  (`_citry_template`), one invalidation. Parse/compile errors and the
+  template-position snippet header carry the origin.
+- **`Dependencies` is a built-in extension.** `DependenciesExtension`
+  (`name = "dependencies"`) is prepended to every Citry instance's extensions
+  (`_builtin_extensions`; names reserved). The nested class rides the standard
+  `Extension.Config` rebuild for runtime access (`component.dependencies`),
+  while the merge reads raw declarations captured in
+  `on_component_class_created` (the rebuild would otherwise erase
+  own-vs-inherited, path anchoring, `extend`, and explicit-`None` semantics).
+  Entries (str/Path/glob/callable/`__html__` objects) resolve to absolute
+  paths where they exist locally; URLs and unresolved paths pass through;
+  globs are sorted (determinism rule). Merge order is **bases first, own
+  last** (specialized CSS wins cascade ties; restores Django forms' order,
+  which DJC had inverted), de-duplicated first-seen. The merged cache is a
+  weak-keyed map on the extension instance, evicted via the `on_files_reset`
+  hook, the first consumer of the custom-hook `emit` dispatch. Divergences
+  from DJC: the user's nested class is not mutated, callables run lazily at
   resolution, `bytes` entries dropped.
 - **Hot reload:** every resolved file registers in `Citry._file_index`
   (weakrefs); `Citry.get_components_for_file` is what a future watcher drives.
-  `reset_template` also clears the compiled body generator and the class's
-  const-body cache entries (new `Citry._evict_component_cache`).
+  `reset_template()` clears the one template cache and the class's const-body
+  cache entries (`Citry._evict_component_cache`); `reset_files()` clears
+  JS/CSS and fires `on_files_reset`.
 
 **Usage:**
 
@@ -2261,12 +2275,12 @@ class Card(Component):           # /proj/components/card/card.py
     js_file = "card.js"
     css_file = "card.css"
 
-    class Media:
+    class Dependencies:
         js = ["vendor/*.js"]
         css = {"all": "theme.css", "print": "print.css"}
 
-get_template(Card).source        # file content, hooks applied
-get_media(Card).js               # merged, absolute paths
+Card.get_template().source       # file content, hooks applied
+Card.get_dependencies().js       # merged, absolute paths, bases-first
 ```
 
 ### Slot resolution at `<c-slot>` and the `on_slot_rendered` hook (`nodes/__init__.py`, `extension.py`)
@@ -2588,3 +2602,339 @@ class Guarded(Component):
             return "<p>fallback</p>"   # swallow the error
         return None                    # keep the rendered output
 ```
+
+### Dependency rendering, phase 1: core plumbing (`citry/cache.py`, `citry/extensions/dependencies/types.py`, `component.py`, `citry.py`)
+
+**What:** The foundation pieces of the dependency-rendering design
+([`dependencies.md`](dependencies.md) section 16 phase 1): the pluggable
+cache backend, component class identity, the `Script`/`Style` dependency
+objects, and the `js_data()`/`css_data()` data methods. No emission yet;
+nothing reaches the rendered page until phase 2.
+
+**Why:** Each piece is an independently testable prerequisite of the
+collection/emission phases, and three of them resolve long-standing ❓ rows
+in this doc (cache backend protocol, `hash_comp_cls`/class id, and where
+processed JS/CSS lives).
+
+**Design decisions:**
+
+- **`CitryCache` protocol** (`citry/cache.py`): four string-valued methods
+  (`get`/`set`/`delete`/`has`), so any store adapts in minutes.
+  `Citry(cache=...)` accepts a backend object or an import string (resolved
+  like extension specs; a class is instantiated with no arguments); `None`
+  builds a per-instance `InMemoryCache` (unbounded by default, optional
+  `max_entries` with least-recently-used eviction). The spec lives on
+  `CitrySettings.cache`, the live backend on `Citry.cache`. `Citry.clear()`
+  calls the backend's `clear()` when it has one (the protocol does not
+  require it; a shared backend may not want a full wipe).
+- **`Component.class_id`** is a property on `ComponentMeta` (so the user's
+  class declaration is never rewritten), computed on first read and cached
+  in each class's own `__dict__`: the class name plus the first 6 hex chars
+  of the md5 of the full import path, djc's `hash_comp_cls` scheme.
+  `Citry._classes_by_id` (weak values, filled at registration) backs
+  `Citry.get_component_by_class_id()`, the reverse lookup the script
+  endpoint will use.
+- **`Script`/`Style`** (`citry/extensions/dependencies/types.py`; the
+  extension module became a package): url-or-content exclusive, validity
+  checked at render (including the no-own-end-tag-in-content rule), equality
+  and hashing by url-or-content so `dict.fromkeys` dedupes keeping first
+  occurrence, `to_json`/`from_json` as the cache storage format, and the
+  IIFE wrap rule for classic inline JS. Divergence from djc (its own
+  TODO_V1): they are accepted **directly** as `Dependencies` entries
+  (`_resolve_entry` passes them through), instead of djc's render-to-string
+  + HTMLParser re-parse round trip, which is not ported.
+- **`js_data(kwargs, slots)` / `css_data(kwargs, slots)`** mirror
+  `template_data` (kwargs+slots only; no args, no context). Optional
+  `JsData`/`CssData` schema classes ride the same metaclass auto-dataclass
+  conversion and the same validation (declaring a schema with required
+  fields obliges the method to supply them). All three data methods now
+  normalize through one `_normalize_data` helper in `component_render.py`,
+  and `on_component_data` carries `template_data` + `js_data` + `css_data`
+  (closing the TODO in [`extensions.md`](extensions.md) section 7.5).
+
+**Tests:** `tests/test_cache.py`, `tests/test_class_id.py`,
+`tests/test_deps_types.py`, `tests/test_js_css_data.py`.
+
+### Dependency rendering, phase 2: collection and document emission (`citry/extensions/dependencies/`, `extension.py`, `serialize.py`, `components/js_css.py`)
+
+**What:** A page rendered through citry now carries its components' JS and
+CSS: every rendered component's `Component.js`/`css` and `Dependencies`
+entries are collected during the render and placed into the final HTML at
+serialize time. The `<c-js>`/`<c-css>` built-in tags mark explicit spots;
+without them CSS goes before the first `</head>` and JS before the last
+`</body>`. Phase 2 of [`dependencies.md`](dependencies.md).
+
+**Why:** This is the emission half of django-components #1144, rebuilt on
+the object pipeline: djc transported "which components rendered" as
+`<!-- _RENDERED -->` comments regex-extracted from HTML; citry carries tiny
+`DependencyRecord` tuples on `CitryContext.extra` and never re-parses
+rendered output.
+
+**Design decisions:**
+
+- **Collection** (`on_component_data`): the extension appends a record
+  (class id + render id) to the render's `CitryContext.extra`, but only for
+  components that actually carry assets. The hook context gained a
+  `context` field for this; the context is now built just before the hook
+  fires (provides are snapshotted right after, timing unchanged).
+- **Bubbling is extension-owned**: the render pipeline's
+  `_merge_dependencies` seam now only fires the new core `on_render_context_merge`
+  hook; each extension merges its own slice of `extra` with its own policy.
+  The core no longer copies `extra` wholesale (last-writer-wins was the
+  wrong default for everything).
+- **`on_serialize` core hook**: fires at the end of `serialize()` with the
+  joined HTML (threaded), the root context, the strategy arguments, and the
+  placeholder map. All placement lives in the extension's implementation
+  (`emission.py`); the core knows nothing about JS/CSS.
+- **Placeholders**: `<c-js>`/`<c-css>` are transparent built-ins whose
+  `on_render` returns a core `Placeholder` part. The serializer renders each
+  as a `<template c-render-id="deps:js:N">` tag (the same machinery child
+  components ride), reports id -> exact-text to the hook, and the extension
+  fills the first occurrence per kind and removes the rest (divergence from
+  djc, which duplicated tags into every occurrence).
+- **Strategies**: `serialize(deps_strategy=..., deps_position=...)`,
+  implementing djc's own TODO that prepend/append are positions, not
+  strategies. `document` and `simple` are identical until the client
+  runtime lands; `fragment` raises `NotImplementedError`; `ignore` still
+  removes the internal placeholders. With no `<head>`/`<body>` and no
+  placeholder, CSS is prepended and JS appended rather than silently
+  dropped (djc dropped them; flagged divergence).
+- **Emission order**: per record, `Dependencies` entries then the
+  component's own scripts; page-wide, core kind first, then all extras,
+  then all component scripts, deduplicated first-seen via the
+  `Script`/`Style` url-or-content equality. `Component.on_dependencies`
+  (classmethod, per rendered instance) and the extension-owned
+  `on_dependencies` emit hook (the first real custom hook) adjust the
+  lists.
+- **Entry emission**: resolved local files arrive as `Path` objects from
+  the loading half (the type distinguishes a file from a URL-like string
+  such as `/static/x.css`) and are inlined, unwrapped, so a vendored lib's
+  top-level `var` stays global; `Component.js` is IIFE-wrapped; URL strings
+  become `src`/`href` tags; `Script`/`Style` objects pass through;
+  pre-rendered tags emit verbatim. The CSS media type from the
+  `Dependencies` dict becomes the tag's `media` attribute (omitted for
+  `"all"`).
+
+**Usage:**
+
+```py
+class Table(Component):
+    template_file = "table.html"
+    js_file = "table.js"          # inlined once per page, however many tables render
+    css_file = "table.css"
+
+    class Dependencies:
+        js = ["https://cdn.example.com/chart.js", "helpers.js"]   # URL + local file
+        css = {"print": "print.css"}
+```
+
+```html
+<html>
+  <head><c-css /></head>
+  <body><c-table /><c-js /></body>
+</html>
+```
+
+**Tests:** `tests/test_deps_emission.py`; the merge-hook contract in
+`tests/test_deferred_render.py` (`TestDepsBubble`).
+
+### Dependency rendering, phase 3: JS/CSS variables and the client runtime (`extensions/dependencies/`, `client/citry.js`, `util/css.py`)
+
+**What:** Per-render data now reaches the browser. `js_data()` results are
+delivered to the component's `$onComponent` callback per instance;
+`css_data()` results become CSS custom properties scoped to the instance's
+elements. The pieces: hashed variables scripts, the `data-ccss-<hash>` root
+markers, the `$onComponent` source transform, citry's own client-side
+dependency manager, and the page manifest that ties them together. Phase 3
+of [`dependencies.md`](dependencies.md).
+
+**Why:** This is djc's JS/CSS-variables mechanism rebuilt on citry's
+pipeline: the association between an instance and its data rides the
+`data-cid` markers the serializer already stamps (djc had to post-process
+HTML to add them), and the per-instance call list rides the collected
+records rather than parsed HTML comments.
+
+**Design decisions:**
+
+- **Hashing**: a `js_data()`/`css_data()` result is JSON-serialized (with
+  `Const` proxies unwrapped) and hashed (md5, 6 hex chars); the generated
+  script/stylesheet is cached under `citry:<class_id>:js|css:<hash>`, so
+  identical data, across instances and renders, is generated once and sent
+  to the browser once. The hashes ride the `DependencyRecord`.
+- **CSS variables** need no JavaScript: a generated stylesheet
+  `[data-ccss-<hash>] { --name: value; }` (values via the ported
+  `serialize_css_var_value`) plus the marker attribute on the instance's
+  root elements. The marker rides the new **root-marker seam**:
+  the internal `CitryContext._add_root_markers` / `_get_root_markers`,
+  storing under the namespaced `extra["citry"]["root_markers"]`, which serialization splices
+  next to `data-cid-<id>`; the future scoped-CSS work (#1230) is the second
+  intended user. Generated only when the class has CSS; works under both
+  `document` and `simple`.
+- **JS variables** are delivered as a script calling
+  `Citry.manager.registerComponentData(class_id, hash, data)`, with the
+  JSON riding as base64 so no value can break out of the script tag.
+  Generated only when the class's JS registers a callback.
+- **`$onComponent`** is expanded once per class, when the class script is
+  cached: `$onComponent(` becomes
+  `Citry.manager.registerComponent("<class_id>", `. The callback receives
+  `{id, els, data}` per instance (`els` are the elements carrying the
+  instance's `data-cid-<id>` marker).
+- **The manifest** is a `data-citry` JSON script tag (schema: `markLoaded`
+  URLs, `fetch` descriptors for fragments, `calls` triples), emitted, with
+  the runtime, only when some rendered component used `$onComponent`; a
+  page without per-instance JS stays as lean as `simple`. Built after the
+  `on_dependencies` hook, so URLs added there are marked as loaded too.
+- **The runtime** (`client/citry.js`, shipped as package data and inlined
+  for now; a `<script src>` once a web integration is mounted) holds the
+  loaded-URL sets, the callback/data registries, and an in-order pending
+  queue, so the manifest, component scripts, and data scripts may arrive in
+  any order; a MutationObserver picks up manifests inserted later (the
+  fragments seam). Plain readable JS today; the
+  `packages/js/citry-client` TypeScript + minification build is deferred to
+  the packaging work.
+- **`document` vs `simple` now differ**: `simple` is the no-JS-runtime mode,
+  so JS variables and component calls are document-only. Flagged divergence
+  from djc, where `simple` emitted manager-calling variables scripts with no
+  manager on the page.
+
+**Usage:**
+
+```py
+class Table(Component):
+    template = "<table>...</table>"
+    css = ".table-row { color: var(--row-color); }"
+    js = "$onComponent(({ els, data }) => { console.log(els, data.rows); });"
+
+    def js_data(self, kwargs, slots=None):
+        return {"rows": kwargs["rows"]}
+
+    def css_data(self, kwargs, slots=None):
+        return {"row-color": kwargs["color"]}
+```
+
+**Tests:** `tests/test_deps_vars.py`.
+
+### Dependency rendering, phase 4: URLs, web integrations, and fragments (`citry/util/routing.py`, `citry/contrib/`, `extensions/dependencies/routes.py`)
+
+**What:** Citry's endpoints are now mountable into any web framework, and
+HTML fragments work end to end: a partial rendered with
+`serialize(deps_strategy="fragment")` carries a JSON manifest of script URLs
+the client-side manager fetches, each once per page however many fragments
+need it. Phase 4 of [`dependencies.md`](dependencies.md).
+
+**Why:** Fragments are the reason the whole URL layer exists: a fragment
+cannot put tags into `<head>`, so its dependencies must be fetchable. The
+layer is split so nothing host-shaped lives in citry: a neutral route table,
+neutral handlers, and adapters of a dozen lines each.
+
+**Design decisions:**
+
+- **`URLRoute`** (`citry/util/routing.py`): path + handler-or-children +
+  `name` + an explicit `methods` field (deviation from djc, which left
+  method checks to each Django view). Paths use `{param}` placeholders; a
+  small first-wins router (regexes cached per pattern) backs the generic
+  adapters, so define more specific patterns first. Handlers take
+  ``(request, **path_params)`` and return a neutral `RouteResponse`.
+- **`Extension.urls`** (list or property) feeds `Citry.urls`: built-in
+  extensions' routes mount at the prefix root (`cache/...`, `citry.js`),
+  user extensions' under `ext/<name>/` so they cannot collide. The manager
+  now sets a `citry` back-reference on every extension instance, which is
+  how route handlers (and anything else extension-owned) reach engine state.
+- **The endpoints** (`routes.py`): `cache/{class_id}.{script_type}` and the
+  vars variant serve the cached `Script`/`Style` content with the right
+  mime type; class-level scripts repopulate the cache on a miss (the
+  phase-1 lazy-repopulation rule, now actually exercised over HTTP);
+  `citry.js` serves the client runtime.
+- **The mount contract**: an adapter's `mount()` registers the routes and
+  records the prefix on the instance (`Citry.set_mounted_prefix`, the
+  escape hatch for render-only processes); `Citry.build_url` raises with
+  guidance when nothing is mounted. Adapters: a dependency-free ASGI app
+  (handles both root-path conventions hosts use when mounting), the WSGI
+  twin, and `citry.contrib.fastapi.mount` sugar (one call does both steps;
+  works for Starlette too). The FastAPI adapter is what the test suite
+  drives end to end with `TestClient` (fastapi/httpx are dev-only deps,
+  mirrored in the root pyproject per the monorepo convention).
+- **Fragments**: nothing is inlined; the output ends with a pre-loader (load
+  the runtime if the page lacks it, then remove yourself) and a manifest
+  whose `fetch` lists are `{tag, attrs, content}` descriptors: cache URLs
+  for component and variables scripts, plain URLs for URL entries, inline
+  content for local-file entries (which have no URL). A fragment whose
+  components carry no assets serializes plain, with no pre-loader and no
+  mounted-integration requirement; one with assets raises a pointed
+  `RuntimeError` when nothing is mounted. Pre-rendered (`__html__`)
+  entries are rejected loudly in fragments: an opaque tag string cannot
+  become a descriptor.
+- **Mounted documents get better**: the runtime is served by URL
+  (browser-cacheable) instead of inlined, and the manifest marks the
+  inlined component/variables scripts' *cache URLs* as loaded, so a
+  fragment inserted into the page later fetches nothing it already has.
+  Unmounted documents keep the inlined runtime, so the zero-configuration
+  flow is unchanged.
+
+**Usage:**
+
+```py
+from fastapi import FastAPI
+from citry.contrib.fastapi import mount
+
+app = FastAPI()
+mount(app, my_citry)               # serves /citry/cache/..., /citry/citry.js
+
+@app.get("/table-fragment")
+def table_fragment(rows: int):
+    html = Table(rows=rows).render().serialize(deps_strategy="fragment")
+    return HTMLResponse(html)
+```
+
+**Tests:** `tests/test_deps_urls.py` (routing, mount contract, endpoint
+logic, the WSGI app), `tests/test_deps_fragments.py` (fragment + mounted
+document flows), `tests/test_contrib_fastapi.py` (end to end over
+`TestClient`, including "every URL a fragment references is servable").
+
+### Dependency rendering, phase 5: more hosts, more caches, served local files (`citry/contrib/`, `routes.py`, `emission.py`)
+
+**What:** The breadth pass over the integration surfaces: Flask and Django
+join FastAPI as supported hosts, Redis/diskcache/Django-cache backends join
+the in-memory default, and local-file ``Dependencies`` entries can be served
+at fingerprinted URLs instead of inlined. Phase 5 of
+[`dependencies.md`](dependencies.md); with it, the dependency-rendering
+design is fully built (the TS/minification build of the client runtime and
+the user-facing docs remain, deliberately).
+
+**Design decisions:**
+
+- **`citry.contrib.flask.mount`** wraps the app's `wsgi_app` callable with a
+  prefix dispatcher (the standard WSGI sub-mount convention: prefix into
+  `SCRIPT_NAME`, remainder in `PATH_INFO`), so it needs no Flask import and
+  works for any framework exposing that attribute.
+- **`citry.contrib.django`**: `urlpatterns(citry_instance, prefix=...)`
+  converts `Citry.urls` to Django patterns; Django's `path()` syntax cannot
+  express two parameters in one segment (the dotted cache routes), so those
+  fall back to `re_path` over the same compiled citry pattern. Views check
+  `route.methods` and translate `RouteResponse`. `DjangoCache` adapts any
+  configured Django cache to the `CitryCache` protocol, so a Django project
+  reuses the store it already runs. Citry owns this module (not
+  django-components), per the earlier decision that plain citry must work
+  with Django regardless of django-components' future.
+- **`citry.contrib.caches`**: `RedisCache` and `DiskCache` in one module,
+  each wrapping a client object the user constructs (`redis.Redis(...)`,
+  `diskcache.Cache(dir)`), so citry imports nothing from the host packages
+  and the adapters are testable with fakes. Redis expiries are whole
+  seconds, rounded up so a short ttl never means "expire immediately".
+  (Deviation from the design sketch, which had one module per backend; one
+  import-free module is simpler.)
+- **`local_files = "serve"`** (9.4): a setting on the `Dependencies` config,
+  per component or global via
+  `extensions_defaults={"dependencies": {...}}` (the first real use of the
+  extension-config default layers). The file's content is cached under its
+  hash and emitted as `asset/<hash>.<ext>` on a new endpoint; the hash IS
+  the fingerprint, so a changed file gets a new URL and the old one can be
+  cached forever. Falls back to inlining when no integration is mounted
+  (inline is always correct), and composes with fragments (served entries
+  become URL descriptors the manager de-duplicates).
+- `URLRoute` and `RouteResponse` are exported from the package top level:
+  extension authors declaring `Extension.urls` need them.
+
+**Tests:** `tests/test_contrib_hosts.py` (Flask mount via a fake WSGI host,
+Django patterns/views/cache against real Django, cache adapters against
+fakes), `tests/test_deps_fragments.py` (`TestServedLocalFiles`).

@@ -23,8 +23,8 @@ Example:
         # Composition - returns a CitryElement
         element = Greeting(name="World")
 
-        # Rendering - produces HTML (not yet implemented)
-        # html = element.render()
+        # Rendering - produces a CitryRender; serialize() (or str()) -> HTML
+        html = element.render().serialize()
 
     Component with typed inputs::
 
@@ -57,11 +57,13 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass, is_dataclass
+from hashlib import md5
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from citry.citry import Citry, citry
 from citry.citry_element import CitryElement
 from citry.component_render import gen_render_id
+from citry.extensions.dependencies import get_dependencies as _get_dependencies_impl
 from citry.provide import MISSING, inject_value, make_provided, validate_provide_key
 from citry.slots import Slot, normalize_slot_fills
 from citry.util.misc import to_dict
@@ -70,7 +72,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from citry.citry_render import OnRenderGenerator, RenderReplacement
-    from citry.component_render import _CompiledTemplate
+    from citry.citry_template import CitryTemplate
+    from citry.extensions.dependencies import CitryDependencies, Dependency
 
 
 class ComponentMeta(type):
@@ -83,6 +86,30 @@ class ComponentMeta(type):
     3. Converts inner data classes (Kwargs, Slots, etc.) without explicit
        bases to dataclasses (with slots) for ergonomic input typing.
     """
+
+    # Per-class cache for the class_id property (stored on each component
+    # class's own __dict__, never inherited).
+    _class_id: str
+
+    @property
+    def class_id(cls) -> str:
+        """
+        A stable, URL-safe identifier for this component class, e.g.
+        ``"Table_a1b2c3"``: the class name plus a short hash of its full
+        import path.
+
+        Deterministic across processes and restarts (it is derived from the
+        import path, not from object identity), so it can key cache entries
+        and script URLs that one worker writes and another serves. Reverse
+        lookup goes through ``Citry.get_component_by_class_id``. See
+        docs/design/dependencies.md section 4.1.
+        """
+        cached: str | None = cls.__dict__.get("_class_id")
+        if cached is None:
+            digest = md5(get_import_path(cls).encode(), usedforsecurity=False).hexdigest()[:6]
+            cached = f"{cls.__name__}_{digest}"
+            cls._class_id = cached
+        return cached
 
     def __new__(
         mcs,
@@ -110,14 +137,14 @@ class ComponentMeta(type):
         if not is_component_subclass:
             return super().__new__(mcs, name, bases, attrs)
 
-        # Convert inner data classes (Kwargs, Slots, TemplateData) to
-        # dataclasses if they don't explicitly declare a base class or
-        # the @dataclass decorator. This lets users write:
+        # Convert inner data classes (Kwargs, Slots, and the data-method
+        # schemas) to dataclasses if they don't explicitly declare a base
+        # class or the @dataclass decorator. This lets users write:
         #     class Kwargs:
         #         title: str
         #         size: int = 10
         # and get a dataclass with slots automatically.
-        for data_class_name in ("Kwargs", "Slots", "TemplateData"):
+        for data_class_name in ("Kwargs", "Slots", "TemplateData", "JsData", "CssData"):
             data_class = attrs.get(data_class_name)
             if data_class is None or not isinstance(data_class, type):
                 continue
@@ -281,6 +308,14 @@ class Component(metaclass=ComponentMeta):
     TemplateData: ClassVar[type | None] = None
     """Optional typed template data output."""
 
+    JsData: ClassVar[type | None] = None
+    """Optional typed schema for the ``js_data()`` output. Like
+    ``TemplateData``, a plain annotated class converted to a dataclass."""
+
+    CssData: ClassVar[type | None] = None
+    """Optional typed schema for the ``css_data()`` output. Like
+    ``TemplateData``, a plain annotated class converted to a dataclass."""
+
     _template_body_generator: ClassVar[_CompiledTemplate | None] = None
     """Internal: the compiled form of this component's template (the
     body-generating function plus parse-time metadata), built once per class
@@ -329,10 +364,21 @@ class Component(metaclass=ComponentMeta):
     """
 
     parent: Component | None
-    """The parent component instance, or None if this is a root component."""
+    """The component that wrote this one into its template. None for a root
+    component, and for one rendered standalone (e.g. an element handed into
+    an expression as ``{{ element }}``).
+
+    The link follows authorship, not slot placement: a component written
+    inside a ``<c-fill>`` keeps the fill's author as its parent, no matter
+    whose slot the content lands in. (This differs from Vue, whose
+    ``$parent`` points at the slot host.) To ask "what am I rendered
+    inside, slots included", use ``provide``/``inject``, which travels the
+    render path and crosses slot boundaries.
+    """
 
     root: Component
-    """The root component of the current render tree.
+    """The component at the top of the ``parent`` chain (the same
+    authorship rule as ``parent``).
 
     For root components, ``self.root is self``. Never None.
     """
@@ -411,6 +457,85 @@ class Component(metaclass=ComponentMeta):
         Returns:
             A dict of template variables, or None for no variables.
 
+        """
+        return None
+
+    def js_data(
+        self,
+        kwargs: Any,  # noqa: ARG002
+        slots: Any | None = None,  # noqa: ARG002
+    ) -> dict[str, Any] | None:
+        """
+        Return the JS variables for this render.
+
+        Override this to expose per-render data to the component's JS
+        (``Component.js``). The dict is serialized to JSON and delivered to
+        the component's ``$onComponent`` callback in the browser; identical
+        data is sent to the browser only once, however many instances share
+        it. Consumed by the built-in ``dependencies`` extension (see
+        docs/design/dependencies.md section 5).
+
+        Args:
+            kwargs: The keyword arguments passed to the component.
+            slots: The slot fills passed to the component.
+
+        Returns:
+            A dict of JS variables, or None for no variables.
+
+        """
+        return None
+
+    def css_data(
+        self,
+        kwargs: Any,  # noqa: ARG002
+        slots: Any | None = None,  # noqa: ARG002
+    ) -> dict[str, Any] | None:
+        """
+        Return the CSS variables for this render.
+
+        Override this to expose per-render values to the component's CSS
+        (``Component.css``) as CSS custom properties: a returned
+        ``{"row-color": "red"}`` is usable in the CSS as
+        ``var(--row-color)``, scoped to this component's elements. Identical
+        data across renders shares one generated stylesheet. Consumed by the
+        built-in ``dependencies`` extension (see docs/design/dependencies.md
+        section 5).
+
+        Args:
+            kwargs: The keyword arguments passed to the component.
+            slots: The slot fills passed to the component.
+
+        Returns:
+            A dict of CSS variables, or None for no variables.
+
+        """
+        return None
+
+    # The base implementation ignores its arguments; they are the documented
+    # signature for subclasses to override, hence the noqa's.
+    @classmethod
+    def on_dependencies(
+        cls,
+        scripts: list[Dependency],  # noqa: ARG003
+        styles: list[Dependency],  # noqa: ARG003
+    ) -> tuple[list[Dependency], list[Dependency]] | None:
+        """
+        Hook to adjust this component's JS/CSS tags before they enter the page.
+
+        Called at serialize time, once per rendered instance of this
+        component, with the ``Script``/``Style`` entries this component
+        contributes (its ``Dependencies`` entries and its own
+        ``Component.js``/``css``). Return a ``(scripts, styles)`` pair to
+        replace the lists, mutate them in place, or return ``None`` (the
+        default) to keep them. Removing the component's own script entries
+        can break the component's behavior in the browser; this hook is for
+        adding attributes, reordering, or dropping entries you know are
+        provided elsewhere.
+
+        To adjust the *page-wide* lists instead (every component's tags,
+        after de-duplication), implement an extension with an
+        ``on_dependencies`` method (see
+        ``citry.extensions.dependencies.OnDependenciesContext``).
         """
         return None
 
@@ -554,13 +679,17 @@ class Component(metaclass=ComponentMeta):
         All ancestor components, nearest first: the parent, then the parent's
         parent, up to and including the root. Empty for a root component.
 
-        Useful to check where a component is being rendered, e.g.::
+        Useful to check where a component sits, e.g.::
 
             is_themed = any(isinstance(c, Theme) for c in self.ancestors)
 
-        For fill content, the chain follows who *wrote* the component, the
-        same as ``parent``: a component written inside a ``<c-fill>`` has the
-        fill's author as its parent, not the component whose slot rendered it.
+        The chain follows who *wrote* the component, the same as ``parent``:
+        a component written inside a ``<c-fill>`` has the fill's author as
+        its parent, not the component whose slot rendered it. So the check
+        above holds when ``Theme``'s own template renders this component;
+        for "am I rendered inside a Theme, slots included", have ``Theme``
+        ``provide`` a value and ``inject`` it here, which travels the render
+        path and crosses slot boundaries.
         """
         current = self.parent
         while current is not None:

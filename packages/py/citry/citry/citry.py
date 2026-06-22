@@ -37,8 +37,12 @@ Example:
 
 from __future__ import annotations
 
+from importlib import import_module
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from weakref import WeakValueDictionary, ref
 
+from citry.cache import CitryCache, InMemoryCache
 from citry.component_registry import ComponentRegistry
 from citry.constness import ConstBodyCache
 from citry.extension import ExtensionManager
@@ -46,10 +50,12 @@ from citry.settings import CitrySettings
 from citry.tag_rules import build_tag_rules
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, Sequence
+    from collections.abc import Mapping, Sequence
+    from weakref import ReferenceType
 
     from citry.component import Component
     from citry.extension import Extension
+    from citry.util.routing import URLRoute
     from citry_core.template_parser import TagRules
 
 
@@ -77,11 +83,19 @@ class Citry:
         self,
         extensions: Sequence[type[Extension] | Extension | str] = (),
         extensions_defaults: Mapping[str, Mapping[str, Any]] | None = None,
+        cache: CitryCache | str | None = None,
     ) -> None:
         self.settings = CitrySettings(
             extensions=tuple(extensions),
             extensions_defaults=dict(extensions_defaults) if extensions_defaults is not None else {},
+            cache=cache,
         )
+
+        # The cache backend (docs/design/dependencies.md section 10): derived
+        # content such as the dependencies extension's processed JS/CSS lives
+        # here. Built from the settings spec; defaults to a per-instance
+        # in-memory cache.
+        self.cache: CitryCache = self._build_cache(cache)
         # The registry creates the built-in components (<c-provide>, ...) on
         # its first lookup, through this factory, so they exist in every
         # Citry instance. See ComponentRegistry._ensure_builtins.
@@ -100,6 +114,18 @@ class Citry:
         # Kwargs/Slots declarations (see citry/tag_rules.py). Built on first
         # template parse; invalidated whenever the registry changes.
         self._tag_rules_cache: dict[str, TagRules] | None = None
+
+        # class_id -> component class reverse index, maintained at registration.
+        # This is how the script-serving endpoint finds the class a cached
+        # JS/CSS script belongs to (docs/design/dependencies.md section 4.1).
+        # Weak values, so unregistered classes can be garbage-collected.
+        self._classes_by_id: WeakValueDictionary[str, type[Component]] = WeakValueDictionary()
+
+        # Where this instance's routes are mounted in the host web app, e.g.
+        # "/citry". Recorded by the web-integration adapters' mount() call
+        # (docs/design/dependencies.md section 9.3); None means no
+        # integration is mounted, and URL building raises with guidance.
+        self._mounted_prefix: str | None = None
 
         # The extension/hook system, scoped to this Citry instance (DJC #1413).
         # Extensions are present from construction, so hooks fire immediately.
@@ -120,6 +146,7 @@ class Citry:
         accepts the class.
         """
         self.registry.register(comp_cls, name)
+        self._classes_by_id[comp_cls.class_id] = comp_cls
         self._tag_rules_cache = None
         registered_name = name or getattr(comp_cls, "name", None) or comp_cls.__name__
         self.extensions.on_component_registered(registered_name, comp_cls)
@@ -155,6 +182,90 @@ class Citry:
     def components(self) -> dict[str, type[Component]]:
         """All registered components as a name -> class mapping."""
         return self.registry.all()
+
+    @property
+    def urls(self) -> tuple[URLRoute, ...]:
+        """
+        This instance's HTTP route table (framework-neutral ``URLRoute``s).
+
+        The web-integration adapters (``citry.contrib.asgi`` and friends)
+        mount these into the host application; the routes serve cached
+        component JS/CSS, the client runtime, and extension endpoints. See
+        docs/design/dependencies.md section 9.
+        """
+        return self.extensions.urls
+
+    @property
+    def mounted_prefix(self) -> str | None:
+        """Where this instance's routes are mounted (e.g. ``"/citry"``), or ``None`` when nothing is mounted."""
+        return self._mounted_prefix
+
+    def set_mounted_prefix(self, prefix: str) -> None:
+        """
+        Record where this instance's routes are mounted in the host app.
+
+        The adapters' ``mount()`` call this; call it directly only in a
+        process that builds URLs without mounting the routes itself (for
+        example a worker that renders fragments served by another process).
+        ``prefix`` must start with ``/``; a trailing ``/`` is dropped.
+        """
+        if not prefix.startswith("/"):
+            msg = f"Mount prefix must start with '/', got {prefix!r}"
+            raise ValueError(msg)
+        self._mounted_prefix = prefix.rstrip("/")
+
+    def build_url(self, path: str) -> str:
+        """
+        An absolute URL path for one of this instance's routes.
+
+        ``path`` is the route's full path (no leading slash), e.g.
+        ``"cache/Table_a1b2c3.js"``. Raises ``RuntimeError`` when no web
+        integration is mounted, since the URL would point nowhere.
+        """
+        if self._mounted_prefix is None:
+            msg = (
+                "Cannot build a citry URL: no web integration is mounted."
+                " Mount one (e.g. citry.contrib.fastapi.mount(app, citry_instance))"
+                " or call set_mounted_prefix() in processes that only build URLs."
+            )
+            raise RuntimeError(msg)
+        return f"{self._mounted_prefix}/{path}"
+
+    def get_component_by_class_id(self, class_id: str) -> type[Component]:
+        """
+        Look up a registered component class by its ``class_id``.
+
+        ``class_id`` is the stable identifier (``MyComp.class_id``) used in
+        cache keys and script URLs (docs/design/dependencies.md section 4.1).
+        Raises ``KeyError`` when no registered class has that id.
+        """
+        comp_cls = self._classes_by_id.get(class_id)
+        if comp_cls is None:
+            msg = f"No component class with class_id {class_id!r} is registered with this Citry instance"
+            raise KeyError(msg)
+        return comp_cls
+
+    @staticmethod
+    def _build_cache(spec: CitryCache | str | None) -> CitryCache:
+        """
+        Build the live cache backend from the settings spec.
+
+        ``None`` gives a fresh in-memory cache. An import string is resolved
+        like extension specs are: ``"path.to.Cache"`` names either a class
+        (instantiated with no arguments) or a ready-made backend object.
+        """
+        if spec is None:
+            return InMemoryCache()
+        if isinstance(spec, str):
+            module_path, _, attr_name = spec.rpartition(".")
+            resolved = getattr(import_module(module_path), attr_name)
+            spec = resolved() if isinstance(resolved, type) else resolved
+        if not isinstance(spec, CitryCache):
+            msg = (
+                f"Citry cache must provide get/set/delete/has (see citry.cache.CitryCache), got {type(spec).__name__}"
+            )
+            raise TypeError(msg)
+        return spec
 
     def _create_builtin_components(self) -> None:
         """
@@ -192,7 +303,13 @@ class Citry:
         """Clear all state: registered components, caches, etc."""
         self.registry.clear()
         self._const_body_cache.clear()
+        self._classes_by_id.clear()
         self._tag_rules_cache = None
+        # The protocol does not require clear() (a shared backend may not want
+        # a full wipe); the built-in in-memory cache supports it.
+        cache_clear = getattr(self.cache, "clear", None)
+        if callable(cache_clear):
+            cache_clear()
 
 
 # The default Citry instance, used when Component.citry is not set.

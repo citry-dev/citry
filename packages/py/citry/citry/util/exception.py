@@ -89,11 +89,38 @@ def with_component_error_message(component_path: list[str]) -> Generator[None, N
         raise err from None
 
 
+def set_template_origin_error_message(err: Exception, origin: str) -> None:
+    """
+    Prefix the error message with the template's origin.
+
+    Used for parse/compile-time failures, where no rendered node exists yet:
+    the raw error from the parser carries positions but not where the template
+    came from. ``origin`` is the template's file path, or
+    ``"<module file>::<ClassName>"`` for an inline template. Runs once per
+    error (re-raising through multiple layers must not stack prefixes).
+    """
+    if getattr(err, "_template_origin", False):
+        return
+    err._template_origin = True  # type: ignore[attr-defined]
+
+    prefix = f"In template {origin}:\n"
+    if len(err.args) and err.args[0] is not None:
+        orig_msg = str(err.args[0])
+    else:
+        orig_msg = str(err)
+    err.args = (prefix + orig_msg,)
+    # SyntaxError (what the citry_core parser raises) renders its message from
+    # ``.msg``, not ``args[0]``, so mirror the rewrite there.
+    if isinstance(err, SyntaxError) and isinstance(err.msg, str):
+        err.msg = prefix + err.msg
+
+
 def set_template_position_error_message(
     err: Exception,
     source: str,
     position: tuple[int, int],
     component_name: str | None,
+    origin: str | None = None,
 ) -> None:
     """
     Append an underlined template snippet for ``position`` to the error message.
@@ -101,7 +128,8 @@ def set_template_position_error_message(
     ``source`` is the whole template string and ``position`` the failing
     node's start/end indices in it. The snippet shows the failing lines with
     real line numbers and a ``^^^`` underline, headed by a line naming the
-    template's owner ("In template of 'Page':").
+    template's owner and, when known, where the template came from
+    ("In template of 'Page' (/path/card.html):").
 
     Runs once per error, so the innermost failing node wins: a later call for
     the same error (e.g. from the enclosing ``<c-if>``'s render) is a no-op.
@@ -117,6 +145,8 @@ def set_template_position_error_message(
     # appending the header to the message first lands it just above the
     # snippet block.
     header = f"In template of {component_name!r}:" if component_name is not None else "In template:"
+    if origin is not None:
+        header = f"{header[:-1]} ({origin}):"
     if len(err.args) and err.args[0] is not None:
         msg = str(err.args[0])
     else:

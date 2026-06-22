@@ -99,8 +99,7 @@ def _resolve_component(component: Component, value: Any) -> type[Component]:
         return value
     if isinstance(value, CitryElement):
         msg = (
-            "<c-component> 'is' got an already-composed element. "
-            "Embed it with '{{ ... }}' instead, or pass its class."
+            "<c-component> 'is' got an already-composed element. Embed it with '{{ ... }}' instead, or pass its class."
         )
         raise TypeError(msg)
     msg = f"<c-component> 'is' must be a component name or a Component class, got {type(value).__name__}."

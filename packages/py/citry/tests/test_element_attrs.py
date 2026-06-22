@@ -13,7 +13,7 @@ import re
 import pytest
 
 from citry import Citry, Component, Const, Extension
-from citry.component_render import _compile_template
+from citry.component_render import _compile_nested_template
 from citry.constness import fold_body
 from citry.nodes import ElementAttrsNode
 
@@ -209,7 +209,7 @@ class TestOnAttrsResolvedHook:
 
 class TestConstFolding:
     def _body(self, template):
-        return _compile_template(template, None).generate()
+        return _compile_nested_template(template, None)()
 
     def test_literal_attr_region_folds_to_text(self):
         body = self._body("<div c-class=\"['a', 'b']\">hi</div>")

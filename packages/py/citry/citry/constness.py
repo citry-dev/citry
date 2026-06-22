@@ -106,6 +106,7 @@ _T = TypeVar("_T")
 # THE CONST MARKER
 # #########################################################
 
+
 class _ConstProxy(wrapt.ObjectProxy):
     """
     A transparent marker that a value is constant across renders.

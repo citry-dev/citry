@@ -44,9 +44,11 @@ class TestExtensionDefinition:
 
 
 class TestManagerConstruction:
-    def test_default_citry_has_empty_manager(self):
+    def test_default_citry_has_only_builtins(self):
         c = _Citry()
-        assert c.extensions._extensions == ()
+        # Every instance carries the built-in extensions (prepended by the
+        # manager); with no user extensions, that is all there is.
+        assert [ext.name for ext in c.extensions._extensions] == ["dependencies"]
 
     def test_accepts_class_and_instance(self):
         class E1(Extension):
@@ -56,7 +58,8 @@ class TestManagerConstruction:
             name = "e2"
 
         c = _Citry(extensions=[E1, E2()])
-        assert len(c.extensions._extensions) == 2
+        # Built-ins come first, then the user's extensions in spec order.
+        assert [ext.name for ext in c.extensions._extensions] == ["dependencies", "e1", "e2"]
 
     def test_accepts_string_path(self):
         spec = f"{_StringPathExt.__module__}.{_StringPathExt.__qualname__}"
@@ -300,16 +303,18 @@ class TestTemplateHooks:
 
 class TestSmartDispatch:
     def test_only_overriding_extensions_define_the_hook(self):
+        # Uses hooks the built-in dependencies extension does not implement,
+        # so the expected lists are exact.
         class Partial(Extension):
             name = "partial"
 
-            def on_component_data(self, ctx):
+            def on_component_input(self, ctx):
                 pass
 
         app = _Citry(extensions=[Partial])
         mgr = app.extensions
         inst = mgr.get_extension("partial")
-        assert mgr._extensions_with_hook("on_component_data") == (inst,)
+        assert mgr._extensions_with_hook("on_component_input") == (inst,)
         assert mgr._extensions_with_hook("on_component_rendered") == ()
 
     def test_hook_extension_list_is_cached(self):
