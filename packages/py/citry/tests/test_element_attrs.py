@@ -106,6 +106,13 @@ class TestCBindSpread:
         with pytest.raises(TypeError, match="c-bind on <div> must resolve to a mapping"):
             _html('<div c-bind="x">y</div>', x=42)
 
+    def test_none_contributes_nothing(self):
+        # An optional attribute dict that is None is a no-op, so the call site
+        # needs no `or {}` guard (matches Vue's `v-bind="null"`). None is the
+        # only non-mapping value allowed; other types still raise (above).
+        assert _html('<div c-bind="attrs" id="x">y</div>', attrs=None) == '<div id="x">y</div>'
+        assert _html('<div c-bind="a" c-bind="b">y</div>', a=None, b={"id": "z"}) == '<div id="z">y</div>'
+
 
 class TestClassAndStyleMerging:
     def test_class_merges_across_sources(self):
@@ -258,3 +265,43 @@ class TestConstFolding:
         first = _CID_RE.sub("", Comp(cls=Const("btn")).render().serialize())
         second = _CID_RE.sub("", Comp(cls=Const("btn")).render().serialize())
         assert first == second == '<div class="btn" data-x="1">hi</div>'
+
+
+class TestConstInsideClassStyleList:
+    """
+    A ``Const``-marked string nested inside a class or style *list* must
+    normalize like a plain string. A marker is a transparent proxy that
+    reaches the normalizer's string branch but breaks its internal regex
+    unless unwrapped (the value layer handles this in ``attrs.py``).
+    """
+
+    def test_explicit_const_in_class_list(self):
+        assert _html("<div c-class=\"[a, 'b']\">y</div>", a=Const("a")) == '<div class="a b">y</div>'
+
+    def test_explicit_const_in_style_list(self):
+        out = _html("<div c-style=\"[s, {'color': 'red'}]\">y</div>", s=Const("width: 1px"))
+        assert out == '<div style="width: 1px; color: red;">y</div>'
+
+    def test_auto_const_static_attr_passed_into_class_list(self):
+        # The benchmark-relevant path: a static attr on a component tag is
+        # auto-marked Const, and the child forwards it unchanged into a class
+        # list. Before the fix this raised TypeError in the normalizer.
+        c = Citry()
+
+        class Badge(Component):
+            citry = c
+
+            class Kwargs:
+                tone: str
+
+            def template_data(self, kwargs, slots=None):
+                # raw_kwargs keeps the marker; tone flows into a class list.
+                return {"tone": self.raw_kwargs["tone"]}
+
+            template = "<span c-class=\"['badge', tone]\">x</span>"
+
+        class Page(Component):
+            citry = c
+            template = '<c-Badge tone="ok" />'
+
+        assert _CID_RE.sub("", Page().render().serialize()) == '<span class="badge ok">x</span>'

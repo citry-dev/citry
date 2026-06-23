@@ -219,25 +219,30 @@ class DependenciesExtension(Extension):
             # The instance's root elements get the matching marker attribute,
             # which the generated stylesheet scopes its custom properties to.
             ctx.context._add_root_markers([f"data-ccss-{css_vars_hash}"])
-        records: list[DependencyRecord] = ctx.context.extra.setdefault(EXTRA_KEY, [])
-        records.append(
+        # Records are held as an insertion-ordered set (dict keyed by the
+        # record, value unused): a record bubbles up through every ancestor, so
+        # without dedup-on-insert a deep page accumulates one copy of each
+        # record per ancestor level (the merge below would be O(n*depth)).
+        records: dict[DependencyRecord, None] = ctx.context.extra.setdefault(EXTRA_KEY, {})
+        records[
             DependencyRecord(
                 class_id=comp_cls.class_id,
                 component_id=ctx.component.id,
                 js_vars_hash=js_vars_hash,
                 css_vars_hash=css_vars_hash,
             )
-        )
+        ] = None
 
     def on_render_context_merge(self, ctx: OnRenderContextMergeContext) -> None:
-        # A nested render was consumed by an enclosing one: its records join
-        # the enclosing list, preserving order (parent's own record was added
-        # before its children rendered, so the list approximates document
-        # order; emission dedupes).
+        # A nested render was consumed by an enclosing one: its records join the
+        # enclosing set, preserving first-seen order (the parent's own record
+        # was added before its children rendered, so the order approximates
+        # document order). The set makes the merge idempotent, so a render
+        # consumed by several enclosing renders never multiplies its records.
         child_records = ctx.child_context.extra.get(EXTRA_KEY)
         if child_records:
-            parent_records: list[DependencyRecord] = ctx.parent_context.extra.setdefault(EXTRA_KEY, [])
-            parent_records.extend(child_records)
+            parent_records: dict[DependencyRecord, None] = ctx.parent_context.extra.setdefault(EXTRA_KEY, {})
+            parent_records.update(child_records)
 
     # ----- Emission at serialize (docs/design/dependencies.md section 7) -----
 

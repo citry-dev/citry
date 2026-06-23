@@ -5,6 +5,7 @@ mod common;
 #[cfg(test)]
 mod tests {
     use citry_template_parser::parser::parse_template;
+    use citry_template_parser::TemplateElement;
 
     use super::common::{
         assert_parse_error, body_node_full, end_tag, expr_attr, expr_elem, node_elem,
@@ -456,5 +457,70 @@ mod tests {
         let input = r#"<c-for each="x in y"><li>x</li></c-for><c-empty />"#;
         let template = parse_template(input, None, None).unwrap();
         assert_eq!(template.elements.len(), 2);
+    }
+
+    // The shorthand `c-for` loop variable is in scope for the SAME element's
+    // other attributes, so referencing it there (e.g. spreading it with
+    // `c-bind`) is not shadowing. A self-closing or void element must drop the
+    // loop target from its used_variables just like a bodied element does, or
+    // the variable looks both introduced and used and trips the shadowing
+    // check. Regression for the c-for + c-bind parser bug
+    // (docs/design/benchmarking.md results log).
+    #[test]
+    fn test_c_for_shorthand_loop_var_in_same_element_cbind_void() {
+        // `<path>` is a void element (self-closing path in the parser).
+        let input = r#"<path c-for="p in items" c-bind="p" />"#;
+        let template = parse_template(input, None, None)
+            .unwrap_or_else(|e| panic!("same-element c-for + c-bind should parse: {:?}", e));
+
+        let TemplateElement::Node(node) = &template.elements[0] else {
+            panic!("expected a node");
+        };
+        let used: Vec<&str> = node
+            .used_variables()
+            .iter()
+            .map(|t| t.content.as_str())
+            .collect();
+        let introduced: Vec<&str> = node
+            .introduced_variables()
+            .iter()
+            .map(|t| t.content.as_str())
+            .collect();
+        // The loop target is internal; only the iterable is a free variable.
+        assert_eq!(
+            used,
+            vec!["items"],
+            "loop var must not leak into used_variables"
+        );
+        assert_eq!(introduced, vec!["p"]);
+    }
+
+    #[test]
+    fn test_c_for_shorthand_loop_var_in_same_element_cbind_self_closing() {
+        // A non-void self-closing component tag takes the other self-closing path.
+        let input = r#"<c-Card c-for="p in items" c-bind="p" />"#;
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "same-element c-for + c-bind on a self-closing tag should parse: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_c_for_shorthand_loop_var_in_dynamic_attr() {
+        // The loop var feeding a non-bind dynamic attribute is the same case.
+        let input = r#"<img c-for="src in sources" c-src="src" />"#;
+        let template = parse_template(input, None, None)
+            .unwrap_or_else(|e| panic!("loop var in a dynamic attr should parse: {:?}", e));
+        let TemplateElement::Node(node) = &template.elements[0] else {
+            panic!("expected a node");
+        };
+        let used: Vec<&str> = node
+            .used_variables()
+            .iter()
+            .map(|t| t.content.as_str())
+            .collect();
+        assert_eq!(used, vec!["sources"]);
     }
 }

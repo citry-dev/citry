@@ -33,6 +33,7 @@ its own props and slots, never an inherited context.
 
 from __future__ import annotations
 
+import random
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from citry.assets import load_template
@@ -62,7 +63,6 @@ from citry.util.exception import (
     set_template_position_error_message,
 )
 from citry.util.misc import is_generator, to_dict
-from citry.util.nanoid import generate
 from citry_core.template_parser import compile_template, parse_template
 
 if TYPE_CHECKING:
@@ -79,7 +79,12 @@ _ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 def gen_id() -> str:
     """Generate a unique alphanumeric ID (6 chars, ~1 in 3.3M collision chance)."""
-    return generate(_ID_ALPHABET, size=UID_LENGTH)
+    # IMPORTANT: django-components used nanoid impl using `os.urandom()`.
+    # But these IDs only scope DOM/CSS to a component instance, so a fast PRNG is
+    # the right tool; they are not secrets. `random.choices()` avoids the urandom
+    # syscall and the rejection-sampling math nanoid does per call.
+    # This `random.choices()` impl is ~3-4x faster than the nanoid impl.
+    return "".join(random.choices(_ID_ALPHABET, k=UID_LENGTH))  # noqa: S311 (DOM id, not a secret)
 
 
 def gen_render_id() -> str:

@@ -849,6 +849,9 @@ class ExtensionManager:
         Thread the rendered output through the extensions; a return replaces the
         render, a raise replaces the error.
         """
+        # Fires for every component; skip the context build when unsubscribed.
+        if not self.has_hook("on_component_rendered"):
+            return render, error
         ctx = OnComponentRenderedContext(citry=self.citry, component=component, render=render, error=error)
         for extension in self._extensions_with_hook("on_component_rendered"):
             try:
@@ -873,6 +876,11 @@ class ExtensionManager:
         Thread a slot's rendered output through the extensions; a return
         replaces the result, a raise propagates.
         """
+        # Skip building the context when nothing subscribes: this fires for
+        # every slot of every component, so the dataclass would otherwise be
+        # built and thrown away on a hot path.
+        if not self.has_hook("on_slot_rendered"):
+            return result
         return self.emit(
             "on_slot_rendered",
             OnSlotRenderedContext(

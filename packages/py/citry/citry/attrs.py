@@ -34,7 +34,9 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any, TypeAlias
 
-from citry.util.html import SafeString, escape
+import wrapt
+
+from citry.util.html import SafeString, escape_to_str
 
 ClassValue: TypeAlias = "str | Mapping[str, bool] | Sequence[ClassValue]"
 """A ``class`` attribute value: string, ``{class_name: bool}`` dict, or a list of those."""
@@ -44,6 +46,23 @@ StyleDict: TypeAlias = Mapping[str, "str | int | float | bool | None"]
 
 StyleValue: TypeAlias = "str | StyleDict | Sequence[StyleValue]"
 """A ``style`` attribute value: inline CSS string, ``StyleDict``, or a list of those."""
+
+
+def _underlying(value: Any) -> Any:
+    """
+    Recover the real object behind a transparent proxy.
+
+    A transparent proxy (a ``wrapt.ObjectProxy``, which citry's ``Const``
+    marker is built on) reports the wrapped type from ``isinstance``, so a
+    marked string reaches the string branches below, but the C-level string
+    functions (``re.split``, ``re.sub``) reject anything that is not exactly
+    ``str``. Unwrapping recovers the real object so those calls run. It must
+    unwrap, not ``str()``: callers apply this before dispatching on the
+    value's type, and the wrapped value may be a list or dict, which ``str()``
+    would flatten into a repr string.
+    """
+    return value.__wrapped__ if isinstance(value, wrapt.ObjectProxy) else value
+
 
 # Splits a class string on runs of whitespace.
 _whitespace_re = re.compile(r"\s+")
@@ -90,6 +109,10 @@ def normalize_class(value: ClassValue) -> str:
 def _flatten_class(value: ClassValue) -> dict[str, bool]:
     """Convert any ``class`` value form into one ``{class_name: bool}`` dict."""
     res: dict[str, bool] = {}
+    # Defuse a transparent proxy (e.g. a Const-marked class string) so the
+    # whitespace split below sees a real str. Recursion re-enters here for
+    # each list element, so a marker nested inside a list is unwrapped too.
+    value = _underlying(value)
     if isinstance(value, str):
         res.update({part: True for part in _whitespace_re.split(value) if part})
     elif isinstance(value, (list, tuple)):
@@ -164,6 +187,10 @@ def parse_string_style(css_text: str) -> dict[str, Any]:
         parse_string_style("color: red; width: 100px; /* note */")
         # -> {"color": "red", "width": "100px"}
     """
+    # Defuse a transparent proxy (e.g. a Const-marked style string) so the
+    # regex passes below get a real str; the slices they produce are then
+    # plain str too.
+    css_text = _underlying(css_text)
     css_text = _style_comment_re.sub("", css_text)
 
     res: dict[str, Any] = {}
@@ -256,8 +283,11 @@ def format_attrs(attrs: Mapping[str, Any]) -> SafeString:
         if value is None or value is False:
             continue
         if value is True:
-            parts.append(escape(key))
+            parts.append(escape_to_str(key))
         else:
-            parts.append(f'{escape(key)}="{escape(value)}"')
+            # escape_to_str (not escape): each piece is concatenated into the
+            # joined string that is wrapped as SafeString below, so escaping to
+            # a plain str avoids a throwaway Markup per key and per value.
+            parts.append(f'{escape_to_str(key)}="{escape_to_str(value)}"')
 
     return SafeString(" ".join(parts))

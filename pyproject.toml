@@ -58,11 +58,13 @@ exclude = [
     "dist",
     "__pycache__",
     ".mypy_cache",
-    "third_party", # Third-party dependencies (git submodules)
-    # Vendored benchmark scenario files, kept byte-close to upstream
-    # django-components (docs/design/benchmarking.md section 7); not linted.
+    # Third-party dependencies (git submodules)
+    "third_party",
+    # benchmark files, not linted.
     "packages/py/citry/tests/test_benchmark_django*.py",
     "packages/py/citry/tests/test_benchmark_djc*.py",
+    "packages/py/citry/tests/test_benchmark_citry.py",
+    "packages/py/citry/tests/test_benchmark_citry_const.py",
 ]
 
 # See https://docs.astral.sh/ruff/linter/#rule-selection

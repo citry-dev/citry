@@ -61,9 +61,13 @@ Guidance for using ``Const``:
   Mark the final value if it is the transformed form that is stable.
 - **A few C-level APIs reject the marker.** The marker is a proxy object, and
   some built-ins demand the exact built-in type rather than something that
-  behaves like it; ``getattr(obj, name)`` is the common case (it raises
-  ``TypeError`` when ``name`` is a marked string). Convert with ``str()``
-  first when passing a marked value somewhere that needs the real type.
+  behaves like it. ``getattr(obj, name)`` raises ``TypeError`` when ``name``
+  is a marked string, and ``json.dumps(value)`` fails on a marked value (or
+  one nested in the data it serializes). Pass the real value to such an API,
+  e.g. ``str(name)`` for an attribute name, or mark the already-serialized
+  result instead of the input. Citry's own ``class``/``style`` handling
+  unwraps internally, so marked values in templates are fine; the gap is your
+  own ``template_data`` calling these APIs directly.
 
 Example:
     Mark an input constant::

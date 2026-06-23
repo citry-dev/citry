@@ -674,14 +674,7 @@ impl Node {
         comments.extend(comments_from_start_tag);
         used_variables.extend(used_variables_from_attrs);
 
-        // Remove introduced variables from used_variables
-        // This prevents variables introduced by this node (e.g., loop variables) from
-        // being reported as required by the parent template
-        let introduced_var_names: HashSet<&str> = introduced_variables
-            .iter()
-            .map(|v| v.content.as_str())
-            .collect();
-        used_variables.retain(|v| !introduced_var_names.contains(v.content.as_str()));
+        let used_variables = remove_introduced_variables(used_variables, &introduced_variables);
 
         Self::WithBody {
             start_tag,
@@ -693,6 +686,32 @@ impl Node {
             contains_fills: false, // Will be set in finalize_node
         }
     }
+}
+
+/// Drop a node's introduced variables (e.g. `c-for` loop targets) from its used
+/// variables.
+///
+/// A variable a node binds for its own subtree is not a free variable the
+/// parent must provide, and a same-element use of it (for example `<li c-for="x
+/// in xs" c-bind="x">`, where the loop variable feeds another attribute on the
+/// same tag) is the loop variable in scope, not shadowing. Bodied and
+/// self-closing nodes must agree on this, so every node-construction site routes
+/// its used variables through here.
+pub(crate) fn remove_introduced_variables(
+    used_variables: Vec<Token>,
+    introduced_variables: &[Token],
+) -> Vec<Token> {
+    if introduced_variables.is_empty() {
+        return used_variables;
+    }
+    let introduced_names: HashSet<&str> = introduced_variables
+        .iter()
+        .map(|v| v.content.as_str())
+        .collect();
+    used_variables
+        .into_iter()
+        .filter(|v| !introduced_names.contains(v.content.as_str()))
+        .collect()
 }
 
 // #########################################################

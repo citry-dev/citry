@@ -138,7 +138,7 @@ class TestScriptEndpointLogic:
                 return {"rows": 3}
 
         rendered = Widget().render()
-        record = rendered.context.extra["dependencies"][0]
+        record = next(iter(rendered.context.extra["dependencies"]))
         response = self._serve(c, f"cache/{Widget.class_id}.{record.js_vars_hash}.js")
         assert response.status == 200
         assert "registerComponentData" in response.content

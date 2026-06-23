@@ -4,8 +4,8 @@ use std::rc::Rc;
 use pest::Parser;
 
 use crate::ast::{
-    Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot,
-    Template, TemplateElement, Text, Token,
+    remove_introduced_variables, Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag,
+    Node, StaticNamedSlot, Template, TemplateElement, Text, Token,
 };
 use crate::constants::{
     CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG,
@@ -255,12 +255,17 @@ fn process_template_element(
                     // These don't need closing tags and are treated as self-closing
                     let tag_name = start_tag.name.content.as_str();
                     if HTML_VOID_ELEMENTS.contains(&tag_name) {
-                        // Collect used_variables from attrs
-                        let used_variables: Vec<Token> = start_tag
-                            .attrs
-                            .iter()
-                            .flat_map(|attr| attr.used_variables.clone())
-                            .collect();
+                        // Collect used_variables from attrs, dropping any
+                        // same-element introduced var (shorthand `c-for` loop
+                        // target), mirroring the bodied/self-closing paths.
+                        let used_variables = remove_introduced_variables(
+                            start_tag
+                                .attrs
+                                .iter()
+                                .flat_map(|attr| attr.used_variables.clone())
+                                .collect(),
+                            &introduced_variables,
+                        );
                         // Treat void element as self-closing
                         let node = Node::SelfClosing {
                             used_variables,
@@ -737,10 +742,18 @@ fn process_html_self_closing_tag(
     let introduced_variables =
         process_control_flow_metadata(&name.content, &self_closing_token, &mut attrs, context)?;
 
-    let used_variables = attrs
-        .iter()
-        .flat_map(|attr| attr.used_variables.clone())
-        .collect();
+    // A same-element introduced variable (a shorthand `c-for` loop target) is
+    // bound for this node's own attributes, so it is removed from used_variables
+    // just as the bodied path does (ast::from_start_and_end_tags). Without this,
+    // `<path c-for="p in items" c-bind="p" />` would report `p` as both used and
+    // introduced and trip the shadowing check.
+    let used_variables = remove_introduced_variables(
+        attrs
+            .iter()
+            .flat_map(|attr| attr.used_variables.clone())
+            .collect(),
+        &introduced_variables,
+    );
     let comments_from_attrs = attrs.iter().flat_map(|attr| attr.comments.clone());
     let mut comments: Vec<Comment> = comments_from_tag.clone();
     comments.extend(comments_from_attrs);

@@ -41,6 +41,12 @@ if TYPE_CHECKING:
 # HTML around.
 _RENDER_ID_ATTR = "c-render-id"
 
+# The allowed strategy/position values, computed once (get_args walks the
+# Literal type, so doing it per serialize would be needless work on a path that
+# runs once per page).
+_DEPS_STRATEGIES = get_args(DepsStrategy)
+_DEPS_POSITIONS = get_args(DepsPosition)
+
 # One scanned frame: the HTML split around child placeholders (always one more
 # segment than placeholders), and per placeholder its id, its own text (with
 # any spliced markers), and the markers it received.
@@ -54,11 +60,11 @@ def serialize_render(
     deps_position: DepsPosition = "smart",
 ) -> str:
     """Serialize a render tree to HTML, adding ``data-cid-<id>`` markers (see module doc)."""
-    if deps_strategy not in get_args(DepsStrategy):
-        msg = f"Invalid deps_strategy {deps_strategy!r}; must be one of {get_args(DepsStrategy)}"
+    if deps_strategy not in _DEPS_STRATEGIES:
+        msg = f"Invalid deps_strategy {deps_strategy!r}; must be one of {_DEPS_STRATEGIES}"
         raise ValueError(msg)
-    if deps_position not in get_args(DepsPosition):
-        msg = f"Invalid deps_position {deps_position!r}; must be one of {get_args(DepsPosition)}"
+    if deps_position not in _DEPS_POSITIONS:
+        msg = f"Invalid deps_position {deps_position!r}; must be one of {_DEPS_POSITIONS}"
         raise ValueError(msg)
     # Pass 1 (top-down): build each component's HTML with its children still as
     # placeholders, add its markers, and work out which markers each child

@@ -106,7 +106,9 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
     if ctx.deps_strategy == "ignore":
         return _blank(ctx.html, all_placeholder_texts)
 
-    records: list[DependencyRecord] = ctx.context.extra.get(EXTRA_KEY, [])
+    # Collected as an insertion-ordered set (a dict) so the bubble-up merge
+    # dedupes on insert instead of accumulating one copy per ancestor.
+    records: list[DependencyRecord] = list(ctx.context.extra.get(EXTRA_KEY, {}))
 
     # "fragment": nothing is inlined; the output carries a pre-loader plus a
     # manifest of URLs for the client-side manager to fetch (section 8).
@@ -210,6 +212,13 @@ def _resolve_records(
     """
     mounted = citry.mounted_prefix is not None
 
+    # A record bubbles up through every ancestor as nested renders merge, so the
+    # same instance's record can arrive many times (deeply nested pages see a
+    # large multiple). Each duplicate resolves to identical scripts, so collapse
+    # them first, keeping first-seen (document) order; without this the
+    # per-record work below is quadratic in the tree depth.
+    records = list(dict.fromkeys(records))
+
     core_js: list[Dependency] = []
     core_css: list[Dependency] = []
     extra_js: list[Dependency] = []
@@ -220,43 +229,68 @@ def _resolve_records(
     mark_js_urls: list[str] = []
     mark_css_urls: list[str] = []
 
+    # The class-level entries (a class's Dependencies plus its own JS/CSS) are
+    # identical for every instance of the class, so resolve them once per class
+    # and reuse them: a page commonly renders many instances of the same
+    # component. Only the per-instance variables scripts and the client-side
+    # call below differ between instances. Cached as
+    # (scripts, styles, mark_js_url, mark_css_url, uses_oncomponent).
+    class_deps: dict[str, tuple[list[Dependency], list[Dependency], str | None, str | None, bool]] = {}
+
     for record in records:
         comp_cls = citry.get_component_by_class_id(record.class_id)
 
-        instance_scripts: list[Dependency] = []
-        instance_styles: list[Dependency] = []
+        cached = class_deps.get(record.class_id)
+        if cached is None:
+            scripts: list[Dependency] = []
+            styles: list[Dependency] = []
+            mark_js: str | None = None
+            mark_css: str | None = None
 
-        deps = comp_cls.get_dependencies()
-        for entry in deps.js:
-            instance_scripts.append(_entry_to_script(entry, comp_cls, fragment=as_urls))
-        for media_type, entries in deps.css.items():
-            for entry in entries:
-                instance_styles.append(_entry_to_style(entry, media_type, comp_cls, fragment=as_urls))
+            deps = comp_cls.get_dependencies()
+            for entry in deps.js:
+                scripts.append(_entry_to_script(entry, comp_cls, fragment=as_urls))
+            for media_type, entries in deps.css.items():
+                for entry in entries:
+                    styles.append(_entry_to_style(entry, media_type, comp_cls, fragment=as_urls))
 
-        # The class's own JS/CSS: inlined content for a page, a cache URL for
-        # a fragment (the endpoint serves what the cache write here stores).
-        if as_urls:
-            if comp_cls.get_js() is not None:
-                cache_component_js(comp_cls)
-                instance_scripts.append(
-                    Script(url=script_url(comp_cls, "js"), kind="component", origin_class_id=comp_cls.class_id)
-                )
-            if comp_cls.get_css() is not None:
-                cache_component_css(comp_cls)
-                instance_styles.append(
-                    Style(url=script_url(comp_cls, "css"), kind="component", origin_class_id=comp_cls.class_id)
-                )
-        else:
-            comp_js = get_component_script("js", comp_cls)
-            if comp_js is not None:
-                instance_scripts.append(comp_js)
-                if mounted:
-                    mark_js_urls.append(script_url(comp_cls, "js"))
-            comp_css = get_component_script("css", comp_cls)
-            if comp_css is not None:
-                instance_styles.append(comp_css)
-                if mounted:
-                    mark_css_urls.append(script_url(comp_cls, "css"))
+            # The class's own JS/CSS: inlined content for a page, a cache URL for
+            # a fragment (the endpoint serves what the cache write here stores).
+            if as_urls:
+                if comp_cls.get_js() is not None:
+                    cache_component_js(comp_cls)
+                    scripts.append(
+                        Script(url=script_url(comp_cls, "js"), kind="component", origin_class_id=comp_cls.class_id)
+                    )
+                if comp_cls.get_css() is not None:
+                    cache_component_css(comp_cls)
+                    styles.append(
+                        Style(url=script_url(comp_cls, "css"), kind="component", origin_class_id=comp_cls.class_id)
+                    )
+            else:
+                comp_js = get_component_script("js", comp_cls)
+                if comp_js is not None:
+                    scripts.append(comp_js)
+                    if mounted:
+                        mark_js = script_url(comp_cls, "js")
+                comp_css = get_component_script("css", comp_cls)
+                if comp_css is not None:
+                    styles.append(comp_css)
+                    if mounted:
+                        mark_css = script_url(comp_cls, "css")
+
+            cached = (scripts, styles, mark_js, mark_css, with_client_js and uses_oncomponent(comp_cls))
+            class_deps[record.class_id] = cached
+
+        cls_scripts, cls_styles, cls_mark_js, cls_mark_css, cls_uses_oncomp = cached
+        # Copy the class lists so the per-instance scripts below (and any
+        # on_dependencies edit) never mutate the cached entry.
+        instance_scripts: list[Dependency] = list(cls_scripts)
+        instance_styles: list[Dependency] = list(cls_styles)
+        if cls_mark_js is not None:
+            mark_js_urls.append(cls_mark_js)
+        if cls_mark_css is not None:
+            mark_css_urls.append(cls_mark_css)
 
         # The variables scripts generated for this instance's data hashes.
         # Unlike class scripts these cannot be rebuilt on a cache miss (the
@@ -293,7 +327,7 @@ def _resolve_records(
                     if mounted:
                         mark_css_urls.append(script_url(comp_cls, "css", record.css_vars_hash))
 
-        if with_client_js and uses_oncomponent(comp_cls):
+        if cls_uses_oncomp:
             calls.append((record.class_id, record.component_id, record.js_vars_hash))
 
         # Per-component hook: adjust this instance's lists before they join

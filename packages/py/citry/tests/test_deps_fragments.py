@@ -42,7 +42,7 @@ class TestFragmentStrategy:
         widget = _widget(c)
 
         rendered = widget().render()
-        record = rendered.context.extra["dependencies"][0]
+        record = next(iter(rendered.context.extra["dependencies"]))
         html = rendered.serialize(deps_strategy="fragment")
 
         # The content itself, with the data-ccss marker (CSS vars are pure CSS).

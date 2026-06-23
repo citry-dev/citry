@@ -58,6 +58,39 @@ class TestDocumentEmission:
         html = str(page())
         assert html.count("console.log('widget');") == 1
 
+    def test_resolve_records_dedupes_duplicate_records(self, monkeypatch):
+        # A record bubbles up through every ancestor, so on a deeply nested page
+        # the same instance's record can arrive many times. Resolution must
+        # collapse duplicates first, or the per-record script lookups are
+        # quadratic in tree depth (a real slowdown the large benchmark surfaced).
+        from citry.extensions.dependencies import emission
+        from citry.extensions.dependencies.types import DependencyRecord
+
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            js = "console.log('w');"
+
+        lookups = []
+        real = emission.get_component_script
+
+        def counting_lookup(script_type, comp_cls):
+            lookups.append(script_type)
+            return real(script_type, comp_cls)
+
+        monkeypatch.setattr(emission, "get_component_script", counting_lookup)
+
+        record = DependencyRecord(
+            class_id=Widget.class_id, component_id="cid-1", js_vars_hash=None, css_vars_hash=None
+        )
+        resolved = emission._resolve_records(c, [record] * 500, with_client_js=True)
+
+        # 500 duplicates collapse to one instance: one js + one css lookup, not 500.
+        assert lookups.count("js") == 1
+        assert lookups.count("css") == 1
+        assert any("console.log('w');" in (s.content or "") for s in resolved.scripts)
+
     def test_collection_records_in_root_extra(self):
         c = Citry()
 

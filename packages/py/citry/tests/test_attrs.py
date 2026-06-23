@@ -206,3 +206,42 @@ class TestParseStringStyle:
 
     def test_incomplete_style(self):
         assert parse_string_style("color: red; background-color") == {"color": "red"}
+
+
+class TestConstMarkedValues:
+    """
+    The normalizers accept ``Const``-marked strings. The engine auto-marks
+    template literals on component tags, so such a value can flow unchanged
+    into a class or style position; it is a transparent proxy that passes
+    ``isinstance(str)`` but would otherwise break the internal regex calls.
+    """
+
+    def test_const_string_in_class_list(self):
+        from citry import Const
+
+        # The marker survives until it reaches a class list; normalization
+        # must still split it into class names.
+        assert normalize_class([Const("a b"), "c"]) == "a b c"
+
+    def test_const_class_dict_value(self):
+        from citry import Const
+
+        assert normalize_class(["base", {"on": Const(True), "off": Const(False)}]) == "base on"  # noqa: FBT003
+
+    def test_const_string_in_style_list(self):
+        from citry import Const
+
+        assert normalize_style([Const("color: red"), {"width": "1px"}]) == "color: red; width: 1px;"
+
+    def test_const_passed_to_parse_string_style(self):
+        from citry import Const
+
+        assert parse_string_style(Const("color: red; width: 1px")) == {"color": "red", "width": "1px"}
+
+    def test_const_wrapped_whole_list_is_not_flattened_to_repr(self):
+        from citry import Const
+
+        # The whole list (not just an element) can arrive marked. Unwrapping
+        # must keep it a list so each class name is split out, not str()-ed
+        # into the list's repr.
+        assert normalize_class(Const(["a", "b"])) == "a b"

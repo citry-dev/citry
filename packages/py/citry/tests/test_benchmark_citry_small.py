@@ -7,15 +7,14 @@
 
 from typing import Literal, NamedTuple, TypeAlias
 
-from citry import Citry, Component, Const
+from citry import Citry, Component
 
 # ----------- IMPORTS END ------------ #
 
-# Overridden by the benchmark runner (regex on this line). When True,
-# gen_render_data() marks the inputs as constant across renders, switching on
-# the Const optimization (docs/design/constness.md); the component code is
-# identical in both modes.
-CONST_MODE: bool = False
+# There is no Const variant of the small scenario: a single dynamic Button has
+# no render-invariant literals to mark, so the Const optimization has nothing
+# to fold here (docs/design/benchmarking.md section 6.4). The large scenario's
+# Const variant (test_benchmark_citry_const.py) is where Const is exercised.
 
 app = Citry()
 
@@ -40,13 +39,6 @@ def gen_render_data():
             "class": "py-2 px-4",
         },
     }
-    if CONST_MODE:
-        # Only the marker is added; values are identical to the plain run.
-        # Derived values that template_data() computes from these inputs lose
-        # the marker (a transformation returns a new, unmarked value), so the
-        # fold covers the pass-through inputs only. That is the honest
-        # "inputs only" opt-in; see docs/design/benchmarking.md section 6.4.
-        data = {key: Const(value) for key, value in data.items()}
     return data
 
 
@@ -191,16 +183,13 @@ def get_styling_css(
     color = color or "default"
     disabled = disabled if disabled is not None else False
 
-    # str() because in CONST_MODE these arrive as Const-marked values, and
-    # getattr() requires the attribute name to be a plain str (the marker is
-    # a transparent proxy everywhere else; this is a documented sharp edge).
-    color_variants: ThemeStylingVariant = getattr(theme, str(color))
+    color_variants: ThemeStylingVariant = getattr(theme, color)
 
     if variant not in VARIANTS:
         raise ValueError(f'Unknown theme variant "{variant}", must be one of {VARIANTS}')
 
     variant_name = variant if not disabled else f"{variant}_disabled"
-    styling: ThemeStylingUnit = getattr(color_variants, str(variant_name))
+    styling: ThemeStylingUnit = getattr(color_variants, variant_name)
 
     return f"{styling.color} {styling.css}".strip()
 
@@ -298,15 +287,6 @@ EXPECTED_HTML = (
 
 
 def test_render():
-    data = gen_render_data()
-    rendered = render(data)
-    assert rendered == EXPECTED_HTML
-
-
-def test_render_const_mode(monkeypatch):
-    # Same output with the Const optimization switched on; the marker must
-    # never change what is rendered, only how much work repeat renders do.
-    monkeypatch.setitem(globals(), "CONST_MODE", True)  # noqa: FBT003 (a stored value, not a flag argument)
     data = gen_render_data()
     rendered = render(data)
     assert rendered == EXPECTED_HTML

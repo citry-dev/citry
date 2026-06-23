@@ -144,14 +144,16 @@ def error_context(func_name: str) -> Callable[[T], T]:
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             # Functions that use this decorator have signature
             # (context: Mapping[str, Any], source: str, token: tuple[int, int], *args: Any, **kwargs: Any) -> Any
-            source = args[1]
-            start_index, end_index = args[2]
-
             try:
                 # On success return result normally
                 return func(*args, **kwargs)
             except Exception as e:
-                # On error, modify the error message to include the source code context
+                # On error, modify the error message to include the source code
+                # context. The source and token are pulled from the args only
+                # here, on the error path: this wraps every intercepted
+                # operation of every expression, so the success path stays bare.
+                source = args[1]
+                start_index, end_index = args[2]
                 format_error_with_context(e, source, start_index, end_index, func_name)
                 raise
 

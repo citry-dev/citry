@@ -107,6 +107,45 @@ class TestComponentNodeAttrs:
 
         assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">1-2</span></main>'
 
+    def test_c_bind_none_contributes_no_kwargs(self):
+        # An optional kwargs dict that is None is a no-op (no `or {}` guard
+        # needed at the call site), matching the same rule on plain elements
+        # and Vue's `v-bind="null"`.
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<span>{{ a }}</span>"
+
+            def template_data(self, kwargs, slots=None):
+                return {"a": kwargs.get("a", "default")}
+
+        class Page(Component):
+            citry = c
+            template = '<main><c-card c-bind="extra" /></main>'
+
+            def template_data(self, kwargs, slots=None):
+                return {"extra": None}
+
+        assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">default</span></main>'
+
+    def test_c_bind_non_mapping_raises(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<span>x</span>"
+
+        class Page(Component):
+            citry = c
+            template = '<main><c-card c-bind="bad" /></main>'
+
+            def template_data(self, kwargs, slots=None):
+                return {"bad": 42}
+
+        with pytest.raises(TypeError, match="c-bind on <card> must resolve to a mapping of kwargs"):
+            Page().render().serialize()
+
     def test_dynamic_attr_value_is_escaped_by_the_child(self):
         # The attr resolves to a raw Python value (unescaped); the child escapes
         # it when rendering it through an ExprNode.

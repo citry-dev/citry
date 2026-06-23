@@ -135,6 +135,18 @@ class TestForNode:
     def test_shorthand_empty(self):
         assert _html('<li c-for="i in items">{{ i }}</li>', items=[]) == ""
 
+    def test_loop_var_used_in_same_element_attribute(self):
+        # The loop variable is in scope for the same element's other
+        # attributes, so it can feed a c-bind on that element. Regression for
+        # a parser bug that rejected this as variable shadowing.
+        out = _html('<li c-for="i in rows" c-bind="i">x</li>', rows=[{"data-n": 1}, {"data-n": 2}])
+        assert out == '<li data-n="1" data-cid-c1="">x</li><li data-n="2" data-cid-c1="">x</li>'
+
+    def test_loop_var_in_same_element_attribute_on_void_element(self):
+        # Same case on a void element (the self-closing parser path).
+        out = _html('<img c-for="a in items" c-bind="a" />', items=[{"src": "a.png"}, {"src": "b.png"}])
+        assert out == '<img src="a.png" data-cid-c1=""/><img src="b.png" data-cid-c1=""/>'
+
 
 class TestNestedControlFlow:
     def test_for_inside_if(self):

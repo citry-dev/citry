@@ -609,6 +609,12 @@ class ElementAttrsNode(Node):
         for attr in self.attrs:
             if attr.key == "c-bind":
                 value = const_value(attr.resolve(context))
+                # A c-bind of None contributes nothing, so an optional
+                # attribute dict (a common case) needs no guard at the call
+                # site. This matches Vue's `v-bind="null"`. A non-None,
+                # non-mapping value is still a mistake and is rejected.
+                if value is None:
+                    continue
                 if not isinstance(value, Mapping):
                     msg = (
                         f"c-bind on <{self.tag_name}> must resolve to a mapping of attributes, "
@@ -623,19 +629,37 @@ class ElementAttrsNode(Node):
 
     def _format(self, resolved: Mapping[str, Any], context: CitryContext) -> RenderPart:
         """Format the merged dict into the output part(s)."""
+        # Common case: no attribute value is a nested-template render, so the
+        # whole dict formats in a single pass. Doing it per key (the mixed-case
+        # path below) would escape, join, and concatenate once per attribute,
+        # which is the dominant per-element cost on a big page.
+        if not any(isinstance(value, CitryRender) for value in resolved.values()):
+            chunk = format_attrs(resolved)
+            return (" " + chunk) if chunk else ""
+
+        # Mixed: a nested-template value (`c-foo="<div>...</div>"`) keeps its
+        # parts so components inside it stay deferred and render through the
+        # queue. Format the runs of plain attributes around it in one call each.
         parts: list[RenderPart] = []
+        plain: dict[str, Any] = {}
+
+        def flush_plain() -> None:
+            if plain:
+                chunk = format_attrs(plain)
+                if chunk:
+                    parts.append(" " + chunk)
+                plain.clear()
+
         for key, value in resolved.items():
             if isinstance(value, CitryRender):
-                # A nested-template attribute value (`c-foo="<div>...</div>"`)
-                # keeps its parts, so components inside it stay deferred and
-                # render through the queue like anywhere else.
+                flush_plain()
                 parts.append(f' {escape(key)}="')
                 parts.append(value)
                 parts.append('"')
             else:
-                chunk = format_attrs({key: value})
-                if chunk:
-                    parts.append(" " + chunk)
+                plain[key] = value
+        flush_plain()
+
         if not parts:
             return ""
         if all(isinstance(part, str) for part in parts):
@@ -747,7 +771,17 @@ class ComponentNode(Node):
         for attr in self.attrs:
             key: str = attr.key
             if key == "c-bind":
-                kwargs.update(attr.resolve(context))
+                bound = attr.resolve(context)
+                # A c-bind of None contributes nothing (an optional kwargs dict
+                # needs no `or {}` guard at the call site), matching Vue's
+                # `v-bind="null"` and the same rule on plain elements. A
+                # non-None, non-mapping value is still a mistake.
+                if bound is None:
+                    continue
+                if not isinstance(bound, Mapping):
+                    msg = f"c-bind on <{self.name}> must resolve to a mapping of kwargs, got {type(bound).__name__}"
+                    raise TypeError(msg)
+                kwargs.update(bound)
                 continue
             value = attr.resolve(context)
             # Only these two attr kinds are literals. A TemplateHtmlAttr also
