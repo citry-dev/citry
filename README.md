@@ -1,22 +1,34 @@
 # Citry - Refreshingly elegant templating
 
-Citry is a templating engine that brings the best of **Vue**, **React**,
-**Django**, and **Jinja** to every language.
+Citry is a templating engine for Python that brings the best of **Vue**, **React**,
+**Django**, and **Jinja**.
 
-Use the same Vue-like component syntax to write templates everywhere -
-**Python**, **JS/TS**, **PHP**, **Go**, or **Rust**:
+```python
+from citry import Component
 
-```html
-<c-Card title="Welcome" c-class="card_classes">
-  <c-fill name="body">
-    <c-for each="item in items">
-      <c-Item c-data="item" />
-    </c-for>
-  </c-fill>
-  <c-fill name="footer">
-    <button c-disabled="is_loading">Submit</button>
-  </c-fill>
-</c-Card>
+class Welcome(Component):
+    class Kwargs:
+        title: str
+        messages: list[str]
+
+    def template_data(self, kwargs, slots=None):
+        return {
+            "title": kwargs.title,
+            "count": len(kwargs.messages),
+        }
+
+    template = """
+      <div class="card">
+        <h1>{{ title }}</h1>
+        <p>You have {{ count }} new messages.</p>
+      </div>
+    """
+
+component = Welcome(
+    title="Welcome back",
+    messages=["a", "b", "c"],
+)
+html = str(component)
 ```
 
 ## Why Citry?
@@ -29,12 +41,11 @@ Citry is:
 - **Simple** - just 2 rules and 13 built-in tags
 - **Fast** - Rust-powered parsing
 - **Safe** - expressions are sandboxed to block dangerous operations
+- **Smart** - manages JS and CSS scripts for you
 - **Reliable** - typos and missing props fail at compile time, not in production
 - **Universal** - one template language for your entire stack
 
 ## Quickstart
-
-Citry ships for Python today.
 
 ```sh
 pip install citry
@@ -98,10 +109,18 @@ class Page(Component):
 
 Citry extends HTML with two rules:
 
-1. **`<c-*>` tags are components** - any tag starting with `c-` is a component
-   or a built-in tag.
-2. **`c-*` attributes are dynamic** - any attribute starting with `c-` is
-   evaluated as an expression, and the `c-` prefix is stripped from the output.
+### 1. `<c-*>` tags are components
+
+Any tag starting with `c-` is a component or a built-in tag.
+
+`<c-Card>` -> `Card` component.
+
+### 2. `c-*` attributes are dynamic
+
+Any attribute starting with `c-` is evaluated as an expression.
+The `c-` prefix is stripped from the output:
+
+`<div c-title="data.title">` -> `<div title="...">`
 
 ```html
 <!-- Static HTML attribute -->
@@ -142,14 +161,18 @@ is as expressive as Vue or React.
 A short tour. The [template syntax reference](docs/template-syntax.md) covers
 every feature in depth.
 
-**Expressions** with `{{ }}`, written in your host language:
+### Expressions
+
+With `{{ }}`, written in Python:
 
 ```html
 <p>{{ user.name }}</p>
 <p>{{ 'Member' if user.is_active else 'Guest' }}</p>
 ```
 
-**Dynamic attributes** with the `c-` prefix. A `True` value renders the
+### Dynamic attributes
+
+With the `c-` prefix. A `True` value renders the
 attribute bare, `False` or `None` omits it:
 
 ```html
@@ -161,7 +184,9 @@ attribute bare, `False` or `None` omits it:
 </button>
 ```
 
-**Control flow** as tags or as attributes on a regular element:
+### Control flow
+
+As tags or as attributes on a regular element:
 
 ```html
 <ul>
@@ -177,14 +202,18 @@ attribute bare, `False` or `None` omits it:
 </c-else>
 ```
 
-**Slots** let a component accept content from its caller. Define insertion
+### Slots
+
+Let a component accept content from its caller. Define insertion
 points with `<c-slot>`, and fill them with `<c-fill>`:
 
 ```html
 <!-- Modal.html -->
 <div class="modal">
   <header>{{ title }}</header>
-  <main><c-slot /></main>
+  <main>
+    <c-slot /> <!-- Insertion point -->
+  </main>
 </div>
 
 <!-- Using the component -->
@@ -197,103 +226,17 @@ points with `<c-slot>`, and fill them with `<c-fill>`:
 
 Citry components are more than templates. A few of the things you can do:
 
-**Type your inputs and catch mistakes at compile time.** Declare a component's
-props and slots with plain annotated classes:
+### Build a component once, then compose and reuse it
 
-```python
-from citry import Component, SlotInput
-
-class Card(Component):
-    template = '<div>{{ title }}<c-slot name="header" /></div>'
-
-    class Kwargs:
-        title: str          # required
-        size: int = 10      # optional
-
-    class Slots:
-        header: SlotInput
-```
-
-These declarations become a contract for every template that uses the
-component. Mistakes fail when the template is compiled, pointing at the exact
-spot in the source:
-
-```html
-<c-Card title="Hi" bogus="1" />      <!-- error: unknown prop -->
-<c-Card />                           <!-- error: missing required `title` -->
-<c-Card title="Hi">
-  <c-fill name="headr">...</c-fill>  <!-- error: typo'd slot name -->
-</c-Card>
-```
-
-**Co-locate JS and CSS with a component**, and render the collected assets
-where you want them with `<c-js>` and `<c-css>`:
-
-```python
-class Counter(Component):
-    template = """
-      <button>{{ label }}</button>
-    """
-    css = """
-      button {
-        font-weight: bold;
-      }
-    """
-    js = """
-      $onComponent(({ els }) => {
-        els[0].addEventListener('click', increment);
-      });
-    """
-```
-
-**Provide values to descendant components** with `<c-provide>`, and read them
-anywhere below with `inject()`, so you do not thread props through every level:
-
-```python
-class Greeting(Component):
-    template = """
-      <p>{{ label }}</p>
-    """
-
-    def template_data(self, kwargs, slots=None):
-        # Read a value an ancestor provided, with no prop drilling.
-        return {
-            "label": self.inject("theme").label,
-        }
-
-class Page(Component):
-    # <c-Greeting /> renders <p>Dark mode</p>
-    template = '''
-      <c-provide key="theme" label="Dark mode">
-        <c-Greeting />
-      </c-provide>
-    '''
-```
-
-**Wrap a subtree in an error boundary** so a failure in one component renders a
-fallback instead of breaking the whole page:
-
-```python
-class Page(Component):
-    # If <c-Widget /> raises while rendering,
-    # the page shows the fallback text instead of
-    # letting the error break the page.
-    template = '''
-      <c-error-fallback fallback="Could not load widget">
-        <c-Widget />
-      </c-error-fallback>
-    '''
-```
-
-A `fallback` slot can receive the error itself if you want a custom message.
-
-**Build a component once, then compose and reuse it.** `Component(...)` returns
-a value you can render on its own or pass into another component, and the same
-instance works in more than one place:
+`Component(...)` returns a value you can render on its own or pass into another component, and the same instance works in more than one place:
 
 ```python
 class Layout(Component):
-    template = "<main>{{ body }}</main>"
+    template = """
+      <main>
+        {{ body }}
+      </main>
+    """
 
     def template_data(self, kwargs, slots=None):
         return {"body": kwargs["body"]}
@@ -303,6 +246,186 @@ card = Card(title="Welcome")
 standalone = str(card)        # render the card to HTML on its own
 page = Layout(body=card)      # or pass the same card into another component
 ```
+
+### Ship JS and CSS with your components
+
+As a page renders, Citry collects every rendered component's CSS and JS scripts, and injects them where you place
+`<c-css />` and `<c-js />` (typically `<head>` and the end of `<body>`). No
+bundler, no hand-managed `<link>` or `<script>` tags:
+
+```python
+class Page(Component):
+    template = """
+      <html>
+        <head>
+          <c-css />
+        </head>
+        <body>
+          <c-Chart c-points="[1, 2, 3]" />
+          <c-js />
+        </body>
+      </html>
+    """
+```
+
+### Pass Python data to JS/CSS as variables
+
+`js_data()` and `css_data()` pass values from the server straight to that component's JS
+and CSS (as custom properties) in the browser, per rendered
+instance. A server-rendered component can drive its own client behaviour and
+styling from Python, with no manual data wiring:
+
+```python
+class Chart(Component):
+    template = """
+      <div class="chart"></div>
+    """
+    js = """
+      $onComponent(({ els, data }) => {
+        draw(els[0], data.points);
+      )};
+    """
+    css = """
+      .chart {
+        height: var(--h);
+      }
+    """
+
+    def js_data(self, kwargs, slots=None):
+        return {"points": kwargs["points"]}   # reaches the JS as `data.points`
+
+    def css_data(self, kwargs, slots=None):
+        return {"h": "240px"}                  # reaches the CSS as `var(--h)`
+```
+
+### Provide data to a whole subtree
+
+Set a value with `<c-provide>` and read it anywhere below with `inject()`, so you do not thread props through every layer:
+
+```python
+class Greeting(Component):
+    template = """
+      <p>{{ label }}</p>
+    """
+
+    def template_data(self, kwargs, slots=None):
+        # Read a value an ancestor provided, with no prop drilling.
+        return {"label": self.inject("theme").label}
+
+class Page(Component):
+    # <c-Greeting /> renders <p>Dark mode</p>
+    template = """
+      <c-provide key="theme" label="Dark mode">
+        <c-Greeting />
+      </c-provide>
+    """
+```
+
+### Handle render errors with grace
+
+500s due to an error in the template is poor UX. Instead of breaking the whole page, wrap section in `<c-error-fallback>` to
+render a fallback when error occurs. Boundaries nest, and the nearest one wins:
+
+```python
+class Page(Component):
+    # If <c-Widget /> raises while rendering, the page shows the fallback
+    # text instead of letting the error break the page.
+    template = """
+      <c-error-fallback fallback="Could not load widget">
+        <c-Widget />
+      </c-error-fallback>
+    """
+```
+
+A `fallback` slot can receive the error itself if you want a custom message.
+
+### Catch errors early with input types
+
+Declare a component's inputs with plain annotated classes.
+A wrong prop or slot name then fails when the template *compiles*:
+
+```python
+from citry import Component, SlotInput
+
+class Card(Component):
+    template = """
+      <div>
+        {{ title }}
+        <c-slot name="header" />
+      </div>
+    """
+
+    class Kwargs:
+        title: str          # required
+        size: int = 10      # optional
+
+    class Slots:
+        header: SlotInput
+```
+
+```html
+<c-Card title="Hi" bogus="1" />      <!-- error: unknown prop -->
+<c-Card />                           <!-- error: missing required `title` -->
+<c-Card title="Hi">
+  <c-fill name="headr">...</c-fill>  <!-- error: typo'd slot name -->
+</c-Card>
+```
+
+### Support for HTML fragments (HTMX-style)
+
+Fragments are rendered components that can be inserted into a page.
+
+Fragments are smart - browser downloads their JS and CSS assets only once,
+even with many copies of the fragment on the page. 
+
+Render a component specifically as a fragment with `.serialize()`:
+
+```python
+card = Card(title="Welcome")
+card.render().serialize(deps_strategy="fragment")
+```
+
+To use fragements, you must [mount a web framework](#use-with-web-framework).
+
+### Performance - Render the constant parts once
+
+If you have inputs that don't change between renders, wrap them in `Const(...)`.
+
+Citry pre-renders and caches the parts of the template that
+depend only on the constant inputs.
+
+```python
+from citry import Const
+
+class Row(Component):
+    template = """
+      <tr>
+        <td>{{ label }}</td>
+        <td>{{ value }}</td>
+      </tr>
+    """
+
+    def template_data(self, kwargs, slots=None):
+        return {
+            "label": kwargs["label"],
+            "value": kwargs["value"],
+        }
+
+# The <td>{{ label }}</td> part is computed once and reused down the loop;
+# only `value`, which varies per row, is recomputed.
+rows = [
+    Row(label=Const("Name"), value=v)
+    for v in values
+]
+```
+
+### And more
+
+- Templates support infinite depth;
+- Extension system;
+- Dynamic components/HTML tags with `<c-component>` / `<c-element>`
+
+See the [changelog](CHANGELOG.md) for the full list.
 
 ## Use with web framework
 
@@ -332,15 +455,6 @@ Cache backends plug in the same way, through `Citry(cache=...)`:
 `citry.contrib.caches.RedisCache`, `citry.contrib.caches.DiskCache`, and
 `citry.contrib.django.DjangoCache`.
 
-## Installation
-
-```sh
-pip install citry
-```
-
-`citry` is the runtime you import from. It builds on `citry_core`, the
-Rust-powered parser and compiler, and installs it for you.
-
 ## Documentation
 
 - [Template syntax reference](docs/template-syntax.md) - every template feature
@@ -350,11 +464,11 @@ Rust-powered parser and compiler, and installs it for you.
 
 ## Help bring Citry to your language
 
-Today Citry ships as a Python package, but it is built to travel. All the hard
-parts (parsing, compiling, the template contract) live in a single Rust core,
-and each language gets a thin binding on top. The code inside `{{ }}` and `c-*`
-attributes is the only host-language-specific piece. Adding a language means
-writing that thin binding, not reimplementing the engine.
+Today Citry ships as a Python package, but designed to work with any language.
+The code inside `{{ }}` and `c-*` attributes is the only host-language-specific logic.
+
+If you want Citry in your stack, this is a great place to contribute. Star the
+repo to follow along, and open an issue if you would like to help port it.
 
 | Language   | Status  | Binding      |
 | ---------- | ------- | ------------ |
@@ -363,9 +477,6 @@ writing that thin binding, not reimplementing the engine.
 | **PHP**    | Planned | FFI          |
 | **Go**     | Planned | cgo          |
 | **Rust**   | Planned | Native       |
-
-If you want Citry in your stack, this is a great place to contribute. Star the
-repo to follow along, and open an issue if you would like to help port it.
 
 ## License
 

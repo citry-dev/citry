@@ -301,6 +301,11 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   - When warning against a mistake, show the reader's natural first attempt,
     why it breaks in plain language, then the fix; pair a wrong and a right
     example with comments on the lines that matter.
+  - Order a feature showcase by value to the target reader (for citry, a
+    Python/web engineer), not by what is easiest to defend: core capabilities
+    first, then validation, then optimizations. Do not drop a genuinely
+    valuable feature for a weak caveat (e.g. "no turnkey endpoint"); show it,
+    framed honestly. Keep it accurate: only showcase what is actually built.
 - **No em dashes** (the U+2014 character) in agent docs, code comments, or
   docstrings. Use a hyphen, a comma, parentheses, or two sentences. A
   PostToolUse hook ([`.claude/hooks/check-em-dashes.py`](.claude/hooks/check-em-dashes.py))
