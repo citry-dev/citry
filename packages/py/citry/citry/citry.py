@@ -84,11 +84,13 @@ class Citry:
         extensions: Sequence[type[Extension] | Extension | str] = (),
         extensions_defaults: Mapping[str, Mapping[str, Any]] | None = None,
         cache: CitryCache | str | None = None,
+        sandbox_expressions: bool = True,
     ) -> None:
         self.settings = CitrySettings(
             extensions=tuple(extensions),
             extensions_defaults=dict(extensions_defaults) if extensions_defaults is not None else {},
             cache=cache,
+            sandbox_expressions=sandbox_expressions,
         )
 
         # The cache backend (docs/design/dependencies.md section 10): derived

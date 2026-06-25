@@ -39,9 +39,16 @@ class CitrySettings:
             instance its own in-memory cache. The live backend built from this
             spec is ``Citry.cache``. See docs/design/dependencies.md
             section 10.
+        sandbox_expressions: Whether template expressions (``{{ ... }}`` and
+            dynamic ``c-*`` attributes) are evaluated in the security sandbox.
+            On by default. Turning it off evaluates expressions as plain Python
+            (no builtins exposed, same as the sandbox), which is faster but
+            removes all access controls; only do so when every template comes
+            from a trusted source. See docs/design/constness.md.
 
     """
 
     extensions: tuple[type[Extension] | Extension | str, ...] = ()
     extensions_defaults: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
     cache: CitryCache | str | None = None
+    sandbox_expressions: bool = True

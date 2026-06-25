@@ -401,7 +401,9 @@ normally each time.
 """
 
 
-def fold_body(body: list[BodyItem], const_vars: dict[str, Any], *, fold_attrs: bool = True) -> list[BodyItem]:
+def fold_body(
+    body: list[BodyItem], const_vars: dict[str, Any], *, fold_attrs: bool = True, sandboxed: bool = True
+) -> list[BodyItem]:
     """
     Pre-compute the parts of ``body`` that depend only on ``const_vars``.
 
@@ -471,8 +473,9 @@ def fold_body(body: list[BodyItem], const_vars: dict[str, Any], *, fold_attrs: b
     The trade-off of folding inside kept ``<c-if>`` branches is WHEN a const
     expression runs: it is evaluated once here even if the branch it sits in
     is not taken by this particular render (a later render sharing the cache
-    entry may take it). Citry expressions are sandboxed and expected to have
-    no side effects, so running one early should not be observable.
+    entry may take it). Citry expressions are expected to have no side effects
+    (the sandbox enforces it by default), so running one early should not be
+    observable.
 
     One sharp edge of pre-running loops: a one-shot iterable (a generator)
     marked const is consumed by the attempt. If the attempt then has to back
@@ -492,7 +495,9 @@ def fold_body(body: list[BodyItem], const_vars: dict[str, Any], *, fold_attrs: b
     unchanged ones is safe).
     """
     const_names = frozenset(const_vars)
-    fold_context = CitryContext(variables=dict(const_vars))
+    # Fold-time evaluation must use the same sandbox mode as the live render, so
+    # a node's evaluator is compiled once in the right mode (see _fold_expr).
+    fold_context = CitryContext(variables=dict(const_vars), sandboxed=sandboxed)
     return _fold_into(body, const_names, fold_context, fold_attrs=fold_attrs)
 
 
@@ -621,7 +626,7 @@ def _fold_expr(node: ExprNode, fold_context: CitryContext) -> BodyItem:
     try:
         # Unwrap a Const marker so the identity check sees the real value, the
         # same rule as ``_render_value``.
-        value = const_value(node.evaluate(fold_context.variables))
+        value = const_value(node.evaluate(fold_context.variables, sandboxed=fold_context.sandboxed))
         if value is None:
             return ""
         if isinstance(value, (Slot, CitryElement, CitryRender)):

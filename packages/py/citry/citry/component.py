@@ -62,10 +62,10 @@ from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from citry.citry import Citry, citry
 from citry.citry_element import CitryElement
-from citry.component_render import gen_render_id
 from citry.extensions.dependencies import get_dependencies as _get_dependencies_impl
 from citry.provide import MISSING, inject_value, make_provided, validate_provide_key
 from citry.slots import Slot, normalize_slot_fills
+from citry.util.id import gen_render_id
 from citry.util.misc import to_dict
 
 if TYPE_CHECKING:
@@ -388,8 +388,9 @@ class Component(metaclass=ComponentMeta):
     render path above it (captured where its tag sits). Read by ``inject``.
     """
 
-    _provides_own: dict[str, Any]
-    """Internal: the entries this instance registered via ``provide``, passed
+    _provides_own: dict[str, Any] | None
+    """Internal: the entries this instance registered via ``provide`` (``None``
+    until the first ``provide`` call), passed
     on to its descendants (never visible to its own ``inject``).
     """
 
@@ -415,8 +416,11 @@ class Component(metaclass=ComponentMeta):
         # Slot inputs (strings, functions, elements, renders, Slot instances)
         # additionally normalize to `Slot` values; `normalize_slot_fills`
         # builds a fresh dict, so the copy is preserved.
+        # `element.slots` is `slots or {}`, so the common no-slots case is a falsy
+        # empty dict, not None. A truthiness check skips the `normalize_slot_fills`
+        # call (which would just rebuild an empty dict) for that case.
         raw_slots: dict[str, Slot] = (
-            normalize_slot_fills(to_dict(slots), component_name=cls.__name__) if slots is not None else {}
+            normalize_slot_fills(to_dict(slots), component_name=cls.__name__) if slots else {}
         )
 
         # Set typed kwargs/slots if the component defines a dataclass,
@@ -435,7 +439,9 @@ class Component(metaclass=ComponentMeta):
         # provides builds a new mapping instead of changing an existing one,
         # so sharing is safe.
         self._provides_inherited = provides if provides is not None else {}
-        self._provides_own = {}
+        # Allocated lazily by `provide()`; most components never provide. Readers
+        # guard with truthiness, so `None` reads the same as an empty dict.
+        self._provides_own = None
 
     # The base implementation ignores its arguments (it returns None); they are
     # the documented signature for subclasses to override, hence the noqa's.
@@ -647,6 +653,8 @@ class Component(metaclass=ComponentMeta):
 
         """
         validate_provide_key(key)
+        if self._provides_own is None:
+            self._provides_own = {}
         self._provides_own[key] = make_provided(data)
 
     def inject(self, key: str, default: Any = MISSING) -> Any:

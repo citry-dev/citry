@@ -781,6 +781,11 @@ class ExtensionManager:
     # ----- Render hooks -----
 
     def on_component_input(self, component: Component) -> None:
+        # Skip building the context dataclass when no extension subscribes, the
+        # same short-circuit the per-element/per-slot hooks use. This runs per
+        # component, so the allocation is worth avoiding on the construction path.
+        if not self.has_hook("on_component_input"):
+            return
         self.emit(
             "on_component_input",
             OnComponentInputContext(
@@ -799,6 +804,8 @@ class ExtensionManager:
         js_data: dict[str, Any],
         css_data: dict[str, Any],
     ) -> None:
+        if not self.has_hook("on_component_data"):
+            return
         self.emit(
             "on_component_data",
             OnComponentDataContext(

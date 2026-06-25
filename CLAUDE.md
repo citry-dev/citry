@@ -190,9 +190,13 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   `module-name = "citry_core._rust"`; see
   [`packages/py/citry_core/pyproject.toml`](packages/py/citry_core/pyproject.toml)
   for why.
-- **The `template_parser` PyO3 module is currently commented out** in
-  [`citry_core_py/src/lib.rs`](crates/citry_core_py/src/lib.rs); the V3 wiring
-  to Python is pending (see the INDEX "Open project plans").
+- **The PyO3 surface is registered in
+  [`citry_core_py/src/lib.rs`](crates/citry_core_py/src/lib.rs).** Each Rust
+  capability is added as a submodule of `_rust`: `template_parser`
+  (`parse_template`/`compile_template` plus the AST classes), `safe_eval`,
+  `html_transform`, and the prototype `render_plan` module. That list is exactly
+  what Python sees, so keep it in step with the
+  [`_rust.pyi`](packages/py/citry_core/citry_core/_rust.pyi) stub.
 - **Some dependency declarations are mirrored across files** and drift if
   you update only one. Python test deps live in each package's
   `[dependency-groups].dev` AND in the root `pyproject.toml` dev/ci extras

@@ -33,15 +33,14 @@ its own props and slots, never an inherited context.
 
 from __future__ import annotations
 
-import random
+import functools
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from citry.assets import load_template
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
-from citry.citry_render import CitryRender, DeferredComponent
+from citry.citry_render import CitryRender, DeferredComponent, _render_value
 from citry.citry_template import CitryTemplate
-from citry.constants import COMP_ID_PREFIX, UID_LENGTH
 from citry.constness import const_value, extract_const_vars, fold_body
 from citry.nodes import (
     ComponentNode,
@@ -70,26 +69,8 @@ if TYPE_CHECKING:
 
     from citry.citry_render import OnRenderGenerator, RenderPart, RenderReplacement
     from citry.component import Component
-    from citry.nodes import BodyItem
+    from citry.nodes import BodyItem, Node
     from citry_core.template_parser import TagRules
-
-
-_ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-
-def gen_id() -> str:
-    """Generate a unique alphanumeric ID (6 chars, ~1 in 3.3M collision chance)."""
-    # IMPORTANT: django-components used nanoid impl using `os.urandom()`.
-    # But these IDs only scope DOM/CSS to a component instance, so a fast PRNG is
-    # the right tool; they are not secrets. `random.choices()` avoids the urandom
-    # syscall and the rejection-sampling math nanoid does per call.
-    # This `random.choices()` impl is ~3-4x faster than the nanoid impl.
-    return "".join(random.choices(_ID_ALPHABET, k=UID_LENGTH))  # noqa: S311 (DOM id, not a secret)
-
-
-def gen_render_id() -> str:
-    """Generate a unique render ID for a component instance (e.g. ``c1A2b3c``)."""
-    return COMP_ID_PREFIX + gen_id()
 
 
 def render_impl(
@@ -517,7 +498,11 @@ def _render_one(
     #    components, each of which can detect const-ness and cache accordingly.
     #    Const is a transparent proxy, so nodes treat a const value exactly like
     #    the underlying value.
-    context = CitryContext(variables=tpl_data, component=component)
+    context = CitryContext(
+        variables=tpl_data,
+        component=component,
+        sandboxed=citry_instance.settings.sandbox_expressions,
+    )
 
     # 4.5 on_component_data: extensions may add/modify the data, and stash
     #     tree-wide state into ``context.extra`` (e.g. the dependencies
@@ -598,6 +583,7 @@ def _render_one(
                     # Folding an attribute region bakes its dict before extensions
                     # see it, so keep the regions live when anyone subscribes.
                     fold_attrs=not extensions.has_hook("on_attrs_resolved"),
+                    sandboxed=citry_instance.settings.sandbox_expressions,
                 )
 
             body = citry_instance._const_body_cache.get_or_build(comp_cls, signature, build)

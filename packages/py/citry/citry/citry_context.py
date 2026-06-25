@@ -77,7 +77,7 @@ class CitryContext:
 
     """
 
-    __slots__ = ("component", "extra", "provides", "variables")
+    __slots__ = ("component", "extra", "provides", "sandboxed", "variables")
 
     def __init__(
         self,
@@ -85,11 +85,14 @@ class CitryContext:
         extra: dict[str, Any] | None = None,
         component: Component | None = None,
         provides: dict[str, Any] | None = None,
+        sandboxed: bool = True,
     ) -> None:
         self.variables = variables if variables is not None else {}
         self.extra = extra if extra is not None else {}
         self.component = component
         self.provides = provides if provides is not None else {}
+        # Whether expressions evaluated in this context use the security sandbox.
+        self.sandboxed = sandboxed
 
     def _add_root_markers(self, markers: Iterable[str]) -> None:
         """

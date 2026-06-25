@@ -397,8 +397,10 @@ already tracked in the AST.
   and then mutates it, output goes stale. That is acceptable and must be
   documented.
 - **Folding assumes pure, deterministic expressions.** Citry expressions are
-  sandboxed (see `safe_eval`), which mostly guarantees this, but folding does
-  change when a const expression is evaluated (once, at first render).
+  sandboxed by default (see `safe_eval`), which mostly guarantees this, but
+  folding does change when a const expression is evaluated (once, at first
+  render). (Turning the sandbox off does not change this assumption: a template
+  expression is still expected to be a pure function of its inputs.)
 
 ---
 

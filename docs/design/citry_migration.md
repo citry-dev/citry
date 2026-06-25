@@ -846,7 +846,7 @@ Ported function by function, on demand. Current state:
 |---|---|---|
 | `to_dict` | ✅ Done | Extended beyond djc: also understands Pydantic v1/v2 via the attribute protocol |
 | (citry addition) `get_fields` / `FieldSpec` | ✅ Done | Reads dataclass/NamedTuple/Pydantic field specs; feeds `tag_rules.py` |
-| `gen_id` / `gen_component_id` | ✅ Done | As `gen_id` / `gen_render_id` in `component_render.py` |
+| `gen_id` / `gen_component_id` | ✅ Done | As `gen_id` / `gen_render_id` in `util/id.py` |
 | `get_module_info` | ✅ Done | |
 | `is_glob` | ✅ Done | |
 | `snake_to_pascal` | ✅ Done | |
@@ -2487,10 +2487,9 @@ immediate driver is the benchmark Form component's div/table/ul switch
 
 The first cross-engine rendering numbers, from the small benchmark scenario
 (the django-components Button benchmark, vendored and ported per
-[`benchmarking.md`](benchmarking.md)). Four engine rows render the same UI:
-vanilla Django templates, django-components, the citry port with plain
-inputs, and the same citry port with `Const`-marked inputs. Each cell is the
-median of 5 fresh-process rounds, run by `benchmarks/compare.py`.
+[`benchmarking.md`](benchmarking.md)). Three engine rows render the same UI:
+vanilla Django templates, django-components, and the citry port. Each cell is
+the median of 5 fresh-process rounds, run by `benchmarks/compare.py`.
 
 Measured 2026-06-12 on an Apple M4, Python 3.13.12; django 6.0.6,
 django-components 0.151.0, citry 0.1.0 (citry_core 1.3.0, release build).
@@ -2502,7 +2501,6 @@ machines, runs, or build profiles.
 | django | 75.35 ms (1.00x) | 71.45 ms (1.00x) | 1.11 ms (1.00x) | 39.5 us (1.00x) |
 | django-components | 72.47 ms (0.96x) | 72.05 ms (1.01x) | 1.44 ms (1.29x) | 206.6 us (5.23x) |
 | citry | 25.96 ms (0.34x) | 26.08 ms (0.37x) | 866.6 us (0.78x) | 58.9 us (1.49x) |
-| citry-const | 26.05 ms (0.35x) | 25.80 ms (0.36x) | 849.7 us (0.76x) | 64.4 us (1.63x) |
 
 What the numbers say about the migration so far:
 
@@ -2512,10 +2510,12 @@ What the numbers say about the migration so far:
   slower than a bare Django template. That remaining gap is the component
   machinery itself (per-render component construction, slot resolution, id
   marking), which a bare template simply does not do.
-- The Const fold is a wash on a one-element template (the fold-cache key
-  costs about as much as the fold saves); its fair test is the large
-  scenario, which is gated on JS/CSS dependency rendering
-  ([`benchmarking.md`](benchmarking.md) feature C).
+- The small scenario has no Const variant: a single Button computes everything
+  it renders from its inputs, so there is no render-invariant literal to mark.
+  The Const optimization gets its fair test in the large scenario (now ported,
+  35 components), and even there a correct per-component `Const` pass shows no
+  measurable benefit, because a real project page is mostly loops over dynamic
+  data; the full picture is in [`benchmarking.md`](benchmarking.md) section 11.
 
 Later snapshots go to the benchmarking design doc's results log
 ([`benchmarking.md`](benchmarking.md) section 11); `benchmarks/README.md`

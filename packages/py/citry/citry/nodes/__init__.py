@@ -71,11 +71,11 @@ from citry.attrs import format_attrs, merge_attrs
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender, DeferredComponent, _render_value
-from citry.constness import Const, const_value
+from citry.constness import Const, const_value, is_const
 from citry.slots import Slot
 from citry.util.exception import add_slot_to_error_message
 from citry.util.html import escape
-from citry_core.safe_eval import safe_eval
+from citry_core.safe_eval import compile_expr
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -252,6 +252,7 @@ def _make_body_slot(
                 extra=context.extra,
                 component=context.component,
                 provides=provides,
+                sandboxed=context.sandboxed,
             )
         else:
             render_context = context
@@ -291,23 +292,26 @@ class ExprNode(Node):
         # rendered, e.g. an expression in an `<c-if>` branch that is never taken.
         self._eval: Callable[[Any], Any] | None = None
 
-    def evaluate(self, variables: Mapping[str, Any]) -> Any:
+    def evaluate(self, variables: Mapping[str, Any], *, sandboxed: bool = True) -> Any:
         """
         Evaluate the expression against ``variables`` and return the raw value.
 
         The compiled evaluator is built on first use and reused (the node is
-        cached across renders, so the expression compiles once). Called by
-        ``render``, and by the ``Const`` optimization (``citry/constness.py``),
-        which evaluates an expression ahead of time when all of its variables
-        are marked constant.
+        cached across renders, so the expression compiles once). ``sandboxed``
+        chooses the security sandbox or plain evaluation; it is read only on the
+        first call, when the evaluator is compiled, and ignored afterwards (the
+        instance's setting is fixed, so every call passes the same value).
+        Called by ``render``, and by the ``Const`` optimization
+        (``citry/constness.py``), which evaluates an expression ahead of time
+        when all of its variables are marked constant.
         """
         if self._eval is None:
-            self._eval = safe_eval(self.expr)
+            self._eval = compile_expr(self.expr, sandboxed=sandboxed)
         return self._eval(variables)
 
     @override
     def render(self, context: CitryContext) -> RenderPart:
-        value = self.evaluate(context.variables)
+        value = self.evaluate(context.variables, sandboxed=context.sandboxed)
         # An element or Slot found in the expression renders with the
         # provide/inject entries active here, so it can inject what this
         # render site provides (docs/design/provide.md section 4.4).
@@ -468,7 +472,7 @@ class ExprHtmlAttr(HtmlAttr):
         if not isinstance(self.expr, str):
             return True
         if self._eval is None:
-            self._eval = safe_eval(self.expr)
+            self._eval = compile_expr(self.expr, sandboxed=context.sandboxed)
         return self._eval(context.variables)
 
     def __repr__(self) -> str:
@@ -670,6 +674,33 @@ class ElementAttrsNode(Node):
         return f"ElementAttrsNode(attrs={len(self.attrs)}, used_vars={self.used_vars})"
 
 
+def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
+    """
+    Whether a resolved component-input value is the same on every render.
+
+    A static attribute (``age="30"``) is always the same. An expression
+    attribute (``c-age="..."``) is the same on every render when every variable
+    it reads is itself constant. Two cases follow from that one rule:
+
+    - An expression that reads no variables at all (``c-items="[1, 2]"``,
+      ``c-age="30"``) is constant: nothing in it can change. (This is why
+      ``all()`` of an empty list of variables is true.)
+    - An expression that reads only constant variables (``c-age="base + 1"``
+      when ``base`` is constant) is constant too: a template expression only
+      depends on its inputs, so if none of the inputs can change, neither can
+      the result. Marking it lets the child component reuse the work it already
+      did for that input.
+
+    A ``TemplateHtmlAttr`` renders fresh output every time, and an attribute kind
+    an extension added is unknown to us, so neither is treated as constant.
+    """
+    if isinstance(attr, StaticHtmlAttr):
+        return True
+    if isinstance(attr, ExprHtmlAttr):
+        return all(is_const(context.variables.get(name)) for name in attr.used_vars)
+    return False
+
+
 @final
 class ComponentNode(Node):
     """
@@ -754,18 +785,18 @@ class ComponentNode(Node):
         - Other dynamic attrs carry a leading ``c-`` (``c-foo`` -> ``foo``);
           static attrs have a plain key. ``removeprefix`` handles both.
 
-        A value written literally in the template is marked ``Const`` here
-        ("this is the same on every render"): a static attribute
-        (``age="30"``) and an expression attribute that uses no variables
-        (``c-age="30"``, ``c-items="[1, 2]"``) cannot produce a different
-        value from one render to the next, so the child component can reuse
-        its pre-computed template work for them without anyone opting in
-        (see docs/design/constness.md). The marking happens here, where a
-        value becomes a component input, and nowhere else, so values used as
-        names or keys (slot/fill names, provide keys) stay plain. The marker
-        is applied fresh on each render, so a mutable literal (a list) is
-        still a new object every render; equal values still land on the same
-        cache entry.
+        A value that is the same on every render is marked ``Const`` here, so
+        the child component can reuse the work it already did for that input,
+        with no opt-in needed (see docs/design/constness.md). That covers a
+        literal (``age="30"``, ``c-items="[1, 2]"``) and also an expression
+        whose variables are all constant at render time (``c-age="base + 1"``
+        when ``base`` is constant): the result of such an expression cannot
+        change either, so it is constant too. ``_kwarg_is_const`` is the single
+        rule that decides this. The marking happens here, where a value becomes
+        a component input, and nowhere else, so values used as names or keys
+        (slot/fill names, provide keys) stay plain. The marker is applied fresh
+        on each render, so a mutable literal (a list) is still a new object
+        every render; equal values still land on the same cache entry.
         """
         kwargs: dict[str, Any] = {}
         for attr in self.attrs:
@@ -784,12 +815,7 @@ class ComponentNode(Node):
                 kwargs.update(bound)
                 continue
             value = attr.resolve(context)
-            # Only these two attr kinds are literals. A TemplateHtmlAttr also
-            # uses no variables, but it resolves to a freshly rendered piece
-            # of output each render, so it is never "the same value". Unknown
-            # attr kinds (an extension may add its own) stay unmarked, to be
-            # safe.
-            if isinstance(attr, StaticHtmlAttr) or (isinstance(attr, ExprHtmlAttr) and not attr.used_vars):
+            if _kwarg_is_const(attr, context):
                 value = Const(value)
             kwargs[key.removeprefix("c-")] = value
         return kwargs
@@ -962,7 +988,7 @@ class ForNode(Node):
             # uniform: `(x,)` for one target, `(k, v,)` for several.
             clause = each_attr.expr
             gen_src = f"(({', '.join(targets)},) for {clause})"
-            self._iter_eval = safe_eval(gen_src)
+            self._iter_eval = compile_expr(gen_src, sandboxed=context.sandboxed)
 
         count = 0
         for values in self._iter_eval(context.variables):
@@ -972,6 +998,7 @@ class ForNode(Node):
                 extra=context.extra,
                 component=context.component,
                 provides=context.provides,
+                sandboxed=context.sandboxed,
             )
             yield body, child
 

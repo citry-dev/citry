@@ -557,6 +557,90 @@ class TestTemplateLiteralConst:
         assert len(card_bodies) == 1
 
 
+class TestExpressionConstPropagation:
+    """
+    An expression attribute whose variables are all const at render time
+    produces a const result (``c-age="base + 1"`` when ``base`` is const), so
+    the child reuses its pre-computed work for that input as well. A single
+    non-const variable in the expression breaks it, exactly like a dynamic
+    attribute.
+    """
+
+    def test_all_const_expression_attr_is_const_in_the_child(self):
+        # base is const, so base + 1 (= 30) is const, so the child's c-if
+        # folds on `age`. If propagation failed, `age` would be plain and the
+        # IfNode would stay live.
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = '<c-if cond="age > 18">adult</c-if><c-else>minor</c-else>'
+
+            def template_data(self, kwargs, slots=None):
+                return dict(kwargs)
+
+        class Page(Component):
+            citry = c
+            template = '<c-Card c-age="base + 1" />'
+
+            def template_data(self, kwargs, slots=None):
+                return {"base": Const(29)}
+
+        assert Page().render().serialize() == "adult"
+        assert ["adult"] in c._const_body_cache.values()
+
+    def test_expression_mixing_const_and_dynamic_is_not_marked(self):
+        # base is const but n is not, so base + n is not const: the child must
+        # stay dynamic (one shared empty-signature entry keeping the IfNode).
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = '<c-if cond="age > 18">adult</c-if><c-else>minor</c-else>'
+
+            def template_data(self, kwargs, slots=None):
+                return dict(kwargs)
+
+        class Page(Component):
+            citry = c
+            template = '<c-Card c-age="base + n" />'
+
+            def template_data(self, kwargs, slots=None):
+                return {"base": Const(29), "n": kwargs["n"]}
+
+        assert Page(n=1).render().serialize() == "adult"
+        assert Page(n=-100).render().serialize() == "minor"
+        assert ["adult"] not in c._const_body_cache.values()
+        live = [b for b in c._const_body_cache.values() if any(isinstance(item, IfNode) for item in b)]
+        assert len(live) == 1
+
+    def test_propagated_const_dedups_across_a_loop(self):
+        # The win: a loop hands every child an all-const computed label, so all
+        # the children share ONE folded cache entry (the loop var `i` is not in
+        # the kwarg, so the kwarg is const every iteration and equal-valued).
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<span>{{ label }}</span>"
+
+            def template_data(self, kwargs, slots=None):
+                return dict(kwargs)
+
+        class Page(Component):
+            citry = c
+            template = '<c-for each="i in items"><c-Card c-label="prefix + \'!\'" /></c-for>'
+
+            def template_data(self, kwargs, slots=None):
+                return {"items": Const([1, 2, 3]), "prefix": Const("hi")}
+
+        out = Page().render().serialize()
+        assert out.count("<span") == 3
+        assert "hi!" in out
+        card_bodies = [b for b in c._const_body_cache.values() if b == ["<span>hi!</span>"]]
+        assert len(card_bodies) == 1
+
+
 class TestConstThroughTypedKwargs:
     def test_marker_survives_the_typed_kwargs_view(self):
         # The auto-converted dataclass Kwargs stores values as-is, so the

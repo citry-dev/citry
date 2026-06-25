@@ -1,5 +1,6 @@
 import builtins
-from typing import Any, Callable, Mapping, Optional, Tuple
+from types import MappingProxyType
+from typing import Any, Callable, Mapping, Optional, Tuple, cast
 
 from citry_core import _rust
 from citry_core.safe_eval.error import error_context, format_error_with_context
@@ -176,6 +177,58 @@ def safe_eval(
     lambda_code = f"_eval_expr = lambda context: (\n{transformed_code}\n)"
 
     return _exec_func_with_error_handling(lambda_code, "_eval_expr", source, "expression", eval_namespace)
+
+
+# A read-only empty mapping used as `__builtins__` for unsandboxed evaluation:
+# no builtins are exposed, and because it cannot be mutated, one template cannot
+# plant a fake builtin (`__builtins__["len"] = ...`) that another would then see.
+# Read-only also lets it be shared across evaluations without a per-call copy.
+_NO_BUILTINS: Mapping[str, Any] = MappingProxyType({})
+
+
+def compile_expr(source: str, *, sandboxed: bool = True) -> Callable[[Mapping[str, Any]], Any]:
+    """
+    Compile a template expression, optionally without the security sandbox.
+
+    With ``sandboxed=True`` (the default) this is exactly :func:`safe_eval`:
+    every variable, attribute, item, and call the expression uses is checked as
+    it runs. With ``sandboxed=False`` the expression is compiled to plain Python
+    and run directly. That is faster, but it drops every safety check, so it is
+    only for templates from a trusted source. Two things are kept the same so the
+    output does not change: Python builtins are still unavailable (``len(x)``
+    fails just as it does under the sandbox), and a walrus assignment
+    (``name := value``) still writes back into the variables mapping. The result
+    of a *successful* expression is identical either way; only the failures
+    differ (a missing name raises ``NameError`` here, ``KeyError`` under the
+    sandbox).
+    """
+    if sandboxed:
+        return safe_eval(source)
+
+    # Plain Python, no interceptors. Compiled once and reused across renders.
+    code = compile(f"(\n{source}\n)", "<expr>", "eval")
+
+    def evaluate(variables: Mapping[str, Any]) -> Any:
+        # `eval` is given one dict serving as both globals and locals, so that a
+        # name used inside a generator expression or lambda (a nested scope)
+        # resolves from the same mapping as a top-level name, and a walrus writes
+        # back into it. The runtime value is always a dict. An empty
+        # ``__builtins__`` blocks Python's automatic builtin injection (matching
+        # the sandbox, which exposes no builtins); it is removed afterwards so
+        # the caller's mapping is left exactly as it was found.
+        namespace = cast("dict[str, Any]", variables)
+        had_builtins = "__builtins__" in namespace
+        saved = namespace.get("__builtins__")
+        namespace["__builtins__"] = _NO_BUILTINS
+        try:
+            return eval(code, namespace)  # noqa: S307
+        finally:
+            if had_builtins:
+                namespace["__builtins__"] = saved
+            else:
+                namespace.pop("__builtins__", None)
+
+    return evaluate
 
 
 # NOTE: This is used also in citry_template_parser.
