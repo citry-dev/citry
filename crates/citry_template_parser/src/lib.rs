@@ -13,7 +13,6 @@ pub mod lang {
 }
 pub mod parser;
 pub mod parser_context;
-pub mod render_plan;
 pub mod utils {
     pub mod pest;
 }
