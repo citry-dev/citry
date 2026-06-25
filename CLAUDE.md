@@ -9,6 +9,17 @@ When working inside a specific crate or package, also read its `AGENTS.md`
 for local pointers and gotchas (e.g.
 [`crates/citry_template_parser/AGENTS.md`](crates/citry_template_parser/AGENTS.md)).
 
+## Working mode - always use the fable-mode skill
+
+Always work in the `fable-mode` skill
+([`.claude/skills/fable-mode/SKILL.md`](.claude/skills/fable-mode/SKILL.md)) for
+any non-trivial task here: map the stages before editing, delegate independent
+reads and analysis to parallel sub-agents, verify each stage against its
+expected output before advancing, and self-critique before delivery. This sits
+on top of the mechanisms below, not instead of them: a structural change still
+goes through the prior-art header (Mechanism 1) and the `ExitPlanMode` plan
+(Mechanism 2).
+
 ## What this project is
 
 Citry is a universal, cross-language HTML templating engine (Vue/React-like
