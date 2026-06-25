@@ -462,6 +462,24 @@ Cache backends plug in the same way, through `Citry(cache=...)`:
 - [Codebase and development setup](docs/codebase.md) - how to build, test, and
   contribute.
 
+## Performance
+
+Rendering a large page (~325 component instances, ~205 KB of HTML):
+
+![Citry vs Django vs django-components rendering a large page. Lower is better.](docs/assets/benchmark.png)
+
+- **Versus django-components** (the fair component-to-component comparison),
+  Citry is about **1.7x faster** on first render, **3.1x faster** on repeat
+  renders, and roughly **2x faster** to start up and import.
+- **Versus a bare Django template** (which renders no components at all), Citry
+  starts up about **2x faster**, and its repeat render stays within **~1.4x**,
+  while doing the full component lifecycle Django skips.
+
+These are relative numbers from a single machine. See
+[`benchmarks/`](benchmarks/README.md) for the methodology and how to reproduce
+them, and the [performance notes](docs/design/performance.md) for where the
+remaining time goes.
+
 ## Help bring Citry to your language
 
 Today Citry ships as a Python package, but designed to work with any language.
