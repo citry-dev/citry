@@ -193,7 +193,7 @@ class TestTemplateData:
         class MyComp(Component):
             citry = c
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"greeting": f"Hello {kwargs['name']}!"}
 
         inst = MyComp._create_instance()
@@ -340,7 +340,7 @@ class TestTemplateDataNormalization:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"title": "Hello"}
 
         assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
@@ -358,7 +358,7 @@ class TestTemplateDataNormalization:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return Data(title="Hello")
 
         assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
@@ -376,7 +376,7 @@ class TestTemplateDataNormalization:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return Data(title="Hello")
 
         assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
@@ -395,7 +395,7 @@ class TestTemplateDataValidation:
             class TemplateData:
                 title: str
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"title": "Hello"}
 
         assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
@@ -410,7 +410,7 @@ class TestTemplateDataValidation:
             class TemplateData:
                 title: str
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {}
 
         with pytest.raises(TypeError):
@@ -426,7 +426,7 @@ class TestTemplateDataValidation:
             class TemplateData:
                 title: str
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"title": "Hello", "bogus": 1}
 
         with pytest.raises(TypeError):
@@ -442,7 +442,7 @@ class TestTemplateDataValidation:
             class TemplateData:
                 title: str
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return MyComp.TemplateData(title="Hello")
 
         assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
@@ -454,7 +454,7 @@ class TestTemplateDataValidation:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"anything": "goes", "count": 3}
 
         assert MyComp(title="x").render().serialize() == '<p data-cid-c1="">hi</p>'
@@ -518,7 +518,7 @@ class TestAncestors:
             citry = c
             template = "<p>x</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen.append(list(self.ancestors))
 
         Root().render()
@@ -532,7 +532,7 @@ class TestAncestors:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen.append([type(a).__name__ for a in self.ancestors])
 
         class Middle(Component):
@@ -559,7 +559,7 @@ class TestAncestors:
             citry = c
             template = "<i>w</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen.append(any(type(a).__name__ == "Theme" for a in self.ancestors))
 
         class Theme(Component):
@@ -583,14 +583,14 @@ class TestAncestors:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen.append(list(self.ancestors))
 
         class Root(Component):
             citry = c
             template = "<main>{{ em }}</main>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"em": Embedded()}
 
         Root().render()
@@ -606,7 +606,7 @@ class TestAncestors:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen.append([type(a).__name__ for a in self.ancestors])
 
         class Card(Component):

@@ -121,7 +121,7 @@ class TestConstFlow:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}
 
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">hi</p>'
@@ -133,7 +133,7 @@ class TestConstFlow:
             citry = c
             template = "<p>{{ cols }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}
 
         # Different const values -> different signatures -> two cache entries.
@@ -152,7 +152,7 @@ class TestConstFlow:
             citry = c
             template = "<p>hi</p>"  # uses no variables
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}
 
         # The template never reads `cols`, so its const values cannot affect
@@ -168,7 +168,7 @@ class TestConstFlow:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}
 
         # Plain (non-Const) values do not enter the signature, so both renders
@@ -184,7 +184,7 @@ class TestConstFlow:
             citry = c
             template = "<p>{{ rows }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"rows": kwargs["rows"]}
 
         # Equal lists (distinct objects) share one canonical key.
@@ -201,7 +201,7 @@ class TestConstFlow:
             citry = c
             template = "<p>{{ obj.x }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"obj": kwargs["obj"]}
 
         # The value cannot be keyed, so it is demoted to dynamic: both renders
@@ -217,7 +217,7 @@ class TestConstFlow:
             citry = c
             template = "<p>{{ v }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"v": kwargs["v"]}
 
         assert Card(v=Const(True)).render().serialize() == '<p data-cid-c1="">True</p>'  # noqa: FBT003
@@ -245,7 +245,7 @@ class TestConstFold:
             citry = c
             template = "<p>{{ cols }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}
 
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
@@ -259,7 +259,7 @@ class TestConstFold:
             citry = c
             template = "<p>{{ cols }} and {{ other }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"], "other": kwargs["other"]}
 
         # Two renders share the const signature but differ in the dynamic input.
@@ -280,7 +280,7 @@ class TestConstFold:
             citry = c
             template = "<p>{{ v }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"v": kwargs["v"]}
 
         assert Card(v=Const("<b>")).render().serialize() == '<p data-cid-c1="">&lt;b&gt;</p>'
@@ -292,7 +292,7 @@ class TestConstFold:
             citry = c
             template = "<p>{{ v }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"v": kwargs["v"]}
 
         assert Card(v=Const(None)).render().serialize() == '<p data-cid-c1=""></p>'
@@ -305,7 +305,7 @@ class TestConstFold:
             citry = c
             template = '<c-if cond="cols > 2">big</c-if><c-else>small</c-else>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}
 
         assert Card(cols=Const(3)).render().serialize() == "big"
@@ -321,7 +321,7 @@ class TestConstFold:
             citry = c
             template = '<c-if cond="cols > 2">big</c-if>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}
 
         assert Card(cols=Const(1)).render().serialize() == ""
@@ -335,7 +335,7 @@ class TestConstFold:
             citry = c
             template = '<c-if cond="cols > 2">big</c-if><c-else>small</c-else>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}
 
         assert Card(cols=3).render().serialize() == "big"
@@ -351,7 +351,7 @@ class TestConstFold:
             citry = c
             template = '<c-if cond="show">{{ label }}: {{ count }}</c-if>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"show": kwargs["show"], "label": kwargs["label"], "count": kwargs["count"]}
 
         out = Card(show=Const(True), label=Const("n"), count=7).render().serialize()  # noqa: FBT003
@@ -383,7 +383,7 @@ class TestConstFold:
             citry = c
             template = '<c-Box><c-fill name="s">{{ msg }}</c-fill></c-Box>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"msg": kwargs["msg"], "k": kwargs["k"]}
 
         # Same const signature, different fills: the cached Box body must keep
@@ -409,7 +409,7 @@ class TestConstFold:
             citry = c
             template = "<div>{{ content }}</div>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"content": kwargs["content"]}
 
         # Rendering an element mints per-render state (a fresh component id),
@@ -443,7 +443,7 @@ class TestTemplateLiteralConst:
             citry = c
             template = "<p>{{ age }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
@@ -461,7 +461,7 @@ class TestTemplateLiteralConst:
             citry = c
             template = "<p>{{ age }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
@@ -478,7 +478,7 @@ class TestTemplateLiteralConst:
             citry = c
             template = "<p>{{ compact }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
@@ -497,7 +497,7 @@ class TestTemplateLiteralConst:
             citry = c
             template = '<c-if cond="age > 18">adult</c-if><c-else>minor</c-else>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
@@ -514,7 +514,7 @@ class TestTemplateLiteralConst:
             citry = c
             template = '<c-for each="i in items">[{{ i * mult }}]</c-for>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
@@ -537,14 +537,14 @@ class TestTemplateLiteralConst:
             citry = c
             template = "<p>{{ age }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
             citry = c
             template = '<c-Card c-age="n" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"n": kwargs["n"]}
 
         assert Page(n=1).render().serialize() == '<p data-cid-c2="" data-cid-c1="">1</p>'
@@ -576,14 +576,14 @@ class TestExpressionConstPropagation:
             citry = c
             template = '<c-if cond="age > 18">adult</c-if><c-else>minor</c-else>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
             citry = c
             template = '<c-Card c-age="base + 1" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"base": Const(29)}
 
         assert Page().render().serialize() == "adult"
@@ -598,14 +598,14 @@ class TestExpressionConstPropagation:
             citry = c
             template = '<c-if cond="age > 18">adult</c-if><c-else>minor</c-else>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
             citry = c
             template = '<c-Card c-age="base + n" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"base": Const(29), "n": kwargs["n"]}
 
         assert Page(n=1).render().serialize() == "adult"
@@ -624,14 +624,14 @@ class TestExpressionConstPropagation:
             citry = c
             template = "<span>{{ label }}</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         class Page(Component):
             citry = c
             template = '<c-for each="i in items"><c-Card c-label="prefix + \'!\'" /></c-for>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"items": Const([1, 2, 3]), "prefix": Const("hi")}
 
         out = Page().render().serialize()
@@ -657,7 +657,7 @@ class TestConstThroughTypedKwargs:
             class Kwargs:
                 cols: int
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs.cols}
 
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'
@@ -678,7 +678,7 @@ class TestConstThroughTypedKwargs:
             class Kwargs:
                 cols: int = Const(3)
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs.cols}
 
         assert Card().render().serialize() == '<p data-cid-c1="">3</p>'
@@ -698,7 +698,7 @@ class TestConstFoldInsideKeptNodes:
             citry = c
             template = '<c-if cond="show">{{ label }}: {{ n }}</c-if><c-else>{{ label }} off</c-else>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         # `show` and `n` are dynamic, `label` is const: the IfNode stays, but
@@ -723,7 +723,7 @@ class TestConstFoldInsideKeptNodes:
             citry = c
             template = '<c-if cond="show"><c-if cond="big">L</c-if><c-else>S</c-else>{{ n }}</c-if>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         # The outer condition is dynamic; the inner one is const, so inside
@@ -742,7 +742,7 @@ class TestConstFoldInsideKeptNodes:
             citry = c
             template = '<c-for each="i in items">[{{ prefix }}{{ i }}]</c-for>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         # `items` is dynamic, so the loop stays; the const `prefix` inside the
@@ -782,7 +782,7 @@ class TestConstFoldInsideSlotContent:
                 "</c-Card>"
             )
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         out1 = Page(heading=Const("Dash"), greeting="hi").render().serialize()
@@ -811,7 +811,7 @@ class TestConstFoldInsideSlotContent:
             citry = c
             template = '<c-Card><c-fill name="body">x<c-if cond="wide">WIDE</c-if></c-fill></c-Card>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         assert Page(wide=Const(True)).render().serialize() == "xWIDE"  # noqa: FBT003
@@ -830,7 +830,7 @@ class TestConstFoldInsideSlotContent:
             citry = c
             template = '<c-Box><c-fill name="s" data="d">{{ d["x"] }}-{{ k }}</c-fill></c-Box>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         # The fill's own `d` variable is per-invocation slot data, so the
@@ -853,7 +853,7 @@ class TestConstFoldInsideSlotContent:
             citry = c
             template = "<c-Box>{{ k }}</c-Box>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         assert Page(k=Const("K")).render().serialize() == '<b data-cid-c2="" data-cid-c1="">K</b>'
@@ -867,7 +867,7 @@ class TestConstFoldInsideSlotContent:
             citry = c
             template = '<c-slot name="title">{{ label }}</c-slot>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         # Unfilled: the fallback renders, and with `label` const its
@@ -890,7 +890,7 @@ class TestConstFoldUnroll:
             citry = c
             template = '<ul><c-for each="i in items">{{ i }},</c-for></ul>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         assert Card(items=Const([1, 2, 3])).render().serialize() == '<ul data-cid-c1="">1,2,3,</ul>'
@@ -904,7 +904,7 @@ class TestConstFoldUnroll:
             citry = c
             template = '<c-for each="i in items"><c-if cond="i > 1">{{ i }}!</c-if></c-for><c-empty>none</c-empty>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         assert Card(items=Const([1, 2, 3])).render().serialize() == "2!3!"
@@ -919,7 +919,7 @@ class TestConstFoldUnroll:
             citry = c
             template = '<c-for each="i in items">.</c-for>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         n = _MAX_UNROLL_ITERATIONS + 1
@@ -940,7 +940,7 @@ class TestConstFoldUnroll:
             citry = c
             template = '<c-for each="i in items">{{ i }}</c-for>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         # The loop body is statically foldable, but the value is an element,
@@ -961,7 +961,7 @@ class TestConstFoldUnroll:
             citry = c
             template = '<c-for each="i in items">{{ i }}</c-for>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         assert Card(items=[1, 2]).render().serialize() == "12"
@@ -977,7 +977,7 @@ class TestConstFoldErrors:
             citry = c
             template = '<p>{{ cfg["missing"] }}</p>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         # Folding must not raise: the failing expression stays a dynamic node
@@ -996,7 +996,7 @@ class TestConstFoldErrors:
             citry = c
             template = '<c-if cond="cfg[\'missing\']">a</c-if>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return dict(kwargs)
 
         with pytest.raises(KeyError):

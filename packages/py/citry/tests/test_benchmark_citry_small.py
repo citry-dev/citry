@@ -211,7 +211,7 @@ class Button(Component):
         type: "str | None" = "button"
         attrs: "dict | None" = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         common_css = (
             "inline-flex w-full text-sm font-semibold"
             " sm:mt-0 sm:w-auto focus-visible:outline-2 focus-visible:outline-offset-2"

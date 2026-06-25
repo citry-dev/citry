@@ -90,7 +90,7 @@ class TestTemplateFile:
             citry = c
             template_file = "greet.html"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"name": kwargs["name"]}
 
         assert "World" in str(Greet(name="World"))
@@ -147,7 +147,7 @@ class TestTemplateFile:
             citry = c
             template = "<p>{{ x }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"x": kwargs["x"]}
 
         template = Card.get_template()

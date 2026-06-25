@@ -26,10 +26,10 @@ def _widget(c):
         js = "$onComponent(({ els, data }) => { els[0].textContent = data.rows; });"
         css = ".w { color: var(--row-color); }"
 
-        def js_data(self, kwargs, slots=None):
+        def js_data(self, kwargs, slots):
             return {"rows": 3}
 
-        def css_data(self, kwargs, slots=None):
+        def css_data(self, kwargs, slots):
             return {"row-color": "red"}
 
     return Widget

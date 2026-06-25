@@ -58,7 +58,7 @@ class TestOnRenderPlainForm:
             citry = c
             template = "<p>{{ tracked() }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 def tracked():
                     rendered_data.append("template rendered")
                     return "x"
@@ -109,7 +109,7 @@ class TestOnRenderPlainForm:
             class Kwargs:
                 name: str
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"name": kwargs.name}
 
         class Comp(Component):
@@ -152,7 +152,7 @@ class TestOnRenderPlainForm:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen.append(type(self.parent).__name__ if self.parent else None)
 
         class Comp(Component):
@@ -298,7 +298,7 @@ class TestOnRenderGeneratorForm:
             citry = c
             template = "<p>{{ tracked() }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 def tracked():
                     order.append("template")
                     return "x"
@@ -412,7 +412,7 @@ class TestOnRenderGeneratorForm:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Guard(Component):
@@ -441,7 +441,7 @@ class TestOnRenderGeneratorForm:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Observer(Component):
@@ -530,7 +530,7 @@ class TestOnRenderGeneratorForm:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Comp(Component):

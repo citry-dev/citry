@@ -11,7 +11,7 @@ class Welcome(Component):
         title: str
         messages: list[str]
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "title": kwargs.title,
             "count": len(kwargs.messages),
@@ -68,7 +68,7 @@ class Welcome(Component):
 
     # template_data prepares the values your template can read.
     # Run any computation here, in plain Python.
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "title": kwargs["title"],
             "count": len(kwargs["messages"]),
@@ -101,7 +101,7 @@ class Page(Component):
       </main>
     """
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {"user": kwargs["user"]}
 ```
 
@@ -238,7 +238,7 @@ class Layout(Component):
       </main>
     """
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {"body": kwargs["body"]}
 
 card = Card(title="Welcome")
@@ -291,10 +291,10 @@ class Chart(Component):
       }
     """
 
-    def js_data(self, kwargs, slots=None):
+    def js_data(self, kwargs, slots):
         return {"points": kwargs["points"]}   # reaches the JS as `data.points`
 
-    def css_data(self, kwargs, slots=None):
+    def css_data(self, kwargs, slots):
         return {"h": "240px"}                  # reaches the CSS as `var(--h)`
 ```
 
@@ -308,7 +308,7 @@ class Greeting(Component):
       <p>{{ label }}</p>
     """
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         # Read a value an ancestor provided, with no prop drilling.
         return {"label": self.inject("theme").label}
 
@@ -405,7 +405,7 @@ class Row(Component):
       </tr>
     """
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "label": kwargs["label"],
             "value": kwargs["value"],

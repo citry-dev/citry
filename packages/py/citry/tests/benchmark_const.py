@@ -71,7 +71,7 @@ def scenario_expression_heavy() -> None:
         citry = c
         template = f"<table><tr>{cells}<td>{{{{ body }}}}</td></tr></table>"
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return dict(kwargs)
 
     const_kwargs = {f"col{i}": Const(f"v{i}") for i in range(30)}
@@ -104,7 +104,7 @@ def scenario_small_card() -> None:
             "<p>{{ body }}</p><span>{{ footer }}</span></div>"
         )
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return dict(kwargs)
 
     const_kwargs = {"title": Const("Dashboard"), "subtitle": Const("Stats"), "cols": Const(3), "footer": Const("(c)")}
@@ -134,7 +134,7 @@ def scenario_unrolled_nav() -> None:
             "<main>{{ body }}</main>"
         )
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return dict(kwargs)
 
     links = [f"/page/{i}" for i in range(20)]
@@ -175,7 +175,7 @@ def _build_slot_layout() -> tuple[Citry, type[Component], dict, dict]:
             "</c-Layout>"
         )
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return dict(kwargs)
 
     links = [f"/p/{i}" for i in range(10)]

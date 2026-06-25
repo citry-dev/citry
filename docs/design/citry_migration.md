@@ -1384,7 +1384,7 @@ class Card(Component):
         title: str
         body: str = ""
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "title": kwargs.title,
             "body": kwargs.body,
@@ -1667,7 +1667,7 @@ from citry import Component, Const
 class Card(Component):
     template = "<p>{{ cols }}</p>"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {"cols": kwargs["cols"]}   # passes the marker through
 
 # Same const signature -> same cache entry; a different value -> a new entry.
@@ -1808,7 +1808,7 @@ class Card(Component):
     citry = c
     template = "<span>{{ title }}</span>"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {"title": kwargs["title"]}
 
 class Page(Component):
@@ -2003,7 +2003,7 @@ class Card(Component):
     citry = app
     template = "<p>Hello {{ who }}</p>"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {"who": "world"}
 
 str(Card())   # prints "Card rendered"; returns "<p>Hello world</p>"
@@ -2192,7 +2192,7 @@ collection + lazy Slots is the split that supports both.
 class Card(Component):
     template = "<div>{{ h }}</div>"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {"h": slots.get("header", "")}
 
 # Python channel:
@@ -2805,10 +2805,10 @@ class Table(Component):
     css = ".table-row { color: var(--row-color); }"
     js = "$onComponent(({ els, data }) => { console.log(els, data.rows); });"
 
-    def js_data(self, kwargs, slots=None):
+    def js_data(self, kwargs, slots):
         return {"rows": kwargs["rows"]}
 
-    def css_data(self, kwargs, slots=None):
+    def css_data(self, kwargs, slots):
         return {"row-color": kwargs["color"]}
 ```
 

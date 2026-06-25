@@ -40,13 +40,13 @@ class TestJsCssDataMethods:
             citry = c
             template = "<p>{{ rows }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"rows": kwargs["rows"]}
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": kwargs["rows"]}
 
-            def css_data(self, kwargs, slots=None):
+            def css_data(self, kwargs, slots):
                 return {"row-color": "red"}
 
         assert str(Card(rows=3)) == '<p data-cid-c1="">3</p>'
@@ -61,7 +61,7 @@ class TestJsCssDataMethods:
             citry = c
             template = "<p>{{ title }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"title": "hi"}
 
         str(Card())
@@ -95,7 +95,7 @@ class TestJsCssDataSchemas:
             class JsData:
                 rows: int
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {}
 
         with pytest.raises(TypeError, match="rows"):
@@ -111,7 +111,7 @@ class TestJsCssDataSchemas:
             class CssData:
                 color: str = "red"
 
-            def css_data(self, kwargs, slots=None):
+            def css_data(self, kwargs, slots):
                 return {"colour": "red"}
 
         with pytest.raises(TypeError, match="colour"):
@@ -128,7 +128,7 @@ class TestJsCssDataSchemas:
             class JsData:
                 rows: int
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return Card.JsData(rows=5)
 
         str(Card())

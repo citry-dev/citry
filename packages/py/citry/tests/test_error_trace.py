@@ -32,7 +32,7 @@ class TestComponentPath:
             citry = c
             template = "<p>hi</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         with pytest.raises(ValueError, match="boom") as exc_info:
@@ -47,7 +47,7 @@ class TestComponentPath:
             citry = c
             template = "<i>leaf</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Middle(Component):
@@ -72,7 +72,7 @@ class TestComponentPath:
             citry = c
             template = '<c-if cond="flag"><c-for each="x in items"><span>{{ broken() }}</span></c-for></c-if>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"flag": True, "items": [1], "broken": _boom}
 
         with pytest.raises(ValueError, match="boom") as exc_info:
@@ -99,7 +99,7 @@ class TestComponentPath:
             citry = c
             template = '<main><c-leaf c-bind="extra" /></main>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"extra": {"title": "x", "bogus": 1}}
 
         with pytest.raises(TypeError) as exc_info:
@@ -118,14 +118,14 @@ class TestComponentPath:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Root(Component):
             citry = c
             template = "<main>{{ em }}</main>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"em": Embedded()}
 
         with pytest.raises(ValueError, match="boom") as exc_info:
@@ -172,7 +172,7 @@ class TestSlotFrames:
             citry = c
             template = '<c-card><c-fill name="body"><span>{{ broken() }}</span></c-fill></c-card>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"broken": _boom}
 
         with pytest.raises(ValueError, match="boom") as exc_info:
@@ -190,7 +190,7 @@ class TestSlotFrames:
             citry = c
             template = '<div><c-slot name="body">{{ broken() }}</c-slot></div>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"broken": _boom}
 
         with pytest.raises(ValueError, match="boom") as exc_info:
@@ -210,7 +210,7 @@ class TestSlotFrames:
             citry = c
             template = "<i>x</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Card(Component):
@@ -242,7 +242,7 @@ class TestTemplatePosition:
             citry = c
             template = "<article>\n  <h1>title</h1>\n  <p>{{ broken() }}</p>\n</article>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"broken": _boom}
 
         with pytest.raises(ValueError, match="boom") as exc_info:
@@ -269,7 +269,7 @@ class TestTemplatePosition:
                 '<c-if cond="flag">\n  <c-for each="x in items">\n    <b>{{ broken() }}</b>\n  </c-for>\n</c-if>'
             )
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"flag": True, "items": [1], "broken": _boom}
 
         with pytest.raises(ValueError, match="boom") as exc_info:
@@ -307,7 +307,7 @@ class TestTemplatePosition:
             citry = c
             template = '<c-frame>\n  <c-fill name="body">\n    <em>{{ broken() }}</em>\n  </c-fill>\n</c-frame>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"broken": _boom}
 
         with pytest.raises(ValueError, match="boom") as exc_info:
@@ -367,7 +367,7 @@ class TestErrorBubbling:
             citry = c
             template = "<i>leaf</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Middle(Component):
@@ -400,7 +400,7 @@ class TestErrorBubbling:
             citry = c
             template = "<i>leaf</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Middle(Component):
@@ -427,14 +427,14 @@ class TestErrorBubbling:
             citry = c
             template = "<i>bad</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Good(Component):
             citry = c
             template = "<i>good</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 rendered.append("Good")
                 return {}
 
@@ -463,7 +463,7 @@ class TestErrorBubbling:
             citry = c
             template = "<i>leaf</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class B(Component):
@@ -498,7 +498,7 @@ class TestErrorBubbling:
             citry = c
             template = "<i>leaf</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Middle(Component):
@@ -568,7 +568,7 @@ class TestErrorBubbling:
             citry = c
             template = "<i>leaf</i>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 raise ValueError("boom")
 
         class Middle(Component):

@@ -134,7 +134,7 @@ class TestScriptEndpointLogic:
             template = "<span>w</span>"
             js = "$onComponent(() => {});"
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
         rendered = Widget().render()

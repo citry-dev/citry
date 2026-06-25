@@ -161,7 +161,7 @@ Python function of the inputs. Therefore "const kwarg" does not imply "const
 template variable":
 
 ```python
-def template_data(self, kwargs):
+def template_data(self, kwargs, slots):
     return {"label": fetch_from_db(kwargs.title)}   # title const, label NOT const
 ```
 

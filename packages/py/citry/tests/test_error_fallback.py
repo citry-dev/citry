@@ -15,7 +15,7 @@ def _make_failing(c):
         citry = c
         template = "<i>x</i>"
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             raise ValueError("boom")
 
     return Failing
@@ -54,7 +54,7 @@ class TestErrorFallback:
             citry = c
             template = '<main><c-error-fallback fallback="Oops"><b>{{ broken() }}</b></c-error-fallback></main>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 def boom():
                     raise ValueError("sync boom")
 
@@ -174,7 +174,7 @@ class TestErrorFallback:
                 "</c-error-fallback>"
             )
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 def boom2():
                     raise ValueError("fallback boom")
 

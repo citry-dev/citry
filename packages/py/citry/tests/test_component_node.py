@@ -50,7 +50,7 @@ class TestComponentNodeAttrs:
             citry = c
             template = "<span>{{ out }}</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"out": kwargs.get(var)}
 
         return Card
@@ -73,7 +73,7 @@ class TestComponentNodeAttrs:
             citry = c
             template = '<main><c-card c-title="who" /></main>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"who": "World"}
 
         assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">World</span></main>'
@@ -95,14 +95,14 @@ class TestComponentNodeAttrs:
             citry = c
             template = "<span>{{ a }}-{{ b }}</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"a": kwargs["a"], "b": kwargs["b"]}
 
         class Page(Component):
             citry = c
             template = '<main><c-card c-bind="extra" /></main>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"extra": {"a": 1, "b": 2}}
 
         assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">1-2</span></main>'
@@ -117,14 +117,14 @@ class TestComponentNodeAttrs:
             citry = c
             template = "<span>{{ a }}</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"a": kwargs.get("a", "default")}
 
         class Page(Component):
             citry = c
             template = '<main><c-card c-bind="extra" /></main>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"extra": None}
 
         assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">default</span></main>'
@@ -140,7 +140,7 @@ class TestComponentNodeAttrs:
             citry = c
             template = '<main><c-card c-bind="bad" /></main>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"bad": 42}
 
         with pytest.raises(TypeError, match="c-bind on <card> must resolve to a mapping of kwargs"):
@@ -156,7 +156,7 @@ class TestComponentNodeAttrs:
             citry = c
             template = '<main><c-card c-title="raw" /></main>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"raw": "<b>"}
 
         assert Page().render().serialize() == '<main data-cid-c1=""><span data-cid-c2="">&lt;b&gt;</span></main>'
@@ -170,14 +170,14 @@ class TestComponentNodeAttrs:
             citry = c
             template = "<span>{{ body }}</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"body": kwargs["body"]}
 
         class Page(Component):
             citry = c
             template = '<main><c-card c-body="<b>{{ x }}</b>" /></main>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"x": "hi"}
 
         # The prop template renders in Page's scope but is interior content of
@@ -199,7 +199,7 @@ class TestComponentNodeBoundary:
             citry = c
             template = "<main><c-card /></main>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"x": "parent-only"}
 
         with pytest.raises(KeyError):
@@ -213,7 +213,7 @@ class TestComponentNodeBoundary:
             citry = c
             template = "<span>x</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen["parent"] = self.parent
                 seen["root"] = self.root
                 return {}

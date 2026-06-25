@@ -35,7 +35,7 @@ class TestJsVars:
             template = "<span>w</span>"
             js = ON_COMPONENT_JS
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
         html = str(_page(c)())
@@ -52,10 +52,10 @@ class TestJsVars:
             js = ON_COMPONENT_JS
             css = ".w { color: var(--row-color); }"
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
-            def css_data(self, kwargs, slots=None):
+            def css_data(self, kwargs, slots):
                 return {"row-color": "red"}
 
         rendered = _page(c)().render()
@@ -71,7 +71,7 @@ class TestJsVars:
             template = "<span>w</span>"
             js = ON_COMPONENT_JS
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
         page = _page(c, template="<main><c-widget /><c-widget /></main>")
@@ -89,10 +89,10 @@ class TestJsVars:
             class Kwargs:
                 rows: int
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"rows": kwargs.rows}
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": kwargs.rows}
 
         page = _page(c, template="<main><c-widget rows='1' /><c-widget rows='2' /></main>")
@@ -107,7 +107,7 @@ class TestJsVars:
             template = "<span>w</span>"
             js = ON_COMPONENT_JS
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 # A value that must not break out of the <script> tag.
                 return {"html": "</script><b>boom</b>"}
 
@@ -124,7 +124,7 @@ class TestJsVars:
             template = "<span>w</span>"
             css = ".w {}"  # has assets, so it is recorded; but no JS
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
         page = _page(c)
@@ -161,7 +161,7 @@ class TestCssVars:
             template = "<span>w</span>"
             css = ".w { color: var(--row-color); }"
 
-            def css_data(self, kwargs, slots=None):
+            def css_data(self, kwargs, slots):
                 return {"row-color": "red"}
 
         html = str(_page(c)())
@@ -183,7 +183,7 @@ class TestCssVars:
             template = "<span>w</span>"
             js = "console.log(1);"  # has assets, but no CSS
 
-            def css_data(self, kwargs, slots=None):
+            def css_data(self, kwargs, slots):
                 return {"row-color": "red"}
 
         html = str(_page(c)())
@@ -207,7 +207,7 @@ class TestManifestAndRuntime:
             template = "<span>w</span>"
             js = ON_COMPONENT_JS
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
         rendered = _page(c, template="<main><c-widget /><c-widget /></main>")().render()
@@ -271,10 +271,10 @@ class TestSimpleStrategy:
             js = ON_COMPONENT_JS
             css = ".w { color: var(--row-color); }"
 
-            def js_data(self, kwargs, slots=None):
+            def js_data(self, kwargs, slots):
                 return {"rows": 3}
 
-            def css_data(self, kwargs, slots=None):
+            def css_data(self, kwargs, slots):
                 return {"row-color": "red"}
 
         html = _page(c)().render().serialize(deps_strategy="simple")

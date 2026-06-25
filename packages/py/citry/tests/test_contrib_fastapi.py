@@ -28,7 +28,7 @@ def _widget(c):
         js = "$onComponent(({ els, data }) => { els[0].textContent = data.rows; });"
         css = ".w {}"
 
-        def js_data(self, kwargs, slots=None):
+        def js_data(self, kwargs, slots):
             return {"rows": 3}
 
     return Widget

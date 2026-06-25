@@ -221,7 +221,7 @@ class Provide(Component):
     transparent = True
     template = "<c-slot />"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         data = dict(kwargs)
         key = data.pop("key", None)   # missing/invalid key raises
         self.provide(key, **data)

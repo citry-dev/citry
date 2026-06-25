@@ -26,7 +26,7 @@ def _declared_card(c):
             header: SlotInput
             footer: "SlotInput | None" = None
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return {"title": kwargs.title}
 
     return Card
@@ -131,7 +131,7 @@ class TestKwargsValidation:
             citry = c
             template = '<c-card c-title="t"><c-fill name="header">H</c-fill></c-card>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"t": "T"}
 
         assert str(Page()) == '<div data-cid-c2="" data-cid-c1="">TH</div>'
@@ -155,7 +155,7 @@ class TestKwargsValidation:
             citry = c
             template = '<c-card c-bind="props"><c-fill name="header">H</c-fill></c-card>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"props": {"title": "T"}}
 
         assert str(Page()) == '<div data-cid-c2="" data-cid-c1="">TH</div>'
@@ -168,7 +168,7 @@ class TestKwargsValidation:
             citry = c
             template = '<c-card title="T" c-if="flag"><c-fill name="header">H</c-fill></c-card>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"flag": True}
 
         assert str(Page()) == '<div data-cid-c2="" data-cid-c1="">TH</div>'
@@ -236,7 +236,7 @@ class TestSlotsValidation:
             citry = c
             template = '<c-card title="T"><c-fill c-name="which">X</c-fill></c-card>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"which": "header"}
 
         # A dynamic fill could resolve to the required name, so the per-name
@@ -264,7 +264,7 @@ class TestValidationScope:
             citry = c
             template = "<div>{{ body }}</div>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"body": kwargs["body"]}
 
         class Page(Component):
@@ -391,7 +391,7 @@ class TestNonDataclassDeclarations:
                 title: str
                 size: int = 10
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"title": kwargs.title}
 
         class Good(Component):
@@ -416,7 +416,7 @@ class TestNonDataclassDeclarations:
             class Kwargs(_FakeModelBase):
                 model_fields = {"title": _FakeFieldInfo(required=True)}
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"title": kwargs.title}
 
         class Good(Component):
@@ -444,7 +444,7 @@ class TestNonDataclassDeclarations:
                 title: str
                 size: int = 10
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"title": kwargs.title}
 
         class Bad(Component):

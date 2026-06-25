@@ -1417,7 +1417,7 @@ class Button(Component):
         type: str | None = "button"
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         common_css = (
             "inline-flex w-full text-sm font-semibold"
             " sm:mt-0 sm:w-auto focus-visible:outline-2 focus-visible:outline-offset-2"
@@ -1511,7 +1511,7 @@ class Icon(Component):
         link_attrs: dict | None = None
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         color = kwargs.color or ""
         icon_color = kwargs.icon_color or color
         text_color = kwargs.text_color or color
@@ -1562,7 +1562,7 @@ class HeroIcon(Component):
         viewbox: str | None = None
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         # IconDefaults applies the real defaults where a value is None (DJC's
         # ComponentDefaults), so the Kwargs above mirror DJC's all-None signature.
         kw = IconDefaults(
@@ -1635,7 +1635,7 @@ class Menu(Component):
         anchor: str | None = None
         anchor_dir: str | None = "bottom"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         model = kwargs.model
         is_model_overriden = bool(model)
         model = model or "open"
@@ -1735,7 +1735,7 @@ class MenuList(Component):
         items: MaybeNestedList
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "item_groups": prepare_menu_items(kwargs.items),
             "attrs": kwargs.attrs,
@@ -1816,7 +1816,7 @@ class Table(Component):
         rows: list
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         headers = kwargs.headers
         headers_with_first = [(h, i == 0) for i, h in enumerate(headers)]
 
@@ -1898,7 +1898,7 @@ class ExpansionPanel(Component):
         content_attrs: dict | None = None
         icon_position: Literal["left", "right"] = "left"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "attrs": kwargs.attrs,
             "header_attrs": kwargs.header_attrs,
@@ -1964,7 +1964,7 @@ class Dialog(Component):
         close_on_esc: bool | None = True
         close_on_click_outside: bool | None = True
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         model = kwargs.model
         is_model_overriden = bool(model)
         model = model or "open"
@@ -2059,7 +2059,7 @@ class Tags(Component):
         max_width: int | str = "300px"
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         # `.upper()` forwards through a string or a Const-wrapped string (and a
         # StrEnum), and the StrEnum keys hash equal to their string value.
         all_tags = TAG_TYPE_META[kwargs.tag_type.upper()].allowed_values
@@ -2127,7 +2127,7 @@ class Breadcrumbs(Component):
         items: list
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "items_with_first": [(c, i == 0) for i, c in enumerate(kwargs.items)],
             "attrs": kwargs.attrs,
@@ -2173,7 +2173,7 @@ class ListComponent(Component):
         attrs: dict | None = None
         item_attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "items": kwargs.items,
             "attrs": kwargs.attrs,
@@ -2248,7 +2248,7 @@ class Bookmarks(Component):
         bookmarks: list
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         project_id = kwargs.project_id
         bookmark_data: list = []
         attachment_data: list = []
@@ -2328,7 +2328,7 @@ class Bookmark(Component):
         bookmark: Any
         js: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         bookmark = kwargs.bookmark._asdict()
         js = kwargs.js or {}
         x_props = (
@@ -2418,7 +2418,7 @@ class _TabsImpl(Component):
         header_attrs: dict | None = None
         content_attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         header_data = []
         content_data = []
         for i, tab in enumerate(kwargs.tabs, 1):
@@ -2475,7 +2475,7 @@ class Tabs(Component):
         header_attrs: dict | None = None
         content_attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         tabs: list = []
         self._collected_tabs = tabs
         self._kw = kwargs
@@ -2507,7 +2507,7 @@ class TabItem(Component):
         header: str
         disabled: bool = False
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         tab_ctx = self.inject("_tab")
         if not tab_ctx.enabled:
             msg = "Component 'TabItem' must be a direct child of a Tabs component (not nested in another TabItem)."
@@ -2542,7 +2542,7 @@ class TabsStatic(Component):
         header_attrs: dict | None = None
         content_attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         tabs = kwargs.tabs
         index = kwargs.index
         tabs_data = []
@@ -2594,7 +2594,7 @@ class ProjectUserAction(Component):
         role_id: int
         user_name: str
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         role_data = {
             "delete_url": f"/delete/{kwargs.project_id}/{kwargs.role_id}",
             "role_id": kwargs.role_id,
@@ -2635,7 +2635,7 @@ class ProjectStatusUpdates(Component):
         status_updates: list
         editable: bool
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "create_status_update_url": f"/create/{kwargs.project_id}/status_update",
             "updates_data": [_make_status_update_data(su) for su in kwargs.status_updates],
@@ -2705,7 +2705,7 @@ class ProjectUsers(Component):
         available_users: list | None
         editable: bool = False
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         project_id = kwargs.project_id
         editable = kwargs.editable
 
@@ -2833,7 +2833,7 @@ class Form(Component):
         form_content_attrs: dict | None = None
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         form_content_tag = {"table": "table", "paragraph": "div", "ul": "ul"}.get(kwargs.type, "div")
         form_attrs = {}
         if kwargs.submit_href and kwargs.editable:
@@ -2937,7 +2937,7 @@ class ProjectOutputBadge(Component):
         completed: bool
         missing_deps: bool
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "completed": kwargs.completed,
             "missing_deps": kwargs.missing_deps,
@@ -2992,7 +2992,7 @@ class ProjectOutputAttachments(Component):
         editable: bool
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "has_attachments": kwargs.has_attachments,
             "editable": kwargs.editable,
@@ -3080,7 +3080,7 @@ class ProjectOutputDependency(Component):
     class Kwargs:
         dependency: Any
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         dep = kwargs.dependency  # RenderedOutputDep
         output = dep.dependency.output  # the output dict
         return {
@@ -3143,7 +3143,7 @@ class ProjectOutputForm(Component):
         data: Any
         editable: bool
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         data = kwargs.data  # RenderedProjectOutput
         return {
             "editable": kwargs.editable,
@@ -3206,7 +3206,7 @@ class ProjectOutputs(Component):
         outputs: list
         editable: bool
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         project_id = kwargs.project_id
         outputs_data = []
         for output, attachments, dependencies in kwargs.outputs:
@@ -3279,7 +3279,7 @@ class ProjectOutputsSummary(Component):
         editable: bool
         phase_titles: dict
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         outputs_by_phase = group_by(kwargs.outputs, lambda output, _: output[0]["phase"]["phase_template"]["type"])
         groups = []
         for phase_meta in PROJECT_PHASES_META.values():
@@ -3332,7 +3332,7 @@ class ProjectInfo(Component):
         roles_with_users: list
         editable: bool
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         project = kwargs.project
         pid = project["id"]
         contacts_data = [
@@ -3442,7 +3442,7 @@ class ProjectNotes(Component):
         comments_by_notes: dict
         editable: bool
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "create_note_url": f"/create/{kwargs.project_id}/note/",
             "notes_data": _make_notes_data(kwargs.notes, kwargs.comments_by_notes),
@@ -3491,7 +3491,7 @@ class Navbar(Component):
     class Kwargs:
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {"attrs": kwargs.attrs}
 
     template = """
@@ -3528,7 +3528,7 @@ class RenderContextProvider(Component):
     class Kwargs:
         request: Any
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         context = RenderContext(
             request=kwargs.request,
             user=kwargs.request.user,
@@ -3573,7 +3573,7 @@ class Sidebar(Component):
         active_projects: list
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         user = self.inject("render_context").render_context.user
         is_staff = user.get("is_staff", False) if isinstance(user, dict) else getattr(user, "is_staff", False)
         return {
@@ -3655,7 +3655,7 @@ class Base(Component):
         };
     """
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "csrf_token": self.inject("render_context").render_context.csrf_token,
             "background": Const(theme.background),
@@ -3732,7 +3732,7 @@ class Layout(Component):
         data: Any
         attrs: dict | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {
             "request": kwargs.data.request,
             "active_projects": kwargs.data.active_projects,
@@ -3794,7 +3794,7 @@ class ProjectLayoutTabbed(Component):
         top_level_tab_index: int | None = None
         variant: Literal["thirds", "halves"] = "thirds"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         data = kwargs.data
         project = data.project
         prefixed_breadcrumbs = [
@@ -3873,7 +3873,7 @@ class ProjectPage(Component):
         project: Any
         breadcrumbs: list | None = None
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         project = kwargs.project
         phases_by_type = {p["phase_template"]["type"]: p for p in kwargs.phases}
         rendered_phases = [

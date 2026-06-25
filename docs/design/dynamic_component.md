@@ -297,7 +297,7 @@ class DynamicComponent(Component):
     transparent = True
     template = "{{ target }}"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         data = dict(self.raw_kwargs)
         comp_cls = self._resolve(const_value(data.pop("is", None)))   # section 4.1
         return {"target": CitryElement(comp_cls, data, self.raw_slots)}
@@ -323,7 +323,7 @@ class DynamicElement(Component):
     transparent = True
     template = "{{ open }}<c-slot />{{ close }}"
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         attrs = dict(self.raw_kwargs)
         tag = const_value(attrs.pop("is", None))
         self._validate_tag_name(tag)              # section 4.2; also the escape guarantee

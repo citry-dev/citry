@@ -82,7 +82,7 @@ class Cart(Component):
       <p>{{ count }} items</p>
     """
 
-    def template_data(self, kwargs, slots=None):
+    def template_data(self, kwargs, slots):
         return {"count": len(kwargs["items"])}
 ```
 

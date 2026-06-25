@@ -27,7 +27,7 @@ def _html(template, **data):
     class Comp(Component):
         citry = c
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return dict(data)
 
     Comp.template = template
@@ -259,7 +259,7 @@ class TestConstFolding:
             class Kwargs:
                 cls: str
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cls": kwargs.cls}
 
         first = _CID_RE.sub("", Comp(cls=Const("btn")).render().serialize())
@@ -294,7 +294,7 @@ class TestConstInsideClassStyleList:
             class Kwargs:
                 tone: str
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 # raw_kwargs keeps the marker; tone flows into a class list.
                 return {"tone": self.raw_kwargs["tone"]}
 

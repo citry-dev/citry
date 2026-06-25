@@ -27,7 +27,7 @@ def _make_injectee(c, key="my_provide", default=MISSING, name=None):
         citry = c
         template = "<div>{{ injected }}</div>"
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             if default is MISSING:
                 injected = self.inject(key)
             else:
@@ -47,7 +47,7 @@ class TestProvideComponent:
             citry = c
             template = "<div>{{ text }}</div>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"text": self.inject("my_provide").text}
 
         class Page(Component):
@@ -65,7 +65,7 @@ class TestProvideComponent:
             citry = c
             template = "<p>x</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen["payload"] = self.inject("my_provide")
                 return {}
 
@@ -119,7 +119,7 @@ class TestProvideComponent:
             citry = c
             template = "<p>x</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen["payload"] = self.inject("my_provide")
                 return {}
 
@@ -151,7 +151,7 @@ class TestProvideComponent:
             citry = c
             template = '<c-provide c-key="key_var" text="hi"><c-injectee /></c-provide>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"key_var": "my_provide"}
 
         assert "Provided(text=&#39;hi&#39;)" in str(Page())
@@ -164,7 +164,7 @@ class TestProvideComponent:
             citry = c
             template = '<c-provide c-bind="props"><c-injectee /></c-provide>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"props": {"key": "my_provide", "text": "hi"}}
 
         assert "Provided(text=&#39;hi&#39;)" in str(Page())
@@ -208,7 +208,7 @@ class TestProvideComponent:
             citry = c
             template = '<c-provide key="my_provide" c-a="\'provided\'">{{ a }}</c-provide>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"a": "outer"}
 
         # The provide body renders in the page's scope; the provided field
@@ -244,7 +244,7 @@ class TestProvideComponent:
             citry = c
             template = "<p>x</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen["first"] = self.inject("first_provide")
                 seen["second"] = self.inject("second_provide")
                 return {}
@@ -270,7 +270,7 @@ class TestProvideComponent:
             citry = c
             template = "<li>{{ v }}</li>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"v": self.inject("loop_data").val}
 
         class Page(Component):
@@ -281,7 +281,7 @@ class TestProvideComponent:
                 "</c-for></ul>"
             )
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"items": [1, 2, 3]}
 
         html = str(Page())
@@ -297,7 +297,7 @@ class TestProvideComponent:
             citry = c
             template = "<span>{{ mode }}</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"mode": self.inject("theme").mode}
 
         class Page(Component):
@@ -315,14 +315,14 @@ class TestComponentProvideApi:
             citry = c
             template = "<span>{{ user }}</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"user": self.inject("user_data").user}
 
         class Page(Component):
             citry = c
             template = "<c-child />"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 self.provide("user_data", user="Jo")
                 return {}
 
@@ -336,7 +336,7 @@ class TestComponentProvideApi:
             citry = c
             template = "<p>x</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen["payload"] = self.inject("theme")
                 return {}
 
@@ -344,7 +344,7 @@ class TestComponentProvideApi:
             citry = c
             template = "<c-child />"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 # A provided field may itself be named `key`.
                 self.provide("theme", key="x")
                 return {}
@@ -377,7 +377,7 @@ class TestComponentProvideApi:
             citry = c
             template = "<p>x</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 self.provide("mine", a=1)
                 seen["value"] = self.inject("mine", "NOT VISIBLE")
                 return {}
@@ -428,7 +428,7 @@ class TestInject:
             citry = c
             template = "<p>x</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen["value"] = self.inject("abc", None)
                 return {}
 
@@ -454,7 +454,7 @@ class TestInject:
             citry = c
             template = "<p>x</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 captured["self"] = self
                 return {}
 
@@ -501,21 +501,21 @@ class TestProvideAcrossSlots:
             citry = c
             template = '<c-provide key="my_provide" c-data="data"><c-slot /></c-provide>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"data": kwargs["data"]}
 
         class Injectee(Component):
             citry = c
             template = "<div>{{ d }}</div><main><c-slot /></main>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"d": self.inject("my_provide").data}
 
         class Parent(Component):
             citry = c
             template = '<c-provider c-data="data"><c-injectee><c-slot /></c-injectee></c-provider>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"data": kwargs["data"]}
 
         class Page(Component):
@@ -535,21 +535,21 @@ class TestProvideAcrossSlots:
             citry = c
             template = '<c-provide key="my_provide" c-data="data"><c-slot /></c-provide>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"data": kwargs["data"]}
 
         class Injectee(Component):
             citry = c
             template = "<div>{{ d }}</div>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"d": self.inject("my_provide").data}
 
         class Parent(Component):
             citry = c
             template = '<c-provider c-data="data"><c-slot /></c-provider>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"data": kwargs["data"]}
 
         class Page(Component):
@@ -598,7 +598,7 @@ class TestPythonChannel:
             citry = c
             template = "<div>{{ el }}</div>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 self.provide("user_data", user="Jo")
                 return {"el": injectee_cls()}
 
@@ -621,7 +621,7 @@ class TestTransparent:
             citry = c
             template = "<span>{{ v }}</span>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"v": self.inject("x").a}
 
         class Page(Component):
@@ -693,14 +693,14 @@ class TestDeepNesting:
             citry = c
             template = "<b>{{ v }}</b>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"v": self.inject("deep").v}
 
         class Nested(Component):
             citry = c
             template = '<c-if cond="n > 0"><c-nested c-n="n - 1" /></c-if><c-else><c-leaf /></c-else>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"n": kwargs["n"]}
 
         class Page(Component):

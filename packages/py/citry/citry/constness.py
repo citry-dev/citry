@@ -77,7 +77,7 @@ Example:
         class Card(Component):
             template = "<p>{{ cols }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": kwargs["cols"]}  # the marker flows through
 
         Card(cols=Const(3)).render()

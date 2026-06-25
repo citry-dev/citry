@@ -29,7 +29,7 @@ def _render_tricky(c: Citry) -> str:
         citry = c
         template = '<li class="{{ kind }}">{{ label }}</li>'
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return {"kind": kwargs["kind"], "label": kwargs["label"]}
 
     class Page(Component):
@@ -48,7 +48,7 @@ def _render_tricky(c: Citry) -> str:
             "<p>{{ (kept := [x for x in items if x != skip]) and prefix + kept[0] }}</p>"
         )
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return {"items": ["a", "b", "c"], "skip": "b", "prefix": "p-"}
 
     return _norm(Page().render().serialize())
@@ -72,7 +72,7 @@ def test_default_is_sandboxed_and_blocks_unsafe_access():
         citry = c
         template = "{{ obj._secret }}"  # underscore attribute: blocked by the sandbox
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return {"obj": kwargs["obj"]}
 
     holder = type("Holder", (), {"_secret": "hidden"})()
@@ -87,7 +87,7 @@ def test_sandbox_off_allows_what_the_sandbox_blocks():
         citry = c
         template = "{{ obj._secret }}"  # the same blocked access, now permitted
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return {"obj": kwargs["obj"]}
 
     holder = type("Holder", (), {"_secret": "hidden"})()

@@ -18,7 +18,7 @@ from citry.component_registry import AlreadyRegistered, NotRegistered
 def _chain_template_data(target_name):
     """A ``template_data`` for one chain level, closing over its target's name."""
 
-    def template_data(self, kwargs, slots=None):  # noqa: ARG001
+    def template_data(self, kwargs, slots):  # noqa: ARG001
         return {"t": target_name}
 
     return template_data
@@ -31,7 +31,7 @@ def _make_card(c):
         citry = c
         template = '<div class="card">{{ title }}: <c-slot /></div>'
 
-        def template_data(self, kwargs, slots=None):
+        def template_data(self, kwargs, slots):
             return {"title": kwargs.get("title", "untitled")}
 
     return Card
@@ -58,7 +58,7 @@ class TestDynamicComponent:
             citry = c
             template = "<c-component c-is=\"comp\" c-title=\"'Hi'\">body</c-component>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": "card"}
 
         # Same element output as the static form; the transparent wrapper
@@ -73,7 +73,7 @@ class TestDynamicComponent:
             citry = c
             template = '<c-component c-is="comp">body</c-component>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": card_cls}
 
         assert str(Page()) == '<div class="card" data-cid-c3="" data-cid-c1="">untitled: body</div>'
@@ -104,7 +104,7 @@ class TestDynamicComponent:
                 "</c-component>"
             )
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": "panel"}
 
         assert str(Page()) == '<div data-cid-c3="" data-cid-c1="">HEAD|BODY</div>'
@@ -122,7 +122,7 @@ class TestDynamicComponent:
                 "</c-component>"
             )
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": "card"}
 
         rendered = str(Page())
@@ -139,14 +139,14 @@ class TestDynamicComponent:
             class Kwargs:
                 title: str
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"title": kwargs.title}
 
         class Page(Component):
             citry = c
             template = "<c-component c-is=\"comp\" c-title=\"'x'\" c-bogus=\"1\" />"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": "strict"}
 
         with pytest.raises(TypeError, match="bogus"):
@@ -159,7 +159,7 @@ class TestDynamicComponent:
             citry = c
             template = '<c-component c-is="comp" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": "no-such-comp"}
 
         with pytest.raises(NotRegistered, match=r"use <c-element> instead"):
@@ -184,7 +184,7 @@ class TestDynamicComponent:
             citry = c
             template = '<c-component c-is="comp" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": None}
 
         with pytest.raises(TypeError, match="requires an 'is' value"):
@@ -197,7 +197,7 @@ class TestDynamicComponent:
             citry = c
             template = '<c-component c-is="comp" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": 42}
 
         with pytest.raises(TypeError, match="got int"):
@@ -211,7 +211,7 @@ class TestDynamicComponent:
             citry = c
             template = '<c-component c-is="comp" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": card_cls(title="x")}
 
         with pytest.raises(TypeError, match=r"Embed it with '\{\{ \.\.\. \}\}'"):
@@ -224,14 +224,14 @@ class TestDynamicComponent:
             citry = c
             template = "<p>{{ val }}</p>"
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"val": self.inject("theme").mode}
 
         class Page(Component):
             citry = c
             template = '<c-provide key="theme" mode="dark"><c-component c-is="comp" /></c-provide>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"comp": "reader"}
 
         assert "dark" in str(Page())
@@ -282,7 +282,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag" class="x">hello {{ w }}</c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "section", "w": "world"}
 
         assert str(Page()) == '<section class="x" data-cid-c1="">hello world</section>'
@@ -294,7 +294,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag" data-x="1">hi</c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "my-widget"}
 
         assert str(Page()) == '<my-widget data-x="1" data-cid-c1="">hi</my-widget>'
@@ -306,7 +306,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag">x</c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "clipPath"}
 
         assert str(Page()) == '<clipPath data-cid-c1="">x</clipPath>'
@@ -321,7 +321,7 @@ class TestDynamicElement:
                 " c-bind=\"{'class': ['a', {'b': True, 'c': False}], 'disabled': True}\" />"
             )
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "hr"}
 
         assert str(Page()) == '<hr id="el1" class="a b" disabled data-cid-c1=""/>'
@@ -333,7 +333,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag" c-title="evil">x</c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "span", "evil": '"><script>'}
 
         assert str(Page()) == '<span title="&#34;&gt;&lt;script&gt;" data-cid-c1="">x</span>'
@@ -345,7 +345,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag"><c-fill name="default">child</c-fill></c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "div"}
 
         assert str(Page()) == '<div data-cid-c1="">child</div>'
@@ -357,7 +357,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag" class="x" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "br"}
 
         assert str(Page()) == '<br class="x" data-cid-c1=""/>'
@@ -369,7 +369,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag">stuff</c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "br"}
 
         with pytest.raises(ValueError, match="void element 'br' cannot have children"):
@@ -383,7 +383,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": bad_tag}
 
         with pytest.raises((TypeError, ValueError), match="<c-element>"):
@@ -396,7 +396,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": 42}
 
         with pytest.raises(TypeError, match="naming the HTML tag"):
@@ -412,7 +412,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag"><c-fill c-name="n">X</c-fill></c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "div", "n": "header"}
 
         with pytest.raises(ValueError, match="only accepts the default slot"):
@@ -428,7 +428,7 @@ class TestDynamicElement:
             citry = c
             template = '<c-element c-is="tag" c-foo="<b>{{ x }}</b>" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "div", "x": "hi"}
 
         with pytest.raises(TypeError, match="does not support nested-template attribute"):
@@ -461,7 +461,7 @@ class TestAttributeParity:
             citry = c1
             template = f'<c-element c-is="tag" {attrs}>x</c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "div"}
 
         c2 = Citry()
@@ -487,7 +487,7 @@ class TestAttributeParity:
             citry = c
             template = '<c-element c-is="tag" class="x" c-n="1" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"tag": "hr"}
 
         str(Page())
@@ -527,14 +527,14 @@ class TestRegistryReservation:
             citry = c
             template = '<c-component c-is="t" />'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"t": "table"}
 
         class PageEl(Component):
             citry = c
             template = '<c-element c-is="t">cell</c-element>'
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"t": "table"}
 
         assert "component table" in str(PageComp())

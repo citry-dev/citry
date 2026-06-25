@@ -37,7 +37,7 @@ class TestPydanticKwargs:
                 title: str
                 cols: int = 2
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 assert isinstance(kwargs, Card.Kwargs)
                 return {"title": kwargs.title, "cols": kwargs.cols}
 
@@ -112,7 +112,7 @@ class TestPydanticSlots:
 
                 header: Slot | None = None
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 assert isinstance(slots, Box.Slots)
 
         assert "HEAD" in Box(slots={"header": "HEAD"}).render().serialize()
@@ -154,7 +154,7 @@ class TestPydanticConstInterplay:
             class Kwargs(BaseModel):
                 cols: int
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 seen["typed_is_const"] = is_const(kwargs.cols)
                 return {"cols": kwargs.cols}
 
@@ -175,7 +175,7 @@ class TestPydanticConstInterplay:
             class Kwargs(BaseModel):
                 cols: int
 
-            def template_data(self, kwargs, slots=None):
+            def template_data(self, kwargs, slots):
                 return {"cols": self.raw_kwargs["cols"]}
 
         assert Card(cols=Const(3)).render().serialize() == '<p data-cid-c1="">3</p>'

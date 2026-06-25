@@ -17,7 +17,7 @@ Example:
         class Greeting(Component):
             template = '<p>Hello {{ name }}!</p>'
 
-            def template_data(self, kwargs):
+            def template_data(self, kwargs, slots):
                 return {"name": kwargs.get("name", "World")}
 
         # Composition - returns a CitryElement
@@ -42,7 +42,7 @@ Example:
                 title: str
                 body: str = ""
 
-            def template_data(self, kwargs):
+            def template_data(self, kwargs, slots):
                 return {
                     "title": kwargs.title,
                     "body": kwargs.body,
@@ -668,14 +668,14 @@ class Component(metaclass=ComponentMeta):
             class Page(Component):
                 template = '<c-user-card />'
 
-                def template_data(self, kwargs, slots=None):
+                def template_data(self, kwargs, slots):
                     self.provide("user_data", user=kwargs["user"])
                     return {}
 
             class UserCard(Component):
                 template = '<div>{{ name }}</div>'
 
-                def template_data(self, kwargs, slots=None):
+                def template_data(self, kwargs, slots):
                     return {"name": self.inject("user_data").user}
 
         In templates, the same thing is written with the ``<c-provide>``
