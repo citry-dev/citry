@@ -33,6 +33,7 @@ from citry.citry_render import (
     Placeholder,
     RenderReplacement,
 )
+from citry.citry_template import CitryTemplate
 from citry.component import Component
 from citry.component_registry import AlreadyRegistered, ComponentRegistry, NotRegistered
 from citry.constness import Const
@@ -49,7 +50,10 @@ from citry.extension import (
     OnComponentRegisteredContext,
     OnComponentRenderedContext,
     OnComponentUnregisteredContext,
+    OnCssLoadedContext,
     OnExtensionCreatedContext,
+    OnFilesResetContext,
+    OnJsLoadedContext,
     OnRenderContextMergeContext,
     OnSerializeContext,
     OnSlotRenderedContext,
@@ -98,6 +102,7 @@ __all__ = [
     "CitryElement",
     "CitryRender",
     "CitrySettings",
+    "CitryTemplate",
     "Component",
     "ComponentNode",
     "ComponentRegistry",
@@ -128,8 +133,11 @@ __all__ = [
     "OnComponentRegisteredContext",
     "OnComponentRenderedContext",
     "OnComponentUnregisteredContext",
+    "OnCssLoadedContext",
     "OnDependenciesContext",
     "OnExtensionCreatedContext",
+    "OnFilesResetContext",
+    "OnJsLoadedContext",
     "OnRenderContextMergeContext",
     "OnRenderGenerator",
     "OnSerializeContext",

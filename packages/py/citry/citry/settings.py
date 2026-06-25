@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
+    from pathlib import Path
 
     from citry.cache import CitryCache
     from citry.extension import Extension
@@ -34,6 +35,10 @@ class CitrySettings:
             extension name. Merged between an extension's factory defaults and a
             component's own nested config class (see the extension system's
             three-level config precedence).
+        dirs: Directories searched when resolving a component's asset files
+            (``template_file``, ``js_file``, ``css_file``, and ``Dependencies``
+            entries), after the directory of the component's own ``.py`` file.
+            Entries must be absolute paths; ``Citry.__init__`` validates them.
         cache: The cache backend spec (a :class:`citry.cache.CitryCache`
             object or a ``"path.to.Cache"`` import string). ``None`` gives the
             instance its own in-memory cache. The live backend built from this
@@ -50,5 +55,6 @@ class CitrySettings:
 
     extensions: tuple[type[Extension] | Extension | str, ...] = ()
     extensions_defaults: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
+    dirs: tuple[Path, ...] = ()
     cache: CitryCache | str | None = None
     sandbox_expressions: bool = True

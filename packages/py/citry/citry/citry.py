@@ -83,12 +83,22 @@ class Citry:
         self,
         extensions: Sequence[type[Extension] | Extension | str] = (),
         extensions_defaults: Mapping[str, Mapping[str, Any]] | None = None,
+        dirs: Sequence[str | Path] = (),
         cache: CitryCache | str | None = None,
         sandbox_expressions: bool = True,
     ) -> None:
+        # Asset search dirs must be absolute (same contract as DJC's
+        # COMPONENTS.dirs); relative-to-py-file resolution needs no dirs at all.
+        dir_paths = tuple(Path(d) for d in dirs)
+        for dir_path in dir_paths:
+            if not dir_path.is_absolute():
+                msg = f"Citry dirs must be absolute paths, got {str(dir_path)!r}"
+                raise ValueError(msg)
+
         self.settings = CitrySettings(
             extensions=tuple(extensions),
             extensions_defaults=dict(extensions_defaults) if extensions_defaults is not None else {},
+            dirs=dir_paths,
             cache=cache,
             sandbox_expressions=sandbox_expressions,
         )
@@ -116,6 +126,13 @@ class Citry:
         # Kwargs/Slots declarations (see citry/tag_rules.py). Built on first
         # template parse; invalidated whenever the registry changes.
         self._tag_rules_cache: dict[str, TagRules] | None = None
+
+        # File-to-component reverse index: absolute file path -> weakrefs to the
+        # component classes whose assets resolved to that file. The hot-reload
+        # seam: a watcher (or test) asks get_components_for_file() which classes
+        # to reset when a file changes. See docs/design/asset_loading.md
+        # section 8.
+        self._file_index: dict[str, list[ReferenceType[type[Component]]]] = {}
 
         # class_id -> component class reverse index, maintained at registration.
         # This is how the script-serving endpoint finds the class a cached
@@ -301,10 +318,43 @@ class Citry:
         """Forget one component class's cached template work (see ``_const_body_cache``)."""
         self._const_body_cache.evict_component(comp_cls)
 
+    # ----- Asset file index (hot-reload seam) -----
+
+    def _register_component_file(self, path: Path, comp_cls: type[Component]) -> None:
+        """Record that ``comp_cls`` loaded an asset from ``path``."""
+        key = str(Path(path).resolve())
+        refs = self._file_index.setdefault(key, [])
+        if not any(existing() is comp_cls for existing in refs):
+            refs.append(ref(comp_cls))
+
+    def get_components_for_file(self, path: str | Path) -> list[type[Component]]:
+        """
+        The component classes whose assets resolved to ``path``.
+
+        This is what a hot-reload handler drives invalidation through: when a
+        file changes, call ``reset_template()`` / ``reset_files()`` on each
+        returned class. Dead weakrefs are pruned on read.
+        """
+        key = str(Path(path).resolve())
+        refs = self._file_index.get(key)
+        if not refs:
+            return []
+
+        alive: list[type[Component]] = []
+        alive_refs: list[ReferenceType[type[Component]]] = []
+        for comp_ref in refs:
+            comp_cls = comp_ref()
+            if comp_cls is not None:
+                alive.append(comp_cls)
+                alive_refs.append(comp_ref)
+        self._file_index[key] = alive_refs
+        return alive
+
     def clear(self) -> None:
         """Clear all state: registered components, caches, etc."""
         self.registry.clear()
         self._const_body_cache.clear()
+        self._file_index.clear()
         self._classes_by_id.clear()
         self._tag_rules_cache = None
         # The protocol does not require clear() (a shared backend may not want

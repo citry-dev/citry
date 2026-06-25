@@ -206,6 +206,34 @@ class OnTemplateCompiledContext:
 
 
 @dataclass(frozen=True, slots=True)
+class OnJsLoadedContext:
+    citry: Citry
+    """The ``Citry`` instance the component class belongs to."""
+    component_class: type[Component]
+    """The Component class whose JS was loaded."""
+    content: str
+    """The JS content (inline or read from ``js_file``)."""
+
+
+@dataclass(frozen=True, slots=True)
+class OnCssLoadedContext:
+    citry: Citry
+    """The ``Citry`` instance the component class belongs to."""
+    component_class: type[Component]
+    """The Component class whose CSS was loaded."""
+    content: str
+    """The CSS content (inline or read from ``css_file``)."""
+
+
+@dataclass(frozen=True, slots=True)
+class OnFilesResetContext:
+    citry: Citry
+    """The ``Citry`` instance the component class belongs to."""
+    component_class: type[Component]
+    """The Component class whose loaded asset files were reset."""
+
+
+@dataclass(frozen=True, slots=True)
 class OnRenderContextMergeContext:
     citry: Citry
     """The ``Citry`` instance the render belongs to."""
@@ -463,6 +491,20 @@ class Extension:
         """
         Called once per compiled body, with the generated node list. Mutate it
         in place or return a new list.
+        """
+
+    # ----- JS / CSS -----
+
+    def on_js_loaded(self, ctx: OnJsLoadedContext) -> str | None:
+        """
+        Called once per class with the component's primary JS content (inline
+        or read from ``js_file``). Return a new string to modify it.
+        """
+
+    def on_css_loaded(self, ctx: OnCssLoadedContext) -> str | None:
+        """
+        Called once per class with the component's primary CSS content (inline
+        or read from ``css_file``). Return a new string to modify it.
         """
 
 
@@ -950,4 +992,37 @@ class ExtensionManager:
             OnTemplateCompiledContext(citry=self.citry, component_class=component_class, nodes=nodes),
             result="map",
             field="nodes",
+        )
+
+    # ----- JS / CSS hooks -----
+
+    def on_js_loaded(self, component_class: type[Component], content: str) -> str:
+        return self.emit(
+            "on_js_loaded",
+            OnJsLoadedContext(citry=self.citry, component_class=component_class, content=content),
+            result="map",
+            field="content",
+        )
+
+    def on_css_loaded(self, component_class: type[Component], content: str) -> str:
+        return self.emit(
+            "on_css_loaded",
+            OnCssLoadedContext(citry=self.citry, component_class=component_class, content=content),
+            result="map",
+            field="content",
+        )
+
+    def on_files_reset(self, component_class: type[Component]) -> None:
+        """
+        Notify extensions that a component class's loaded asset files were
+        reset, so each drops its own per-class state (the ``dependencies``
+        built-in drops its merged result here).
+
+        Deliberately not declared on the :class:`Extension` base: this is the
+        first consumer of the duck-typed custom-hook dispatch (an extension
+        subscribes by defining a method named ``on_files_reset``).
+        """
+        self.emit(
+            "on_files_reset",
+            OnFilesResetContext(citry=self.citry, component_class=component_class),
         )

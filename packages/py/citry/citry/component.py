@@ -60,13 +60,16 @@ from dataclasses import dataclass, is_dataclass
 from hashlib import md5
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+from citry.assets import load_css, load_js, load_template, validate_asset_pairs
+from citry.assets import reset_files as _reset_files_impl
+from citry.assets import reset_template as _reset_template_impl
 from citry.citry import Citry, citry
 from citry.citry_element import CitryElement
 from citry.extensions.dependencies import get_dependencies as _get_dependencies_impl
 from citry.provide import MISSING, inject_value, make_provided, validate_provide_key
 from citry.slots import Slot, normalize_slot_fills
 from citry.util.id import gen_render_id
-from citry.util.misc import to_dict
+from citry.util.misc import get_import_path, to_dict
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -136,6 +139,11 @@ class ComponentMeta(type):
         is_component_subclass = any(isinstance(b, ComponentMeta) for b in bases)
         if not is_component_subclass:
             return super().__new__(mcs, name, bases, attrs)
+
+        # Setting both members of an asset pair (e.g. `template` and
+        # `template_file`) on the same class is an error; fail at class
+        # definition. See docs/design/asset_loading.md section 3.2.
+        validate_asset_pairs(name, attrs)
 
         # Convert inner data classes (Kwargs, Slots, and the data-method
         # schemas) to dataclasses if they don't explicitly declare a base
@@ -285,10 +293,41 @@ class Component(metaclass=ComponentMeta):
     """
 
     template: ClassVar[str | None] = None
-    """Inline template string (Citry V3 HTML-like syntax)."""
+    """Inline template string (Citry template syntax).
+
+    Mutually exclusive with ``template_file``. Read the loaded template with
+    ``get_template()``.
+    """
 
     template_file: ClassVar[str | None] = None
-    """Path to a template file. Mutually exclusive with ``template``."""
+    """Path to a template file. Mutually exclusive with ``template``.
+
+    Resolved relative to the directory of this component's ``.py`` file first,
+    then relative to each entry of ``Citry(dirs=...)``; absolute paths are used
+    as-is.
+    """
+
+    js: ClassVar[str | None] = None
+    """Inline primary JS for this component. Mutually exclusive with
+    ``js_file``. Read the loaded content with ``get_js()``."""
+
+    js_file: ClassVar[str | None] = None
+    """Path to the component's primary JS file. Mutually exclusive with
+    ``js``. Resolved like ``template_file``."""
+
+    css: ClassVar[str | None] = None
+    """Inline primary CSS for this component. Mutually exclusive with
+    ``css_file``. Read the loaded content with ``get_css()``."""
+
+    css_file: ClassVar[str | None] = None
+    """Path to the component's primary CSS file. Mutually exclusive with
+    ``css``. Resolved like ``template_file``."""
+
+    # NOTE: Secondary assets are declared in a nested ``Dependencies`` class,
+    # which belongs to the built-in `dependencies` extension (the extension
+    # manager rebuilds it into the extension's per-component config). There is
+    # deliberately no `Dependencies` ClassVar here; read the merged result
+    # with ``get_dependencies()``. See docs/design/asset_loading.md section 7.
 
     Kwargs: ClassVar[type | None] = None
     """Optional typed keyword arguments.
@@ -316,13 +355,13 @@ class Component(metaclass=ComponentMeta):
     """Optional typed schema for the ``css_data()`` output. Like
     ``TemplateData``, a plain annotated class converted to a dataclass."""
 
-    _template_body_generator: ClassVar[_CompiledTemplate | None] = None
-    """Internal: the compiled form of this component's template (the
-    body-generating function plus parse-time metadata), built once per class
-    on first render and cached here (the Citry analog of Django's
-    ``Component._template``). Calling its ``generate`` yields a fresh node
-    list. Populated and read via ``__dict__`` by the render pipeline; not a
-    user-facing field.
+    _citry_template: ClassVar[CitryTemplate | None] = None
+    """Internal: this component's loaded template (the ``CitryTemplate``,
+    which also carries the compiled form once first rendered), resolved once
+    per class and cached here (the Citry analog of Django's
+    ``Component._template``). Populated and read via ``__dict__`` by the
+    asset loader and the render pipeline; read it through ``get_template()``,
+    not directly.
     """
 
     # ----- Instance fields -----
@@ -703,6 +742,68 @@ class Component(metaclass=ComponentMeta):
         while current is not None:
             yield current
             current = current.parent
+
+    # ----- Asset accessors -----
+    # Thin delegates into citry/assets.py and the built-in `dependencies`
+    # extension. The class fields (template, js_file, ...) stay exactly as
+    # declared; these classmethods return the resolved/loaded values, cached
+    # once per class. They are accessors, not override points: supplying a
+    # template dynamically by overriding get_template() is unsupported.
+    # See docs/design/asset_loading.md section 3.1.
+
+    @classmethod
+    def get_template(cls) -> CitryTemplate | None:
+        """
+        The loaded template (a ``CitryTemplate``), or ``None`` for a
+        template-less component. Resolved from ``template`` /
+        ``template_file`` once per class; ``on_template_loaded`` applied.
+        """
+        return load_template(cls)
+
+    @classmethod
+    def get_js(cls) -> str | None:
+        """
+        The loaded primary JS content, or ``None``. Resolved from ``js`` /
+        ``js_file`` once per class; ``on_js_loaded`` applied.
+        """
+        return load_js(cls)
+
+    @classmethod
+    def get_css(cls) -> str | None:
+        """
+        The loaded primary CSS content, or ``None``. Resolved from ``css`` /
+        ``css_file`` once per class; ``on_css_loaded`` applied.
+        """
+        return load_css(cls)
+
+    @classmethod
+    def get_dependencies(cls) -> CitryDependencies:
+        """
+        The merged secondary assets from this component's (and, per
+        ``Dependencies.extend``, its bases') nested ``Dependencies`` class.
+        Owned by the built-in ``dependencies`` extension.
+        """
+        return _get_dependencies_impl(cls)
+
+    @classmethod
+    def reset_template(cls) -> None:
+        """
+        Clear this class's loaded template (and its compiled form and cached
+        ``Const`` optimization results), so the next render re-reads it.
+        Subclasses that inherit this template cache their own copies; reset
+        them too (``Citry.get_components_for_file`` lists every class using
+        a given file).
+        """
+        _reset_template_impl(cls)
+
+    @classmethod
+    def reset_files(cls) -> None:
+        """
+        Clear this class's loaded JS/CSS (and, via the ``on_files_reset``
+        hook, extension state such as the merged ``Dependencies``), so the
+        next access re-reads them.
+        """
+        _reset_files_impl(cls)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
