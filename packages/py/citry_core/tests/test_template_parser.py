@@ -324,10 +324,10 @@ class TestRoundTrip:
         assert body == ["<div>hi</div>"]
 
     def test_raw(self):
+        # <c-raw> is a verbatim block: it compiles to a literal text part, not a
+        # component. The inner {{ ... }} is kept as literal text, not parsed.
         body = self._exec_template("<c-raw>{{ not parsed }}</c-raw>")
-        assert isinstance(body[0], ComponentNode)
-        assert body[0].name == "raw"
-        assert body[0].body == ["{{ not parsed }}"]
+        assert body == ["{{ not parsed }}"]
 
     def test_nested_components(self):
         body = self._exec_template("<c-Outer><c-Inner /></c-Outer>")

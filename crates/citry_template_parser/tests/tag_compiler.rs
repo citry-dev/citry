@@ -473,11 +473,38 @@ mod tests {
 
     #[test]
     fn test_raw_body_kept_verbatim() {
-        // `<c-raw>` becomes a ComponentNode named "raw" whose body is the raw,
-        // unparsed text (the `{{ ... }}` is NOT turned into an ExprNode).
+        // `<c-raw>` is a verbatim block: its body compiles to a single literal
+        // text part, with no template processing (the `{{ ... }}` is NOT turned
+        // into an ExprNode).
         assert_compile(
             "<c-raw>{{ not parsed }}</c-raw>",
-            r#"[ComponentNode(source, (0, 31,), (), ["""{{ not parsed }}""",], (), """raw""", False),]"#,
+            r#"["""{{ not parsed }}""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_raw_empty_compiles_to_empty_text() {
+        // An empty `<c-raw></c-raw>` compiles to an empty literal text part.
+        assert_compile("<c-raw></c-raw>", r#"["""""",]"#);
+    }
+
+    #[test]
+    fn test_raw_coalesces_with_surrounding_html() {
+        // The verbatim text merges with adjacent static HTML into one string,
+        // and the inner `{{ y }}` stays literal.
+        assert_compile(
+            "<p>a</p><c-raw>X{{y}}</c-raw><p>b</p>",
+            r#"["""<p>a</p>X{{y}}<p>b</p>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_raw_keeps_inner_tags_and_comments_literal() {
+        // Inner `<c-Foo/>` and `{# ... #}` are emitted verbatim, not parsed as
+        // a component or a template comment.
+        assert_compile(
+            "<c-raw><c-Foo/>{# nope #}</c-raw>",
+            r#"["""<c-Foo/>{# nope #}""",]"#,
         );
     }
 

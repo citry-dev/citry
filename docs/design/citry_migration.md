@@ -317,7 +317,7 @@ Status legend:
 
 ### `component.py` (3657 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -361,7 +361,7 @@ Status legend:
 
 ### `component_render.py` (1444 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -414,7 +414,7 @@ Status legend:
 | Feature | Status | Notes |
 |---|---|---|
 | `ComponentExtension` base + hook surface | ✅ Done | As `Extension`; hooks wired: extension-created, class created/deleted, registered/unregistered, input, data, rendered, slot-rendered, template loaded/compiled, js/css loaded, plus citry-only `on_attrs_resolved` |
-| `on_registry_created` / `on_registry_deleted` | ❓ Ambiguous | The registry is 1:1 with a `Citry` instance now; decide whether a Citry-created hook is needed at all |
+| `on_registry_created` / `on_registry_deleted` | ♻️ Superseded | The registry is 1:1 with a `Citry` instance now; separate hooks no longer needed |
 | `on_dependencies` hook | ✅ Done | Extension-owned custom hook fired via `emit` at serialize time; the first real consumer of the custom-hook mechanism |
 | `ExtensionComponentConfig` (nested per-component config) | ✅ Done | As `ExtensionConfig`; the `<name>_class` escape hatch dropped |
 | `ExtensionManager` dispatch | ✅ Done (diverged) | Smart dispatch (only extensions that override a hook) + generic `emit` |
@@ -448,7 +448,7 @@ Status legend:
 
 ### `component_media.py` (1290 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -473,7 +473,7 @@ port. The concepts migrate; the string-smuggling mechanics (HTML comments,
 base64 manifests, regex over rendered HTML) are superseded by the object
 pipeline (`CitryRender` parts + `CitryContext.extra`).
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |

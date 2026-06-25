@@ -126,8 +126,9 @@ Non-obvious facts not covered in the module doc:
   concatenated at runtime. They are *not* wrapped in `*HtmlAttr` calls (those
   only appear in component/slot/fill attribute tuples).
 - Expression content retains its trailing whitespace from `{{ expr }}`.
-- `<c-raw>` compiles as a `ComponentNode` named `"""raw"""`, not a dedicated
-  node type.
+- `<c-raw>` compiles its body to a single literal text part (an `UnsafeString`
+  that `coalesce_strings` may merge with adjacent static text); the inner
+  content is emitted verbatim, with no template processing.
 
 Compiler tests are in `tests/tag_compiler.rs` and assert exact generated
 strings (the observe-then-lock style).

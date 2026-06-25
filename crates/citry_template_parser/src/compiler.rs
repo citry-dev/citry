@@ -53,8 +53,8 @@
 //! - `key=""` normalizes to boolean `True` (at compile time, not parse time).
 //! - Void elements render compact (`<br/>`); non-void self-closing expand
 //!   (`<div></div>`).
-//! - `<c-raw>` compiles to a `ComponentNode` named `"""raw"""` whose body
-//!   contains the raw, unparsed text.
+//! - `<c-raw>` compiles its body to a single literal text part; the inner
+//!   content is emitted verbatim, with no template processing.
 //!
 //! ## Determinism
 //!
@@ -72,7 +72,7 @@ use crate::ast::{
 };
 use crate::constants::{
     COMPONENT_NODE, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELEMENT_TAG,
-    C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_SLOT_TAG,
+    C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG,
     ELEMENT_ATTRS_NODE, EXPR_ATTR_NODE, EXPR_NODE, FILL_NODE, FOR_NODE, HTML_VOID_ELEMENTS,
     IF_NODE, SLOT_NODE, STATIC_ATTR_NODE, TAG_ATTR_RULES, TEMPLATE_ATTR_NODE,
 };
@@ -260,6 +260,21 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                     }
                     // NOTE: `<c-provide>`, `<c-js>`, and `<c-css>` are not included here
                     // because they can be implemented as user-side components.
+
+                    // `<c-raw>` is a verbatim block, not a component: emit its
+                    // body as literal text. The parser stored the unparsed
+                    // content as a single Text element (process_html_raw), so
+                    // nothing inside is template-processed.
+                    C_RAW_TAG => {
+                        if let Node::WithBody { body, .. } = node {
+                            for element in body.elements {
+                                if let TemplateElement::Text(text) = element {
+                                    body_items
+                                        .push(LangSpecArgument::UnsafeString(text.token.content));
+                                }
+                            }
+                        }
+                    }
 
                     // Component nodes (render user-defined components)
                     C_COMPONENT_TAG => {
