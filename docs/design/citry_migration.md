@@ -68,10 +68,11 @@ directly.
    that there is a design decision to make, and the user should make it.
 
 6. **Tests alongside features.** Every feature gets tests when built.
-   Until the citry equivalent of `@djc_test` exists, tests use plain
-   pytest. Track test files that need updating once test isolation
-   infrastructure is in place (see "Test files to revisit" in the
-   implementation log below).
+   Tests use plain pytest; the isolation unit is a fresh `Citry()`
+   instance per test (it owns its own registry, caches, and settings),
+   not a `@djc_test`-style decorator. Some early test files still lean on
+   the shared default `citry` instance (see "Test files to revisit" in
+   the implementation log below).
 
 7. **Type-check new code.** Run `uv run mypy packages/py/citry/citry/`
    after changes. New code must pass mypy with `--ignore-missing-imports`.
@@ -574,7 +575,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 
 ### `cache.py` (50 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -592,7 +593,7 @@ Same audit for the "primarily Django" group (reviewed June 2026). Same
 status legend as above. The headline: most of these files stay, but
 `node.py` carries the template-position-in-errors concept worth porting,
 and a handful of unlisted files (reviewed at the end) contain genuinely
-portable features (`ErrorFallback`, `@djc_test`).
+portable features (e.g. `ErrorFallback`).
 (`dependencies.py` was reclassified into the component-logic group: it is
 the blueprint for the citry dependency extension and definitely ports.)
 
@@ -602,7 +603,7 @@ The file is the Django settings bridge (`COMPONENTS = {...}` ->
 `InternalSettings` with lazy loading and per-test reload). The mechanism
 stays in django-components; the verdicts below are about each *field*.
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -611,7 +612,8 @@ stays in django-components; the verdicts below are about each *field*.
 | `extensions` / `extensions_defaults` | ✅ Done | Same names on `CitrySettings`, incl. import strings |
 | `dirs` | ✅ Done | `Citry(dirs=...)`; djc's `(prefix, dir)` tuple form not carried (prefix only matters for staticfiles) |
 | `app_dirs` | ⏭️ Skip (Django) | Per-app `[app]/components` dirs need Django's app registry; django-components can feed the resolved dirs into `Citry(dirs=...)` |
-| `autodiscover` / `libraries` | ⏭️ Skip (Django) | Goes with `autodiscovery.py` (see below) |
+| `autodiscover` | ✅ Done | `Citry(autodiscover=True)` (default) imports the component modules under `Citry(dirs=...)` on first lookup, and `Citry.autodiscover()` runs it on demand. See `autodiscovery.py` below |
+| `libraries` | ❌ Drop | An explicit list of component modules to import. It dates to when django-components was a pure-template tool with no component `.py` files to discover; with component classes the `dirs` scan (or a plain `import`) covers it, and it is being dropped upstream too |
 | `cache` (named cache backend for component media) | ✅ Done | `Citry(cache=...)` / `CitrySettings.cache` ([`dependencies.md`](dependencies.md) section 10); `citry.contrib.django.DjangoCache` adapts any configured Django cache |
 | `context_behavior` (`django` / `isolated`) | ❌ Drop | citry passes only props + slots; there is one behavior |
 | `debug_highlight_components` / `debug_highlight_slots` | ⏭️ Skip (Django) | Belongs to the debug-highlight extension (reviewed with `extensions/`) |
@@ -643,14 +645,14 @@ stays in django-components; the verdicts below are about each *field*.
 
 ### `autodiscovery.py` (110 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
 |---|---|---|
-| `autodiscover()` (import every `.py` under the component dirs) | ❓ Ambiguous | citry has `Citry(dirs=...)` but no module-importing story. Decide whether citry owns "import component modules from dirs" (framework-neutral: `importlib` + paths) or each host wires its own. Template-only components (djc #1240) will reshape this either way |
-| `import_libraries()` | ⏭️ Skip (Django) | Driven by the Django `libraries` setting |
-| `LOADED_MODULES` test bookkeeping | ⏭️ Skip (Django) | Belongs to `@djc_test` (see unlisted files below) |
+| `autodiscover()` (import every `.py` under the component dirs) | ✅ Done | citry owns it: `Citry.autodiscover()` and the `autodiscover` setting import the modules under `Citry(dirs=...)`, mapping each file to its import name by anchoring on `sys.path` (the framework-neutral stand-in for djc's `BASE_DIR`). Lives in `citry/autodiscovery.py`. Template-only components (djc #1240) will extend it to synthesize components from template files that have no `.py` |
+| `import_libraries()` | ❌ Drop | Implemented the dropped `libraries` setting (see `app_settings.py` above) |
+| `LOADED_MODULES` test bookkeeping | ❌ Drop | Tracked imported modules so `@djc_test` could unload them between tests. citry isolates per-test state with separate `Citry()` instances instead, so there is nothing global to unwind; a test that needs to re-import a module manages `sys.modules` itself |
 
 </details>
 
@@ -689,14 +691,14 @@ stays in django-components; the verdicts below are about each *field*.
 
 ### `node.py` (891 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
 |---|---|---|
 | `BaseNode` declarative tag definition (`tag` / `end_tag` / `allowed_flags`, params derived from `render` signature) | ♻️ Superseded | In V3 the Rust grammar parses tags; citry node classes are compiler output, not tag parsers |
 | Tag input features (flags, literal lists/dicts, spread `...`, self-closing `/`) | ♻️ Superseded | The V3 grammar covers these natively (boolean attrs, expressions, `c-bind`, self-closing tags) |
-| `template_tag()` decorator (user-defined custom tags) | ❓ Ambiguous | Does citry want user-defined tags beyond components? Today the extension answer is custom `Node` subclasses injected via `on_template_compiled`, and parse-time attribute rules (djc #1213). Decide before porting anything |
+| `template_tag()` decorator (user-defined custom tags) | ❌ Drop | citry's user-facing tag is the component (`<c-*>`); there is no user-defined custom-tag or custom-`Node` API, so there is nothing to port |
 | `_format_error_with_template_position` (errors point at template line/col, with caret) | ✅ Done (diverged) | Via the shared formatter, now public as `citry_core.safe_eval.format_error_with_context`; citry applies it per failing node with the full template source + node span ([`on_render.md`](on_render.md) section 6.3), broader than djc's tag-signature-TypeError-only use |
 | `_modify_typeerror_message` (friendlier missing-kwarg TypeErrors) | ♻️ Superseded | Typed `Kwargs` validation + parse-time tag rules produce the errors up front |
 | `NodeMeta` signature validation | ♻️ Superseded | |
@@ -727,7 +729,7 @@ stays in django-components; the verdicts below are about each *field*.
 
 ### `urls.py` (18 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -805,12 +807,12 @@ These exist in `_djc_reference/` but were not in the classification tables.
 
 #### `testing.py`
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
 |---|---|---|
-| Public re-export of `@djc_test` | ➡️ (elsewhere) | A 9-line re-export; the implementation lives in `util/testing.py`, reviewed in the utilities section |
+| Public re-export of `@djc_test` | ❌ Drop | Re-exported the dropped `@djc_test` (see `util/testing.py` in the utilities section); nothing to re-export |
 
 </details>
 
@@ -863,7 +865,7 @@ Ported function by function, on demand. Current state:
 
 ### `util/cache.py` (115 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -929,7 +931,7 @@ Ported function by function, on demand. Current state:
 
 ### `util/routing.py` (78 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -1003,7 +1005,7 @@ Ported function by function, on demand. Current state:
 
 | Feature | Status | Notes |
 |---|---|---|
-| `@djc_test` (per-test isolation of settings, registries, caches, imported modules) | 🚧 To migrate | The citry equivalent is tracked in "Test files to revisit". `Citry()` instances already isolate registries/caches; what remains is a fixture/decorator that sweeps the default instance, module caches, and (if autodiscovery lands) imported modules |
+| `@djc_test` (per-test isolation of settings, registries, caches, imported modules) | ❌ Drop | citry has no test-isolation decorator: a `Citry()` instance is already the isolation unit (it owns its own registry, caches, and settings), so a test gets clean state by binding its components to a fresh instance. The two leftovers do not need one either: deterministic render ids become the `id_generator` setting, and a test that re-imports a module manages `sys.modules` itself rather than through citry API |
 | `GenIdPatcher` (deterministic render ids in tests) | ✅ Done | The autouse per-test id-counter fixture in `tests/conftest.py` |
 | `is_testing` / `CsrfTokenPatcher` / Django settings merging | ⏭️ Skip (Django) | |
 
@@ -1024,13 +1026,13 @@ Ported function by function, on demand. Current state:
 
 ### `util/loader.py` (254 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
 |---|---|---|
 | `get_component_dirs` (resolve `COMPONENTS.dirs` + per-app dirs from Django settings) | ⏭️ Skip (Django) | citry takes resolved paths via `Citry(dirs=...)`; the host computes them |
-| `get_component_files` / `_filepath_to_python_module` / `_search_dirs` (scan dirs, map files to module paths) | ❓ Ambiguous | Framework-neutral mechanics; ports if citry owns autodiscovery (the ❓ in `autodiscovery.py`), otherwise stays host-side |
+| `get_component_files` / `_filepath_to_python_module` / `_search_dirs` (scan dirs, map files to module paths) | ✅ Done | Ported framework-neutral to `citry/autodiscovery.py` as `find_component_modules` / `_path_to_module` / `_iter_py_files`; the file-to-module mapping anchors on `sys.path` instead of Django's `BASE_DIR` |
 | `resolve_file` | ♻️ Superseded | `media.py` resolves asset paths against the component file and `Citry.dirs` |
 
 </details>
@@ -1061,7 +1063,7 @@ extension and a good dogfood test for citry's hook system.
 
 ### `extensions/dependencies.py` (29 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -1103,7 +1105,7 @@ extension and a good dogfood test for citry's hook system.
 
 | Feature | Status | Notes |
 |---|---|---|
-| Run `import_libraries()` + `autodiscover()` at extension creation | ⏭️ Skip (Django) | Driven by Django settings. If citry takes ownership of autodiscovery (the ❓ in `autodiscovery.py`), packaging it as a citry extension like this is the natural shape |
+| Run `import_libraries()` + `autodiscover()` at extension creation | ⏭️ Skip (Django) | citry runs autodiscovery from the `Citry` instance, not an extension: an extension's only setup hook (`on_extension_created`) fires inside `Citry()` construction, too early to import modules that bind to the instance. The dirs scan runs lazily on first lookup instead (see `autodiscovery.py` above) |
 
 </details>
 
@@ -1186,6 +1188,7 @@ packages/py/citry/
     settings.py            # CitrySettings schema
     component.py           # Component class + ComponentMeta
     component_registry.py  # ComponentRegistry (owned by Citry, builtin names)
+    autodiscovery.py       # Find + import component modules under Citry(dirs=...)
     component_render.py    # Render pipeline (deferred, stack-driven)
     citry_element.py       # CitryElement (composition phase)
     citry_render.py        # CitryRender (render phase)
@@ -1261,9 +1264,11 @@ unrolling).
 
 ### Test files to revisit
 
-These test files use plain pytest and should be updated to use citry's
-test isolation infrastructure (the equivalent of django-components'
-`@djc_test`) once it exists.
+These test files lean on the shared default `citry` instance, which
+accumulates state across tests. citry's isolation unit is a fresh
+`Citry()` instance per test (it owns its own registry, caches, and
+settings), so these should bind their components to a per-test instance
+instead. There is no `@djc_test`-style decorator to wait for.
 
 - `packages/py/citry/tests/test_citry.py`
 - `packages/py/citry/tests/test_component.py`

@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from weakref import WeakValueDictionary, ref
 
+from citry.autodiscovery import import_component_modules
 from citry.cache import CitryCache, InMemoryCache
 from citry.component_registry import ComponentRegistry
 from citry.constness import ConstBodyCache
@@ -86,6 +87,7 @@ class Citry:
         dirs: Sequence[str | Path] = (),
         cache: CitryCache | str | None = None,
         sandbox_expressions: bool = True,
+        autodiscover: bool = True,
     ) -> None:
         # Asset search dirs must be absolute (same contract as DJC's
         # COMPONENTS.dirs); relative-to-py-file resolution needs no dirs at all.
@@ -101,6 +103,7 @@ class Citry:
             dirs=dir_paths,
             cache=cache,
             sandbox_expressions=sandbox_expressions,
+            autodiscover=autodiscover,
         )
 
         # The cache backend (docs/design/dependencies.md section 10): derived
@@ -112,6 +115,18 @@ class Citry:
         # its first lookup, through this factory, so they exist in every
         # Citry instance. See ComponentRegistry._ensure_builtins.
         self.registry = ComponentRegistry(builtins_factory=self._create_builtin_components)
+
+        # Autodiscovery (see autodiscover()). When the autodiscover setting is
+        # on, the component modules under settings.dirs are imported the first
+        # time a component is looked up, so their classes register themselves.
+        # _discovered latches that the scan has run for the current registry;
+        # clear() resets it so the next lookup rebuilds the registry (the scan
+        # re-registers components from already-imported modules, see
+        # citry.autodiscovery). _discovering guards the case where registering a
+        # discovered component routes back through this instance (the guard makes
+        # that re-entrant call a no-op, not a nested scan).
+        self._discovered: bool = False
+        self._discovering: bool = False
 
         # When a component is rendered and some of its template data is
         # wrapped in `Const()` ("this value is the same on every render"),
@@ -191,16 +206,46 @@ class Citry:
 
     def get(self, name: str) -> type[Component]:
         """Look up a component by name. See ``ComponentRegistry.get``."""
+        self._ensure_discovered()
         return self.registry.get(name)
 
     def has(self, name: str) -> bool:
         """Check if a component is registered. See ``ComponentRegistry.has``."""
+        self._ensure_discovered()
         return self.registry.has(name)
 
     @property
     def components(self) -> dict[str, type[Component]]:
         """All registered components as a name -> class mapping."""
+        self._ensure_discovered()
         return self.registry.all()
+
+    def autodiscover(self, dirs: Sequence[str | Path] | None = None) -> list[str]:
+        """
+        Import this instance's component modules so their classes register.
+
+        With no argument, imports every component module under the instance's
+        ``dirs`` - the same scan the ``autodiscover`` setting performs
+        automatically on first use - and marks that automatic scan done, so it
+        will not run again. Pass ``dirs`` to import an extra set of directories
+        on demand without affecting the automatic scan.
+
+        The directories must be importable: each one (or a parent of it) is on
+        ``sys.path``/``PYTHONPATH``, which is how a component file is mapped to
+        the import name Python uses for it. A directory that holds component
+        modules but is not importable raises ``ValueError``.
+
+        Returns the dotted import paths of the modules that were imported. Safe
+        to call more than once: an already-imported module has its components
+        re-registered directly, so a call after ``clear()`` rebuilds the
+        registry and a call that changes nothing is a no-op.
+        """
+        if dirs is None:
+            self._discovered = True
+            search_dirs: tuple[Path, ...] = self.settings.dirs
+        else:
+            search_dirs = tuple(Path(d) for d in dirs)
+        return self._run_discovery(search_dirs)
 
     @property
     def urls(self) -> tuple[URLRoute, ...]:
@@ -299,6 +344,39 @@ class Citry:
 
         make_builtin_components(self)
 
+    def _ensure_discovered(self) -> None:
+        """
+        Import the component modules under ``settings.dirs`` once, on first use.
+
+        Driven by the ``autodiscover`` setting. Runs at the first component
+        lookup (``get``/``has``/``components``) or template compile
+        (``_tag_rules``), so every component defined under ``dirs`` is registered
+        before any template that references it is parsed. A no-op when
+        autodiscovery is off or no ``dirs`` are set. See ``Citry.autodiscover``.
+        """
+        if self._discovered or self._discovering or not self.settings.autodiscover:
+            return
+        # Latch before importing (as the registry's _ensure_builtins does): a
+        # discovered module registers components, which routes back through this
+        # instance; the latch makes that re-entrant call short-circuit here
+        # instead of starting a second scan.
+        self._discovered = True
+        if self.settings.dirs:
+            self._run_discovery(self.settings.dirs)
+
+    def _run_discovery(self, dirs: tuple[Path, ...]) -> list[str]:
+        """
+        Scan ``dirs`` and import their component modules, under the re-entrancy
+        guard. Returns the imported module names. The guard makes a lookup that
+        fires while a discovered component is registering short-circuit (see
+        ``_ensure_discovered``) rather than start a nested scan.
+        """
+        self._discovering = True
+        try:
+            return import_component_modules(dirs)
+        finally:
+            self._discovering = False
+
     def _tag_rules(self) -> dict[str, TagRules]:
         """
         Parse-time validation rules for templates parsed under this instance.
@@ -309,6 +387,10 @@ class Citry:
         kwargs/fills. Cached; the cache resets whenever a component is
         registered or unregistered.
         """
+        # Discovery must finish before the rules are built: build_tag_rules
+        # reads the whole registry, so every discovered component has to be
+        # registered first or the rules would be built from a partial set.
+        self._ensure_discovered()
         if self._tag_rules_cache is None:
             self._tag_rules_cache = build_tag_rules(self)
         return self._tag_rules_cache
@@ -356,6 +438,11 @@ class Citry:
         self._file_index.clear()
         self._classes_by_id.clear()
         self._tag_rules_cache = None
+        # Re-arm autodiscovery: the next lookup re-runs the dirs scan and
+        # rebuilds the registry. Even though the modules are already imported,
+        # the scan re-registers their components (see citry.autodiscovery), so
+        # the rebuilt registry matches the one clear() just wiped.
+        self._discovered = False
         # The protocol does not require clear() (a shared backend may not want
         # a full wipe); the built-in in-memory cache supports it.
         cache_clear = getattr(self.cache, "clear", None)

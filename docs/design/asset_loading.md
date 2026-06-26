@@ -46,9 +46,10 @@ In `packages/py/citry/_djc_reference/`:
   `Template.__init__` is a global chokepoint. Its `TODO_v3` (`template.py:350`)
   says to drop Django loaders and read files directly; citry does exactly that.
 - **`util/loader.py`**: `get_component_dirs()` (driven by Django settings),
-  `resolve_file()`, and the autodiscovery glob walk. Per the migration
-  classification, autodiscovery/finders/template_loader stay in
-  django-components; only the dir-based file resolution concept ports.
+  `resolve_file()`, and the autodiscovery glob walk. The dir-based file
+  resolution concept ports here (asset loading); the autodiscovery glob walk
+  ports separately to `citry/autodiscovery.py`; finders and template_loader
+  stay in django-components.
 - **The laziness rationale** (`component_media.py:348-358`): DJC resolves
   lazily because Django settings are unavailable at class-definition time.
   Citry has no such race: a component binds to its `Citry` (whose frozen
@@ -542,7 +543,8 @@ using `get_components_for_file`).
 | File-to-component reverse index | Ported | on the `Citry` instance, weakrefs |
 | `reset_template` / `reset_files` | Ported | plus per-class const-body eviction |
 | Hot-reload watcher | Deferred | future extension over `get_components_for_file` |
-| Autodiscovery / finders / template_loader | Stays in DJC | per the migration classification |
+| Autodiscovery | citry owns it | `citry/autodiscovery.py`, run from `Citry.autodiscover()` / the `autodiscover` setting; separate from asset loading, which only reads files |
+| finders / template_loader | Stays in DJC | per the migration classification |
 
 ---
 

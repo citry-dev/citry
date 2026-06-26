@@ -234,6 +234,17 @@ class ComponentRegistry:
         self._cls_to_names.clear()
         self._builtins_registered = False
 
+    def _has_class(self, comp_cls: type[Component]) -> bool:
+        """
+        Whether this exact class is registered (under any name).
+
+        Used by autodiscovery to re-register only the components that a cleared
+        registry is missing, so a re-scan skips ones already present. Does not
+        create the built-ins (it asks about a specific user class), so it has no
+        side effects.
+        """
+        return id(comp_cls) in self._cls_to_names
+
     def _ensure_builtins(self) -> None:
         """
         Create and register the built-in components, once.

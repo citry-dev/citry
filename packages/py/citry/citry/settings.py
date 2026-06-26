@@ -48,6 +48,12 @@ class CitrySettings:
             On by default. Turning it off evaluates expressions as plain Python,
             which is faster but removes security guardrails.
             Only do so when every template comes from a trusted source.
+        autodiscover: Whether to import the component modules under ``dirs`` the
+            first time a component is looked up, so their classes register
+            themselves without being imported by hand. On by default; a no-op
+            when no ``dirs`` are set (so the default instance does nothing). The
+            directories must be importable (on ``sys.path``/``PYTHONPATH``). See
+            ``Citry.autodiscover`` and ``citry.autodiscovery``.
 
     """
 
@@ -56,3 +62,4 @@ class CitrySettings:
     dirs: tuple[Path, ...] = ()
     cache: CitryCache | str | None = None
     sandbox_expressions: bool = True
+    autodiscover: bool = True
