@@ -469,11 +469,14 @@ Rendering a large page (~325 component instances, ~205 KB of HTML):
 ![Citry vs Django vs django-components rendering a large page. Lower is better.](docs/assets/benchmark.png)
 
 - **Versus django-components** (the fair component-to-component comparison),
-  Citry is about **1.7x faster** on first render, **3.1x faster** on repeat
-  renders, and roughly **2x faster** to start up and import.
-- **Versus a bare Django template** (which renders no components at all), Citry
-  starts up about **2x faster**, and its repeat render stays within **~1.4x**,
-  while doing the full component lifecycle Django skips.
+  Citry is about **1.7x faster** on first render and **3.4x faster** on repeat
+  renders, and about **2x faster** to start up and import.
+- **Versus bare template engines** (Django and Jinja2 render no components), Citry pays for the component lifecycle they skip, yet its repeat render
+  is only about **1.3x** a Django template.
+- **Jinja2** is the fast no-component baseline: fastest to start up and fastest
+  once warm, because each component is just a precompiled macro. It has no
+  component model, and it pays on first render, recompiling its whole macro
+  library at once.
 
 These are relative numbers from a single machine. See
 [`benchmarks/`](benchmarks/README.md) for the methodology and how to reproduce

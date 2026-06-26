@@ -1,7 +1,7 @@
 # Benchmarks
 
-Rendering-performance comparison between citry, django-components (DJC), and
-vanilla Django templates. The design, scope, and roadmap live in
+Rendering-performance comparison between citry, django-components (DJC),
+vanilla Django templates, and Jinja2. The design, scope, and roadmap live in
 [`docs/design/benchmarking.md`](../docs/design/benchmarking.md); this README
 covers running the comparison and reading its output.
 
@@ -25,6 +25,7 @@ Engines:
 | `django-components` | The DJC component scenario, vendored byte-close to upstream |
 | `citry` | The citry port of the same UI, plain inputs |
 | `citry-const` | The same port with each component's render-invariant literals marked `Const` (the opt-in render-caching optimization, see `docs/design/constness.md`); large scenario only |
+| `jinja2` | The same UI in Jinja2, the first engine beyond the Django family. Jinja2 has no component model, so each citry component becomes a macro; provide/inject is threaded as macro arguments, and each component's inline JS is collected by a per-render registry and injected at the `<c-js>` marker. Its `html_attrs` global stands in for Django's `{% html_attrs %}` tag. Both scenarios |
 
 Test types, mirroring upstream so the methodology stays comparable:
 
@@ -41,7 +42,7 @@ From the repository root:
 
 ```bash
 # 1. Install the baseline engines (not part of the default dev install)
-uv pip install django==6.0.6 django-components==0.151.0
+uv pip install django==6.0.6 django-components==0.151.0 jinja2==3.1.6
 
 # 2. REQUIRED: build the Rust extension in release mode. The default debug
 #    build makes citry's Rust-backed paths many times slower and invalidates
@@ -70,56 +71,79 @@ django-components):
 
 ## Results (small scenario)
 
-Measured 2026-06-12 on an Apple M4, Python 3.13.12, median of 5 fresh-process
-rounds per cell. Versions: django 6.0.6, django-components 0.151.0, citry
-0.1.0 (citry_core 1.3.0, release build). Ratios are vs the `django` row.
+Measured 2026-06-25 on an Apple M4, Python 3.13.12, median of 5 fresh-process
+rounds per cell. Versions: django 6.0.6, django-components 0.151.0, jinja2
+3.1.6, citry 0.1.0 (citry_core 1.3.0, release build). Ratios are vs the
+`django` row.
 
 | engine | startup | import | first | subsequent |
 |---|---|---|---|---|
-| django | 75.35 ms (1.00x) | 71.45 ms (1.00x) | 1.11 ms (1.00x) | 39.5 us (1.00x) |
-| django-components | 72.47 ms (0.96x) | 72.05 ms (1.01x) | 1.44 ms (1.29x) | 206.6 us (5.23x) |
-| citry | 25.96 ms (0.34x) | 26.08 ms (0.37x) | 866.6 us (0.78x) | 58.9 us (1.49x) |
+| django | 79.21 ms (1.00x) | 77.37 ms (1.00x) | 1.06 ms (1.00x) | 41.0 us (1.00x) |
+| django-components | 78.86 ms (1.00x) | 77.28 ms (1.00x) | 1.41 ms (1.33x) | 199.4 us (4.86x) |
+| citry | 29.80 ms (0.38x) | 29.20 ms (0.38x) | 1.53 ms (1.45x) | 71.5 us (1.74x) |
+| jinja2 | 14.68 ms (0.19x) | 14.26 ms (0.18x) | 1.21 ms (1.15x) | 23.2 us (0.57x) |
 
 Highlights, with the relative-only caveat above:
 
-- citry imports and starts up about 3x faster than the Django stack.
-- On repeat renders citry is about 3.5x faster than django-components,
-  though still ~1.5x slower than a bare Django template (the gap is the
-  component machinery: per-render component construction, slot resolution,
-  and id marking).
+- The two bare template engines (django, jinja2) do no per-render component
+  work, so they lead the component engines (django-components, citry) on
+  render time; the meaningful reading is within each pair.
+- jinja2 is the fast no-component baseline it is known for: it imports and
+  starts up about 5x faster than the Django stack, and its repeat render is
+  about 1.8x faster than a bare Django template (and ~8.6x faster than
+  django-components). It pays for that on first render (1.15x), where
+  compiling the template to Python bytecode costs a little more than Django's
+  parse; the speed shows up on every render after.
+- citry imports and starts up about 2.6x faster than the Django stack.
+- On repeat renders citry is about 2.8x faster than django-components, the
+  fair component-to-component comparison. It trails the two bare template
+  engines, which skip the component lifecycle citry runs each render
+  (component construction, slot resolution, id marking).
 - There is no `citry-const` row here. The single Button computes every value
   it renders from its inputs (the classes, the attributes), so nothing it
   returns is a render-invariant literal to mark constant. Const has a fair
   test in the large scenario, where there are static literals to mark.
 
+The small table was last measured 2026-06-12, before the phase-3 feature and
+render-path work landed, so its citry numbers differ from that older table;
+compare rows within this run, never numbers across the dated tables.
+
 ## Results (large scenario)
 
-Measured 2026-06-22 on an Apple M4, Python 3.13.12, median of 5 fresh-process
-rounds per cell. Versions: django 6.0.6, django-components 0.151.0, citry
-0.1.0 (citry_core 1.3.0, release build). Ratios are vs the `django` row. The
-large scenario is the full project-management page: 35 components, ~325
-component instances rendered, JS dependency collection, provide/inject,
-slots/fills, and dynamic elements.
+Measured 2026-06-25 on an Apple M4, Python 3.13.12, median of 5 fresh-process
+rounds per cell. Versions: django 6.0.6, django-components 0.151.0, jinja2
+3.1.6, citry 0.1.0 (citry_core 1.3.0, release build). Ratios are vs the
+`django` row. The large scenario is the full project-management page: 35
+components, ~325 component instances rendered, JS dependency collection,
+provide/inject, slots/fills, and dynamic elements.
 
 | engine | startup | import | first | subsequent |
 |---|---|---|---|---|
-| django | 77.25 ms (1.00x) | 69.75 ms (1.00x) | 17.77 ms (1.00x) | 10.60 ms (1.00x) |
-| django-components | 77.16 ms (1.00x) | 70.90 ms (1.02x) | 64.11 ms (3.61x) | 45.73 ms (4.31x) |
-| citry | 38.51 ms (0.50x) | 29.02 ms (0.42x) | 37.57 ms (2.11x) | 14.52 ms (1.37x) |
-| citry-const | 37.85 ms (0.49x) | 29.52 ms (0.42x) | 38.22 ms (2.15x) | 14.61 ms (1.38x) |
+| django | 81.90 ms (1.00x) | 76.78 ms (1.00x) | 17.82 ms (1.00x) | 10.78 ms (1.00x) |
+| django-components | 82.25 ms (1.00x) | 76.73 ms (1.00x) | 65.45 ms (3.67x) | 46.02 ms (4.27x) |
+| citry | 38.36 ms (0.47x) | 28.64 ms (0.37x) | 37.79 ms (2.12x) | 13.65 ms (1.27x) |
+| citry-const | 38.02 ms (0.46x) | 29.19 ms (0.38x) | 38.44 ms (2.16x) | 14.82 ms (1.37x) |
+| jinja2 | 18.16 ms (0.22x) | 14.54 ms (0.19x) | 58.93 ms (3.31x) | 6.06 ms (0.56x) |
 
 Highlights, with the relative-only caveat above:
 
 - citry imports and starts up about 2x faster than the Django stack.
 - Against django-components (the fair comparison, since both pay the
   component-machinery cost) citry is about 1.7x faster on first render and
-  about 3.1x faster on repeat renders.
+  about 3.4x faster on repeat renders.
 - Both component engines are slower than a bare Django template, which does
   none of the per-render component work (construction, slots, dependency
   collection, id marking); the relevant question is the relative cost of
   using components, and there citry wins. After a round of render-path
   optimization (see the section 11 log in `docs/design/benchmarking.md`),
-  citry's repeat render is about 1.4x a bare Django template, down from 1.85x.
+  citry's repeat render is about 1.3x a bare Django template, down from 1.85x.
+- jinja2 (no component model: each component is a macro) is the fastest engine
+  to start up and import (about 5x the Django stack, about 2x citry) and has
+  the fastest repeat render of any engine here (0.56x a bare Django template,
+  about 7.6x faster than django-components), because each render just runs
+  pre-compiled macro bytecode. It pays for that on first render (3.31x), where
+  the whole macro library compiles at once. The classic compiled-template
+  trade-off, at page scale: slowest to warm up, fastest once warm.
 - `citry-const` is within noise of plain citry here. The const variant
   (`test_benchmark_citry_const.py`) marks each component's genuinely
   render-invariant values constant (literal attribute dicts, the theme, icon
@@ -145,8 +169,15 @@ benchmarks/
     README.md    this file
     compare.py   the comparison runner (one table per scenario size)
     utils.py     marker slicing shared by runners
+    plot.py      draws the project README chart from the large-scenario table
 ```
 
-The large (`lg`) scenario, asv adoption (per-commit tracking, dashboards,
-memory benchmarks), and engines beyond the Django family (Jinja2, MiniJinja,
-JinjaX, ...) are later phases; see the design doc's section 8.
+`plot.py` renders the chart shown in the project README from the large-scenario
+numbers above. After re-measuring that table, update the data in `plot.py` to
+match and re-run it: `uv run --no-project --with matplotlib python benchmarks/plot.py`.
+
+Still ahead: asv adoption (per-commit tracking, dashboards, memory
+benchmarks), and more engines beyond the Django family (MiniJinja, JinjaX,
+django-cotton, ...); see the design doc's section 8. Jinja2 is the first
+beyond-Django-family engine, ported for both scenarios
+(`test_benchmark_jinja2_small.py` and `test_benchmark_jinja2.py`).

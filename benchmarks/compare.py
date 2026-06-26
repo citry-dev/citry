@@ -68,6 +68,10 @@ ENGINES = [
     # flag), so it only exists for the large scenario; the small scenario has
     # no render-invariant literals to mark, so its citry-const cell is skipped.
     Engine("citry-const", "test_benchmark_citry_const"),
+    # The first engine beyond the Django family (docs/design/benchmarking.md
+    # section 2.1). Only the small scenario is ported so far; the large cell is
+    # skipped automatically while `test_benchmark_jinja2.py` does not exist.
+    Engine("jinja2", "test_benchmark_jinja2"),
 ]
 
 TEST_TYPES = ["startup", "import", "first", "subsequent"]

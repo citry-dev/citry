@@ -11,6 +11,15 @@ try:
 except ImportError:
     collect_ignore_glob += ["test_benchmark_django*", "test_benchmark_djc*"]
 
+# The Jinja2 benchmark scenario (the first engine beyond the Django family,
+# docs/design/benchmarking.md section 2.1) needs the same optional `benchmark`
+# dependency group. Skipped here when Jinja2 is absent, so the default dev
+# install collects the suite without it.
+try:
+    import jinja2  # noqa: F401
+except ImportError:
+    collect_ignore_glob += ["test_benchmark_jinja2*"]
+
 
 @pytest.fixture(autouse=True)
 def _deterministic_render_ids(monkeypatch):
