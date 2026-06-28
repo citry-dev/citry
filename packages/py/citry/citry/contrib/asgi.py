@@ -11,18 +11,31 @@ instance so URL building works::
 
 (The ``citry.contrib.fastapi.mount`` convenience does both.) Uses no
 third-party packages; only the ASGI 3 protocol.
+
+For development, hot-reload component files by adding a watcher to the app's
+lifespan::
+
+    from citry.contrib.asgi import reload_lifespan
+
+    app = FastAPI(lifespan=reload_lifespan(citry_instance))   # or Starlette(...)
 """
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
+from citry.reload import watch
 from citry.util.routing import match_route
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable, MutableMapping
+    from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, MutableMapping
+    from contextlib import AbstractAsyncContextManager
+    from pathlib import Path
 
     from citry.citry import Citry
+    from citry.component import Component
+    from citry.reload import FileWatcher
     from citry.util.routing import RouteResponse
 
     Scope = MutableMapping[str, Any]
@@ -82,3 +95,38 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
         await _send_response(send, response.status, response.content_type, response.body)
 
     return app
+
+
+def reload_lifespan(
+    engine: Citry,
+    *,
+    roots: Iterable[str | Path] | None = None,
+    watcher: FileWatcher | None = None,
+    on_reload: Callable[[set[Path], list[type[Component]]], None] | None = None,
+) -> Callable[[Any], AbstractAsyncContextManager[None]]:
+    """
+    A Starlette/FastAPI ``lifespan`` that hot-reloads component files while the
+    app runs.
+
+    Pass it when you build the app::
+
+        from citry.contrib.asgi import reload_lifespan
+
+        app = FastAPI(lifespan=reload_lifespan(citry_instance))   # or Starlette(...)
+
+    It starts the :mod:`citry.reload` watcher on startup and stops it on
+    shutdown, so editing a component's template/JS/CSS shows up on the next
+    render without restarting. For development; in production simply do not add
+    it. If you already have a lifespan, nest this one inside yours. The keyword
+    arguments mirror :func:`citry.reload.watch`.
+    """
+
+    @asynccontextmanager
+    async def lifespan(_app: Any) -> AsyncIterator[None]:
+        handle = watch(engine, roots=roots, watcher=watcher, on_reload=on_reload)
+        try:
+            yield
+        finally:
+            handle.stop()
+
+    return lifespan

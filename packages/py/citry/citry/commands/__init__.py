@@ -16,6 +16,7 @@ from citry.command import CommandArg
 from citry.commands.create import CreateCommand
 from citry.commands.ext_list import ExtListCommand
 from citry.commands.list import ListCommand
+from citry.commands.watch import WatchCommand
 from citry.extension import ExtensionCommand
 
 if TYPE_CHECKING:
@@ -78,6 +79,6 @@ def build_cli(citry: Citry) -> type[ExtensionCommand]:
     return grouping_command(
         "citry",
         "The citry command-line interface.",
-        (ListCommand, CreateCommand, ext),
+        (ListCommand, CreateCommand, WatchCommand, ext),
         arguments=(CommandArg("--version", action="version", version=f"citry {_citry_version()}"),),
     )

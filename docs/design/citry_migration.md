@@ -619,7 +619,7 @@ stays in django-components; the verdicts below are about each *field*.
 | `debug_highlight_components` / `debug_highlight_slots` | ⏭️ Skip (Django) | Belongs to the debug-highlight extension (reviewed with `extensions/`) |
 | `dynamic_component_name` | ❌ Drop | The `<c-component>` built-in's name is reserved in the registry, so the name conflict this setting solved cannot arise; see [`dynamic_component.md`](dynamic_component.md) section 6 |
 | `multiline_tags` | ♻️ Superseded | Existed to patch Django's tag regex; V3 syntax is HTML and multiline by nature |
-| `reload_on_file_change` (+ `ReloadMode` hot/restart) | ✅ Done (citry half) | The invalidation seam is in citry (`Citry.get_components_for_file`, `reset_template`/`reset_files`); the file *watcher* and the hot/restart policy are host-specific and stay in django-components |
+| `reload_on_file_change` (+ `ReloadMode` hot/restart) | ✅ Done (citry half) | The invalidation seam is in citry (`Citry.get_components_for_file`, `reset_template`/`reset_files`); the host-neutral watcher that drives the seam is designed in [`hot_reload.md`](hot_reload.md) (the hot/restart policy stays host-specific) |
 | `reload_on_template_change` | ❌ Drop | Deprecated alias of `reload_on_file_change` |
 | `static_files_allowed` / `static_files_forbidden` / `forbidden_static_files` | ⏭️ Skip (Django) | staticfiles concern (`forbidden_static_files` is a deprecated alias) |
 | `tag_formatter` | ❌ Drop | Tag formatters dropped entirely |
@@ -637,7 +637,7 @@ stays in django-components; the verdicts below are about each *field*.
 | `AppConfig.ready()` wiring | ⏭️ Skip (Django) | |
 | Template monkeypatches (debug-toolbar profiler, `InclusionNode`, template-partials compat) | ⏭️ Skip (Django) | Compat with Django ecosystem packages |
 | Multiline-tags regex patch | ♻️ Superseded | See `multiline_tags` row above |
-| File-change reload listener (`_setup_component_file_reload`) | ⏭️ Skip (Django) | Django `file_changed` signal handler; calls into the invalidation seam that citry already owns. Any future citry watcher (e.g. for a dev server) would be a separate, host-neutral design |
+| File-change reload listener (`_setup_component_file_reload`) | ⏭️ Skip (Django) | Django `file_changed` signal handler; calls into the invalidation seam that citry already owns. The host-neutral citry watcher (with a Django `file_changed` piggyback for this case) is designed in [`hot_reload.md`](hot_reload.md) |
 | Registering `DynamicComponent` / `ErrorFallback` at app ready | ♻️ Superseded | citry's registry creates built-ins lazily via `builtins_factory`; which built-ins citry ships is the open question (see unlisted files below) |
 | `extensions._init_app()` deferred extension init | ♻️ Superseded | Extensions bind at `Citry()` construction |
 

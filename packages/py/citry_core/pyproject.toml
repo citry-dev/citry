@@ -44,68 +44,14 @@ Donate = "https://github.com/sponsors/JuroOravec"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
-# !!!IMPORTANT!!!
-# This is the corresponding Rust crate for which we are building the Python bindings.
+# The Rust crate these bindings build from.
 manifest-path = "../../../crates/citry_core_py/Cargo.toml"
-# !!!IMPORTANT!!!
-# By default maturin generates a Python module binary and gives it the name of the Rust crate.
-# In our case, it would be `citry_core_py`.
-# The problem is that maturin then automatically creates the following wheel directory layout:
-# ```
-# wheel/
-# ├── <rust_crate_name>/
-# │   ├── __init__.py
-# │   └── <pymodule_name>.cpython.so
-# ```
-# Maturin then searches for the `<rust_crate_name>` in the Python project directory,
-# and copies the contents to the wheel above.
-#
-# The implication is that for `maturin` to nicely merge the contents,
-# we'd have name both the Python and Rust projects the same. So either:
-# 1. Name this Python project `citry_core_py`.
-# 2. Or rename the Rust crate to `citry_core`.
-#
-# Neither is great, because:
-# 1. We want to publish this Python package as `citry_core`, not `citry_core_py`.
-# 2. We want to keep the Rust crate name as `citry_core_py`, because similar
-#    pattern may be used for other languages, e.g. `citry_core_js`.
-#
-# The solution is to configure maturin to change the name of the directory
-# it creates within the Python wheel. We do so by using the `module-name` option.
+# module-name sets `<python_package>.<rust_module>` for the compiled extension.
+# Without it, maturin names the wheel's module dir after the Rust crate
+# (`citry_core_py`), forcing the Python package and the crate to share a name.
+# We keep them distinct: the package publishes as `citry_core`, the crate stays
+# `citry_core_py` (leaving room for siblings like `citry_core_js`). So the binary
+# lands at `citry_core/_rust` and merges with our ./citry_core/ Python tree
+# (py.typed and .pyi files included).
 # See https://www.maturin.rs/project_layout.html#mixed-rustpython-project
-#
-# The setting is a string in format `<python_package_name>.<rust_module_name>`.
-# E.g. with `"citry_core._rust"`, maturin will create the following wheel directory layout:
-# ```
-# wheel/
-# ├── citry_core/
-# │   ├── __init__.py
-# │   └── _rust.cpython.so
-# ```
-#
-# This way, maturin will then copy our `./citry_core/` directory to the wheel above,
-# and we'll end up with:
-# ```
-# wheel/
-# ├── citry_core/
-# │   ├── __init__.py
-# │   ├── _rust.cpython.so
-# │   │
-# │   │   # Python code from `./citry_core/`
-# │   │
-# │   ├── html_transform/
-# │   │   ├── __init__.py
-# │   │   └── ...
-# │   ├── safe_eval/
-# │   │   ├── __init__.py
-# │   │   └── ...
-# │   ├── template_parser/
-# │   │   ├── __init__.py
-# │   │   └── ...
-# │   ├── _rust.pyi
-# │   └── py.typed
-# │   └── ...
-# ```
-#
-# NOTE: This way, maturin automatically includes also `py.typed` and `.pyi` files.
 module-name = "citry_core._rust"

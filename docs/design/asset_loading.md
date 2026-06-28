@@ -513,8 +513,9 @@ accessors in 3.1):
   concrete consumer of the custom-hook dispatch
   ([`extensions.md`](extensions.md) section 9).
 
-The watcher that calls these on file change is deferred (likely an extension,
-using `get_components_for_file`).
+The watcher that calls these on file change is designed in
+[`hot_reload.md`](hot_reload.md): a host-neutral pluggable watcher over
+`get_components_for_file`, with the invalidation primitive kept on `Citry`.
 
 ---
 
@@ -542,7 +543,7 @@ using `get_components_for_file`).
 | `on_js_loaded` / `on_css_loaded` | Wired now | were deferred in extensions.md section 10 |
 | File-to-component reverse index | Ported | on the `Citry` instance, weakrefs |
 | `reset_template` / `reset_files` | Ported | plus per-class const-body eviction |
-| Hot-reload watcher | Deferred | future extension over `get_components_for_file` |
+| Hot-reload watcher | Designed | [`hot_reload.md`](hot_reload.md): host-neutral pluggable watcher over `get_components_for_file` |
 | Autodiscovery | citry owns it | `citry/autodiscovery.py`, run from `Citry.autodiscover()` / the `autodiscover` setting; separate from asset loading, which only reads files |
 | finders / template_loader | Stays in DJC | per the migration classification |
 

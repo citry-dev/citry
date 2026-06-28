@@ -34,31 +34,28 @@ dependencies = [
     "typing-extensions>=4.4",
 ]
 
+# Optional runtime extras, namespaced `<category>-<name>` (see docs/codebase.md).
+# `watcher-*` are hot-reload file-watcher backends (docs/design/hot_reload.md);
+# the polling fallback in citry.reload needs no extra.
+[project.optional-dependencies]
+watcher-watchfiles = ["watchfiles>=1.0"]   # recommended native backend
+watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
+
 # The `citry` console script (the CLI entry point); see citry/__main__.py.
 [project.scripts]
 citry = "citry.__main__:main"
 
+# Groups here are mirrored into the root pyproject's matching extras (dev/ci,
+# benchmark), which the shared venv and CI install from; keep in sync until #8.
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
-    # Not a runtime dependency: users may declare Kwargs/Slots as Pydantic
-    # models, so the test suite exercises that path (tests/test_pydantic.py).
-    # Mirrored in the root pyproject's dev/ci extras, which are what the
-    # shared monorepo venv and CI actually install from; the mirroring goes
-    # away with the uv workspace conversion (issue #8).
-    "pydantic>=2.0",
-    # The web-integration tests (tests/test_contrib_fastapi.py) exercise the
-    # FastAPI adapter through Starlette's TestClient (which needs httpx).
-    # Same mirroring note as pydantic above.
-    "fastapi>=0.110",
-    "httpx>=0.27",
+    "pydantic>=2.0",   # test-only: components may use Pydantic Kwargs/Slots
+    "fastapi>=0.110",  # test-only: FastAPI contrib tests (Starlette TestClient)
+    "httpx>=0.27",     # TestClient needs httpx
 ]
-# Baseline engines for the rendering benchmarks (docs/design/benchmarking.md).
-# Pinned exactly: bumping them re-baselines the published comparison, so it is
-# a deliberate act, not a routine update. Not part of the default dev install;
-# tests that need them are skipped when they are absent (tests/conftest.py).
-# Mirrored in the root pyproject's benchmark extra (same mirroring note as
-# above, goes away with issue #8).
+# Benchmark baselines (docs/design/benchmarking.md), pinned exactly so a bump is
+# a deliberate re-baseline; skipped when absent (tests/conftest.py).
 benchmark = [
     "django==6.0.6",
     "django-components==0.151.0",

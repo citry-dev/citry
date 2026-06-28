@@ -20,9 +20,21 @@ store through the cache framework you already configured)::
 
     app = Citry(cache=DjangoCache(caches["default"]))
 
+Hot reload in development (clear a component's caches when its template/JS/CSS
+file changes, so the next render reads fresh content), driven by Django's own
+autoreloader::
+
+    # apps.py
+    from django.apps import AppConfig
+    from citry.contrib.django import enable_hot_reload
+
+    class MyAppConfig(AppConfig):
+        def ready(self):
+            enable_hot_reload(citry_instance)  # mode="hot" by default
+
 Citry owns this adapter (rather than leaving it to django-components) so
 plain citry works with Django regardless of how django-components ends up
-relating to citry. Django is imported lazily, only when ``urlpatterns`` is
+relating to citry. Django is imported lazily, only when these functions are
 called.
 """
 
@@ -34,6 +46,10 @@ from typing import TYPE_CHECKING, Any
 from citry.util.routing import flatten_routes
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+    from typing import Literal
+
     from citry.citry import Citry
     from citry.util.routing import URLRoute
 
@@ -91,6 +107,49 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
         else:
             patterns.append(django_path(full_path, _make_view(route), name=route.name))
     return patterns
+
+
+def enable_hot_reload(
+    citry_instance: Citry,
+    *,
+    mode: Literal["hot", "restart"] = "hot",
+) -> Callable[..., bool | None]:
+    """
+    Reload changed component files in development, using Django's autoreloader.
+
+    Connects a receiver to Django's ``file_changed`` autoreload signal. When a
+    watched file changes, the receiver clears the caches of the components that
+    loaded it (``Citry.invalidate_file``). With ``mode="hot"`` (the default) the
+    change is handled in place and the server keeps running; with
+    ``mode="restart"`` the process restart is left to Django (the same thing
+    Django does for a Python edit). Files that back no loaded component fall
+    through to Django's normal handling either way.
+
+    Call once at startup, e.g. from your ``AppConfig.ready()``. Django watches
+    its template and static directories, so this needs no watcher of its own.
+    Returns the connected receiver (disconnect it via ``file_changed.disconnect``
+    if you ever need to).
+    """
+    if mode not in ("hot", "restart"):
+        msg = f"mode must be 'hot' or 'restart', got {mode!r}"
+        raise ValueError(msg)
+
+    from django.utils.autoreload import file_changed  # noqa: PLC0415
+
+    def on_component_file_changed(sender: Any, file_path: Path, **kwargs: Any) -> bool | None:  # noqa: ARG001
+        reset = citry_instance.invalidate_file(file_path)
+        if not reset:
+            # The file backs no loaded component: let Django's autoreloader
+            # decide (it restarts the dev server on a Python edit, for example).
+            return None
+        # A truthy return tells Django's notify_file_changed the change was
+        # handled, suppressing the restart; returning None lets Django restart.
+        return True if mode == "hot" else None
+
+    # weak=False: the receiver is a local closure, so a weak connection (Django's
+    # default) would let it be garbage-collected right away.
+    file_changed.connect(on_component_file_changed, weak=False)
+    return on_component_file_changed
 
 
 class DjangoCache:

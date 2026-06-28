@@ -37,6 +37,7 @@ Example:
 
 from __future__ import annotations
 
+import threading
 from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -164,6 +165,12 @@ class Citry:
         # to reset when a file changes. See docs/design/asset_loading.md
         # section 8.
         self._file_index: dict[str, list[ReferenceType[type[Component]]]] = {}
+
+        # Guards _file_index so a watcher thread can read it (and prune dead
+        # weakrefs) while a render thread registers a newly resolved file. The
+        # reset caches the invalidation then drives are already thread-safe on
+        # their own (the const-body cache holds its own lock).
+        self._index_lock = threading.Lock()
 
         # class_id -> component class reverse index, maintained at registration.
         # This is how the script-serving endpoint finds the class a cached
@@ -455,38 +462,88 @@ class Citry:
     def _register_component_file(self, path: Path, comp_cls: type[Component]) -> None:
         """Record that ``comp_cls`` loaded an asset from ``path``."""
         key = str(Path(path).resolve())
-        refs = self._file_index.setdefault(key, [])
-        if not any(existing() is comp_cls for existing in refs):
-            refs.append(ref(comp_cls))
+        with self._index_lock:
+            refs = self._file_index.setdefault(key, [])
+            if not any(existing() is comp_cls for existing in refs):
+                refs.append(ref(comp_cls))
 
     def get_components_for_file(self, path: str | Path) -> list[type[Component]]:
         """
         The component classes whose assets resolved to ``path``.
 
-        This is what a hot-reload handler drives invalidation through: when a
-        file changes, call ``reset_template()`` / ``reset_files()`` on each
-        returned class. Dead weakrefs are pruned on read.
+        Most callers want :meth:`invalidate_file`, which both finds these
+        classes and resets them. This lower-level lookup is for a caller that
+        wants the classes without resetting (a custom hot-reload handler, a
+        test). Dead weakrefs are pruned on read.
         """
         key = str(Path(path).resolve())
-        refs = self._file_index.get(key)
-        if not refs:
-            return []
+        with self._index_lock:
+            refs = self._file_index.get(key)
+            if not refs:
+                return []
 
-        alive: list[type[Component]] = []
-        alive_refs: list[ReferenceType[type[Component]]] = []
-        for comp_ref in refs:
-            comp_cls = comp_ref()
-            if comp_cls is not None:
-                alive.append(comp_cls)
-                alive_refs.append(comp_ref)
-        self._file_index[key] = alive_refs
-        return alive
+            alive: list[type[Component]] = []
+            alive_refs: list[ReferenceType[type[Component]]] = []
+            for comp_ref in refs:
+                comp_cls = comp_ref()
+                if comp_cls is not None:
+                    alive.append(comp_cls)
+                    alive_refs.append(comp_ref)
+            self._file_index[key] = alive_refs
+            return alive
+
+    def invalidate_file(self, path: str | Path) -> list[type[Component]]:
+        """
+        Drop cached template/JS/CSS for every component that loaded an asset
+        from ``path``, so the next render re-reads it from disk.
+
+        Returns the component classes it reset. An empty list means the file
+        backs no loaded component, which a hot-reload handler can read as "not
+        mine" and, if it wants, fall through to a full restart. This is the
+        host-neutral call a file watcher drives; see the watcher in
+        :mod:`citry.reload` and ``docs/design/hot_reload.md``.
+        """
+        classes = self.get_components_for_file(path)
+        for comp_cls in classes:
+            # A file backs only one asset kind, but the index does not record
+            # which; each reset is a cheap no-op when its cache is unset, so
+            # calling both is the simplest correct choice.
+            comp_cls.reset_template()
+            comp_cls.reset_files()
+        return classes
+
+    def invalidate_all(self) -> list[type[Component]]:
+        """
+        Reset cached template/JS/CSS for every component that has loaded a file,
+        so the next render re-reads them all from disk. Returns the reset classes
+        (in first-seen order).
+
+        For when a change cannot be mapped to a single path: a bulk edit, a
+        branch switch, or a custom watcher reporting an event it cannot resolve
+        to one file. Unlike :meth:`clear`, this leaves the registry and
+        autodiscovery untouched.
+        """
+        # First-seen order, de-duplicated: a class can be indexed under several
+        # files (template + js + css), and dict keys preserve insertion order.
+        unique: dict[type[Component], None] = {}
+        with self._index_lock:
+            for refs in self._file_index.values():
+                for comp_ref in refs:
+                    comp_cls = comp_ref()
+                    if comp_cls is not None:
+                        unique.setdefault(comp_cls, None)
+        classes = list(unique)
+        for comp_cls in classes:
+            comp_cls.reset_template()
+            comp_cls.reset_files()
+        return classes
 
     def clear(self) -> None:
         """Clear all state: registered components, caches, etc."""
         self.registry.clear()
         self._const_body_cache.clear()
-        self._file_index.clear()
+        with self._index_lock:
+            self._file_index.clear()
         self._classes_by_id.clear()
         self._tag_rules_cache = None
         # Re-arm autodiscovery: the next lookup re-runs the dirs scan and
