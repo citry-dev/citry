@@ -38,6 +38,20 @@ benchmark = [
     "django-components==0.151.0",
     "jinja2==3.1.6",
 ]
+# Docs-site tooling (docs/design/docs_site.md); nothing imports it until the
+# docs-site port.
+docs = [
+    "pymdown-extensions",   # markdown extensions (highlighting, admonitions, TOC, ...)
+    "griffe>=1.15.0",       # Python API-reference generation (the mkdocstrings replacement)
+    "lxml",                 # HTML parsing for the post-build guardrails
+    "pagefind[bin]",        # static search index; [bin] pulls the bundled Rust binary, no Node
+    "minify-html",          # Rust-backed post-build HTML minifier
+    "packaging",            # PEP 440 version ordering for the version manifest
+    "pygments<2.21",        # 2.20 rejects the None filename pymdownx.highlight passes through
+    "pyyaml",               # loads the _nav.yml navigation tree
+    "starlette",            # the dev/preview server (a catch-all that renders pages live)
+    "uvicorn",              # ASGI server that runs the dev server
+]
 
 # Tool configurations (codebase-wide)
 [tool.ruff]
@@ -143,6 +157,25 @@ ignore = [
 ]
 "benchmarks/*" = [
     "T201",    # The comparison runner prints its results
+]
+"docs_site/cli.py" = [
+    "T201",    # the CLI prints its build summary to stdout
+]
+"docs_site/components/*" = [
+    "E501",    # page-chrome templates carry long inline SVG icon and HTML lines
+]
+"docs_site/examples/*" = [
+    "ANN",     # example code is illustrative and shown to readers; keep it minimal
+    "ARG002",  # template_data takes slots even when an example does not use them
+    "D",       # example modules are demonstrations, not documented APIs
+    "INP001",  # examples are imported by file path, not as a package
+]
+"docs_site/tests/*" = [
+    "ANN",     # Annotations are not needed for tests
+    "ARG002",  # Unused method argument
+    "PLC0415", # In-test imports (e.g. to monkeypatch a module) are fine
+    "S101",    # Use of `assert` detected
+    "TC003",   # Type-only imports need not move to a TYPE_CHECKING block in tests
 ]
 
 [tool.ruff.lint.isort]
