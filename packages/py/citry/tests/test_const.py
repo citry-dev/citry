@@ -423,9 +423,7 @@ class TestConstPrecompute:
         # Two entries: Inner's own body, and Holder's body for the const
         # signature. Holder's must have kept the expression dynamic.
         holder_bodies = [
-            body
-            for body in c._const_body_cache.values()
-            if any(isinstance(item, ExprNode) for item in body)
+            body for body in c._const_body_cache.values() if any(isinstance(item, ExprNode) for item in body)
         ]
         assert len(holder_bodies) == 1
 
@@ -551,9 +549,7 @@ class TestTemplateLiteralConst:
         assert Page(n=2).render().serialize() == '<p data-cid-c4="" data-cid-c3="">2</p>'
         # The child renders dynamic: one shared (empty-signature) entry whose
         # body keeps the expression node.
-        card_bodies = [
-            b for b in c._const_body_cache.values() if any(isinstance(item, ExprNode) for item in b)
-        ]
+        card_bodies = [b for b in c._const_body_cache.values() if any(isinstance(item, ExprNode) for item in b)]
         assert len(card_bodies) == 1
 
 
@@ -994,7 +990,7 @@ class TestConstPrecomputeErrors:
 
         class Card(Component):
             citry = c
-            template = '<c-if cond="cfg[\'missing\']">a</c-if>'
+            template = "<c-if cond=\"cfg['missing']\">a</c-if>"
 
             def template_data(self, kwargs, slots):
                 return dict(kwargs)

@@ -18,7 +18,7 @@ from citry.component_registry import AlreadyRegistered, NotRegistered
 def _chain_template_data(target_name):
     """A ``template_data`` for one chain level, closing over its target's name."""
 
-    def template_data(self, kwargs, slots):  # noqa: ARG001
+    def template_data(self, kwargs, slots):
         return {"t": target_name}
 
     return template_data
@@ -44,7 +44,7 @@ class TestDynamicComponent:
 
         class Page(Component):
             citry = c
-            template = "<c-component is=\"card\" c-title=\"'Hi'\">body</c-component>"
+            template = '<c-component is="card" c-title="\'Hi\'">body</c-component>'
 
         # Compiled away to <c-card>: same output, no wrapper render
         # (the id counter is c1=Page, c2=Card).
@@ -56,7 +56,7 @@ class TestDynamicComponent:
 
         class Page(Component):
             citry = c
-            template = "<c-component c-is=\"comp\" c-title=\"'Hi'\">body</c-component>"
+            template = '<c-component c-is="comp" c-title="\'Hi\'">body</c-component>'
 
             def template_data(self, kwargs, slots):
                 return {"comp": "card"}
@@ -144,7 +144,7 @@ class TestDynamicComponent:
 
         class Page(Component):
             citry = c
-            template = "<c-component c-is=\"comp\" c-title=\"'x'\" c-bogus=\"1\" />"
+            template = '<c-component c-is="comp" c-title="\'x\'" c-bogus="1" />'
 
             def template_data(self, kwargs, slots):
                 return {"comp": "strict"}

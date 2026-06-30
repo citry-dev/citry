@@ -130,8 +130,7 @@ def scenario_unrolled_nav() -> None:
     class Nav(Component):
         citry = c
         template = (
-            '<nav><c-for each="item in links"><a c-href="item">{{ item }}</a></c-for></nav>'
-            "<main>{{ body }}</main>"
+            '<nav><c-for each="item in links"><a c-href="item">{{ item }}</a></c-for></nav><main>{{ body }}</main>'
         )
 
         def template_data(self, kwargs, slots):
@@ -154,8 +153,7 @@ def _build_slot_layout() -> tuple[Citry, type[Component], dict, dict]:
     class Layout(Component):
         citry = c
         template = (
-            '<div class="layout"><aside><c-slot name="sidebar" /></aside>'
-            '<main><c-slot name="main" /></main></div>'
+            '<div class="layout"><aside><c-slot name="sidebar" /></aside><main><c-slot name="main" /></main></div>'
         )
 
     class CardC(Component):

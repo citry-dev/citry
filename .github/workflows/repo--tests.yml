@@ -37,9 +37,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Plain `uv sync` installs the root tooling group (pre-commit and friends).
+      # Not `--all-packages`: that would build the citry_core Rust extension, and
+      # this job has no Rust toolchain. The pre-commit checks only read files.
       - name: Install Python dependencies
         run: |
-          uv sync --extra ci
+          uv sync --locked
 
       # Lint with pre-commit hooks (requires Python & CI dependencies)
       - name: Cache pre-commit

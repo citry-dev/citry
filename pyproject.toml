@@ -10,36 +10,25 @@ classifiers = [
     "Private :: Do Not Upload", # Explicitly mark as non-releasable
 ]
 
-# dev/ci and benchmark mirror packages/py/citry's test and benchmark deps (CI
-# and the shared venv install from here); keep in sync until #8.
-[project.optional-dependencies]
+# Repo-wide tooling, installed by default on `uv sync`. Package TEST deps
+# (pytest, pydantic, fastapi, httpx) deliberately live in each package's own
+# [dependency-groups].dev, not here: the uv workspace installs every member's
+# group on `uv sync --all-packages`, so each dep has a single declaration and
+# there is no cross-file mirroring to keep in step (#8). Benchmark baselines
+# live in packages/py/citry's `benchmark` group for the same reason.
+[dependency-groups]
 dev = [
-    "maturin>=1.8,<2.0",
-    "pytest>=8.0",
+    "maturin>=1.10.2",
     "ruff>=0.8.0",
     "mypy>=1.0.0",
     "pre-commit>=3.0.0",
-    "pydantic>=2.0",   # test-only (citry Pydantic Kwargs/Slots)
-    "fastapi>=0.110",  # test-only (FastAPI contrib tests, Starlette TestClient)
-    "httpx>=0.27",
 ]
-ci = [
-    "maturin>=1.8,<2.0",
-    "pytest>=8.0",
-    "pre-commit>=3.0.0",
-    "pydantic>=2.0",
-    "fastapi>=0.110",
-    "httpx>=0.27",
-]
-# Benchmark baselines (docs/design/benchmarking.md), pinned exactly (a bump
-# re-baselines the published comparison).
-benchmark = [
-    "django==6.0.6",
-    "django-components==0.151.0",
-    "jinja2==3.1.6",
-]
-# Docs-site tooling (docs/design/docs_site.md); nothing imports it until the
-# docs-site port.
+
+# Optional extras for the docs site (docs/design/docs_site.md): root-only, heavy,
+# and not part of the default dev environment. Install with `uv sync --extra docs`
+# (add `--extra social-cards` for per-page OG images, which also needs a browser
+# binary via `playwright install chromium`).
+[project.optional-dependencies]
 docs = [
     "pymdown-extensions",   # markdown extensions (highlighting, admonitions, TOC, ...)
     "griffe>=1.15.0",       # Python API-reference generation (the mkdocstrings replacement)
@@ -52,6 +41,20 @@ docs = [
     "starlette",            # the dev/preview server (a catch-all that renders pages live)
     "uvicorn",              # ASGI server that runs the dev server
 ]
+
+# uv workspace: packages/py/* are workspace members, so `uv sync --all-packages`
+# builds and installs every package from this one root (citry_core through the
+# maturin backend, citry editable) and the lockfile covers all of them. This is
+# what makes `uv run` safe and lets citry's tests run in CI. See issue #8.
+[tool.uv.workspace]
+members = ["packages/py/*"]
+
+# Resolve the inter-package dependency (citry needs citry-core) to the local
+# workspace member during development, while citry-core>=1.3.0 stays an ordinary
+# PyPI range for published builds.
+[tool.uv.sources]
+citry = { workspace = true }
+citry-core = { workspace = true }
 
 # Tool configurations (codebase-wide)
 [tool.ruff]
@@ -69,11 +72,10 @@ exclude = [
     # Third-party dependencies (git submodules)
     "third_party",
     # benchmark files, not linted.
-    "packages/py/citry/tests/test_benchmark_django*.py",
-    "packages/py/citry/tests/test_benchmark_djc*.py",
-    "packages/py/citry/tests/test_benchmark_citry.py",
-    "packages/py/citry/tests/test_benchmark_citry_const.py",
-    "packages/py/citry/tests/test_benchmark_jinja2.py",
+    "packages/py/citry/tests/test_benchmark*.py",
+    "packages/py/citry_core/tests/benchmark*.py",
+    # Agent/editor harness tooling, not shipped code.
+    ".claude",
 ]
 
 # See https://docs.astral.sh/ruff/linter/#rule-selection
@@ -140,10 +142,12 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "packages/py/**/tests/*" = [
+    "ARG001",  # Unused function argument (mock/callback signatures in tests)
     "ARG002",  # Unused method argument
     "ANN",     # Annotations are not needed for tests
     "N806",    # Variable in function should be lowercase
     "PLC0415", # `import` should be at the top-level of a file
+    "PLW1641", # `__eq__` without `__hash__` is fine for throwaway test fixtures
     "RUF012",  # Mutable class attributes should be annotated with `typing.ClassVar`
     "S101",    # Use of `assert` detected
     "TRY002",  # Create your own exception
@@ -177,6 +181,31 @@ ignore = [
     "S101",    # Use of `assert` detected
     "TC003",   # Type-only imports need not move to a TYPE_CHECKING block in tests
 ]
+# The hand-written stub for the Rust extension. Its class and method names mirror
+# the PyO3 module and enum-variant names on purpose (the bindings check enforces
+# that), and it carries docstrings so editors show help on hover.
+"**/*.pyi" = [
+    "A002",    # `input` mirrors the published parse_template/compile_template parameter name
+    "E501",    # mirrored signatures and docstrings can run long in the stub
+    "N801",    # class names mirror Rust submodules/enum variants (html_transform, Node_WithBody)
+    "N805",    # namespace classes expose module-level functions, so the first arg is not `self`
+    "PYI021",  # docstrings in the stub are intentional (IDE hover help)
+    "PYI063",  # positional-only params mirror the PyO3 signatures
+]
+# The safe-eval sandbox: it executes user expressions and reimplements builtins,
+# so several "smells" are the whole point of the file.
+"packages/py/citry_core/citry_core/safe_eval/eval.py" = [
+    "A001",    # the sandbox intentionally provides builtins named `slice`/`format`
+    "PLC0415", # t-string imports are version-gated (string.templatelib is 3.14+), so necessarily lazy
+    "PLW2901", # the format() builtin transforms each loop value in place, which reads clearly here
+    "PYI063",  # the builtin wrappers use the `__name` positional-only idiom on purpose
+    "S102",    # the sandbox executes compiled user code by design
+]
+# `input` is the published parameter name of parse_template/compile_template;
+# renaming it to avoid shadowing the builtin would be an API break.
+"packages/py/citry_core/citry_core/template_parser/*" = [
+    "A002",    # `input` shadows a builtin but is the public parameter name
+]
 
 [tool.ruff.lint.isort]
 known-first-party = ["citry", "citry_core"]
@@ -184,11 +213,15 @@ known-first-party = ["citry", "citry_core"]
 [tool.mypy]
 check_untyped_defs = true
 ignore_missing_imports = true
-exclude = ["build"]
+exclude = ["build", "docs_site/_vendor"]
 
 [[tool.mypy.overrides]]
 module = "citry_core.*"
 disallow_untyped_defs = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Collect only the published packages' suites. Without explicit paths, pytest
+# recurses from the repo root and tries to collect the vendored ruff submodule
+# (third_party/) and the docs-site tests, which fail to import here. The
+# docs-site has its own tests, run separately with its `--extra docs` deps.
+testpaths = ["packages/py/citry_core/tests", "packages/py/citry/tests"]

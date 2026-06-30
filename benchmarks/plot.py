@@ -44,16 +44,15 @@ def main() -> None:
 
     for i, (label, values, color) in enumerate(SERIES):
         offset = (i - (len(SERIES) - 1) / 2) * BAR_WIDTH
-        bars = ax.bar(x + offset, values, BAR_WIDTH, label=label, color=color,
-                      edgecolor="white", linewidth=0.6, zorder=3)
-        ax.bar_label(bars, labels=[f"{v:.0f}" for v in values], padding=2,
-                     fontsize=7.5, color="#334155")
+        bars = ax.bar(
+            x + offset, values, BAR_WIDTH, label=label, color=color, edgecolor="white", linewidth=0.6, zorder=3
+        )
+        ax.bar_label(bars, labels=[f"{v:.0f}" for v in values], padding=2, fontsize=7.5, color="#334155")
 
     ax.set_xticks(x)
     ax.set_xticklabels(METRICS, fontsize=10.5)
     ax.set_ylabel("Time in milliseconds (lower is better)", fontsize=10)
-    ax.set_title("Rendering a large page (~325 components)", fontsize=13,
-                 pad=10, fontweight="bold")
+    ax.set_title("Rendering a large page (~325 components)", fontsize=13, pad=10, fontweight="bold")
     ax.legend(frameon=False, fontsize=9, loc="upper right")
     ax.spines["top"].set(visible=False)
     ax.spines["right"].set(visible=False)

@@ -365,7 +365,7 @@ pub fn parse_expression_with_adjusted_error_ranges(
     source: &str,
     wrap_prefix_len: usize,
 ) -> Result<Parsed<ast::ModExpression>, String> {
-    parse_expression(&wrapped_source).map_err(|e| {
+    parse_expression(wrapped_source).map_err(|e| {
         let error_msg = format!("Parse error: {}", e);
         adjust_error_ranges(&error_msg, wrap_prefix_len, source)
     })
@@ -435,7 +435,7 @@ pub fn transform_expression_string(source: &str) -> Result<TransformResult, Stri
         })
         .collect();
     // Sort by start_index for consistent output
-    used_vars.sort_by(|a, b| a.start_index.cmp(&b.start_index));
+    used_vars.sort_by_key(|a| a.start_index);
 
     // Get the assigned variables (from walrus operator) and convert to Vec of Tokens
     let mut assigned_vars: Vec<Token> = transformer
@@ -462,7 +462,7 @@ pub fn transform_expression_string(source: &str) -> Result<TransformResult, Stri
         })
         .collect();
     // Sort by start_index for consistent output
-    assigned_vars.sort_by(|a, b| a.start_index.cmp(&b.start_index));
+    assigned_vars.sort_by_key(|a| a.start_index);
 
     // Extract comments from wrapped source, then adjust their positions
     let mut comments = extract_comments(&wrapped_source)?;
@@ -1213,7 +1213,7 @@ impl Transformer for SandboxTransformer {
                                                         let mut tuple_elts =
                                                             vec![spec_template_literal];
                                                         tuple_elts.extend(spec_format_args);
-                                                        tuple_elts.into()
+                                                        tuple_elts
                                                     },
                                                 })
                                             }
@@ -1233,8 +1233,7 @@ impl Transformer for SandboxTransformer {
                                         range: expr_range,
                                         ctx: ast::ExprContext::Load,
                                         parenthesized: false,
-                                        elts: vec![value_expr, conversion_flag, format_spec_expr]
-                                            .into(),
+                                        elts: vec![value_expr, conversion_flag, format_spec_expr],
                                     });
 
                                     // Add the tuple to format args
@@ -1461,7 +1460,6 @@ impl Transformer for SandboxTransformer {
         self.set_error(
             "Validation Error: Statements are not allowed in expression context".to_string(),
         );
-        return;
     }
 
     /// Override visit_comprehension to handle local variables properly

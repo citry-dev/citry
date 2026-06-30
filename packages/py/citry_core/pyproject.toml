@@ -55,3 +55,18 @@ manifest-path = "../../../crates/citry_core_py/Cargo.toml"
 # (py.typed and .pyi files included).
 # See https://www.maturin.rs/project_layout.html#mixed-rustpython-project
 module-name = "citry_core._rust"
+
+# uv keys its rebuild detection on package metadata, not Rust sources, so without
+# this `uv sync` would not rebuild the extension after a `crates/**` edit (the
+# Rust sources live outside this package dir). List them here so a sync picks up
+# Rust changes. `maturin develop` stays the documented inner loop for Rust work;
+# this is the backstop for everyone else. See issue #8.
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "../../../Cargo.toml" },
+    { file = "../../../Cargo.lock" },
+    { file = "../../../crates/**/*.rs" },
+    { file = "../../../crates/**/*.pest" },
+    { file = "../../../crates/**/Cargo.toml" },
+]

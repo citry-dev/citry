@@ -83,6 +83,7 @@ class CitryDependencies:
     classes).
 
     Holds resolved entries:
+
     - a local file - resolved to ``Path``
     - URLs (plain strings) - unchanged
     - ``Script``/``Style`` objects - unchanged
@@ -161,6 +162,7 @@ class DependenciesExtension(Extension):
         """
         What a ``Dependencies`` entry that resolved to a local file becomes
         in the output:
+
         - ``"inline"`` embeds the file content in the page;
         - ``"serve"`` emits a fingerprinted URL on citry's routes
         (``asset/<content hash>.<ext>``), so the browser caches the file and
@@ -271,6 +273,7 @@ class DependenciesExtension(Extension):
         to win (docs/design/asset_loading.md section 7.3).
 
         ``Component.Dependencies.extend`` picks the bases:
+
         - ``True`` - inherit JS/CSS from `Component.Dependencies` of Component's base classes
         - ``False`` - no inheritance; only the class's own entries (if any)
         - a list - exactly those classes + their bases, in the order given

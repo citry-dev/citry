@@ -487,9 +487,7 @@ class TestProvideAcrossSlots:
         # ids: Page c1, Parent c2, provide c3, Injectee c4. The injectee is
         # Parent's root content, which is Page's root content, so the
         # markers stack.
-        assert str(Page()) == (
-            '<div data-cid-c4="" data-cid-c2="" data-cid-c1="">Provided(text=&#39;hi&#39;)</div>'
-        )
+        assert str(Page()) == ('<div data-cid-c4="" data-cid-c2="" data-cid-c1="">Provided(text=&#39;hi&#39;)</div>')
 
     def test_inject_in_fill(self):
         # DJC test_inject_in_fill (PR #778): the injectee is written in a

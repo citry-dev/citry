@@ -1,3 +1,13 @@
+// Shared test helpers: each test binary includes this module but uses only a
+// subset of the helpers, so the unused ones are expected per-binary.
+#![allow(dead_code)]
+// Integration tests are separate compilation units, so they do not inherit the
+// crate's lib-level allows; mirror the ones the helpers need here.
+#![allow(clippy::result_large_err)]
+#![allow(clippy::large_enum_variant)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
+
 use citry_template_parser::ast::{
     Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot,
     Template, TemplateElement, Text, Token,

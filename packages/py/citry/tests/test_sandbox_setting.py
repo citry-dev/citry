@@ -42,7 +42,7 @@ def _render_tricky(c: Citry) -> str:
         template = (
             "<ul>"
             '<c-for each="item in items if item != skip">'
-            "<c-Row c-kind=\"'row'\" c-label=\"prefix + item\" />"
+            '<c-Row c-kind="\'row\'" c-label="prefix + item" />'
             "</c-for>"
             "</ul>"
             "<p>{{ (kept := [x for x in items if x != skip]) and prefix + kept[0] }}</p>"

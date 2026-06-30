@@ -22,7 +22,6 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Set, Union
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +61,7 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def extract_pymodule_names(lib_rs_content: str) -> Set[str]:
+def extract_pymodule_names(lib_rs_content: str) -> set[str]:
     """Extract module names from PyModule::new() calls in lib.rs."""
     modules = set()
 
@@ -78,7 +77,7 @@ def extract_pymodule_names(lib_rs_content: str) -> Set[str]:
     return modules
 
 
-def extract_rust_pyi_classes(rust_pyi_content: str) -> Set[str]:
+def extract_rust_pyi_classes(rust_pyi_content: str) -> set[str]:
     """
     Extract class names from rust.pyi like `class module_name:`.
     Returns a set of class names.
@@ -99,7 +98,7 @@ def extract_rust_pyi_classes(rust_pyi_content: str) -> Set[str]:
     return classes
 
 
-def extract_pymodule_function_name(lib_rs_content: str) -> Union[str, None]:
+def extract_pymodule_function_name(lib_rs_content: str) -> str | None:
     """
     Extract the function name from `#[pymodule]` followed by `fn function_name`.
     Returns the function name or None if not found.

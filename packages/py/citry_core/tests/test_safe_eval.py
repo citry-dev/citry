@@ -1,7 +1,7 @@
 # ruff: noqa: E731
 import re
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, NamedTuple
+from typing import Any, NamedTuple
 
 import pytest
 
@@ -33,7 +33,7 @@ class Obj:
     start: int = 1
     end: int = 5
     nested: Nested = field(default_factory=Nested)
-    items: Dict[Any, Value] = field(default_factory=lambda: {"test": Value(value=42), 0: Value(value=10)})
+    items: dict[Any, Value] = field(default_factory=lambda: {"test": Value(value=42), 0: Value(value=10)})
 
     _private = "secret"
 
@@ -551,7 +551,7 @@ class TestSyntax:
         @dataclass
         class Item:
             name: str
-            children: List[int]
+            children: list[int]
 
         items = [Item("a", [1, 2]), Item("b", [3, 4])]
         context = {"items": items}
@@ -637,7 +637,7 @@ class TestSyntax:
         @dataclass
         class Item:
             name: str
-            children: List[int]
+            children: list[int]
 
         items = [Item("a", [1]), Item("b", [2])]
         context = {"items": items, "x": 100, "y": 200}
@@ -660,7 +660,7 @@ class TestSyntax:
         @dataclass
         class Item:
             name: str
-            children: List[int]
+            children: list[int]
 
         items = [Item("a", [-1, 1]), Item("b", [-2, 2])]
         context = {"items": items, "x": 100, "y": 200}

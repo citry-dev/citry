@@ -1,6 +1,7 @@
 import builtins
+from collections.abc import Callable, Mapping, MutableMapping
 from types import MappingProxyType
-from typing import Any, Callable, Mapping, Optional, Tuple, cast
+from typing import Any, cast
 
 from citry_core import _rust
 from citry_core.safe_eval.error import error_context, format_error_with_context
@@ -18,11 +19,11 @@ class SecurityError(Exception):
 def safe_eval(
     source: str,
     *,
-    validate_variable: Optional[Callable[[str], bool]] = None,
-    validate_attribute: Optional[Callable[[Any, str], bool]] = None,
-    validate_subscript: Optional[Callable[[Any, Any], bool]] = None,
-    validate_callable: Optional[Callable[[Callable], bool]] = None,
-    validate_assign: Optional[Callable[[str, Any], bool]] = None,
+    validate_variable: Callable[[str], bool] | None = None,
+    validate_attribute: Callable[[Any, str], bool] | None = None,
+    validate_subscript: Callable[[Any, Any], bool] | None = None,
+    validate_callable: Callable[[Callable], bool] | None = None,
+    validate_assign: Callable[[str, Any], bool] | None = None,
 ) -> Callable[[Mapping[str, Any]], Any]:
     """
     Compile a Python expression string into a safe evaluation function.
@@ -73,7 +74,7 @@ def safe_eval(
         def variable_fn(
             __context: Mapping[str, Any],
             __source: str,
-            __token: Tuple[int, int],
+            __token: tuple[int, int],
             var_name: str,
         ) -> Any:
             if not validate_variable(var_name):
@@ -88,7 +89,7 @@ def safe_eval(
         def attribute_fn(
             __context: Mapping[str, Any],
             __source: str,
-            __token: Tuple[int, int],
+            __token: tuple[int, int],
             obj: Any,
             attr_name: str,
         ) -> Any:
@@ -104,7 +105,7 @@ def safe_eval(
         def subscript_fn(
             __context: Mapping[str, Any],
             __source: str,
-            __token: Tuple[int, int],
+            __token: tuple[int, int],
             obj: Any,
             key: Any,
         ) -> Any:
@@ -120,7 +121,7 @@ def safe_eval(
         def call_fn(
             __context: Mapping[str, Any],
             __source: str,
-            __token: Tuple[int, int],
+            __token: tuple[int, int],
             func: Callable,
             *args: Any,
             **kwargs: Any,
@@ -137,7 +138,7 @@ def safe_eval(
         def assign_fn(
             __context: Mapping[str, Any],
             __source: str,
-            __token: Tuple[int, int],
+            __token: tuple[int, int],
             var_name: str,
             value: Any,
         ) -> Any:
@@ -233,9 +234,9 @@ def compile_expr(source: str, *, sandboxed: bool = True) -> Callable[[Mapping[st
 
 # NOTE: This is used also in citry_template_parser.
 def _exec_func_with_error_handling(
-    func_string: str, func_name: str, source: str, kind: str, global_scope: Mapping[str, Any]
+    func_string: str, func_name: str, source: str, kind: str, global_scope: dict[str, Any]
 ) -> Callable[..., Any]:
-    local_scope = {}
+    local_scope: dict[str, Any] = {}
 
     # The `func_string` code should create a function and assign it to the local_scope[func_name] variable.
     # We do so to avoid the overhead of calling `exec()` on each evaluation.
@@ -255,7 +256,7 @@ def _exec_func_with_error_handling(
 
     # Return a function that calls the compiled function
     # We return this wrapper function so that we can intercept errors and add context to the error message.
-    def evaluate(*args, **kwargs) -> Any:
+    def evaluate(*args: Any, **kwargs: Any) -> Any:
         """Evaluate the compiled function with the given arguments."""
         try:
             return compiled_func(*args, **kwargs)
@@ -268,7 +269,7 @@ def _exec_func_with_error_handling(
                 e._error_processed = True  # type: ignore[attr-defined]
             raise
 
-    evaluate._source_code = func_string
+    evaluate._source_code = func_string  # type: ignore[attr-defined]
     return evaluate
 
 
@@ -302,7 +303,7 @@ def _exec_func_with_error_handling(
 
 
 @error_context("variable")
-def variable(__context: Mapping[str, Any], __source: str, __token: Tuple[int, int], var_name: str) -> Any:
+def variable(__context: Mapping[str, Any], __source: str, __token: tuple[int, int], var_name: str) -> Any:
     """Look up a variable in the evaluation context, e.g. `my_var`"""
     if not is_safe_variable(var_name):
         raise SecurityError(f"variable '{var_name}' is unsafe")
@@ -313,7 +314,7 @@ def variable(__context: Mapping[str, Any], __source: str, __token: Tuple[int, in
 def attribute(
     __context: Mapping[str, Any],
     __source: str,
-    __token: Tuple[int, int],
+    __token: tuple[int, int],
     obj: Any,
     attr_name: str,
 ) -> Any:
@@ -327,7 +328,7 @@ def attribute(
 def subscript(
     __context: Mapping[str, Any],
     __source: str,
-    __token: Tuple[int, int],
+    __token: tuple[int, int],
     obj: Any,
     key: Any,
 ) -> Any:
@@ -343,7 +344,7 @@ def subscript(
 def call(
     __context: Mapping[str, Any],
     __source: str,
-    __token: Tuple[int, int],
+    __token: tuple[int, int],
     func: Callable,
     *args: Any,
     **kwargs: Any,
@@ -362,14 +363,16 @@ def call(
 def assign(
     __context: Mapping[str, Any],
     __source: str,
-    __token: Tuple[int, int],
+    __token: tuple[int, int],
     var_name: str,
     value: Any,
 ) -> Any:
     """Assign a value to a variable in the evaluation context, e.g. `(x := 5)`"""
     if not is_safe_variable(var_name):
         raise SecurityError(f"variable '{var_name}' is unsafe")
-    __context[var_name] = value
+    # The context is the mutable eval scope (a dict) at runtime; the parameter is
+    # typed Mapping only so every intercepted operation shares one signature.
+    cast("MutableMapping[str, Any]", __context)[var_name] = value
     return value
 
 
@@ -381,7 +384,7 @@ def assign(
 def slice(
     __context: Mapping[str, Any],
     __source: str,
-    __token: Tuple[int, int],
+    __token: tuple[int, int],
     lower: Any = None,
     upper: Any = None,
     step: Any = None,
@@ -398,27 +401,27 @@ def slice(
 def interpolation(
     __context: Mapping[str, Any],
     __source: str,
-    __token: Tuple[int, int],
+    __token: tuple[int, int],
     value: Any,
     expression: str,
-    conversion: Optional[str],
+    conversion: str | None,
     format_spec: str,
 ) -> Any:
     """Process t-string interpolation."""
     try:
         from string.templatelib import Interpolation  # type: ignore[import-untyped]
     except ImportError:
-        raise NotImplementedError("t-string interpolation is not supported")
+        raise NotImplementedError("t-string interpolation is not supported") from None
     return Interpolation(value, expression, conversion, format_spec)
 
 
 @error_context("template")
-def template(__context: Mapping[str, Any], __source: str, __token: Tuple[int, int], *parts: Any) -> Any:
+def template(__context: Mapping[str, Any], __source: str, __token: tuple[int, int], *parts: Any) -> Any:
     """Construct a template from parts."""
     try:
         from string.templatelib import Template  # type: ignore[import-untyped]
     except ImportError:
-        raise NotImplementedError("t-string template construction is not supported")
+        raise NotImplementedError("t-string template construction is not supported") from None
     return Template(*parts)
 
 
@@ -426,7 +429,7 @@ def template(__context: Mapping[str, Any], __source: str, __token: Tuple[int, in
 def format(
     __context: Mapping[str, Any],
     __source: str,
-    __token: Tuple[int, int],
+    __token: tuple[int, int],
     template_string: str,
     *args: Any,
 ) -> str:

@@ -1,6 +1,6 @@
 import functools
 from collections.abc import Callable
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 T = TypeVar("T", bound=Callable)
 
@@ -157,6 +157,8 @@ def error_context(func_name: str) -> Callable[[T], T]:
                 format_error_with_context(e, source, start_index, end_index, func_name)
                 raise
 
-        return wrapper
+        # functools.wraps copies func's signature onto wrapper, so it is the same
+        # callable type as far as callers are concerned.
+        return cast("T", wrapper)
 
     return decorator

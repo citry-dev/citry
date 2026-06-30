@@ -615,7 +615,7 @@ class TestOnRenderGeneratorForm:
             template = "<i>bottom</i>"
 
         def make_on_render():
-            def on_render(self):  # noqa: ARG001
+            def on_render(self):
                 _result, _error = yield
 
             return on_render

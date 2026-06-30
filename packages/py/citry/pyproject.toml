@@ -45,8 +45,9 @@ watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
 [project.scripts]
 citry = "citry.__main__:main"
 
-# Groups here are mirrored into the root pyproject's matching extras (dev/ci,
-# benchmark), which the shared venv and CI install from; keep in sync until #8.
+# These groups are the single declaration of citry's test and benchmark deps.
+# The uv workspace installs them on `uv sync --all-packages`, so the shared venv
+# and CI get them with no separate root-level copy to keep in step.
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
@@ -56,9 +57,12 @@ dev = [
 ]
 # Benchmark baselines (docs/design/benchmarking.md), pinned exactly so a bump is
 # a deliberate re-baseline; skipped when absent (tests/conftest.py).
+# django 6.0 requires Python >= 3.12, so the Django comparison baselines only
+# install there; on 3.10/3.11 the suite skips them (the bare pin would otherwise
+# make the whole workspace unresolvable on those versions).
 benchmark = [
-    "django==6.0.6",
-    "django-components==0.151.0",
+    "django==6.0.6; python_version >= '3.12'",
+    "django-components==0.151.0; python_version >= '3.12'",
     "jinja2==3.1.6",
 ]
 

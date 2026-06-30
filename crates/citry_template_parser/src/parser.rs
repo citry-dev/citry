@@ -98,10 +98,10 @@ pub fn parse_template_with_custom_lang(
     // Thus we also clone the Rc internally, so that in both Some/None cases we end up
     // owning the Rc instances.
     let lang = lang
-        .map(|l| Rc::clone(l))
+        .map(Rc::clone)
         .unwrap_or_else(|| Lang::Python.to_lang_impl());
     let rules = user_rules
-        .map(|r| Rc::clone(r))
+        .map(Rc::clone)
         .unwrap_or_else(|| Rc::new(HashMap::new()));
 
     let context = ParserContext::new(&lang, &rules);
@@ -349,7 +349,7 @@ fn process_template_element(
 /// Logic that runs when we construct a Node (either from SelfClosing, or finished with bodied Node).
 fn finalize_node(
     mut node: Node,
-    tag_stack: &mut Vec<TagStackEntry>,
+    tag_stack: &mut [TagStackEntry],
     root_template: &mut Template,
     context: &ParserContext,
 ) -> Result<(), ParseError> {
@@ -542,7 +542,7 @@ fn process_template_string(
         parent_context.create_child_context(new_line_offset, new_col_offset, new_index_offset);
 
     // Parse the content as a template with updated offsets
-    let template = parse_template_inner(&content, &nested_context)?;
+    let template = parse_template_inner(content, &nested_context)?;
     Ok(template)
 }
 
@@ -1033,7 +1033,7 @@ fn process_html_raw(
 
 // Decide which template to push items to
 fn get_current_template<'a>(
-    tag_stack: &'a mut Vec<TagStackEntry>,
+    tag_stack: &'a mut [TagStackEntry],
     root_template: &'a mut Template,
 ) -> &'a mut Template {
     if let Some(stack_entry) = tag_stack.last_mut() {
@@ -1054,12 +1054,12 @@ fn validate_node(
     tag_stack: &[TagStackEntry],
     context: &ParserContext,
 ) -> Result<(), ParseError> {
-    validate_fill_placement(&node, tag_stack)?;
-    validate_attributes_present(&node, context)?;
-    validate_attribute_conflicts(&node)?;
-    validate_dynamic_attr_values(&node)?;
-    validate_fill_names(&node, fill_nodes, context)?;
-    validate_variable_shadowing(&node)?;
+    validate_fill_placement(node, tag_stack)?;
+    validate_attributes_present(node, context)?;
+    validate_attribute_conflicts(node)?;
+    validate_dynamic_attr_values(node)?;
+    validate_fill_names(node, fill_nodes, context)?;
+    validate_variable_shadowing(node)?;
 
     Ok(())
 }
@@ -1115,8 +1115,8 @@ fn validate_dynamic_attr_values(node: &Node) -> Result<(), ParseError> {
 ///
 /// This runs after we popped the Node from the stack.
 fn validate_node_against_parent(node: &Node, parent_template: &Template) -> Result<(), ParseError> {
-    validate_tag_grouping(&node, parent_template)?;
-    validate_fill_exclusivity(&node, parent_template)?;
+    validate_tag_grouping(node, parent_template)?;
+    validate_fill_exclusivity(node, parent_template)?;
 
     Ok(())
 }
@@ -2128,7 +2128,7 @@ fn validate_fill_names(
             if let Some(allowed_slots_list) = allowed_slots {
                 if !allowed_slots_list.contains(&"default".to_string()) {
                     return format_error(
-                        &node,
+                        node,
                         format!(
                             "Tag '<{}>' does not allow a 'default' slot, but body content was provided.",
                             tag_name
@@ -2305,7 +2305,7 @@ fn validate_fill_names(
                     .saturating_sub(static_fills_in_allowed.len());
                 if dynamic_fills_outside_control_flow > remaining {
                     return format_error(
-                        &node,
+                        node,
                         format!(
                             "Tag '<{}>' allows {} slot(s), but {} are statically filled and there are {} additional dynamic fill(s) outside control flow. \
                             The dynamic fill(s) will either duplicate an existing slot or use a non-allowed name.",
@@ -2321,44 +2321,42 @@ fn validate_fill_names(
     }
 
     // Validate required slots
-    if !required_slots.is_empty() {
-        if !has_unbounded_dynamic_fill {
-            // Count check: even with dynamic fills, if the total number of possible
-            // unique fills is fewer than required slots, we know it can't work.
-            //
-            // E.g. with `required_slots: ["default", "footer"]`:
-            //   `<c-fill c-name="x">` => 1 fill < 2 required => error
-            //   `<c-fill c-name="x"> <c-fill c-name="y">` => 2 fills >= 2 required => ok
-            if max_possible_fills < required_slots.len() {
-                return format_error(
-                    &node,
-                    format!(
-                        "Tag '<{}>' requires {} slot(s), but only {} <c-fill> tag(s) were provided.",
-                        tag_name,
-                        required_slots.len(),
-                        max_possible_fills,
-                    ),
-                );
-            }
+    if !required_slots.is_empty() && !has_unbounded_dynamic_fill {
+        // Count check: even with dynamic fills, if the total number of possible
+        // unique fills is fewer than required slots, we know it can't work.
+        //
+        // E.g. with `required_slots: ["default", "footer"]`:
+        //   `<c-fill c-name="x">` => 1 fill < 2 required => error
+        //   `<c-fill c-name="x"> <c-fill c-name="y">` => 2 fills >= 2 required => ok
+        if max_possible_fills < required_slots.len() {
+            return format_error(
+                node,
+                format!(
+                    "Tag '<{}>' requires {} slot(s), but only {} <c-fill> tag(s) were provided.",
+                    tag_name,
+                    required_slots.len(),
+                    max_possible_fills,
+                ),
+            );
+        }
 
-            // Per-name check: verify each required slot is present.
-            // This only applies when ALL fills are static, because dynamic fills
-            // (c-name/c-bind) could resolve to any name at runtime.
-            //
-            // E.g. with `required_slots: ["default", "footer"]`:
-            //   `<c-fill name="default"> <c-fill name="header">` => "footer" missing => error
-            //   `<c-fill name="default"> <c-fill c-name="x">` => skipped (x could be "footer")
-            if !has_any_dynamic_fill {
-                for required_slot in required_slots {
-                    if !found_slots.contains(required_slot.as_str()) {
-                        return format_error(
-                            &node,
-                            format!(
-                                "Tag '<{}>' must have a slot named '{}'.",
-                                tag_name, required_slot
-                            ),
-                        );
-                    }
+        // Per-name check: verify each required slot is present.
+        // This only applies when ALL fills are static, because dynamic fills
+        // (c-name/c-bind) could resolve to any name at runtime.
+        //
+        // E.g. with `required_slots: ["default", "footer"]`:
+        //   `<c-fill name="default"> <c-fill name="header">` => "footer" missing => error
+        //   `<c-fill name="default"> <c-fill c-name="x">` => skipped (x could be "footer")
+        if !has_any_dynamic_fill {
+            for required_slot in required_slots {
+                if !found_slots.contains(required_slot.as_str()) {
+                    return format_error(
+                        node,
+                        format!(
+                            "Tag '<{}>' must have a slot named '{}'.",
+                            tag_name, required_slot
+                        ),
+                    );
                 }
             }
         }

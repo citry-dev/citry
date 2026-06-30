@@ -24,9 +24,7 @@ except ImportError:
     try:
         import tomli as tomllib  # type: ignore[import-untyped]
     except ImportError:
-        log.exception(
-            "[rust_toolchain_check] tomllib (Python 3.11+) or tomli package required"
-        )
+        log.exception("[rust_toolchain_check] tomllib (Python 3.11+) or tomli package required")
         log.exception("[rust_toolchain_check] Install with: pip install tomli pyyaml")
         sys.exit(1)
 
@@ -37,10 +35,7 @@ RUST_TOOLCHAIN_PATH = Path("rust-toolchain.toml")
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description=(
-            f"Check that Rust toolchain versions match between {RUST_TOOLCHAIN_PATH} "
-            f"and {RUST_CI_PATH}"
-        )
+        description=(f"Check that Rust toolchain versions match between {RUST_TOOLCHAIN_PATH} and {RUST_CI_PATH}")
     )
     parser.add_argument(
         "-q",
@@ -77,9 +72,7 @@ def main() -> int:
 
     # Verify we're in the right directory by checking for a marker file
     if not (repo_root / "Cargo.toml").exists() and not (repo_root / ".git").exists():
-        log.error(
-            f"[rust_toolchain_check] Could not find repository root. Expected Cargo.toml or .git in {repo_root}"
-        )
+        log.error(f"[rust_toolchain_check] Could not find repository root. Expected Cargo.toml or .git in {repo_root}")
         sys.exit(1)
 
     # Read rust-toolchain.toml
@@ -112,9 +105,7 @@ def main() -> int:
     # Find the position of dtolnay/rust-toolchain
     dtolnay_match = re.search(r"dtolnay/rust-toolchain", workflow_content)
     if not dtolnay_match:
-        log.error(
-            "[rust_toolchain_check] Could not find 'dtolnay/rust-toolchain' in workflow"
-        )
+        log.error("[rust_toolchain_check] Could not find 'dtolnay/rust-toolchain' in workflow")
         sys.exit(1)
 
     # From that position, search forward for the next "toolchain:" line
@@ -124,27 +115,19 @@ def main() -> int:
 
     if toolchain_match:
         workflow_toolchain = toolchain_match.group(1).strip("\"'")
-        log.debug(
-            f"[rust_toolchain_check] Found workflow_toolchain = {workflow_toolchain}"
-        )
+        log.debug(f"[rust_toolchain_check] Found workflow_toolchain = {workflow_toolchain}")
     else:
-        log.error(
-            "[rust_toolchain_check] Could not find 'toolchain:' value after 'dtolnay/rust-toolchain'"
-        )
+        log.error("[rust_toolchain_check] Could not find 'toolchain:' value after 'dtolnay/rust-toolchain'")
         sys.exit(1)
 
     # Compare values
     if toolchain_channel != workflow_toolchain:
         log.error("[rust_toolchain_check] Rust toolchain version mismatch!")
         log.error(f"[rust_toolchain_check]   {RUST_TOOLCHAIN_PATH}: {toolchain_channel}")
-        log.error(
-            f"[rust_toolchain_check]   {RUST_CI_PATH}: {workflow_toolchain}"
-        )
+        log.error(f"[rust_toolchain_check]   {RUST_CI_PATH}: {workflow_toolchain}")
         sys.exit(1)
 
-    log.info(
-        f"[rust_toolchain_check] ✓ Rust toolchain versions match: {toolchain_channel}"
-    )
+    log.info(f"[rust_toolchain_check] ✓ Rust toolchain versions match: {toolchain_channel}")
     return 0
 
 

@@ -173,7 +173,7 @@ impl LangImpl for PythonLang {
         final_code.push_str("def generate_template():\n");
         final_code.push_str("    body = ");
         final_code.push_str(&format_list(&args));
-        final_code.push_str("\n");
+        final_code.push('\n');
         final_code.push_str("    return body\n");
 
         Ok(final_code)
@@ -207,7 +207,7 @@ fn format_lang_spec_arg(arg: &LangSpecArgument) -> String {
         }
         // Format a list of strings as a Python list, e.g. `[a, b,]`
         // Always includes trailing comma for consistency
-        LangSpecArgument::List(elements) => format_list(&elements),
+        LangSpecArgument::List(elements) => format_list(elements),
         // Generate function / instance call, e.g.
         // ```py
         // NodeClass(
@@ -233,7 +233,7 @@ fn format_lang_spec_arg(arg: &LangSpecArgument) -> String {
 /// Format a vector of `LangSpecArgument` as a Python list.
 ///
 /// Converts each `LangSpecArgument` to its Python string representation.
-fn format_list(args: &Vec<LangSpecArgument>) -> String {
+fn format_list(args: &[LangSpecArgument]) -> String {
     let items: Vec<String> = args.iter().map(format_lang_spec_arg).collect();
     let list_str = if items.is_empty() {
         "[]".to_string()

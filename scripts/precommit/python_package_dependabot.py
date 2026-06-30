@@ -18,7 +18,7 @@ handler.setFormatter(logging.Formatter("%(message)s"))
 log.addHandler(handler)
 
 
-def parse_args():
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Check that Python packages in `packages/py/` have corresponding Dependabot entries"
     )
@@ -64,19 +64,16 @@ def find_python_packages(packages_dir: Path) -> set[str]:
         return packages
 
     for item in packages_dir.iterdir():
-        if item.is_dir():
-            # Check if it looks like a Python package (has pyproject.toml or __init__.py)
-            if (item / "pyproject.toml").exists() or (item / "__init__.py").exists():
-                package_path = f"packages/py/{item.name}"
-                packages.add(package_path)
-                log.debug(
-                    f"[python_package_dependabot] Found Python package: {package_path}"
-                )
+        # A Python package directory has a pyproject.toml or an __init__.py
+        if item.is_dir() and ((item / "pyproject.toml").exists() or (item / "__init__.py").exists()):
+            package_path = f"packages/py/{item.name}"
+            packages.add(package_path)
+            log.debug(f"[python_package_dependabot] Found Python package: {package_path}")
 
     return packages
 
 
-def main():
+def main() -> int:
     args = parse_args()
 
     # Set log level based on flags (quiet takes precedence over verbose)
@@ -110,28 +107,20 @@ def main():
 
     # Extract directories from dependabot.yml
     dependabot_directories = extract_dependabot_directories(dependabot_content)
-    log.debug(
-        f"[python_package_dependabot] Found {len(dependabot_directories)} Dependabot entries for `packages/py/`"
-    )
+    log.debug(f"[python_package_dependabot] Found {len(dependabot_directories)} Dependabot entries for `packages/py/`")
 
     # Find all Python packages in packages/py/
     packages_dir = repo_root / "packages" / "py"
     python_packages = find_python_packages(packages_dir)
-    log.debug(
-        f"[python_package_dependabot] Found {len(python_packages)} Python packages in `packages/py/`"
-    )
+    log.debug(f"[python_package_dependabot] Found {len(python_packages)} Python packages in `packages/py/`")
 
     # Check for missing entries: packages without Dependabot entries
     missing_entries = python_packages - dependabot_directories
     if missing_entries:
-        log.error(
-            "[python_package_dependabot] Python packages missing from Dependabot configuration:"
-        )
+        log.error("[python_package_dependabot] Python packages missing from Dependabot configuration:")
         for package in sorted(missing_entries):
             log.error(f"[python_package_dependabot]   - {package}")
-        log.error(
-            "[python_package_dependabot] Add entries to .github/dependabot.yml like:"
-        )
+        log.error("[python_package_dependabot] Add entries to .github/dependabot.yml like:")
         log.error('[python_package_dependabot]   - package-ecosystem: "pip"')
         for package in sorted(missing_entries):
             log.error(f'[python_package_dependabot]     directory: "{package}"')
@@ -139,22 +128,16 @@ def main():
     # Check for orphaned entries: Dependabot entries pointing to non-existent packages
     orphaned_entries = dependabot_directories - python_packages
     if orphaned_entries:
-        log.error(
-            "[python_package_dependabot] Dependabot entries pointing to non-existent packages:"
-        )
+        log.error("[python_package_dependabot] Dependabot entries pointing to non-existent packages:")
         for entry in sorted(orphaned_entries):
             log.error(f"[python_package_dependabot]   - {entry}")
-        log.error(
-            "[python_package_dependabot] Remove these entries from .github/dependabot.yml"
-        )
+        log.error("[python_package_dependabot] Remove these entries from .github/dependabot.yml")
 
     # If there are any issues, exit with error
     if missing_entries or orphaned_entries:
         sys.exit(1)
 
-    log.info(
-        f"[python_package_dependabot] ✓ All {len(python_packages)} Python packages have Dependabot entries"
-    )
+    log.info(f"[python_package_dependabot] ✓ All {len(python_packages)} Python packages have Dependabot entries")
     return 0
 
 

@@ -9,8 +9,7 @@ mod tests {
 
     use super::common::{
         assert_parse_error, body_node_full, end_tag, expr_attr, expr_elem, node_elem,
-        self_closing_node_full, start_tag, static_attr, template, template_with_vars, token,
-        with_used_vars,
+        self_closing_node_full, start_tag, template_with_vars, token, with_used_vars,
     };
 
     #[test]

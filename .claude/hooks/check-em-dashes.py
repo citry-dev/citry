@@ -30,6 +30,7 @@ Silent (exit 0, no stdout) when:
 - file can't be read
 - no em dashes in scanned content
 """
+
 import json
 import sys
 
@@ -74,9 +75,7 @@ def main() -> None:
     except Exception:
         sys.exit(0)
 
-    fp = data.get("tool_input", {}).get("file_path") or data.get(
-        "tool_response", {}
-    ).get("filePath")
+    fp = data.get("tool_input", {}).get("file_path") or data.get("tool_response", {}).get("filePath")
     if not fp or not fp.endswith(CODE_EXT):
         sys.exit(0)
 
@@ -105,8 +104,7 @@ def main() -> None:
     msg = (
         f"Em dash ({EM}) found. Per CLAUDE.md house style, em dashes are not "
         f"allowed in agent docs, code comments, or docstrings. Replace with a "
-        f"hyphen, a comma, parentheses, or recast as two sentences:\n"
-        + "\n".join(findings)
+        f"hyphen, a comma, parentheses, or recast as two sentences:\n" + "\n".join(findings)
     )
     print(
         json.dumps(

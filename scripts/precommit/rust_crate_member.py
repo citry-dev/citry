@@ -23,17 +23,14 @@ except ImportError:
     try:
         import tomli as tomllib  # type: ignore[import-untyped]
     except ImportError:
-        log.error(
-            "[rust_crate_member] tomllib (Python 3.11+) or tomli package required"
-        )
-        log.error("[rust_crate_member] Install with: pip install tomli")
+        # A "please install tomli" message; the ImportError traceback would be noise here.
+        log.error("[rust_crate_member] tomllib (Python 3.11+) or tomli package required")  # noqa: TRY400
+        log.error("[rust_crate_member] Install with: pip install tomli")  # noqa: TRY400
         sys.exit(1)
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(
-        description="Check that Rust crates in crates/ are listed in workspace.members"
-    )
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Check that Rust crates in crates/ are listed in workspace.members")
     parser.add_argument(
         "-q",
         "--quiet",
@@ -77,17 +74,16 @@ def find_rust_crates(crates_dir: Path) -> set[str]:
         return crates
 
     for item in crates_dir.iterdir():
-        if item.is_dir():
-            # Check if it's a Rust crate (has Cargo.toml)
-            if (item / "Cargo.toml").exists():
-                crate_path = f"crates/{item.name}"
-                crates.add(crate_path)
-                log.debug(f"[rust_crate_member] Found Rust crate: {crate_path}")
+        # A Rust crate directory has a Cargo.toml
+        if item.is_dir() and (item / "Cargo.toml").exists():
+            crate_path = f"crates/{item.name}"
+            crates.add(crate_path)
+            log.debug(f"[rust_crate_member] Found Rust crate: {crate_path}")
 
     return crates
 
 
-def main():
+def main() -> int:
     args = parse_args()
 
     # Set log level based on flags (quiet takes precedence over verbose)
@@ -105,9 +101,7 @@ def main():
 
     # Verify we're in the right directory
     if not (repo_root / "Cargo.toml").exists() and not (repo_root / ".git").exists():
-        log.error(
-            f"[rust_crate_member] Could not find repository root. Expected Cargo.toml or .git in {repo_root}"
-        )
+        log.error(f"[rust_crate_member] Could not find repository root. Expected Cargo.toml or .git in {repo_root}")
         sys.exit(1)
 
     # Read Cargo.toml
@@ -121,9 +115,7 @@ def main():
 
     # Extract workspace.members from Cargo.toml
     workspace_members = extract_workspace_members(cargo_toml_content)
-    log.debug(
-        f"[rust_crate_member] Found {len(workspace_members)} workspace members in Cargo.toml"
-    )
+    log.debug(f"[rust_crate_member] Found {len(workspace_members)} workspace members in Cargo.toml")
 
     # Find all Rust crates in crates/
     crates_dir = repo_root / "crates"
@@ -136,9 +128,7 @@ def main():
         log.error("[rust_crate_member] Rust crates missing from workspace.members:")
         for crate in sorted(missing_entries):
             log.error(f"[rust_crate_member]   - {crate}")
-        log.error(
-            "[rust_crate_member] Add entries to Cargo.toml under [workspace] members like:"
-        )
+        log.error("[rust_crate_member] Add entries to Cargo.toml under [workspace] members like:")
         log.error("[rust_crate_member]   [workspace]")
         log.error("[rust_crate_member]   members = [")
         for crate in sorted(missing_entries):
@@ -148,22 +138,16 @@ def main():
     # Check for orphaned entries: workspace.members pointing to non-existent crates
     orphaned_entries = workspace_members - rust_crates
     if orphaned_entries:
-        log.error(
-            "[rust_crate_member] workspace.members entries pointing to non-existent crates:"
-        )
+        log.error("[rust_crate_member] workspace.members entries pointing to non-existent crates:")
         for entry in sorted(orphaned_entries):
             log.error(f"[rust_crate_member]   - {entry}")
-        log.error(
-            "[rust_crate_member] Remove these entries from Cargo.toml [workspace.members]"
-        )
+        log.error("[rust_crate_member] Remove these entries from Cargo.toml [workspace.members]")
 
     # If there are any issues, exit with error
     if missing_entries or orphaned_entries:
         sys.exit(1)
 
-    log.info(
-        f"[rust_crate_member] ✓ All {len(rust_crates)} Rust crates are in workspace.members"
-    )
+    log.info(f"[rust_crate_member] ✓ All {len(rust_crates)} Rust crates are in workspace.members")
     return 0
 
 

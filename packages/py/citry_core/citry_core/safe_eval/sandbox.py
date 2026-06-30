@@ -26,19 +26,22 @@ Example:
 def delete(self):
     pass
 ```
+
 """
 
 import builtins
+import contextlib
 import types
-from typing import Any, Callable, Dict, Optional, Set, Tuple, TypeVar
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 F = TypeVar("F", bound=Callable[..., Any])
 
 #: Unsafe function attributes.
-UNSAFE_FUNCTION_ATTRIBUTES: Set[str] = set()
+UNSAFE_FUNCTION_ATTRIBUTES: set[str] = set()
 
 #: Unsafe method attributes. Function attributes are unsafe for methods too.
-UNSAFE_METHOD_ATTRIBUTES: Set[str] = set()
+UNSAFE_METHOD_ATTRIBUTES: set[str] = set()
 
 #: unsafe generator attributes.
 UNSAFE_GENERATOR_ATTRIBUTES = {"gi_frame", "gi_code"}
@@ -80,7 +83,7 @@ _UNSAFE_BUILTIN_FUNCTION_NAMES = {
     "super": None,
     "vars": None,
 }
-UNSAFE_BUILTIN_FUNCTIONS: Dict[Any, Optional[str]] = {
+UNSAFE_BUILTIN_FUNCTIONS: dict[Any, str | None] = {
     getattr(builtins, attr): replacement
     for attr, replacement in _UNSAFE_BUILTIN_FUNCTION_NAMES.items()
     if hasattr(builtins, attr)
@@ -89,7 +92,7 @@ UNSAFE_BUILTIN_FUNCTIONS: Dict[Any, Optional[str]] = {
 # These are not allowed as they can be used to access unsafe variables,
 # e.g. `"a{0.b.__builtins__[__import__]}b".format({"b": 42})`
 # Use f-strings instead.
-UNSAFE_FUNCTIONS: Dict[Any, Optional[str]] = {
+UNSAFE_FUNCTIONS: dict[Any, str | None] = {
     str.format: "Use f-strings instead.",
     str.format_map: "Use f-strings instead.",
 }
@@ -105,8 +108,9 @@ def unsafe(f: F) -> F:
     def delete(self):
         pass
     ```
+
     """
-    f.unsafe_callable = True  # type: ignore
+    f.unsafe_callable = True  # type: ignore[attr-defined]
     return f
 
 
@@ -136,9 +140,8 @@ def _is_internal_attribute(obj: Any, attr: str) -> bool:
     elif hasattr(types, "CoroutineType") and isinstance(obj, types.CoroutineType):
         if attr in UNSAFE_COROUTINE_ATTRIBUTES:
             return True
-    elif hasattr(types, "AsyncGeneratorType") and isinstance(
-        obj, types.AsyncGeneratorType
-    ):
+    # Kept nested (not collapsed) to stay parallel with the CoroutineType branch above.
+    elif hasattr(types, "AsyncGeneratorType") and isinstance(obj, types.AsyncGeneratorType):  # noqa: SIM102
         if attr in UNSAFE_ASYNC_GENERATOR_ATTRIBUTES:
             return True
     return attr.startswith("__")
@@ -159,7 +162,7 @@ def is_safe_attribute(obj: Any, attr: str) -> bool:
     return not (attr.startswith("_") or _is_internal_attribute(obj, attr))
 
 
-def is_safe_callable(obj: Any) -> Tuple[bool, Optional[str]]:
+def is_safe_callable(obj: Any) -> tuple[bool, str | None]:
     """
     Check if an object is safely callable.
 
@@ -173,6 +176,7 @@ def is_safe_callable(obj: Any) -> Tuple[bool, Optional[str]]:
     - Marked with `obj.alters_data = True` (Django convention)
     - Unsafe builtins (e.g. `eval`)
     - `str.format` or `str.format_map` (use f-strings instead)
+
     """
     # Check for bound methods (e.g., "string".format())
     # Handle both regular methods (types.MethodType) and built-in methods (builtin_function_or_method)
@@ -180,23 +184,15 @@ def is_safe_callable(obj: Any) -> Tuple[bool, Optional[str]]:
     if isinstance(obj, types.MethodType):
         # Regular Python method - has __func__ attribute
         underlying_func = obj.__func__
-    elif (
-        hasattr(obj, "__self__")
-        and hasattr(obj, "__name__")
-        and not hasattr(obj, "__func__")
-    ):
+    elif hasattr(obj, "__self__") and hasattr(obj, "__name__") and not hasattr(obj, "__func__"):
         # Built-in method descriptor (e.g., str.format, str.format_map)
         # These are bound methods that don't have __func__, but we can get the original descriptor
-        try:
+        with contextlib.suppress(AttributeError, TypeError):
             underlying_func = getattr(type(obj.__self__), obj.__name__)
-        except (AttributeError, TypeError):
-            pass
 
     if underlying_func is not None:
         # Check marks on inner function (decorated with @unsafe or alters_data)
-        if getattr(underlying_func, "unsafe_callable", False) or getattr(
-            underlying_func, "alters_data", False
-        ):
+        if getattr(underlying_func, "unsafe_callable", False) or getattr(underlying_func, "alters_data", False):
             return (False, None)
         # Check if the underlying function is in our unsafe dictionaries
         if underlying_func in UNSAFE_FUNCTIONS:

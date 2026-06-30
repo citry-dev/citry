@@ -24,13 +24,12 @@
 # - Functions without `self` are treated as module-level functions.
 #   This matches how typeshed defines modules.
 
-from typing import Literal
-
 ########################################################
 # HTML transform
 ########################################################
 
 class html_transform:
+    @staticmethod
     def mark_html(
         html: str,
         root_attributes: list[str],
@@ -86,6 +85,7 @@ class html_transform:
         ```
         """
 
+    @staticmethod
     def transform_html(
         html: str,
         root_attributes: list[str],
@@ -147,6 +147,7 @@ class html_transform:
 ########################################################
 
 class safe_eval:
+    @staticmethod
     def safe_eval(source: str) -> str:
         """
         Transform a Python expression string to make it safe for evaluation.
@@ -203,11 +204,13 @@ class safe_eval:
 
 class template_parser:
     # Functions
+    @staticmethod
     def parse_template(
         input: str,
         lang: str | None = None,
         user_rules: dict[str, template_parser.TagRules] | None = None,
     ) -> template_parser.Template: ...
+    @staticmethod
     def compile_template(
         template: template_parser.Template,
         lang: str | None = None,
@@ -217,6 +220,7 @@ class template_parser:
 
     class Token:
         """A span in the template source with position information."""
+
         def __init__(
             self,
             content: str,
@@ -231,18 +235,21 @@ class template_parser:
 
     class Comment:
         """A template comment `{# ... #}` or HTML comment `<!-- ... -->`."""
+
         def __init__(self, token: template_parser.Token, value: template_parser.Token) -> None: ...
         token: template_parser.Token
         value: template_parser.Token
 
     class HtmlAttrKind:
         """Enum: Static, Expression, or Template."""
+
         Static: template_parser.HtmlAttrKind
         Expression: template_parser.HtmlAttrKind
         Template: template_parser.HtmlAttrKind
 
     class HtmlAttr:
         """An HTML attribute (static, dynamic expression, or nested template)."""
+
         token: template_parser.Token
         key: template_parser.Token
         value: template_parser.Token | None
@@ -253,6 +260,7 @@ class template_parser:
 
     class HtmlStartTag:
         """An HTML opening tag with its attributes."""
+
         token: template_parser.Token
         name: template_parser.Token
         attrs: list[template_parser.HtmlAttr]
@@ -261,12 +269,14 @@ class template_parser:
 
     class HtmlEndTag:
         """An HTML closing tag."""
+
         token: template_parser.Token
         name: template_parser.Token
         comments: list[template_parser.Comment]
 
     class Expr:
         """A template expression `{{ ... }}`."""
+
         token: template_parser.Token
         value: template_parser.Token
         used_variables: list[template_parser.Token]
@@ -274,10 +284,12 @@ class template_parser:
 
     class Text:
         """Plain text content."""
+
         token: template_parser.Token
 
     class Node_SelfClosing:
         """A self-closing HTML/component tag."""
+
         start_tag: template_parser.HtmlStartTag
         used_variables: list[template_parser.Token]
         introduced_variables: list[template_parser.Token]
@@ -287,6 +299,7 @@ class template_parser:
 
     class Node_WithBody:
         """An HTML/component tag with a body."""
+
         start_tag: template_parser.HtmlStartTag
         end_tag: template_parser.HtmlEndTag
         body: template_parser.Template
@@ -298,37 +311,50 @@ class template_parser:
 
     class Node:
         """Enum: SelfClosing or WithBody. Access the variant via `._0`."""
+
         SelfClosing: type[template_parser.Node_SelfClosing]
         WithBody: type[template_parser.Node_WithBody]
         name: str
 
     class TemplateElement_Text:
         """A TemplateElement variant wrapping Text. Access via `._0`."""
+
         _0: template_parser.Text
 
     class TemplateElement_Expr:
         """A TemplateElement variant wrapping Expr. Access via `._0`."""
+
         _0: template_parser.Expr
 
     class TemplateElement_Node:
         """A TemplateElement variant wrapping Node. Access via `._0`."""
+
         _0: template_parser.Node_SelfClosing | template_parser.Node_WithBody
 
     class TemplateElement:
-        """Enum: Text, Expr, or Node. The concrete variant type is one of
-        TemplateElement_Text, TemplateElement_Expr, TemplateElement_Node."""
+        """
+        Enum: Text, Expr, or Node. The concrete variant type is one of
+        TemplateElement_Text, TemplateElement_Expr, TemplateElement_Node.
+        """
+
         Text: type[template_parser.TemplateElement_Text]
         Expr: type[template_parser.TemplateElement_Expr]
         Node: type[template_parser.TemplateElement_Node]
 
     class StaticNamedSlot:
         """A slot with a statically-known name."""
+
         token: template_parser.Token
         required: bool | None
 
     class Template:
         """The parsed template AST."""
-        elements: list[template_parser.TemplateElement_Text | template_parser.TemplateElement_Expr | template_parser.TemplateElement_Node]
+
+        elements: list[
+            template_parser.TemplateElement_Text
+            | template_parser.TemplateElement_Expr
+            | template_parser.TemplateElement_Node
+        ]
         comments: list[template_parser.Comment]
         used_variables: list[template_parser.Token]
         slots: list[template_parser.StaticNamedSlot]
@@ -337,6 +363,7 @@ class template_parser:
 
     class TagRules:
         """Validation rules for custom component tags."""
+
         def __init__(
             self,
             allowed_attrs: list[list[str]] | None = None,

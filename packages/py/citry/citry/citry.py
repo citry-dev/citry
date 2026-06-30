@@ -61,11 +61,17 @@ if TYPE_CHECKING:
     from citry_core.template_parser import TagRules
 
 
+# Benefits over module-level globals:
+# - All transient state has a maximum lifetime bound to the Citry
+#     instance. Deleting the instance cleans up everything.
+# - Tests can use isolated instances for clean state.
+# - Multiple independent component trees can coexist.
 class Citry:
     """
     Global instance that scopes all component state.
 
     A Citry instance owns:
+
     - A ``registry`` (``ComponentRegistry``) mapping names to classes
     - Settings (to be expanded as the engine grows)
     - Transient rendering state
@@ -74,11 +80,6 @@ class Citry:
     definition time. If no instance is specified, the default instance
     is used.
 
-    Benefits over module-level globals:
-    - All transient state has a maximum lifetime bound to the Citry
-      instance. Deleting the instance cleans up everything.
-    - Tests can use isolated instances for clean state.
-    - Multiple independent component trees can coexist.
     """
 
     def __init__(

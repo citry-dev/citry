@@ -1,3 +1,10 @@
+// Lints we accept for the PyO3 bindings crate, matching the parser crate's
+// posture (large error/enum variants, complex or wide signatures).
+#![allow(clippy::result_large_err)]
+#![allow(clippy::large_enum_variant)]
+#![allow(clippy::type_complexity)]
+#![allow(clippy::too_many_arguments)]
+
 pub mod html_transform;
 pub mod safe_eval;
 pub mod template_parser;

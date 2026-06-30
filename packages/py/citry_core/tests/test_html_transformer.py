@@ -1,7 +1,6 @@
 # This same set of tests is also found in django-components, to ensure that
 # this implementation can be replaced with the django-components' pure-python implementation
 
-from typing import Dict, List
 
 from citry_core.html_transform import mark_html, transform_html
 
@@ -122,7 +121,7 @@ def test_watch_attribute():
         </div>"""
 
     result: str
-    captured: Dict[str, List[str]]
+    captured: dict[str, list[str]]
     result, captured = transform_html(
         html,
         ["data-root"],

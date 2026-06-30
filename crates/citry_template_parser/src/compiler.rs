@@ -135,16 +135,14 @@ pub fn compile_template_with_custom_lang(
     // Thus we also clone the Rc internally, so that in both Some/None cases we end up
     // owning the Rc instances.
     let lang_impl = lang
-        .map(|l| Rc::clone(l))
+        .map(Rc::clone)
         .unwrap_or_else(|| Lang::Python.to_lang_impl());
 
     // Compile the template body into LangSpecArgument structures
     let body_items = compile_template_body(template)?;
 
     // Delegate to the language implementation to convert LangSpecArguments to source code
-    lang_impl
-        .compile(body_items)
-        .map_err(|e| CompileError::Generic(e))
+    lang_impl.compile(body_items).map_err(CompileError::Generic)
 }
 
 pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>, CompileError> {
@@ -1346,7 +1344,7 @@ fn format_expr_node(
     node_class_name: &str,
     token: &Token,
     content: &str,
-    used_variables: &Vec<Token>,
+    used_variables: &[Token],
 ) -> LangSpecArgument {
     let start_pos = token.start_index;
     let end_pos = token.end_index;

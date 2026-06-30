@@ -51,7 +51,7 @@ pub fn tuple_literal(elements: Vec<Expr>, range: TextRange) -> Expr {
         range,
         ctx: ExprContext::Load,
         parenthesized: true,
-        elts: elements.into(),
+        elts: elements,
     })
 }
 

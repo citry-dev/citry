@@ -253,6 +253,7 @@ class Component(metaclass=ComponentMeta):
     Base class for all Citry components.
 
     A component is a reusable unit of UI defined by:
+
     - A **template** (Citry template syntax)
     - Optional **typed inputs** (via inner ``Kwargs``, ``Slots`` classes)
     - A **data method** that maps inputs to template variables
@@ -465,9 +466,7 @@ class Component(metaclass=ComponentMeta):
         # `element.slots` is `slots or {}`, so the common no-slots case is a falsy
         # empty dict, not None. A truthiness check skips the `normalize_slot_fills`
         # call (which would just rebuild an empty dict) for that case.
-        raw_slots: dict[str, Slot] = (
-            normalize_slot_fills(to_dict(slots), component_name=cls.__name__) if slots else {}
-        )
+        raw_slots: dict[str, Slot] = normalize_slot_fills(to_dict(slots), component_name=cls.__name__) if slots else {}
 
         # Set typed kwargs/slots if the component defines a dataclass,
         # otherwise keep as plain dict.

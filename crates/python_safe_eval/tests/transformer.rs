@@ -56,9 +56,8 @@ mod tests {
 
     fn _test_forbidden_syntax(input: &str) {
         let result = transform_expression_string(input);
-        if result.is_ok() {
+        if let Ok(transform_result) = &result {
             // If transformation succeeded, print the result to help debug
-            let transform_result = result.unwrap();
             let generated = generate_python_code(&transform_result.expression);
             panic!(
                 "Expected transformation to fail, but it succeeded.\nInput: {}\nGenerated code: {}",
