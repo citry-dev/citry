@@ -2,6 +2,8 @@ import itertools
 
 import pytest
 
+collect_ignore_glob = []
+
 # The Django/DJC benchmark scenario files (docs/design/benchmarking.md) need
 # the optional `benchmark` dependency group. Skipping them here (rather than
 # with importorskip inside the files) keeps the vendored files' import section
