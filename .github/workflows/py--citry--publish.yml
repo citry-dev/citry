@@ -56,7 +56,7 @@ jobs:
       - name: Build sdist and wheel
         run: uv build --package citry --out-dir dist
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: citry-dist
           path: dist
