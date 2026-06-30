@@ -259,7 +259,7 @@ jobs:
       contents: write
     steps:
       # Collect every wheel and the sdist into a single dist/ directory.
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
