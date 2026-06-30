@@ -241,12 +241,15 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   referenced.
 - **Run checks repo-wide before declaring done.** Scoping a linter or test run
   to the files you touched is fine for iteration, but a final pass must run the
-  way CI does (`cargo test` with one `-p` per crate under `crates/`, `cargo
-  clippy`, `cargo fmt --check`, `uv run ruff check .`, `uv run mypy`, `uv run
-  pytest`). A scoped pass hides failures in files you changed indirectly. The
-  `-p` flags matter: the vendored ruff submodule's crates are workspace members,
-  so a bare `cargo test` runs ruff's own test suite too (see
-  [`docs/codebase.md`](docs/codebase.md) "Running tests").
+  whole gate, the same way CI does: `python scripts/check.py`. That one command
+  runs every phase (cargo fmt, cargo clippy, cargo test, ruff check, ruff format,
+  mypy, pytest, and the custom validators), runs them all even after one fails,
+  and reports everything at once. Pass `--reporter agent` for a single JSON
+  object you can parse. A scoped pass hides failures in files you changed
+  indirectly. The phases scope cargo with one `-p` per first-party crate (and
+  clippy with `--no-deps`) because the vendored ruff submodule's crates are
+  workspace path-dependencies; a bare `cargo test`/`cargo clippy` would pull in
+  ruff's own code (see [`docs/codebase.md`](docs/codebase.md) "Running checks").
 - **Don't preserve incorrect behavior to keep tests passing.** When a fix makes
   the more correct choice, update the failing tests to match the new contract,
   and call the update out explicitly. A failing test under a deliberate change

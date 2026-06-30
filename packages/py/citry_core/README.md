@@ -188,9 +188,9 @@ When a new Rust crate / submodule is added to the twin Rust crate [`citry_core_p
 
 2. **Create Python wrapper**: Add `citry_core/new_module/__init__.py` if needed
 
-NOTE: There is a pre-commit hook
-[`python-core-bindings-check`](../../../scripts/precommit/python_core_bindings_check.py)
-that checks that we've added entries to `_rust.pyi` and that we've added the `new_module` subdirectory exists.
+NOTE: A validator
+[`bindings`](../../../scripts/validators/bindings.py) (run by `python scripts/check.py`)
+checks that we've added entries to `_rust.pyi` and that the `new_module` subdirectory exists.
 
 ### Type stub maintenance
 

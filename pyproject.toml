@@ -21,7 +21,6 @@ dev = [
     "maturin>=1.10.2",
     "ruff>=0.8.0",
     "mypy>=1.0.0",
-    "pre-commit>=3.0.0",
 ]
 
 # Optional extras for the docs site (docs/design/docs_site.md): root-only, heavy,
@@ -205,6 +204,14 @@ ignore = [
 # renaming it to avoid shadowing the builtin would be an API break.
 "packages/py/citry_core/citry_core/template_parser/*" = [
     "A002",    # `input` shadows a builtin but is the public parameter name
+]
+# The check/validate runners print their report and shell out to cargo/uv.
+"scripts/check.py" = [
+    "S607",    # `cargo`/`uv` are intentionally resolved from PATH
+    "T201",    # the runner prints its results
+]
+"scripts/validate.py" = [
+    "T201",    # the runner prints its results
 ]
 
 [tool.ruff.lint.isort]

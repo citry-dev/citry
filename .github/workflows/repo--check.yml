@@ -1,0 +1,55 @@
+# The project gate: runs the full check suite (scripts/check.py) in one job.
+# This is the single source of truth for "does everything pass" - formatting,
+# lints, types, the custom validators, and a single-environment test pass. The
+# per-language matrix workflows (rust--tests.yml, py--tests.yml) add cross
+# version/OS test breadth on top of this.
+name: Check
+
+on:
+  # No path filters: the gate runs on every change.
+  push:
+    branches:
+      - "main"
+      - "dev"
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Initialize the vendored Ruff submodule (a build/runtime dependency)
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # Rust is needed for the cargo fmt/clippy/test phases and to build the
+      # citry_core extension during `uv sync`.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+          components: rustfmt, clippy
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install the workspace
+        run: uv sync --locked --all-packages
+
+      # The whole gate in one command: cargo fmt/clippy/test, ruff check/format,
+      # mypy, pytest, and the custom validators. Runs every phase then reports.
+      - name: Run the check suite
+        run: python scripts/check.py

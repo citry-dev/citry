@@ -37,3 +37,8 @@ updates:
     directory: "packages/py/citry_core"
     schedule:
       interval: weekly
+
+  - package-ecosystem: "pip"
+    directory: "packages/py/citry"
+    schedule:
+      interval: weekly

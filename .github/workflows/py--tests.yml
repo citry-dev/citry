@@ -34,14 +34,19 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         os: [ubuntu-latest, windows-latest]
+        # macOS is a smoke pair (oldest + newest Python) rather than the full
+        # matrix, since macOS runners are costly and the maintainer develops on
+        # darwin. The publish workflow builds the full macOS wheel set.
+        include:
+          - { os: macos-latest, python-version: "3.10" }
+          - { os: macos-latest, python-version: "3.14" }
 
     steps:
       - uses: actions/checkout@v6
         with:
-          # Initialize Ruff submodule
+          # Initialize the vendored Ruff submodule (a build/runtime dependency)
           submodules: recursive
 
-      # Install Python dependencies
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -52,28 +57,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install Python dependencies
-        run: |
-          uv sync --extra ci
-
-      # Install Rust deps (required for maturin to build Rust extensions)
+      # Rust is needed because `uv sync` builds the citry_core extension through
+      # the maturin backend, so the toolchain must be in place before the sync.
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
         with:
-          # NOTE: This should match the value in `rust-toolchain.toml`
+          # NOTE: keep in step with rust-toolchain.toml
           toolchain: nightly
-          components: rustfmt, clippy
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
 
-      # Build any Python packages that need building
-      - name: Build Python package
-        working-directory: packages/py/citry_core
-        run: |
-          uv run maturin develop
+      # One command builds citry_core (maturin) and installs citry editable,
+      # plus every package's dev group, from the locked workspace.
+      - name: Install the workspace
+        run: uv sync --locked --all-packages
 
-      # Run Python tests
       - name: Run Python tests
-        run: |
-          uv run pytest
+        run: uv run --no-sync pytest
