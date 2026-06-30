@@ -22,9 +22,11 @@ goes through the prior-art header (Mechanism 1) and the `ExitPlanMode` plan
 
 ## What this project is
 
-Citry is a universal, cross-language HTML templating engine (Vue/React-like
-component syntax). The core logic lives in **Rust crates** under
-[`crates/`](crates/) and is exposed to host languages through thin bindings.
+Citry is a fast, simple, and smart frontend framework for Python that brings
+the best of Vue, React, Django, and Jinja: an HTML component engine with
+Vue/React-like `<c-*>` tag syntax. The core logic lives in **Rust crates**
+under [`crates/`](crates/) and is exposed to host languages through thin
+bindings.
 **Python is live** (via PyO3/maturin, shipped as the `citry_core` package);
 JS, PHP, and Go are planned. Rust is the single source of truth: a behavior
 is defined once in a crate and surfaced to every language.

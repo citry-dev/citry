@@ -1,4 +1,4 @@
-# citry - Framework-agnostic component engine for HTML templating
+# citry - Fast, simple, and smart frontend framework for Python
 #
 # This package provides the rendering runtime for Citry templates:
 # component lifecycle, slots, rendering pipeline, and the node classes

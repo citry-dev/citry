@@ -1,7 +1,9 @@
-# Citry - Refreshingly elegant UI
+# Citry - Refreshingly simple UI
 
-Citry is a **smart**, **fast**, and **elegant** **frontend framework** for Python that brings the best of **Vue**, **React**,
+Citry is a **fast**, **simple**, and **smart** **frontend framework** for Python that brings the best of **Vue**, **React**,
 **Django**, and **Jinja**.
+
+Compatible with FastAPI, Django, and [other web servers](#use-with-web-framework).
 
 ```python
 from citry import Component
@@ -140,6 +142,14 @@ Any tag starting with `c-` is a component or a built-in tag.
 
 `<c-Card>` -> `Card` component.
 
+```html
+<!-- Static HTML -->
+<div class="container">
+  <!-- A component -->
+  <c-card title="Hello"></c-card>
+</div>
+```
+
 ### 2. `c-*` attributes are dynamic
 
 Any attribute starting with `c-` is evaluated as an expression.
@@ -150,12 +160,10 @@ The `c-` prefix is stripped from the output:
 ```html
 <!-- Static HTML attribute -->
 <div class="container">
-  <!-- Dynamic attribute (evaluated as an expression) -->
-  <div c-class="dynamic_classes">
-    <!-- A component -->
-    <c-MyComponent title="Hello"></c-MyComponent>
-  </div>
-</div>
+<!-- Dynamic attribute (evaluated as an expression) -->
+<div c-title="data.title">
+<!-- Component with dynamic attribute -->
+<c-card c-title="data.title">
 ```
 
 If you know HTML, you already know most of Citry.
@@ -211,20 +219,38 @@ attribute bare, `False` or `None` omits it:
 
 ### Control flow
 
-As tags or as attributes on a regular element:
+Write if branches and for loops directly in templates.
+
+Long form:
 
 ```html
-<ul>
-  <li c-for="item in items">{{ item.name }}</li>
-  <li c-empty>No items found</li>
-</ul>
-
 <c-if cond="is_admin">
   <p>Admin</p>
 </c-if>
 <c-else>
   <p>Guest</p>
 </c-else>
+
+<ul>
+  <c-for each="item in items">
+    <li>{{ item.name }}</li>
+  </c-for>
+  <c-empty>
+    <li>No items found</li>
+  </c-empty>
+</ul>
+```
+
+Short form:
+
+```html
+<p c-if="is_admin">Admin</p>
+<p c-else>Guest</p>
+
+<ul>
+  <li c-for="item in items">{{ item.name }}</li>
+  <li c-empty>No items found</li>
+</ul>
 ```
 
 ### Slots
@@ -328,6 +354,14 @@ class Chart(Component):
 Set a value with `<c-provide>` and read it anywhere below with `inject()`, so you do not thread props through every layer:
 
 ```python
+class Page(Component):
+    # <c-Greeting /> renders <p>Dark mode</p>
+    template = """
+      <c-provide key="theme" label="Dark mode">
+        <c-Greeting />
+      </c-provide>
+    """
+
 class Greeting(Component):
     template = """
       <p>{{ label }}</p>
@@ -336,19 +370,11 @@ class Greeting(Component):
     def template_data(self, kwargs, slots):
         # Read a value an ancestor provided, with no prop drilling.
         return {"label": self.inject("theme").label}
-
-class Page(Component):
-    # <c-Greeting /> renders <p>Dark mode</p>
-    template = """
-      <c-provide key="theme" label="Dark mode">
-        <c-Greeting />
-      </c-provide>
-    """
 ```
 
 ### Handle render errors with grace
 
-500s due to an error in the template is poor UX. Instead of breaking the whole page, wrap section in `<c-error-fallback>` to
+500s due to an error in the template is poor UX. Instead of breaking the whole page, wrap a section in `<c-error-fallback>` to
 render a fallback when error occurs. Boundaries nest, and the nearest one wins:
 
 ```python
@@ -373,19 +399,19 @@ A wrong prop or slot name then fails when the template *compiles*:
 from citry import Component, SlotInput
 
 class Card(Component):
-    template = """
-      <div>
-        {{ title }}
-        <c-slot name="header" />
-      </div>
-    """
-
     class Kwargs:
         title: str          # required
         size: int = 10      # optional
 
     class Slots:
         header: SlotInput
+
+    template = """
+      <div>
+        {{ title }}
+        <c-slot name="header" />
+      </div>
+    """
 ```
 
 ```html
@@ -400,8 +426,7 @@ class Card(Component):
 
 Fragments are rendered components that can be inserted into a page.
 
-Fragments are smart - browser downloads their JS and CSS assets only once,
-even with many copies of the fragment on the page. 
+In browser, Citry smartly loads the fragments' JS/CSS scripts for you.
 
 Render a component specifically as a fragment with `.serialize()`:
 

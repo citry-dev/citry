@@ -9,9 +9,10 @@ the constraints.
 
 ## The shape of this project
 
-Citry is a Rust-first templating engine with thin per-language bindings. The
-central artifact, the template parser and compiler, is a **contract that spans
-five host languages plus the Python bindings**. The grammar feeds the AST, the
+Citry is a fast, simple, and smart frontend framework for Python, built
+Rust-first with thin per-language bindings. The central artifact, the template
+parser and compiler, is a **contract that spans five host languages plus the
+Python bindings**. The grammar feeds the AST, the
 AST feeds the compiler, the compiler output feeds runtime node classes in each
 host language, and the AST types are also exposed directly to Python and
 mirrored in a hand-written stub. A change at any layer can ripple through all

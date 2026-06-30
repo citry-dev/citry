@@ -78,7 +78,7 @@ def build_cli(citry: Citry) -> type[ExtensionCommand]:
     )
     return grouping_command(
         "citry",
-        "The citry command-line interface.",
+        "Fast, simple, and smart frontend framework for Python.",
         (ListCommand, CreateCommand, WatchCommand, ext),
         arguments=(CommandArg("--version", action="version", version=f"citry {_citry_version()}"),),
     )
