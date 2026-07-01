@@ -74,7 +74,7 @@ jobs:
           manylinux: auto
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-linux-${{ matrix.platform.target }}
           path: ${{ env.PROJECT_DIR }}/dist
@@ -109,7 +109,7 @@ jobs:
           manylinux: musllinux_1_2
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-musllinux-${{ matrix.platform.target }}
           path: ${{ env.PROJECT_DIR }}/dist
@@ -166,7 +166,7 @@ jobs:
           sccache: "true"
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-windows-${{ matrix.platform.target }}
           path: ${{ env.PROJECT_DIR }}/dist
@@ -218,7 +218,7 @@ jobs:
           sccache: "true"
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Upload wheels
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-macos-${{ matrix.platform.target }}
           path: ${{ env.PROJECT_DIR }}/dist
@@ -237,7 +237,7 @@ jobs:
           args: --out dist
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Upload sdist
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: wheels-sdist
           path: ${{ env.PROJECT_DIR }}/dist
@@ -259,7 +259,7 @@ jobs:
       contents: write
     steps:
       # Collect every wheel and the sdist into a single dist/ directory.
-      - uses: actions/download-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
