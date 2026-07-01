@@ -7,6 +7,7 @@ import sys
 from dataclasses import MISSING, fields, is_dataclass
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, NamedTuple
+from urllib import parse
 
 from typing_extensions import TypeIs
 
@@ -165,3 +166,44 @@ def snake_to_pascal(name: str) -> str:
     its ``name``.
     """
     return "".join(part[:1].upper() + part[1:] for part in name.split("_"))
+
+
+# Kept internal (not in citry's public __all__): generic URL plumbing, not citry-specific.
+# Promote beside URLRoute/RouteResponse (util/routing.py) if a consumer like Component.Events needs it.
+def format_url(url: str, query: dict[str, Any] | None = None, fragment: str | None = None) -> str:
+    """
+    Add query parameters and a fragment to a URL, returning the updated URL.
+
+    ``query`` and ``fragment`` are optional and leave the URL untouched when
+    ``None``. Any query parameters already on ``url`` are kept, with ``query``
+    merged on top. A query value of ``True`` becomes a flag parameter with no
+    value; ``False`` and ``None`` values are dropped.
+
+    ```py
+    format_url("https://example.com", query={"foo": "bar"}, fragment="baz")
+    # "https://example.com?foo=bar#baz"
+
+    format_url(
+        "https://example.com",
+        query={"foo": "bar", "baz": None, "enabled": True, "debug": False},
+    )
+    # "https://example.com?foo=bar&enabled"
+    ```
+    """
+    parts = parse.urlsplit(url)
+    fragment_enc = parse.quote(fragment or parts.fragment, safe="")
+    base_query = dict(parse.parse_qsl(parts.query))
+    # Drop None and False before merging; keep everything already on the URL.
+    supplied = {key: value for key, value in (query or {}).items() if value is not None and value is not False}
+    merged = {**base_query, **supplied}
+
+    query_parts = []
+    for key, value in merged.items():
+        if value is True:
+            # A True value is a flag parameter: emit the key alone, no "=value".
+            query_parts.append(parse.quote_plus(str(key)))
+        else:
+            query_parts.append(f"{parse.quote_plus(str(key))}={parse.quote_plus(str(value))}")
+    encoded_query = "&".join(query_parts)
+
+    return parse.urlunsplit(parts._replace(query=encoded_query, fragment=fragment_enc))

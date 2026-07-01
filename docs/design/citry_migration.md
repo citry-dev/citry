@@ -96,8 +96,8 @@ designed. Grouped by which part of the architecture they impact.
 |---|---|---|
 | [#1650](https://github.com/django-components/django-components/issues/1650) | `Component()` returns a `CitryElement`, not a string | Three-phase pipeline: `Component()` composes a `CitryElement`; `.render()` produces a `CitryRender` (rendered parts + collected metadata); `.serialize()` produces the HTML string. The render output is a struct so JS/CSS deps travel as data, not as marker strings. Cache stores objects. Full design in [`rendering.md`](rendering.md). |
 | [#1083](https://github.com/django-components/django-components/issues/1083) | `Const()` marker for 50% perf gain | Nodes detect constant inputs and replace themselves with static text. Rendering context must track constness. |
-| [#1473](https://github.com/django-components/django-components/issues/1473) | Expression caching | Variable tracking (already in AST) enables memoizing expression results across renders when inputs are unchanged. |
-| [#1337](https://github.com/django-components/django-components/issues/1337) | Lazy/streaming rendering | Rendering may be deferred; components produce futures or generators instead of synchronous strings. |
+| [#1473](https://github.com/django-components/django-components/issues/1473) | Expression caching | Variable tracking (already in AST) enables memoizing expression results across renders when inputs are unchanged. Tracked in citry [#18](https://github.com/citry-dev/citry/issues/18). |
+| [#1337](https://github.com/django-components/django-components/issues/1337) | Lazy/streaming rendering | Rendering may be deferred; components produce futures or generators instead of synchronous strings. Tracked in citry [#19](https://github.com/citry-dev/citry/issues/19). |
 | [#1326](https://github.com/django-components/django-components/issues/1326) | Avoid double-parsing component body | Template parsing should be cached at the class level, not re-parsed per render. |
 
 The render-output model (the three-phase `CitryElement` -> `CitryRender` ->
@@ -107,7 +107,8 @@ flow that drives the struct shape) is captured separately in
 `CitryRender`, rendering is deferred (depth-unbounded, stack-driven), and
 `serialize()` stamps the per-component `data-cid-<id>` markers. Placing
 collected JS/CSS dependencies into `<head>`/`<body>` at serialize time is
-designed in [`dependencies.md`](dependencies.md), not yet built.
+built (the five dependency-rendering phases in
+[`dependencies.md`](dependencies.md); see the implementation log below).
 
 The `Const()` (#1083), expression-caching (#1473), and render-body-caching
 design (and its many edge cases) is captured separately in
@@ -116,7 +117,8 @@ design (and its many edge cases) is captured separately in
 body cache keyed by const signature) and the *precompute pass* are built: precomputing
 pre-computes const expressions and attributes, drops untaken `<c-if>`
 branches, and unrolls small const `<c-for>` loops. Phase-2 taint tracking is
-parked.
+parked (citry [#20](https://github.com/citry-dev/citry/issues/20)), as is
+across-render expression caching (citry [#18](https://github.com/citry-dev/citry/issues/18)).
 
 ### Component class
 
@@ -124,7 +126,7 @@ parked.
 |---|---|---|
 | [#1195](https://github.com/django-components/django-components/issues/1195) | Phase out registered names, use class names directly | `Component()` takes a class, not a string name. Registry becomes optional. |
 | [#1413](https://github.com/django-components/django-components/issues/1413) | Global `Components` instance for all state | A `Components()` instance scopes settings, registries, caches. Avoids module-level globals. Easier test isolation. |
-| [#1240](https://github.com/django-components/django-components/issues/1240) | Template-only / class-less components | Components can be defined from a template file alone (no Python class). The `CitryTemplate` struct ([`asset_loading.md`](asset_loading.md) section 4) is the synthesis seat: a template-only component starts from a `CitryTemplate` with no user class. |
+| [#1240](https://github.com/django-components/django-components/issues/1240) | Template-only / class-less components | Components can be defined from a template file alone (no Python class). The `CitryTemplate` struct ([`asset_loading.md`](asset_loading.md) section 4) is the synthesis seat: a template-only component starts from a `CitryTemplate` with no user class. Tracked in citry [#17](https://github.com/citry-dev/citry/issues/17). |
 | [#1144](https://github.com/django-components/django-components/issues/1144) | `Component.Media` becomes an extension | Realized from the start: secondary assets are the `Dependencies` class, owned by the built-in `dependencies` extension ([`asset_loading.md`](asset_loading.md) section 7). |
 | [#1259](https://github.com/django-components/django-components/issues/1259) | Deprecate slot context input and outer_context | Simplifies slot resolution API. |
 
@@ -145,6 +147,7 @@ parked.
 | [#897](https://github.com/django-components/django-components/issues/897) | Partials support | Related to fragments. |
 | [#1471](https://github.com/django-components/django-components/issues/1471) | Language server / linter | Variable tracking in AST already supports this. |
 | [#1118](https://github.com/django-components/django-components/issues/1118) | MCP for component metadata | CLI/tooling integration. |
+| (no issue yet) | Component URLs + `Component.Events` | Components served over HTTP (djc's `Component.View` / `get_component_url`), redesigned: handlers named by the *event* they handle (`Events.submit()`, `Events.delete()`, ...) instead of by HTTP method. DJC's `View` forced every action onto an HTTP-method name, which broke down when one component backed several mutations (one had to go under `post()`, another under `patch()`). Each handler declares what it accepts (query args, request body, file upload, eventually websocket events). Builds on `Extension.urls`, the fragment strategy, and the mount contract from [`dependencies.md`](dependencies.md) section 9.5. Needs its own design doc. |
 | [#473](https://github.com/django-components/django-components/issues/473) | Define public API | citry gets a clean public API from scratch. |
 
 ---
@@ -390,7 +393,7 @@ Status legend:
 | `Slot` class (lazy, repeatable callable + metadata) | ✅ Done | |
 | `SlotContext` / `SlotFunc` / `SlotResult` / `SlotInput` | ✅ Done | |
 | `normalize_slot_fills` | ✅ Done | Copies incomplete Slots instead of mutating |
-| `Slot.contents` / `Slot.nodelist` / `Slot.fill_node` metadata | ❓ Ambiguous | citry keeps `component_name`/`slot_name`/`extra`. djc exposes the raw contents and originating nodes for extensions; decide what the citry equivalents are (body items? `FillNode` ref?) before extensions need them |
+| `Slot.contents` / `Slot.nodelist` / `Slot.fill_node` metadata | ✅ Done / ❌ Drop | `Slot.contents` (the raw fill body) and `Slot.source_position` (where the fill was written) exist alongside `component_name`/`slot_name`/`extra`. An originating-node / owning-component back-reference (djc's `nodelist` / `fill_node`) is not carried: no consumer needs it, and it can be added if an extension ever does. |
 | `SlotFallback` wrapper | ✅ Done (diverged) | The fallback handle is itself a `Slot` |
 | `SlotIsFilled` + `{{ component_vars.is_filled }}` | ♻️ Superseded | Slots are explicit inputs; check via `slots.get(...)` in `template_data` |
 | `SlotNode`: name resolution, `required`, slot data kwargs | ✅ Done | Data resolves per render of the site (loops pass per-iteration data) |
@@ -853,7 +856,7 @@ Ported function by function, on demand. Current state:
 | `is_glob` | ✅ Done | |
 | `snake_to_pascal` | ✅ Done | |
 | `get_import_path` | ✅ Done | `citry/util/misc.py`; feeds `Component.class_id` |
-| `format_url` | 🚧 To migrate | Used by `get_script_url`; goes with the dependency extension |
+| `format_url` | ✅ Done | `citry/util/misc.py`: adds query params (True is a flag, False/None dropped) and a fragment to a URL, merging with any existing query. Framework-neutral stdlib helper; a future component-URL builder is its first caller |
 | `is_generator` | ✅ Done | `citry/util/misc.py`; returns `TypeIs` so type checkers narrow both branches |
 | `hash_comp_cls` | ✅ Done | As the `Component.class_id` metaclass property ([`dependencies.md`](dependencies.md) section 4.1) |
 | `format_as_ascii_table` | ✅ Done | Ported into `citry/command.py` for the CLI's `list` / `ext list` tables (no trailing whitespace) |
@@ -920,7 +923,7 @@ Ported function by function, on demand. Current state:
 
 ### `util/css.py` (51 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -942,12 +945,12 @@ Ported function by function, on demand. Current state:
 
 ### `util/types.py` (28 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
 |---|---|---|
-| `Empty` (explicit "this component takes no inputs" type) | 🚧 To migrate | Trivial, but decide the shape first: djc's is a NamedTuple, citry's typed inputs are dataclasses, and `Empty` should also produce an empty parse-time rule set ("no attributes allowed") rather than "undeclared" |
+| `Empty` (explicit "this component takes no inputs" type) | ❌ Drop | A component that takes no inputs declares an empty `class Kwargs: pass` (or omits the schema). The empty dataclass already yields an empty parse-time rule set ("no attributes allowed"), so a dedicated type earns nothing. |
 
 </details>
 
@@ -1168,6 +1171,10 @@ each node produces.
 
 Replace django-components' internal component logic with citry imports.
 Django-components becomes a thin wrapper.
+
+**Deferred.** Keeping django-components as a separate legacy project and
+pointing its users at citry is simpler than re-absorbing all the Django
+integration intricacies. Not planned for now.
 
 ---
 
