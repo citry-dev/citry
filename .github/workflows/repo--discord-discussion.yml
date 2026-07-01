@@ -1,0 +1,46 @@
+# Posts newly-created discussions to a Discord channel. No-op until the
+# DISCORD_WEBHOOK_DEVELOPMENT repository secret is set.
+name: Notify Discord on new discussions
+
+on:
+  discussion:
+    types: [created]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_DEVELOPMENT }}
+    steps:
+      - name: Post to Discord (development channel)
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          TITLE: ${{ github.event.discussion.title }}
+          URL: ${{ github.event.discussion.html_url }}
+          USER: ${{ github.event.discussion.user.login }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.discussion.number }}
+          TS: ${{ github.event.discussion.created_at }}
+        run: |
+          payload=$(jq -n \
+            --arg title "$TITLE" \
+            --arg url "$URL" \
+            --arg user "$USER" \
+            --arg repo "$REPO" \
+            --arg number "#$NUMBER" \
+            --arg timestamp "$TS" \
+            '{
+              "username": "GitHub Discussions",
+              "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              "embeds": [
+                {
+                  "title": ("New discussion: " + $number + " " + $title),
+                  "url": $url,
+                  "color": 16776960,
+                  "author": {"name": $user},
+                  "footer": {"text": $repo},
+                  "timestamp": $timestamp
+                }
+              ]
+            }')
+          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK_URL" | cat

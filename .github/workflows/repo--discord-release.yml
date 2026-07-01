@@ -1,0 +1,55 @@
+# Announces published GitHub Releases to a Discord channel. Fires for both
+# citry@* and citry-core@* releases (each publish workflow creates a Release).
+# No-op until the DISCORD_WEBHOOK_ANNOUNCEMENTS repository secret is set.
+name: Notify Discord on Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_ANNOUNCEMENTS }}
+    steps:
+      - name: Post to Discord (announcements channel)
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          NAME: ${{ github.event.release.name || github.event.release.tag_name }}
+          URL: ${{ github.event.release.html_url }}
+          BODY: ${{ github.event.release.body }}
+          USER: ${{ github.event.release.author.login }}
+          REPO: ${{ github.repository }}
+          TS: ${{ github.event.release.published_at }}
+        run: |
+          # Discord embed descriptions cap at 4096 chars; truncate the release
+          # notes so the webhook does not reject the payload.
+          TRUNC_SUFFIX=$'\n\n_... see the release for the full notes._'
+          MAX_BODY=4000
+          if [ ${#BODY} -gt "$MAX_BODY" ]; then
+            BODY="${BODY:0:$MAX_BODY}${TRUNC_SUFFIX}"
+          fi
+          payload=$(jq -n \
+            --arg name "$NAME" \
+            --arg url "$URL" \
+            --arg body "$BODY" \
+            --arg user "$USER" \
+            --arg repo "$REPO" \
+            --arg timestamp "$TS" \
+            '{
+              "username": "GitHub Releases",
+              "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              "embeds": [
+                {
+                  "title": ("🚀 New release: " + $name),
+                  "url": $url,
+                  "description": $body,
+                  "color": 2664261,
+                  "author": {"name": $user},
+                  "footer": {"text": $repo},
+                  "timestamp": $timestamp
+                }
+              ]
+            }')
+          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK_URL" | cat

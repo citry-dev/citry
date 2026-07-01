@@ -1,0 +1,47 @@
+# Posts newly-opened issues to a Discord channel. No-op until the
+# DISCORD_WEBHOOK_DEVELOPMENT repository secret (a Discord channel webhook URL)
+# is set, so the repo does not accumulate failed runs before Discord is wired up.
+name: Notify Discord on new issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_DEVELOPMENT }}
+    steps:
+      - name: Post to Discord (development channel)
+        if: ${{ env.DISCORD_WEBHOOK_URL != '' }}
+        env:
+          TITLE: ${{ github.event.issue.title }}
+          URL: ${{ github.event.issue.html_url }}
+          USER: ${{ github.event.issue.user.login }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          TS: ${{ github.event.issue.created_at }}
+        run: |
+          payload=$(jq -n \
+            --arg title "$TITLE" \
+            --arg url "$URL" \
+            --arg user "$USER" \
+            --arg repo "$REPO" \
+            --arg number "#$NUMBER" \
+            --arg timestamp "$TS" \
+            '{
+              "username": "GitHub Issues",
+              "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              "embeds": [
+                {
+                  "title": ("New issue: " + $number + " " + $title),
+                  "url": $url,
+                  "color": 3447003,
+                  "author": {"name": $user},
+                  "footer": {"text": $repo},
+                  "timestamp": $timestamp
+                }
+              ]
+            }')
+          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK_URL" | cat
