@@ -58,6 +58,13 @@ dev = [
     "fastapi>=0.110",  # test-only: FastAPI contrib tests (Starlette TestClient)
     "httpx>=0.27",     # TestClient needs httpx
 ]
+# Browser end-to-end tests (tests/e2e). A separate group, NOT installed by
+# default, so the normal test run skips them (they need browser binaries from
+# `playwright install`). The e2e CI jobs install this group and the browsers.
+e2e = [
+    "playwright>=1.49",
+    "pytest-playwright>=0.5",
+]
 # Benchmark baselines (docs/design/benchmarking.md), pinned exactly so a bump is
 # a deliberate re-baseline; skipped when absent (tests/conftest.py).
 # django 6.0 requires Python >= 3.12, so the Django comparison baselines only

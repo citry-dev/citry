@@ -9,7 +9,7 @@ from pathlib import Path
 try:
     import tomllib
 except ImportError:  # Python < 3.11
-    import tomli as tomllib  # type: ignore[import-untyped]
+    import tomli as tomllib  # type: ignore[import-untyped, no-redef]
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 

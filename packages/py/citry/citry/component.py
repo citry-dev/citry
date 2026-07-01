@@ -184,6 +184,7 @@ class ComponentMeta(type):
 
         return cls
 
+    # mypy ignores a metaclass __call__ return type, so it mistypes `MyComp()` as the class (pyright is correct).
     def __call__(cls, /, **kwargs: Any) -> CitryElement:
         """
         Intercept ``MyComp(title="Hi")`` to return a CitryElement.

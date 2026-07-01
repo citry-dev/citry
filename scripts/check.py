@@ -45,7 +45,7 @@ def _phases() -> list[tuple[str, list[str]]]:
         ("cargo test", ["cargo", "test", *crates]),
         ("ruff check", [*uvr, "ruff", "check", "."]),
         ("ruff format", [*uvr, "ruff", "format", "--check", "."]),
-        ("mypy", [*uvr, "mypy", "packages/py/citry/citry", "packages/py/citry_core/citry_core"]),
+        ("mypy", [*uvr, "mypy", "packages/py/citry/citry", "packages/py/citry_core/citry_core", "scripts"]),
         ("pytest", [*uvr, "pytest"]),
         ("validators", [sys.executable, "scripts/validate.py"]),
     ]

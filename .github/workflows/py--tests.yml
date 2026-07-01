@@ -75,3 +75,43 @@ jobs:
 
       - name: Run Python tests
         run: uv run --no-sync pytest
+
+  # Browser end-to-end tests (packages/py/citry/tests/e2e), chromium only for
+  # PR-time speed; the weekly py--tests-cross-browser workflow runs the same
+  # suite on all three browsers. The `test` job above does not sync `e2e`, so
+  # those tests skip there (they importorskip pytest-playwright); this job
+  # installs the group and the browser and runs them.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install the workspace with the e2e group
+        run: uv sync --locked --all-packages --group e2e
+
+      - name: Install the chromium browser
+        run: uv run --no-sync playwright install --with-deps chromium
+
+      - name: Run the browser e2e tests
+        run: uv run --no-sync pytest packages/py/citry/tests/e2e --browser chromium

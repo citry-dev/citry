@@ -1,0 +1,55 @@
+# Weekly cross-browser run of the e2e suite on all three engines. PR-time e2e
+# (the `e2e` job in py--tests.yml) runs chromium only for speed; this catches
+# firefox/webkit-specific regressions on a schedule. A failed scheduled run
+# notifies the maintainer via GitHub's default e-mail on workflow failure.
+name: Cross-browser e2e
+
+on:
+  schedule:
+    - cron: "0 5 * * 1" # Mondays, 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      # Run every browser even if one fails, so a webkit-only break still shows
+      # the chromium/firefox results.
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install the workspace with the e2e group
+        run: uv sync --locked --all-packages --group e2e
+
+      - name: Install the ${{ matrix.browser }} browser
+        run: uv run --no-sync playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run the browser e2e tests on ${{ matrix.browser }}
+        run: uv run --no-sync pytest packages/py/citry/tests/e2e --browser ${{ matrix.browser }}
