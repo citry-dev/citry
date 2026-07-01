@@ -1,0 +1,4 @@
+# Code owners are requested for review automatically when a pull request
+# touches files they own. Citry is solo-maintained today, so one owner covers
+# everything; add path-specific owners here as the team grows.
+* @JuroOravec

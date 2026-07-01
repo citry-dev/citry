@@ -1,5 +1,11 @@
 # Citry - Refreshingly simple UI
 
+[![PyPI - Version](https://img.shields.io/pypi/v/citry)](https://pypi.org/project/citry/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/citry)](https://pypi.org/project/citry/)
+[![License](https://img.shields.io/pypi/l/citry)](./LICENSE)
+[![CI](https://github.com/citry-dev/citry/actions/workflows/repo--check.yml/badge.svg)](https://github.com/citry-dev/citry/actions/workflows/repo--check.yml)
+[![Docs](https://img.shields.io/badge/docs-citry.dev-8a2be2)](https://citry.dev)
+
 Citry is a **fast**, **simple**, and **smart** **frontend framework** for Python that brings the best of **Vue**, **React**,
 **Django**, and **Jinja**.
 

@@ -1,0 +1,10 @@
+# Keep the escape hatch open (a blank issue is allowed) while still offering
+# the structured templates above.
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://citry.dev
+    about: The citry docs, guides, and template-syntax reference.
+  - name: Question or idea (Discussions)
+    url: https://github.com/citry-dev/citry/discussions
+    about: Ask a question or float an idea before opening an issue.
