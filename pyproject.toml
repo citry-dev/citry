@@ -232,3 +232,24 @@ disallow_untyped_defs = true
 # (third_party/) and the docs-site tests, which fail to import here. The
 # docs-site has its own tests, run separately with its `--extra docs` deps.
 testpaths = ["packages/py/citry_core/tests", "packages/py/citry/tests"]
+
+[tool.coverage.run]
+# NOTE: The Rust half of citry_core is covered separately by `cargo test`;
+#       only its Python wrapper is seen here.
+source = ["citry", "citry_core"]
+branch = true
+omit = [
+    "*/tests/*", # the test files themselves are not the measured code
+    "*/_rust*",  # the compiled Rust extension and its hand-written type stub
+]
+
+[tool.coverage.report]
+fail_under = 92 # baseline measured 2026-07-02
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
+    "\\.\\.\\.",
+]
