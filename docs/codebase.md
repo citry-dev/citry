@@ -506,6 +506,67 @@ The existing Dependabot entry for `package-ecosystem: "cargo"` at the root direc
     interval: "weekly"
 ```
 
+**Why `pip` and not the `uv` ecosystem, and how `uv.lock` stays in sync.** The
+entries use `package-ecosystem: "pip"` on purpose. Dependabot's newer `uv`
+ecosystem would update `uv.lock` for you, but its uv-workspace support is still
+immature, and the root `pyproject.toml` uses `[tool.uv.sources]` with
+`{ workspace = true }`, which trips a known Dependabot uv parse bug. `pip` bumps
+each package's `pyproject.toml` correctly but does not touch `uv.lock`, so the
+`Check` gate would otherwise fail at `uv sync --locked`. The
+[`repo--dependabot-relock.yml`](../.github/workflows/repo--dependabot-relock.yml)
+workflow closes that gap: on a Dependabot PR it runs `uv lock` and commits the
+refreshed `uv.lock` back to the PR branch. If no token is configured it instead
+comments on the PR with the manual `uv lock` command and fails, so a missing or
+expired token never silently blocks a PR.
+
+**Setting up the relock token.** The push has to use a token that is *not* the
+default `GITHUB_TOKEN` (a `GITHUB_TOKEN` push does not re-trigger the `Check`
+gate, so it would stay red). Store it as a **Dependabot secret** (repo `Settings`
+-> `Secrets and variables` -> `Dependabot`, *not* the Actions tab), because a
+Dependabot-triggered run can only read Dependabot secrets. Two options:
+
+- **Org GitHub App (recommended, not tied to one person).** An org-owned App is
+  free on any plan and does not depend on one person's account. The mental model
+  to hold: **ownership and installation are two separate things, and you need
+  both.** *Owning* the App lets the org control it (its settings and key) but
+  grants access to no repositories; *installing* it is what gives it repo access
+  and creates the installation the workflow mints a token from. Set it up once:
+
+  1. **Register it under the org** at
+     `https://github.com/organizations/citry-dev/settings/apps/new`
+     (`Organization citry-dev` -> `Settings` -> `Developer settings` ->
+     `GitHub Apps` -> `New GitHub App`; you must be an org owner). Already made it
+     under your *personal* account? Do not recreate it, transfer it: your account
+     `Settings` -> `Developer settings` -> `GitHub Apps` -> the App ->
+     `Advanced` -> `Transfer ownership` -> `citry-dev`.
+  2. **Give it write access to code.** In the App's permissions set
+     `Repository permissions` -> `Contents: Read and write`; that is what lets it
+     push the `uv.lock` commit.
+  3. **Install it on the repo** (owning it is not enough, and this is the step
+     people miss). App page -> `Install App` -> install on `citry-dev` ->
+     `Only select repositories` -> `citry` (or all). If a personal App showed no
+     org to install on, that was its `Where can this GitHub App be installed?`
+     setting defaulting to "Only on this account".
+  4. **Approve any pending permission change.** If you set or changed
+     `Contents: Read and write` *after* installing, GitHub holds it as a request
+     an org owner must approve, or the token will not actually have write access.
+  5. **Store the credentials as Dependabot secrets.** Copy the numeric `App ID`
+     and `Generate a private key` (downloads a `.pem`); add them as the Dependabot
+     secrets `RELOCK_APP_ID` and `RELOCK_APP_PRIVATE_KEY`. The workflow mints a
+     short-lived installation token from these on each run
+     (`actions/create-github-app-token`), so no long-lived token is stored.
+- **Fine-grained PAT (simpler, but personal and expiring).** Create it on *your
+  own* account at `Settings` -> `Developer settings` -> `Personal access tokens`
+  -> `Fine-grained tokens`, with `Resource owner: citry-dev`, `Repository: citry`,
+  and `Repository permissions` -> `Contents: Read and write`. The org must allow
+  fine-grained PATs (`Organization citry-dev` -> `Settings` -> `Personal access
+  tokens`). Add it as the Dependabot secret `RELOCK_TOKEN`. Prefer the App for
+  anything long-lived, since a PAT stops working when its owner leaves or it
+  expires.
+
+If neither is set, the workflow still runs: it posts a PR comment with the exact
+`uv lock` command and fails, so the fix is one copy-paste away.
+
 ### Working with Multiple Python Versions
 
 UV can manage multiple Python versions automatically:
@@ -756,9 +817,14 @@ Tags follow the format: `<package-name>@<version>`. A tag with no language prefi
 Currently, releases are managed manually:
 
 1. **Update version** in the package's `pyproject.toml` (or equivalent for other languages)
-2. **Update CHANGELOG.md** with release notes
-3. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use `citry@0.2.0` for the citry package)
-4. **Push the tag**: `git push origin citry-core@1.3.0`
+2. **Re-lock**: run `uv lock` so `uv.lock` picks up the new version, and commit
+   `uv.lock` alongside `pyproject.toml`. The lockfile pins every workspace
+   package's version, so a bumped `pyproject.toml` without a matching `uv.lock`
+   makes CI fail its `uv sync --locked --all-packages` step (in `repo--check` and
+   the test workflows), not only at publish time.
+3. **Update CHANGELOG.md** with release notes
+4. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use `citry@0.2.0` for the citry package)
+5. **Push the tag**: `git push origin citry-core@1.3.0`
 
 Pushing the tag triggers the package's publish workflow, which verifies the tag matches the pyproject version, builds the distributions, smoke-tests them, and uploads to PyPI. **Release ordering**: citry depends on `citry-core`, so when bumping both, publish `citry-core` first and let it reach PyPI before tagging `citry`.
 
