@@ -271,6 +271,9 @@ docs = [
     { name = "starlette" },
     { name = "uvicorn" },
 ]
+social-cards = [
+    { name = "playwright" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -286,13 +289,14 @@ requires-dist = [
     { name = "minify-html", marker = "extra == 'docs'" },
     { name = "packaging", marker = "extra == 'docs'" },
     { name = "pagefind", extras = ["bin"], marker = "extra == 'docs'" },
+    { name = "playwright", marker = "extra == 'social-cards'" },
     { name = "pygments", marker = "extra == 'docs'", specifier = "<2.21" },
     { name = "pymdown-extensions", marker = "extra == 'docs'" },
     { name = "pyyaml", marker = "extra == 'docs'" },
     { name = "starlette", marker = "extra == 'docs'" },
     { name = "uvicorn", marker = "extra == 'docs'" },
 ]
-provides-extras = ["docs"]
+provides-extras = ["docs", "social-cards"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -430,9 +434,9 @@ name = "django"
 version = "6.0.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "asgiref" },
-    { name = "sqlparse" },
-    { name = "tzdata", marker = "sys_platform == 'win32'" },
+    { name = "asgiref", marker = "python_full_version >= '3.12'" },
+    { name = "sqlparse", marker = "python_full_version >= '3.12'" },
+    { name = "tzdata", marker = "python_full_version >= '3.12' and sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/78/29/ac41e16097af67066d97a7d5775c5d8e7efc5d0284f6b0a159e07b9adb92/django-6.0.6.tar.gz", hash = "sha256:ad03916ba59523d781ae5c3f631960c23d69a9d9c43cecda52fc23b47e953713", size = 10905525, upload-time = "2026-06-03T13:02:46.503Z" }
 wheels = [
@@ -444,9 +448,9 @@ name = "django-components"
 version = "0.151.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "django" },
-    { name = "djc-core" },
-    { name = "typing-extensions" },
+    { name = "django", marker = "python_full_version >= '3.12'" },
+    { name = "djc-core", marker = "python_full_version >= '3.12'" },
+    { name = "typing-extensions", marker = "python_full_version >= '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9f/09/7845ded37f5964ff84c3f4535c5e5b6547bc6a6e3e5d5cb14515236d9040/django_components-0.151.1.tar.gz", hash = "sha256:1546483f8224a3888d192f2712334217c48c5cab9526eabdc8e6543bc8b77aea", size = 230384, upload-time = "2026-06-25T10:38:49.445Z" }
 wheels = [
@@ -556,7 +560,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions" },
+    { name = "typing-extensions", marker = "python_full_version < '3.12'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [

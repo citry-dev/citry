@@ -1,0 +1,114 @@
+# Publish the documentation site to GitHub Pages (the upload-pages-artifact +
+# deploy-pages model, not a gh-pages branch push). The build job assembles the
+# multi-version site (current version at the root, committed snapshots under /v/)
+# and renders per-page social cards with a headless browser; the deploy job
+# publishes it. Runs on pushes to main and on demand.
+#
+# Operational setup (one-time, in repo Settings -> Pages): set the build source
+# to "GitHub Actions". For the citry.dev custom domain, also set the custom
+# domain there; the DOCS_SITE_URL below must match it. To deploy to project Pages
+# at https://<owner>.github.io/citry/ instead, set DOCS_SITE_URL to that URL and
+# DOCS_BASE_PATH to "/citry".
+name: Deploy docs to Pages
+
+on:
+  push:
+    branches:
+      - "main"
+    paths:
+      - "docs_site/**"
+      - "packages/py/**"
+      - "crates/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/repo--docs-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One Pages deploy at a time; do not cancel an in-progress deploy (a half-applied
+# publish is worse than waiting).
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+env:
+  # The public URL the built site targets (canonical, Open Graph, sitemap). Keep
+  # in step with the Pages custom domain in repo settings.
+  DOCS_SITE_URL: "https://citry.dev/"
+  # Subpath prefix for a project-Pages deploy (e.g. "/citry"); empty for a
+  # custom-domain / root deploy.
+  DOCS_BASE_PATH: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Initialize the vendored Ruff submodule (a build/runtime dependency)
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # Rust is needed because `uv sync` builds the citry_core extension through
+      # the maturin backend, and the docs import `citry`, which depends on it.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # `social-cards` adds Playwright so the per-page OG images render; `docs`
+      # is the build/guard dependency set.
+      - name: Install the workspace with docs + social-card extras
+        run: uv sync --locked --all-packages --extra docs --extra social-cards
+
+      - name: Install the chromium browser
+        run: uv run --no-sync playwright install --with-deps chromium
+
+      # Reuse rendered cards across deploys: they are content-addressed, so only
+      # new or changed pages launch the browser.
+      - name: Cache social-card images
+        uses: actions/cache@v4
+        with:
+          path: docs_site/.cache/og
+          key: og-cards-${{ hashFiles('docs_site/components/og_card.py', 'docs_site/content/**') }}
+          restore-keys: |
+            og-cards-
+
+      # Assemble the deploy artifact into ./site: the current version at the root
+      # plus any committed versions/ snapshots mounted under /v/.
+      - name: Assemble the site
+        run: uv run --no-sync python -m docs_site assemble
+
+      - name: Upload the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

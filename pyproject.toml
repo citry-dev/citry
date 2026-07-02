@@ -41,6 +41,14 @@ docs = [
     "uvicorn",              # ASGI server that runs the dev server
 ]
 
+# Optional: per-page social-card (OG image) generation. Kept out of `docs`
+# because Playwright is heavy and also needs a browser binary
+# (`playwright install chromium`). The build skips card generation cleanly when
+# this is absent, so the `docs` extra alone produces a deployable site.
+social-cards = [
+    "playwright",           # headless browser that screenshots each OG card to a PNG
+]
+
 # uv workspace: packages/py/* are workspace members, so `uv sync --all-packages`
 # builds and installs every package from this one root (citry_core through the
 # maturin backend, citry editable) and the lockfile covers all of them. This is
@@ -70,6 +78,8 @@ exclude = [
     ".mypy_cache",
     # Third-party dependencies (git submodules)
     "third_party",
+    # Vendored third-party code, kept byte-compatible with upstream.
+    "docs_site/_vendor",
     # benchmark files, not linted.
     "packages/py/citry/tests/test_benchmark*.py",
     "packages/py/citry_core/tests/benchmark*.py",

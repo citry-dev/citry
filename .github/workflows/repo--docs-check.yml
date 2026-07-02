@@ -1,0 +1,81 @@
+# The docs-site gate: builds the documentation site and runs the post-build
+# guards (the same `python -m docs_site build-check` a contributor runs locally),
+# then the docs-site unit tests. The docs live at the repo root (docs_site/) and
+# are not covered by the main gate (scripts/check.py) or the package test
+# workflows, so this is their dedicated CI. A guard error fails the job.
+name: Docs check
+
+on:
+  push:
+    branches:
+      - "main"
+      - "dev"
+    # The reference pages introspect the live `citry` API (built from crates/ and
+    # packages/py), so a change to either can change the docs output.
+    paths:
+      - "docs_site/**"
+      - "packages/py/**"
+      - "crates/**"
+      - "third_party/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/**"
+      - ".gitmodules"
+  pull_request:
+    paths:
+      - "docs_site/**"
+      - "packages/py/**"
+      - "crates/**"
+      - "third_party/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/**"
+      - ".gitmodules"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docs-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Initialize the vendored Ruff submodule (a build/runtime dependency)
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # Rust is needed because `uv sync` builds the citry_core extension through
+      # the maturin backend, and the docs import `citry`, which depends on it.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # The `docs` extra pulls the guard/build dependencies (lxml, pagefind,
+      # minify-html, ...); social cards are not needed for the gate.
+      - name: Install the workspace with the docs extra
+        run: uv sync --locked --all-packages --extra docs
+
+      # Build the site and run the post-build guards. Exits non-zero on a render
+      # failure or a guard error (add --strict to also fail on warnings).
+      - name: Run the docs guard gate
+        run: uv run --no-sync python -m docs_site build-check
+
+      - name: Run the docs-site tests
+        run: uv run --no-sync pytest docs_site/tests
