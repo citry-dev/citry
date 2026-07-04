@@ -17,6 +17,8 @@
 
 - A default value for a slot set at `Component.Slot.<attr>` is now correctly used.
 
+- Include JS runtime script when a Component has any JS/CSS scripts
+
 ### Refactor
 
 - Citry now raises error when template contains `<c-slot name="X">`, but `Component.Slots` omits `X`.

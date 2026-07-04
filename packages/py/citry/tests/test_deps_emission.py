@@ -105,6 +105,38 @@ class TestDocumentEmission:
         assert [r.class_id for r in records] == [page.class_id, Widget.class_id]
         assert all(r.js_vars_hash is None and r.css_vars_hash is None for r in records)
 
+    def test_nested_components_dedupe_and_keep_first_seen_order(self):
+        c = Citry()
+
+        class Inner(Component):
+            citry = c
+            template = "<span>inner</span>"
+            js = "console.log('inner');"
+            css = ".inner {}"
+
+        class Other(Component):
+            citry = c
+            template = "<b>other</b>"
+            js = "console.log('other');"
+            css = ".other {}"
+
+        class Outer(Component):
+            citry = c
+            template = "<div><c-inner /><c-other /><c-inner /></div>"  # Inner rendered twice
+            css = ".outer {}"
+
+        page = _page(c, template="<html><head></head><body><c-outer /></body></html>")
+        html = str(page())
+        # Each class-level asset appears once, even though Inner renders twice.
+        assert html.count(".inner {}") == 1
+        assert html.count(".other {}") == 1
+        assert html.count("console.log('inner');") == 1
+        # First-seen document order: Inner is reached before Other.
+        assert html.index(".inner {}") < html.index(".other {}")
+        # `simple` and `document` agree for a tree with no client-side calls.
+        rendered = page().render()
+        assert rendered.serialize(deps_strategy="simple") == rendered.serialize(deps_strategy="document")
+
 
 class TestPlaceholders:
     def test_c_js_and_c_css_mark_the_spots(self):
@@ -306,6 +338,89 @@ class TestOnDependenciesHooks:
         page = _page(c, js="console.log(1);")
         html = str(page())
         assert '<script src="/static/analytics.js"></script>' in html
+
+    def test_returning_none_keeps_the_component_assets(self):
+        # The hook returns None (the default) to mean "no change": the
+        # component's own js and css must survive untouched.
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            js = "console.log('kept');"
+            css = ".kept {}"
+
+            @classmethod
+            def on_dependencies(cls, scripts, styles):
+                return None
+
+        page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
+        html = str(page())
+        assert "console.log('kept');" in html
+        assert "<style>.kept {}</style>" in html
+
+    def test_component_classmethod_can_add_an_extra_entry(self):
+        # Returning the lists with an extra ``kind="extra"`` Script/Style adds
+        # them to the page; a ``wrap=False`` script renders unwrapped.
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            js = "console.log('own');"
+            css = ".own {}"
+
+            @classmethod
+            def on_dependencies(cls, scripts, styles):
+                extra_js = Script(content="console.log('hook');", wrap=False)
+                extra_css = Style(content=".hook {}")
+                return [*scripts, extra_js], [*styles, extra_css]
+
+        page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
+        html = str(page())
+        # The component's own assets survive.
+        assert "console.log('own');" in html
+        assert "<style>.own {}</style>" in html
+        # The extras are emitted; the wrap=False script is not wrapped.
+        assert "<script>console.log('hook');</script>" in html
+        assert "<style>.hook {}</style>" in html
+
+
+class TestComponentAssetEndTagGuard:
+    """A component's inline JS/CSS may not contain its own closing tag."""
+
+    # ``</script>`` inside JS (or ``</style>`` inside CSS) would terminate the
+    # inlined tag early in the browser, so emission refuses it and names the
+    # offending component. django-components raised RuntimeError here; citry
+    # raises ValueError with a different message (divergence #5 in
+    # docs/design/citry_migration_tests.md).
+
+    def test_component_js_containing_its_end_tag_raises(self):
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            js = 'console.log("</script>");'
+
+        page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
+        with pytest.raises(ValueError, match=r"contains a '</script>' end tag") as excinfo:
+            str(page())
+        # The error names the offending component so the author can find it.
+        assert Widget.class_id in str(excinfo.value)
+
+    def test_component_css_containing_its_end_tag_raises(self):
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            css = "/* </style> */"
+
+        page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
+        with pytest.raises(ValueError, match=r"contains a '</style>' end tag") as excinfo:
+            str(page())
+        assert Widget.class_id in str(excinfo.value)
 
 
 class TestScriptCacheLifecycle:

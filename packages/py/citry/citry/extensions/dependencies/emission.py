@@ -134,11 +134,15 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
         citry.extensions.emit("on_dependencies", hook_ctx)
         scripts, styles = hook_ctx.scripts, hook_ctx.styles
 
-    # The client runtime and the page manifest ride along only when some
-    # component actually registered a callback; a page without per-instance
-    # JS stays as lean as "simple".
+    # The client runtime and the page manifest ride along when the page either
+    # runs per-instance JS (a component registered an `$onComponent` callback,
+    # so `calls` is non-empty) OR carries mounted component assets a later
+    # fragment must dedup against (the `mark_*_urls`, only filled when mounted).
+    # The manifest's `markLoaded` tells the client which cache URLs this page
+    # already has, so a fragment inserted later does not fetch them again. A
+    # page with neither stays as lean as "simple".
     core_scripts: list[Dependency] = []
-    if with_client_js and calls:
+    if with_client_js and (calls or resolved.mark_js_urls or resolved.mark_css_urls):
         mark_js = [*(script.url for script in scripts if script.url), *resolved.mark_js_urls]
         mark_css = [*(style.url for style in styles if style.url), *resolved.mark_css_urls]
         manifest = _build_manifest(mark_js=mark_js, mark_css=mark_css, fetch_js=[], fetch_css=[], calls=calls)

@@ -2793,9 +2793,11 @@ records rather than parsed HTML comments.
   instance's `data-cid-<id>` marker).
 - **The manifest** is a `data-citry` JSON script tag (schema: `markLoaded`
   URLs, `fetch` descriptors for fragments, `calls` triples), emitted, with
-  the runtime, only when some rendered component used `$onComponent`; a
-  page without per-instance JS stays as lean as `simple`. Built after the
-  `on_dependencies` hook, so URLs added there are marked as loaded too.
+  the runtime, when a rendered component used `$onComponent`, or when a
+  mounted page carries component assets a later fragment must dedup against
+  (so `markLoaded` can list their cache URLs). A page with neither stays as
+  lean as `simple`. Built after the `on_dependencies` hook, so URLs added
+  there are marked as loaded too.
 - **The runtime** (`client/citry.js`, shipped as package data and inlined
   for now; a `<script src>` once a web integration is mounted) holds the
   loaded-URL sets, the callback/data registries, and an in-order pending

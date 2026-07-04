@@ -206,3 +206,40 @@ class TestMountedDocumentFlow:
         assert f"/citry/cache/{widget.class_id}.js" in marked_js
         assert f"/citry/cache/{widget.class_id}.{record.js_vars_hash}.js" in marked_js
         assert f"/citry/cache/{widget.class_id}.css" in marked_css
+
+    def test_content_only_mounted_page_still_marks_its_assets(self):
+        # A mounted page with component CSS but NO $onComponent must still ship
+        # the runtime and a markLoaded manifest naming its cache URLs, so a
+        # fragment inserted later dedups against them instead of re-fetching
+        # (otherwise the shared component's CSS lands on the page twice).
+        c = Citry()
+        c.set_mounted_prefix("/citry")
+
+        class Card(Component):
+            citry = c
+            template = "<span>card</span>"
+            css = ".card { color: teal; }"
+
+        page = type("Page", (Component,), {"citry": c, "template": "<main><c-card /></main>"})
+        html = str(page())
+        assert '<script src="/citry/citry.js"></script>' in html  # runtime shipped
+        manifest = _manifest(html)
+        marked_css = [_unb64(url) for url in manifest["markLoaded"]["css"]]
+        assert f"/citry/cache/{Card.class_id}.css" in marked_css
+        assert manifest["calls"] == []  # no per-instance JS to run
+
+    def test_component_less_mounted_page_stays_lean(self):
+        # Leanness guard: a mounted page whose components carry no assets has
+        # nothing for a fragment to dedup against, so it ships no runtime and no
+        # manifest.
+        c = Citry()
+        c.set_mounted_prefix("/citry")
+
+        class Bare(Component):
+            citry = c
+            template = "<span>bare</span>"
+
+        page = type("Page", (Component,), {"citry": c, "template": "<main><c-bare /></main>"})
+        html = str(page())
+        assert "citry.js" not in html
+        assert "data-citry" not in html

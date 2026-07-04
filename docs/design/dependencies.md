@@ -820,8 +820,9 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 - ~~How `on_component_data` exposes the render's `CitryContext`~~ decided:
   the hook context carries a `context` field (6).
 - ~~Whether the `document` manifest should always be emitted~~ decided: the
-  manifest and the runtime are emitted only when some rendered component
-  used `$onComponent`.
+  manifest and the runtime are emitted when a rendered component used
+  `$onComponent`, or when a mounted page carries component assets a later
+  fragment must dedup against (so `markLoaded` can list their cache URLs).
 - ~~Naming~~ settled at implementation: `data-ccss-<hash>` for the CSS vars
   marker, `on_serialize` for the hook.
 - ~~Whether `serve` mode fingerprints URLs~~ decided yes: the asset URL *is*
@@ -858,8 +859,9 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    `CitryContext._add_root_markers` / `_get_root_markers`, storing under the
    namespaced `extra["citry"]["root_markers"]`, read by serialization next
    to the `data-cid` marker; the manifest (and the
-   runtime with it) is emitted only when some rendered component used
-   `$onComponent`; `document` vs `simple` now genuinely differ: `simple` is
+   runtime with it) is emitted when a rendered component used `$onComponent`, or
+   when a mounted page carries component assets a later fragment must dedup
+   against; `document` vs `simple` now genuinely differ: `simple` is
    the no-JS-runtime mode, so JS variables and component calls are
    document-only while CSS variables (pure CSS) work under both; the runtime
    ships as readable plain JS package data
