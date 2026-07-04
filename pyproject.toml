@@ -225,7 +225,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["citry", "citry_core"]
+known-first-party = ["citry", "citry_core", "pygments_citry"]
 
 [tool.mypy]
 check_untyped_defs = true
@@ -236,17 +236,26 @@ exclude = ["build", "docs_site/_vendor"]
 module = "citry_core.*"
 disallow_untyped_defs = true
 
+# pygments-citry is a small public package; hold it to the strict bar too.
+[[tool.mypy.overrides]]
+module = "pygments_citry.*"
+disallow_untyped_defs = true
+
 [tool.pytest.ini_options]
 # Collect only the published packages' suites. Without explicit paths, pytest
 # recurses from the repo root and tries to collect the vendored ruff submodule
 # (third_party/) and the docs-site tests, which fail to import here. The
 # docs-site has its own tests, run separately with its `--extra docs` deps.
-testpaths = ["packages/py/citry_core/tests", "packages/py/citry/tests"]
+testpaths = [
+    "packages/py/citry_core/tests",
+    "packages/py/citry/tests",
+    "packages/py/pygments_citry/tests",
+]
 
 [tool.coverage.run]
 # NOTE: The Rust half of citry_core is covered separately by `cargo test`;
 #       only its Python wrapper is seen here.
-source = ["citry", "citry_core"]
+source = ["citry", "citry_core", "pygments_citry"]
 branch = true
 omit = [
     "*/tests/*", # the test files themselves are not the measured code

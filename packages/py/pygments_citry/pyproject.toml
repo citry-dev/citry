@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pygments-citry"
+version = "0.1.0"
+requires-python = ">=3.10, <4.0"
+description = "Pygments lexer for Citry components: highlights the HTML, JS, and CSS embedded in a component's template/js/css strings"
+readme = "README.md"
+keywords = [
+    "citry",
+    "pygments",
+    "lexer",
+    "syntax highlighting",
+    "components",
+    "html",
+]
+authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: Markup :: HTML",
+    "Topic :: Software Development :: Documentation",
+]
+license = { text = "MIT" }
+# Only Pygments. The floor is where the plugin lexer API we rely on is stable;
+# the docs environment keeps its own upper pin (see the root pyproject `docs`
+# extra), which resolves against this floor.
+dependencies = ["pygments>=2.15"]
+
+# Registers the lexers as Pygments plugins: any environment with this package
+# installed resolves ```citry (full component) and ```citry-html (template only)
+# through get_lexer_by_name with no explicit import.
+[project.entry-points."pygments.lexers"]
+citry = "pygments_citry.lexers:CitryPythonLexer"
+citry-html = "pygments_citry.citry_html:CitryHtmlLexer"
+
+# The single declaration of this package's test deps. The uv workspace installs
+# them on `uv sync --all-packages`, so the shared venv and CI get them with no
+# separate root-level copy to keep in step.
+[dependency-groups]
+dev = ["pytest>=8.3.5"]
+
+[project.urls]
+Homepage = "https://citry.dev"
+Repository = "https://github.com/citry-dev/citry"
+Changelog = "https://github.com/citry-dev/citry/blob/main/packages/py/pygments_citry/CHANGELOG.md"
+Issues = "https://github.com/citry-dev/citry/issues"
+
+# Ship only the lexer package; the flat-layout auto-discovery would otherwise
+# also try to package the tests directory.
+[tool.setuptools.packages.find]
+include = ["pygments_citry*"]
+
+[tool.setuptools.package-data]
+pygments_citry = ["py.typed"]

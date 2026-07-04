@@ -45,7 +45,17 @@ def _phases() -> list[tuple[str, list[str]]]:
         ("cargo test", ["cargo", "test", *crates]),
         ("ruff check", [*uvr, "ruff", "check", "."]),
         ("ruff format", [*uvr, "ruff", "format", "--check", "."]),
-        ("mypy", [*uvr, "mypy", "packages/py/citry/citry", "packages/py/citry_core/citry_core", "scripts"]),
+        (
+            "mypy",
+            [
+                *uvr,
+                "mypy",
+                "packages/py/citry/citry",
+                "packages/py/citry_core/citry_core",
+                "packages/py/pygments_citry/pygments_citry",
+                "scripts",
+            ],
+        ),
         # `--cov` (no target) uses [tool.coverage.run] source; pytest-cov enforces
         # `fail_under` from [tool.coverage.report] (docs/design/citry_migration_tests.md).
         ("pytest", [*uvr, "pytest", "--cov", "--cov-report=term-missing:skip-covered"]),

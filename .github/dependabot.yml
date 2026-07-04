@@ -42,3 +42,8 @@ updates:
     directory: "packages/py/citry"
     schedule:
       interval: weekly
+
+  - package-ecosystem: "pip"
+    directory: "packages/py/pygments_citry"
+    schedule:
+      interval: weekly
