@@ -5,6 +5,7 @@
 [![License](https://img.shields.io/pypi/l/citry)](./LICENSE)
 [![CI](https://github.com/citry-dev/citry/actions/workflows/repo--check.yml/badge.svg)](https://github.com/citry-dev/citry/actions/workflows/repo--check.yml)
 [![Docs](https://img.shields.io/badge/docs-citry.dev-8a2be2)](https://citry.dev)
+[![Discord](https://img.shields.io/badge/Discord-join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/NaQ8QPyHtD)
 
 Citry is a **fast**, **simple**, and **smart** **frontend framework** for Python that brings the best of **Vue**, **React**,
 **Django**, and **Jinja**.
@@ -24,13 +25,13 @@ class Welcome(Component):
     def template_data(self, kwargs, slots):
         return {
             "title": kwargs.title,
-            "messages": kwargs.messages,
+            "count": len(kwargs.messages),
         }
 
     template = """
       <div class="card">
         <h1>{{ title }}</h1>
-        <p>You have {{ len(messages[:20]) }} new messages.</p>
+        <p>You have {{ count }} new messages.</p>
       </div>
     """
 

@@ -11,7 +11,7 @@ for local pointers and gotchas (e.g.
 
 ## Working mode - always use the fable-mode skill
 
-Always work in the `fable-mode` skill
+When NOT using Fable model, always work in the `fable-mode` skill
 ([`.claude/skills/fable-mode/SKILL.md`](.claude/skills/fable-mode/SKILL.md)) for
 any non-trivial task here: map the stages before editing, delegate independent
 reads and analysis to parallel sub-agents, verify each stage against its
@@ -19,6 +19,31 @@ expected output before advancing, and self-critique before delivery. This sits
 on top of the mechanisms below, not instead of them: a structural change still
 goes through the prior-art header (Mechanism 1) and the `ExitPlanMode` plan
 (Mechanism 2).
+
+## Delegating to subagents and workflows
+
+These rules apply whenever you spawn a subagent (the Agent tool) or run a
+Workflow. A delegated agent starts with none of this file in its context; it
+sees only the brief you write. So the brief carries the rules, or the work is
+done without them.
+
+- **Every brief must tell the agent to read `CLAUDE.md` first** (and the
+  relevant crate's `AGENTS.md`, plus any linked design doc for the area it
+  touches). That is how the prior-art gate, the cross-binding audit
+  (Mechanism 4), the code conventions, and the house style travel with the
+  work. Name the files in the brief; do not assume the agent will find them.
+- **Coding subagents also work in the `fable-mode` skill.** Any agent that
+  writes or edits code runs the same map, delegate, verify loop you do (see
+  Working mode above), so say so in the brief. A read-only research or
+  enumeration agent does not need it.
+- **Effort for delegated work.** Give a delegated task at least **xhigh**
+  reasoning effort; for coding, and for detailed analysis (line-by-line review,
+  per-file audits), use **max**, or ultracode when the task warrants a full
+  multi-agent pass. Delegated work gets the same effort you would give it
+  yourself, not less. In a Workflow, set `effort` on the `agent()` calls; for a
+  subagent, run the session at that effort (or pick an agent/model tier that
+  matches). When the delegated work is simply lookup, enumeration, or another
+  simple task, lower the effort to match.
 
 ## What this project is
 
@@ -271,6 +296,15 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   HTML/JS/CSS on its own lines, never flattened onto one line, even when short.
   This holds in real component files and in docs examples alike (it reads better
   and matches how components are actually authored).
+- **Public docstrings become the API reference.** The docs build renders every
+  public `citry.*` symbol's docstring into its reference page (via griffe), so
+  author it for a first-time reader: a one-sentence summary on the first line,
+  then Google-style sections (`Args:`, `Returns:`, `Raises:`, `Attributes:`,
+  `Example:`). Cross-reference another symbol with the bracket form
+  ``[`Text`][citry.Symbol]`` using a real `citry.*` path (a member path works
+  too); an unknown key silently drops to plain text. Full guidance is the
+  "Writing docstrings" section of
+  [`docs_site/content/community/development.md`](docs_site/content/community/development.md).
 
 ## House style
 
