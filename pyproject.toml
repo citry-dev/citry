@@ -36,6 +36,7 @@ docs = [
     "minify-html",          # Rust-backed post-build HTML minifier
     "packaging",            # PEP 440 version ordering for the version manifest
     "pygments<2.21",        # 2.20 rejects the None filename pymdownx.highlight passes through
+    "pygments-citry",       # the citry Pygments lexer (workspace member; see [tool.uv.sources])
     "pyyaml",               # loads the _nav.yml navigation tree
     "starlette",            # the dev/preview server (a catch-all that renders pages live)
     "uvicorn",              # ASGI server that runs the dev server
@@ -62,6 +63,10 @@ members = ["packages/py/*"]
 [tool.uv.sources]
 citry = { workspace = true }
 citry-core = { workspace = true }
+# The docs build's citry lexer resolves to the local workspace member, not PyPI
+# (it may not be published yet); an ordinary version range applies for consumers
+# that install pygments-citry directly.
+pygments-citry = { workspace = true }
 
 # Tool configurations (codebase-wide)
 [tool.ruff]
