@@ -2,7 +2,8 @@
 
 import pytest
 
-from citry import Citry, Component, Script, Style
+from citry import Citry, Component
+from citry.ext.dependencies import Script, Style
 
 
 class TestScript:

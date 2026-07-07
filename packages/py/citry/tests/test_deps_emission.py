@@ -2,7 +2,8 @@
 
 import pytest
 
-from citry import Citry, Component, Extension, Script, Style
+from citry import Citry, Component, Extension
+from citry.ext.dependencies import Script, Style
 from citry.util.html import SafeString
 
 PAGE_TEMPLATE = "<html><head><title>t</title></head><body><p>hi</p></body></html>"

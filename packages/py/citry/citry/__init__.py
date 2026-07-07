@@ -38,14 +38,6 @@ from citry.command import CommandArg, CommandArgGroup, CommandSubcommand
 from citry.component import Component
 from citry.component_registry import AlreadyRegistered, ComponentRegistry, NotRegistered
 from citry.constness import Const
-from citry.ext.dependencies import (
-    CitryDependencies,
-    Dependency,
-    DependencyRecord,
-    OnDependenciesContext,
-    Script,
-    Style,
-)
 from citry.extension import (
     Extension,
     ExtensionCommand,
@@ -99,7 +91,6 @@ __all__ = [
     "Citry",
     "CitryCache",
     "CitryContext",
-    "CitryDependencies",
     "CitryElement",
     "CitryRender",
     "CitrySettings",
@@ -111,8 +102,6 @@ __all__ = [
     "ComponentNode",
     "ComponentRegistry",
     "Const",
-    "Dependency",
-    "DependencyRecord",
     "DepsPosition",
     "DepsStrategy",
     "ElementAttrsNode",
@@ -138,7 +127,6 @@ __all__ = [
     "OnComponentRenderedContext",
     "OnComponentUnregisteredContext",
     "OnCssLoadedContext",
-    "OnDependenciesContext",
     "OnExtensionCreatedContext",
     "OnFilesResetContext",
     "OnJsLoadedContext",
@@ -151,7 +139,6 @@ __all__ = [
     "Placeholder",
     "RenderReplacement",
     "RouteResponse",
-    "Script",
     "Slot",
     "SlotContext",
     "SlotFunc",
@@ -159,7 +146,6 @@ __all__ = [
     "SlotNode",
     "SlotResult",
     "StaticHtmlAttr",
-    "Style",
     "TemplateHtmlAttr",
     "TemplateNode",
     "URLRoute",

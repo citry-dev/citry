@@ -1,5 +1,20 @@
 # Release notes
 
+## v0.3.0
+
+### Breaking changes
+
+- The built-in extensions package is now `citry.ext`: anything
+  you imported from `citry.extensions.*` now lives at `citry.ext.*` (for
+  example `from citry.ext.dependencies import Script`). The
+  `Citry(extensions=[...])` setting is unchanged.
+- The six JS/CSS dependency types (`Script`, `Style`,
+  `CitryDependencies`, `Dependency`, `DependencyRecord`, and
+  `OnDependenciesContext`) are now importable only from
+  `citry.ext.dependencies`, so `from citry import Script` stops working. The
+  one-line fix: `from citry.ext.dependencies import Script` (and likewise for
+  the other five).
+
 ## v0.2.0
 
 ### Feat

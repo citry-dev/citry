@@ -16,3 +16,14 @@ endpoints) into a host application:
 Each module imports its host packages lazily, so importing ``citry`` never
 requires them. See docs/design/dependencies.md section 9.
 """
+
+# Each submodule is its own public surface (the `citry.contrib.<name>`
+# entrypoint shape); this package only groups them.
+__all__ = [
+    "asgi",
+    "caches",
+    "django",
+    "fastapi",
+    "flask",
+    "wsgi",
+]

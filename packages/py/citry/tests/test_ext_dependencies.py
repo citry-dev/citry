@@ -2,10 +2,44 @@
 
 # ruff: noqa: ANN
 
+import ast
+from pathlib import Path
+
 import pytest
 
-from citry import Citry, CitryDependencies, Component, Extension
-from citry.extensions.dependencies import DependenciesExtension, get_dependencies
+import citry.ext.dependencies
+from citry import Citry, Component, Extension
+from citry.ext.dependencies import CitryDependencies, DependenciesExtension, get_dependencies
+
+
+class TestPublicSurface:
+    """The public-API rule: `citry.ext.<name>` is a pure re-export surface."""
+
+    def test_all_exposes_the_documented_surface(self):
+        assert citry.ext.dependencies.__all__ == [
+            "CitryDependencies",
+            "DependenciesExtension",
+            "Dependency",
+            "DependencyRecord",
+            "OnDependenciesContext",
+            "Script",
+            "Style",
+            "get_dependencies",
+        ]
+        for name in citry.ext.dependencies.__all__:
+            assert hasattr(citry.ext.dependencies, name), f"{name} is in __all__ but not importable"
+
+    def test_init_has_no_def_or_class_statements(self):
+        # The public __init__ carries imports and __all__ only, so the API
+        # definition never shares a file with implementation (which lives in
+        # the sibling modules, e.g. extension.py).
+        source = Path(citry.ext.dependencies.__file__).read_text(encoding="utf-8")
+        offenders = [
+            node.name
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        ]
+        assert offenders == []
 
 
 class TestBuiltinExtension:
