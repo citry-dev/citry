@@ -41,8 +41,11 @@ validation, the exact compiler output format), see
   then assert it exactly. Do not hand-compute token offsets or codegen strings.
 - **V1/V2/V3 context.** This crate implements V3. The `v2_*.md` files are
   working notes, not a spec. See the cross-crate INDEX for the version model.
-- **Not yet wired to Python.** The PyO3 module that would expose this crate is
-  commented out in `crates/citry_core_py/src/lib.rs`.
+- **Changes here surface in Python.** `parse_template`, `compile_template`,
+  and the `#[pyclass]` AST types are exposed through
+  `crates/citry_core_py/src/lib.rs` and mirrored by hand in
+  `packages/py/citry_core/citry_core/_rust.pyi`, so a change to any of them
+  triggers the cross-binding audit (Mechanism 4 in `/CLAUDE.md`).
 
 ## Verifying changes
 

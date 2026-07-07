@@ -123,19 +123,6 @@ release tag format (`py@citry-core@x.y.z`), and CI workflow naming
 
 ## Open project plans
 
-### Wire the V3 parser through to Python
-
-The V3 parser and compiler are implemented and tested in Rust but not yet
-exposed to Python. The sequence: commit the template parser crate; uncomment
-and update the `template_parser` PyO3 module in
-[`citry_core_py/src/lib.rs`](../../crates/citry_core_py/src/lib.rs) to expose
-the V3 types and functions; rewrite the Python `template_parser/` wrapper and
-the `_rust.pyi` stub for the V3 API; enable and rewrite the disabled
-`_test_template_parser__*.py` tests. After that, implement the Python-side
-runtime node classes the compiler output references. The detailed, dated
-snapshot of where this stands is
-[`docs/../TODO/project_status_june_2026.md`](../../TODO/project_status_june_2026.md).
-
 ### Rust render walk (built, measured ~parity, archived in git)
 
 Moving the render body-walk to Rust was prototyped and then built out into a full

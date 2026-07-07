@@ -14,17 +14,13 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   can import.
 - `src/html_transform.rs` - wraps `citry_html_transform`.
 - `src/safe_eval.rs` - wraps `python_safe_eval`.
-- `src/template_parser.rs` - wraps `citry_template_parser` (currently not
-  registered; see Gotchas).
+- `src/template_parser.rs` - wraps `citry_template_parser`: `parse_template`
+  / `compile_template`, the V3 AST classes, and `TagRules`.
 - `Cargo.toml` - depends on the sibling crates by path; `crate-type =
   ["cdylib"]`.
 
 ## Gotchas
 
-- **The `template_parser` module is commented out in `src/lib.rs`.** The V3
-  parser is not yet exposed to Python. Wiring it up is the next major step (see
-  the cross-crate INDEX "Open project plans"): uncomment and update the module,
-  exposing the V3 AST types and `parse_template` / `compile_template`.
 - **The Python module name comes from the `#[pymodule]` function name** (`_rust`)
   and must match the `module-name` setting in the Python package's
   `pyproject.toml`. See [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md).

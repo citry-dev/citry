@@ -15,16 +15,16 @@ facts see [`/docs/agent/INDEX.md`](../../../docs/agent/INDEX.md).
 - `citry_core/html_transform/` - wraps the `html_transform` submodule.
 - `citry_core/safe_eval/` - sandboxed expression eval (`eval.py`, `sandbox.py`,
   `error.py`); wraps the `safe_eval` submodule.
-- `citry_core/template_parser/` - V3 parser/compiler wrapper. **Work in
-  progress**: it currently targets the older V1/V2 API and depends on the
-  `_rust.template_parser` module that is commented out in the Rust glue. It will
-  be rewritten for the V3 API when the parser is wired through.
+- `citry_core/template_parser/` - the V3 parser/compiler wrapper (`parse.py`,
+  `compile.py`); wraps the `template_parser` submodule. The generated code it
+  returns instantiates the runtime node classes that live in the `citry`
+  package (`citry.nodes`), not here.
 - `pyproject.toml` - `[tool.maturin]` config. `module-name = "citry_core._rust"`
   and `manifest-path` point maturin at `crates/citry_core_py`. The long comment
   there explains why the module name mapping is necessary.
-- `tests/` - `test_html_transformer.py` and `test_safe_eval.py` run in CI. The
-  `_test_template_parser__*.py` files are disabled (leading underscore) pending
-  the V3 wiring.
+- `tests/` - `test_html_transformer.py`, `test_safe_eval.py`, and
+  `test_template_parser.py` run in CI; the `benchmark_*.py` files are manual
+  helpers, not collected.
 
 ## Gotchas
 
