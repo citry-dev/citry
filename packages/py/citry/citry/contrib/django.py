@@ -40,10 +40,11 @@ called.
 
 from __future__ import annotations
 
+import inspect
 import re
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
-from citry.util.routing import flatten_routes
+from citry.util.routing import RouteHeaders, RouteRequest, flatten_routes
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -51,7 +52,7 @@ if TYPE_CHECKING:
     from typing import Literal
 
     from citry.citry import Citry
-    from citry.util.routing import URLRoute
+    from citry.util.routing import RouteResponse, URLRoute
 
 __all__ = ["DjangoCache", "enable_hot_reload", "urlpatterns"]
 
@@ -63,7 +64,29 @@ def _to_django_path(path: str) -> str:
     return _PARAM_RE.sub(r"<str:\1>", path)
 
 
+def _build_request(request: Any) -> RouteRequest:
+    """Read Django's ``HttpRequest`` into a framework-neutral request."""
+    headers = RouteHeaders(request.headers.items())
+    return RouteRequest(
+        method=request.method,
+        path=request.path,
+        query={key: tuple(values) for key, values in request.GET.lists()},
+        headers=headers,
+        body=request.body,
+        content_type=headers.get("content-type", ""),
+        native=request,
+    )
+
+
 def _make_view(route: URLRoute) -> Any:
+    """
+    Wrap one citry route as a Django view.
+
+    The view is the standard adapter shape: translate the ``HttpRequest``
+    into a ``RouteRequest`` (``_build_request``), call the route's
+    handler, and translate the returned ``RouteResponse`` into an
+    ``HttpResponse``.
+    """
     # Imported here, not at module load: this module must be importable
     # without Django on the path (citry.contrib hosts several integrations).
     from django.http import HttpResponse, HttpResponseNotAllowed  # noqa: PLC0415
@@ -73,8 +96,28 @@ def _make_view(route: URLRoute) -> Any:
             return HttpResponseNotAllowed(route.methods)
         handler = route.handler
         assert handler is not None  # noqa: S101 - flatten_routes only yields handler routes
-        response = handler(request, **kwargs)
-        return HttpResponse(content=response.body, content_type=response.content_type, status=response.status)
+        # urlpatterns() rejected async handlers up front, so the call returns
+        # a concrete RouteResponse.
+        response = cast("RouteResponse", handler(_build_request(request), **kwargs))
+        http_response = HttpResponse(content=response.body, content_type=response.content_type, status=response.status)
+        # Django's response object holds one value per header name, so a
+        # repeated name (e.g. two Set-Cookie lines) cannot be represented.
+        # Reject it loudly instead of silently keeping only the last value;
+        # the ASGI and WSGI adapters send every pair.
+        seen_names: set[str] = set()
+        for name, value in response.headers:
+            lowered = name.lower()
+            if lowered in seen_names:
+                msg = (
+                    f"RouteResponse repeats the response header {name!r}, which the Django adapter "
+                    "cannot send: Django's response object holds one value per header name. Send one "
+                    "value per name, or serve citry through the ASGI or WSGI adapter, which send "
+                    "every pair."
+                )
+                raise ValueError(msg)
+            seen_names.add(lowered)
+            http_response[name] = value
+        return http_response
 
     return view
 
@@ -87,6 +130,10 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
     also record it on the instance, so URL building (fragment manifests, the
     runtime ``src``) points at the right place; leaving it ``None`` means you
     call ``set_mounted_prefix`` yourself.
+
+    The generated views are synchronous, so every route handler must be a
+    plain function; an ``async def`` handler raises ``TypeError`` here,
+    pointing at the ASGI adapter as the fix.
     """
     from django.urls import path as django_path  # noqa: PLC0415
 
@@ -95,6 +142,16 @@ def urlpatterns(citry_instance: Citry, prefix: str | None = None) -> list[Any]:
 
     patterns = []
     for full_path, route in flatten_routes(citry_instance.urls):
+        # Reject async handlers at URL-configuration time (startup), so the
+        # error points at the fix instead of surfacing as a request-time 500.
+        if inspect.iscoroutinefunction(route.handler):
+            msg = (
+                f"citry route {route.name or full_path!r} has an 'async def' handler, which the "
+                "synchronous Django view adapter cannot run. Serve citry's routes through the ASGI "
+                "adapter instead (mount citry.contrib.asgi.asgi_app in your ASGI application), or "
+                "make the handler a plain 'def'."
+            )
+            raise TypeError(msg)
         # Django route syntax cannot express two parameters in one path
         # segment (the cache routes separate them with dots), so use re_path
         # via the compiled citry pattern when the segment-wise conversion

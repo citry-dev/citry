@@ -84,7 +84,7 @@ from citry.slots import (
     SlotInput,
     SlotResult,
 )
-from citry.util.routing import RouteResponse, URLRoute
+from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, URLRoute
 
 __all__ = [
     "AlreadyRegistered",
@@ -138,6 +138,8 @@ __all__ = [
     "OnTemplateLoadedContext",
     "Placeholder",
     "RenderReplacement",
+    "RouteHeaders",
+    "RouteRequest",
     "RouteResponse",
     "Slot",
     "SlotContext",

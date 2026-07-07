@@ -10,8 +10,11 @@ itself cannot listen on a port, so it describes its endpoints as
 ``Citry.urls``.
 
 A route's ``handler`` is a plain callable taking ``(request, **path_params)``
-and returning a :class:`RouteResponse`; ``request`` is whatever the adapter
-passes (citry's own handlers never read it), so handlers stay host-neutral.
+and returning a :class:`RouteResponse`. ``request`` is a :class:`RouteRequest`,
+the same framework-neutral view of the HTTP request under every adapter, with
+the untouched host object riding along as ``RouteRequest.native``. Under the
+ASGI adapter a handler may also be ``async def`` (see :func:`call_maybe_sync`);
+the WSGI and Django adapters run plain handlers only and reject async ones.
 
 Adapted from django-components' ``URLRoute`` (which was already
 framework-free), with two changes: ``methods`` is an explicit field (djc left
@@ -24,28 +27,121 @@ Design: docs/design/dependencies.md section 9.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from functools import cache
-from typing import TYPE_CHECKING, Any, Protocol
+from functools import cache, partial
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable, Sequence
+    from collections.abc import Awaitable, Callable, Iterable, Iterator, Sequence
+
+
+class RouteHeaders(Mapping[str, str]):
+    """
+    A read-only mapping of HTTP header names to values; lookups ignore case.
+
+    Built from ``(name, value)`` pairs. Iteration yields the names lowercased,
+    and a header sent multiple times has its values joined with ``", "`` (the
+    HTTP rule for repeatable headers).
+
+    Example:
+        ```python
+        headers = RouteHeaders([("Content-Type", "application/json")])
+        headers["content-type"]  # "application/json"
+        headers["CONTENT-TYPE"]  # "application/json"
+        ```
+
+    """
+
+    __slots__ = ("_data",)
+
+    def __init__(self, items: Iterable[tuple[str, str]] = ()) -> None:
+        data: dict[str, str] = {}
+        for name, value in items:
+            key = name.lower()
+            data[key] = f"{data[key]}, {value}" if key in data else value
+        self._data = data
+
+    def __getitem__(self, key: str) -> str:
+        return self._data[key.lower()]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._data)
+
+    def __len__(self) -> int:
+        return len(self._data)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({list(self._data.items())!r})"
+
+
+@dataclass(frozen=True, slots=True)
+class RouteRequest:
+    """
+    A framework-neutral view of one HTTP request, passed to route handlers.
+
+    Each web adapter (``citry.contrib.asgi``, ``citry.contrib.wsgi``, the
+    Django patterns, ...) builds this from its host's request, so a handler
+    reads the same fields no matter which framework serves it. Anything
+    host-specific stays reachable through ``native``.
+
+    Attributes:
+        method: The HTTP method, uppercase (`"GET"`, `"POST"`, ...).
+        path: The full URL path of the request, including the prefix the
+            route table is mounted under (e.g. `"/citry/citry.js"`).
+        query: The query-string parameters. Each key maps to all values it
+            was sent with, in order, so repeated keys are preserved.
+        headers: The HTTP request headers; lookups ignore case.
+        body: The raw request body. Empty for bodyless methods such as GET.
+        content_type: The `Content-Type` header value, or `""` when the
+            request names none.
+        native: The untouched host request object: the ASGI scope, the WSGI
+            environ, or Django's `HttpRequest`.
+
+    """
+
+    method: str = "GET"
+    path: str = ""
+    query: Mapping[str, tuple[str, ...]] = field(default_factory=dict)
+    headers: RouteHeaders = field(default_factory=RouteHeaders)
+    body: bytes = b""
+    content_type: str = ""
+    native: Any = None
 
 
 class URLRouteHandler(Protocol):
     """Framework-neutral "view" function for routes."""
 
-    def __call__(self, request: Any, **kwargs: Any) -> RouteResponse: ...  # pragma: no cover - protocol
+    def __call__(
+        self, request: RouteRequest, **kwargs: Any
+    ) -> RouteResponse | Awaitable[RouteResponse]: ...  # pragma: no cover - protocol
 
 
 @dataclass(frozen=True, slots=True)
 class RouteResponse:
-    """What a route handler returns; adapters translate it to the host's response type."""
+    """
+    What a route handler returns; adapters translate it to the host's response type.
+
+    Attributes:
+        content: The response body, as text or raw bytes.
+        content_type: The `Content-Type` header value to send.
+        status: The HTTP status code.
+        headers: Extra response headers, as `(name, value)` pairs; adapters
+            send them in addition to `Content-Type`. A name may repeat (e.g.
+            two `Set-Cookie` lines): the ASGI and WSGI adapters send every
+            pair, while the Django adapter raises `ValueError` on a repeated
+            name, because Django's response object holds one value per header
+            name.
+
+    """
 
     content: str | bytes = ""
     content_type: str = "text/plain"
     status: int = 200
+    headers: tuple[tuple[str, str], ...] = ()
 
     @property
     def body(self) -> bytes:
@@ -72,7 +168,9 @@ class URLRoute:
     # Typed with an ellipsis signature: a concrete handler names its path
     # parameters as keyword arguments (see URLRouteHandler for the calling
     # convention), which a (request, **kwargs) callable type cannot express.
-    handler: Callable[..., RouteResponse] | None = None
+    # The Awaitable side of the union admits `async def` handlers, which the
+    # ASGI adapter awaits (the sync adapters reject them).
+    handler: Callable[..., RouteResponse | Awaitable[RouteResponse]] | None = None
     children: tuple[URLRoute, ...] = ()
     name: str | None = None
     methods: tuple[str, ...] = ("GET",)
@@ -139,3 +237,35 @@ def match_route(routes: Sequence[URLRoute], path: str) -> MatchedRoute | None:
         if match is not None:
             return MatchedRoute(route=route, full_path=full_path, params=match.groupdict())
     return None
+
+
+_R = TypeVar("_R")
+
+
+async def call_maybe_sync(fn: Callable[..., _R | Awaitable[_R]], /, *args: Any, **kwargs: Any) -> _R:
+    """
+    Call ``fn`` from async code without caring whether it is async itself.
+
+    An ``async def`` function is awaited on the running event loop. A plain
+    function runs in the loop's default worker-thread pool, so a slow or
+    blocking callable does not stall the loop (and everything else it is
+    serving). The ASGI adapter calls every route handler through this.
+
+    Args:
+        fn: The function to call (positional-only, so it cannot clash with a
+            keyword argument meant for ``fn`` itself).
+        *args: Positional arguments passed through to ``fn``.
+        **kwargs: Keyword arguments passed through to ``fn``.
+
+    Returns:
+        ``fn``'s result, awaited when ``fn`` is async.
+
+    """
+    if inspect.iscoroutinefunction(fn):
+        return await fn(*args, **kwargs)
+    loop = asyncio.get_running_loop()
+    # partial() binds the arguments because run_in_executor accepts none itself.
+    result = await loop.run_in_executor(None, partial(fn, *args, **kwargs))
+    # This branch only runs plain callables, so the result is already the final
+    # value; the cast spells out what the union-typed signature cannot.
+    return cast("_R", result)

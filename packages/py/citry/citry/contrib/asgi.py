@@ -12,6 +12,16 @@ instance so URL building works::
 (The ``citry.contrib.fastapi.mount`` convenience does both.) Uses no
 third-party packages; only the ASGI 3 protocol.
 
+Like every citry.contrib adapter, the app does one job in three steps:
+translate the host's request into a framework-neutral ``RouteRequest``,
+hand it to the matched citry route handler, and translate the returned
+``RouteResponse`` back into the host's response shape (here: ASGI
+messages). Everything else in this file is ASGI-protocol bookkeeping.
+
+Route handlers may be plain functions or ``async def``: async handlers are
+awaited on the event loop, plain ones run in a worker thread so they cannot
+block the loop (see ``citry.util.routing.call_maybe_sync``).
+
 For development, hot-reload component files by adding a watcher to the app's
 lifespan::
 
@@ -24,9 +34,10 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qs
 
 from citry.reload import watch
-from citry.util.routing import match_route
+from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, call_maybe_sync, match_route
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, MutableMapping
@@ -36,7 +47,6 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
     from citry.reload import FileWatcher
-    from citry.util.routing import RouteResponse
 
     Scope = MutableMapping[str, Any]
     Receive = Callable[[], Awaitable[MutableMapping[str, Any]]]
@@ -44,19 +54,61 @@ if TYPE_CHECKING:
 
 __all__ = ["asgi_app", "reload_lifespan"]
 
-async def _send_response(send: Send, status: int, content_type: str, body: bytes) -> None:
-    await send(
-        {
-            "type": "http.response.start",
-            "status": status,
-            "headers": [(b"content-type", content_type.encode())],
-        }
+# Methods whose requests carry no body, so `receive` is never drained for them.
+_BODYLESS_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+async def _send_response(send: Send, response: RouteResponse) -> None:
+    """Translate a ``RouteResponse`` into the two ASGI response messages."""
+    headers = [(b"content-type", response.content_type.encode("latin-1"))]
+    headers += [(name.encode("latin-1"), value.encode("latin-1")) for name, value in response.headers]
+    await send({"type": "http.response.start", "status": response.status, "headers": headers})
+    await send({"type": "http.response.body", "body": response.body})
+
+
+async def _read_body(receive: Receive) -> bytes | None:
+    """Drain the request body from ``receive``; ``None`` when the client disconnected first."""
+    chunks: list[bytes] = []
+    while True:
+        message = await receive()
+        if message["type"] == "http.disconnect":
+            return None
+        chunks.append(message.get("body", b""))
+        if not message.get("more_body"):
+            return b"".join(chunks)
+
+
+def _build_request(scope: Scope, method: str, full_path: str, body: bytes) -> RouteRequest:
+    """Read the ASGI scope (plus the already-drained body) into a framework-neutral request."""
+    headers = RouteHeaders(
+        (name.decode("latin-1"), value.decode("latin-1")) for name, value in scope.get("headers", ())
     )
-    await send({"type": "http.response.body", "body": body})
+    query_string: bytes = scope.get("query_string", b"")
+    query = {
+        key: tuple(values) for key, values in parse_qs(query_string.decode("latin-1"), keep_blank_values=True).items()
+    }
+    return RouteRequest(
+        method=method,
+        path=full_path,
+        query=query,
+        headers=headers,
+        body=body,
+        content_type=headers.get("content-type", ""),
+        native=scope,
+    )
 
 
 def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitable[None]]:
-    """Build the ASGI application serving ``citry_instance.urls``."""
+    """
+    Build the ASGI application serving ``citry_instance.urls``.
+
+    The returned app handles lifespan events (so it also works served
+    standalone), routes each http request to the matched citry handler,
+    translates the scope into a ``RouteRequest`` (``_build_request``),
+    dispatches it (``call_maybe_sync``: async handlers are awaited, sync
+    ones run in a worker thread), and translates the returned
+    ``RouteResponse`` into ASGI messages (``_send_response``).
+    """
 
     async def app(scope: Scope, receive: Receive, send: Send) -> None:
         # Lifespan support, so the app also works served standalone (uvicorn
@@ -74,26 +126,38 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
             msg = f"citry's ASGI app only handles http scopes, got {scope['type']!r}"
             raise RuntimeError(msg)
 
-        # When mounted, hosts report the prefix as `root_path`; some (e.g.
-        # Starlette) keep the full path in `path`, others pass the remainder.
-        # Strip the prefix when present, so both shapes route the same.
+        # When mounted, hosts report the prefix as `root_path`, but differ in
+        # whether `path` still carries it (e.g. Starlette keeps the full path,
+        # others pass the remainder). Normalize into the full request path
+        # (for the handler's RouteRequest) and the citry-relative path (for
+        # routing), so both shapes behave the same.
         path: str = scope["path"]
         root_path: str = scope.get("root_path", "")
-        if root_path and path.startswith(root_path):
-            path = path[len(root_path) :]
-        path = path.lstrip("/")
+        full_path = path if path.startswith(root_path) else root_path + path
+        path = full_path[len(root_path) :].lstrip("/")
         matched = match_route(citry_instance.urls, path)
         if matched is None:
-            await _send_response(send, 404, "text/plain", b"Not Found")
+            await _send_response(send, RouteResponse(content="Not Found", status=404))
             return
-        if scope["method"] not in matched.route.methods and scope["method"] != "HEAD":
-            await _send_response(send, 405, "text/plain", b"Method Not Allowed")
+        method: str = scope["method"]
+        if method not in matched.route.methods and method != "HEAD":
+            await _send_response(send, RouteResponse(content="Method Not Allowed", status=405))
             return
+
+        if method in _BODYLESS_METHODS:
+            body = b""
+        else:
+            drained = await _read_body(receive)
+            if drained is None:
+                return  # the client disconnected mid-request; there is nobody to answer
+            body = drained
+        request = _build_request(scope, method, full_path, body)
 
         handler = matched.route.handler
         assert handler is not None  # noqa: S101 - match_route only returns handler routes
-        response: RouteResponse = handler(scope, **matched.params)
-        await _send_response(send, response.status, response.content_type, response.body)
+        # Translate in, dispatch, translate out.
+        response = await call_maybe_sync(handler, request, **matched.params)
+        await _send_response(send, response)
 
     return app
 
