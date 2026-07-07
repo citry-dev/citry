@@ -1,4 +1,4 @@
-"""Tests for the ``Script``/``Style`` dependency objects (``citry/extensions/dependencies/types.py``)."""
+"""Tests for the ``Script``/``Style`` dependency objects (``citry/ext/dependencies/types.py``)."""
 
 import pytest
 

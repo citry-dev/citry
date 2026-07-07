@@ -16,7 +16,7 @@ extension hooks, and every resolved file is registered in the Citry instance's
 file-to-component index (the hot-reload seam).
 
 Secondary assets (the nested ``Dependencies`` class) are owned by the built-in
-``dependencies`` extension (``citry/extensions/dependencies.py``), which reuses
+``dependencies`` extension (``citry/ext/dependencies/``), which reuses
 this module's path-resolution helpers.
 
 The full design, including what diverges from django-components and why, is in

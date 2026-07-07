@@ -27,6 +27,8 @@ if TYPE_CHECKING:
     StartResponse = Callable[[str, list[tuple[str, str]]], Any]
     WSGIApp = Callable[[dict[str, Any], StartResponse], Iterable[bytes]]
 
+__all__ = ["wsgi_app"]
+
 _STATUS_LINES = {200: "200 OK", 404: "404 Not Found", 405: "405 Method Not Allowed"}
 
 

@@ -30,7 +30,7 @@ from hashlib import md5
 from typing import TYPE_CHECKING
 
 from citry.constness import const_value
-from citry.extensions.dependencies.types import Script, ScriptType, Style
+from citry.ext.dependencies.types import Script, ScriptType, Style
 from citry.util.css import serialize_css_var_value
 
 if TYPE_CHECKING:

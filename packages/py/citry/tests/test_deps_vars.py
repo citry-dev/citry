@@ -145,7 +145,7 @@ class TestOnComponentTransform:
 
         str(_page(c)())  # render, so the script is processed and cached
         # The cached (and thus emitted/served) form carries the expansion.
-        from citry.extensions.dependencies.scripts import get_component_script
+        from citry.ext.dependencies.scripts import get_component_script
 
         script = get_component_script("js", Widget)
         assert "$onComponent" not in script.content

@@ -53,6 +53,8 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.util.routing import URLRoute
 
+__all__ = ["DjangoCache", "enable_hot_reload", "urlpatterns"]
+
 _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
 

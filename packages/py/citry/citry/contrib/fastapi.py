@@ -26,6 +26,8 @@ from citry.contrib.asgi import asgi_app
 if TYPE_CHECKING:
     from citry.citry import Citry
 
+__all__ = ["mount"]
+
 
 def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     """

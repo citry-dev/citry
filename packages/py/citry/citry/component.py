@@ -65,7 +65,7 @@ from citry.assets import reset_files as _reset_files_impl
 from citry.assets import reset_template as _reset_template_impl
 from citry.citry import Citry, citry
 from citry.citry_element import CitryElement
-from citry.extensions.dependencies import get_dependencies as _get_dependencies_impl
+from citry.ext.dependencies import get_dependencies as _get_dependencies_impl
 from citry.provide import MISSING, inject_value, make_provided, validate_provide_key
 from citry.slots import Slot, normalize_slot_fills
 from citry.util.id import gen_render_id
@@ -76,7 +76,7 @@ if TYPE_CHECKING:
 
     from citry.citry_render import OnRenderGenerator, RenderReplacement
     from citry.citry_template import CitryTemplate
-    from citry.extensions.dependencies import CitryDependencies, Dependency
+    from citry.ext.dependencies import CitryDependencies, Dependency
 
 
 class ComponentMeta(type):
@@ -585,7 +585,7 @@ class Component(metaclass=ComponentMeta):
         To adjust the *page-wide* lists instead (every component's tags,
         after de-duplication), implement an extension with an
         ``on_dependencies`` method (see
-        ``citry.extensions.dependencies.OnDependenciesContext``).
+        ``citry.ext.dependencies.OnDependenciesContext``).
         """
         return None
 

@@ -544,7 +544,7 @@ def _builtin_extensions() -> tuple[type[Extension], ...]:
     # Imported here, not at module load: the built-in extension modules
     # subclass Extension from this module, so a top-level import would be
     # circular.
-    from citry.extensions.dependencies import DependenciesExtension  # noqa: PLC0415
+    from citry.ext.dependencies import DependenciesExtension  # noqa: PLC0415
 
     return (DependenciesExtension,)
 

@@ -63,8 +63,8 @@ class TestDocumentEmission:
         # the same instance's record can arrive many times. Resolution must
         # collapse duplicates first, or the per-record script lookups are
         # quadratic in tree depth (a real slowdown the large benchmark surfaced).
-        from citry.extensions.dependencies import emission
-        from citry.extensions.dependencies.types import DependencyRecord
+        from citry.ext.dependencies import emission
+        from citry.ext.dependencies.types import DependencyRecord
 
         c = Citry()
 

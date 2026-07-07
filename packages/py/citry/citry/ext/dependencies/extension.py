@@ -1,30 +1,11 @@
 """
-The ``dependencies`` built-in extension: a component's secondary assets.
+Implementation of the ``dependencies`` extension: the extension class, and the
+resolution and merge of a component's declared entries.
 
-A component declares extra JS/CSS files in a nested ``Dependencies`` class::
-
-    class Card(Component):
-        class Dependencies:
-            js = ["vendor/chart.js"]
-            css = {"all": "theme.css", "print": "print.css"}
-            extend = True   # inherit entries from base classes (the default)
-
-This extension owns that whole concern:
-- The nested class (through the extension system's per-component config mechanism,
-  since the extension name ``dependencies`` derives the config class name ``Dependencies``),
-- The normalization and path resolution of entries,
-- The merge across the component's base classes.
-
-The merged result is read through ``Card.get_dependencies()``,
-which returns a :class:`CitryDependencies`.
-
-Entries may also be :class:`Script`/:class:`Style` objects (see ``types.py``),
-which say exactly what tag to emit and pass through resolution unchanged.
-
-What the entries *mean* in the rendered output (inline the file content, emit
-a ``<script src>`` tag, ...) is the emission half, which is in ``emission.py``.
-This is citry's realization of django-components #1144 ("media becomes an extension"),
-built as an extension from the start.
+The package ``__init__`` re-exports the public names; this module holds the
+loading half (capture each class's ``Dependencies`` declaration, resolve
+entries to files or URLs, merge across base classes). The serialize-time half
+(turning collected render records into tags) is in ``emission.py``.
 
 Design: docs/design/asset_loading.md section 7.
 """
@@ -38,6 +19,15 @@ from typing import TYPE_CHECKING, Any
 from weakref import WeakKeyDictionary
 
 from citry.assets import HasHtml, dedupe, module_dir, resolve_asset_file
+from citry.ext.dependencies.emission import EXTRA_KEY, emit_dependencies
+from citry.ext.dependencies.scripts import (
+    cache_component_css,
+    cache_component_css_vars,
+    cache_component_js,
+    cache_component_js_vars,
+    evict_component_scripts,
+)
+from citry.ext.dependencies.types import Dependency, DependencyRecord
 from citry.extension import (
     Extension,
     ExtensionConfig,
@@ -47,15 +37,6 @@ from citry.extension import (
     OnRenderContextMergeContext,
     OnSerializeContext,
 )
-from citry.extensions.dependencies.emission import EXTRA_KEY, OnDependenciesContext, emit_dependencies
-from citry.extensions.dependencies.scripts import (
-    cache_component_css,
-    cache_component_css_vars,
-    cache_component_js,
-    cache_component_js_vars,
-    evict_component_scripts,
-)
-from citry.extensions.dependencies.types import Dependency, DependencyRecord, Script, Style
 from citry.util.misc import is_glob
 
 if TYPE_CHECKING:
@@ -63,17 +44,6 @@ if TYPE_CHECKING:
 
     from citry.component import Component
     from citry.util.routing import URLRoute
-
-__all__ = [
-    "CitryDependencies",
-    "DependenciesExtension",
-    "Dependency",
-    "DependencyRecord",
-    "OnDependenciesContext",
-    "Script",
-    "Style",
-    "get_dependencies",
-]
 
 
 @dataclass(frozen=True, slots=True)
@@ -257,7 +227,7 @@ class DependenciesExtension(Extension):
     def urls(self) -> list[URLRoute]:
         # Imported here, not at module load: routes.py imports back into this
         # package, and routing is only needed when a web integration asks.
-        from citry.extensions.dependencies.routes import dependency_routes  # noqa: PLC0415
+        from citry.ext.dependencies.routes import dependency_routes  # noqa: PLC0415
 
         return dependency_routes(self.citry)
 

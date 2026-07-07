@@ -29,6 +29,8 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.contrib.wsgi import StartResponse
 
+__all__ = ["mount"]
+
 
 def mount(app: Any, citry_instance: Citry, prefix: str = "/citry") -> None:
     """

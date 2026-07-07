@@ -24,7 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from citry.extensions.dependencies.scripts import gen_asset_cache_key, get_component_script, get_script
+from citry.ext.dependencies.scripts import gen_asset_cache_key, get_component_script, get_script
 from citry.util.routing import RouteResponse, URLRoute
 
 if TYPE_CHECKING:
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 
     from citry.citry import Citry
     from citry.component import Component
-    from citry.extensions.dependencies.types import ScriptType
+    from citry.ext.dependencies.types import ScriptType
 
 _CONTENT_TYPES = {"js": "text/javascript", "css": "text/css"}
 
@@ -98,7 +98,7 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
         # Imported here, not at module load: emission imports this module's
         # sibling helpers, so a top-level import back into it would be
         # circular.
-        from citry.extensions.dependencies.emission import _runtime_js  # noqa: PLC0415
+        from citry.ext.dependencies.emission import _runtime_js  # noqa: PLC0415
 
         return RouteResponse(content=_runtime_js(), content_type=_CONTENT_TYPES["js"])
 

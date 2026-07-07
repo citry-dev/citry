@@ -38,6 +38,14 @@ from citry.command import CommandArg, CommandArgGroup, CommandSubcommand
 from citry.component import Component
 from citry.component_registry import AlreadyRegistered, ComponentRegistry, NotRegistered
 from citry.constness import Const
+from citry.ext.dependencies import (
+    CitryDependencies,
+    Dependency,
+    DependencyRecord,
+    OnDependenciesContext,
+    Script,
+    Style,
+)
 from citry.extension import (
     Extension,
     ExtensionCommand,
@@ -60,14 +68,6 @@ from citry.extension import (
     OnSlotRenderedContext,
     OnTemplateCompiledContext,
     OnTemplateLoadedContext,
-)
-from citry.extensions.dependencies import (
-    CitryDependencies,
-    Dependency,
-    DependencyRecord,
-    OnDependenciesContext,
-    Script,
-    Style,
 )
 from citry.nodes import (
     ComponentNode,

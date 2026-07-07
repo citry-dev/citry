@@ -34,7 +34,7 @@ from typing import TYPE_CHECKING
 from citry.citry_context import CitryContext
 from citry.citry_render import CitryRender, Placeholder
 from citry.component import Component
-from citry.extensions.dependencies.emission import CSS_PLACEHOLDER_KEY, JS_PLACEHOLDER_KEY
+from citry.ext.dependencies.emission import CSS_PLACEHOLDER_KEY, JS_PLACEHOLDER_KEY
 
 if TYPE_CHECKING:
     from citry.citry import Citry

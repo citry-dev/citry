@@ -27,8 +27,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 from citry.assets import HasHtml
-from citry.extensions.dependencies.routes import runtime_url, script_url
-from citry.extensions.dependencies.scripts import (
+from citry.ext.dependencies.routes import runtime_url, script_url
+from citry.ext.dependencies.scripts import (
     cache_asset,
     cache_component_css,
     cache_component_js,
@@ -36,14 +36,14 @@ from citry.extensions.dependencies.scripts import (
     get_script,
     uses_oncomponent,
 )
-from citry.extensions.dependencies.types import Dependency, Script, Style
+from citry.ext.dependencies.types import Dependency, Script, Style
 from citry.util.html import SafeString
 
 if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
+    from citry.ext.dependencies.types import DependencyRecord
     from citry.extension import OnSerializeContext
-    from citry.extensions.dependencies.types import DependencyRecord
 
 # One "run this instance's $onComponent callback" entry for the client-side
 # manager: (class_id, component_id, js_vars_hash or None).

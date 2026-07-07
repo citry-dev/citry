@@ -86,7 +86,7 @@ jobs:
           from pathlib import Path
 
           origin = importlib.util.find_spec("citry").origin
-          js = Path(origin).parent / "extensions/dependencies/client/citry.js"
+          js = Path(origin).parent / "ext/dependencies/client/citry.js"
           assert js.exists(), f"client JS missing from the wheel: {js}"
           print("client JS present:", js)
           PY
