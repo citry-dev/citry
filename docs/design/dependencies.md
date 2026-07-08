@@ -540,6 +540,58 @@ Two, both diagnosed with explicit errors rather than silent breakage:
   scripts cannot. Documented as the production guidance: fragments + JS/CSS
   variables + multi-worker means configure a shared cache backend.
 
+### 8.4 The component-instance lifecycle: teardown on removal and CSS cleanup
+
+The manager already runs an instance's `$onComponent` cleanup (8.2) when a
+new call for the same instance id arrives, which covers a component that
+re-renders under the same id. Three additions complete the lifecycle for
+the cases that path never reaches. All three stay keyed by the component id
+and the class id the manifests already carry; they need no new client
+concept.
+
+- **Teardown on removal.** An instance's cleanup also runs when its last
+  `[data-cid-<id>]` element leaves the DOM. The manager keeps the set of
+  instance ids whose callbacks have fired and, on DOM mutation and after
+  each render, sweeps that set against the live DOM; an id with no live
+  element left has its stored cleanups run and then discarded. The sweep
+  catches both a real node removal and an in-place attribute swap (the same
+  node losing its old `data-cid-<id>`), so a re-render that changes an
+  instance's id retires the old id exactly once. This closes the case where
+  a component's id never recurs: without the sweep its cleanup would stay
+  queued and its resources (a chart, a map, an editor) would leak.
+- **`Component.css` cleanup on the last instance of a class.** A
+  class-level `Component.css` sheet is tagged
+  `data-citry-css-class="<class>"` at emission (7, and the serializer note
+  below). The manager removes that sheet when the last live instance of the
+  class leaves the DOM, so a class that is gone from the page stops carrying
+  its stylesheet. The per-render CSS-variables sheets (`data-ccss-<hash>`,
+  5.2) are left in place for now; reclaiming them is out of scope here.
+
+  **This cleanup must be deferred to a later task, not run the instant an
+  instance retires.** A component that re-renders in place first retires its
+  old instance id and only then registers the fresh one, so at the moment of
+  retirement a solo instance of a class can momentarily look like the
+  class's last, even though a same-class render is about to land. Running
+  the check inline would drop the class's sheet on every such re-render; for
+  a sheet served from a URL that is worse than a flicker, because the manager
+  still records the URL as loaded (8.2) and would not re-fetch it, so the
+  class would lose its styling for good. Deferring the check to a later task
+  and re-counting the live instances then lets the arriving same-class
+  render cancel it; a genuine last-instance departure still collects the
+  sheet.
+- **Re-entrant flush safety.** When the manager flushes queued calls it
+  snapshots and clears the pending list before iterating it, so a callback
+  or context decorator that synchronously triggers another flush cannot
+  re-run a call that is still in flight. This keeps a nested flush from
+  firing a cleanup twice or recursing without bound.
+
+Two matching additions belong to the serializer that emits the manifests
+(7), not to this runtime: tagging each `Component.css` sheet with
+`data-citry-css-class="<class>"` so the cleanup can find it, and emitting a
+small instance-to-class presence record for instances that carry CSS but no
+`$onComponent` JS, so the manager can still count a class's live instances
+when nothing else registers them.
+
 ---
 
 ## 9. URLs and web-server integration
