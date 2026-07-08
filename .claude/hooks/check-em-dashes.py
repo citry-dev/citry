@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-Em-dash detector for Citry docs and source.
+House-style detector for Citry docs and source.
 
 Per CLAUDE.md house style: no em dashes (U+2014) in agent docs, code
-comments, or docstrings. This PostToolUse hook scans Edit/Write outputs
-and warns Claude (via hookSpecificOutput.additionalContext) when em
-dashes remain, so they can be fixed before the next turn.
+comments, or docstrings, and no calling an integration mechanism a
+"seam" (name the concrete mechanism: the hook, the extension point, the
+registered callback). This PostToolUse hook scans Edit/Write outputs
+and warns Claude (via hookSpecificOutput.additionalContext) when either
+slips through, so the fix happens before the next turn.
 
 Why warn instead of block: the warn-to-Claude mode keeps the UX silent
 for the user when Claude does the right thing; the warning lands in
@@ -32,10 +34,14 @@ Silent (exit 0, no stdout) when:
 """
 
 import json
+import re
 import sys
 
 CODE_EXT = (".md", ".rs", ".py", ".pyi")
 EM = "—"  # em dash
+# The word "seam"/"seams" as a whole word; "seamless" is a normal word
+# and stays allowed.
+SEAM_RE = re.compile(r"\bseams?\b", re.IGNORECASE)
 
 
 def blank_md_code_fences(src: str) -> str:
@@ -89,23 +95,38 @@ def main() -> None:
     scanned = blank_md_code_fences(content) if fp.endswith(".md") else content
     scanned_lines = scanned.split("\n")
 
-    findings = []
+    def excerpt_at(i: int) -> str:
+        # Report the ORIGINAL line so the user sees their actual source.
+        excerpt = orig_lines[i - 1].strip()
+        if len(excerpt) > 120:
+            excerpt = excerpt[:117] + "..."
+        return f"  {fp}:{i}: {excerpt}"
+
+    em_findings = []
+    seam_findings = []
     for i, line in enumerate(scanned_lines, 1):
         if EM in line:
-            # Report the ORIGINAL line so the user sees their actual source.
-            excerpt = orig_lines[i - 1].strip()
-            if len(excerpt) > 120:
-                excerpt = excerpt[:117] + "..."
-            findings.append(f"  {fp}:{i}: {excerpt}")
+            em_findings.append(excerpt_at(i))
+        if SEAM_RE.search(line):
+            seam_findings.append(excerpt_at(i))
 
-    if not findings:
+    if not em_findings and not seam_findings:
         sys.exit(0)
 
-    msg = (
-        f"Em dash ({EM}) found. Per CLAUDE.md house style, em dashes are not "
-        f"allowed in agent docs, code comments, or docstrings. Replace with a "
-        f"hyphen, a comma, parentheses, or recast as two sentences:\n" + "\n".join(findings)
-    )
+    parts = []
+    if em_findings:
+        parts.append(
+            f"Em dash ({EM}) found. Per CLAUDE.md house style, em dashes are not "
+            f"allowed in agent docs, code comments, or docstrings. Replace with a "
+            f"hyphen, a comma, parentheses, or recast as two sentences:\n" + "\n".join(em_findings)
+        )
+    if seam_findings:
+        parts.append(
+            'The word "seam" found. Per CLAUDE.md house style, do not call an '
+            "integration mechanism a seam; name the concrete mechanism (the hook, "
+            "the extension point, the registered callback, the public function):\n" + "\n".join(seam_findings)
+        )
+    msg = "\n\n".join(parts)
     print(
         json.dumps(
             {

@@ -358,6 +358,12 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   docstrings. Use a hyphen, a comma, parentheses, or two sentences. A
   PostToolUse hook ([`.claude/hooks/check-em-dashes.py`](.claude/hooks/check-em-dashes.py))
   warns when one slips through.
+- **Never call an integration mechanism a "seam".** The word is
+  placeholder jargon that hides what the thing is; name the concrete
+  mechanism instead: the hook, the extension point, the registered
+  callback, the public function, the route. This applies to prose,
+  comments, identifiers, and file names alike. The same PostToolUse hook
+  warns when the word slips through.
 - Prefer a robust solution over a one-line shortcut. When choosing between
   proper architecture and a quick patch, recommend the proper one outright.
 - Honest analysis. Do not validate user suggestions uncritically.

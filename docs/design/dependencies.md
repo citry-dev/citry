@@ -29,7 +29,7 @@ Upstream references: django-components
 [#1444](https://github.com/django-components/django-components/issues/1444)
 (head tag extension),
 [#1230](https://github.com/django-components/django-components/issues/1230)
-(scoped CSS, a future consumer of the root-marker seam).
+(scoped CSS, a future consumer of the root-marker hook).
 
 ---
 
@@ -104,7 +104,7 @@ In `packages/py/citry/citry/`:
 - `extensions/dependencies.py`: the built-in extension with the loading half
   (captured declarations, `CitryDependencies` merge). This design adds the
   emission half to the same extension, as planned.
-- `component_render.py:887-900`: `_merge_dependencies`, the TODO-marked seam
+- `component_render.py:887-900`: `_merge_dependencies`, the TODO-marked hook
   where a child render's `extra` reaches its parent.
 - `citry_context.py`: `extra`, the tree-wide bag "for extensions", currently
   unused.
@@ -125,11 +125,11 @@ In `packages/py/citry/citry/`:
 
 ---
 
-## 2. The shape of the whole: one extension, two integration seams
+## 2. The shape of the whole: one extension, two integration hooks
 
 Everything user-visible in this package is owned by the existing built-in
 `dependencies` extension (realizing DJC #1144 end to end). The core engine
-gains only generic seams: the `on_render_context_merge` hook, a serialize hook, a
+gains only generic hooks: the `on_render_context_merge` hook, a serialize hook, a
 placeholder part type, the routing types, and the cache protocol. The core
 never knows what JS or CSS are.
 
@@ -149,7 +149,7 @@ The end-to-end document flow:
 
 The fragment flow differs only at step 4: nothing is inlined; instead a JSON
 manifest tells the client-side manager which URLs to fetch (section 8). That
-is what requires the two integration seams:
+is what requires the two integration hooks:
 
 - **Web server integration** (section 9): the URLs that serve cached scripts
   (and the client runtime) must be mounted into some host app. Citry owns a
@@ -302,7 +302,7 @@ The mechanism ports from DJC conceptually unchanged:
   elements get a `data-ccss-<hash>` marker attribute. Citry splices it in the
   existing serialize marker pass: the marker list at `serialize.py:77-80` is
   already plural, so the extension only needs a way to contribute markers per
-  component instance (the **root-marker seam**, section 7.4).
+  component instance (the **root-marker hook**, section 7.4).
 - **JS variables** become a cached script that calls
   `Citry.manager.registerComponentData("<class_id>", "<hash>", data)`, and
   each instance that used `$onComponent` produces a *component call*
@@ -342,7 +342,7 @@ hooks:
 2. **`on_render_context_merge`** (the hook that replaces the direct
    `_merge_dependencies` call, [`extensions.md`](extensions.md) section 9.1):
    the extension extends the parent's record list with the child's,
-   preserving order. This wires the so-far-empty seam at
+   preserving order. This wires the so-far-empty hook at
    `component_render.py:890`; the deferred-render queue consumes children in
    template order, so the merged list approximates document order, which is
    what script-execution order wants. Building this hook is part of this
@@ -384,7 +384,7 @@ decision already recorded in [`rendering.md`](rendering.md) section 5.1.
 
 ### 7.2 The serialize hook
 
-`serialize_render` gains one extension seam: after the frames are built and
+`serialize_render` gains one extension hook: after the frames are built and
 joined, the manager fires a core hook (working name **`on_serialize`**,
 threaded on the HTML) carrying the root `CitryContext`, the joined HTML, the
 strategy/position arguments, and the placeholder map (7.3). The
@@ -446,7 +446,7 @@ Divergence from DJC, flagged: DJC duplicates all tags into *every*
 placeholder occurrence (and documents that as a footgun). Citry fills the
 first occurrence per type and leaves later ones empty.
 
-### 7.4 The root-marker seam
+### 7.4 The root-marker hook
 
 The extension needs to add `data-ccss-<hash>` next to the `data-cid-<id>`
 marker on a component's root elements (5.2). Rather than a JS/CSS-specific
@@ -502,9 +502,18 @@ manager, renamed (`globalThis.Citry`, `data-citry`, `citry.min.js`):
   `registerComponentData(classId, hash, data)`, `callComponent(classId,
   componentId, varsHash)`; calls queue until their script and data arrive,
   then run against the elements matching `[data-cid-<componentId>]`.
+- Two hooks for other extensions on the callback path (contracts pinned in
+  `events.md` 12.5): `decorateContext(fn)` registers a decorator that adds
+  members to the `$onComponent` payload object in place just before the
+  callbacks run (and returns an unregister function), and a callback may
+  return a cleanup function that runs before the callbacks fire again for
+  the same instance id.
 - `loadJs`/`loadCss` from JSON tag descriptors; `markScriptLoaded`/
   `isScriptLoaded` keyed by URL.
-- The `data-citry` MutationObserver and the stuck-call console warning.
+- The `data-citry` MutationObserver.
+- Planned, not yet in the runtime: a console warning for a stuck call (one
+  whose component script or data never arrives). Today such a call just
+  stays queued, silently.
 
 The runtime ships inside the `citry` Python package as package data
 (`citry/extensions/dependencies/client/citry.js`), today as readable plain
@@ -744,7 +753,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 | `evict_component_scripts` | Ported | folded into the existing `on_files_reset` handler (4.3) |
 | `get_js_data` / `get_css_data` / `JsData` / `CssData` | Ported (reshaped) | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` (5.1) |
 | `$onComponent` transform | Ported | target renamed to `Citry.manager.registerComponent` (5.2) |
-| CSS vars stylesheet + `data-djc-css-<hash>` | Ported | `data-ccss-<hash>` via the root-marker seam (5.2, 7.4) |
+| CSS vars stylesheet + `data-djc-css-<hash>` | Ported | `data-ccss-<hash>` via the root-marker hook (5.2, 7.4) |
 | `set_component_attrs_for_js_and_css` | Superseded | `data-cid-<id>` already stamped at serialize; CSS marker rides the same pass |
 | `<!-- _RENDERED -->` comments + regex extraction | Superseded | `DependencyRecord`s in `CitryContext.extra` (6) |
 | `render_dependencies()` six strategies | Reshaped | four strategies + `deps_position`, implementing DJC's own TODO (7.1) |
@@ -804,7 +813,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 - **Streaming (#1337)**: still held off; the manifest-based fragment path is
   the likely streaming delivery mechanism later (deps at the component's own
   location), and nothing here forecloses it.
-- **Scoped CSS (#1230)**: becomes feasible on two seams built here, the
+- **Scoped CSS (#1230)**: becomes feasible on two hooks built here, the
   root-marker lookup (7.4) and `on_template_compiled`; not part of this
   package.
 
@@ -812,7 +821,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 
 ## 15. Open questions
 
-- ~~The exact shape of the root-marker and placeholder seams~~ decided:
+- ~~The exact shape of the root-marker and placeholder hooks~~ decided:
   `CitryContext._add_root_markers` / `_get_root_markers` (internal), storing
   under the namespaced `extra["citry"]["root_markers"]` (7.4), and a core `Placeholder`
   part riding the serializer's template-tag machinery, reported to
@@ -840,7 +849,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    render-context access for `on_component_data` (section 15) was deferred
    to phase 2, where its consumer (record collection) lands.
 2. **Collection + document emission - built.** `DependencyRecord`s into
-   `extra`; the `on_render_context_merge` hook (the `_merge_dependencies` seam now
+   `extra`; the `on_render_context_merge` hook (the `_merge_dependencies` hook now
    only fires it); the `on_serialize` hook + the `Placeholder` part type;
    `<c-js>`/`<c-css>` built-ins; strategies `document`/`simple`/`ignore`
    with positions; default-location insertion; `Component.on_dependencies` +
@@ -853,9 +862,9 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    entries are `Path` objects (so emission can tell a file from a URL
    string) and are inlined, per the 9.4 default.
 3. **Client runtime + variables - built.** Vars scripts and hashing;
-   `$onComponent`; `data-ccss-` markers via the root-marker seam; the
+   `$onComponent`; `data-ccss-` markers via the root-marker hook; the
    document manifest (mark-as-loaded + component calls); runtime inlining.
-   Decisions made in code: the root-marker seam is the internal
+   Decisions made in code: the root-marker hook is the internal
    `CitryContext._add_root_markers` / `_get_root_markers`, storing under the
    namespaced `extra["citry"]["root_markers"]`, read by serialization next
    to the `data-cid` marker; the manifest (and the

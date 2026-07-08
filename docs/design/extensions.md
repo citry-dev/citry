@@ -377,7 +377,7 @@ its top-level keys are **namespaced by owner** to avoid collisions: an
 extension stashes its data under a key named after itself (the dependencies
 extension uses `extra["dependencies"]`), and citry-core concepts that more
 than one party may contribute to live under `extra["citry"]`
-(`citry_context.EXTRA_CITRY_KEY`). The root-marker seam is the first such
+(`citry_context.EXTRA_CITRY_KEY`). The root-marker hook is the first such
 core concept; the core wraps it in the internal
 `CitryContext._add_root_markers` / `_get_root_markers` rather than exposing
 the raw nested key, so the magic strings stay in one place (underscore-
@@ -388,7 +388,7 @@ each other's `extra` entries.
 
 ### 9.1 The dependency-merge step becomes a hook
 
-`_merge_dependencies(parent_ctx, child_ctx)`, the seam fired when a child
+`_merge_dependencies(parent_ctx, child_ctx)`, the merge step fired when a child
 `CitryRender` is consumed, is a core hook: **`on_render_context_merge(ctx)`**,
 `ctx` carrying the parent and child `CitryContext`s, so each extension merges
 *its own* slice of `extra` with its own policy (deps want ordered de-dup, not

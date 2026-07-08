@@ -487,7 +487,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 | `render_dependencies()` + six strategies (`document`/`fragment`/`simple`/`prepend`/`append`/`ignore`) | ✅ Done (diverged) | `serialize(deps_strategy=..., deps_position=...)`: four strategies + positions, implementing djc's own TODO; `fragment` raises until the client-runtime phase ([`dependencies.md`](dependencies.md) section 7.1) |
 | `_insert_js_css_to_default_locations` (`<head>`/`<body>` insertion) | ✅ Done | Plus a no-`<head>`/`<body>` fallback (prepend CSS, append JS) instead of djc's silent drop |
 | `{% component_js_dependencies %}` / `{% component_css_dependencies %}` placeholder tags | ✅ Done | The `<c-js>` / `<c-css>` built-ins, rendering a core `Placeholder` part; first occurrence wins, later ones render nothing |
-| Per-component attr injection for JS/CSS scoping (`set_component_attrs_for_js_and_css`) | ✅ Done | `data-cid-<id>` at serialize plus `data-ccss-<hash>` via the root-marker seam (internal `CitryContext._add_root_markers`); the every-element `all_attributes` mode belongs to scoped CSS (#1230), a separate feature |
+| Per-component attr injection for JS/CSS scoping (`set_component_attrs_for_js_and_css`) | ✅ Done | `data-cid-<id>` at serialize plus `data-ccss-<hash>` via the root-marker hook (internal `CitryContext._add_root_markers`); the every-element `all_attributes` mode belongs to scoped CSS (#1230), a separate feature |
 | `<!-- _RENDERED ... -->` dependency comments + `insert_component_dependencies_comment` | ♻️ Superseded | Dependencies travel as data on the render objects, not marker strings |
 | `TagAttrParser` / `_parse_html_tag_attrs` | ♻️ Superseded | No re-parsing of rendered HTML in the object pipeline |
 | Client-side runtime (`_core_js`, pre-loader, `Components.onComponent` transform, exec-script manifests) | ✅ Done (rewritten) | Citry's own runtime (`extensions/dependencies/client/citry.js`, `globalThis.Citry.manager`): `$onComponent` callbacks called with `{id, els, data}` per instance via `data-cid` markers; `data-citry` JSON manifests, base64-armored. The fragment pre-loader lands with the fragments phase |
@@ -1621,7 +1621,7 @@ ported.
   `FillNode`) still raise `NotImplementedError` on `render` and are a later
   phase. `_render_body` calls each node's `render(context)`; when a node returns
   a `CitryRender` from a different context, it merges that render's dependencies
-  into the current context (the seam where the dependency extension will hook).
+  into the current context (where the dependency extension will hook in).
 
 **Usage:**
 
@@ -2690,7 +2690,7 @@ rendered output.
   `context` field for this; the context is now built just before the hook
   fires (provides are snapshotted right after, timing unchanged).
 - **Bubbling is extension-owned**: the render pipeline's
-  `_merge_dependencies` seam now only fires the new core `on_render_context_merge`
+  `_merge_dependencies` step now only fires the new core `on_render_context_merge`
   hook; each extension merges its own slice of `extra` with its own policy.
   The core no longer copies `extra` wholesale (last-writer-wins was the
   wrong default for everything).
@@ -2776,7 +2776,7 @@ records rather than parsed HTML comments.
 - **CSS variables** need no JavaScript: a generated stylesheet
   `[data-ccss-<hash>] { --name: value; }` (values via the ported
   `serialize_css_var_value`) plus the marker attribute on the instance's
-  root elements. The marker rides the new **root-marker seam**:
+  root elements. The marker rides the new **root-marker hook**:
   the internal `CitryContext._add_root_markers` / `_get_root_markers`,
   storing under the namespaced `extra["citry"]["root_markers"]`, which serialization splices
   next to `data-cid-<id>`; the future scoped-CSS work (#1230) is the second
@@ -2803,7 +2803,7 @@ records rather than parsed HTML comments.
   loaded-URL sets, the callback/data registries, and an in-order pending
   queue, so the manifest, component scripts, and data scripts may arrive in
   any order; a MutationObserver picks up manifests inserted later (the
-  fragments seam). Plain readable JS today; the
+  fragment entry point). Plain readable JS today; the
   `packages/js/citry-client` TypeScript + minification build is deferred to
   the packaging work.
 - **`document` vs `simple` now differ**: `simple` is the no-JS-runtime mode,
