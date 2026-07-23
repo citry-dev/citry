@@ -278,11 +278,11 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                     C_COMPONENT_TAG => {
                         reject_is_attr_conflict(&node)?;
 
-                        // Check if this component is using static `is` attribute
-                        // instead of the dynamic `c-is`. If the user is using the static variant,
-                        // then we know the component name (the static value), and so we can skip
-                        // rendering the dynamic "c-component", and instead render the underlying
-                        // named component directly.
+                        // A static `is` can bypass the dynamic component only when no
+                        // `c-bind` is present. A spread may also supply `is`, so mixed
+                        // forms stay at runtime where source order selects the target.
+                        // Without a spread, the known static value can render the named
+                        // component directly.
                         // For example:
                         // ```html
                         // <c-component is="XyzComp" ...>
@@ -291,7 +291,7 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                         // ```html
                         // <c-XyzComp ...>
                         // ```
-                        if let Some(comp_name) = find_static_is_value(&node) {
+                        if let Some(comp_name) = find_static_is_rewrite_value(&node) {
                             // We have found a static `is` attribute with the component name.
                             // Now mutate node to `<c-{comp_name}>` and drop the `is` attribute
                             match &mut node {
@@ -571,12 +571,19 @@ fn reject_is_attr_conflict(node: &Node) -> Result<(), CompileError> {
     Ok(())
 }
 
-/// The value of a static `is="..."` attribute, when present and non-empty.
+/// The value of a static `is="..."` attribute when it is safe to rewrite.
 ///
-/// A bare `is`, `is=""`, or only a dynamic `c-is` returns `None`; those cases
-/// stay on the runtime path, where the built-in component raises the proper
-/// "requires an 'is' value" error.
-fn find_static_is_value(node: &Node) -> Option<String> {
+/// A bare `is`, `is=""`, a dynamic `c-is`, or any exact `c-bind` returns
+/// `None`. Those forms stay on the runtime path so validation and spread
+/// source order are resolved before the target is selected.
+fn find_static_is_rewrite_value(node: &Node) -> Option<String> {
+    // A spread may also supply `is`, and attribute source order decides which
+    // value wins. Keep every mixed form on the runtime path, where the spread
+    // can be resolved before selecting the target.
+    if node.attrs().iter().any(|attr| attr.key.content == "c-bind") {
+        return None;
+    }
+
     for attr in node.attrs() {
         if attr.key.content == "is" {
             if let Some(inner_value) = &attr.inner_value {
@@ -707,7 +714,7 @@ fn compile_simple_node(
     // `(HtmlAttr(...), HtmlAttr(...), ...)`
     let mut attr_args = Vec::new();
     for attr in node.attrs() {
-        attr_args.push(compile_html_attr(attr));
+        attr_args.push(compile_html_attr(attr)?);
     }
 
     // Get used variables from the node. The AST tracks one token per
@@ -930,7 +937,7 @@ fn compile_element_node(mut node: Node) -> Result<Vec<LangSpecArgument>, Compile
     let static_name = if node.contains_fills() {
         None
     } else {
-        find_static_is_value(&node)
+        find_static_is_rewrite_value(&node)
     };
 
     // Dynamic path: resolved at render time by the built-in.
@@ -1079,7 +1086,7 @@ fn compile_control_flow_node(
         // Compile attributes as HtmlAttr calls
         let mut attr_args = Vec::new();
         for attr in node.attrs() {
-            attr_args.push(compile_html_attr(attr));
+            attr_args.push(compile_html_attr(attr)?);
         }
 
         // Collect unique variable names from this branch (first-seen order)
@@ -1216,25 +1223,27 @@ fn compile_html_attr(attr: &HtmlAttr) -> LangSpecArgument {
         .map(|token| token.content.clone())
         .collect();
 
-    // Use different class based on kind
-    let class_name = match attr.kind {
-        HtmlAttrKind::Expression => EXPR_ATTR_NODE,
-        HtmlAttrKind::Template => TEMPLATE_ATTR_NODE,
-        HtmlAttrKind::Static => STATIC_ATTR_NODE,
-    };
-
-    // Argument 4: `"""value"""` or `True` - attr value, unsafe string or boolean
-    // In HTML, `key`, `key=""`, and `key=''` are all treated as boolean attributes.
-    // So we normalize empty-string values to `True` just like missing values.
-    let attr_value = match &attr.inner_value {
-        // Non-empty string, e.g. `key="value"`
-        Some(inner_value) if !inner_value.content.is_empty() => {
-            LangSpecArgument::UnsafeString(inner_value.content.clone())
+    // Argument 4: `"""value"""` or `True` - attr value, unsafe string or boolean.
+    // Template fragments are attribute-level grouping syntax, so emit only
+    // their inner payload. Template values always remain strings: notably,
+    // `<></>` becomes `""`, not the boolean-attribute sentinel `True`.
+    let attr_value = if attr.kind == HtmlAttrKind::Template {
+        let template = attr.inner_value.as_ref().map_or("", |inner_value| {
+            template_fragment(&inner_value.content)
+                .map_or(inner_value.content.as_str(), |fragment| fragment.inner)
+        });
+        LangSpecArgument::UnsafeString(template.to_string())
+    } else {
+        // In HTML, `key`, `key=""`, and `key=''` are all treated as boolean
+        // attributes, so static/expression empty values use `True`.
+        match &attr.inner_value {
+            // Non-empty string, e.g. `key="value"`
+            Some(inner_value) if !inner_value.content.is_empty() => {
+                LangSpecArgument::UnsafeString(inner_value.content.clone())
+            }
+            // Empty or missing value, e.g. `key=""`, `key=''`, or `key`
+            Some(_) | None => LangSpecArgument::Bool(true),
         }
-        // Empty string, e.g. `key=""` or `key=''`
-        Some(_) => LangSpecArgument::Bool(true),
-        // Missing value, e.g. `key`
-        None => LangSpecArgument::Bool(true),
     };
 
     // E.g. `ExprHtmlAttr(source, (14, 19), """key""", """value""", ("a", "b"))`
@@ -1577,6 +1586,15 @@ fn _remove_attr_and_wrap_in_control_flow(
         Node::WithBody { start_tag, .. } => start_tag.attrs.remove(attr_index),
         Node::SelfClosing { start_tag, .. } => start_tag.attrs.remove(attr_index),
     };
+    // The lifted attribute no longer belongs to the inner node. Remove its
+    // exact token occurrences from the inner free-variable metadata before
+    // constructing the wrapper; equal names at other source positions remain.
+    let lifted_used_variables = attr.used_variables.clone();
+    match &mut node {
+        Node::WithBody { used_variables, .. } | Node::SelfClosing { used_variables, .. } => {
+            used_variables.retain(|token| !lifted_used_variables.contains(token));
+        }
+    }
 
     // TAG_ATTR_RULES already contains the info about which tag can have which attributes.
     // So we reuse that so that TAG_ATTR_RULES can remain the source of truth.
@@ -1647,15 +1665,31 @@ fn _remove_attr_and_wrap_in_control_flow(
 
 /// Wrap a node in a control flow node (e.g., wrap `<div c-if="...">` in `<c-if>`).
 fn _wrap_node_in_control_flow(
-    inner_node: Node,
+    mut inner_node: Node,
     tag_name: &str,
     cf_attr: Option<HtmlAttr>,
 ) -> Result<Node, CompileError> {
     // Get metadata from the inner node (before moving it)
-    let inner_start_tag = inner_node.start_tag();
+    let inner_start_tag = inner_node.start_tag().clone();
     let inner_used_vars = inner_node.used_variables().clone();
-    let inner_introduced_vars = inner_node.introduced_variables().clone();
     let inner_comments = inner_node.comments().clone();
+    // A shorthand loop's targets belong only to its generated c-for wrapper.
+    // Other wrappers (notably an outer c-if) leave those targets on the inner
+    // host until the c-for attribute itself is lowered.
+    let wrapper_introduced_vars = if tag_name == C_FOR_TAG {
+        match &mut inner_node {
+            Node::WithBody {
+                introduced_variables,
+                ..
+            }
+            | Node::SelfClosing {
+                introduced_variables,
+                ..
+            } => std::mem::take(introduced_variables),
+        }
+    } else {
+        Vec::new()
+    };
     // Get slots from the inner node's body if it exists (WithBody), otherwise empty vec
     let inner_slots = match &inner_node {
         Node::WithBody { body, .. } => body.slots.clone(),
@@ -1674,7 +1708,9 @@ fn _wrap_node_in_control_flow(
     // This is where we assign the `c-if=""` or `c-for=""` attributes from the inner node
     // to the control flow node as `cond=""` or `each=""`.
     let mut cf_attrs = Vec::new();
+    let mut wrapper_used_vars = inner_used_vars.clone();
     if let Some(attr) = cf_attr {
+        wrapper_used_vars.extend(attr.used_variables.clone());
         cf_attrs.push(attr);
     }
 
@@ -1742,16 +1778,29 @@ fn _wrap_node_in_control_flow(
     // Create the body containing just the inner node
     let body = Template {
         elements: vec![TemplateElement::Node(inner_node)],
-        comments: inner_comments,
+        comments: inner_comments.clone(),
         used_variables: inner_used_vars,
         slots: inner_slots,
     };
 
-    // Create the outer control flow node
-    Ok(Node::from_start_and_end_tags(
-        cf_start_tag,
-        cf_end_tag,
+    // Construct directly instead of using `from_start_and_end_tags`: that
+    // helper globally removes introduced names and would incorrectly erase an
+    // outer header read in an invalid clause such as `x in x`.
+    let mut comments = inner_comments;
+    comments.extend(
+        cf_start_tag
+            .attrs
+            .iter()
+            .flat_map(|attr| attr.comments.clone()),
+    );
+    comments.extend(cf_start_tag.comments.clone());
+    Ok(Node::WithBody {
+        start_tag: cf_start_tag,
+        end_tag: cf_end_tag,
         body,
-        inner_introduced_vars,
-    ))
+        used_variables: wrapper_used_vars,
+        introduced_variables: wrapper_introduced_vars,
+        comments,
+        contains_fills: false,
+    })
 }

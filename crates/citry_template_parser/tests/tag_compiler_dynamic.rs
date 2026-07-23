@@ -77,21 +77,32 @@ mod tests {
     }
 
     #[test]
-    fn test_component_empty_static_is_stays_on_runtime_path() {
-        // `is=""` normalizes to a boolean attribute (True), so there is no
-        // static name to rewrite to; the built-in rejects the value at render.
-        assert_compile(
-            r#"<c-component is="" />"#,
-            r#"[ComponentNode(source, (0, 21,), (StaticHtmlAttr(source, (13, 18,), """is""", True, ()),), [], (), """component""", False),]"#,
-        );
+    fn test_dynamic_builtins_reject_empty_static_is_at_parse() {
+        for tag_name in ["c-component", "c-element"] {
+            for attr in ["is", r#"is="""#, r#"is="   ""#] {
+                let input = format!("<{tag_name} {attr} />");
+                assert_parse_error(
+                    &input,
+                    &format!("Tag '<{tag_name}>' static 'is' must have a non-empty value."),
+                );
+            }
+        }
     }
 
     #[test]
-    fn test_component_is_and_c_is_conflict_is_compile_error() {
-        assert_compile_error(
+    fn test_empty_static_is_rule_is_limited_to_dynamic_builtins() {
+        parse_template(r#"<c-my-component is="" />"#, None, None)
+            .expect("ordinary component kwargs may use an empty static 'is'");
+    }
+
+    #[test]
+    fn test_component_is_and_c_is_conflict_is_parse_error() {
+        for input in [
             r#"<c-component is="MyComp" c-is="other" />"#,
-            "<c-component> accepts either 'is' or 'c-is', not both",
-        );
+            r#"<c-component c-is="other" is="MyComp" />"#,
+        ] {
+            assert_parse_error(input, "provide the same logical attribute 'is'");
+        }
     }
 
     #[test]
@@ -198,11 +209,13 @@ mod tests {
     // =============================================================================
 
     #[test]
-    fn test_element_is_and_c_is_conflict_is_compile_error() {
-        assert_compile_error(
+    fn test_element_is_and_c_is_conflict_is_parse_error() {
+        for input in [
             r#"<c-element is="div" c-is="tag" />"#,
-            "<c-element> accepts either 'is' or 'c-is', not both",
-        );
+            r#"<c-element c-is="tag" is="div" />"#,
+        ] {
+            assert_parse_error(input, "provide the same logical attribute 'is'");
+        }
     }
 
     #[test]
@@ -219,6 +232,58 @@ mod tests {
         assert_parse_error(
             r#"<c-element is="div"><c-fill name="header">X</c-fill></c-element>"#,
             "Tag '<c-element>' does not allow a slot named 'header'.",
+        );
+    }
+
+    // =============================================================================
+    // Mixed static `is` and `c-bind` - runtime path preserves source order
+    // =============================================================================
+
+    #[test]
+    fn test_component_static_is_then_bind_stays_on_runtime_path() {
+        assert_compile(
+            r#"<c-component is="Alpha" c-bind="props" />"#,
+            r#"[ComponentNode(source, (0, 41,), (StaticHtmlAttr(source, (13, 23,), """is""", """Alpha""", ()), ExprHtmlAttr(source, (24, 38,), """c-bind""", """props""", ("props",)),), [], ("props",), """component""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_component_bind_then_static_is_stays_on_runtime_path() {
+        assert_compile(
+            r#"<c-component c-bind="props" is="Alpha" />"#,
+            r#"[ComponentNode(source, (0, 41,), (ExprHtmlAttr(source, (13, 27,), """c-bind""", """props""", ("props",)), StaticHtmlAttr(source, (28, 38,), """is""", """Alpha""", ()),), [], ("props",), """component""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_element_static_is_then_bind_stays_on_runtime_path() {
+        assert_compile(
+            r#"<c-element is="section" c-bind="attrs">x</c-element>"#,
+            r#"[ComponentNode(source, (0, 52,), (StaticHtmlAttr(source, (11, 23,), """is""", """section""", ()), ExprHtmlAttr(source, (24, 38,), """c-bind""", """attrs""", ("attrs",)),), ["""x""",], ("attrs",), """element""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_element_bind_then_static_is_stays_on_runtime_path() {
+        assert_compile(
+            r#"<c-element c-bind="attrs" is="section">x</c-element>"#,
+            r#"[ComponentNode(source, (0, 52,), (ExprHtmlAttr(source, (11, 25,), """c-bind""", """attrs""", ("attrs",)), StaticHtmlAttr(source, (26, 38,), """is""", """section""", ()),), ["""x""",], ("attrs",), """element""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_element_static_void_is_then_bind_stays_on_runtime_path() {
+        assert_compile(
+            r#"<c-element is="br" c-bind="attrs" />"#,
+            r#"[ComponentNode(source, (0, 36,), (StaticHtmlAttr(source, (11, 18,), """is""", """br""", ()), ExprHtmlAttr(source, (19, 33,), """c-bind""", """attrs""", ("attrs",)),), [], ("attrs",), """element""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_element_bind_then_static_void_is_stays_on_runtime_path() {
+        assert_compile(
+            r#"<c-element c-bind="attrs" is="br" />"#,
+            r#"[ComponentNode(source, (0, 36,), (ExprHtmlAttr(source, (11, 25,), """c-bind""", """attrs""", ("attrs",)), StaticHtmlAttr(source, (26, 33,), """is""", """br""", ()),), [], ("attrs",), """element""", False),]"#,
         );
     }
 }

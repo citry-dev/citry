@@ -1,8 +1,11 @@
+use std::collections::HashSet;
+
 use python_safe_eval::transformer::{
     parse_expression_with_adjusted_error_ranges, transform_expression_string,
     Comment as SafeEvalComment, Token as SafeEvalToken,
 };
 use ruff_python_ast::Expr as PythonAstExpr;
+use ruff_text_size::Ranged;
 
 use crate::ast::{Comment, Token};
 use crate::lang::lang::{ForLoopVars, LangImpl, LangSpecArgument, ParseExprResult};
@@ -96,6 +99,7 @@ impl LangImpl for PythonLang {
 
         // Extract variable tokens from all generators
         let mut introduced = Vec::new();
+        let mut introduced_by_generator = Vec::new();
         for comprehension in generators {
             let var_tokens = _extract_variable_names_from_comp_target(
                 &comprehension.target,
@@ -109,7 +113,8 @@ impl LangImpl for PythonLang {
                         .to_string(),
                 );
             }
-            introduced.extend(var_tokens);
+            introduced.extend(var_tokens.clone());
+            introduced_by_generator.push(var_tokens);
         }
         // If no variables were found, raise error
         // NOTE: This should never raise, because Ruff would error first.
@@ -120,31 +125,35 @@ impl LangImpl for PythonLang {
         }
 
         // --- Used (free) variables ---
-        // Reuse the scope-aware expression analyser on the same wrapped clause. It
-        // treats the comprehension targets as bound, so the reported used
-        // variables are exactly the free variables of the iterable/condition
-        // clauses. The tokens are positioned relative to `wrapped_expr`; shift
-        // them back so they are relative to `source`. A token inside the synthetic
-        // prefix is not part of the user's source and is dropped (the prefix only
-        // contains the `None` keyword, never a used variable, so this is a safety
-        // net).
-        let used = self
-            .parse_expression(&wrapped_expr)?
-            .used_vars
-            .into_iter()
-            .filter_map(|mut token| {
-                if token.start_index < prefix_len {
-                    return None;
-                }
-                token.start_index -= prefix_len;
-                token.end_index -= prefix_len;
-                // The synthetic prefix is single-line, so only first-line columns shift.
-                if token.line_col.0 == 1 {
-                    token.line_col = (1, token.line_col.1 - prefix_len);
-                }
-                Some(token)
-            })
-            .collect();
+        // Analyse every iterable before binding that generator's target. Python
+        // comprehension scope starts only after `in`, so `x in x` reads an outer
+        // `x` and must not be erased as though the target already existed. Prior
+        // generator targets are in scope for later iterables and conditions.
+        let mut used = Vec::new();
+        let mut bound_names = HashSet::new();
+        for (comprehension, target_tokens) in generators.iter().zip(introduced_by_generator.iter())
+        {
+            used.extend(_extract_free_variables_from_comp_expr(
+                self,
+                &comprehension.iter,
+                &wrapped_expr,
+                source,
+                prefix_len,
+                &bound_names,
+            )?);
+
+            bound_names.extend(target_tokens.iter().map(|token| token.content.clone()));
+            for condition in &comprehension.ifs {
+                used.extend(_extract_free_variables_from_comp_expr(
+                    self,
+                    condition,
+                    &wrapped_expr,
+                    source,
+                    prefix_len,
+                    &bound_names,
+                )?);
+            }
+        }
 
         Ok(ForLoopVars { introduced, used })
     }
@@ -178,6 +187,39 @@ impl LangImpl for PythonLang {
 
         Ok(final_code)
     }
+}
+
+/// Extract free variables from one comprehension iterable/condition and map
+/// their positions from the synthetic wrapped generator back to `source`.
+fn _extract_free_variables_from_comp_expr(
+    lang: &PythonLang,
+    expr: &PythonAstExpr,
+    wrapped_source: &str,
+    source: &str,
+    prefix_len: usize,
+    bound_names: &HashSet<String>,
+) -> Result<Vec<Token>, String> {
+    let range = expr.range();
+    let wrapped_start = range.start().to_usize();
+    let wrapped_end = range.end().to_usize();
+    if wrapped_start < prefix_len || wrapped_end > wrapped_source.len() {
+        return Err("Internal error while mapping for-loop variable ranges.".to_string());
+    }
+    let expr_source = &wrapped_source[wrapped_start..wrapped_end];
+    let source_start = wrapped_start - prefix_len;
+
+    Ok(lang
+        .parse_expression(expr_source)?
+        .used_vars
+        .into_iter()
+        .filter(|token| !bound_names.contains(&token.content))
+        .map(|mut token| {
+            token.start_index += source_start;
+            token.end_index += source_start;
+            token.line_col = _byte_offset_to_line_col(source, token.start_index);
+            token
+        })
+        .collect())
 }
 
 /// Format a single `LangSpecArgument` as a Python string representation.
@@ -286,7 +328,9 @@ fn _extract_variable_names_from_comp_target(
         PythonAstExpr::Tuple(expr_tuple) => {
             let mut tokens = Vec::new();
             for elt in &expr_tuple.elts {
-                tokens.extend(_extract_variable_names_from_comp_target(elt, source, prefix_len)?);
+                tokens.extend(_extract_variable_names_from_comp_target(
+                    elt, source, prefix_len,
+                )?);
             }
             Ok(tokens)
         }
@@ -323,8 +367,10 @@ fn _byte_offset_to_line_col(source: &str, byte_offset: usize) -> (usize, usize) 
         }
     }
 
-    // Column is the byte offset from the last newline (or start), plus 1 (1-indexed)
-    let column = (offset - last_newline_pos) + 1;
+    // Columns count Unicode scalar values, matching Pest's character columns.
+    let column = source
+        .get(last_newline_pos..offset)
+        .map_or(1, |line_prefix| line_prefix.chars().count() + 1);
 
     (line, column)
 }

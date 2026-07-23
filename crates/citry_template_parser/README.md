@@ -102,7 +102,7 @@ Dynamic attributes can contain nested templates instead of expressions:
 
 ```html
 <c-Card c-body="<span>{{ name }}</span>" />
-<!-- Or with a fragment for multiple roots: -->
+<!-- Or use a fragment to group the whole value explicitly: -->
 <c-Card c-body="<><p>Line 1</p><p>Line 2</p></>" />
 ```
 

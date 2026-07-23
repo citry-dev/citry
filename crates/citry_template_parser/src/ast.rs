@@ -109,11 +109,11 @@ impl Token {
         pest::Span::new(input, self.start_index, self.end_index)
     }
 
-    /// Apply column offsets to this token, adjusting content and positions
+    /// Crop bytes from this token, adjusting content and source positions.
     ///
     /// # Arguments
-    /// * `col_start_offset` - Offset to apply to start position (positive = skip chars at start, negative = extend before)
-    /// * `col_end_offset` - Offset to apply to end position (positive = extend after, negative = skip chars at end)
+    /// * `col_start_offset` - Bytes to skip at the start
+    /// * `col_end_offset` - Offset from the current end (normally negative)
     ///
     /// When offsets are non-zero, the content will be sliced to match the adjusted boundaries.
     ///
@@ -122,26 +122,44 @@ impl Token {
     /// - `col_start_offset: 2` skips `{#` at the start
     /// - `col_end_offset: -2` skips `#}` at the end
     pub fn crop_cols(mut self, col_start_offset: isize, col_end_offset: isize) -> Self {
-        // Adjust indices
-        self.start_index = (self.start_index as isize + col_start_offset) as usize;
-        self.end_index = (self.end_index as isize + col_end_offset) as usize;
-
-        // Adjust column (only on first line)
-        let (line, col) = self.line_col;
-        if line == 1 {
-            self.line_col = (line, (col as isize + col_start_offset) as usize);
+        let Ok(content_start) = usize::try_from(col_start_offset) else {
+            return self;
+        };
+        let Some(content_end) = self.content.len().checked_add_signed(col_end_offset) else {
+            return self;
+        };
+        if content_start > content_end {
+            return self;
         }
 
-        // Slice the content to match the adjusted boundaries
-        if col_start_offset != 0 || col_end_offset != 0 {
-            let content_start = col_start_offset.max(0) as usize;
-            let content_end = (self.content.len() as isize + col_end_offset) as usize;
-            if content_start < content_end && content_end <= self.content.len() {
-                self.content = self.content[content_start..content_end].to_string();
+        let Some(prefix) = self.content.get(..content_start) else {
+            // Offsets are byte offsets and must land on UTF-8 boundaries.
+            return self;
+        };
+        let Some(cropped) = self.content.get(content_start..content_end) else {
+            return self;
+        };
+        let Some(start_index) = self.start_index.checked_add(content_start) else {
+            return self;
+        };
+        let Some(end_index) = self.start_index.checked_add(content_end) else {
+            return self;
+        };
+
+        let (mut line, mut col) = self.line_col;
+        for character in prefix.chars() {
+            if character == '\n' {
+                line += 1;
+                col = 1;
             } else {
-                self.content = String::new();
+                col += 1;
             }
         }
+
+        self.start_index = start_index;
+        self.end_index = end_index;
+        self.line_col = (line, col);
+        self.content = cropped.to_string();
 
         self
     }
@@ -313,7 +331,14 @@ impl HtmlAttr {
     fn __repr__(&self) -> String {
         format!(
             "HtmlAttr(token={:?}, key={:?}, value={:?}, inner_value={:?}, quote_char={:?}, kind={:?}, comments={:?}, used_variables={:?})",
-            self.token, self.key, self.value, self.inner_value, self.quote_char, self.kind, self.comments, self.used_variables
+            self.token,
+            self.key,
+            self.value,
+            self.inner_value,
+            self.quote_char,
+            self.kind,
+            self.comments,
+            self.used_variables
         )
     }
 }
@@ -567,7 +592,10 @@ impl Node {
                 comments,
                 contains_fills: _,
             } => {
-                format!("Node::SelfClosing(start_tag={:?}, used_variables={:?}, introduced_variables={:?}, comments={:?})", start_tag, used_variables, introduced_variables, comments)
+                format!(
+                    "Node::SelfClosing(start_tag={:?}, used_variables={:?}, introduced_variables={:?}, comments={:?})",
+                    start_tag, used_variables, introduced_variables, comments
+                )
             }
         }
     }

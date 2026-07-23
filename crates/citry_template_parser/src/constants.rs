@@ -175,7 +175,7 @@ pub const TAG_ATTR_RULES_DATA: &[(&str, (Option<&[&[&str]]>, &[&[&str]]))] = &[
     (
         C_FILL_TAG,
         (
-            Some(&[&["name", "c-name"], &["data"], &["fallback"], &["c-bind"]]),
+            Some(&[&["name", "c-name"], &["data"], &["fallback"]]),
             &[&["name", "c-name", "c-bind"]],
         ),
     ),
