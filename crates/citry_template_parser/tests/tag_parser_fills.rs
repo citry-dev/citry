@@ -305,6 +305,64 @@ mod tests {
     }
 
     #[test]
+    fn test_fill_introduced_vars_follow_source_order_around_c_bind() {
+        let template = parse_template(
+            r#"<c-my-comp><c-fill name="header" data="x" c-bind="attrs">{{ x }}</c-fill></c-my-comp>"#,
+            None,
+            None,
+        )
+        .unwrap();
+        let used_var_names: Vec<&str> = template
+            .used_variables
+            .iter()
+            .map(|var| var.content.as_str())
+            .collect();
+        assert_eq!(used_var_names, vec!["x", "attrs"]);
+
+        let template = parse_template(
+            r#"<c-my-comp><c-fill name="header" c-bind="attrs" data="x">{{ x }}</c-fill></c-my-comp>"#,
+            None,
+            None,
+        )
+        .unwrap();
+        let used_var_names: Vec<&str> = template
+            .used_variables
+            .iter()
+            .map(|var| var.content.as_str())
+            .collect();
+        assert_eq!(used_var_names, vec!["attrs"]);
+
+        let template = parse_template(
+            r#"<c-my-comp><c-fill name="header" data="x" c-bind="attrs" fallback="y">{{ x }}{{ y }}</c-fill></c-my-comp>"#,
+            None,
+            None,
+        )
+        .unwrap();
+        let used_var_names: Vec<&str> = template
+            .used_variables
+            .iter()
+            .map(|var| var.content.as_str())
+            .collect();
+        assert_eq!(used_var_names, vec!["x", "attrs"]);
+    }
+
+    #[test]
+    fn test_slot_and_fill_static_names_must_be_nonempty() {
+        let inputs = [
+            "<c-slot name />",
+            r#"<c-slot name="" />"#,
+            r#"<c-slot name="   " />"#,
+            "<c-my-comp><c-fill name>body</c-fill></c-my-comp>",
+            r#"<c-my-comp><c-fill name="">body</c-fill></c-my-comp>"#,
+            r#"<c-my-comp><c-fill name="   ">body</c-fill></c-my-comp>"#,
+        ];
+
+        for input in inputs {
+            assert_parse_error(input, "static 'name' must have a non-empty value");
+        }
+    }
+
+    #[test]
     fn test_slot_without_name_is_default_slot() {
         // A <c-slot> with no name-providing attribute is the default slot,
         // collected in template.slots under the name "default".
@@ -337,6 +395,78 @@ mod tests {
         assert_eq!(template.slots.len(), 1);
         assert_eq!(template.slots[0].token.content, "hdr");
         assert_eq!(template.slots[0].required, None);
+    }
+
+    #[test]
+    fn test_slot_metadata_follows_source_order() {
+        let template = parse_template(
+            r#"<c-slot c-bind="attrs" name="header" required />"#,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "header");
+        assert_eq!(template.slots[0].required, Some(true));
+
+        let template = parse_template(
+            r#"<c-slot name="header" required c-bind="attrs" />"#,
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(template.slots.is_empty());
+    }
+
+    #[test]
+    fn test_slot_explicit_logical_providers_conflict() {
+        for input in [
+            r#"<c-slot name="header" c-name="dynamic" />"#,
+            r#"<c-slot c-name="dynamic" name="header" />"#,
+            r#"<c-slot required c-required="dynamic" />"#,
+            r#"<c-slot c-required="dynamic" required />"#,
+        ] {
+            assert_parse_error(input, "same logical attribute");
+        }
+    }
+
+    #[test]
+    fn test_comments_and_multiple_whitespace_nodes_are_not_implicit_content() {
+        let mut rules = HashMap::new();
+        rules.insert(
+            "c-a".to_string(),
+            TagRules {
+                allowed_attrs: None,
+                required_attrs: vec![],
+                allowed_slots: Some(vec!["header".to_string()]),
+                required_slots: vec![],
+            },
+        );
+        let rules = Rc::new(rules);
+        let input = "<c-a>\n  {# first #}\n  {# second #}\n</c-a>";
+        let result = parse_template(input, None, Some(&rules));
+        assert!(
+            result.is_ok(),
+            "comments and formatting whitespace are not a default fill: {:?}",
+            result.err()
+        );
+
+        let mut required_rules = HashMap::new();
+        required_rules.insert(
+            "c-a".to_string(),
+            TagRules {
+                allowed_attrs: None,
+                required_attrs: vec![],
+                allowed_slots: Some(vec!["default".to_string()]),
+                required_slots: vec!["default".to_string()],
+            },
+        );
+        let required_rules = Rc::new(required_rules);
+        let error = parse_template(input, None, Some(&required_rules)).unwrap_err();
+        assert!(
+            error.to_string().contains("requires 1 slot(s), but only 0"),
+            "comments and formatting whitespace must not satisfy a required default slot: {error}"
+        );
     }
 
     #[test]
@@ -384,9 +514,25 @@ mod tests {
         let input = r#"<c-my-comp><c-fill name="header">A</c-fill><c-fill name="header">B</c-fill></c-my-comp>"#;
         assert_parse_error(input, "Duplicate");
 
-        // Duplicate c-name values should also fail
+        // Dynamic expressions are resolved at runtime, so identical source
+        // does not prove that two fills resolve to the same name.
         let input = r#"<c-my-comp><c-fill c-name="slot_var">A</c-fill><c-fill c-name="slot_var">B</c-fill></c-my-comp>"#;
-        assert_parse_error(input, "Duplicate");
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Repeated dynamic fill expressions should parse: {:?}",
+            result.err()
+        );
+
+        // The same expression can be stateful and return a different name on
+        // each evaluation.
+        let input = r#"<c-my-comp><c-fill c-name="next(names)">A</c-fill><c-fill c-name="next(names)">B</c-fill></c-my-comp>"#;
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Repeated stateful fill expressions should parse: {:?}",
+            result.err()
+        );
 
         // Different names are fine
         let input = r#"<c-my-comp><c-fill name="header">A</c-fill><c-fill name="footer">B</c-fill></c-my-comp>"#;
@@ -418,6 +564,16 @@ mod tests {
             "Control-flow fill duplicating a top-level fill parses (runtime checks it): {:?}",
             result.err()
         );
+    }
+
+    #[test]
+    fn test_fill_static_and_dynamic_name_conflict() {
+        for input in [
+            r#"<c-my-comp><c-fill name="fallback" c-name="slot_name">A</c-fill></c-my-comp>"#,
+            r#"<c-my-comp><c-fill c-name="slot_name" name="fallback">A</c-fill></c-my-comp>"#,
+        ] {
+            assert_parse_error(input, "must have only one of the attributes: name, c-name");
+        }
     }
 
     // #######################################
@@ -586,11 +742,25 @@ mod tests {
     // #######################################
 
     #[test]
-    fn test_fill_duplicate_cbind_same_value() {
-        // Two <c-fill> with same single c-bind value -> error (same identity)
+    fn test_fill_repeated_cbind_source_parses() {
+        // A spread is evaluated for each fill, so identical source does not
+        // imply identical resolved names.
         let input =
             r#"<c-my-comp><c-fill c-bind="x">A</c-fill><c-fill c-bind="x">B</c-fill></c-my-comp>"#;
-        assert_parse_error(input, "Duplicate");
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Repeated c-bind expressions should parse: {:?}",
+            result.err()
+        );
+
+        let input = r#"<c-my-comp><c-fill c-bind="next(bindings)">A</c-fill><c-fill c-bind="next(bindings)">B</c-fill></c-my-comp>"#;
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Repeated stateful c-bind expressions should parse: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -607,10 +777,16 @@ mod tests {
     }
 
     #[test]
-    fn test_fill_duplicate_cbind_same_ordered_tuple() {
-        // Two <c-fill> with same ordered tuple of c-bind values -> error
+    fn test_fill_repeated_cbind_tuple_parses() {
+        // Even the same sequence of spreads may resolve differently on each
+        // fill because evaluation is stateful.
         let input = r#"<c-my-comp><c-fill c-bind="a" c-bind="b">A</c-fill><c-fill c-bind="a" c-bind="b">B</c-fill></c-my-comp>"#;
-        assert_parse_error(input, "Duplicate");
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Repeated c-bind tuples should parse: {:?}",
+            result.err()
+        );
     }
 
     #[test]
@@ -639,52 +815,55 @@ mod tests {
     }
 
     #[test]
-    fn test_fill_identity_name_then_cbind_resolves_to_dynamic_bind() {
-        // <c-fill name="a" c-bind="b"> -> rightmost is `c-bind` -> DynamicBind([("c-bind","b"), ("name","a")])
+    fn test_fill_identity_name_then_cbind_is_dynamic() {
+        // <c-fill name="a" c-bind="b"> -> rightmost is `c-bind` -> dynamic
         // <c-fill name="a"> -> StaticName("a")
         // Different identity types -> ok (not a duplicate)
         let input = r#"<c-my-comp><c-fill name="a" c-bind="b">X</c-fill><c-fill name="a">Y</c-fill></c-my-comp>"#;
         let result = parse_template(input, None, None);
         assert!(
             result.is_ok(),
-            "name='a' c-bind='b' (DynamicBind) vs name='a' (StaticName) should not be duplicates: {:?}",
+            "name='a' c-bind='b' (dynamic) vs name='a' (static) should not be duplicates: {:?}",
             result.err()
         );
     }
 
     #[test]
-    fn test_fill_identity_cbind_cbind_cname_resolves_to_dynamic_name() {
-        // <c-fill c-bind="c" c-bind="b" c-name="a"> -> rightmost is `c-name` -> DynamicName("a")
-        // <c-fill c-name="a"> -> also DynamicName("a")
-        // Both resolve to DynamicName("a") -> duplicate error
+    fn test_fill_identity_cbind_cbind_cname_is_dynamic() {
+        // <c-fill c-bind="c" c-bind="b" c-name="a"> -> rightmost is `c-name` -> dynamic
+        // <c-fill c-name="a"> -> also dynamic
+        // Dynamic identities are compared only after runtime resolution.
         let input = r#"<c-my-comp><c-fill c-bind="c" c-bind="b" c-name="a">X</c-fill><c-fill c-name="a">Y</c-fill></c-my-comp>"#;
-        assert_parse_error(input, "Duplicate");
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Dynamic identities with identical source should parse: {:?}",
+            result.err()
+        );
     }
 
     #[test]
-    fn test_fill_identity_cbind_name_cbind_resolves_to_dynamic_bind() {
+    fn test_fill_identity_cbind_name_cbind_is_dynamic() {
         // <c-fill c-bind="c" name="a" c-bind="b"> -> rightmost is `c-bind`
-        //   -> DynamicBind([("c-bind","b"), ("name","a")])  (c-bind="c" before name is ignored)
         // This is a unique identity, should not conflict with a simple StaticName("a")
         let input = r#"<c-my-comp><c-fill c-bind="c" name="a" c-bind="b">X</c-fill><c-fill name="a">Y</c-fill></c-my-comp>"#;
         let result = parse_template(input, None, None);
         assert!(
             result.is_ok(),
-            "DynamicBind([c-bind=b, name=a]) vs StaticName(a) should not be duplicates: {:?}",
+            "A final c-bind vs a final static name should defer only the dynamic identity: {:?}",
             result.err()
         );
     }
 
     #[test]
-    fn test_fill_identity_cbind_cname_cbind_resolves_to_dynamic_bind() {
+    fn test_fill_identity_cbind_cname_cbind_is_dynamic() {
         // <c-fill c-bind="c" c-name="a" c-bind="b"> -> rightmost is `c-bind`
-        //   -> DynamicBind([("c-bind","b"), ("c-name","a")])  (c-bind="c" before c-name is ignored)
-        // Should not conflict with DynamicName("a")
+        // Dynamic identities do not participate in parse-time equality.
         let input = r#"<c-my-comp><c-fill c-bind="c" c-name="a" c-bind="b">X</c-fill><c-fill c-name="a">Y</c-fill></c-my-comp>"#;
         let result = parse_template(input, None, None);
         assert!(
             result.is_ok(),
-            "DynamicBind([c-bind=b, c-name=a]) vs DynamicName(a) should not be duplicates: {:?}",
+            "Dynamic fill identities should not be compared at parse time: {:?}",
             result.err()
         );
     }
@@ -692,10 +871,14 @@ mod tests {
     #[test]
     fn test_fill_identity_two_cbinds_only() {
         // <c-fill c-bind="c" c-bind="b"> -> rightmost is `c-bind`
-        //   -> DynamicBind([("c-bind","b"), ("c-bind","c")])  (no name/c-name, all included)
-        // Two of these should be duplicates
+        // Two identical authored spreads are still resolved independently.
         let input = r#"<c-my-comp><c-fill c-bind="c" c-bind="b">X</c-fill><c-fill c-bind="c" c-bind="b">Y</c-fill></c-my-comp>"#;
-        assert_parse_error(input, "Duplicate");
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "Repeated dynamic bind identities should parse: {:?}",
+            result.err()
+        );
 
         // But different order should be ok
         let input = r#"<c-my-comp><c-fill c-bind="c" c-bind="b">X</c-fill><c-fill c-bind="b" c-bind="c">Y</c-fill></c-my-comp>"#;

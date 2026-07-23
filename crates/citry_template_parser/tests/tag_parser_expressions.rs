@@ -6,7 +6,9 @@ mod common;
 mod tests {
     use citry_template_parser::parser::parse_template;
 
-    use super::common::{expr_elem, template_with_vars, text_elem, token};
+    use super::common::{
+        assert_parse_error, expr_elem, template, template_with_vars, text_elem, token,
+    };
 
     #[test]
     fn test_expression_in_text() {
@@ -73,6 +75,23 @@ mod tests {
                 result.err()
             );
         }
+    }
+
+    #[test]
+    fn test_unterminated_expression_errors() {
+        // Unlike Django's tokenizer, V3 does not silently turn an opened
+        // expression back into text. The author gets a parse error at the
+        // unterminated delimiter.
+        assert_parse_error("Hello {{ name", "Failed to parse template");
+    }
+
+    #[test]
+    fn test_django_block_delimiter_is_literal_text() {
+        // V3 has no `{% ... %}` block-tag language. Even an unterminated DTL
+        // opener is ordinary text rather than a half-recognized directive.
+        let input = "{% if true";
+        let result = parse_template(input, None, None).unwrap();
+        assert_eq!(result, template(vec![text_elem(input, 0, 1, 1)]));
     }
 
     #[test]

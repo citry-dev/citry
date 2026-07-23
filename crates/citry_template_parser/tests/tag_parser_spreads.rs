@@ -169,6 +169,47 @@ mod tests {
     }
 
     #[test]
+    fn test_c_bind_is_rejected_on_physical_structural_tags() {
+        let inputs = [
+            r#"<c-if cond="ok" c-bind="attrs" />"#,
+            r#"<c-if cond="ok" /><c-elif cond="other" c-bind="attrs" />"#,
+            r#"<c-if cond="ok" /><c-else c-bind="attrs" />"#,
+            r#"<c-for each="item in items" c-bind="attrs" />"#,
+            r#"<c-for each="item in items" /><c-empty c-bind="attrs" />"#,
+            r#"<c-raw c-bind="attrs">raw</c-raw>"#,
+        ];
+
+        for input in inputs {
+            assert_parse_error(input, "'c-bind' is not supported directly on");
+        }
+    }
+
+    #[test]
+    fn test_c_bind_remains_valid_on_control_flow_shorthand_hosts() {
+        let inputs = [
+            r#"<div c-if="ok" c-bind="attrs" />"#,
+            r#"<li c-for="item in items" c-bind="item" />"#,
+        ];
+
+        for input in inputs {
+            let result = parse_template(input, None, None);
+            assert!(
+                result.is_ok(),
+                "c-bind on a shorthand host should parse: {input:?}: {:?}",
+                result.err()
+            );
+        }
+    }
+
+    #[test]
+    fn test_c_bind_rejects_nested_template_values() {
+        assert_parse_error(
+            r#"<c-my-tag c-bind="<>attrs</>" />"#,
+            "'c-bind' must be an expression",
+        );
+    }
+
+    #[test]
     fn test_c_bind_unquoted_value() {
         // c-bind with unquoted value
         // <c-my-tag c-bind=my_dict />

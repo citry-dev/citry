@@ -191,6 +191,17 @@ mod tests {
     }
 
     #[test]
+    fn test_html_literal_c_prefix_escape_keeps_source_keys() {
+        // The compiler preserves the authored keys. ElementAttrsNode removes
+        // exactly one `c-` prefix at render time, making the remaining key
+        // literal (including the Vue/Alpine `:class` bridge).
+        assert_compile(
+            r#"<div c-c-foo="value" c-c-c-foo="other" c-c-bind="literal" c-:class="bridge">hi</div>"#,
+            r#"["""<div""", ElementAttrsNode(source, (0, 76,), (ExprHtmlAttr(source, (5, 20,), """c-c-foo""", """value""", ("value",)), ExprHtmlAttr(source, (21, 38,), """c-c-c-foo""", """other""", ("other",)), ExprHtmlAttr(source, (39, 57,), """c-c-bind""", """literal""", ("literal",)), ExprHtmlAttr(source, (58, 75,), """c-:class""", """bridge""", ("bridge",)),), ("value", "other", "literal", "bridge",)), """>hi</div>""",]"#,
+        );
+    }
+
+    #[test]
     fn test_html_expr_attr_with_trailing_text() {
         assert_compile(
             r#"<a c-href="url">link</a>"#,
@@ -268,11 +279,51 @@ mod tests {
     }
 
     #[test]
+    fn test_multiline_component_tag() {
+        assert_compile(
+            "<c-card\n  c-title=\"value\"\n  c-count=\"1 + 2\"\n/>",
+            r#"[ComponentNode(source, (0, 46,), (ExprHtmlAttr(source, (10, 25,), """c-title""", """value""", ("value",)), ExprHtmlAttr(source, (28, 43,), """c-count""", """1 + 2""", ()),), [], ("value",), """card""", False),]"#,
+        );
+    }
+
+    #[test]
     fn test_component_with_template_attr() {
         // A c-* attr whose value is a nested template becomes a TemplateHtmlAttr.
         assert_compile(
             r#"<c-Card c-body="<span>{{ x }}</span>" />"#,
             r#"[ComponentNode(source, (0, 40,), (TemplateHtmlAttr(source, (8, 37,), """c-body""", """<span>{{ x }}</span>""", ("x",)),), [], ("x",), """card""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_component_with_fragment_template_attr_unwraps_delimiters() {
+        assert_compile(
+            r#"<c-Card c-body="<>hi {{ n }}</>" />"#,
+            r#"[ComponentNode(source, (0, 35,), (TemplateHtmlAttr(source, (8, 32,), """c-body""", """hi {{ n }}""", ("n",)),), [], ("n",), """card""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_fragment_template_attr_preserves_inner_whitespace() {
+        assert_compile(
+            r#"<c-Card c-body="  <> hi {{ n }} </>  " />"#,
+            r#"[ComponentNode(source, (0, 41,), (TemplateHtmlAttr(source, (8, 38,), """c-body""", """ hi {{ n }} """, ("n",)),), [], ("n",), """card""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_empty_fragment_template_attr_stays_a_string() {
+        assert_compile(
+            r#"<c-Card c-body="<></>" />"#,
+            r#"[ComponentNode(source, (0, 25,), (TemplateHtmlAttr(source, (8, 22,), """c-body""", """""", ()),), [], (), """card""", False),]"#,
+        );
+    }
+
+    #[test]
+    fn test_html_fragment_template_attr_uses_unwrapped_payload() {
+        assert_compile(
+            r#"<div c-body="<>hi {{ n }}</>">x</div>"#,
+            r#"["""<div""", ElementAttrsNode(source, (0, 30,), (TemplateHtmlAttr(source, (5, 29,), """c-body""", """hi {{ n }}""", ("n",)),), ("n",)), """>x</div>""",]"#,
         );
     }
 
@@ -406,9 +457,11 @@ mod tests {
     #[test]
     fn test_attr_c_if_and_c_for_nest_if_outer() {
         // IF has higher priority than FOR, so the IfNode wraps the ForNode.
+        // The loop target belongs only to the For branch; the outer condition
+        // is not copied into the inner loop's free-variable metadata.
         assert_compile(
             r#"<div c-if="x" c-for="item in items">{{ item }}</div>"#,
-            r#"[IfNode(source, (((0, 52,), (ExprHtmlAttr(source, (5, 13,), """cond""", """x""", ("x",)),), [ForNode(source, (((0, 52,), (ExprHtmlAttr(source, (14, 35,), """each""", """item in items""", ("items",)),), ["""<div>""", ExprNode(source, (36, 46,), """item """, ("item",)), """</div>""",], ("item",),),), ("x", "items",)),], ("item",),),), ("x", "items",)),]"#,
+            r#"[IfNode(source, (((0, 52,), (ExprHtmlAttr(source, (5, 13,), """cond""", """x""", ("x",)),), [ForNode(source, (((0, 52,), (ExprHtmlAttr(source, (14, 35,), """each""", """item in items""", ("items",)),), ["""<div>""", ExprNode(source, (36, 46,), """item """, ("item",)), """</div>""",], ("item",),),), ("items",)),], (),),), ("items", "x",)),]"#,
         );
     }
 

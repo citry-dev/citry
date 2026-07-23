@@ -7,8 +7,8 @@ mod tests {
     use citry_template_parser::parser::parse_template;
 
     use super::common::{
-        expr_attr, expr_attr_unquoted, node_elem, self_closing_node_vars, start_tag, template_attr,
-        template_with_vars, token, with_used_vars,
+        assert_parse_error, expr_attr, expr_attr_unquoted, node_elem, self_closing_node_vars,
+        start_tag, template_attr, template_with_vars, token, with_used_vars,
     };
 
     #[test]
@@ -106,18 +106,62 @@ mod tests {
         assert_eq!(result, expected);
     }
 
+    #[test]
+    fn test_unterminated_python_strings_in_dynamic_attrs_error() {
+        for input in [
+            r#"<c-my-tag c-title="'unterminated" />"#,
+            r#"<c-my-tag c-title='"unterminated' />"#,
+        ] {
+            assert_parse_error(input, "missing closing quote in string literal");
+        }
+    }
+
     // =============================================================================
     // DUPLICATE / CONFLICTING ATTRIBUTE NAMES
     // =============================================================================
-    // A static and a dynamic form of the same attribute may coexist: attributes
-    // resolve left to right at render time (last one wins; class/style merge).
-    // An exact duplicate of the same name is still rejected (except c-bind).
-    // See docs/design/html_attrs.md section 4.
+    // One explicit provider per logical attribute. Plain-element class/style
+    // are the accumulating exceptions, and c-bind stays repeatable/dynamic.
 
     #[test]
-    fn test_static_and_dynamic_form_of_same_attr_allowed() {
-        assert!(parse_template(r#"<div class="x" c-class="y">hi</div>"#, None, None).is_ok());
-        assert!(parse_template(r#"<form c-id="my_var" id="form">hi</form>"#, None, None).is_ok());
+    fn test_static_and_dynamic_class_style_forms_accumulate_on_elements() {
+        for input in [
+            r#"<div class="x" c-class="y">hi</div>"#,
+            r#"<div c-class="y" class="x">hi</div>"#,
+            r#"<c-element is="div" style="color: red" c-style="styles" />"#,
+            r#"<c-element is="div" c-style="styles" style="color: red" />"#,
+        ] {
+            assert!(
+                parse_template(input, None, None).is_ok(),
+                "input: {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_static_and_dynamic_form_of_same_logical_attr_rejected() {
+        for input in [
+            r#"<form id="form" c-id="my_var">hi</form>"#,
+            r#"<form c-id="my_var" id="form">hi</form>"#,
+            r#"<c-card title="static" c-title="dynamic" />"#,
+            r#"<c-card c-title="dynamic" title="static" />"#,
+            r#"<c-card class="static" c-class="dynamic" />"#,
+            r#"<c-slot style="static" c-style="dynamic" />"#,
+        ] {
+            let err = parse_template(input, None, None).unwrap_err();
+            assert!(format!("{:?}", err).contains("same logical attribute"));
+        }
+    }
+
+    #[test]
+    fn test_structural_directive_and_spread_do_not_alias_plain_attrs() {
+        assert!(parse_template(
+            r#"<label for="field" c-for="field in fields">x</label>"#,
+            None,
+            None
+        )
+        .is_ok());
+        assert!(parse_template(r#"<div bind="x" c-bind="attrs">x</div>"#, None, None).is_ok());
+        assert!(parse_template(r#"<div foo="x" c-c-foo="y">x</div>"#, None, None).is_ok());
     }
 
     #[test]

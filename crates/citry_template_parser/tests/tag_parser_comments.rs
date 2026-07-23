@@ -165,6 +165,13 @@ mod tests {
     }
 
     #[test]
+    fn test_unterminated_template_comment_errors() {
+        // V3 treats an opened template comment as syntax, so a missing `#}`
+        // is an error instead of falling back to visible text.
+        assert_parse_error("{# comment", "Failed to parse template");
+    }
+
+    #[test]
     fn test_template_comment_among_text() {
         // Input: Hello {# comment #} world
         //        0         1         2
@@ -537,6 +544,31 @@ mod tests {
         );
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_python_comments_in_dynamic_collection_expressions() {
+        let cases = [
+            ("<c-x c-data=\"[1, # list item\n2]\" />", "list item"),
+            (
+                "<c-x c-data=\"{'a': 1, # dict item\n'b': 2}\" />",
+                "dict item",
+            ),
+        ];
+
+        for (input, expected_comment) in cases {
+            let template = parse_template(input, None, None).unwrap();
+            assert_eq!(template.comments.len(), 1, "input: {input:?}");
+
+            let TemplateElement::Node(Node::SelfClosing { start_tag, .. }) = &template.elements[0]
+            else {
+                panic!("expected a self-closing node for {input:?}");
+            };
+            let attr = &start_tag.attrs[0];
+            assert_eq!(attr.kind, HtmlAttrKind::Expression);
+            assert_eq!(attr.comments.len(), 1);
+            assert_eq!(attr.comments[0].value.content.trim(), expected_comment);
+        }
     }
 
     #[test]

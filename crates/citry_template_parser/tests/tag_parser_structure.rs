@@ -14,10 +14,21 @@ mod tests {
 
     #[test]
     fn test_unclosed_tag_errors() {
-        // Unclosed tags should produce an error
-        assert_parse_error("<c-my-tag>", "error");
-        assert_parse_error("<c-my-tag attr=\"val\">", "error");
-        assert_parse_error("<div><c-my-tag></div>", "error");
+        // A tag still open at end of template errors naming itself and the
+        // close tag it expected. When a different close tag arrives before
+        // the template ends, the mismatched-tags diagnosis wins instead.
+        assert_parse_error(
+            "<c-my-tag>",
+            "Unclosed tag <c-my-tag>: expected </c-my-tag> before end of template",
+        );
+        assert_parse_error(
+            "<c-my-tag attr=\"val\">",
+            "Unclosed tag <c-my-tag>: expected </c-my-tag> before end of template",
+        );
+        assert_parse_error(
+            "<div><c-my-tag></div>",
+            "Mismatched tags: expected closing tag '</c-my-tag>', found '</div>'",
+        );
     }
 
     #[test]
@@ -91,6 +102,14 @@ mod tests {
             r#"<div></div class="foo">"#,
             "must not contain any attributes",
         );
+    }
+
+    #[test]
+    fn test_self_closing_slash_must_be_last() {
+        // A slash closes a start tag; it cannot decorate an end tag or appear
+        // before more attributes.
+        assert_parse_error("<c-my-tag></c-my-tag />", "Failed to parse template");
+        assert_parse_error(r#"<c-my-tag / key="val">"#, "Failed to parse template");
     }
 
     #[test]

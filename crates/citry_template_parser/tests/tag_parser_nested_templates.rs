@@ -5,6 +5,7 @@ mod common;
 
 #[cfg(test)]
 mod tests {
+    use citry_template_parser::ast::TemplateElement;
     use citry_template_parser::parser::parse_template;
 
     use super::common::{
@@ -94,6 +95,163 @@ mod tests {
         )))]);
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_fragment_delimiters_must_wrap_the_entire_nested_template() {
+        for input in [
+            r#"<c-my-tag c-body="<>hi</><div>b</div>" />"#,
+            r#"<c-my-tag c-body="<div>b</div><>hi</>" />"#,
+            r#"<c-my-tag c-body="<>a</><>b</>" />"#,
+        ] {
+            assert_parse_error(input, "error");
+        }
+    }
+
+    #[test]
+    fn test_whole_value_fragment_and_adjacent_tag_roots_are_valid() {
+        for input in [
+            r#"<c-my-tag c-body="<>hi<div>b</div></>" />"#,
+            r#"<c-my-tag c-body=" <><div>a</div><span>b</span></> " />"#,
+            r#"<c-my-tag c-body="<div>a</div>between<span>b</span>" />"#,
+            r#"<c-my-tag c-body="<div>a</div><a,>b</a,>" />"#,
+            r#"<c-my-tag c-body="<div>a</div><br>" />"#,
+        ] {
+            assert!(
+                parse_template(input, None, None).is_ok(),
+                "input: {input:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_tag_like_text_does_not_fake_the_final_template_boundary() {
+        for input in [
+            r#"<c-my-tag c-body="<div>a</div> trailing />" />"#,
+            r#"<c-my-tag c-body="<div>a</div> trailing </fake>" />"#,
+        ] {
+            assert_parse_error(input, "error");
+        }
+    }
+
+    #[test]
+    fn test_nested_template_slot_metadata_propagates_from_ordinary_tag_value() {
+        let input = r#"<c-writer c-body="<section><c-slot name='header' /></section>" />"#;
+        let template = parse_template(input, None, None).unwrap();
+
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "header");
+        assert_eq!(template.slots[0].required, Some(false));
+    }
+
+    #[test]
+    fn test_nested_template_slot_metadata_propagates_from_void_element_attribute() {
+        let input = r#"<img c-fallback="<c-slot name='image' />">"#;
+        let template = parse_template(input, None, None).unwrap();
+
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "image");
+    }
+
+    #[test]
+    fn test_fragment_slot_metadata_preserves_attribute_then_body_order() {
+        let input = r#"<c-writer c-first="<c-slot name='first' />" c-second="<>Hi {{ value }}<c-child /><c-slot name='second' /></>"><c-slot name="body" /></c-writer>"#;
+        let template = parse_template(input, None, None).unwrap();
+
+        let slot_names: Vec<&str> = template
+            .slots
+            .iter()
+            .map(|slot| slot.token.content.as_str())
+            .collect();
+        assert_eq!(slot_names, vec!["first", "second", "body"]);
+        let used_variables: Vec<&str> = template
+            .used_variables
+            .iter()
+            .map(|token| token.content.as_str())
+            .collect();
+        assert_eq!(used_variables, vec!["value"]);
+    }
+
+    #[test]
+    fn test_nested_template_slot_metadata_propagates_recursively() {
+        let input = r#"<c-writer c-body="<c-child c-content='<>{{ value }}<c-leaf /><c-slot name=deep required /></>' />" />"#;
+        let template = parse_template(input, None, None).unwrap();
+
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "deep");
+        assert_eq!(template.slots[0].required, Some(true));
+        let used_variables: Vec<&str> = template
+            .used_variables
+            .iter()
+            .map(|token| token.content.as_str())
+            .collect();
+        assert_eq!(used_variables, vec!["value"]);
+    }
+
+    #[test]
+    fn test_dynamic_nested_template_slot_name_is_not_propagated() {
+        let input =
+            r#"<c-writer c-body="<><c-slot c-name='slot_name' /><c-slot name='known' /></>" />"#;
+        let template = parse_template(input, None, None).unwrap();
+
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "known");
+        assert_eq!(template.slots[0].required, Some(false));
+    }
+
+    #[test]
+    fn test_nested_template_slot_metadata_preserves_absolute_position_and_requiredness() {
+        let input = "<c-writer\n  c-body=\"<section>\n    <c-slot name='header' required />\n  </section>\"\n/>";
+        let template = parse_template(input, None, None).unwrap();
+
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "header");
+        assert_eq!(template.slots[0].token.start_index, 48);
+        assert_eq!(template.slots[0].token.end_index, 54);
+        assert_eq!(template.slots[0].token.line_col, (3, 19));
+        assert_eq!(template.slots[0].required, Some(true));
+    }
+
+    #[test]
+    fn test_nested_template_fill_metadata_stays_local() {
+        let input = r#"<c-writer c-body="<c-child><c-fill name='header' data='payload' fallback='fallback'><c-slot name='inside' />{{ payload }}{{ fallback }}</c-fill></c-child>"><span>outer</span></c-writer>"#;
+        let template = parse_template(input, None, None).unwrap();
+
+        assert_eq!(template.slots.len(), 1);
+        assert_eq!(template.slots[0].token.content, "inside");
+        assert!(template.used_variables.is_empty());
+        let TemplateElement::Node(writer) = &template.elements[0] else {
+            panic!("expected the root element to be the writer component");
+        };
+        assert!(!writer.contains_fills());
+    }
+
+    #[test]
+    fn test_reserved_dynamic_attrs_reject_nested_template_values() {
+        let inputs = [
+            r#"<c-component c-is="<span />" />"#,
+            r#"<c-element c-is="<span />" />"#,
+            r#"<c-Component c-is="<>x</>" />"#,
+            r#"<c-Element c-is="<span />" />"#,
+            r#"<c-slot c-name="<span />" />"#,
+            r#"<c-slot c-required="<span />" />"#,
+            r#"<c-parent><c-fill c-name="<span />">body</c-fill></c-parent>"#,
+        ];
+
+        for input in inputs {
+            assert_parse_error(input, "must be an expression");
+        }
+    }
+
+    #[test]
+    fn test_reserved_dynamic_attr_spellings_remain_template_capable_component_inputs() {
+        let input = r#"<c-my-tag c-is="<span />" c-name="<b />" c-required="<i />" />"#;
+        let result = parse_template(input, None, None);
+        assert!(
+            result.is_ok(),
+            "reserved spellings on an ordinary component are regular inputs: {:?}",
+            result.err()
+        );
     }
 
     // --- Tightened template detection: things that should NOT be templates ---

@@ -107,6 +107,12 @@ class TestSyntax:
         assert result == -10000000000.0
         assert context == {}
 
+    def test_allow_additional_float_spellings(self):
+        context = {}
+        assert safe_eval("+2.")(context) == 2.0
+        assert safe_eval(".2e-02")(context) == 0.002
+        assert context == {}
+
     def test_allow_literal_boolean_true(self):
         compiled = safe_eval("True")
         context = {}
@@ -162,6 +168,18 @@ class TestSyntax:
         result = compiled(context)
         assert result == {"a": 1, "b": 2}
         assert context == {}
+
+    def test_allow_trailing_comma_containers(self):
+        context = {}
+        assert safe_eval("[1, 2,]")(context) == [1, 2]
+        assert safe_eval("{'a': 1, 'b': 2,}")(context) == {"a": 1, "b": 2}
+        assert context == {}
+
+    def test_allow_computed_dict_key_and_starred_list_unpack(self):
+        context = {"items": [1, 2], "key": "dynamic"}
+        result = safe_eval("{key: [0, *items]}")(context)
+        assert result == {"dynamic": [0, 1, 2]}
+        assert context == {"items": [1, 2], "key": "dynamic"}
 
     # === DATA STRUCTURES ===
 

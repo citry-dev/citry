@@ -425,12 +425,13 @@ mod tests {
             result.err()
         );
 
-        // 2 dynamic fills (same) >= 2 required slots => BUT raises because duplicate c-name
+        // Identical authored expressions still count as two possible fills:
+        // each evaluation may resolve to a different required name.
         let input = r#"<c-my-comp><c-fill c-name="var_a">A</c-fill><c-fill c-name="var_a">B</c-fill></c-my-comp>"#;
         let result = parse_template(input, None, Some(&rules_rc));
         assert!(
-            result.is_err(),
-            "2 dynamic fills (same) for 2 required slots should fail because of duplicate c-name: {:?}",
+            result.is_ok(),
+            "Repeated dynamic expressions may cover two required slots: {:?}",
             result.err()
         );
     }
@@ -492,12 +493,13 @@ mod tests {
             result.err()
         );
 
-        // 2 dynamic c-bind fills (same) >= 2 required slots => BUT raises because duplicate c-bind
+        // Identical authored spreads still count separately because each
+        // evaluation may provide a different required name.
         let input = r#"<c-my-comp><c-fill c-bind="my_dict_a">A</c-fill><c-fill c-bind="my_dict_a">B</c-fill></c-my-comp>"#;
         let result = parse_template(input, None, Some(&rules_rc));
         assert!(
-            result.is_err(),
-            "2 c-bind fills (same) for 2 required slots should fail because of duplicate c-bind: {:?}",
+            result.is_ok(),
+            "Repeated dynamic spreads may cover two required slots: {:?}",
             result.err()
         );
     }

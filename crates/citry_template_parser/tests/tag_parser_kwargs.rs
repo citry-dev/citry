@@ -8,8 +8,8 @@ mod tests {
     use citry_template_parser::parser::parse_template;
 
     use super::common::{
-        body_node, bool_attr, end_tag, node_elem, parse_first_node, self_closing_node, start_tag,
-        static_attr, template, token, unquoted_attr,
+        assert_parse_error, body_node, bool_attr, end_tag, node_elem, parse_first_node,
+        self_closing_node, start_tag, static_attr, template, token, unquoted_attr,
     };
 
     #[test]
@@ -184,5 +184,15 @@ mod tests {
             true,
         )))]);
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn test_unterminated_quoted_attribute_values_error() {
+        for input in [
+            r#"<c-my-tag title="unterminated />"#,
+            "<c-my-tag title='unterminated />",
+        ] {
+            assert_parse_error(input, "Failed to parse template");
+        }
     }
 }
