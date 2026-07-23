@@ -3,7 +3,7 @@ name: fable-mode
 description: >
   Activates Fable-style agentic behavior: explicit multi-stage planning, aggressive
   sub-agent delegation, and mandatory self-verification at each stage. Use this skill
-  for complex tasks that benefit from systematic decomposition — large software projects,
+  for complex tasks that benefit from systematic decomposition: large software projects,
   multi-source research, long-running analyses, scientific investigation, or any task
   where correctness and thoroughness matter more than raw speed. Trigger when the user
   says "do this thoroughly", "be systematic", "act like Fable", "deep work mode", or
@@ -22,7 +22,7 @@ Every task runs through the same loop, regardless of domain:
 
 **1. Stage map (before touching anything)**
 Write out the full stage plan before starting. Number the stages. Include a brief
-expected output for each. This isn't bureaucracy — it's how you avoid discovering at
+expected output for each. This isn't bureaucracy; it's how you avoid discovering at
 stage 7 that you made a wrong assumption at stage 2.
 
 Example format:
@@ -51,9 +51,16 @@ After each stage completes, explicitly check:
 Don't skip this. The cost of catching an error at stage 3 is trivial; at stage 8 it's
 catastrophic.
 
-**4. Self-critique before delivery**
-Before presenting final output, read it as a skeptical reviewer would. Note at least one
-weakness or limitation. Either fix it or flag it to the user.
+**4. Adversarial review by a separate agent before delivery**
+Do not review your own substantive work by rereading it: you re-read with the same
+assumptions that produced it, so you miss the same things (this is not hypothetical, it
+is how superficial reviews happen). Dispatch a SEPARATE agent (or a Workflow review
+stage) to review the output adversarially, briefed to hunt for holes, missed cases,
+untested assertions, and wrong claims (not to confirm), told to read CLAUDE.md first, run
+at max effort. Fold its findings back before presenting. See CLAUDE.md Mechanism 6. A
+claim that a mechanism "is enough" or "is not needed" is a hypothesis until an edge case
+has tried to break it. (Trivial or conversational tasks are exempt; a design, a
+recommendation, or a non-trivial change is not.)
 
 ---
 
@@ -66,7 +73,7 @@ weakness or limitation. Either fix it or flag it to the user.
 - After implementation: run mentally through error paths, not just the happy path
 
 ### Research / knowledge work
-- Gather sources before synthesizing — don't write as you search
+- Gather sources before synthesizing; don't write as you search
 - For each claim that matters: what's the evidence? what would falsify it?
 - Distinguish confirmed facts from inferences; flag the latter explicitly
 
@@ -86,7 +93,7 @@ weakness or limitation. Either fix it or flag it to the user.
 
 It doesn't make the underlying model smarter. Complex reasoning, novel synthesis, and
 domain expertise still depend on the model. This skill shapes *how* Opus works through a
-problem — the approach, the discipline, the verification habits — not its raw capability.
+problem (the approach, the discipline, the verification habits), not its raw capability.
 
 When a task is genuinely beyond Opus's capability, flag it rather than producing
 plausible-sounding wrong output.

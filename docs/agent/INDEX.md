@@ -27,6 +27,7 @@ each entry to one paragraph and link to longer docs rather than copying them.
 | HTML attribute transformer | [`crates/citry_html_transform/AGENTS.md`](../../crates/citry_html_transform/AGENTS.md) |
 | Python package surface (`citry_core` on PyPI) | [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md) |
 | Monorepo dev / build / release conventions | [`docs/codebase.md`](../codebase.md) |
+| Alpine, browser ownership graph, props, boundary handlers, slots, and morph lifecycle | [`docs/design/alpinejs.md`](../design/alpinejs.md) |
 | Current status snapshot (dated) | [`docs/../TODO/project_status_june_2026.md`](../../TODO/project_status_june_2026.md) |
 
 ---

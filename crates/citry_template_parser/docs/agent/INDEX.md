@@ -67,9 +67,13 @@ except HTML comments which are also kept as `Text`). A `Node` is either
 `SelfClosing { start_tag, .. }` or `WithBody { start_tag, end_tag, body, .. }`,
 and carries `used_variables`, `introduced_variables`, `comments`, and
 `contains_fills`. `HtmlAttr` carries `key`, `value`, `inner_value`,
-`quote_char`, `kind` (`Static` / `Expression` / `Template`), `used_variables`,
-and `comments`. `Token` is the shared span type (`content`, `start_index`,
-`end_index`, `line_col`).
+`quote_char`, `kind` (`Static` / `Expression` / `Template` / `Meta`),
+`used_variables`, and `comments`. `Meta` is the `#c-*` framework-metadata
+channel (`#c-key` / `#c-ignore`): routed by its own grammar rule
+(`html_meta_attribute_name`), exempt from tag attribute rules, with its own
+placement validation (`validate_meta_attr_placement`) and its own compiler
+emission (never an ordinary attribute node). `Token` is the shared span type
+(`content`, `start_index`, `end_index`, `line_col`).
 
 Types annotated `#[pyclass]` are the Python contract. Changing their shape is a
 high-risk change: update the PyO3 registration, the `_rust.pyi` stub, and the
@@ -82,17 +86,25 @@ Python wrapper together (CLAUDE.md Mechanism 4).
 - An HTML tag stack assembles `WithBody` nodes; a closing tag pops and must
   match the open tag's name, else a mismatched-tags error.
 - Void elements (`constants::HTML_VOID_ELEMENTS`) are treated as self-closing.
-- `c-*` attributes are classified: a value that parses as a nested template
-  (starts with `<tag` or `<>` and ends correspondingly) becomes `Template`;
-  otherwise `Expression`. Plain attributes are `Static`. Fragment delimiters
-  `<>...</>` are stripped at the attribute level (not in the grammar).
+- `c-*` attributes are classified: a value whose trimmed content starts with a
+  real tag and whose last grammar element is a closing, self-closing, raw, or
+  HTML void tag becomes `Template`, as does a value wholly enclosed by
+  `<>...</>`. Adjacent real-tag roots are valid; fragment delimiters must wrap
+  the entire non-whitespace value and cannot be sibling roots. They are stripped
+  at the attribute level (not in the grammar). Other dynamic values become
+  `Expression`. Plain attributes are `Static`.
+  Control-flow shortcuts are the semantic exception: `c-if`/`c-elif` must be
+  expressions, `c-for` must be a loop clause, and the `c-else`/`c-empty`
+  markers must be valueless.
 - Variable tracking: `used_variables` is collected from attributes and body in
   source order (a `Vec`, not a set, so order is stable);
   `introduced_variables` come from `<c-for>` loop targets and `<c-fill>`
-  `data` / `default`. Python variable extraction delegates to
+  `data` / `fallback`. Python variable extraction delegates to
   `python_safe_eval` via the `LangImpl`.
 - Control-flow grouping (`<c-if>/<c-elif>/<c-else>`, `<c-for>/<c-empty>`) is
-  validated for adjacency and ordering (`constants::TAG_ORDERING_RULES`).
+  validated for adjacency and ordering (`constants::TAG_ORDERING_RULES`) in
+  both explicit-tag and shorthand-attribute forms, using the same IF-before-FOR
+  precedence as compiler lowering.
 
 Validation runs through `validate_node` (fill placement, attributes present,
 attribute conflicts, `c-bind`, fill names, variable shadowing). **`<c-raw>` is
@@ -119,19 +131,27 @@ hands that to `LangImpl::compile`. Consecutive static strings are coalesced.
 `Variable`, `UnsafeString` (escaped), `SafeString`, `Int`, `Bool`, `Tuple`,
 `List`, `Struct { name, arguments }`.
 
-Non-obvious facts not covered in the module doc:
+Non-obvious facts to keep in mind (the module doc carries the full output
+contract):
 
-- On a regular HTML tag (not a component), dynamic `c-*` attributes are split
-  inline as string fragments + `ExprNode`/`TemplateNode` between them,
-  concatenated at runtime. They are *not* wrapped in `*HtmlAttr` calls (those
-  only appear in component/slot/fill attribute tuples).
+- On a regular HTML tag (not a component), any dynamic `c-*` attribute makes
+  the whole attribute set compile to one `ElementAttrsNode` covering every
+  ordinary attribute (static ones included), because spreads and class/style
+  merging resolve as one unit at render time (`compile_html_node`). A purely
+  static tag flattens to literal strings instead.
+- `#c-*` framework metadata never joins that attribute set: on an element it
+  compiles to its own output fragments after the ordinary attributes
+  (`#c-key` as ` data-citry-key=":` + `ExprNode` + `"`, `#c-ignore` as the
+  literal morph marker), and on a component tag `#c-key` rides as the
+  `ComponentNode`'s trailing key argument, emitted only when present.
 - Expression content retains its trailing whitespace from `{{ expr }}`.
 - `<c-raw>` compiles its body to a single literal text part (an `UnsafeString`
   that `coalesce_strings` may merge with adjacent static text); the inner
   content is emitted verbatim, with no template processing.
 
-Compiler tests are in `tests/tag_compiler.rs` and assert exact generated
-strings (the observe-then-lock style).
+Compiler tests are in `tests/tag_compiler.rs`, `tests/tag_compiler_dynamic.rs`,
+and `tests/tag_compiler_meta_attrs.rs` and assert exact generated strings (the
+observe-then-lock style).
 
 ## Lang trait (`lang/lang.rs`)
 
@@ -147,9 +167,11 @@ is a cross-language change.
 ## Tests
 
 One file per feature area under `tests/` (structure, html, kwargs,
-boolean_attrs, dynamic_attrs, expressions, comments, nested_templates, spreads,
-control_flow_if, control_flow_for, fills, composition, raw, user_rules), plus
-`tag_compiler.rs` for compiler output. Shared AST builders are in
+boolean_attrs, dynamic_attrs, meta_attrs, expressions, comments,
+nested_templates, spreads, control_flow_if, control_flow_for, fills,
+composition, raw, user_rules), plus `tag_compiler.rs`,
+`tag_compiler_dynamic.rs`, and `tag_compiler_meta_attrs.rs` for compiler
+output. Shared AST builders are in
 `tests/common/mod.rs`. Parser tests assert the full AST via `assert_eq!`;
 compiler tests assert the exact generated string. Both are authored
 observe-then-lock. Illustrative code blocks in doc comments (in `lang/rust.rs`

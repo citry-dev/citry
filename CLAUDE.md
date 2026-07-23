@@ -15,7 +15,7 @@ When NOT using Fable model, always work in the `fable-mode` skill
 ([`.claude/skills/fable-mode/SKILL.md`](.claude/skills/fable-mode/SKILL.md)) for
 any non-trivial task here: map the stages before editing, delegate independent
 reads and analysis to parallel sub-agents, verify each stage against its
-expected output before advancing, and self-critique before delivery. This sits
+expected output before advancing, and run reviewer before delivery. This sits
 on top of the mechanisms below, not instead of them: a structural change still
 goes through the prior-art header (Mechanism 1) and the `ExitPlanMode` plan
 (Mechanism 2).
@@ -74,7 +74,12 @@ first, and lead your proposal with what you searched (see Mechanism 1).
 - **The Pest grammar**
   ([`crates/citry_template_parser/src/grammar.pest`](crates/citry_template_parser/src/grammar.pest)).
   Rule **atomicity changes cascade** to called rules and have repo-wide
-  effects. Read the gotcha below before touching it.
+  effects. Before proposing or changing grammar or template-syntax behavior,
+  read the complete grammar trio:
+  [`grammar.pest`](crates/citry_template_parser/src/grammar.pest),
+  [`grammar.rs`](crates/citry_template_parser/src/grammar.rs), and
+  [`grammar.md`](docs/design/grammar.md). Do not infer the syntax contract from
+  parser code or tests alone. Read the gotcha below before touching it.
 - **The AST structs**
   ([`crates/citry_template_parser/src/ast.rs`](crates/citry_template_parser/src/ast.rs)).
   Types marked `#[pyclass]` are the **Python contract**, mirrored by hand in
@@ -176,6 +181,29 @@ The anti-pattern is "it didn't work, let me try something else" repeated
 three times, each attempt adding complexity. The correct response to "it
 didn't work" is "why?", and the answer is in the source.
 
+## Mechanism 6 - review goes to a separate agent, never self-review
+
+Reviewing your own substantive work is superficial by construction: you
+re-read it with the same assumptions that produced it, so you miss exactly
+what you missed the first time. When work needs checking before you present
+it as done - a design or exploration report, a recommendation, a non-trivial
+change, any claim you are about to call settled - **dispatch a separate agent
+(or a Workflow review stage) to review it adversarially.** Brief the reviewer
+to hunt for holes, missed cases, untested assertions, and wrong claims, not to
+confirm; name the artifact and its sources; tell it to read `CLAUDE.md` first;
+run it at **max** effort. Fold its findings back before delivery.
+
+- **"Self-critique before delivery" means route the critique to a fresh
+  agent**, not reread your own output. The fable-mode skill's final step is
+  satisfied only by an independent reviewer.
+- **A found-nothing review is trustworthy only when an independent agent ran
+  it.** Your own "looks good" is not evidence.
+- **Prove uncertain behavior, do not assert it.** A claim that some mechanism
+  "is enough" or "is not needed" is a hypothesis until a harness or a walked
+  edge case (the teleport-out-of-subtree case, the empty input, the concurrent
+  render) has tried to break it. Enumerate the cases that would falsify the
+  claim and check them; if you cannot check one, say so and mark it unproven.
+
 ## Where new agent knowledge goes
 
 When you discover something worth recording, pick **one** location. All of
@@ -235,15 +263,16 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   and `html_transform`. That list is exactly
   what Python sees, so keep it in step with the
   [`_rust.pyi`](packages/py/citry_core/citry_core/_rust.pyi) stub.
-- **Some dependency declarations are mirrored across files** and drift if
-  you update only one. Python test deps live in each package's
-  `[dependency-groups].dev` AND in the root `pyproject.toml` dev/ci extras
-  (the root is what the shared venv and CI install from); the cross-comments
-  in those files say which sibling to update. The mirroring goes away with
-  the uv workspace conversion
-  ([#8](https://github.com/citry-dev/citry/issues/8)). When changing any
-  pinned version, grep for the name across `pyproject.toml` files and CI
-  workflows first.
+- **Python dependencies have one owner in the uv workspace.** A package's
+  test-only dependencies live in that package's `[dependency-groups].dev`;
+  runtime dependencies and extras live on the package that imports them.
+  Root `[dependency-groups].dev` is only for repo-wide tooling such as ruff,
+  mypy, and maturin. `uv sync --all-packages` installs every workspace
+  member's dev group into the shared environment, so do not mirror a package
+  dependency at the root. Refresh `uv.lock` after a declaration change, and
+  grep CI workflows when changing a pin because a job may select groups or
+  extras explicitly. This is the landed uv workspace model from
+  [#8](https://github.com/citry-dev/citry/issues/8).
 
 ## Code conventions
 
