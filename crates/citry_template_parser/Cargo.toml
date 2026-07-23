@@ -8,6 +8,7 @@ edition = "2021"
 python_safe_eval = { path = "../python_safe_eval" }
 ruff_python_ast = { workspace = true }
 ruff_python_parser = { workspace = true }
+ruff_text_size = { workspace = true }
 
 pyo3 = { workspace = true }
 quick-xml = { workspace = true }

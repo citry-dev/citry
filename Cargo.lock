@@ -230,6 +230,7 @@ dependencies = [
  "regex",
  "ruff_python_ast",
  "ruff_python_parser",
+ "ruff_text_size",
  "thiserror",
 ]
 

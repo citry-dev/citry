@@ -1,0 +1,10 @@
+{
+  "name": "citry-dev-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Node dev tooling for the citry monorepo. Holds the pinned pyright used by the check gate (scripts/check.py) to enforce the typed Events base contract. Not published.",
+  "packageManager": "pnpm@10.32.1",
+  "devDependencies": {
+    "pyright": "1.1.411"
+  }
+}
