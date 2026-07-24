@@ -1,0 +1,81 @@
+"""Tests for cross-reference resolution and the objects.inv inventory."""
+
+from __future__ import annotations
+
+import zlib
+
+from docs_site._internal.crossrefs import (
+    build_objects_inv,
+    resolve_crossrefs,
+    resolve_crossrefs_in_prose,
+    symbol_url_index,
+)
+from docs_site._internal.pipeline import render_page
+from docs_site._internal.reference import _md
+
+
+def test_index_has_symbols_and_members() -> None:
+    index = symbol_url_index()
+    assert index["citry.Component"] == "/reference/component/#citry-component"
+    assert index["Component"] == index["citry.Component"]  # short-name alias
+    assert index["Component.template_data"] == "/reference/component/#citry-component-template-data"
+    assert index["citry.Component.template_data"] == index["Component.template_data"]
+
+
+def test_case_colliding_symbols_get_distinct_consistent_anchors() -> None:
+    # The Citry class and the citry instance live on one page and slugify to the
+    # same anchor; they must be disambiguated, and the cross-ref index must point
+    # at exactly the ids the page renders (so a link never lands on the wrong one).
+    from docs_site._internal.reference import reference_anchor_map
+
+    anchors = reference_anchor_map()
+    assert anchors["citry.Citry"] != anchors["citry.citry"]
+
+    index = symbol_url_index()
+    assert index["citry.Citry"].endswith("#" + anchors["citry.Citry"])
+    assert index["citry.citry"].endswith("#" + anchors["citry.citry"])
+
+
+def test_resolve_explicit_and_shorthand() -> None:
+    md, unresolved = resolve_crossrefs("[the class][citry.Component] and [`Component`][]")
+    assert md.count("(/reference/component/#citry-component)") == 2
+    assert unresolved == []
+
+
+def test_unknown_ref_degrades_to_text_in_docstrings() -> None:
+    md, unresolved = resolve_crossrefs("[gone][citry.Nope]", degrade_unresolved=True)
+    assert md == "gone"  # plain text, not a broken [x][y] literal
+    assert unresolved == ["citry.Nope"]
+
+
+def test_non_ref_brackets_survive_in_content() -> None:
+    md, _ = resolve_crossrefs_in_prose("array indexing arr[i][j] stays put")
+    assert "arr[i][j]" in md
+
+
+def test_crossrefs_skip_fenced_code() -> None:
+    src = "ref [`Component`][citry.Component]\n\n```\n[x][citry.Component]\n```\n"
+    md, _ = resolve_crossrefs_in_prose(src)
+    assert "(/reference/component/#citry-component)" in md  # the prose ref resolved
+    assert "[x][citry.Component]" in md  # the fenced one was left alone
+
+
+def test_content_page_links_to_reference() -> None:
+    html = render_page("See [`Component`][citry.Component].").html
+    assert 'href="/reference/component/#citry-component"' in html
+
+
+def test_docstring_crossrefs_resolve() -> None:
+    out = _md("See [the element][citry.CitryElement].")
+    assert 'href="/reference/rendering/#citry-citryelement"' in out
+
+
+def test_objects_inv_is_a_valid_sphinx_v2_inventory() -> None:
+    data = build_objects_inv("9.9.9")
+    assert data.startswith(b"# Sphinx inventory version 2")
+    assert b"# Version: 9.9.9" in data
+    _, _, payload = data.partition(b"compressed using zlib.\n")
+    lines = zlib.decompress(payload).decode().splitlines()
+    assert any(line.startswith("citry.Component ") for line in lines)
+    assert any(".template_data " in line for line in lines)  # a member entry
+    assert all(line.split()[1] == "py:obj" for line in lines)

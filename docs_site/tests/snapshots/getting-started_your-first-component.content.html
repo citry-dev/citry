@@ -1,0 +1,75 @@
+<h1 id="your-first-component"><a class="heading-anchor" href="#your-first-component">Your first component</a></h1>
+<p>A component in citry is a Python class. It pairs a template (the HTML you want)
+with a small method that prepares the values the template reads. This page walks
+through writing one, rendering it, and seeing the HTML it produces.</p>
+<h2 id="define-the-component"><a class="heading-anchor" href="#define-the-component">Define the component</a></h2>
+<p>Subclass <a href="/reference/component/#citry-component"><code>Component</code></a> and give it a <code>template</code>. Then override
+<code>template_data</code> to return the values the template's <code>{{ }}</code> expressions read.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">citry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Component</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Welcome</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span>
+    <span class="nv">template</span> <span class="o">=</span> <span class="sd">&quot;&quot;&quot;</span>
+      <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;card&quot;</span><span class="p">&gt;</span>
+        <span class="p">&lt;</span><span class="nt">h1</span><span class="p">&gt;{{</span> <span class="n">title</span> <span class="p">}}&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
+        <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>You have <span class="p">{{</span> <span class="n">count</span> <span class="p">}}</span> new messages.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+      <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">template_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">slots</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span>
+            <span class="s2">&quot;title&quot;</span><span class="p">:</span> <span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;title&quot;</span><span class="p">],</span>
+            <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;messages&quot;</span><span class="p">]),</span>
+        <span class="p">}</span>
+</code></pre></div>
+<p>Two things are happening here:</p>
+<ul>
+<li>The <code>template</code> is the HTML the component renders. Inside it, <code>{{ title }}</code> and
+  <code>{{ count }}</code> are expressions that read names prepared for the template.</li>
+<li><code>template_data</code> returns a dict of exactly those names. Whatever keys you return
+  are the names the template can see.</li>
+</ul>
+<h2 id="read-a-kwarg"><a class="heading-anchor" href="#read-a-kwarg">Read a kwarg</a></h2>
+<p>When you call the class (in the next step), the keyword arguments you pass become
+<code>kwargs</code>. Here the component reads two of them, <code>title</code> and <code>messages</code>.</p>
+<p>Because this component does not declare an inner <code>Kwargs</code> class, <code>kwargs</code> is a
+plain dict, so you read values with subscript access: <code>kwargs["title"]</code>.</p>
+<p><code>template_data</code> runs as ordinary Python, so every builtin is available here. That
+is why <code>len(kwargs["messages"])</code> works: the counting happens in <code>template_data</code>,
+and the template just displays the prepared <code>count</code>. Builtins like <code>len</code> are not
+available inside <code>{{ }}</code> expressions, so preparing the value here is the way to
+show a computed number.</p>
+<h2 id="render-it"><a class="heading-anchor" href="#render-it">Render it</a></h2>
+<p>Calling <code>Welcome(...)</code> does not build a component object. It returns a
+<a href="/reference/rendering/#citry-citryelement"><code>CitryElement</code></a>, a lightweight description of what to render.
+You turn it into an HTML string by passing it to <code>str()</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="n">component</span> <span class="o">=</span> <span class="n">Welcome</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="s2">&quot;Welcome back&quot;</span><span class="p">,</span> <span class="n">messages</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">])</span>
+<span class="n">html</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">component</span><span class="p">)</span>
+</code></pre></div>
+<p><code>str(component)</code> runs the full render, then serializes the result to HTML. The
+output looks like this:</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;card&quot;</span> <span class="na">data-cid-c1</span><span class="o">=</span><span class="s">&quot;&quot;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">h1</span><span class="p">&gt;</span>Welcome back<span class="p">&lt;/</span><span class="nt">h1</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>You have 3 new messages.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+</code></pre></div>
+<p>The <code>data-cid-c1=""</code> marker is added by citry to identify this rendered instance.
+The <code>title</code> shows the value you passed in, and <code>count</code> shows <code>3</code>, the length of
+the three-item <code>messages</code> list that <code>template_data</code> computed.</p>
+<h2 id="how-the-pieces-fit"><a class="heading-anchor" href="#how-the-pieces-fit">How the pieces fit</a></h2>
+<ul>
+<li><code>template</code> is the HTML, with <code>{{ }}</code> expressions marking where values go.</li>
+<li><code>template_data(self, kwargs, slots)</code> prepares those values. It reads the inputs
+  from <code>kwargs</code> and returns a dict whose keys are the names the template reads.</li>
+<li>Calling the class returns a <a href="/reference/rendering/#citry-citryelement"><code>CitryElement</code></a>; <code>str()</code> on it
+  produces the HTML.</li>
+</ul>
+<p>If you need finer control over rendering, <code>str(component)</code> is a shortcut for
+<code>component.render().serialize()</code>, which accepts options. You will meet those in
+later pages.</p>
+<h2 id="next-steps"><a class="heading-anchor" href="#next-steps">Next steps</a></h2>
+<ul>
+<li><a href="/getting-started/parametrising-components/">Parametrising components</a> shows how
+  to declare typed inputs with an inner <code>Kwargs</code> class and read them by attribute.</li>
+<li><a href="/syntax/expressions/">Template expressions</a> covers what you can write inside
+  <code>{{ }}</code> and why builtins like <code>len</code> belong in <code>template_data</code>.</li>
+</ul>

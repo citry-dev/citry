@@ -1,0 +1,108 @@
+<h1 id="control-flow"><a class="heading-anchor" href="#control-flow">Control flow</a></h1>
+<p>Citry gives you two control-flow tools for templates: conditionals
+(<code>if</code> / <code>elif</code> / <code>else</code>) and loops (<code>for</code> / <code>empty</code>). Each one comes in two
+forms that do the same thing:</p>
+<ul>
+<li>A <strong>tag form</strong>, where the control flow is its own <code>&lt;c-*&gt;</code> element wrapping
+  the content.</li>
+<li>A <strong>shorthand attribute form</strong>, where you put a <code>c-*</code> attribute directly on
+  the element you want to show or repeat.</li>
+</ul>
+<p>Use the tag form when you want to wrap several elements at once, and the
+shorthand when you are toggling or repeating a single element.</p>
+<h2 id="conditionals"><a class="heading-anchor" href="#conditionals">Conditionals</a></h2>
+<h3 id="tag-form"><a class="heading-anchor" href="#tag-form">Tag form</a></h3>
+<p>Wrap each branch in its own tag. The first branch whose condition is truthy
+renders; the rest are skipped. <code>&lt;c-elif&gt;</code> and <code>&lt;c-else&gt;</code> are optional.</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">c-if</span> <span class="na">cond</span><span class="o">=</span><span class="s">&quot;is_visible&quot;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;panel&quot;</span><span class="p">&gt;</span>Content<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">c-if</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">c-elif</span> <span class="na">cond</span><span class="o">=</span><span class="s">&quot;is_admin&quot;</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;panel&quot;</span><span class="p">&gt;</span>Admin content<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">c-elif</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">c-else</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">c-Login</span> <span class="p">/&gt;</span>
+<span class="p">&lt;/</span><span class="nt">c-else</span><span class="p">&gt;</span>
+</code></pre></div>
+<p>The branches must be <strong>adjacent siblings</strong>. Whitespace between them is fine
+(it is dropped when the branches are grouped), but any other content between
+two branches is a parse error.</p>
+<p>Conditions use normal Python truthiness, not identity. <code>[0]</code> is truthy
+because it is a non-empty list; <code>[]</code> is falsy. When a <code>&lt;c-if&gt;</code> is falsy and
+has no matching <code>&lt;c-else&gt;</code>, it renders nothing.</p>
+<h3 id="shorthand-form"><a class="heading-anchor" href="#shorthand-form">Shorthand form</a></h3>
+<p>Put <code>c-if</code>, <code>c-elif</code>, or <code>c-else</code> on a regular element or component. Each one
+controls just that single element. <code>c-else</code> takes no value.</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">div</span> <span class="na">c-if</span><span class="o">=</span><span class="s">&quot;is_visible&quot;</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;panel&quot;</span><span class="p">&gt;</span>Content<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">div</span> <span class="na">c-elif</span><span class="o">=</span><span class="s">&quot;is_admin&quot;</span> <span class="na">class</span><span class="o">=</span><span class="s">&quot;panel&quot;</span><span class="p">&gt;</span>Admin content<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">c-Login</span> <span class="na">c-else</span> <span class="p">/&gt;</span>
+</code></pre></div>
+<p>When the condition is false, the element renders nothing at all.</p>
+<h2 id="loops"><a class="heading-anchor" href="#loops">Loops</a></h2>
+<h3 id="tag-form_1"><a class="heading-anchor" href="#tag-form_1">Tag form</a></h3>
+<p><code>&lt;c-for&gt;</code> repeats its body once per item. The <code>each</code> clause names the loop
+variable and the iterable. An optional <code>&lt;c-empty&gt;</code> sibling renders when the
+iterable produced zero items.</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">c-for</span> <span class="na">each</span><span class="o">=</span><span class="s">&quot;i in items&quot;</span><span class="p">&gt;</span>[{{ i }}]<span class="p">&lt;/</span><span class="nt">c-for</span><span class="p">&gt;&lt;</span><span class="nt">c-empty</span><span class="p">&gt;</span>none<span class="p">&lt;/</span><span class="nt">c-empty</span><span class="p">&gt;</span>
+</code></pre></div>
+<p>With <code>items=[1]</code> this renders <code>[1]</code>; with <code>items=[]</code> it renders <code>none</code>.</p>
+<p>Loop output is escaped like any other expression. If <code>x</code> is <code>&lt;b&gt;</code>, then
+<code>{{ x }}</code> renders <code>&amp;lt;b&amp;gt;</code>.</p>
+<h3 id="shorthand-form_1"><a class="heading-anchor" href="#shorthand-form_1">Shorthand form</a></h3>
+<p>Put <code>c-for</code> on the element you want to repeat, and <code>c-empty</code> on the element
+to show when there are no items.</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">ul</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">li</span> <span class="na">c-for</span><span class="o">=</span><span class="s">&quot;item in items&quot;</span><span class="p">&gt;</span>{{ item.name }}<span class="p">&lt;/</span><span class="nt">li</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">li</span> <span class="na">c-empty</span><span class="p">&gt;</span>No items found<span class="p">&lt;/</span><span class="nt">li</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">ul</span><span class="p">&gt;</span>
+</code></pre></div>
+<p>The loop variable is in scope for the rest of that same element too, so you
+can use it in other attributes on the repeated element (for example a <code>c-bind</code>
+on the same <code>&lt;li&gt;</code>).</p>
+<h3 id="the-each-clause-is-a-real-comprehension"><a class="heading-anchor" href="#the-each-clause-is-a-real-comprehension">The each clause is a real comprehension</a></h3>
+<p>The text inside <code>each</code> is a genuine Python comprehension clause, so anything
+you can write after <code>for</code> in a comprehension works here.</p>
+<p>Unpack multiple targets, including dict items:</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">c-for</span> <span class="na">each</span><span class="o">=</span><span class="s">&quot;k, v in d.items()&quot;</span><span class="p">&gt;</span>{{ k }}:{{ v }} <span class="p">&lt;/</span><span class="nt">c-for</span><span class="p">&gt;</span>
+</code></pre></div>
+<p>With <code>d={'x': 1, 'y': 2}</code> this renders <code>x:1 y:2</code>.</p>
+<p>Filter items with an <code>if</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">c-for</span> <span class="na">each</span><span class="o">=</span><span class="s">&quot;x in xs if x % 2 == 0&quot;</span><span class="p">&gt;</span>{{ x }}<span class="p">&lt;/</span><span class="nt">c-for</span><span class="p">&gt;</span>
+</code></pre></div>
+<p>With <code>xs=[1, 2, 3, 4]</code> this renders <code>24</code>.</p>
+<p>Note that a single target over tuples binds the <strong>whole</strong> tuple. With
+<code>pairs=[(1, 2), (3, 4)]</code>, writing <code>each="p in pairs"</code> and <code>{{ p }}</code> renders
+<code>(1, 2)(3, 4)</code>. Write <code>each="k, v in pairs"</code> to unpack each pair.</p>
+<h2 id="the-loop-variable-is-only-what-you-name"><a class="heading-anchor" href="#the-loop-variable-is-only-what-you-name">The loop variable is only what you name</a></h2>
+<p>The only variables bound inside a <code>&lt;c-for&gt;</code> are the targets you write in
+<code>each</code>. There is no automatic <code>loop</code> object, so there is no <code>loop.index</code>,
+<code>loop.first</code>, or similar. The loop targets are scoped to the loop body: they
+do not leak out, and an outer variable of the same name keeps its value after
+the loop.</p>
+<p>To number your items, compute the index in Python with <code>enumerate</code> and pass it
+in through your <code>template_data</code>. See
+<a href="/syntax/expressions/">Expressions</a> for why the template side stays simple:
+expressions cannot call Python builtins, so work like this belongs in the
+component.</p>
+<div class="highlight"><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">Cart</span><span class="p">(</span><span class="n">Component</span><span class="p">):</span>
+    <span class="nv">template</span> <span class="o">=</span> <span class="sd">&quot;&quot;&quot;</span>
+      <span class="p">&lt;</span><span class="nt">ul</span><span class="p">&gt;</span>
+        <span class="p">&lt;</span><span class="nt">li</span> <span class="na">c-for</span><span class="o">=</span><span class="p">&quot;</span><span class="n">row</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">&quot;&gt;{{</span> <span class="n">row</span><span class="o">.</span><span class="n">i</span> <span class="p">}}</span>: <span class="p">{{</span> <span class="n">row</span><span class="o">.</span><span class="n">name</span> <span class="p">}}&lt;/</span><span class="nt">li</span><span class="p">&gt;</span>
+      <span class="p">&lt;/</span><span class="nt">ul</span><span class="p">&gt;</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">template_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kwargs</span><span class="p">,</span> <span class="n">slots</span><span class="p">):</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;i&quot;</span><span class="p">:</span> <span class="n">i</span><span class="p">,</span> <span class="s2">&quot;name&quot;</span><span class="p">:</span> <span class="n">name</span><span class="p">}</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">&quot;items&quot;</span><span class="p">])]</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="n">rows</span><span class="p">}</span>
+</code></pre></div>
+<h2 id="combining-if-and-for-on-one-element"><a class="heading-anchor" href="#combining-if-and-for-on-one-element">Combining if and for on one element</a></h2>
+<p>When you put both <code>c-if</code> and <code>c-for</code> on the same element, the <code>if</code> wraps the
+<code>for</code>. If the condition is false, the element renders nothing and the loop
+does not run at all.</p>
+<h2 id="related-pages"><a class="heading-anchor" href="#related-pages">Related pages</a></h2>
+<ul>
+<li><a href="/syntax/expressions/">Expressions</a> for what you can write inside <code>cond</code>,
+  <code>each</code>, and <code>{{ }}</code>.</li>
+<li><a href="/syntax/dynamic-attributes/">Dynamic attributes</a> for binding attributes
+  such as <code>c-bind</code> on a looped element.</li>
+</ul>
