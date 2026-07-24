@@ -27,9 +27,9 @@ This is a migration item: it resolves the two ❓ rows in
 [`benchmarking.md`](benchmarking.md) section 6.3, where the large benchmark
 scenario's Form component picks its content tag (div/table/ul) at render
 time. For the transparent-built-in pattern both tags reuse see
-[`provide.md`](provide.md); for how an element embedded in an expression
+[`component_provide.md`](component_provide.md); for how an element embedded in an expression
 renders see [`component_rendering.md`](component_rendering.md); for slot pass-through see
-[`slots.md`](slots.md); for the Const interactions see
+[`component_slots.md`](component_slots.md); for the Const interactions see
 [`component_constness.md`](component_constness.md). Operating rules: [`/CLAUDE.md`](../../CLAUDE.md).
 
 ---

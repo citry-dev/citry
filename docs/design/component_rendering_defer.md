@@ -396,7 +396,7 @@ stacks the `data-cid` markers automatically. It is rejected because:
 
 - **Slots.** `ComponentNode` with body content still raises today.
   `DeferredComponent` carries the element's slots/body so deferred rendering is
-  slot-ready; slot resolution is specified in [`slots.md`](slots.md), whose
+  slot-ready; slot resolution is specified in [`component_slots.md`](component_slots.md), whose
   section 8 also extends `_scan_deferred` to descend into cross-owner renders
   (fill bodies can defer grandchildren).
 - **Const-folding.** A folded component boundary must still mint a fresh render

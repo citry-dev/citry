@@ -1,10 +1,41 @@
 # Design: the Events extension (`Component.Events`)
 
-**Status (2026-07-07): maintainer-reviewed design.** The full
+**Status (2026-07-22): Events v1 shipped.** The Alpine and
+frontend-boundary source of truth is now [`alpinejs.md`](alpinejs.md); this
+document remains normative for the Events protocol, State, actions,
+transport, and queue. The full
 section-by-section maintainer readthrough completed 2026-07-07 (three
-review rounds overall). Implementation is underway against
-[`events_plan.md`](events_plan.md); the landed state is tracked in
-that plan's per-work-package status blocks. This is the design doc the
+review rounds overall), and the client-model round (nested anchor
+continuity, targeted renders, the event queue, the `#c-*` channel) was
+decided by the maintainer 2026-07-15 against the analyses and spike in
+[`events_research/`](events_research/) and is folded into sections 5.1,
+5.3, 5.5, 5.6, and the decision records in 14.3. The 2026-07-17
+review round ratified that round's six drafted recommendations into
+normative text, made the event queue an explicit dependency DAG (5.6,
+14.3.4), settled the `#c-key` depth rule (5.3) and the `$component`
+props declaration (5.5). The 2026-07-19 client-boundary review accepted props
+and event relocation, the init ancestry DAG, managed Alpine helpers, and the
+stable reactive `scope`; it also accepted the round-two unknown-key,
+default-reuse, and update-validation contracts. The
+2026-07-19 `RootGroup`
+spike then proved the multi-root listener mechanism
+and stable live `els` representation across Chromium, Firefox, and WebKit;
+the rootless comment-range spike proved text/empty logical lifetime,
+stable-anchor normalization, grouped mirrors, contextual parsing,
+nested/adjacent isolation, and exact cleanup in the same three engines. The
+focused boundary-handler isolation spike passed the same browser matrix and
+locked whole Alpine handler expressions and optional Citry argument
+expressions to the exact authored source scope. `$el`, `$dispatch`, and
+`$event` come from the physical child; native `currentTarget` remains
+untouched and follows DOM listener mode and timing. Server-handler validation,
+serialization, registry, relay, and morph integration are now landed as
+recorded in [`alpinejs_plan.md`](alpinejs_plan.md). On
+2026-07-20 the maintainer selected graph-first Alpine and the public Citry
+props directive `$c-props`, including the orthogonal `c-$c-props` form. The
+2026-07-22 WP26 closeout further pinned canonical first-live-root event
+dispatch, natural-event draft protection before `.on:`/`.lazy` flushes, and
+the remaining strict-JSON and client-queue edge behavior. This is
+the design doc the
 roadmap calls for in its "Server-interactive / reactive components" row
 ([`extensions_roadmap.md`](extensions_roadmap.md) section 3): one extension
 that serves component event handlers over HTTP (and later WebSocket) and
@@ -30,7 +61,7 @@ Related docs: the extension substrate this plugs into is
 [`extensions.md`](extensions.md); the fragment pipeline, mount contract, and
 URL layer it stands on are [`dependencies.md`](dependencies.md) sections 8
 and 9; the migration verdicts it fulfills are in
-[`citry_migration.md`](citry_migration.md) (search "Component.Events").
+[`migration_djc.md`](migration_djc.md) (search "Component.Events").
 Operating rules: [`/CLAUDE.md`](../../CLAUDE.md).
 
 ---
@@ -73,9 +104,15 @@ class Counter(Component):
 
     template = """
       <div>
-        <button @click="$state.count++">+1</button>
-        <span x-text="$state.count">{{ count }}</span>
-        <button @c-click="save">Save</button>
+        <button @click="$state.count++">
+          +1
+        </button>
+        <span x-text="$state.count">
+          {{ count }}
+        </span>
+        <button @c-click="save">
+          Save
+        </button>
       </div>
     """
 ```
@@ -102,7 +139,9 @@ class ContactForm(Component):
             if not valid_email(data.email):
                 raise EventError(
                     "Please fix the errors.",
-                    fields={"email": "Enter a valid email address."},
+                    fields={
+                        "email": "Enter a valid email address."
+                    },
                 )
             send_message(data.email, data.message)
             return {"sent": True}
@@ -147,7 +186,7 @@ class AddToCart(Component):
             ]
 
     template = """
-      <button @c-click="add({product_id: 42})">
+      <button @c-click="add({ product_id: 42 })">
         Add to cart
       </button>
     """
@@ -156,10 +195,9 @@ class AddToCart(Component):
 Any other component can react with one function call, no wiring:
 ```html
 <div x-init="
-  $onEvent(
-    'cart:updated', 
-    () => $sendEvent('refresh'),
-  )
+  $onEvent('cart:updated', () => {
+    $sendEvent('refresh');
+  })
 ">...</div>
 ```
 
@@ -218,7 +256,9 @@ class Signup(Component):
     template = """
       <form method="post" c-action="submit_url">
         <input name="email">
-        <button type="submit">Sign up</button>
+        <button type="submit">
+          Sign up
+        </button>
       </form>
     """
 ```
@@ -244,7 +284,9 @@ class JobStatus(Component):
             return JobStatus(job_id=state.job_id)
 
     def template_data(self, kwargs, slots):
-        return {"status": job_status(kwargs.job_id)}
+        return {
+            "status": job_status(kwargs.job_id),
+        }
 
     template = """
       <div @c-poll.30s="refresh">
@@ -274,7 +316,7 @@ already built, and this design adds no core hooks:
   (`extension.py:331-346`). An extension can capture the user's raw nested
   class in `on_component_class_created` before the rebuild, the way the
   dependencies extension does
-  ([`dependencies/__init__.py:187-192`](../../packages/py/citry/citry/extensions/dependencies/__init__.py)).
+  ([`dependencies/__init__.py:187-192`](../../packages/py/citry/citry/ext/dependencies/__init__.py)).
 - **Custom hooks.** `emit(name, ctx, result="none"|"first"|"map")` lets an
   extension own its own lifecycle hooks (`extension.py:719-773`); the rule
   that extension lifecycle points are `emit()` hooks, not core hooks, is
@@ -297,14 +339,15 @@ already built, and this design adds no core hooks:
   the mount contract. The interim pattern (a user-written host route) is the
   FastAPI test app
   ([`test_contrib_fastapi.py`](../../packages/py/citry/tests/test_contrib_fastapi.py)).
-- **The client runtime.** `Citry.manager` with seven public methods;
-  `$onComponent` callbacks receive exactly `{id, els, data}`
-  ([`citry.js:150`](../../packages/py/citry/citry/extensions/dependencies/client/citry.js));
+- **The client runtime baseline.** Before the Events decorator extends it in
+  5.5, `Citry.manager` exposes seven public methods and `$component` callbacks
+  receive exactly `{id, els, data}`
+  ([`citry.js:150`](../../packages/py/citry/citry/ext/dependencies/client/citry.js));
   fragments deliver assets and calls through inert base64-encoded JSON
   manifest tags picked up by a MutationObserver (`citry.js:201-213`).
-  `$onComponent(` is a cache-time regex rewrite to
+  `$component(` is a cache-time regex rewrite to
   `Citry.manager.registerComponent("<class_id>", `
-  ([`scripts.py:56-66`](../../packages/py/citry/citry/extensions/dependencies/scripts.py)),
+  ([`scripts.py:56-66`](../../packages/py/citry/citry/ext/dependencies/scripts.py)),
   which means component JS is cached **per class** and anything per-instance
   must flow through the callback's argument object, not the JS text.
 - **Typed inputs.** A nested `Kwargs` class becomes a non-frozen
@@ -329,7 +372,7 @@ continuity instead (5.3, 5.5).
   `:631`), so `c-data-id="item.id"` renders `data-id="3"`. The `@c-*` and `:c-*` names
   start with `@` and `:`, so they never touch that channel (and `:c-*` is
   likewise distinct from the `c-bind` attribute spread,
-  [`html_attrs.md`](html_attrs.md)). Both facts shape the vocabulary
+  [`template_html_attrs.md`](template_html_attrs.md)). Both facts shape the vocabulary
   (section 5).
 - **The push-channel precedent.** Browser live-reload already sketches an
   extension mounting a dev-only SSE or WebSocket endpoint via
@@ -337,7 +380,7 @@ continuity instead (5.3, 5.5).
   WebSocket-shaped exists in the adapters yet.
 - **Migration verdicts.** `Component.View`'s HTTP-method-named handler API
   is dropped, "the concept returns redesigned as `Component.Events`"
-  ([`citry_migration.md`](citry_migration.md), view.py rows);
+  ([`migration_djc.md`](migration_djc.md), view.py rows);
   `get_component_url` returns with this design on `Extension.urls` plus the
   fragment strategy; the ported `format_url` is explicitly waiting for "a
   future component-URL builder" as its first caller.
@@ -537,7 +580,7 @@ and back with every call), and a client runtime that calls the handlers:
   and SSE later.
 - Rendered HTML in a response is a complete
   `serialize(deps_strategy="fragment")` output, so assets, JS/CSS
-  variables, and `$onComponent` re-fire through the existing manifest
+  variables, and `$component` re-fire through the existing manifest
   machinery unchanged. The fragment pipeline is the update vehicle; Events
   adds the missing client half (transport, bindings, morph) and the missing
   server half (dispatch, validation, state).
@@ -545,7 +588,7 @@ and back with every call), and a client runtime that calls the handlers:
   vocabulary: `@c-*` for events and `:c-*` for state bindings
   (`@c-click="add"`, `:c-query.debounce.300ms="refresh"`,
   `@c-poll.30s="refresh"`), rewritten at template load so the authored
-  syntax never reaches the browser; component JS gets `sendEvent` / `onEvent` on the `$onComponent`
+  syntax never reaches the browser; component JS gets `sendEvent` / `onEvent` on the `$component`
   callback object for everything else.
 - HTTP is the v1 transport. The dispatcher is transport-agnostic, so
   WebSocket (v2) and anything custom (a GraphQL mutation, postMessage from
@@ -621,10 +664,7 @@ class LiveSearch(Component):
             return LiveSearch(query=state.query)
 
     def template_data(self, kwargs, slots):
-        if kwargs.query:
-            results = find_products(kwargs.query)
-        else:
-            results = []
+        results = find_products(kwargs.query) if kwargs.query else []
         return {"results": results}
 
     template = """
@@ -668,9 +708,7 @@ class ContactForm(Component):
             if "@" not in data.email:
                 raise EventError(
                     "Please fix the errors.",
-                    fields={
-                        "email": "Enter a valid email address."
-                    },
+                    fields={"email": "Enter a valid email address."},
                 )
             send_contact_email(data.name, data.email)
             return ContactForm(name=data.name, email=data.email, sent=True)
@@ -743,8 +781,9 @@ tutorial:
   opt-in by placement, and the wire carries structured JSON, never
   expression strings.
 - **Tetra**: the same "server method feels like a client method"
-  ergonomics, without pickled live objects as state and without hard-wiring
-  Alpine.
+  ergonomics, without pickled live objects as state and without making a
+  generated Alpine data object the source of component identity. Citry ships
+  pinned stock Alpine under its graph-first component ownership model.
 - **livecomponents**: the same one-response-many-fragments update shape,
   without Redis, without manual `parent_id` threading, and without a
   five-library client stack.
@@ -764,12 +803,15 @@ not exposed.** There are no reserved public methods and no built-in
 events, so the rule has no exceptions: public `def` means handler,
 underscore `def` means private helper (or the `_context` hook, 3.6),
 underscore attributes mean configuration (3.5). The extension enumerates
-handlers from the raw nested class captured in
-`on_component_class_created` (the dependencies-extension trick), so
-inherited config-base members are never mistaken for handlers. Handlers
-inherit through normal component subclassing. `*args` / `**kwargs` in a
-handler signature are rejected at class definition (the signature is the
-schema).
+handlers from Citry's preserved nested declaration chain, so inherited
+config-base members are never mistaken for handlers. When a component child
+declares its own `class Events:`, Citry automatically combines it with the
+parent declarations in component C3 order. Parent handlers therefore remain
+available without spelling `class Events(Parent.Events)`, and a child method
+with the same name overrides the parent. `Events = None` stops that
+component-level inheritance; a nearer `class Events:` above the reset starts a
+new chain. `*args` / `**kwargs` in a handler signature are
+rejected at class definition (the signature is the schema).
 
 Note on `self`: inside a handler, `self` is the per-call **Events config
 instance**, never the component (no component instance exists during
@@ -782,7 +824,9 @@ nothing that looks like one.
 `class State:` on the component declares **exactly what round-trips**
 between the browser and the handlers. The extension rebuilds it as a
 non-frozen `dataclass(slots=True)` (the same treatment the core gives
-`Kwargs`, applied by the extension so the core stays unaware of it). Rules:
+`Kwargs`, applied by the extension). A child `class State:` automatically adds
+to its parents' State fields in component C3 order; `State = None` resets the
+inherited State, and a nearer declaration can reopen the chain. Rules:
 
 - State is deliberately **separate from `Kwargs`**. Kwargs and slots are
   render-time inputs and can hold anything: ORM instances, big structures,
@@ -935,9 +979,20 @@ installed. It is the one annotation the dispatcher must resolve at
 runtime, because it is the validator, so module-level schema classes are
 the documented style. Validation and coercion: fields coerce from JSON
 primitives (`int`/`float` cross-coercion, `str` to `UUID | datetime |
-date | time | Decimal | Enum`, `list` to `tuple`/`set`, nested annotated
+date | time | Decimal | Enum`, which parse from strings because a
+string is their canonical JSON encoding, `list` to `tuple`/`set`,
+nested annotated
 classes from objects); extra keys are a 422, missing required fields are
-a 422 with per-field messages, never a host 500. File fields are declared
+a 422 with per-field messages, never a host 500. A JSON payload sending
+a string where the schema declares `int`, `float`, or `bool` is a 422,
+not a coercion: JSON can express those types natively, so a mistyped
+field there is a client bug worth surfacing (the audit rationale
+below). The string transports cannot express them: form posts and GET
+query strings carry only strings, so for those codecs (6.2) the binding
+is source-aware, and strings additionally bind to declared `int` /
+`float` / `bool` fields (`"5"` binds to `int`; boolean spellings accept
+the HTML form vocabulary: `"true"` / `"false"` / `"1"` / `"0"` / `"on"`;
+anything else is the per-field 422). File fields are declared
 as `UploadedFile` (or `list[UploadedFile]`) on the schema and arrive via
 the multipart codec (6.2).
 
@@ -980,13 +1035,15 @@ anything when called:
 | `actions.Data(value)` | `data` | Resolve the client caller's promise with this JSON value. |
 | `actions.Dispatch(name, detail=None)` | `event` | Dispatch a named browser event (DOM CustomEvent; `onEvent` listeners and plain `addEventListener` react). |
 | `actions.Redirect(url)` | `redirect` | Navigate the page. |
-| `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` (v1.x) | `url` | History update without navigation, pushing onto or replacing the top of the history stack (the htmx `HX-Push-Url` / `HX-Replace-Url` sibling pair). |
-| `actions.Download(content, filename, content_type=...)` (v1.x) | none (escape) | A file download. Sugar over the raw-response escape below, so it is per-event HTTP route only and cannot ride the envelope (tunneling files as base64 JSON is the documented anti-pattern, Livewire being the lone framework that does it). Returned bare or as a list's only element, both fine; a list holding a `Download` alongside anything else, other `Download`s included, is an error. The client detects `Content-Disposition` on the response and saves it. |
+| `actions.PushUrl(url)` / `actions.ReplaceUrl(url)` (v1.x) | `url` | History update without navigation, pushing onto or replacing the top of the history stack (the htmx `HX-Push-Url` / `HX-Replace-Url` sibling pair). The client preserves `history.state`; Citry does not synthesize `popstate` or restore component HTML or State on later Back/Forward navigation. |
+| `actions.Download(content, filename, content_type=...)` (v1.x) | none (escape) | A file download. Sugar over the raw-response escape below, so its handler uses `@event(bundle=False)`, runs through the per-event HTTP route, leaves State unchanged, and returns the download bare or as a list's only element. It cannot share a list or request with another result. The client accepts a successful attachment response for one call, buffers the blob, and starts the save only after the call survives timeout and supersession checks. |
 
 Every envelope-riding constructor also accepts the timing fields
 `delay` (seconds) and `wait` (4.3). `Render`'s `target` accepts a CSS
 selector string (all matches) and defaults to the calling instance
-(4.3).
+(4.3). On an instance-less compatibility / no-JS HTTP request, a targetless
+render instead supplies the whole response body; the internal compatibility
+translation consumes it before any action reaches a client.
 
 Return-value rules, strict by design (ambiguity is refused, not guessed):
 
@@ -1010,6 +1067,9 @@ Anything other than the calling instance is addressed explicitly
 (`Render(..., target=...)`). Mechanically the morph applies the new
 rendering as a minimal diff (5.3), so the untouched parts of the DOM,
 including the focused control that triggered the call, stay in place.
+For a classic form or pasted compatibility URL with no calling instance,
+returning an element is also valid: its HTML is the complete HTTP response,
+not a client-side morph action.
 
 ```python
 from citry.ext.events import actions
@@ -1055,9 +1115,10 @@ ready call sites per app area for `Redirect` alone (production mutations
 today end in full page reloads for lack of exactly these actions).
 
 `RouteResponse(...)` remains the HTTP-transport, per-event-route escape
-hatch (file downloads, custom content types); it bypasses the envelope and
-is rejected with a clear error on the batch endpoint and non-HTTP
-transports.
+hatch (file downloads, custom content types). Its handler uses
+`@event(bundle=False)` and leaves State unchanged because the raw response
+bypasses the result envelope and its state-token refresh. It is rejected with
+a clear error on the batch endpoint and non-HTTP transports.
 
 **The import paths are governed by one public-API rule.** Public is:
 what the root `citry` package exports, plus what each extension's and
@@ -1140,7 +1201,7 @@ The component-level config surface, exhaustively:
 |---|---|---|---|
 | `_guard` | `def _guard(self): ...` inline, or `_guard = my_check` assigning any `callable(events)`; both bind identically. Receives the Events instance with the ambient per-call attributes populated (`self.state`, `self.context`, `self.request`, `self.event`; the raw unvalidated payload is `self.event.args`). Raise `EventError` (e.g. `status=403`) to deny, return to allow. It takes no `data` because one guard covers handlers with different schemas; payload-dependent authorization belongs in the handler body, where `data` is typed. | engine default from `extensions_defaults["events"]`, else none | Authorization for every handler of the component. Resolution is most-specific-wins: `@event(guard=...)` beats `_guard` beats the engine default (7.4). |
 | `_context` | `def _context(self) -> Any`; receives the Events instance (request populated, guards not yet run) | engine default from `extensions_defaults["events"]`, else none | Builds the per-call `context` injectable (3.6). Usually configured once, engine-wide. |
-| `_csrf` | `"auto"` \| `False` \| `callable(request) -> None` (raise to reject) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only the token layer (the baseline never turns off); a callable replaces the token check. |
+| `_csrf` | `"auto"` \| `False` \| `callable(request) -> None` (raise to reject) | `"auto"` | HTTP CSRF policy for the component's handlers (7.4). Beneath any setting sits the always-on baseline: the `X-Citry-Events` header requirement (HTML forms cannot attach custom headers, and cross-origin JS attempting it hits a CORS preflight the browser blocks) plus `Origin` / `Sec-Fetch-Site` same-origin checks (browser-set, unforgeable by page JS). `"auto"` adds the host token where the host has one (Django); `False` drops only citry's own token layer (the baseline never turns off, and a host framework's token check, like Django's `CsrfViewMiddleware`, is governed by the host and stays on, 7.4); a callable replaces citry's token check and runs on top of the baseline and any host check. |
 | `_methods` | tuple of HTTP method names | `("POST",)` | The allowed methods for handlers that do not set `@event(methods=...)`. GET opts a handler into read-only, cacheable-in-principle (served `no-store` until GET caching lands, section 16), pasteable-URL calls (7.4). |
 | `_debounce` / `_throttle` | `int`, milliseconds | none | Component-wide client-timing defaults; see the `@event` row below for the mechanics. |
 | `_topics` | tuple of topic-name templates formatted from State fields, e.g. `("project:{project_id}",)` | `()` | v2 server push (section 8): the serializer formats and signs these at render time; a client can subscribe only to topics it was handed. |
@@ -1158,6 +1219,13 @@ live in no shared namespace):
 | `guard` | same signature as `_guard` | the component's `_guard` | Per-handler authorization; most specific wins, it replaces rather than stacks. |
 | `csrf` | same values as `_csrf` | the component's `_csrf` | Per-handler CSRF override (e.g. `csrf=False` on a token-authenticated endpoint). |
 | `debounce` / `throttle` | `int`, milliseconds | the component's `_debounce` / `_throttle` | Client-side timing instructions, not server machinery: they travel in the class descriptor (4.4) and the runtime holds calls back before sending, so the server never sees the suppressed ones (server-side rate limiting is the `on_event` hook or a guard). An explicit modifier on a binding overrides both levels. |
+| `latest_wins` | `bool` | `False` | Newest-wins for this handler on one instance, opt-in (5.6): when a newer call to this handler enqueues from the same anchor, queued-not-sent predecessors are dropped before sending, and an in-flight predecessor is abandoned (its response's actions are dropped on arrival); either way the predecessor's promise rejects with the `superseded` reason and the drop event fires (the settle table, 5.2). Opting in is the author's statement that overlapping runs of this handler are safe (idempotent), because the server still executes every call it received. The default preserves every call: a killed save is data loss, so newest-wins is never a default (14.3.4). Like the timing hints, it travels in the class descriptor (4.4), which is how the runtime knows it at queue time. |
+| `bundle` | `bool` | `True` | Whether calls to this handler may share a batch envelope with other calls that become eligible together at dequeue (5.6). `bundle=False` sends alone, for handlers that should never ride a shared request (a slow export next to fast toggles). It travels in the class descriptor (4.4) like the timing hints. |
+
+`latest_wins` and `bundle` are per-handler on purpose, never per call
+site: two call sites that need different overlap or bundling semantics
+are two handlers, which keeps a binding's behavior readable from the
+handler it names.
 
 Two per-handler knobs from earlier drafts are **derived, not
 configured**. Token requirement follows the signature. A handler
@@ -1174,8 +1242,13 @@ and 7.1) alongside `_storage` and `_max_bytes`.
 Engine-wide configuration splits along one line, because Events is a
 built-in extension the user never instantiates. Config that a component
 can override rides `extensions_defaults["events"]` (default `_guard`,
-default `_context`, envelope size caps), the mechanism that exists precisely
-for configuring extensions without touching them. Engine-wide registries
+default `_context`), the mechanism that exists precisely
+for configuring extensions without touching them. The envelope size cap
+(`_max_envelope_bytes`) also rides `extensions_defaults["events"]` but
+is engine-wide only, with no per-component override: it guards the
+transport before any component resolves, and one batch envelope spans
+components, so declaring it on a component's `Events` class fails at
+class definition. Engine-wide registries
 and secrets are `CitrySettings` fields: `secret` (7.1),
 `event_result_resolvers` (result resolvers, 6.2), and
 `event_payload_codecs` (payload codecs, 6.2).
@@ -1249,8 +1322,9 @@ request-derived context, which is `_context`.
   validation fills the same map automatically on `invalid_args`. One
   error class with a status argument covers forbidden, not-found, and conflict
   without an exception zoo (a user-raised 403 carries the wire code
-  `forbidden`; the 404 and 409 code mappings are pinned at
-  implementation time).
+  `forbidden`, 404 carries `not_found`, 409 carries `conflict`, and any
+  other status carries the catch-all code `error`; the protocol spec's
+  error-code table is the authoritative list).
 - **Unexpected exceptions**: caught by the dispatcher, logged, fired
   through the extension's own `on_event_error` emit hook (a Sentry
   extension can observe or replace the response), then answered as a
@@ -1295,7 +1369,7 @@ limiters, access logs, curl, and OpenAPI all see:
 ```
 curl -X POST http://localhost:8000/citry/ext/events/e/Counter_a1b2c3/increment \
   -H 'content-type: application/json' -H 'x-citry-events: 1' \
-  -d '{"protocol": "citry-events/1", "id": "r1", "calls": [{"event": "increment", "instance": "c9Zk1q", "args": {}, "state": "cev1..."}]}'
+  -d '{"protocol": "citry-events/1", "id": "r1", "calls": [{"event": "increment", "instance": "c9zk1q00", "args": {}, "state": "cev1..."}]}'
 ```
 
 `component.events.url("submit", query=..., fragment=...)` builds event URLs
@@ -1306,9 +1380,11 @@ when no integration is mounted. The audit found 116 references to the old
 `get_component_url` doing exactly this job by hand.
 
 `call` is the batch endpoint: one POST carrying a multi-call envelope.
-Client-side same-tick coalescing (merging calls made in the same JS tick
-into one request) is a v2 feature; the endpoint exists from day one so
-coalescing needs no protocol change. Method configs govern the
+Its first v1 consumer is the event queue's dequeue bundling (queued
+events that become eligible together ride one envelope, 5.6);
+client-side same-tick coalescing (merging calls made in the same JS
+tick into one request) remains a v2 feature. The endpoint exists from
+day one so neither needs a protocol change. Method configs govern the
 **per-event route only**: batch calls are envelope items, not HTTP
 requests, so a GET-configured handler invoked via batch loses nothing
 but cacheability and gains the batch POST's CSRF coverage.
@@ -1359,7 +1435,7 @@ is opaque, minted and verified by the same binding.
     {
       "component": "TodoList_a1b2c3",
       "event": "add",
-      "instance": "c9Zk1q",
+      "instance": "c9zk1q00",
       "args": { "text": "Buy milk" },
       "state": "cev1.eyJ...9mYt",
       "updates": { "query": "shoes" },
@@ -1386,7 +1462,10 @@ is opaque, minted and verified by the same binding.
   baseline and receives `replace`.
 - `calls`: an array from day one (one to sixteen entries; the cap is
   part of the protocol schema, 7.4), so batching is a client feature,
-  not a protocol change. The v1 client sends one call; same-tick coalescing is a
+  not a protocol change. The v1 client sends one call per gesture; the
+  event queue bundles queued calls that become eligible together into
+  one envelope at dequeue (5.6), and same-tick coalescing (merging
+  calls made in the same JS tick) is a
   v2 client feature. On the per-event route, `component`/`event` are bound
   from the URL and must match if present.
 - `instance`: the calling instance's render id, when known; the server
@@ -1397,8 +1476,10 @@ is opaque, minted and verified by the same binding.
   use), a hand-written form posting to a per-event URL without the
   hidden instance field, or host-page JS invoking a handler without a
   component. Such calls still run; they just have no default
-  self-render target (handlers address targets explicitly) and no
-  client registry entry to refresh.
+  self-render target on the JSON/wire path (handlers address targets
+  explicitly) and no client registry entry to refresh. The compatibility /
+  no-JS HTTP path is the one exception: a targetless render becomes the
+  whole HTML response body, so it needs no client-side target.
 - `args`: a JSON object, named keys only. Validated server-side.
 - `state`: the opaque state token, echoed verbatim. Absent for stateless
   handlers.
@@ -1412,18 +1493,34 @@ is opaque, minted and verified by the same binding.
   out-of-order guard. The runtime increments it on every send from an
   anchor and remembers the highest epoch it has applied there; the
   response echoes the request's value.
-  When a response arrives carrying an epoch lower than the highest
-  applied, its instance-mutating actions (the self-targeted render, the
-  `state` token refresh) are dropped, because a newer call's response
-  already landed; its `data` still resolves the caller's own promise,
-  and non-instance actions apply normally. The classic case: two rapid
+  A response's instance-mutating actions (the self-targeted render,
+  the `state` token refresh) apply only when its epoch is **strictly
+  greater** than the anchor's highest-applied; otherwise they are
+  dropped, while its `data` still resolves the caller's own promise
+  and non-instance actions apply normally. Over HTTP's at-most-once
+  delivery, dropping at equal-or-lower behaves exactly like dropping
+  only the lower ones (a response's own epoch becomes the highest
+  applied the moment it applies), and the comparison is stated
+  strictly because that is the form one bookkeeping move can lean on:
+  setting an anchor's highest-applied to its send counter invalidates
+  every in-flight call at once, which is exactly what the
+  keyed-linking horizon cut does (5.5; the epoch-comparison
+  restatement in the "Machinery every option needs" list of
+  [`events_research/analysis-nested-anchor-continuity.md`](events_research/analysis-nested-anchor-continuity.md)).
+  The classic case: two rapid
   debounced updates, the network delivers the second response first,
   and without the guard the first response would overwrite newer state
   with older (a shipped bug class in unicorn and Livewire). The component
   id changes on every render (5.5), so the guard tracks the anchor, not
   the id; the epoch itself stays an opaque echoed field the server never
   interprets, so moving its bookkeeping to the anchor changes nothing on
-  the wire.
+  the wire. The event queue (5.6) serializes sends from overlapping
+  anchors client-side, so in practice the guard's work narrows to what
+  the queue cannot see: `wait: false` sends, responses arriving from
+  unrelated anchors' calls, and future transports with different
+  delivery
+  orders. The guard itself is unchanged; it is the net beneath the
+  queue.
 
 Explicitly not in the envelope: CSRF tokens, cookies, auth (transport
 concerns, section 6), and executable expressions of any kind. Events are
@@ -1447,9 +1544,9 @@ the template.
       "actions": [
         {
           "action": "render",
-          "target": "cid:c9Zk1q",
+          "target": "cid:c9zk1q00",
           "swap": "morph",
-          "html": "<button data-cid-c9Zk1q ...>...</button>
+          "html": "<button data-cid-c9zk1q00 ...>...</button>
             <script type=\"application/json\" data-citry>...</script>
             <script type=\"application/json\" data-citry-events>...</script>"
         },
@@ -1461,7 +1558,7 @@ the template.
           "action": "event",
           "name": "todo:added",
           "detail": { "id": 17 },
-          "target": "cid:c9Zk1q"
+          "target": "cid:c9zk1q00"
         }
       ]
     }
@@ -1486,12 +1583,12 @@ Streams and htmx out-of-band swaps are the same shape):
 
 | Action | Fields | Meaning |
 |---|---|---|
-| `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment (markup plus the inert `data-citry` and `data-citry-events` manifest tags), so the existing MutationObserver machinery loads assets and re-fires `$onComponent` with zero new insertion mechanics. |
+| `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment (markup plus the inert `data-citry` and `data-citry-events` manifest tags), so the existing MutationObserver machinery loads assets and re-fires `$component` with zero new insertion mechanics. |
 | `data` | `value` | Resolve the calling instance's promise with this JSON value. At most one per result: a handler whose return would encode two `data` actions is an encode-time error naming the fix (two bare dicts in one list is semantically contradictory, which promise value wins?), unlike the trailing-after-redirect case, whose actions are individually valid and merely unreliable, so it warns. |
 | `state` | `instance`, `token` | Replace the stored state token for an instance whose handler mutated state without re-rendering; the server places it before the handler's own actions. (A `render` action needs no companion; the fresh fragment's manifest carries the new token.) Client rule, either carrier: the runtime applies a result's token refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token. |
-| `event` | `name`, `detail`, `target` | Dispatch a bubbling DOM CustomEvent under the **exact given name** on the target instance's roots, or on `document`. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the calling instance (the call's `instance`); only instance-less calls produce a document-targeted dispatch. |
+| `event` | `name`, `detail`, `target` | Dispatch one bubbling DOM CustomEvent under the **exact given name** on the target instance's first live root, or on `document`. A multi-root or mirrored instance uses one canonical root deliberately: dispatching the same logical action on every root would duplicate document/global delivery and `onEvent` callbacks. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the calling instance (the call's `instance`); only instance-less calls produce a document-targeted dispatch. |
 | `redirect` | `url` | Navigate the page. |
-| `url` | `url`, `mode` | History push or replace without navigation. In the schema from day one; its first producer, `PushUrl`, lands in v1.x. |
+| `url` | `url`, `mode` | History push or replace without navigation. `PushUrl` and `ReplaceUrl` are its two producers; the client accepts only exact `push` or `replace` modes, preserves `history.state`, and skips invalid or browser-rejected updates without interrupting later actions. |
 
 Targets: a plain string is a **CSS selector** and applies to **all
 matches** (`querySelectorAll`, so comma unions work natively; the
@@ -1501,7 +1598,10 @@ nothing logs a zero-match warning instead of silently doing nothing. The
 optional `cid:<instance id>` form targets a specific component instance
 (the elements carrying its `data-cid-<id>` marker); it is what the
 runtime uses for self-renders, and `cid:` is a reserved prefix no real
-selector starts with. A selector that targets a non-component region makes
+selector starts with. Its instance uses the case-safe `^[a-z0-9_-]+$`
+render-ID grammar, and the same constraint applies to `state.instance`. The
+client rejects an unsafe suffix before constructing a `data-cid-*` selector.
+A selector that targets a non-component region makes
 that region's structure part of the page's contract; prefer instance
 targets where possible. Swaps: `morph`
 (default when the client advertises it), `replace`, `inner`, `append`,
@@ -1520,6 +1620,14 @@ emits a debug warning when anything follows a `redirect` (and when a
 dispatch fired just before a redirect reaches listeners on the outgoing
 page, which is usually not what a toast wants; the tool for that is the
 timing fields below.
+The dispatcher emits the same encode-time debug warning when a
+self-addressed action follows a selector-targeted render: the selector
+may resolve to a region that contains the caller, and that earlier
+render then retires the caller's anchor, so the later self-addressed
+action drops at apply time (per-action liveness, 5.5 machinery item
+4). The authoring note the docs teach for this class: dispatch before
+the render that destroys its audience, so an `event` action meant for
+a region is listed ahead of the action that removes it.
 
 **Timing fields.** Every action carries two optional fields:
 `delay` (seconds, float, default 0) waits before applying the action,
@@ -1527,7 +1635,16 @@ and `wait` (default `true`) decides whether the queue holds for it.
 With `wait: true` the delay is blocking, preserving order; with
 `wait: false` the action is scheduled and subsequent actions proceed
 immediately. `actions.Redirect(url, delay=5, wait=False)` lets a
-farewell toast be read while later actions still apply. (`delay` is
+farewell toast be read while later actions still apply. A scheduled
+action (a nonzero `delay`, or `wait: false`) re-resolves its target,
+re-runs the per-action liveness checks (5.5 machinery item 4), and,
+when it is instance-mutating, re-runs the epoch comparison (4.2) at
+the moment it fires, never at response arrival: it applies to the DOM
+as it is then, which may have changed while the action waited, and an
+action fresh at arrival but stale by fire time drops instead of
+applying old state (the concrete case: a delayed token refresh firing
+after a newer response already landed).
+(`delay` is
 seconds because action timing is UX-scale; client input debounce stays
 in milliseconds per that convention's own field norm. The Python kwarg
 is `wait` rather than a raw `async` flag because `async` is a reserved
@@ -1545,11 +1662,25 @@ never requires custom actions: `on_event_result` (server) and
 data.
 
 Error results carry `{status, code, message, fields?}` with stable string
-codes, each with a fixed status: `invalid_args` (422), `invalid_state`
-(403, a tampered or malformed token), `stale_state` (409, an expired or
-rotated-out token), `unknown_event` and `unknown_component` (404),
-`forbidden` (403), `csrf_failed` (403), `payload_too_large` (413),
-`protocol_mismatch` (400), `handler_error` (500). On the per-event route
+codes, each with a fixed status except the catch-all: `invalid_args`
+(422), `invalid_state` (403, a malformed token), `stale_state` (409, an
+expired or rotated-out token), `unknown_event` and `unknown_component`
+(404), `forbidden` (403), `not_found` (404), `conflict` (409), `error`
+(the catch-all for user-raised statuses with no dedicated code, 3.7;
+it ships the raised 400-599 unchanged), `csrf_failed` (403),
+`payload_too_large` (413), `protocol_mismatch` (400), `handler_error`
+(500); the protocol spec's error-code table is the authoritative list.
+When a token's
+signature verifies against no current secret, the payload decides
+between the two token codes: a payload that still parses as a
+well-formed token (valid base64 and JSON with the version, component
+class, and state fields) answers `stale_state`, because a token signed
+by a rotated-out secret looks exactly like that; anything less (bad
+base64, bad JSON, wrong version, missing fields) answers
+`invalid_state`. A signature-only tamper is indistinguishable from an
+honest rotated-out token, so it takes the 409 path; the payload's
+values are only used to pick the error code, never trusted before the
+signature verifies. On the per-event route
 the HTTP status mirrors the call's status; the batch endpoint answers 200
 with per-call statuses inside (one batch can mix outcomes). `fields` is
 the per-field error map, surfaced client-side as `$error.fields` (5.5).
@@ -1579,7 +1710,7 @@ however the HTML is inserted. Decoded, an `instances` entry is the
 4-tuple `[instance id, class id, state token, public values]`:
 
 ```json
-["c9Zk1q", "TodoList_a1b2c3", "cev1.eyJ...9mYt", {"query": "shoes", "show": "open"}]
+["c9zk1q00", "TodoList_a1b2c3", "cev1.eyJ...9mYt", {"query": "shoes", "show": "open"}]
 ```
 
 The values object holds the instance's **public** State fields only; it
@@ -1591,14 +1722,25 @@ client hints:
 ```json
 {
   "events": {
-    "add":    { "method": "POST" },
-    "filter": { "method": "GET", "debounce": 300 }
-  }
+    "add":      { "method": "POST", "state": true },
+    "filter":   { "method": "GET", "state": true, "debounce": 300 },
+    "autosave": { "method": "POST", "state": true, "debounce": 400, "latest_wins": true },
+    "export":   { "method": "POST", "bundle": false }
+  },
+  "model": ["query"]
 }
 ```
 
-It carries the event names with their method and timing hints (the
-resolved `_debounce` / `_throttle` defaults, 3.5); the server stays the
+It carries the event names with their method, a `state: true` hint when a
+handler declares the State injectable, timing hints (the resolved
+`_debounce` / `_throttle` defaults, 3.5), and the queue knobs
+`latest_wins` and `bundle` (3.5), which the runtime reads at queue time
+(5.6). The optional `model` list carries a narrowed `State._model`
+capability in declaration order. It is omitted when `_model` equals
+`_public`, while an explicit empty list means all public State is read-only.
+The runtime rejects an out-of-model `$state` write before changing reactive
+State or queueing an update; the server independently enforces the same list.
+The server stays the
 authority, the descriptor is a client convenience. A re-rendered
 fragment carries its own manifest, so morphing it in updates the client
 registry automatically; fragments stay self-contained however they are
@@ -1615,23 +1757,25 @@ fields on known structures are ignored by both sides. The runtime and the
 server ship in one wheel, so version skew (client and server running
 different releases) exists only across deploys, and `capabilities`
 plus the `stale_state` flow make it graceful: both surface as a
-`citry:events:stale` DOM event whose default handling (configurable) is a
-soft reload prompt.
+`citry:events:stale` DOM event (reason `version`, 5.2) whose default
+handling (configurable) is a soft reload prompt.
 
 ---
 
 ## 5. The client API
 
-One new runtime file, `citry-events.js`, served at
-`ext/events/runtime.js` and injected automatically (via the existing
-`on_dependencies` emit hook) whenever a rendered page or fragment contains
-an interactive component. The runtime embeds **AlpineJS as its reactivity
-layer** (decision record 14.1.10), the Livewire playbook applied: a
-pinned Alpine 3.15.x plus chosen plugins is compiled into the citry
-bundle and booted by the runtime itself (`Alpine.start()` from the
-manifest step, nothing runs before it), with a warning when a second
-Alpine instance is detected. Only Events-declaring components create
-Alpine scopes, so display-only components pay no initialization cost
+The pinned Alpine/Events bundle is served at `ext/events/runtime.js` and
+injected automatically through the existing `on_dependencies` hook whenever
+a rendered page or fragment contains a client-active ownership graph. The
+bundle embeds **AlpineJS as its reactivity layer** (decision record 14.1.10)
+and installs exact Alpine 3.15.x plus morph into the permanent
+`Citry.alpine` broker. The broker owns the single startup, root selector,
+init interceptor, mutation fan-out, magic dispatchers, morph entry point, and
+duplicate-instance warning. Events-declaring components create Events
+anchors; any instance with `$component` or boundary relay activity also
+enters the general client-instance registry and gets the stable scope
+described in 5.5. Components with none of those client surfaces pay no
+initialization cost
 (Alpine's startup is one synchronous DOM walk; the audited production
 pages that froze on init are the motivating case). The DOM morph is
 `@alpinejs/morph` (2.1 KB gzip, Livewire's production backbone), pinned
@@ -1648,15 +1792,23 @@ Two prefixes to teach: **`@c-` binds events, `:c-` binds state.** They
 look different because they are different things: an `@c-*` attribute
 names a DOM event and the handler it sends, a `:c-*` attribute names a
 State field a control is bound to. Both prefixes are citry-owned by
-construction, so there is nothing to disambiguate: plain `@click`,
-`:class`, and every other attribute pass through to the final HTML
-untouched by the citry compiler, and since citry ships Alpine (5.5),
-inside any Alpine scope they are simply ordinary Alpine syntax. (The
+construction, so there is nothing to disambiguate. On a plain HTML element,
+plain `@click`, `:class`, and every other attribute pass through to the final
+HTML untouched by the citry compiler, and since citry ships Alpine (5.5),
+inside any Alpine scope they are simply ordinary Alpine syntax. At a component
+boundary, 5.5's narrow relay rule applies: only `$c-props`, Alpine event
+handlers, and Citry `@c-*` event handlers are relocated. `<c-element>` is an
+HTML-element target, not a component boundary: it rejects `$c-props`, while
+Alpine and Citry event/State bindings become attributes of its selected HTML
+element and follow the ordinary element path. (The
 citry prefixes include their trailing hyphen: `:class` and the other
-Alpine bind shorthands do not match `:c-` and are never touched.) The four attribute channels stay visually distinct: `@c-*` events,
-`:c-*` state bindings, bare `c-*` dynamic expressions, and the `c-bind`
-attribute spread ([`html_attrs.md`](html_attrs.md)); the first two never
-touch the last two (verified in section 1.1).
+Alpine bind shorthands do not match `:c-` and are never touched.) The five attribute channels stay visually distinct: `@c-*` events,
+`:c-*` state bindings, `#c-*` framework metadata about node identity
+and morphing (the block below), bare `c-*` dynamic expressions, and the `c-bind`
+attribute spread ([`template_html_attrs.md`](template_html_attrs.md)); the event and
+state channels never
+touch the expression channels (verified in section 1.1), and `#c-*` is
+its own grammar channel by construction.
 
 | Attribute | Meaning |
 |---|---|
@@ -1664,17 +1816,21 @@ touch the last two (verified in section 1.1).
 | modifiers | See the modifier table below. |
 | `@c-poll.30s="handler"` | Send the named event on an interval, paused on hidden tabs. The interval is seconds, one time segment exactly (`.30s`; a second time segment is a template-load error rather than guessing whether units add or conflict). |
 
-The modifiers, exhaustively:
+The modifiers, exhaustively, for a binding on one HTML element. A component-
+boundary `@c-*` relay follows 5.5's spike-proven `RootGroup` contract instead:
+`.self` means any member root and `.once` is one shared relay lifetime. A
+pointed error is reserved for a concrete unsupported case rather than silently
+becoming once-per-root.
 
 | Modifier | Applies to | Effect |
 |---|---|---|
 | `.prevent` | event bindings | `preventDefault()` before sending. |
 | `.stop` | event bindings | `stopPropagation()`. |
-| `.self` | event bindings | Send only when `event.target` is the bound element itself, ignoring events bubbling up from descendants. |
-| `.once` | event bindings | The binding fires at most once per element lifetime. |
+| `.self` | event bindings | Send only when `event.target` is the bound HTML element itself, ignoring events bubbling up from descendants. |
+| `.once` | event bindings | The HTML-element binding fires at most once per element lifetime. |
 | `.enter` / `.escape` | keyboard event bindings | Send only for that key; a template-load error on non-keyboard events. |
 | `.debounce[.300ms]` | event bindings, two-way bindings | Hold until the trigger has been idle that long (bare `.debounce` is 250 ms); overrides the `_debounce` / `@event(debounce=...)` defaults (3.5). |
-| `.throttle[.1s]` | event bindings, two-way bindings | At most one send per window; same override chain. |
+| `.throttle[.1s]` | event bindings, two-way bindings | At most one send per window (bare `.throttle` is 250 ms); same override chain. |
 | `.lazy` | two-way bindings only | Use the control's committed-value event instead of its active event (table below); a template-load error elsewhere. |
 | `.on:<event>` | two-way bindings only | Override the update event outright; required for controls the table below does not know; `.lazy` together with `.on:` is a conflict error. |
 | `.30s` (time segment) | `@c-poll` only | The poll interval, seconds. |
@@ -1713,12 +1869,20 @@ one ever proves needed.
   default table below, the same one two-way binding needs everywhere.
   `.on:<event>` overrides it outright (`:c-query.on:keyup.enter="search"`)
   and is **required** for controls the table does not know, so the table
-  never needs to be user-extensible.
-- **HTML elements only.** A `:c-*` or `@c-*` attribute on a `<c-*>`
-  component tag is a template-load error with guidance: a child component
-  binds its own State in its own template, and cross-component coupling
-  stays explicit (`Dispatch` plus `onEvent`). Bindings on component tags
-  are a recorded deferral (section 16).
+  never needs to be user-extensible. The override changes the **flush**
+  trigger, not draft detection: ordinary `input`/`change` activity marks a
+  known control as an unsent draft immediately, so a render before the
+  eventual `.on:` trigger cannot clobber what the user has typed.
+- **State bindings are HTML-element-only.** A `:c-*` attribute on a semantic
+  component target is a template-load error with guidance: a child binds its
+  own State to controls in its own template. An `@c-*` handler is different:
+  on a child component target it is a parent-owned events-up relay (5.5). The
+  handler name remains validated, queued, and loaded against the source parent
+  Events instance; its optional argument expression is evaluated at the exact
+  parent source. The child root is its physical DOM event carrier.
+  `<c-element>` is the explicit exception because its semantic target is the
+  selected HTML element: both event and State bindings use that element's
+  normal resolved-attrs path.
 
 The update-event table for two-way bindings:
 
@@ -1728,50 +1892,110 @@ The update-event table for two-way bindings:
 | `<textarea>` | `input` | `change` |
 | `<input type="range">` | `input` | `change` |
 | `<select>`, `<input type="checkbox">`, `<input type="radio">` | `change` | template-load error where the type is statically known (`change` is already the committed value) |
-| `<input type="file">` | not two-way bindable: files cannot live in State (6.2); a template-load error pointing at event args |
+| `<input type="file">` | not two-way bindable: files cannot live in State (6.2); a template-load error where the type is statically known, pointing at event args |
 | custom elements, anything else | `.on:<event>` required |
 
 A binding belongs to the nearest enclosing interactive component instance
 (walk up to the closest registered `data-cid-*` marker).
 
-**The authored syntax dissolves before it reaches the browser.** At
-template load (`on_template_loaded`, string level, before parse and
-caching) the extension rewrites each `@c-*` and `:c-*` attribute into a
-`data-cev-*` attribute carrying a base64 JSON spec: owner class id,
-handler wire name, the raw arg expression when one was written,
-modifiers, merged per-handler debounce config. The shipped HTML is
-spec-valid and the internals stay internal. For event bindings, the
-client runtime installs one delegated listener per DOM event type at the
-document root and reads the specs at event time, so the bindings survive
-morphs and cost nothing server-side. State bindings apply through the
-instance's Alpine scope (one-way as a reactive effect over `$state`,
-two-way as a `$state` write plus the named handler, 5.5). The client parses no citry
-syntax at event time (the spec is data); arg expressions are the one
-author-code part, carried verbatim and handed to Alpine's evaluator like
+**Framework metadata (`#c-*`).** The third citry-owned prefix names
+neither a handler nor a State field: a `#c-*` attribute is an
+instruction to the framework about the node itself, how it is
+identified and morphed. It earns its own channel by the same test that
+settled the rest of the vocabulary (14.1.9's taxonomy; the decision
+record is 14.3.1): a key is not a browser event (`@c-` wrong), not a
+State field (`:c-` wrong), and not render data destined for an HTML
+attribute the author named (`c-` wrong; its value feeds the runtime's
+identity machinery). The channel is **reserved for keying and morphing
+features only**, never event call-site configuration (call-site knobs
+stay on `@event`, 3.5). Two members exist:
+
+- `#c-key="expr"`: the keying attribute. Expression-valued and
+  server-evaluated like a `c-*` expression. On a plain element it is
+  the morph pairing key; on a `<c-*>` component tag it is anchor
+  continuity across a parent render. Both halves, including what the
+  attribute compiles to, are specified in 5.3; the linking rule it
+  drives is in 5.5. Keys must be unique wherever they compete, an
+  authored contract, not a hint: among siblings (within one sibling
+  window) for an element key, per class across one applied render
+  region for a component key (5.3, 5.5).
+- `#c-ignore`: the whole-subtree morph opt-out marker, bare (no value),
+  valid on plain elements; it compiles to the runtime marker the morph
+  hook reads (5.3). The marker is bare by design; an expression-valued
+  form (a per-render condition deciding the opt-out) is reserved for
+  later and deliberately unbuilt. On a `<c-*>` component tag the
+  marker is a template-load
+  error pointing at the fix (put it on an element inside the child's
+  own template below the template's root element, or on a wrapper
+  element), because an ignore on an instance root is unsupported, and
+  a child template's own root element is an instance root too (5.3).
+
+Unlike HTML-element `@c-*` and `:c-*`, which dissolve in the rewrite below,
+`#c-*` is a real parser channel: the grammar, the AST, and the
+compiler carry it, because `#c-key` holds a server-evaluated expression
+that must ride the same expression machinery as `c-*`. That parser work
+is its own work package (`events_plan.md` WP21), and the client wave
+depends on it. The channel reserves nothing outside its prefix: plain
+`key` and `c-key` stay completely ordinary (an HTML attribute and its
+dynamic twin on elements, an ordinary `key` kwarg on component tags),
+no kwarg is reserved, and no `c-bind` escape is needed. In v1 the
+channel is template-authored only: a `#c-*` key arriving through an
+attribute spread or dynamic attributes is a render-time error naming
+the fix (author it on the tag in the template). If real component
+libraries turn out to compose keys through spreads the way the audit
+showed them composing `@c-*`, the `on_attrs_resolved` pass extends to
+`#c-*`; that demand signal is the test.
+
+**HTML-element syntax dissolves before it reaches the browser.** At template
+load (`on_template_loaded`, string level, before parse and caching) the
+extension rewrites each HTML-element `@c-*` and `:c-*` attribute into a
+`data-cev-*` attribute carrying a base64 JSON spec: owner class id, handler
+wire name, the raw arg expression when one was written, modifiers, and merged
+per-handler debounce config. The shipped HTML is spec-valid and the internals
+stay internal. For event bindings, the client runtime installs one delegated
+listener per DOM event type at the document root and reads the specs at event
+time, so the bindings survive morphs and cost nothing server-side. State
+bindings apply through the instance's Alpine scope (one-way as a reactive
+effect over `$state`, two-way as a `$state` write plus the named handler,
+5.5). The client parses no Citry syntax at event time; arg expressions are the
+one author-code part, carried verbatim and handed to Alpine's evaluator like
 any Alpine attribute (5.1 Arguments).
 
-The rewrite is **two-stage**, because attributes can also be contributed
-at render time: a parent may pass an attrs dict as a kwarg
+A semantic component-target `@c-*` takes the relay path instead. The template-
+load pass validates a literal binding against the source component class but
+leaves or encodes enough structure for `ComponentNode.render` to attach the
+compiled spec and source identity to the selected child. Dynamic and `c-bind`
+forms are validated when they resolve. They never become child kwargs or
+select the child's Events anchor. `<c-element>` remains on the HTML-element
+path described above.
+
+The HTML-element rewrite is **two-stage**, because attributes can also be
+contributed at render time: a parent may pass an attrs dict as a kwarg
 (`<c-card attrs="{'@c-click': 'select'}">`) that the child spreads with
 the `c-bind` attribute spread. The production audit found that spread
 pattern pervasive with Alpine attributes. The template-load pass (above) handles
 everything written literally in templates; a second pass in the existing
 `on_attrs_resolved` hook (which fires per element after dynamic
-attributes resolve) rewrites `@c-*` / `:c-*` keys that arrive through
-spreads or dynamic attributes. Bindings contributed this way are
+attributes resolve) rewrites HTML-element `@c-*` / `:c-*` keys that arrive
+through spreads or dynamic attributes. Component-tag relay keys instead join
+the source-ordered relay split in 5.5. Bindings contributed this way are
 validated at that moment rather than at template load: still
 server-side, still a loud error, just later.
 
 **Validation is a hard error.** Because `@c-*` and `:c-*` can belong to
 nothing else and there are no built-in events, validation has no special
 cases. Every `@c-click`/`@c-poll` value must name a declared handler of
-the owning component (the name part, before any parenthesized
+its owning source component (the name part, before any parenthesized
 expression). Every `:c-*` key must name a **public** State field (and a
 `_model` field when two-way, 7.2). Modifier combinations must parse:
 unknown modifiers, a second `@c-poll` time segment, `.lazy` with `.on:`,
-and `.lazy` on one-way bindings are all load errors. Everything is
-checked when the template loads (for inline templates, at class
-definition time) and fails with the template location. Arg expressions are Alpine
+and `.lazy` on one-way bindings are all hard server-side errors. The `#c-*` channel
+validates at parse, being a grammar channel: an unknown `#c-*` name, a
+valued `#c-ignore`, a valueless `#c-key`, and `#c-ignore` on a
+component tag are template-load errors like the rest. Literal bindings are
+checked when the template loads (for inline templates, at class definition
+time); dynamic/spread contributions are checked when they resolve. Both fail
+with the best available template location. Arg expressions are Alpine
 expressions, checked at event time when they run; the server's schema
 validation backstops whatever they produce (3.3). No surveyed framework has compile-time checked
 bindings; unicorn's troubleshooting docs are a catalog of the runtime
@@ -1779,7 +2003,7 @@ failures this removes.
 
 Known v1 caveat, stated honestly: the load-time rewrite is textual and can
 match binding-shaped text inside `<c-raw>` blocks, the same caveat class as
-the shipped `$onComponent` substring rewrite. The refinement path is a
+the shipped `$component` substring rewrite. The refinement path is a
 node-level transform in `on_template_compiled` (an existing hook, no
 grammar change); the authored syntax and the emitted `data-cev-*` contract
 do not change when that lands.
@@ -1853,7 +2077,7 @@ on the wire carries two-way binding values only.
 
 ### 5.2 Component JS: `sendEvent` and `onEvent`
 
-The `$onComponent` callback object grows two members (extending the object
+The `$component` callback object grows two members (extending the object
 built at `citry.js:150`; no new source rewrites):
 
 ```python
@@ -1876,7 +2100,7 @@ class Chart(Component):
             return {"points": points_data}
 
     js = """
-      $onComponent(({ id, els, data, sendEvent, onEvent }) => {
+      $component(({ id, els, data, sendEvent, onEvent }) => {
         const chart = drawChart(els[0], data.initialPoints);
 
         const rangeEl = els[0].querySelector(".range");
@@ -1901,10 +2125,12 @@ class Chart(Component):
 - `sendEvent(name, args?, opts?) -> Promise`: bound to this instance (id
   and state token resolved from the registry); resolves with the `data`
   action's value, rejects with a structured error (`{status, code,
-  message, fields}`).
+  message, fields?}`). `opts` carries the per-call overrides: `timeout`
+  (the `configure` field below) and `wait` (default `true`;
+  `wait: false` bypasses the event queue, 5.6).
 - `onEvent(name, fn) -> unsubscribe`: fires for `event` actions targeting
   this instance.
-- **Teardown (new runtime capability)**: an `$onComponent` callback may
+- **Teardown (new runtime capability)**: a `$component` callback may
   return a cleanup function; the runtime calls it before re-invoking the
   callback for the same instance (which happens after every server
   re-render, because the fresh fragment carries a fresh manifest entry).
@@ -1924,7 +2150,7 @@ queued by the bootstrap stub, per Load ordering below):
 
 | Method | What it does | Scoped counterpart |
 |---|---|---|
-| `Citry.events.send(target, name, args?, opts?)` | Send an event to any instance on the page. `target` is an instance id or an Element inside one; the runtime resolves the instance's registry entry (class, token, pending updates, epoch) and dispatches over the configured transport. Same promise contract as the scoped form. | `sendEvent(name, args?, opts?)` on the `$onComponent` payload and `$sendEvent` in Alpine expressions: the same call with the instance pre-bound. |
+| `Citry.events.send(target, name, args?, opts?)` | Send an event to any instance on the page. `target` is an instance id or an Element inside one; the runtime resolves the instance's registry entry (class, token, pending updates, epoch) and dispatches over the configured transport. Same promise contract as the scoped form. | `sendEvent(name, args?, opts?)` on the `$component` payload and `$sendEvent` in Alpine expressions: the same call with the instance pre-bound. |
 | `Citry.events.on(name, fn)` | Listen for server-dispatched events (`Dispatch` actions) under their raw name, from any instance; returns the unsubscribe function. Sugar over `document.addEventListener` that unwraps `e.detail`. | `onEvent(name, fn)` / `$onEvent(name, fn)`: the same, filtered to events targeting that instance. |
 | `Citry.events.configure(opts)` | Set page-wide runtime defaults once, from the host page; fields below. | None page-wide; a one-off override rides `sendEvent`'s `opts` (e.g. a per-call `timeout`). |
 | `Citry.events.registerTransport(name, impl)` | Register a transport under a name: `impl` is `{send(envelope) -> Promise<resultEnvelope>, subscribe?}` (`subscribe` is the v2 push half, 6.1). The built-in fetch transport registers through this same function; selection is `configure({transport: name})`. | None (transports are page-level by nature). |
@@ -1935,7 +2161,7 @@ What `configure` actually configures, field by field:
 | Field | Default | What it overrides |
 |---|---|---|
 | `csrf` | `{cookie: "csrftoken", header: "X-CSRFToken"}` | Where the CSRF token comes from and which request header carries it (7.4): `cookie` names the cookie to read, `header` names the request header the token is sent in (the defaults are Django's; the same shape as axios's `xsrfCookieName` / `xsrfHeaderName`). For token sources that are not cookies (a meta tag, a JS variable), set `token` to a string or a zero-arg function instead of `cookie`; `header` still names the carrier. |
-| `timeout` | none (wait indefinitely) | Milliseconds before an in-flight call's promise rejects with a timeout error. The server is not cancelled; the client just stops waiting. |
+| `timeout` | `30000` | Milliseconds before an in-flight call's promise rejects with a timeout error and its queue dependents release (5.6). The server is not cancelled; the client stops waiting, and a response that still arrives afterwards is dropped with the drop event (reason `timeout`). A hung request must never hold its dependents forever, which is why an unbounded setting is deliberately not offered; raise the number for known-slow handlers, per call via `sendEvent` opts or here page-wide. |
 | `transport` | `"fetch"` | Which registered transport `send` uses. Only meaningful once an alternative is registered (alternatives are v1.x; the registration function itself is v1). |
 | `url` | from the manifest | Base URL of the events routes, for the rare deployment where the URL the server emitted is wrong from the browser's viewpoint (a path-rewriting reverse proxy in front of the app). Normally never set. |
 
@@ -1946,9 +2172,36 @@ bubbling DOM CustomEvents, all under the reserved `citry:` prefix:
 |---|---|---|
 | `citry:events:before` | Just before a call is sent. Cancellable: `e.preventDefault()` stops the send and rejects the caller's promise. | none |
 | `citry:events:after` | When a call settles, success and failure alike (the stop-side counterpart to `before`). | `ok` (boolean) |
-| `citry:events:error` | When a call fails: a transport failure or an error result. | `error`: the `{status, code, message, fields}` envelope (3.7) |
+| `citry:events:error` | When a call fails: a transport failure, an error result, or a timeout (5.6). | `error`: the `{status, code, message, fields?}` envelope (3.7) |
 | `citry:events:swapped` | After a `render` action has updated the DOM. | `els`: the swapped-in root elements |
-| `citry:events:stale` | A response arrived out of order: its echoed epoch (4.2) is older than what the instance already shows, so the runtime drops its DOM-changing actions rather than roll newer content back to older (the caller's promise still resolves). The typing case: you typed "ab", then "abc"; "abc" answered first, and the slower "ab" response would overwrite newer results with older ones, so it is dropped and this event fires instead. | the dropped result's `event` name |
+| `citry:events:stale` | Something was dropped or cancelled, and this is the one event that says so (research doc R3): every drop the runtime performs, of a response's application, of a queued call it cancels before sending, or of a one-shot send it drops at fire time (5.5 machinery item 5), fires it with a `reason` naming the cause. (The one cancel outside the claim is a send stopped by a `citry:events:before` listener's `preventDefault`: the page performed that cancel itself and already knows.) The reasons: `epoch` (an out-of-order response: its echoed epoch, 4.2, is not newer than what the anchor already applied, so its instance-mutating actions, the self-targeted render and the token refresh, drop rather than roll newer state back to older; the caller's promise still resolves with its `data` and all other actions apply), `retired` (the response's instance, or a single action's target, left the DOM, 5.5), `cancelled` (a send's dispatching element was dead when it was due to fire, at dequeue, 5.6, or at a one-shot closure's fire time, 5.5: never sent, promise rejected), `superseded` (a newer call superseded it under `@event(latest_wins=True)`, 3.5), `timeout` (a response arrived after its call timed out, 5.6), `version` (the version-skew prompt of 4.5 rides this same event under this reason; its default handling is the soft reload prompt). The `epoch` case in one line: a custom input sends on every keystroke through `sendEvent(..., {wait: false})`, you typed "ab" then "abc", "abc" answered first, and the slower "ab" response would overwrite newer results with older ones, so its application is dropped and this event fires instead. | `reason`, plus the dropped result's `event` name |
+
+**How each drop settles.** Every dropped or cancelled call still
+settles its caller's promise (the R3 contract, 14.3.6). The drop
+event's `reason` names what was dropped; this table pins the matching
+promise outcome, so no drop path is left to guesswork:
+
+| Reason | What was dropped | The caller's promise |
+|---|---|---|
+| `epoch` | a stale response's instance-mutating actions (4.2) | unaffected: resolves with the result's `data` |
+| `retired` | instance-mutating actions, or one action's dead target (5.5 machinery item 4) | unaffected: settles from its own result (a `data` action resolves it, an error result rejects it) |
+| `cancelled` | a send whose dispatching element died before it fired, at dequeue (5.6) or at a one-shot closure's fire time (5.5 machinery item 5): never sent | rejects with code `cancelled`; a framework-fired one-shot (a debounce flush) holds no caller promise, so the drop event plus the debug log is its whole surface |
+| `superseded` | a predecessor call under `@event(latest_wins=True)` (3.5): a queued-not-sent predecessor is never sent, an in-flight one's response drops on arrival | rejects with code `superseded`, sent or not |
+| `timeout` | a late response's application | already rejected with code `timeout` when the call timed out (5.6) |
+| `version` | nothing call-scoped: the version-skew prompt of 4.5 rides this reason | no call promise involved; a stale-state call settles through its own error result |
+
+Client-minted rejections (`cancelled`, `superseded`, `timeout`) carry
+the same `{status, code, message, fields?}` envelope contract as server
+errors, so one rejection handler covers both: `code` is the reason,
+`status` is `0` (no server verdict exists; the browser's own convention
+for a request that got no response), and `fields` is absent. The other two
+failure surfaces compose by reason: a timeout is a failed call, so it
+sets `$error` (5.5) and fires `citry:events:error` (5.6), while
+`cancelled` and `superseded` are routine queue outcomes, so they set
+neither and fire no error event; the drop event plus the rejection is
+their whole surface. A rejection
+nobody catches surfaces as the browser's standard unhandled-rejection
+log, the accepted cost of every promise settling.
 
 Server-dispatched events fire under their own raw names (4.3),
 never a citry prefix. Every lifecycle event's `detail` carries
@@ -1957,7 +2210,7 @@ htmx, or vanilla code integrates with zero citry API:
 
 ```js
 // global error toast: `error` on the detail is
-// `{status, code, message, fields}` envelope from 3.7
+// `{status, code, message, fields?}` envelope from 3.7
 document.addEventListener("citry:events:error", (e) => {
   const { event, error } = e.detail;
   showToast(`${event} failed: ${error.message}`);
@@ -1982,11 +2235,13 @@ document.addEventListener("citry:events:swapped", (e) => {
   e.detail.els.forEach((el) => initTooltips(el));
 });
 
-// `stale` means the epoch guard (4.3) dropped a late response's DOM
-// changes; normal under fast typing, worth a breadcrumb when
-// debugging "my update disappeared"
+// `stale` fires whenever the runtime dropped or cancelled something;
+// `e.detail.reason` says why (epoch, retired, cancelled, superseded,
+// timeout, version). Epoch drops are normal under fast `wait: false`
+// sends; the rarer reasons are the breadcrumb for "my update
+// disappeared"
 document.addEventListener("citry:events:stale", (e) => {
-  console.debug(`stale ${e.detail.event} response dropped`);
+  console.debug(`${e.detail.event} dropped (${e.detail.reason})`);
 });
 
 // react to a server-dispatched event with no citry API at all
@@ -1997,25 +2252,37 @@ document.addEventListener("MyCard:saved", (e) => {
 ```
 
 **Load ordering.** Fragment script execution order is not guaranteed, so
-the extension injects a 15-line inline bootstrap stub through the manifest
+the extension injects a compact inline bootstrap stub through the manifest
 (inline manifest scripts run synchronously during processing). The stub
-does two things. It defines a queueing `Citry.events`, so a `sendEvent`
-made before the full runtime arrives returns a promise that resolves once
-it has. And it registers a context decorator via a new ten-line hook on
+defines a queueing `Citry.events`: early `send`, `configure`,
+`registerTransport`, `on`, and instance-listener calls are retained, while
+early `send` and `applyActions` return promises that settle after the full
+runtime arrives. It also registers a context decorator via a hook on
 the dependencies manager, `Citry.manager.decorateContext(fn)`, the hook
 through which the events runtime adds its members
-(`state` / `sendEvent` / `onEvent`) to every `$onComponent` payload
-object (substrate item 12.5).
+(`state` / `sendEvent` / `onEvent`; the `props` member of 5.5 rides
+the `$component` registration itself, extended in citry.js) to
+every `$component` payload object (substrate item 12.5).
+
+Bootstrap replay has one intentional exception to FIFO order: every queued
+`registerTransport` declaration is installed in a first pass, then all other
+queued calls replay in their original relative order. Thus an early
+`configure({transport: name})` or `send` can select a custom transport whose
+registration appeared later in parser execution. Transport declarations do
+not represent work and return no promise; declaration-first replay makes the
+load-order race deterministic. Queued `applyActions` retains normal FIFO
+position in the second pass and keeps its promise contract.
 
 The spike (13.2) pinned three boot-order rules that make this
 race-proof, because citry.js processes manifest tags DURING page parse
 (parser insertions are mutations, delivered mid-parse):
 
-- The events runtime ships as a classic script (an iife bundle, not a
-  page module) evaluated right after citry.js; it registers its
-  events-manifest observer and the context decorator at evaluation
-  time, and only `Alpine.start()` waits for DOMContentLoaded. A page
-  module loses the race: callbacks fire before the module graph loads.
+- The pinned runtime ships as a classic script (an IIFE bundle, not a page
+  module) evaluated after citry.js. It registers Events providers and the
+  context decorator at evaluation time, then marks the permanent broker
+  ready. Only the broker's guarded `Alpine.start()` waits for DOM readiness.
+  The core manager's single observer processes graph records, fans the batch
+  out to Events, and only then handles dependency calls.
 - The serializer emits the `data-citry-events` tag BEFORE the
   `data-citry` tag, so whenever a call can fire, the events manifest is
   already parsed.
@@ -2047,19 +2314,28 @@ audience this extension targets. Rules:
   fail. For the same reason `$state` stays inert (an empty read, never a
   throw) for a marker-bearing node whose id is momentarily unregistered
   in the middle of a morph.
-- A focused two-way-bound control's value is never overwritten, and after
-  every patch the runtime re-applies `:c-*` bindings to unfocused bound
-  controls (that application is exactly what a one-way binding is), so
-  templates need not echo `value=` for bound fields.
-- Per-action `swap` override; per-element opt-out via the runtime marker
-  attribute `data-citry-morph="ignore"` for DOM subtrees that another JS
+- What survives a patch is one explicit model, pinned in 5.5's
+  preservation block: the server wins by default, and a draft is
+  protected exactly while the server has not seen it. After
+  every patch the runtime re-applies `:c-*` bindings from `$state` to
+  bound controls (that application is exactly what a one-way binding
+  is, and for a field with a pending unsent write it restores the
+  preserved draft; a control whose live value the patch-time guard
+  below kept is exempt, per 5.5's preservation block), so templates
+  need not echo `value=` for bound fields.
+- Per-action `swap` override; per-subtree opt-out via `#c-ignore`
+  (5.1), which compiles to the runtime marker attribute
+  `data-citry-morph="ignore"` the morph hook reads, for DOM subtrees
+  that another JS
   library builds and owns (the classic case is a select-enhancement
-  library like Select2; Livewire's `wire:ignore` analogue). It is a plain
-  marker in the `data-citry-*` runtime namespace, like `data-citry-busy`,
-  deliberately not an `@c-*` binding: it names no handler, so it would
-  fail the channel test that settled the vocabulary (5.1).
+  library like Select2; Livewire's `wire:ignore` analogue). The
+  compiled form is a plain
+  marker in the `data-citry-*` runtime namespace, like `data-citry-busy`;
+  the authored form lives in the `#c-*` channel because it names no
+  handler, no State field, and no rendered attribute value: it is
+  framework metadata about the node, the channel test of 5.1 applied.
 - After patching, the fragment's manifests are picked up by the existing
-  observer unchanged: assets dedupe by URL, `$onComponent` re-fires with
+  observer unchanged: assets dedupe by URL, `$component` re-fires with
   teardown first.
 - The morph preserves the instance's living Alpine scope: `$state` is
   updated in place per the reconcile rule (5.5), never recreated, so
@@ -2077,17 +2353,27 @@ import morph from "@alpinejs/morph"; // compiled into the runtime bundle
 Alpine.plugin(morph);
 
 Alpine.morph(rootEl, fragmentHtml, {
-  // Child matching pairs elements by tag name plus the plain `key`
-  // attribute (the library default reads el.getAttribute("key")).
-  // Give repeated list items stable identity with key="...", written
-  // dynamically as c-key="item.id".
+  // Child matching pairs elements by tag name plus a key. The key the
+  // runtime reads is citry's composite key attribute (what #c-key
+  // compiles to, below), never the plain `key` attribute, which keeps
+  // its ordinary HTML meaning. The callback is consulted for every
+  // comparison, so it must stay a bare attribute read (keyed-morph
+  // spike F-KM-8: the callback is hot).
+  key(el) { return el.getAttribute?.("data-citry-key"); },
   // (the real signature carries a sixth skipUntil argument beyond
   // these five; spike finding F10)
   updating(el, toEl, childrenOnly, skip, skipChildren) {
-    // the ignore marker: leave this element and its subtree untouched
+    // the ignore marker (what #c-ignore compiles to): leave this
+    // element and its subtree untouched
     if (el.getAttribute?.("data-citry-morph") === "ignore") return skip();
-    // never clobber a focused two-way-bound control's live value
-    if (el === document.activeElement && isTwoWayBound(el)) {
+    // the patch-time half of the preservation rule (5.5): keep a
+    // focused two-way-bound control's live value while it holds a
+    // draft the server has not seen. hasUnsentDraft covers both draft
+    // stages: a pending unsent $state write, and the unflushed
+    // two-way draft before it (the flush timer still pending, the DOM
+    // value diverging from $state). A control with nothing unsent
+    // takes the server's value, focused or not (submit-then-clear)
+    if (el === document.activeElement && isTwoWayBound(el) && hasUnsentDraft(el)) {
       keepLiveValue(el, toEl);
     }
   },
@@ -2117,21 +2403,147 @@ policy, never per-response data.
   or re-inserted. This is exactly how Livewire implements
   `wire:ignore`: its directive stamps a flag on the element at init and
   its `updating` hook returns `skip()` when it sees the flag. We read
-  the marker attribute directly in the hook, so no init pass is needed.
+  the marker attribute directly in the hook, so no init pass is needed,
+  and the marker attribute is a public surface of its own for DOM built
+  outside citry templates (a third-party library's init code can stamp
+  the subtree it owns; `#c-ignore` covers everything template-authored,
+  5.1). On an instance root the marker is unsupported: skipping the
+  root leaves the old component id in the DOM while the fragment's
+  manifest introduces a fresh id that never lands, so registry and DOM
+  diverge. The runtime logs a debug warning when it finds the marker on
+  a root, and the documented fix is an ignore on an element inside the
+  child's own template below its root, or on a wrapper element: the
+  template's own root element is itself an instance root, so the
+  marker there hits the same unsupported case, and only this warning
+  catches it (`#c-ignore` on a component tag is already a
+  template-load error, 5.1).
   The hook vocabulary is richer than v1 uses: `childrenOnly()` patches
   children while leaving the element's own attributes alone (Livewire's
   `wire:ignore.self`), `skipChildren()` is the reverse, and
   `removing`/`adding` can cancel a node swap. An `"ignore-self"` marker
   value would map to `childrenOnly()` and stays reserved until someone
-  needs it.
-- **Keys are user-authored**, like Vue's `:key` and Livewire's
+  needs it; the finer per-attribute preservation tier every long-lived
+  morph framework eventually grew is a recorded v2 expectation, not
+  built (16.1).
+- **Keys are user-authored, and `#c-key` is the keying attribute**,
+  like Vue's `:key` and Livewire's
   `wire:key`: only the author knows which domain field identifies a
-  list item, so the runtime never invents one. Unkeyed lists pair
+  list item or a child instance, so the runtime never invents identity.
+  `#c-key="item.id"` on a plain element is the morph pairing key:
+  within one sibling window, morph moves the real keyed nodes, so
+  values, checkedness, and selection travel with the key (the
+  form-field flip: two keyed inputs that swap positions carry their
+  typed values with them; keyed-morph spike F-KM-2). `#c-key` on a
+  `<c-*>` component tag is anchor continuity: the child instance keeps
+  its client state across a parent render (the keyed-linking rule,
+  5.5). Unkeyed lists pair
   positionally, which is correct until items reorder or are inserted
   mid-list; from that point per-element state (focus, a caret, an
-  ignored subtree) sticks to the position rather than the item. The
-  docs guidance is one line: add `c-key` to `<c-for>` items whose list
-  can reorder.
+  ignored subtree) sticks to the position rather than the item, and an
+  unkeyed interactive child resets wholesale under every parent render
+  (5.5). The docs guidance is therefore two-tier: add `#c-key` to
+  `<c-for>` items whose list
+  can reorder; and on interactive children under a re-rendering parent
+  a key is required for correct behavior, not an optimization (the
+  Livewire-strength wording; that ecosystem's most repeated fix is the
+  missing key). Two authored contracts ride the attribute. Keys are
+  **unique wherever they compete**, or behavior is incorrect. For an
+  element key that means unique among siblings, within one sibling
+  window: morph compares keys across all children of a matched parent
+  pair whatever their tags or classes (spike F-KM-1), so two same-key
+  siblings mispair however different they otherwise look, while
+  duplicates in separate windows never meet. A window duplicate is
+  author error with no defined pairing, documented as the author's
+  responsibility the way Vue documents `:key` (the spike's verdict).
+  For a component key the contract means unique per class across one
+  applied render region, the scope the keyed linker matches over
+  (5.5): two same-class instances carrying one key anywhere in a
+  region compete for the same link, whatever their depths.
+  Component-key duplicates are author error too; those the runtime
+  matches in document order with a debug warning (5.5). And a keyed
+  move still resets what the
+  browser ties to document presence (focus, scroll positions, iframe
+  documents, media playback; spike F-KM-3/F-KM-4, which also shows the
+  move cost cascading from the first out-of-order sibling to the end of
+  the window), so reorder-prone keyed lists should not wrap heavy
+  embedded content lightly.
+- **An element key works within one sibling window only.** The
+  natural expectation is that a key carries a node and its state
+  anywhere in the template; it does not. A key
+  rescues reordering among the direct children of one matched parent
+  pair; a keyed node whose position moves to a different parent or a
+  different depth between renders is recreated, not moved, and its
+  DOM-held state (a typed value, checkedness, a caret) dies with the
+  old node (spike F-KM-1: shallow-to-deep and cross-parent moves
+  always produced a fresh clone, whatever the key). The shape that
+  hits this in practice is a conditional branch changing an element's
+  nesting:
+
+  ```html
+  <c-if cond="editing">
+    <input #c-key="'draft'" />
+  </c-if>
+  <c-else>
+    <div class="highlight">
+      <input #c-key="'draft'" />
+    </div>
+  </c-else>
+  ```
+
+  Switching branches recreates the input and the typed value is gone,
+  identical keys notwithstanding: one branch renders it as a direct
+  child, the other inside a wrapper, and keys never pair across
+  depths or parents. The authoring guidance: keep a keyed element at
+  the same tree position across branches (render the same wrapper
+  structure in both, varying its attributes or classes instead), or
+  carry the value through something that outlives the node, a two-way
+  binding's pending writes in State (5.5) or, for a client-owned
+  region, a `#c-ignore` opt-out (5.1).
+- **What `#c-key` emits: one composite attribute.** The evaluated key
+  is stamped into a single runtime data attribute on the rendered
+  element, `data-citry-key`, never into the plain `key` attribute,
+  which keeps its ordinary HTML meaning end to end (nothing in this
+  machinery reads it). The value is composite, a scope segment plus the
+  evaluated key: on a component instance root the scope is the child's
+  class id (`TodoItem_a1b2c3:5`), the keyed-morph spike's
+  class-id-scoped form, pinned by its verdict because morph key
+  matching proved sibling-window scoped (F-KM-1: keys are compared only
+  among direct children of one matched parent pair, so class-scoped
+  values can never cross-pair and need no runtime normalization); on a
+  plain element the scope segment is empty (`:5`), which keeps element
+  keys and instance keys from ever pairing with each other. On a
+  component tag the serializer stamps the attribute onto every root
+  marker element of the child (a multi-root instance is one unit of
+  continuity, so all of its roots carry its key). Emitted keys never
+  embed per-render component ids (spike F-KM-7: raw ids inside keys
+  are strictly worse than no keys at all); the id-to-anchor normalized
+  form, a per-call key callback mapping ids to anchors on both sides,
+  is empirically proven and recorded as the fallback if a future
+  mechanism ever needs ids inside keys (spike F-KM-6 and its verdict).
+  The parser channel and the emission path are WP21
+  (`events_plan.md`); the falsifying outcome is named in section 15.
+- **A parent-authored key survives the child's own re-render.** A
+  component key is written in the *parent's* template but lands on the
+  *child's* DOM: the parent's render stamps
+  `data-citry-key="<child class id>:<key>"` (the composite form above)
+  onto the child's root elements. When that child later renders itself,
+  the server renders only the child, from the child's own template,
+  which never carried the parent's key, so the fresh fragment's root
+  arrives keyless. Morph compares root keys before any hook runs
+  (keyed-morph spike), so a keyed old root against a keyless new root
+  reads as a mismatch and forces a wholesale swap instead of an
+  in-place patch. Two failures follow: the caret, focus, and scroll die
+  on the child's own re-render (breaking the same-class reconcile
+  promise, 5.5), and the swapped-in root now carries no key, so the
+  next parent render can no longer link the child and it resets. The
+  author's `#c-key` would quietly stop working after the child's first
+  self-render. The applier prevents this by carrying the old root's key
+  onto the incoming fragment roots during a same-class reconcile
+  self-render, and only when the key's class-id prefix matches the
+  caller's own class (`preserveCallerKey` in the client runtime): a key
+  authored inside the child's own template re-renders with the fragment
+  and needs no carrying, and a foreign class's key must never survive a
+  class change (the different-class branch of the three-way split, 5.5).
 - **`morph()` is single-root by construction**: it consumes only the
   first element of the parsed HTML. Multi-root instances (fragment
   components) morph pairwise, root by root, while the old and new root
@@ -2140,6 +2552,14 @@ policy, never per-response data.
   morphs a comment-delimited range and is the upgrade path if pairwise
   proves insufficient; it needs boundary markers the fragments do not
   emit today, so it stays out of v1 unless the spike says otherwise.
+  Because the call consumes only the first root, a fragment's trailing
+  `data-citry-events` and `data-citry` manifest tags are never part of
+  a morph patch, and neither manifest observer reacts to a script tag
+  patched in place (both process manifest tags only from added
+  elements). Delivering the tags after the patch is therefore the
+  applier's job; the normative rule is 5.5's machinery item 2. The
+  harness symptom that falsifies it is assets not loading or
+  `$component` never firing for a freshly rendered instance.
 - **A parent's morph does not skip nested instance roots.** Livewire's
   skip is a whole architecture, not just a client rule: on a parent
   re-render its server does not re-render children at all, emitting
@@ -2152,7 +2572,9 @@ policy, never per-response data.
   manifest entry) is part of the parent's fragment: props flow
   naturally, the child's scope survives through the plugin's Alpine
   bridge, and the fresh manifest re-registers it, teardown first (5.2),
-  with `$state` reconciled per 5.5.
+  with `$state` reconciled per 5.5. What the parent's fragment does to
+  each child's client identity is the uncorrelated-id lifecycle (5.5):
+  an unkeyed child resets, a `#c-key`-matched child links.
 - **Alpine-state survival is the plugin's own machinery, not ours**: it
   clones the live `_x_dataStack` onto incoming nodes during the patch.
   That is the concrete content of the idiomorph question (section 5
@@ -2168,7 +2590,8 @@ model is redesigned before any server work hardens.
 
 **Optimistic UI stance**: pending states, not predicted state. The runtime
 stamps `data-citry-busy` on the triggering element and the instance
-roots, fires the lifecycle DOM events, and exposes `$loading` (5.5);
+roots (from the gesture: a queued call is busy from enqueue, 5.6),
+fires the lifecycle DOM events, and exposes `$loading` (5.5);
 a component that truly wants optimism mutates `$state` or its own DOM
 before `await sendEvent(...)`. No rollback machinery; no surveyed
 framework ships one that works.
@@ -2182,7 +2605,7 @@ mechanism: a `render` action's HTML is a full fragment serialize, so the
 variables ride the fragment's own manifest exactly as they do for any
 host-inserted fragment today. New `js_data` values arrive as a fresh
 variables script keyed by a new hash. The manifest's `calls` entry re-fires
-`$onComponent` with the **new** `data` payload (after the previous
+`$component` with the **new** `data` payload (after the previous
 teardown ran). New `css_data` values load as a fresh hashed stylesheet
 whose hook attribute rides the re-rendered roots, so the morph carrying
 the new attribute is what switches the styles.
@@ -2215,26 +2638,36 @@ Two consequences to verify and document:
 
 ### 5.5 The Alpine layer: scopes, `$state`, and the magics
 
-This is the integration design behind the decision in 14.1.10. The rule
-of the whole section: **Alpine's reactive scope is the single source of
-client-side truth for an instance's State**; everything else (bindings,
-magics, morphs, the `$onComponent` members) reads and writes that one
-object.
+This section records the Events-specific projection of the client model. The
+normative ownership graph, isolation, props, boundary handlers, slot scope,
+and root-shape rules live in [`alpinejs.md`](alpinejs.md). The graph is the
+authority for logical ownership; pinned Alpine is its expression, directive,
+reactivity, and morph engine. Within an Events anchor, Alpine's reactive State
+object remains the single source of client-side truth for State. Bindings,
+magics, morphs, and `$component` members read and write that one object.
 
-**Scopes.** During manifest processing, before `Alpine.start()`, the
-runtime creates each Events-declaring instance's scope. The mechanics
-are pinned here because they decide what can conflict with user code:
+**Scopes.** During manifest processing, before `Alpine.start()`, the runtime
+creates one general registry record for every instance the ownership graph
+marks client-active. Reasons include an Events anchor, a `$component`
+registration/call, a boundary relay, an explicit component scope, or a
+supplied/fallback fill whose Alpine expressions need a source projection.
+[`alpinejs.md`](alpinejs.md) owns the complete trigger set. Events anchors
+remain the owners of State, epochs, and server calls; the general record also
+covers components that need Alpine ownership without declaring Events. The
+mechanics are pinned here because they decide what can conflict with user code:
 
-**Two identities: the component id and the anchor.** Every interactive
-instance carries two identities the runtime keeps separate on purpose.
+**Render, logical, and anchor identities.** Every interactive instance keeps
+the server render record, client logical generation, and stable browser
+anchor separate on purpose.
 The **component id** (`data-cid-<id>`) is the server's faithful surface:
 the server mints a fresh id on every render, so the DOM, telemetry, and
-`$onComponent` always show the server's current id, never a reused or
+`$component` always show the server's current id, never a reused or
 stale one. The **anchor** is a stable, client-internal identity for one
-interactive DOM position, owned by the events runtime and not exposed to
-users in v1; it is what the reactive State, the scope, and the epoch
-guard (4.2) actually hang off, so they survive a re-render even as the
-component id under them changes. The runtime ties the two through a
+interactive DOM position, owned by the general registry. The logical client
+instance and optional Events sidecar attach to it; reactive State and the
+epoch guard (4.2) remain Events-owned sidecar data, so they survive a
+re-render even as the component id under them changes. The runtime ties the
+two through a
 component-id-to-anchor index (a plain in-memory map, re-linked as each
 render lands), and routes a render response to the right anchor by the
 call-correlation id (the envelope `id`, 4.2), never by the component id.
@@ -2252,22 +2685,20 @@ and nothing new rides the wire.
   (`cloneNode` drops expandos, 5.3); attributes survive cloning, so the
   DOM carries only a marker and the registry holds the object. Multi-root
   instances share the one object for free.
-- **`$state` and the other magics resolve by marker, not by scope
-  stack**: a magic receives its element and walks
-  `el.closest("[data-cid]")` (one fixed-name CSS selector, the fast
-  path) to the innermost instance root, reads that innermost component
-  id, maps it through the component-id-to-anchor index, and reads the
-  anchor's registry entry (one hop past today, since the id no longer
-  keys the registry directly, the anchor does). The fixed-name `data-cid`
-  attribute carries the instance
-  ids space-separated, innermost last; it is added alongside the
-  existing per-instance `data-cid-*` markers because a CSS selector
-  cannot wildcard attribute names. When one element roots both a
-  wrapper component and its only child, magics resolve to the child.
-  The wrapper keeps full access through its `$onComponent` payload
-  (`state` is the same registry object, fetched by its id through the
-  index with no DOM walk); and since it has no exclusive elements, it has
-  no expression surface to lose.
+- **`$state` and the other magics resolve through graph evaluation context,
+  not the Alpine scope stack or DOM proximity alone**: a physical marker can
+  locate candidate graph records, but it is not the ownership authority.
+  Ordinary child-template expressions select the child's logical record. A
+  source-linked fill or relocated component-tag handler selects its exact
+  authored source record even though the evaluating element lives under a
+  physical child. That record then resolves the optional Events anchor for
+  State and call state. An owner with no Events anchor keeps the inert
+  mid-boundary behavior rather than falling through to an unrelated physical
+  ancestor. When one element roots multiple logical instances, graph-record
+  precedence and the current evaluation facade choose the owner; array order
+  in a marker is only transport data. The fixed-name `data-cid` marker may
+  remain as a physical lookup optimization alongside per-instance markers,
+  but `el.closest("[data-cid]")` cannot decide logical ownership.
 - **Nothing is written into `x-data`, ever.** A user's own `x-data` on
   the instance root, or anywhere inside, coexists untouched: citry adds
   no enumerable keys to any user scope object (verified on the scope
@@ -2277,11 +2708,12 @@ and nothing new rides the wire.
   collide with scope properties. The rejected alternative, merging
   State into the user's `x-data` object, would pollute key enumeration
   and invite name collisions.
-- **The one thing placed on the Alpine scope stack is an empty boundary
-  entry** at each instance root (`addScopeToNode`, the pinned-version
+- **The one thing placed on the Alpine scope stack is the instance's stable
+  reactive `scope` object** at each normal root (`addScopeToNode`, the pinned-version
   private API from the audit), together with registering the instance
-  marker as an Alpine root selector
-  (`Alpine.addRootSelector(() => "[data-cid]")`, a public API, the
+  marker as an Alpine root selector through the permanent broker
+  (`[data-citry-root]`, with `[data-cid]` retained for Events roots, using
+  Alpine's public `addRootSelector` API and the
   Livewire pattern; without it Alpine never walks a scopeless citry
   root, spike finding F5): the pair makes the subtree
   Alpine-active whether or not the user wrote `x-data`, and the
@@ -2289,10 +2721,15 @@ and nothing new rides the wire.
   the ~15-line stack truncation from the maintainer's
   alpine-composition cuts inheritance, so a nested citry component does
   not inherit its parent's scopes, mirroring the server-side isolation
-  of component inputs. Being empty, it contributes no names to
-  expression lookup.
+  of component inputs. It starts empty and gains only names the component
+  writes explicitly through its `$component` context. On a shared physical
+  root, structural `data-cid` order chooses the innermost client-active
+  instance's scope independent of manifest order; outer scopes stay registry-
+  only there. The same object is attached to every normal root of a multi-root
+  instance.
 
-Display-only components get no scope and pay nothing, which is the main
+Components with no graph-declared client activity get no scope and pay
+nothing, which is the main
 mitigation for Alpine's synchronous startup walk. Scope creation is
 eager at manifest time; lazy activation (viewport entry with a margin,
 plus first interaction) stays in reserve if the dogfood port (section
@@ -2304,14 +2741,14 @@ draft toggles) that does not belong in State.
 
 **The magics.** Registered through the plugin pattern lifted from
 alpine-composition, available in any Alpine expression inside a citry
-scope (and, where noted, as members of the `$onComponent` payload):
+scope (and, where noted, as members of the `$component` payload):
 
 | Magic | What it is |
 |---|---|
-| `$state` | The closest instance's reactive State (public fields). Reads are reactive. Writes work on any public field not clamped by `_model` and throw a pointed error otherwise (client-only UI state belongs in your own `x-data`). A write queues a pending update: it rides the next call from the instance, whatever sends it (the designed flush is the event you send; the piggyback rule of 4.2 applies). |
-| `$loading` | Callable: `$loading()` is true while any call from this instance is in flight; `$loading('save')` scopes to one handler. An unknown handler name throws the pointed error naming the declared handlers (the class descriptor carries the list). Read-only. |
-| `$error` | The instance's last error envelope (`{status, code, message, fields}`) or `null`; set on any failed call, cleared on the next successful one. Read-only. |
-| `$sendEvent(name, args?)` | Send an event from an Alpine expression; the same function the `$onComponent` payload carries. An unknown event name throws the pointed error client-side, before anything hits the wire (the same descriptor check as `$loading`). |
+| `$state` | The graph-selected Events owner's reactive State (public fields). Reads are reactive. Writes work on any public field not clamped by `_model` and throw a pointed error otherwise (client-only UI state belongs in your own `x-data`). A write queues a pending update: it rides the next call from that owner, whatever sends it (the designed flush is the event you send; the piggyback rule of 4.2 applies). |
+| `$loading` | Callable: `$loading()` is true while any call from this instance is queued or in flight (busy spans the queue, 5.6); `$loading('save')` scopes to one handler. An unknown handler name throws the pointed error naming the declared handlers (the class descriptor carries the list). Read-only. |
+| `$error` | The instance's last error envelope (`{status, code, message, fields?}`) or `null`; set on a failed call (an error result, a transport failure, or a timeout; `cancelled` and `superseded` rejections leave it untouched, 5.2), cleared on the next successful one. Read-only. |
+| `$sendEvent(name, args?)` | Send an event from an Alpine expression; the same function the `$component` payload carries. An unknown event name throws the pointed error client-side, before anything hits the wire (the same descriptor check as `$loading`). |
 | `$onEvent(name, fn)` | Listen for server-dispatched events targeting this instance; returns the unsubscribe function. |
 
 A listen-and-forward shorthand (a `$forwardEvent` magic) is deliberately
@@ -2319,9 +2756,20 @@ absent: forwarding is the one-line composition
 `$onEvent(name, () => $sendEvent(handler))`, and the magics list stays
 minimal (16 tracks it as a community-demand item).
 
-The `$onComponent` payload gains a `state` member (the same reactive
-proxy), so imperative component JS and Alpine expressions share one
-object: `{ id, els, data, state, sendEvent, onEvent }`.
+The `$component` payload is
+`{ id, els, data, state, props, scope, effect, reactive, sendEvent, onEvent }`.
+`state` is the same reactive Events proxy; `props` carries the declared client
+inputs and is empty under the bare callback form. `scope` is the one stable
+reactive object shared by all of the instance's normal roots. `effect(fn)`
+uses Citry's embedded Alpine, returns an idempotent early-stop function, and
+auto-disposes before user cleanup; `reactive(value)` returns an Alpine
+reactive proxy. There is no separate `release` member. Init's return remains
+the user cleanup function. The logical registry owns prop supply and lifecycle
+independently of physical roots, so rootless components can resolve props and
+run init. `els` contains every current element root and is empty for a
+rootless instance. The positive RootGroup spike pins it as one stable array
+whose membership updates in place and which clears on logical teardown; A6
+connects product morph membership to that array.
 
 **Client-side writes and the local-first pattern.** Because `$state` is
 writable (on `_model` fields), interactions that need no server work
@@ -2370,9 +2818,67 @@ with `@alpinejs/morph` preserving the living Alpine scope across morphs,
 a re-render never recreates the scope; `$state` object identity is
 stable for the anchor's lifetime, and reactivity propagates the new
 values into `x-text` / `x-show` / effect subscribers automatically. The
-`$onComponent` teardown-then-re-fire cycle remains for imperative JS
+`$component` teardown-then-re-fire cycle remains for imperative JS
 that manages what a library draws and owns outside Alpine (charts,
 maps, editors).
+
+**Preservation: server wins by default, deviations are explicit.** One
+rule covers every layer of an update: the server's render is
+authoritative, and anything that outlives it is something the author,
+or the user's still-unsent input, explicitly made outlive it. The
+explicit deviations are exactly three: a **pending unsent write** wins
+its field until the flush carries it (the reconcile rule above);
+**`#c-ignore`** opts a whole subtree out of patching (5.3);
+**`#c-key`** carries identity, and with it the anchor's client state,
+across reorders and parent renders (5.3, and the lifecycle below).
+Focus is deliberately not a fourth: the runtime never treats "the user
+is focused here" as a silent preservation signal. The two recorded
+field failures are the poles this construction avoids: with no
+protection at all, every keystroke-driven patch can eat a draft
+(morphdom issue 135); with blanket focused-element protection, a
+handler that legitimately clears a still-focused field can never land
+the clear (Turbo issue 1194, the submit-then-clear chat box). Here a
+draft is protected exactly as long as it is still unsent (in the
+field, or still in the control ahead of its flush), and stops being
+protected the moment the flush hands it to the
+server, so the handler's clear wins. The acceptance tests are both
+poles at once (research R1): fast typing over a patch loses nothing,
+and submit-then-clear clears. The updates piggyback (4.2) is the
+lifted-input-state half of the story: a pending write rides whatever
+call the instance sends next, poll ticks included, so a poll uploads
+the draft instead of racing it; `data-citry-busy` plus `$loading` are
+the disable-while-loading half (5.3). Grounding for all of it:
+[`events_research/research-rerender-preservation-and-concurrency.md`](events_research/research-rerender-preservation-and-concurrency.md)
+(R1).
+
+After a patch, the runtime re-applies `:c-*` bindings from `$state` to
+bound controls (the application a one-way binding is, 5.1), and a
+field holding a pending unsent write re-applies too: its `$state`
+value **is** the preserved draft, so the re-apply restores what the
+patch may have visually reverted. One exemption keeps the re-apply
+from fighting the patch-time guard in 5.3's hook: a control whose
+live value that guard kept (a focused control holding an unflushed
+two-way draft, one its debounce has not yet written into `$state`) is
+skipped, because for that control `$state` still holds the pre-draft
+value and re-applying it would clobber exactly what the guard
+preserved. The guard's `hasUnsentDraft` check therefore covers both
+draft stages, a pending unsent `$state` write and the unflushed DOM
+draft before it, and the one loss window left open is the unflushed
+draft in a control that is **not** focused when the patch lands
+(typed, then tabbed away before the debounce flushed): the guard is
+focus-scoped, protection still derives from the unsent draft, and
+focus only picks out the control the user is actively editing. So
+fast typing over a patch loses nothing, whether the draft sits in
+`$state` or is still mid-debounce.
+
+The three layers compose into one rule set: the reconcile rule
+preserves flushed-but-unsent writes at the state layer, the patch-time
+guard keeps a focused control's unflushed mid-debounce draft, and the
+re-apply skips guard-kept controls so it can never undo the guard. The
+re-apply itself is focus-independent (a field with pending unsent
+writes re-applies from `$state` after a patch, focused or not), and
+the one exposed loss is the window named above: an unflushed draft
+whose control lost focus before the patch.
 
 **What a re-render does to the scope: the three-way split.** The
 reconcile rule above is one of three branches, chosen by a single check
@@ -2383,7 +2889,8 @@ token's class field (`c`, 7.1).
 - **Same class**: reconcile, exactly as above. The anchor's Alpine scope
   and `$state` object identity persist, the server wins per field except
   fields with a pending unsent local write, and a focused two-way-bound
-  input keeps its value and caret.
+  input holding an unsent draft keeps its value and caret (the
+  preservation block above).
 - **Different class**: discard the old state and adopt the server's fresh
   token and values wholesale, with no per-field reconcile (the fields do
   not correspond), then rebuild the boundary scope for the new class. The
@@ -2394,9 +2901,201 @@ token's class field (`c`, 7.1).
   non-interactive, its state and scope are discarded, its instance's
   cleanup runs, and no new instance is created.
 
+**The uncorrelated-id lifecycle: one rule for every arrival that is
+not the caller's own.** The three-way split above is the property of
+exactly one path: a correlated self-render, where the envelope's
+correlation id resolves the caller's anchor and the target agrees.
+Every other way an instance id reaches the DOM (the initial page load,
+a host-inserted fragment, a render action targeting a selector, a
+parent's fragment carrying fresh child ids, v2 server push) follows
+one rule instead: **a render arriving from anywhere other than the
+region's own correlated call replaces the region's client state
+wholesale.** Fresh manifest ids mint fresh anchors seeded from the
+server-rendered token and values; anchors whose ids leave the DOM
+retire. This is the client mirror of the golden rule (7.5): the
+handler's returned tree shares nothing with what it replaces, so the
+client does not pretend its regions do either, and it can never
+attribute state to the wrong entity because it never guesses identity
+(positional matching was rejected for exactly that reason, 14.3.2).
+
+**Keyed linking is the one continuity mechanism on top.** A child
+instance whose root carries the same class and the same `#c-key` value
+on both sides of an applied render links instead of resetting: its
+anchor, meaning the `$state` object identity, the pending unsent
+writes, the `$loading` counters, the `$error` box, the epoch pair, and
+its subscriptions, carries across and reconciles by the same-class
+branch above. For that link to keep working across the child's own
+later self-renders, the applier re-stamps the parent-authored key onto
+the child's otherwise-keyless fragment during that same-class reconcile
+(the caller-key preservation, 5.3); without it a child would go keyless
+after its first self-render and the next parent render could not link
+it. Busy display carries with the counters: a linked anchor
+whose loading count is nonzero after the swap re-stamps
+`data-citry-busy` on its new roots, and on the triggering element
+where it survived the patch (the morph strips client-stamped
+attributes from surviving elements, so the per-trigger stamp of 5.6
+needs the same restore), so the one continuous busy state
+(5.6) stays visible through the parent's render, per-trigger pending
+UI included. Matching is
+swap-agnostic (it reads the composite key
+attribute, 5.3, on the old region and on the pre-parsed fragment, so
+the same semantics hold under `replace`, where the anchor payload
+survives even though the DOM state dies with the node), scoped per
+applied region, and recursive (a linked child's subtree is itself a
+region for its keyed grandchildren); the region is also the scope of
+the authored uniqueness contract for component keys (5.3), because
+two same-class instances carrying one key anywhere in it compete for
+the same link. Duplicate keys within a region
+match in document order with a debug warning; everything unkeyed or
+unmatched follows the reset rule above. One sub-rule rides every link,
+the **horizon cut**: at link time the child's highest-applied epoch is
+set to its send counter, so instance-mutating actions of the child's
+own in-flight calls drop when their responses arrive (the guard
+applies only strictly-greater epochs, 4.2, so this one assignment
+covers them all; their `data` still resolves; the drop event fires
+with its reason). The parent's
+render replaced the child's token with a parent-derived one, and
+applying a pre-parent render or token afterwards would resurrect that
+replaced state into the child's next send. With the queue (5.6)
+serializing sends from overlapping anchors, the cut's remaining work
+is `wait: false` sends and arrivals from unrelated anchors' calls,
+the same residue the
+epoch guard nets. The alternative, last-writer-wins for late child
+responses, is recorded with the decision (14.3.2); both are
+client-internal, so if dogfood users report "my save's UI never
+showed" more than they would tolerate stale-parent flicker, the cut is
+the piece to revisit.
+
+**Targeted renders are remove-and-replace.** A `render` action whose
+target names anything other than the calling instance is, to the state
+model, a region teardown plus a fragment insert: departing instance
+ids retire with their anchors, the fragment's manifest mints fresh
+ones (or links keyed matches per the rule above), and no epoch
+comparison ties the apply to the target's past, because the target
+keeps no surviving counter. Continuity is owned by a region's own
+correlated self-renders, and by keyed matches, alone; a handler whose
+selector happens to resolve to its own region gets replace semantics,
+not the three-way split (self-continuity rides only the runtime's
+`cid:` self-address). Races to one target from unrelated anchors (two
+different
+callers rendering into `#cart-badge`) stay last-write-wins in arrival
+order and are answered in userland by the ordering patterns the docs
+teach: render current truth, not deltas (a handler that renders truth
+leaves a briefly stale region that self-corrects on the next event),
+and dispatch-and-refresh for contested regions (`Dispatch` plus the
+region's own listener re-rendering itself, so the region's anchor
+serializes its own updates). Helper utilities for that cross-caller
+target ordering are a possible later addition, not v1 (16.1). One documented
+author trade: a `wait: false` send's targeted render bypasses the
+queue's ordering (5.6), so repeat-firing `wait: false` sends into one
+region can paint out of arrival order; bypassing the queue accepts
+last-arrival-wins there.
+
+**A selector matching several elements inserts one shared instance,
+mirrored per match.** The same fragment (one instance id, one anchor,
+one State, one token) lands at every match; every copy carries the
+instance's marker, and a `$state` write in one reflects in all (the
+canonical case: the cart badge in the desktop header and the mobile
+drawer always agree). A later self-render of the duplicated instance
+applies its fragment to each marker-carrying element independently,
+and the applier strips the trailing manifest tags from all but the
+first insertion (machinery item 2 below). Independent per-region widgets are the other
+tool: one `Render` action per target, each its own instance. The
+user-guide framing of the distinction is WP19 scope
+(`events_plan.md`).
+
+**The five machinery requirements.** Option-independent runtime
+obligations, normative for the client applier work package
+(`events_plan.md` WP16.1); they were required under every
+candidate lifecycle, which is why the decision round adopted them as a
+unit ([`events_research/analysis-nested-anchor-continuity.md`](events_research/analysis-nested-anchor-continuity.md)
+"Machinery every option needs";
+[`events_research/analysis-target-other-renders.md`](events_research/analysis-target-other-renders.md)
+option A mechanics):
+
+1. **Fragment ids register before the morph.** The applier parses the
+   fragment's events manifest out of the action's HTML and
+   creates-or-links anchors for every id it names before any swap
+   runs, so every `$state` read the morph's Alpine bridge evaluates
+   mid-patch resolves to real state (an inert read tracks no reactive
+   dependency and never recovers). This is link-before-morph,
+   generalized from the correlated caller to the whole fragment.
+2. **The applier owns manifest-tag delivery.** Both trailing manifest
+   tags are inserted as new elements after a morph patch (the
+   single-root call never carries them, 5.3), unmarked, so the
+   post-swap observer pass stays the single mechanism across swap
+   kinds (for an id registered before the swap that pass is
+   idempotent, refreshing only the token); on a multi-match target the
+   tags ride only the first insertion, so the dependency manager runs
+   one teardown-and-refire cycle rather than one per copy.
+3. **The anchor retirement sweep.** After a swap settles, and on DOM
+   mutation (host JS also removes subtrees), any anchor whose
+   component id has no live element retires: unlink the id, drop the
+   anchor from the registry, null its fields. When the sweep retires
+   an anchor still holding pending unsent writes or a nonzero loading
+   count, it logs a debug warning naming the class and the dropped
+   field keys: that is the exact moment reset discards user input, and
+   without the warning the silent revert is undiagnosable in the
+   field.
+4. **Per-action liveness checks.** Liveness of an action's target and
+   of the caller's anchor is re-checked per action in faithful list
+   order, never once per response: an earlier action in the same
+   result can retire a later action's target (a targeted render that
+   replaces the region containing the caller, followed by the caller's
+   self-render, drops the self-render). The same rule
+   spans results within one batch envelope (5.6): an earlier result's
+   render can retire a later result's caller. A response correlating
+   to a retired anchor behaves like a stale one: its `data` resolves,
+   its instance-mutating actions drop, the drop event fires with
+   reason `retired`, and a debug line records it. Every per-action
+   dead-target drop surfaces the same way: the drop event (reason
+   `retired`, 5.2) plus a debug log. That includes a self-addressed
+   `event` action whose target id is dead, which drops rather than
+   falling back to a document dispatch (that would change delivery
+   semantics silently). Liveness and its `retired` surface belong to
+   instance-addressed work alone (the caller's anchor, `cid:`
+   targets, the self-addressed defaults): a plain-selector target is
+   never live or dead, so a selector that stops matching, whatever
+   earlier action or host mutation removed its matches, surfaces only
+   4.3's zero-match warning, and one action never fires both
+   surfaces.
+5. **Recurring timers retire with their region, and never
+   double-poll.** Retiring an anchor cancels the interval timers
+   registered to it, or timers are keyed to the element with one timer
+   per element so a morph survivor dedupes against the fresh
+   instance's own manifest-initialized interval instead of
+   compounding; either form guarantees a replaced `@c-poll` region
+   never leaves a dead interval firing forever. One-shot closures (a
+   debounce flush, a captured `$sendEvent`) re-resolve
+   element-to-anchor when they fire; a fire-time miss, or a hit on a
+   class that does not declare the event, drops the send before
+   anything is sent, and the drop settles like the dequeue-time
+   cancel (5.6): where a caller holds the promise (a captured
+   `$sendEvent`), it rejects with reason `cancelled` and the drop
+   event fires (reason `cancelled`, 5.2), while a framework-fired
+   one-shot (a debounce flush) holds no caller promise, so the drop
+   event plus a debug log is its whole surface. Nothing on this path
+   throws: the runtime never turns a routine race into a bare
+   exception, and the one console artifact left is the browser's own
+   unhandled-rejection log when a caller ignored a promise that had
+   to settle (every promise settles, 14.3.6).
+
+Falsifiers for this lifecycle, split by when the evidence can exist.
+Checkable pre-v1, in WP21 and the client wave: if `#c-key` forwarding
+onto child root markers cannot stay inside WP21's
+compiler-to-serializer path, the keyed-linking cost claim is falsified
+(section 15); and if the typed-text revert reproduces in a realistic
+unkeyed demo page, the keying guidance escalates to requirement
+wording wherever interactive children sit under re-rendering parents.
+Checkable only in the post-v1 dogfood port (section 13): if the port
+surfaces a recurring pattern of targeted renders into regions holding
+live client state that dispatch-and-refresh cannot express, wholesale
+reset is too destructive and adopt-in-place comes forward from the v2
+continuity design (16.1).
+
 **How `:c-*` and `@c-*` ride on Alpine.** The compiled `data-cev-*`
-specs stay exactly as specified in 5.1 (spec-valid HTML, no author
-expressions ever evaluated); what changes is what they drive. A one-way
+specs stay exactly as specified in 5.1 (spec-valid HTML; handler names are
+never evaluated as code); what changes is what they drive. A one-way
 `:c-<key>` registers an Alpine `effect()` over `$state.<key>` that
 applies the value to the control, so re-application after morphs is
 just reactivity. A two-way binding writes `$state.<key>` (which queues
@@ -2418,13 +3117,15 @@ teaching, because they demystify the sugar:
 ></span>
 ```
 
-The compiled forms add template-load validation and evaluate no strings;
-the plain-Alpine forms trade that for full expressiveness. Both are
-first-class.
+The compiled forms add template-load validation and never evaluate handler
+names. A compiled `@c-*` call may still evaluate its optional parenthesized
+Alpine argument expression; the plain-Alpine forms trade server binding
+validation for full expression control. Both are first-class.
 
 **Pending and error display need no vocabulary.** The runtime stamps
 `data-citry-busy` on the **triggering element** for the duration of its
-call (in addition to the instance roots), so per-trigger pending UI is a
+call, from the moment the gesture enqueues it (5.6), in addition to
+the instance roots, so per-trigger pending UI is a
 CSS attribute selector in the component's own CSS
 (`.toggle[data-citry-busy] { opacity: .5 }`). That resolves the
 granularity critique with zero new syntax: a settings page of
@@ -2441,33 +3142,253 @@ components registered through the runtime's component helper) are
 isolated like citry scopes, so a
 descendant can never implicitly absorb an ancestor's inputs; anonymous
 inline `x-data` keeps Alpine-native nesting for local UI state. Explicit
-per-instance inputs are **props**: an `x-props` binding on the child's
-own element, evaluated against the parent scope (DOM containment is the
-identity, so repeated siblings each get their own inputs), one-way down
-and reactive. The child declares its props (names, required, defaults),
-so a missing input fails loudly when the client component initializes. This is the
+per-instance inputs are **props**: declared by the component that consumes
+them, supplied by an exact component-boundary source record to a
+graph-identified child instance, one-way down and reactive. Repeated siblings
+have distinct target records even when their DOM shape matches. This is the
 client mirror of the server contracts: `Kwargs` at the server boundary,
 `State` at the wire boundary, props at the client boundary, each
-declaring, documenting, and validating what crosses. Ambient context
-that should cross component boundaries (theme, locale) is
+declaring, documenting, and validating what crosses.
+
+**Props are declared and consumed through `$component`** (renamed and
+one-registration-per-class contract ratified 2026-07-17), which accepts two
+forms. A component class has exactly one registration; a second `$component`
+call for the same class throws an error naming the class and stating that the
+component is already defined. `$component` is the registration spelling.
+
+- The existing **bare callback**, unchanged:
+  `$component((ctx) => { ... })`. It declares no props, and the
+  context's `props` member is an empty object.
+- A **config object** with a required `init` and an optional
+  `props` map:
+
+  ```js
+  $component({
+    props: {
+      name: { type: String, required: false },
+    },
+    init: ({ props: { name } }) => { ... },
+  });
+  ```
+
+  `init` carries the bare form's exact contract: it receives the
+  context and may return a cleanup (5.2).
+
+The config object, rather than a second argument, is deliberate: it
+is the future home for other JS-side component settings, which is why
+`props` is a named key inside it. Named client components registered
+through the runtime's component helper declare props with this same
+config shape, so one declaration form serves component JS and client
+components alike. Prop definitions are Vue-object-API style, one
+entry per prop name; the v1 definition fields are `type` (a
+constructor the resolved value must match, or an array of
+constructors any one of which may match, `type: [String, Boolean]`),
+`required` (default
+`false`), and `default` (the value used when the parent supplies none).
+Object and array defaults must be factories such as `default: () => ({})` or
+`default: () => []`; Citry calls each factory once per logical instance and
+reuses that result for the instance lifetime. This prevents accidental
+cross-instance sharing without cloning or freezing user data. The read-only
+props view blocks top-level declared-key reassignment but deliberately does
+not deep-freeze nested supplied/default objects or arrays. Anything beyond
+those three (a
+`validator` callback) is a future field, added on
+demand. Resolved prop **values** arrive on the callback context under
+`props` (`{ id, els, data, state, props, scope, effect, reactive, sendEvent,
+onEvent }`),
+reactive through plain Alpine reactivity like the rest of the layer:
+a parent-side change propagates to effects reading `props.<name>`,
+and nothing Vue-flavored is layered on top. Validation runs when the
+instance initializes, before init: a missing required prop or
+a type mismatch fails loudly, naming the component and the prop. This
+carries the recorded requirements (16.1's record): the contract is
+explicit per child (documented, required-checked, defaulted), inputs
+are per logical sibling instance, and isolation
+stands, so no prop is ever inherited implicitly across depth.
+
+**Props are supplied with `$c-props` on the child component tag.** The parent
+writes one Alpine object expression where the child is invoked:
+
+```html
+<c-chart-card $c-props="{ theme: $state.theme }" />
+```
+
+`$c-props` is client-evaluated and must survive to the browser. Its `$c-*`
+spelling identifies Citry-owned client-runtime behavior without claiming
+Alpine's `x-*` namespace or the server-evaluated `#c-*` channel.
+`ComponentNode.render` resolves the tag's attribute contributions in source
+order, then splits them into ordinary Python kwargs and structured relay
+records. Three families relay across a component boundary: `$c-props`, Alpine
+event handlers (`@...` and `x-on:...`), and Citry event handlers (`@c-*`,
+classified before generic `@...`). Every other non-reserved attribute,
+including `x-show`, `x-model`, `:class`, `x-transition`, and ordinary `class`,
+remains a Python render-time component input. `:c-*` and `#c-*` retain their
+separate 5.1 rules. There is no general root-attribute fallthrough.
+
+This relay split applies to registered component targets and transparent
+`<c-component>`. `<c-element>` instead produces one selected HTML element: it
+rejects `$c-props`, and its Alpine handlers, `@c-*`, and `:c-*` use the normal
+HTML-element attribute/rewrite path.
+
+The recommended arbitrary-attribute API is a child-declared `attrs` mapping:
+
+```html
+<c-card c-attrs="{ 'x-show': 'visible', ':class': '{ selected: selected }' }" />
+```
+
+```html
+<!-- Card.template: the child chooses the destination. -->
+<article c-bind="attrs"><c-slot /></article>
+```
+
+The child may instead apply that mapping to another root or nested element.
+Direct, server-dynamic (`c-$c-props`, `c-@click`, `c-@c-save`), and
+component-tag `c-bind` contributions resolve left to right; exact-key
+last-one-wins; final `None` or `False` removes the relay; `True` is invalid;
+and a present value must be a string. `$c-props`
+and Alpine handler values are raw Alpine expressions. A Citry `@c-*` value is
+a declared server handler name with an optional parenthesized Alpine argument
+expression. An exact-key winner occupies its winning contribution's position
+in final handler order; remove-then-readd likewise occupies the re-add
+position. Keep `@click` and `x-on:click` distinct. Spread diagnostics name both
+the `c-bind` span and mapping key. A literal `$c-props` on plain HTML is a
+template-load error; a dynamically contributed one fails when attributes
+resolve.
+
+The relay record names the exact lexical source, logical owner, actual child
+target, and current graph revision after the component tag disappears. Supply
+evaluates through that source record, not through the child's physical parent
+or nearest DOM stack. One logical supplier effect belongs to the child
+instance even for multi-root or rootless output. The props bag, stable
+`scope`, managed effects, cleanup, and full `els` collection remain
+instance-scoped and shared by all roots. A parent change therefore updates
+effects reading `props.<name>` through plain Alpine reactivity.
+
+First init waits until declaration and first supply meet. Parent init settles
+before descendant init through an ancestry DAG; only the dependent branch
+waits, and failure or removal settles that branch rather than freezing
+unrelated components. `effect` and `reactive` use the embedded Alpine instance
+and follow the managed lifetime described above.
+
+`$c-props` must synchronously return a plain object. On first supply, a syntax
+error, runtime throw, Promise/thenable, or invalid result shape logs a pointed
+error, skips init, deactivates that supplier, and settles the ancestry branch
+so descendants cannot deadlock. After successful init, invalid data must not
+remain exposed as if valid and the supplier must not stop the scheduler. The
+exact field-versus-whole-bag transaction, clear-to-`undefined` behavior, and
+recovery diagnostic remain open in [`alpinejs_plan.md`](alpinejs_plan.md) O5.
+The failure does not write `$error` or fire an Events lifecycle event unless
+that final decision explicitly changes the contract.
+
+Only own enumerable keys from the supplied object participate in resolution.
+An unknown key is ignored and reported with one direct `console.error` per
+instance/key failure episode; a later evaluation without that key re-arms the
+report. Valid declared siblings still apply, and a typo that also omits a
+required prop reports both failures. Unknown keys do not throw, write
+`$error`, fire an Events lifecycle event, or enter the resolved props bag.
+There is no page-level strictness setting. `__proto__`, `prototype`, and
+`constructor` are never assigned from supplied data; a future open-ended
+contract requires an explicit declaration-level rest facility.
+
+An Alpine event handler authored on a child component tag evaluates its whole
+value in the exact parent source scope. A Citry `@c-*` value instead names a
+declared server handler and may include one parenthesized Alpine expression for
+its argument object; only that argument expression uses the parent source
+evaluator. Ordinary data, `$data`, `$root`, `$id`, `$refs`, and the other
+lexical magics come from the location where the tag was authored, so a missing
+source name never falls through to child `x-data`. Only `$el`, the child-bound
+`$dispatch`, and the exact `$event` come from the physical child. Native
+`event.currentTarget` is untouched, so the listener mode and delivery timing
+determine whether it is a child root, `window`, `document`, or `null`. The
+listener and modifier machinery therefore binds to the child `RootGroup`, but
+only the Alpine handler or Citry argument expression evaluates against the
+live source-location carrier. See the cross-browser
+[`boundary-handler scope spike`](alpinejs/spike-citry-handler-refs.md).
+
+Citry `@c-*` has one additional ownership rule: its server-handler name is
+validated, dispatched, and queued through the exact source parent Events
+anchor, never the child's nearest anchor. The child root remains the physical
+trigger and receives the per-trigger busy marker. A relocated `@c-submit`
+still collects named controls from the physical child form using the ordinary
+Events codec; an explicit source-authored argument object is merged afterward
+and wins on collisions. `:c-*` remains invalid on a component tag.
+
+A handler authored inside the child's own template remains child-local. To
+grant child code an intentional parent capability, pass a callback through a
+declared prop, expose it through the child's stable `scope` during init, and
+call it from the child's Alpine template:
+
+```html
+<c-action-button
+  $c-props="{ givenCallback: () => selected = true }"
+/>
+```
+
+```js
+$component({
+  props: {
+    givenCallback: { type: Function, required: true },
+  },
+  init: ({ props, scope }) => {
+    scope.givenCallback = props.givenCallback;
+  },
+});
+```
+
+```html
+<!-- ActionButton.template -->
+<button @click="givenCallback">Run</button>
+```
+
+This explicit props path is how the parent chooses to share behavior. Merely
+placing a handler on `<c-action-button>` never grants it access to child scope.
+
+Static `<c-component is="Card">` already compiles to its selected target. The
+dynamic `<c-component c-is="selected">` path must forward relays separately
+from kwargs to the actual selected `CitryElement`; the transparent built-in is
+never the relay target. Replacement cleans the old target's relay lifetime
+exactly once.
+
+The multi-root `RootGroup` mechanism and stable live `els` representation are
+proved by the cross-browser
+[`RootGroup` spike](alpinejs/spike-root-group.md) and landed in Alpine plan A6
+together with the real boundary relay. The cross-browser
+[`rootless lifecycle spike`](alpinejs/spike-rootless-lifecycle.md) proves a
+comment-owned lifetime for text-only or empty client-active output, with
+stable-anchor normalization, grouped mirrored regions, contextual parsing,
+and a nested-range island guard; A6 lands those range mechanisms. A2 already
+settled O11 by requiring exact `comment-v1` caps and cap-preserving deployment.
+A8 landed atomic incoming graph, Events, dependency, and DOM adoption with
+rollback before publication.
+The remaining gated edge mechanism is a named
+client-target helper that creates fresh identities for direct `x-for` clones. A later
+browser-side blueprint-instantiation feature would be needed to clone a
+server-rendered Citry component safely; rewriting `data-cid-*` values alone is
+insufficient. The complete edge matrices and fallback errors live in the
+[round-two report](alpinejs/exploration-x-props-round-2.md).
+
+Ambient context that should cross component boundaries (theme, locale) is
 **provide/inject**, which deliberately pierces isolation and is never
-used for per-instance inputs. Events travel up as they already do:
-browser events bubble, `Dispatch` / `$onEvent` for the server-touched
-paths. Two boundary facts keep this channel small: citry components
-never need it (their input passing happened server-side, kwargs to
-`state_data` to a seeded scope, per instance), and a client `x-for` can
-compose client components but never citry components (the server cannot
-mint instances client-side), so server-generated lists stay `<c-for>`
-plus morph. The concrete props API (declaration shape, validation timing,
-what is lifted from alpine-composition minus its Vue-reactivity layer)
-is an open design round, section 16.
+used for per-instance inputs. Events travel up through native bubbling,
+parent-owned component-target handler relays, or `Dispatch` / `$onEvent` for
+server-touched paths. Two boundary facts keep this channel small: Citry
+components never need client props for their own server inputs (that passing
+happened server-side, kwargs to `state_data` to a seeded scope, per instance),
+and server-generated lists stay `<c-for>` plus morph. If the separately
+designed named client-target helper enters v1, client `x-for` may target it
+rather than cloning a server-rendered Citry identity; the landed graph-first
+runtime makes no direct `x-for` component-composition claim. A later blueprint-instantiation
+protocol is a separate feature.
 
 **What `js_data()` remains for.** State is the small reactive contract;
 `js_data()` is the big inert per-render payload. `js_data` stays
 non-reactive and hash-deduplicated across instances (5.4), arrives as
-the `data` member of `$onComponent`, and is recomputed wholesale on
-re-render. The rule: if it must survive calls or drive bindings, it is
-State; if it is derived for this render, it is `js_data`.
+the `data` member of `$component`, and is recomputed wholesale on
+re-render. It must not be mutated to expose Alpine variables because sibling
+instances may share the deduplicated object; write instance-local client names
+to `scope`. The rule: if it must survive calls or drive server bindings, it is
+State; if it is derived for this render, it is `js_data`; if it is local
+client state exposed by init, it is `scope`.
 
 **Content security policy, stated honestly.** The embedded Alpine is the
 standard build, which evaluates expression strings, so pages using
@@ -2477,6 +3398,170 @@ where the author wrote an arg expression (5.1); argless bindings
 evaluate nothing. A future constrained mode pairing Alpine's CSP
 build with argless compiled bindings is therefore possible; it is
 recorded in section 16, not planned.
+
+### 5.6 The event queue: a dependency DAG
+
+Two sends can overlap: a slow save races a fast toggle, a poll tick
+lands mid-edit, the network reorders. The queue is the client-side
+answer, and it is an explicit dependency graph: **queued events are
+nodes in a DAG** (a directed acyclic graph: every edge is a wait, and
+because edges only ever point at earlier events, no cycle can form).
+At enqueue, the new event gains a dependency edge to every
+not-yet-settled event whose dispatching owner is the same logical owner as,
+an ancestor of, or a descendant of the new event's dispatching owner in the
+active Citry ownership graph. Physical roots and markers locate live regions;
+they do not define ancestry. Logical containment and physical liveness are
+re-verified at dequeue because both the graph revision and DOM may have
+changed while the event waited. An event
+dispatches when every edge it holds is settled; the graph's roots, the
+events with no unsettled dependencies, are exactly the dispatchable
+set. Independent branches of the DAG run in parallel: events from
+sibling or otherwise unrelated anchors share no edge and never wait on
+each other, while events whose anchors overlap are ordered by their
+edges in enqueue order, so overlapping work applies in the order the
+user caused it.
+Serializing within one identity unit with siblings parallel is the
+field's convergent shape (Livewire per component, LiveView per view,
+React's `useActionState` per hook;
+[`events_research/research-rerender-preservation-and-concurrency.md`](events_research/research-rerender-preservation-and-concurrency.md)
+dimension 2). The containment scope is citry's own, because citry is
+the framework where a parent's response rewrites its children (5.3),
+so parent-child overlap is exactly the pair that must never
+interleave; the DAG carries that scope one edge at a time, so an event
+dispatched from an anchor sitting inside two overlapping in-flight
+scopes simply holds one edge to each.
+
+**Settled means applied.** An in-flight event holds every event that
+depends on it until its response's actions have been **applied to the
+DOM**, not merely received: a dependent event must see the world its
+predecessor's render produced, and carry the token that render
+delivered, or the edges are cosmetic. Applied means all of the
+result's actions processed, whatever their kinds, so a result with no
+render action settles the same way: a data-only result settles at
+promise resolution and holds its dependents no longer than its own
+application. The timing
+fields (4.3) split along the same line: a blocking delay
+(`wait: true`) is part of the application, so it holds the event's
+dependents for its duration, while a scheduled `wait: false` action
+holds nothing, safe exactly because its fire-time re-checks (target
+re-resolution, liveness, and the epoch comparison, 4.3) drop it if
+the world moved on while it waited.
+
+**Failure settles too.** A transport error, an error result, or a
+timeout settles the call and releases its dependents; a hung request
+must never freeze a subtree forever. The timeout is therefore bounded
+by default: `configure({timeout})` (5.2) defaults to 30000
+milliseconds, overridable per call through `sendEvent` opts, and an
+unbounded setting is deliberately not offered, because a queue that
+holds neighbors cannot afford a request that never stops holding
+them. A timeout rejects the
+caller's promise with the timeout error, fires `citry:events:error`,
+clears busy state, and releases the dependents; the server is still
+not cancelled (the 5.2 stance), and a response that arrives after its
+call timed out is dropped with the drop event (reason `timeout`) and a
+debug log, because its caller was already told it failed.
+
+**Dequeue re-verifies, batches, and cancels early.** When an event's last edge
+settles it becomes dispatchable. Before anything goes on the wire, the queue
+maps its stored logical dispatch-owner record into the active graph revision
+and re-verifies that owner's containment against not-yet-settled events. It
+separately verifies that the physical carrier still belongs to a live target
+region. Morph may replace or relocate that carrier, but its DOM position never
+changes the event's source logical owner.
+Re-verification adds edges only to events enqueued earlier that are
+still unsettled, preserving the invariant that edges point at earlier
+events, so the graph stays acyclic; overlap with an event enqueued
+later needs no edge from this step, because the later event already
+holds its own enqueue-time edge to this one. A live logical owner and carrier
+send. A missing logical owner or dead carrier cancels early: the event is never
+sent, its promise rejects with the
+named `cancelled` reason, the drop event fires (reason `cancelled`,
+5.2), and a debug line records it. A queued click on a region that a
+predecessor's render just replaced must not fire a ghost call at
+whatever now occupies the position. When several events become
+dispatchable together, they batch into **one** envelope: each stays
+its own `calls[]` entry with its own promise and its own result (4.2
+reserved the array from day one; this is Livewire-style
+cross-component bundling, and it is why a burst costs one request). A
+batch larger than the envelope's sixteen-call cap splits into
+successive envelopes in order. Two `@event` knobs govern a handler's
+place in this (3.5): `bundle=False` keeps its calls out of shared
+envelopes, and `latest_wins=True` lets a newer call drop queued-not-sent
+predecessors and abandon an in-flight one, sending without waiting for
+the abandoned response, which is exactly why that opt-in is the
+author's statement that overlapping runs of the handler are safe.
+Neither knob has a call-site form by design: a call site that needs
+different semantics names a different handler.
+
+**`wait: false` joins no graph.** A send with
+`{wait: false}` neither waits nor is waited on: it fires
+immediately, it gains no dependency edges, no later event gains an
+edge to it, and its late
+responses are exactly what the per-anchor epoch guard (4.2) exists to
+net. The guard is unchanged and remains the floor beneath the queue
+for the three things the queue cannot see: `wait: false` sends,
+responses arriving from calls the graph holds no edge for (a targeted
+render from an unrelated anchor, 5.5), and future transports with
+different delivery orders.
+The send-level `wait` is the sibling of the action-level `wait` of
+4.3; both mean "do not hold the queue for me", one at the event
+queue, one at the action-application queue. The documented trade for
+`wait: false` targeted renders is in 5.5: last-arrival-wins ordering.
+
+**Busy state spans the queue.** The user's gesture, not the send,
+starts the pending UI: `data-citry-busy` stamps and `$loading` counts
+from enqueue, one continuous busy state through queue, flight, and
+apply. A button whose click is waiting behind an in-flight ancestor
+looks busy, because to the user it is: the gesture is already
+committed, and a control that shows idle while its click sits in the
+queue misreports it.
+
+**Recurring timers do not pile up.** A `@c-poll` tick that fires while
+the binding's previous call is still queued or in flight is skipped
+with a debug breadcrumb, never enqueued behind it: at most one
+outstanding call per recurring binding, the queue's own tick-skip
+rule. (Timer lifetime is the separate concern of 5.5's machinery item
+5: one timer per element, retired with its region.) Debounced two-way
+flushes enqueue like any send and carry the piggybacked updates as
+always (4.2).
+
+**What the queue replaces, and its fallback.** The concurrency
+research recommended drop-plus-surface alone for the parent-child
+overlap (its R2), on the ground that no surveyed framework derives a
+serialization scope from the component tree. The queue supersedes that
+recommendation: the tree-scoped race is a citry-specific consequence
+of fresh ids plus whole-subtree re-renders, the field's convergent
+shape wherever serialization exists is "serialize within one identity
+unit, siblings parallel, nothing dropped", and the maintainers of the
+largest queue-owning system state serialization as the only safe
+default for UI-affecting state (Livewire's `#[Async]` warning, quoted
+in the research). Drop-plus-surface is recorded as the fallback, and
+the evidence window decides which release ships it: if the queue work
+package's harness (`events_plan.md` WP16.3) proves
+settled-means-applied undeliverable, v1 ships R2's
+drop-plus-surface behind the same drop event; if the post-v1 dogfood
+port (section 13) proves the queue impractical through head-of-line
+blocking the knobs cannot relieve, a v1.x release ships the same
+fallback and the queue returns as a v2 design (the decision record is
+14.3.4; the falsifier is 15.11). The fallback replaces only the
+containment edges: same-anchor overlap still serializes, per R2's
+other
+half (per-anchor serialize-with-merge: at most one in-flight call per
+anchor, later sends coalesce and follow as one request), so a rapid
+second send from one instance still waits for its predecessor's
+response and carries the refreshed token instead of racing it.
+Send-versus-apply pipelining (dispatching a dependent while its
+predecessor's actions are still applying) is a recorded v2 candidate,
+not designed (16.1).
+
+The test that falsifies the queue's core rule, runnable in the WP16.3
+harness: with a slow parent poll in flight, a child send must wait and
+then observe the parent's applied render (fresh token, fresh DOM)
+before it fires; with two sibling widgets, one slow save must never
+delay the other's toggle; an event enqueued under two overlapping
+in-flight scopes must dispatch only after both settle (one edge each);
+and a network-failed send must release its dependents within the
+timeout.
 
 ---
 
@@ -2525,8 +3610,8 @@ sendEvent(...)   --call envelope (4.2)-->   codec decodes the
                                                    |
                                                    v
 applyActions     <--result envelope (4.3)--  encoded results
-(5.2)               (as bytes)     
-                    same transport        
+(5.2)               (as bytes)
+                    same transport
 ```
 
 ```python
@@ -2564,7 +3649,7 @@ transports would both need belongs in the dispatcher, never duplicated):
 | Envelope validation | Structural check of the call envelope (field presence, types, the 16-call cap) before any other work. | Plain Python checks, not JSON-Schema loading at runtime; the protocol package's schemas bind in tests (plan WP18). Cap violations map to `payload_too_large` (413). |
 | Version and capabilities | Reject unknown protocol majors; resolve an absent `capabilities` field to the baseline; hand the resolved set to action encoding so `morph` downgrades to `replace` and no action kind outside the set is ever emitted. | The baseline constant is the protocol package's `CAPABILITIES_BASELINE_V1`; rejections mirror per call so `results[i]` always answers `calls[i]`. |
 | Component and event resolution | The per-event URL is authoritative; body fields must match it when present. A failed lookup produces the wire error codes `unknown_component` / `unknown_event` (protocol constants from the 3.7 table, status 404), never a lookup of any user-defined name: there is no magic fallback component or handler to define. Custom not-found behavior hangs off the `on_event_error` hook or host middleware on the real URLs. | `Citry.get_component_by_class_id` resolves the class; wire names come from the handler metadata captured at class creation (plan WP7). |
-| Token verification and updates | Verify the signed State token (tampered 403, expired or rotated-out 409), rebuild State, apply `_model`-gated `updates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
+| Token verification and updates | Verify the signed State token (malformed 403, expired or rotated-out 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `updates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
 | Args validation | Validate the wire args payload against the handler's `data` schema with the 3.3 coercions; failures are per-field 422s, never host 500s. | The data-schema machinery (plan WP9) returns structured results that the error mapping consumes. |
 | Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
@@ -2602,9 +3687,10 @@ registry keyed by content type; user codecs ride
 
 | Codec | Content type | Status | What it does |
 |---|---|---|---|
-| JSON | `application/json` | v1 | The identity codec: the body already is the envelope. What the runtime sends by default. |
-| Form | `application/x-www-form-urlencoded` | v1 | Classic form posts: fields become the args payload; the reserved `_citry_state` / `_citry_instance` fields map into the envelope; schema coercion (3.3) turns the strings into typed values. |
-| Query | GET query string | v1 | Args ride as query parameters; the state token rides `_citry_state` only when the handler declares `state` (3.5). |
+| Envelope | `application/citry-events+json` | v1 | The identity codec: the body already is the envelope. What the runtime sends. The vendor media type is what distinguishes an envelope from flat JSON, so classification never depends on body shape (a user schema could legitimately declare fields named `v` or `calls`). The batch route takes only the envelope and accepts it under plain `application/json` too, since a batch body has no flat reading. |
+| Flat JSON | `application/json` | v1 | Flat handler fields as one JSON object (`POST {"email": "a@b.c"}`), per-event route only: what an external API client sends without knowing the protocol. Fields bind per 3.3's JSON rules (native types, strict); the reserved `_citry_state` / `_citry_instance` keys map into the envelope like the form codec's. |
+| Form | `application/x-www-form-urlencoded` | v1 | Classic form posts: fields become the args payload; the reserved `_citry_state` / `_citry_instance` fields map into the envelope; the source-aware binding rule (3.3) turns the strings into typed values, including `int` / `float` / `bool` fields. |
+| Query | GET query string | v1 | Args ride as query parameters, bound per the same source-aware rule (3.3); the state token rides `_citry_state` only when the handler declares `state` (3.5). Browser calls additionally reserve `_citry_protocol`, `_citry_id`, and JSON `_citry_capabilities` for the flattened envelope, plus `_citry_instance` and `_citry_epoch` for call metadata. |
 | Multipart | `multipart/form-data` | v1.x | File uploads: the envelope JSON rides as one part, each file as its own part, bound to `UploadedFile` fields ("Files, precisely" below). |
 | Msgpack | `application/msgpack` | candidate, unscheduled | A binary envelope for apps where payload size matters; would pair with symmetric response encoding negotiated via `Accept`. Open an issue when someone measures the need. |
 
@@ -2728,16 +3814,17 @@ commits.
 
 ### 6.4 postMessage (v1.x, the proof the transport boundary holds)
 
-Concrete consumer: sandboxed preview iframes (the planned Storybook
-extension and the docs site's live examples have no same-origin network
-path, no cookies, no CSRF token). The iframe runtime registers a
-postMessage transport; a small bridge on the embedding page forwards
-envelopes to its own HTTP transport, which has cookies and CSRF. No
-server-side work at all, and the envelope crosses two transports
-unchanged, which is the proof the transport abstraction is real (if the WS
-or postMessage transport ever requires changing the dispatcher signature or
-an envelope field, the abstraction is fake and gets redesigned, see
-section 15). The bridge is also a policy point: a preview host can
+Concrete consumer: sandboxed or cross-origin preview iframes where the
+planned Storybook adapter or docs-site live example cannot use a safe
+same-origin route or reverse proxy with ordinary cookies and CSRF. The iframe
+runtime registers a postMessage transport; a small bridge on the embedding
+page forwards envelopes to its own HTTP transport, which has cookies and
+CSRF. Same-origin and reverse-proxied previews use HTTP directly. No
+server-side work is required for the bridge, and the envelope crosses two
+transports unchanged, which is the proof the transport abstraction is real.
+If the WS or postMessage transport ever requires changing the dispatcher
+signature or an envelope field, the abstraction is fake and gets redesigned;
+see section 15. The bridge is also a policy point: a preview host can
 allowlist events by inspecting envelopes, possible precisely because the
 protocol is transparent JSON.
 
@@ -2785,10 +3872,11 @@ Rules, each closing a named prior-art hole:
   anything rendered into HTML. The docs lead with the symptom ("anything
   in State is visible in the page source"); the mitigations, in order: do
   not put secrets in State; keep an id in State and re-derive per call;
-  optional token encryption (v1.x, needs the `cryptography` package).
+  use server-side State storage when the values must not ride in the token.
 - Optional expiry via State meta (`_max_age`, a `timedelta`); expired or
-  rotated-out tokens answer `stale_state` (409), tampered or malformed
-  ones `invalid_state` (403), and both degrade per component, not per
+  rotated-out tokens answer `stale_state` (409), malformed ones
+  `invalid_state` (403; the split is payload well-formedness, per the
+  error-codes rule in 4.3), and both degrade per component, not per
   page.
 
 On each call the order is: verify token (cheapest rejection first), check
@@ -2843,6 +3931,20 @@ field, always.
   simplest examples to spell out the `_model` list, dragging an
   advanced, niche feature into the happy path.
 
+  The class descriptor in the events manifest carries `model` only when this
+  list narrows `_public`; omission therefore preserves the common all-public-
+  fields-writable case without repeating field names. `model: []` is not an
+  omission: it is the explicit capability for read-only public State. The
+  browser applies that gate before local mutation or pending-queue insertion,
+  and refreshes the gate when a later manifest updates a live class
+  descriptor. If the refreshed contract removes a field that was already
+  pending, the runtime drops that pending update with a warning; a failed
+  in-flight call likewise cannot requeue a field the current descriptor no
+  longer permits. This prevents deploy skew from making every later event
+  retry an update the server must reject. The client gate is a convenience and
+  early diagnostic, not a replacement for the server's authoritative update
+  validation.
+
 The security doctrine, stated as the symptom: **every State field is
 client input, exactly like a form field.** State exists for exactly two
 purposes, and each carries the same obligations as its plain-HTTP
@@ -2855,12 +3957,13 @@ worse than admitting it is input, because a false sense of security is
 the more dangerous failure. A handler must authorize what it does with
 state values the same way it authorizes its args (the audited
 production handlers already behave this way: fetch by id, then check
-permissions). The tool for keeping a value out of the client's reach
-entirely is omission from `_public`. A non-public field is a full
-member of State (declared, typed, rebuilt on every call, readable and
-writable in handlers), but it rides only inside the opaque token, is
-absent from the client-side values map, and can never be read or
-written by templates, bindings, or `$state`.
+permissions). Omitting a field from `_public` keeps it out of bindings and
+`$state`, but not out of the browser: with signed storage it still rides inside
+the readable token. A non-public field is a full member of State (declared,
+typed, rebuilt on every call, readable and writable in handlers), but it is
+absent from the client-side values map and cannot be read or written by
+templates, bindings, or `$state`. Use `_storage = "server"` when the State
+values themselves must not ride through the browser.
 
 Two properties of the omission model, stated because they matter:
 
@@ -2894,6 +3997,11 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
 - **Universal floor, all hosts**: POST by default, the `X-Citry-Events: 1`
   header required (unattachable by HTML forms, forces a CORS preflight
   cross-origin), and `Origin` / `Sec-Fetch-Site` same-origin verification.
+  The header requirement covers every JSON-bodied call: the envelope's
+  `application/citry-events+json` vendor type, any other `+json` suffix
+  type, and flat `application/json` alike (so an external API client
+  sends one static header); a form post without the header takes the
+  compat path (6.2).
 - **Host token by default.** Under Django the routes are plain views, so
   Django's CSRF middleware applies untouched; the client runtime
   auto-attaches the token (by default it reads Django's `csrftoken`
@@ -2910,6 +4018,21 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   declares `state` in its signature (3.5), so read-only GET URLs stay
   pasteable and token-free (the docs note URL length limits and the
   id-plus-reload fix for large-State components).
+  The per-handler descriptor carries `state: true` only when the handler
+  declares the State injectable, so the browser can enforce that URL rule.
+  The built-in browser transport selects GET for a single call to a
+  GET-declared handler. It serializes scalar string, boolean, and finite
+  number args, and non-empty arrays of those values as repeated query
+  parameters; a value with no unambiguous flat-query representation rejects
+  locally with `transport_error`. Browser calls also carry `_citry_protocol`,
+  `_citry_id`, and JSON `_citry_capabilities`, preserving version rejection,
+  response correlation, and morph/action negotiation from the ordinary
+  envelope. `_citry_instance` and `_citry_epoch` preserve call metadata;
+  `_citry_state` appears only for a state-declaring handler. The query codec
+  removes those reserved fields before input validation. A GET call never flushes or consumes pending
+  two-way writes: those remain queued for the next mutating call. A mixed or
+  multi-call envelope still uses the POST-only batch endpoint, including when
+  one item names a GET-declared handler.
 - **Guards inherit**: engine-wide default, per-component `_guard`,
   per-handler `@event(guard=...)`, most specific wins. A guard is
   `callable(events)` that raises `EventError(status=403)` to deny, reading
@@ -2964,8 +4087,8 @@ nothing and just return data.
 Storing raw template source server-side to replay fills (the
 livecomponents mechanism) is rejected outright; citry renders from
 component entry points, never from captured template text, and never
-caches serialized HTML (the established cache rule: cache objects, not
-strings).
+caches serialized HTML. Cross-request output caching uses the detached,
+validated replay artifact designed in [`caching.md`](caching.md).
 
 ### 7.6 The prior-art CVE record, and what it dictates
 
@@ -3048,19 +4171,106 @@ hand-declared ninja Schemas):
   are already API-reference quality per the house docstring rule).
 - The same walk feeds the class descriptors in the events manifest, a
   future TypeScript codegen in `packages/js/citry-client`, and the planned
-  Storybook extension. When the component introspection API
-  ([#26](https://github.com/citry-dev/citry/issues/26)) lands, the events
-  manifest becomes one of its views rather than a duplicate.
+  Storybook extension. The component introspection API
+  ([#26](https://github.com/citry-dev/citry/issues/26)) now exposes a separate,
+  versioned and allowlisted projection of the same handler metadata. The
+  manifest remains the browser runtime protocol; component introspection is a
+  tooling contract and does not serialize the manifest.
+
+### 9.1 Component introspection metadata
+
+The Events extension implements component introspection version 1. A caller
+requests it explicitly with `include_extensions=("events",)`. The `data`
+object under the component's `events` extension entry has this exact top-level
+shape:
+
+```json
+{
+  "handlers": [
+    {
+      "name": "save",
+      "methods": ["POST"],
+      "request_schema": {
+        "kind": "fields",
+        "import_path": "shop.events.SaveIn",
+        "fields": [
+          {
+            "name": "title",
+            "required": true,
+            "type_display": "str",
+            "type_fidelity": "normalized",
+            "description": null
+          }
+        ]
+      },
+      "return_type_display": "dict[str, int]",
+      "return_type_fidelity": "normalized",
+      "description": "Save one item.",
+      "debounce": null,
+      "throttle": null
+    }
+  ]
+}
+```
+
+Every handler object always contains exactly these keys:
+
+- `name` is the public wire name, including a name supplied by
+  `@event(name=...)`.
+- `methods` contains the resolved uppercase HTTP methods. Their configured
+  order is preserved.
+- `request_schema` is `null` when the handler declares no `data` parameter.
+  Otherwise it is an object with exactly `kind`, `import_path`, and `fields`.
+  `import_path` is the safely copied schema-class import path when one is
+  available, or `null`. A recognized runtime data schema has `kind: "fields"`;
+  its fields remain in the schema adapter's declaration order. A schema the
+  adapter cannot describe has `kind: "opaque"` and an empty `fields` array. An
+  empty recognized schema has `kind: "fields"` and an empty array, so consumers
+  can distinguish the two.
+- Each request field contains exactly `name`, `required`, `type_display`,
+  `type_fidelity`, and `description`. Type display uses the safe normalized
+  formatter from component introspection. Fidelity is `"normalized"` when
+  display text is present and `"unavailable"` when it is not. Request field
+  defaults and default factories are never included, even when the caller
+  requests component default values.
+- `return_type_display` and `return_type_fidelity` follow the same normalized
+  or unavailable pair. The inspector reads the stored return annotation
+  without resolving it: string annotations are copied, and unsupported values
+  become `null` plus `"unavailable"`. It does not call `get_type_hints()`,
+  import an annotation target, or call an arbitrary object's `repr()` or
+  `str()`.
+- `description` is the cleaned handler docstring or `null`.
+- `debounce` and `throttle` are the resolved client timing values in
+  milliseconds or `null`. A value must be a non-negative JavaScript-safe
+  integer, at most `2**53 - 1`; larger values are invalid at declaration time.
+
+The `handlers` array is sorted lexically by public wire `name`, independent of
+Python method declaration order. This makes the versioned JSON stable while
+preserving the configured method order inside each handler.
+
+An absent effective `Events` declaration, including an explicit
+`Events = None`, makes the inspector return `None`; the component then has no
+`events` entry. An explicit or inherited effective `Events` class with no
+handlers returns `{ "handlers": [] }`. The catalog's `extension_versions`
+still records Events version 1 whenever the caller requests the installed
+inspector, including when every inspected component returns `None`.
+
+Version 1 deliberately excludes Python method names, injectable parameter
+names, handler functions, `latest_wins`, `bundle`, State and raw State values,
+topics, guards, context and CSRF callables, and all other executable or private
+configuration. OpenAPI and the runtime manifest may expose different
+allowlisted projections for their own purposes; those do not silently expand
+this introspection version.
 
 ---
 
 ## 10. Migration
 
-The parity matrix (every capability each prior tool has, and this
-design's answer, with delivery tags) is an implementation-time artifact:
-it is produced and maintained with the migration guide pages (plan
-WP20), one page per source framework with before/after code, and serves
-as the acceptance checklist for v1. The summary argument per audience:
+The maintained
+[`events-migration-parity.md`](../../docs_site/content/guides/events-migration-parity.md)
+matrix records every audited prior-tool capability, this design's answer, and
+its delivery tag. It links the four source-framework migration pages and
+serves as the acceptance checklist for v1. The summary argument per audience:
 
 **From `Component.View`** (django-components): any number of named actions
 instead of one method per verb; the `?type=` and verb multiplexing die (21
@@ -3071,50 +4281,58 @@ server-expressed `Redirect`. `get_component_url`'s powers return as
 `events.url(name, query=..., fragment=...)`. For verb-shaped code, a
 compat shim ships: `class Events(ViewEvents):` reserves `get`/`post`/...
 handler names and adds one extra route (`ext/events/e/{class_id}`
-dispatching by HTTP method), about 40 lines on top of Events, so the old
-form-submission example ports with its handler body unchanged (verb
-handlers omit `state`, so their calls carry no token). The shim's
-docstring says to name
-events after actions once a component has more than one mutation.
+dispatching by HTTP method). Only the verb-shaped route maps mechanically:
+old handlers must replace host request parsing and response construction with
+typed `data`, the neutral `request`, and Events return values. The compatibility
+route does not require a State token, and verb handlers cannot inject `state`;
+a named runtime call to a verb on a State-declaring component may still carry
+the component token. The shim's docstring says to name events after actions
+once a component has more than one mutation.
 
 **From django-unicorn**: the template grammar carries over nearly verbatim
 (`unicorn:click` -> `@c-click`, `unicorn:model.debounce-300` ->
 `:c-query.debounce.300ms="refresh"`, a two-way binding naming its flush
 handler); the class attributes that were
 the wire state become a declared `State`; action methods move under
-`Events`, and where unicorn re-rendered implicitly, the handler ends with
-`return state.render()` (the recipe written once). Gone by design:
-`javascript_exclude` hygiene (nothing round-trips unless declared in
-State), property-setter expressions on the wire (a one-line handler
-replaces them), and the per-keystroke full-state POST. Django-forms
-validation maps to `EventError("Please fix the errors.", fields=form.errors)`; a `form_class` sugar
-is a v1.x nicety.
+`Events`, and where unicorn re-rendered implicitly, the handler returns a
+fresh component or explicit `Render`. Gone by design: implicit public class
+attributes and `javascript_exclude` as the visibility model (only declared
+State round-trips, and `_public` narrows its browser projection), plus
+property-setter expressions on the wire (a one-line handler replaces them).
+A two-way binding sends an explicit field delta alongside the current signed
+token, which contains the full declared State; this is a clearer mutation
+contract, not a claim that each request omits the rest of State. Django-forms
+validation maps to `EventError` after normalizing each field's `ErrorList` to
+one string message; a `form_class` sugar is a v1.x nicety.
 
 **From Tetra**: `public(0)` attributes become State fields; `@public`
 methods become `Events` methods; `await this.method()` becomes
 `await sendEvent(...)`; encrypted pickled state becomes the signed JSON
 State; `@public.debounce(200)` becomes `@event(debounce=200)`. Not
-carried: Alpine as the mandatory client model, and the open
-`self.client.*` callback channel (the closed action vocabulary plus
-`onEvent` covers the legitimate uses; Tetra itself had to whitelist that
-channel down after shipping it open).
+carried: making generated Alpine data the component state and identity model,
+and the open `self.client.*` callback channel. Citry still supplies pinned
+stock Alpine for expressions, directives, reactivity, and morphing, while its
+graph owns component and slot scope. The closed action vocabulary plus
+`onEvent` covers the legitimate callback uses; Tetra itself had to whitelist
+that channel down after shipping it open.
 
 **From livecomponents**: `@command` methods with `CallContext` become
-`Events` methods; `call_context.state` becomes the `state` injectable
-(still a
-declared dataclass, now signed into the page instead of pickled into
-Redis); the execution-results algebra maps one-to-one onto returned
-actions (`ComponentDirty` -> `return state.render()`, parent updates
--> `Render(..., target=...)` or `Dispatch` + `onEvent`, `RedirectPage` ->
-`Redirect`); `parent_id` threading disappears, and Redis with its
-TTL expiry storms is replaced by `Citry.cache` when server-held state is
-kept at all. Migration is deliberately two-step, and the guide leads
-with it: step one is a mechanical per-component port that keeps
-server-held behavior via the opt-in `_storage = "server"` (same runtime
-behavior, different library); step two, per component and optional,
-drops the server store for the signed token. Nothing is given up at
-step one, and components whose State cannot fit a signed token simply
-stay on the server store.
+`Events` methods; `call_context.state` becomes the `state` injectable, backed
+by a declared strict-JSON State. Common execution results become explicit
+return values (`ComponentDirty` becomes a fresh component or `Render`, an
+explicit parent-region update becomes `Render(..., target=...)` or `Dispatch`
++ `onEvent`, and `RedirectPage` becomes `Redirect`). This is not a one-to-one
+algebra: implicit dirty propagation, `find_one`/ancestor command navigation,
+and history actions need deliberate replacements; history navigation uses
+`PushUrl` or `ReplaceUrl`. `parent_id` threading disappears, and Redis with its TTL
+expiry storms can be replaced by `Citry.cache` when server-held State is kept.
+Migration is deliberately two-step, and the guide leads with it. Step one
+preserves the server-held storage policy via `_storage = "server"`, but the
+port still changes serialization to strict JSON, makes results explicit, and
+requires `_public` to omit server-only values from the browser projection.
+Step two, per component and optional, drops the server store for the signed
+token. Components whose State cannot fit a signed token can stay on the server
+store.
 
 **The Component.Ninja idea** ships as a property of every handler: typed
 args, typed JSON returns, per-operation URLs, 422 semantics, and the
@@ -3135,9 +4353,9 @@ pattern: JS pre-uploads the file to a temporary endpoint or an S3
 presigned URL, then the action references the stored stub. The pattern
 exists for upload progress bars, validation before submit,
 direct-to-storage offload, and keeping files out of re-render cycles.
-The shipped design is single-request multipart (v1.x), which covers the
-form-submit case; staged uploads return to the table only if
-direct-to-storage demand shows.
+The planned v1.x design is single-request multipart, which covers the
+form-submit case; staged uploads return to the table only if direct-to-storage
+demand shows.
 
 ---
 
@@ -3198,7 +4416,7 @@ adapter today).
    instantiate.
 5. **Two client-runtime extension points in `citry.js`** (owned by the dependencies
    extension, coordinated, not forked): `Citry.manager.decorateContext(fn)`
-   (about ten lines; any extension can enrich the `$onComponent` payload)
+   (about ten lines; any extension can enrich the `$component` payload)
    and cleanup-function returns from callbacks (teardown, 5.2). The
    decorator contract, pinned here so implementation does not invent it:
    `fn(ctx)` receives the payload object at flush time, just before the
@@ -3234,7 +4452,7 @@ and set a response header.
 1. **Protocol package first**: spec, schemas, fixtures merged before server
    code.
 2. **The morph spike** (gate for all client work): a re-rendered fragment
-   with a pinned instance id morphs over the live DOM; `$onComponent`
+   with a pinned instance id morphs over the live DOM; `$component`
    re-fires exactly once, after teardown, with the new `js_data` payload;
    new CSS variables take effect on the morphed roots; assets dedupe; a
    focused two-way-bound control keeps value and caret through a
@@ -3263,7 +4481,8 @@ and set a response header.
    the Alpine scope, form-fields-into-data collection, `@c-poll`;
    per-trigger
    `data-citry-busy`), fetch transport with CSRF
-   autowiring, epoch handling, morph with focused-input protection,
+   autowiring, the event queue (5.6), epoch handling, morph with keyed
+   linking and the explicit preservation rules (5.3, 5.5),
    `sendEvent`/`onEvent`, bootstrap stub, DOM CustomEvents. Exit: the three
    pitch examples pass e2e under WSGI and ASGI at (or under) the line
    counts shown in section 2, and the e2e suite includes one element
@@ -3274,22 +4493,25 @@ and set a response header.
    e2e tests.
 
 **v1.x, fast follows in value order**: multipart uploads; the postMessage
-transport and bridge (unblocks Storybook previews); served
-`openapi.json`; Django `form_class` sugar; `PushUrl` / `Download` actions;
-optional token encryption; node-level binding rewrite replacing the textual one
+transport and bridge (unblocks Events-backed Storybook previews that cannot
+use a same-origin route or proxy); served
+`openapi.json`; Django `form_class` sugar; optional token encryption;
+node-level binding rewrite replacing the textual one
 if the textual pass proves insufficient.
 
 **The acceptance dogfood, once v1 lands**: fork the production
 application audited in 1.4 and rewrite its interactive components in
 citry Events with the Alpine runtime. It is the ready-made corpus for
-falsifiers 15.2, 15.3, and 15.8 (36 real components, known behavior to
-reproduce, known pain points that must disappear), and the port doubles
-as the migration guide's worked example.
+falsifiers 15.2, 15.3, and 15.8 and for the post-v1 half of 15.11
+(head-of-line blocking, the queue's dogfood check): 36 real
+components, known behavior to reproduce, known pain points that must
+disappear. The port doubles as the migration guide's worked example.
 
 **v2, each its own decision point**: WebSocket transport and server push
 (signed topics, `push()`); client-side same-tick batching; SSE evaluated
-against WS; the Alpine scoped-slot milestone (its parse-time hook needs
-are decided there, per the roadmap).
+against WS. Alpine scoped-slot ownership is no longer a v2 Events milestone:
+the graph-first client runtime landed source-owned supplied fills and
+receiver-owned fallback content in Alpine plan A7.
 
 ---
 
@@ -3387,7 +4609,10 @@ design-panel decisions argued the other way:
    register, and the setup example is just the mount. Since users never
    instantiate the extension, its config splits along one line:
    component-overridable config rides `extensions_defaults["events"]` and
-   the nested class (guard, `_context`, envelope size caps), while engine-wide
+   the nested class (guard, `_context`), joined by the envelope size cap
+   as an engine-wide-only entry (it guards the transport before any
+   component resolves, so it has no per-component override), while
+   engine-wide
    registries and secrets become settings fields (`secret`,
    `event_result_resolvers`, `event_payload_codecs`). An alternative was
    considered and
@@ -3408,7 +4633,7 @@ design-panel decisions argued the other way:
    looked exactly like an event binding while meaning something entirely
    different, `@c-` had been established as the event prefix, and the
    name collided with the shipped `c-bind` attribute spread
-   ([`html_attrs.md`](html_attrs.md)). (Process note: every draft
+   ([`template_html_attrs.md`](template_html_attrs.md)). (Process note: every draft
    inherited the unicorn/Livewire "model binding" frame, binding as a
    member of the event family, and the adversarial review scrutinized
    the event prefix without re-deriving the binding taxonomy against
@@ -3561,7 +4786,7 @@ adversarial judging:
    gate.
 5. **No new `$`-source rewrites.** The rewrite mechanism cannot bind
    instances and has known substring sharp edges; the capability ships as
-   `$onComponent` payload members.
+   `$component` payload members.
 6. **State delivery via the inert events manifest tag**, not a valued
    root-element attribute: the manifest reuses the shipped dependencies
    pattern with zero core serialization change.
@@ -3584,6 +4809,137 @@ bindings (unauditable, and they mix render-time and event-time contexts
 in one syntax); an open custom-action vocabulary (the `event` action plus
 component JS covers the need; Tetra's open channel is the cautionary
 tale).
+
+### 14.3 The client-model round (2026-07-15)
+
+Decided by the maintainer against the three decision-input documents
+and the keyed-morph spike in [`events_research/`](events_research/),
+which carry the full option matrices and scenario walkthroughs;
+recorded here with the alternatives and why they lost.
+
+1. **A `#c-*` meta-attribute channel joins the attribute language.**
+   The channel test that settled the vocabulary (14.1.9 and the 16.2
+   record) settled this too: `@c-` names browser events, `:c-` names
+   State fields, bare `c-` names render-time data, and node identity
+   and morph behavior are none of those, so they get their own prefix
+   rather than overloading one. `#c-*` is reserved for keying and
+   morphing features only, never event call-site configuration. First
+   members: `#c-key` (expression-valued, server-evaluated) and
+   `#c-ignore` (bare subtree marker); the per-attribute preservation
+   tier is a recorded v2 expectation (16.1). Alternatives rejected:
+   reserving the plain `key` attribute or a `key` kwarg (steals
+   ordinary names; `key` already has HTML rendering semantics and any
+   component may legitimately want a `key` input), and a `c-bind`
+   escape hatch (nothing needs escaping once the channel exists). The
+   channel is real parser work (grammar, AST, compiler, the five
+   `LangImpl` surfaces, PyO3, the `.pyi` stub), planned as WP21 with
+   the client wave depending on it (`events_plan.md`).
+2. **Nested anchor continuity: reset baseline plus keyed linking
+   (options A plus C), with the horizon cut.** Every uncorrelated
+   instance id follows reset: fresh ids mint fresh anchors, departed
+   anchors retire; `#c-key` is the only linking mechanism,
+   author-asserted identity exactly where Livewire's `wire:key`,
+   LiveView's `:id`, and React's keys all converged. Option B
+   (positional matching) rejected as a default: a guessed link can
+   send one entity's unsent draft into another entity's State, and
+   misattribution is the only outcome on the board worse than loss
+   (React's decade of unkeyed-list state bleed, with the stakes raised
+   because citry's pending writes reach the server). Option D
+   (Livewire-style islands) rejected: it reverses the landed server
+   model (a parent's render carries its children, 5.3) and
+   reintroduces the stale-props disease that model exists to avoid.
+   The horizon cut (drop a linked child's in-flight instance-mutating
+   actions at link time) chosen over last-writer-wins: a late
+   pre-parent render would resurrect a replaced child's state; both
+   are client-internal, so the choice is revisitable on dogfood
+   evidence. Key emission pinned by the keyed-morph spike's verdict:
+   one composite data attribute in the class-id-scoped form (morph key
+   matching proved sibling-window scoped, F-KM-1), with the
+   id-to-anchor normalized form proven feasible and recorded as the
+   fallback (F-KM-6). Inputs:
+   [`events_research/analysis-nested-anchor-continuity.md`](events_research/analysis-nested-anchor-continuity.md),
+   [`alpinejs/spike-keyed-morph.md`](alpinejs/spike-keyed-morph.md).
+3. **Targeted renders: remove-and-replace (option A).** A render
+   addressed to anything but the caller retires the region's anchors
+   and mints fresh ones; continuity belongs to correlated self-renders
+   and keyed matches alone (5.5). Option B (widening the epoch drop
+   rule to every render action of a stale response) rejected as
+   unnecessary once the queue exists: same-caller repeat-fire
+   serializes client-side, so the stale overwrite the widening
+   targeted cannot occur for queued sends, and the residual
+   `wait: false` ordering is a documented author trade (5.5). The 4.2
+   drop set therefore stays narrow (instance-mutating actions only),
+   and 5.2's drop-event row was aligned to it. Option C
+   (adopt-in-place against the target's anchor) rejected: two rules
+   where A has one, degenerate under multi-match targets, and it is
+   the v2 anchor-update question (server push, 16.1) arriving early
+   for the rarest consumer. Option D (server-declared region identity)
+   rejected: a wire change for a race the surveyed field leaves
+   unguarded at apply time by default. Races to one target from
+   unrelated anchors
+   are userland (render truth, not deltas; dispatch-and-refresh
+   for contested regions), with helper utilities a possible later
+   addition (16.1); multi-target inserts are one shared instance
+   mirrored per match (5.5). Input:
+   [`events_research/analysis-target-other-renders.md`](events_research/analysis-target-other-renders.md).
+4. **The event queue (5.6), superseding the research's drop-only
+   recommendation.** The concurrency research (R2) recommended
+   drop-plus-surface alone for the parent-child overlap (with
+   same-anchor overlap serialized per anchor with merge), on the
+   ground that no surveyed
+   framework derives a serialization scope from a component tree.
+   Overridden: the tree-scoped race is a citry-specific consequence of
+   fresh ids plus whole-subtree re-renders, the field's convergent
+   shape wherever serialization exists is "serialize within one
+   identity unit, siblings parallel, nothing dropped", and the
+   maintainers of the largest queue-owning system state serialization
+   as the only safe default for UI-affecting state (Livewire's
+   `#[Async]` warning). Drop-plus-surface is recorded as the
+   fallback, split by evidence window in falsifier 15.11: applier
+   evidence in the WP16.3 harness would put it in v1, dogfood evidence
+   in a v1.x.
+   Newest-wins abort rejected as a default (a killed save is data loss
+   from the user's viewpoint; Unpoly's documented sharp edge); the
+   per-handler `@event` knobs carry the variance instead (3.5):
+   `latest_wins` as the opt-in, `bundle=False` as the opt-out from
+   default-on bundling.
+   **Amended 2026-07-17: the queue is an explicit dependency DAG in
+   v1**, superseding the containment-chain framing this decision was
+   first drafted in. Chains model overlapping scopes awkwardly: a
+   second event dispatched from an anchor inside an in-flight event's
+   scope would need a second stored chain, where the DAG expresses
+   the relation as one dependency edge; and the DAG's roots-first
+   structure (dispatch whatever holds no unsettled edges) is the
+   natural organization for the same semantics. The observable rules
+   are those of the original decision: overlapping events apply in
+   enqueue order, independent events run in parallel (5.6, the
+   normative statement). Send-versus-apply
+   pipelining stays a recorded v2 candidate (16.1). Input:
+   [`events_research/research-rerender-preservation-and-concurrency.md`](events_research/research-rerender-preservation-and-concurrency.md).
+5. **Preservation: server wins by default, deviations explicit, focus
+   is not a signal.** R1's mechanism stack ratified as one unit (keys,
+   the subtree marker, the updates piggyback as the lifted-input-state
+   story, busy plus `$loading` as disable-while-loading), with the
+   focused-element rule reframed out of silent-default status:
+   protection derives from a pending unsent write, never from focus,
+   the construction that sits between the two recorded field failures
+   (morphdom 135, no protection; Turbo 1194, blanket protection
+   fighting a legitimate clear). The rule and its acceptance tests are
+   5.5's preservation block.
+6. **Surfacing: R3 ratified in full.** Every drop fires the one drop
+   event with a `reason` field (5.2); every promise settles; the toast
+   pattern stays two-tier (per-call rejection, global
+   `citry:events:error`). citry never cancels server work: the drop,
+   where one exists, is of client application only, and every call
+   settles on the client in R3's terms, a resolution, a structured
+   rejection, or a drop that still resolves its `data` (the settle
+   table, 5.2). Choosing between viable calls is never a default:
+   newest-wins abort is rejected, and supersession exists solely as
+   the `@event(latest_wins=True)` opt-in (3.5). The two default ways a
+   call ends early are not such choices: the dequeue-time cancel of a
+   call whose dispatching element died (never sent, 5.6) and the
+   bounded timeout (the client stops waiting; the server still runs,
+   5.6).
 
 ---
 
@@ -3637,6 +4993,36 @@ Concrete outcomes that would prove this design wrong, checkable early:
     implement the protocol from the fixtures without consulting Python
     semantics. Consequence: strip the offending fields into
     binding-private extensions and re-cut the schemas.
+11. **The dependency-DAG queue proves unworkable** (5.6), with two
+    evidence
+    windows and a consequence per window. Before v1, in the WP16.3
+    harness: settled-means-applied proves undeliverable in the
+    applier. Consequence: v1 ships the recorded fallback of 5.6
+    (drop-plus-surface for the parent-child overlap, same-anchor
+    sends still serialized per anchor, per the concurrency
+    research's R2) behind the
+    same drop event, and the queue returns as a v2 design. After v1,
+    in the dogfood port (section 13): head-of-line blocking that
+    `latest_wins`, `bundle=False`, and `wait: false` cannot relieve.
+    Consequence: a v1.x release ships the same fallback and the queue
+    is redesigned for v2; the drop event and the settled promises
+    hold under both rules, so the swap narrows behavior without
+    breaking the surfacing contract.
+12. **`#c-key` emission cannot stay inside WP21's
+    compiler-to-serializer path**: forwarding a component-tag key onto
+    the child's root markers turns out to demand a core serialization
+    redesign. Consequence: re-price keyed linking against the recorded
+    id-to-anchor normalized form (the keyed-morph spike's F-KM-6)
+    before the client wave hardens. Here the fallback does a
+    different job than the one the spike priced: it removes the
+    stamping path entirely. The child's roots already carry the
+    per-render component id (`data-cid-*`), the authored key rides
+    the child's events-manifest entry instead of a stamped attribute,
+    and a per-call key callback maps both sides through the
+    component-id-to-anchor index. The spike proved the callback
+    feasible (and hot, F-KM-8) but never priced the manifest
+    carriage; the re-pricing weighs both against the serialization
+    redesign.
 
 ---
 
@@ -3663,8 +5049,9 @@ their critique records shaped the design.
   anything is built; open a feature issue once events ship. Other
   transport candidates, considered, with their status: WebSocket (v2,
   6.3), SSE (evaluated against WS at v2, section 8), postMessage (v1.x,
-  the Storybook route, 6.4), and in-process (already free: the
-  dispatcher API itself is the transport that tests and conformance use).
+  the cross-origin or sandboxed Storybook route, 6.4), and in-process
+  (already free: the dispatcher API itself is the transport that tests and
+  conformance use).
   Nothing else earns a seat yet.
 - **A `$forwardEvent(name, handler)` listen-and-forward magic.** Kept out
   of v1 on the fewest-globals principle: it is the one-line
@@ -3695,54 +5082,51 @@ their critique records shaped the design.
     deferred component, rather than detecting content-generating
     directives per template (spreads and user JS can add Alpine
     behavior the classifier would miss).
-- **The client props API for named client components** (5.5 "props down,
-  events up"): declaration shape, validation timing, and what is
-  lifted from alpine-composition minus its Vue-reactivity layer.
-  Recorded requirements: explicit per-child contract (documented,
-  required-checked, defaulted), no implicit inheritance across depth
-  (isolation-by-default for named client components), per-sibling
-  inputs with
-  no shared keys (DOM containment is the identity), plain Alpine
-  reactivity only. Considered and rejected for this job: an
-  init-time event handshake (needs a pre-shared identity, which is
-  the drilling problem recursed, and unscoped events broadcast to
-  every sibling) and provide/inject (ambient by nature; per-instance
-  inputs with repeated children force per-child providers and
-  implicit deep inheritance).
+- **Client-side component instantiation.** Props down, events up, managed
+  lifecycle helpers, RootGroups, rootless ownership, slot-source projection,
+  and atomic graph plus Events adoption are landed. Native `x-for`, `x-if`,
+  and `x-teleport` still cannot clone a server-rendered client-active component:
+  rewriting `data-cid-*` attributes cannot mint independent registry,
+  lifecycle, State, timer, cap, and cleanup identity. A named client target or
+  browser blueprint is a separate protocol decision; see
+  [`alpinejs/a9_client_instantiation.md`](alpinejs/a9_client_instantiation.md).
 - **A constrained CSP mode** pairing Alpine's CSP build with
   argless-compiled-bindings usage (5.5 records the trade; the standard
   build needs `unsafe-eval` like Livewire).
 - **GET event caching**: `no-store` default now; `@event(cache=...)`
   recipes when the Cache extension lands.
-- **Anchor lifecycle for nested instances** (genuinely open). The
-  anchor model (5.5) is proven for a top-level instance re-rendering
-  itself. A citry instance rendered inside another instance's region gets
-  a fresh child component id inside the parent's fragment, but no
-  call-correlation id routes to the child, so matching the old child to
-  the new one to keep the child's anchor, epoch, and state across a parent
-  re-render is unresolved (it is kin to list identity and `c-key`, 5.3).
-  Reads already work (the innermost-last `$state` resolution, 5.5); only
-  the child anchor's continuity under a parent morph is open. Becomes
-  blocking before the WP16/WP17 client work (`events_plan.md`).
-- **A render addressed to a different element** (`target="#other"` or a
-  CSS selector; genuinely open). The model is proven for self-renders,
-  where the correlation id and the target agree. When a response
-  correlates to the caller's anchor but the DOM change lands on a
-  different region, it is unresolved which anchor's epoch guards the
-  render and whether the target region's anchor updates. Becomes blocking
-  before the WP16/WP17 client work.
 - **Anchor creation versus update for server push and host-inserted
   fragments** (create designed, update open). Minting a fresh anchor for
   an uncorrelated component id is designed and covers the initial page
   load and a plain fragment insert. The update case, where a push
   replaces an existing region and wants to keep that region's anchor
   without a correlation id, is unresolved; it is v2 scope (server push,
-  section 8).
-- **Confirming the `$state` inert-fallback against the real magics**
-  (designed, untested). The runtime treats `$state` on a marker-bearing
-  node whose id is momentarily unregistered mid-morph as an inert empty
-  read rather than a throw (5.3, 5.5); this needs confirming against the
-  real magics implementation when the WP15 client runtime lands.
+  section 8), and it is where adopt-in-place for targeted renders
+  (rejected for v1, 14.3.3) folds in, so the continuity upgrades get
+  designed once, with push updates, targeted adopt-in-place, and any
+  keying extensions as the consumers.
+- **Send-versus-apply pipelining** (v2 candidate, recorded by 14.3.4;
+  5.6's queue dispatches a dependent only after its predecessor's
+  actions have applied). The shape, named so a future design starts
+  from it: dispatch the next call while the previous result's actions
+  are still applying. Recorded, not designed; the queue's observable
+  semantics (5.6) are the compatibility bar.
+- **A per-attribute preservation tier** (v2 expectation, recorded by
+  14.3.1; `#c-ignore` is the v1 subtree tier, 5.3). Every long-lived
+  morph framework grew one after its subtree marker (LiveView's
+  `JS.ignore_attributes`, Turbo's `turbo:before-morph-attribute`,
+  Datastar's `data-preserve-attr`), because browser-owned attributes
+  like `open` on `<details>` keep getting stripped by faithful
+  patches. Expected demand, deliberately unbuilt; the `"ignore-self"`
+  marker value stays reserved alongside it (5.3).
+- **Queue helpers for target ordering across unrelated anchors**
+  (userland in v1,
+  14.3.3). The v1 answer to two unrelated callers racing one target
+  region is
+  the documented patterns (render truth, not deltas;
+  dispatch-and-refresh for contested regions, 5.5). If the dogfood
+  shows those patterns repeated verbatim, a packaged helper (a
+  target-scoped ordering utility) earns a design round.
 - **A devtools root-element attribute**: whether the events instance
   data should additionally ride a root-element
   attribute for devtools debuggability (deferred to client profiling; the
@@ -3770,6 +5154,13 @@ their critique records shaped the design.
 
 ### 16.2 Resolved, kept for the record
 
+- **The `$state` inert-fallback, confirmed against the real magics**
+  (resolved when the WP15 client runtime landed). The runtime treats
+  `$state` on a marker-bearing node whose id is momentarily
+  unregistered mid-morph as an inert empty read rather than a throw
+  (5.3, 5.5), and the boundary scope self-heals right before Alpine
+  initializes a root whose manifest arrived early (a head-placed
+  `<c-js />` exercises this); both are locked by the WP15 e2e suite.
 - **The pending-state, error-display, and server-event surfaces resolved
   into the Alpine layer** (the drafts' `@c-loading`, `@c-error`,
   `@c-on:`; resolution in 5.5, decision in 14.1.10; the critique record
@@ -3803,7 +5194,33 @@ their critique records shaped the design.
   manifest time, per-trigger `data-citry-busy` for pending UI, and
   error display as plain Alpine over `$error` (text-only by
   construction). The items that remained genuinely open from this round
-  (`$forwardEvent`, lazy scope activation, the client props API, the
-  `$loaded` signal, the CSP mode) live in 16.1.
+  (`$forwardEvent`, lazy scope activation, the `$loaded` signal, and the CSP
+  mode) live in 16.1. The landed client-boundary contract is normative in
+  [`alpinejs.md`](alpinejs.md).
 - **A `$loaded`-style readiness signal**: not ported (the manifest
   ordering, bootstrap queue, and lifecycle events cover its old job)
+- **Anchor lifecycle for nested instances** (resolved 2026-07-15 in
+  the client-model round; it stood here while the anchor model was
+  proven only for a top-level instance re-rendering itself). The
+  question: a citry instance rendered inside another instance's region
+  gets a fresh child component id inside the parent's fragment with no
+  correlation of its own, so nothing said which old child, if any, the
+  fresh id continues. The resolution is the uncorrelated-id lifecycle
+  (5.5): reset is the baseline for every uncorrelated id, `#c-key` is
+  the one linking mechanism (with the horizon cut), and the five
+  machinery requirements became normative scope for the client
+  applier work package (WP16.1). The decision
+  record with the rejected alternatives (positional matching, islands)
+  is 14.3.2; the inputs were
+  [`events_research/analysis-nested-anchor-continuity.md`](events_research/analysis-nested-anchor-continuity.md)
+  and the keyed-morph spike.
+- **A render addressed to a different element** (resolved 2026-07-15
+  in the client-model round; it stood here as two open halves: which
+  anchor's epoch guards a targeted render, and what happens to the
+  target region's client state). The resolution is remove-and-replace
+  (5.5): the target region's anchors retire, fresh manifest ids mint
+  (or keyed matches link), no epoch ties the apply to the target's
+  past, and same-caller ordering is answered by the event queue (5.6)
+  rather than by widening the epoch guard. The decision record with
+  the B, C, and D rejections is 14.3.3; the input was
+  [`events_research/analysis-target-other-renders.md`](events_research/analysis-target-other-renders.md).

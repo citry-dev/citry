@@ -1,10 +1,10 @@
 # Design: provide / inject and the `<c-provide>` component
 
-**Status (2026-06-10): built.** All phases are implemented: the
+**Status (2026-07-24): built.** All phases are implemented: the
 `CitryContext.provides` plumbing, the hand-over at component and slot
 boundaries, `Component.provide()`/`inject()`, the `<c-provide>` built-in with
-the `transparent` flag, lazy per-instance built-in registration, and the
-reserved-name guard. Tests in
+the `transparent` flag, `Component.deinject()` compound-scope boundaries,
+lazy per-instance built-in registration, and the reserved-name guard. Tests in
 [`tests/test_provide.py`](../../packages/py/citry/tests/test_provide.py).
 
 This document specifies how a component passes data to components rendered
@@ -14,10 +14,10 @@ the provide/inject feature (React's `ContextProvider`, Vue's
 `Component.provide()` / `Component.inject()` APIs, the `<c-provide>` built-in
 component, and how the data reaches slot content.
 
-It extends [`rendering.md`](rendering.md) (the three-phase pipeline and
-`CitryContext`), [`deferred_rendering.md`](deferred_rendering.md) (children
+It extends [`component_rendering.md`](component_rendering.md) (the three-phase pipeline and
+`CitryContext`), [`component_rendering_defer.md`](component_rendering_defer.md) (children
 render after their parents, which forces the snapshot rule in section 4.2
-here), and [`slots.md`](slots.md) (whose section 6 defers provide/inject to
+here), and [`component_slots.md`](component_slots.md) (whose section 6 defers provide/inject to
 this design). Operating rules are in [`/CLAUDE.md`](../../CLAUDE.md).
 
 Upstream references: the django-components implementation studied for this
@@ -27,8 +27,8 @@ design is [`_djc_reference/provide.py`](../../packages/py/citry/_djc_reference/p
 (the cache and reference-counting machinery), and
 [`_djc_reference/context.py`](../../packages/py/citry/_djc_reference/context.py)
 (the `_DJC_INJECT__` key pass-through). The behavioral contract is pinned by
-the captured DJC suite
-[`_djc_tests/test_templatetags_provide.py`](../../packages/py/citry/tests/_djc_tests/test_templatetags_provide.py),
+the upstream DJC suite
+[`test_templatetags_provide.py`](https://github.com/django-components/django-components/blob/5d4d4f5d13dd06c80ba389f30fc63fdbb71cda75/tests/test_templatetags_provide.py),
 including the slot tests from django-components PRs #778 and #786.
 
 ---
@@ -48,7 +48,7 @@ What already exists, verified on 2026-06-10:
 - **The README pins the syntax** (line 74): the provider-name attribute is
   **`key`**, and every other attribute is the provided data:
   `<c-provide key="theme" mode="dark">...</c-provide>`.
-- **[`citry_migration.md`](citry_migration.md)** plans `<c-provide>` as a
+- **[`migration_djc.md`](migration_djc.md)** plans `<c-provide>` as a
   built-in component in `citry/components/provide.py` (sections "Built-in
   components" and "Step 4").
 - **The runtime pieces are in place**: `CitryContext`
@@ -88,7 +88,7 @@ has to pick one:
   receiving component.
 
 For template *variables*, citry picks "written": a fill renders with the
-variables of the template that wrote it ([`slots.md`](slots.md) section 2).
+variables of the template that wrote it ([`component_slots.md`](component_slots.md) section 2).
 For provide/inject, citry picks **rendered**. This example (the shape of the
 DJC tests from PRs #778/#786) shows why:
 
@@ -110,19 +110,20 @@ asks for the theme it is rendered under" is the entire point of the pattern.
 So `inject` must see what is provided around the place the content lands,
 not only around the place it was written.
 
-Choosing "rendered" loses nothing from the "written" side. By the time
-content reaches a slot, providers have only ever been *added* around it,
-never removed: the content was picked up at the component call
+Choosing "rendered" keeps the provider state from the "written" side unless a
+component explicitly establishes a compound-scope boundary with
+`deinject()`. Normally, the content was picked up at the component call
 (`<c-provider>` above), the receiving component inherits everything provided
 around that call, and on the way to its `<c-slot>` it can only provide more.
 So rendering slot content with the provides of the slot site keeps everything
 that was provided where the content was written, plus whatever the receiving
-component added. And when both provide the same key, the rule from section 2
-already answers it: the closer provider wins.
+component added. A deliberate block makes one key appear missing below that
+component until a nearer provider restores it. When both provide the same key,
+the rule from section 2 already answers it: the closer provider wins.
 
 One more option that cannot work: walking up `Component.parent`. Those links
 follow where content was *written* (a component inside slot content gets the
-component that wrote it as its parent, see [`slots.md`](slots.md)), so
+component that wrote it as its parent, see [`component_slots.md`](component_slots.md)), so
 Provider above would never be on the button's parent chain.
 
 ## 4. How the data travels
@@ -130,10 +131,11 @@ Provider above would never be on the button's parent chain.
 ### 4.1 `CitryContext.provides`
 
 `CitryContext` gets a `provides` field next to `variables`/`extra`: a mapping
-from key to frozen payload. It is treated as read-only. A component that
-provides builds a **new** mapping with its additions instead of changing the
-one it received, so everyone already holding the old mapping is unaffected,
-and handing the mapping around is just sharing a reference (no copies).
+from key to frozen payload, plus private blocked markers that `inject()` treats
+as absent. It is treated as read-only. A component that provides or blocks
+builds a **new** mapping with its changes instead of changing the one it
+received, so everyone already holding the old mapping is unaffected, and
+handing the mapping around is just sharing a reference (no copies).
 Every place that builds a derived context passes it along:
 `ForNode.iter_bodies`, `_make_body_slot`, and `_render_one`.
 
@@ -141,7 +143,7 @@ Every place that builds a derived context passes it along:
 
 A child component renders *after* its parent has finished, through the
 render queue, when the parent's context is already gone. So, exactly like
-kwargs ([`deferred_rendering.md`](deferred_rendering.md) section 4.2), the
+kwargs ([`component_rendering_defer.md`](component_rendering_defer.md) section 4.2), the
 provides are read while the parent is still rendering: `ComponentNode.render`
 stores the current `context.provides` on the `DeferredComponent` (a shared
 reference, nothing is copied). When the queue renders the child, the child
@@ -197,7 +199,24 @@ only what was provided *above* the component, never the component's own
 `provide()` calls, and keeps working after the render finishes for as long
 as the component instance is kept (the data sits on a plain attribute).
 
-### 5.3 Scoping rules (the DJC contract)
+### 5.3 `Component.deinject(key, /)`
+
+Hides one inherited provide from this component's descendants. The current
+component can still inject the inherited payload because its own outgoing
+provide changes are never visible to itself. A nearer descendant can restore
+the key normally with `provide()`.
+
+Call this from `template_data` when a compound child ends the current ambient
+scope. For example, a Tab blocks its Tabs context before rendering user
+content. A nested Tab then fails until the user inserts a new Tabs root, whose
+`provide()` replaces the internal blocked marker.
+
+An empty payload cannot represent a block because `provide(key)` with no data
+is deliberately injectable. The runtime therefore stores a private `BLOCKED`
+marker in the outgoing provides mapping. `inject()` treats that marker exactly
+like an absent key, including default handling and close-name suggestions.
+
+### 5.4 Scoping rules (the DJC contract plus explicit boundaries)
 
 - Provided data is **not** added to template variables; components opt in
   via `inject`. (`test_provide_does_not_expose_kwargs_to_context`)
@@ -209,6 +228,8 @@ as the component instance is kept (the data sits on a plain attribute).
   (`test_provide_does_not_leak`)
 - Providing with no data fields yields an empty payload, which is still
   injectable. (`test_provide_empty`)
+- A blocked key appears missing below the blocking component until a nearer
+  provider restores it.
 
 ## 6. The `<c-provide>` built-in component
 
@@ -257,18 +278,17 @@ A `Component` subclass binds to one `Citry` instance when the class is
 defined, but the built-in must exist in every instance. Registering it
 eagerly inside `Citry.__init__` cannot work for the default instance: that
 instance is constructed while `citry/citry.py` is still importing, before
-`component.py` can be imported at all. So built-ins are created **lazily**,
-and the machinery lives on `ComponentRegistry`: on the registry's first
-component lookup (`get`/`has`/`all`) it calls a factory the owning `Citry`
-instance handed it at construction (`Citry._create_builtin_components`,
-whose function-local import is justified by this concrete cycle), which
-creates the subclasses bound to that instance. `clear()` resets the flag so
-a cleared registry re-creates them.
+`component.py` can be imported at all. So built-ins are created **lazily** by
+the private component registration state. On the engine's first component
+lookup (`get`/`has`/`components`) it calls
+`Citry._create_builtin_components`, whose function-local import is justified by
+this concrete cycle, and creates the subclasses bound to that instance.
+`clear()` resets the flag so a cleared engine re-creates them.
 
 The names `provide`, `js`, and `css` are **reserved**
 (`BUILTIN_COMPONENT_NAMES` in `component_registry.py`):
-`ComponentRegistry.register` rejects a user registration that would claim
-one of them (the README promises all three as built-in tags), raising
+`Citry.register` rejects a user registration that would claim one of them (the
+README promises all three as built-in tags), raising
 `AlreadyRegistered` with a message naming the built-in. Without the guard, a
 user class registered before the first lookup would silently take the
 built-in's place.
@@ -343,7 +363,7 @@ itself, so this is considered settled.
    elements rendered mid-render.
 3. **The built-in**: `components/provide.py`, the `transparent` flag, lazy
    per-instance registration, and the reserved-name guard.
-4. **Docs**: this document, the [`slots.md`](slots.md) section 6/12
+4. **Docs**: this document, the [`component_slots.md`](component_slots.md) section 6/12
    cross-references, README examples verified.
 
 Tests (in `tests/test_provide.py`), ported from the DJC suite plus

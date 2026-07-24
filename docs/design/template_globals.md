@@ -14,19 +14,19 @@ every component.
 
 This document covers what globals are, the two layers and their precedence, the
 Python API, and how each layer reaches every component at render time. It builds
-on [`rendering.md`](rendering.md) (the three-phase pipeline and `CitryContext`)
-and [`deferred_rendering.md`](deferred_rendering.md) (how children render).
+on [`component_rendering.md`](component_rendering.md) (the three-phase pipeline and `CitryContext`)
+and [`component_rendering_defer.md`](component_rendering_defer.md) (how children render).
 
 ## 1. Prior art
 
 - **django-components had `context_processors_data`** and citry dropped it (see
   the `util/context.py` row in
-  [`citry_migration.md`](citry_migration.md)). It auto-injected Django
+  [`migration_djc.md`](migration_djc.md)). It auto-injected Django
   context-processor output (`request`, `user`, ...) into every component
   template, but only when a request was present, which made it empty in tests
   and other non-request renders. Template globals are the citry replacement,
   bound to the engine instead of a request.
-- **`provide` / `inject`** ([`provide.md`](provide.md)) is a different feature:
+- **`provide` / `inject`** ([`component_provide.md`](component_provide.md)) is a different feature:
   it passes data *down* to descendants who opt in by calling `inject()`, and the
   data deliberately does **not** enter template variables. Globals do the
   opposite: they land directly in every component's template variables, no

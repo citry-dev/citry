@@ -17,8 +17,8 @@ user-facing feature: it is what makes the README's "Dynamic attributes" and
 of django-components' `{% html_attrs %}`.
 
 For the render model the new node plugs into see
-[`rendering.md`](rendering.md); for the constant-folding pass that must keep
-working see [`constness.md`](constness.md). For operating rules see
+[`component_rendering.md`](component_rendering.md); for the constant-folding pass that must keep
+working see [`component_constness.md`](component_constness.md). For operating rules see
 [`/CLAUDE.md`](../../CLAUDE.md).
 
 Upstream references: django-components
@@ -171,16 +171,34 @@ that sees the whole attribute set), so they ship together. Decisions:
    documented divergence from Vue (a later falsy dict entry removes an
    earlier class). Same author, deliberate choice, and parity makes the DJC
    test suite portable.
-4. **The parser stops rejecting same-name static + dynamic attributes**
-   (`parser.rs:1902`). With defined duplicate semantics the rejection loses
-   its purpose, and the README interlacing example must parse. The
-   control-flow attribute exclusivity check right below it
-   (`parser.rs:1935`) stays.
-5. **Component tags are out of scope.** Attributes on `<c-Comp>` are kwargs,
-   not HTML attributes; `c-bind` already spreads there and dict-update
-   (last-one-wins) semantics stay. If component attrs fallthrough (Vue's
-   `$attrs`) lands later, it reuses the merge model from this design at the
-   point where forwarded attrs meet the root element's own.
+4. **One explicit provider per logical attribute.** A static spelling and its
+   dynamic spelling (`id` and `c-id`) are both visible to the author, so writing
+   both is a parse error rather than a silent last-write-wins override. Plain
+   HTML `class` / `c-class` and `style` / `c-style` are the accumulating
+   exceptions because both contributions are preserved. `c-bind` remains
+   repeatable and may interlace with an explicit provider because a spread may
+   not contain that key at render time. The control-flow attribute exclusivity
+   rules remain separate.
+5. **Component tags are out of scope.** Ordinary attributes on `<c-Comp>` are
+   kwargs, not HTML attributes; explicit static/dynamic pairs are rejected,
+   while `c-bind` spreads keep source-ordered last-one-wins behavior.
+   Client relays (`$c-props`, Alpine event handlers, and Citry `@c-*`
+   handlers) follow the same explicit-provider rule; their `c-bind`
+   contributions remain source ordered. [`alpinejs.md`](alpinejs.md) is
+   normative for relay behavior. `x-show`,
+   `x-model`, `:class`, `x-transition`, `class`, and all other non-reserved
+   attrs stay kwargs. `:c-*` remains invalid on component tags and `#c-*`
+   keeps its parser-level contract. There is no automatic Vue-style
+   fallthrough: a component declares
+   an `attrs` mapping and explicitly applies `c-bind="attrs"` to the root or
+   nested element it chooses. If broader fallthrough ever lands, it reuses the
+   merge model from this design where forwarded attrs meet that element's own.
+   The built-in `<c-element>` is that element boundary already: although it
+   travels through `ComponentNode`, its `class`/`style` inputs retain and merge
+   all source-ordered contributions before the selected HTML tag is formatted.
+   In that target, `<c-element>` follows its selected HTML element and rejects
+   `$c-props`, while Alpine handlers and Citry event/State bindings use ordinary
+   HTML-element attribute resolution.
 6. **The helpers are public API.** `template_data()` authors building attr
    dicts by hand need the same normalization DJC exports
    (`merge_attributes` / `format_attributes`); citry exports its equivalents
@@ -266,9 +284,10 @@ one less transform). Property values may be `int` (rendered bare,
 
 Because `c-` is reserved for the framework, an attribute name that starts with
 `c-` is normally handled as a directive. To emit a *literal* `c-`-prefixed
-attribute, add one extra `c-` segment: the compiler always strips **exactly
-one** leading `c-`, and if what remains still starts with `c-`, it is a literal
-name rather than a directive (its value is still evaluated as usual).
+attribute, add one extra `c-` segment: the runtime attribute resolver always
+strips **exactly one** leading `c-`, and if what remains still starts with `c-`,
+it is a literal name rather than a directive (its value is still evaluated as
+usual).
 
 | Written | Rendered |
 |---|---|
@@ -292,7 +311,11 @@ For one element, attributes are collected **left to right in source order**:
    prefix-stripped key,
 3. a `c-bind` attribute contributes each entry of its evaluated value, which
    must be a `Mapping` (a non-mapping raises at render time, consistent with
-   the README's "c-bind spreads are checked at render").
+   the README's "c-bind spreads are checked at render"). Each key must be a
+   string satisfying the same attribute-name delimiters as the template
+   grammar; invalid runtime keys raise instead of being interpolated into
+   malformed markup. `format_attrs()` enforces the same rule for mappings
+   built directly in Python or rewritten by an extension hook.
 
 Resolution per key:
 
@@ -378,7 +401,7 @@ ElementAttrsNode(source, (start, end), (attr_nodes...), (used_vars...))
 - Const pass: `StaticHtmlAttr` and variable-free `ExprHtmlAttr` members are
   literal, same marking as `ComponentNode` applies (`nodes/__init__.py:601`);
   an `ElementAttrsNode` whose members are all literal renders to a constant
-  string and folds like any other literal part (constness.md). This keeps
+  string and folds like any other literal part (component_constness.md). This keeps
   `<div c-class="['a', 'b']">` (no variables) free after the first render.
 
 ### 5.3 Compiler change (high-risk area: compiler output format)
@@ -405,9 +428,10 @@ Cross-binding consistency audit (CLAUDE.md Mechanism 4):
 
 ### 5.4 Parser change
 
-Remove the same-name static/dynamic rejection at `parser.rs:1902` (the
-duplicate now has defined semantics). Keep the control-flow attribute group
-check (`parser.rs:1935`). Update the parser tests that lock the old error.
+Keep the same-name static/dynamic rejection as a generic one-explicit-provider
+check, with element `class`/`c-class` and `style`/`c-style` exceptions. Keep the
+control-flow attribute group check separate. Add parser tests for both source
+orders and for `c-bind` interlacing.
 
 ### 5.5 Extension hook: `on_attrs_resolved`
 
@@ -469,7 +493,7 @@ built); the README examples are the first three:
 | `<button c-disabled="is_loading">` (`is_loading=False`) | `<button>` |
 | `<div c-bind="{'class': 'btn', 'disabled': True, 'data-id': item.id}">` (`item.id=123`) | `<div class="btn" disabled data-id="123">` |
 | the interlacing example (section 4) | `<div class="default from-bind override" id="second">` |
-| `<form c-id="my_var" id="form">` (`my_var="dyn"`) | `<form id="form">` (source order decides; static vs dynamic makes no difference) |
+| `<form c-id="my_var" id="form">` (`my_var="dyn"`) | parse error (two explicit providers for `id`) |
 | `<div c-class="['btn', {'active': ok}]">` (`ok=False`) | `<div class="btn">` |
 | `<div c-style="{'color': 'red', 'width': False}">` | `<div style="color: red;">` |
 | `<div class="a" c-style="s" c-bind="extra">` (`s={'color': None}`, `extra={'style': 'color: blue'}`) | `<div class="a" style="color: blue;">` |
@@ -515,7 +539,7 @@ Phases 1 and 2 unblock the benchmark small-scenario port
   uses `c-bind="attrs" c-class="[btn_class, 'no-underline']"`, exercising
   phases 1-2. The large scenario's 47 `{% html_attrs %}` uses all map to
   this feature.
-- **Const folding** ([`constness.md`](constness.md)): literal-only
+- **Const folding** ([`component_constness.md`](component_constness.md)): literal-only
   `ElementAttrsNode`s fold; mixed ones fold their static members into the
   surrounding parts as today. No new pass needed.
 - **HTML serialization rules** (CLAUDE.md gotchas): the `key=""` -> boolean

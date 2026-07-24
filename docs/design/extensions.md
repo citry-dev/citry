@@ -1,6 +1,6 @@
 # Design: the extension (plugin) system
 
-**Status (2026-06-13): built, except the caching/short-circuit phase.** This
+**Status (2026-07-23): built, including the component caching short-circuit.** This
 document is the design for citry's extension/hook system, adapted from
 django-components and reshaped for citry's architecture (Citry-instance scoping,
 the `CitryRender` struct pipeline, no Django). The system (`Extension`,
@@ -9,11 +9,11 @@ the `On*Context` types, the lifecycle/registration/render/template/slot/JS/CSS
 hooks, the `emit` mechanism for extension-owned custom hooks,
 `on_render_context_merge`/`on_serialize`, and `Extension.urls`) is
 implemented; see the impl-log entries in
-[`citry_migration.md`](citry_migration.md). The caching/short-circuit phase
-(a future cache extension) is the main piece still deferred.
+[`migration_djc.md`](migration_djc.md). The Cache extension's replay format
+and `Component.Cache` path are specified in [`caching.md`](caching.md).
 
-For the broader migration context see [`citry_migration.md`](citry_migration.md).
-For the render model the render-hooks plug into see [`rendering.md`](rendering.md).
+For the broader migration context see [`migration_djc.md`](migration_djc.md).
+For the render model the render-hooks plug into see [`component_rendering.md`](component_rendering.md).
 For operating rules see [`/CLAUDE.md`](../../CLAUDE.md).
 
 Upstream references: django-components
@@ -59,16 +59,17 @@ In `packages/py/citry/_djc_reference/`:
   to split it is **django-components#1141 "[v2] Ideas", item R6** ("Elevate
   component caching to first-class lifecycle hooks, instead of overloading
   `on_component_input`"): `on_component_input` regains a single responsibility
-  (inspect/mutate inputs); a dedicated `on_component_cache` takes over
-  "compute key / decide whether to render" (explicit short-circuit); and
-  `on_component_cache_hit` fires on a short-circuited render so *other*
-  extensions can observe it (today they cannot). Leak lineage:
+  (inspect/mutate inputs); a dedicated cache decision takes over
+  "compute key / decide whether to render" (explicit short-circuit); and a
+  hit notification lets *other* extensions observe the short-circuit. Citry's
+  built-in Cache extension now owns the decision directly and emits only the
+  notify-only `on_component_cache_hit` custom hook. Leak lineage:
   django-components#1607 (leak found) -> #1648 (fix: bind per-render state to the
   component lifetime) -> #1649 (docs warning). Section 7.1 carries R6 into
   citry's extension-owned-hooks model.
 
-Places in citry where hooks will attach: `ComponentMeta.__new__`/`__del__`
-([`component.py:83`](../../packages/py/citry/citry/component.py), `:180`);
+Places in citry where hooks will attach: `ComponentMeta.__new__`
+([`component.py`](../../packages/py/citry/citry/component.py));
 `Citry.register`/`unregister` ([`citry.py:82`](../../packages/py/citry/citry/citry.py));
 `render_impl` ([`component_render.py:75`](../../packages/py/citry/citry/component_render.py));
 `_get_compiled_template`/`_compile_template` (`:185`,`:206`);
@@ -93,9 +94,11 @@ app.settings.extensions        # -> the immutable spec tuple (see 2.1)
 
 Every instance (including the default module-level `citry`) also carries the
 **built-in extensions**: a fixed set (`extension.py`'s `_builtin_extensions()`) the manager prepends
-to the user's spec, with their names reserved. The first built-in is the
-`dependencies` extension (see [`asset_loading.md`](asset_loading.md) section 7);
-this mirrors the registry's built-in components. Beyond the built-ins, the
+to the user's spec, with their names reserved. The built-ins are `cache`,
+`dependencies`, and `events`. The `cache` extension owns key and invalidation
+state plus the opt-in `Component.Cache` output-cache configuration;
+`dependencies` is described in [`asset_loading.md`](asset_loading.md) section 7.
+Beyond the built-ins, the
 default instance has no extensions; a user who wants more constructs their own
 `Citry(extensions=[...])` and assigns components to it
 (`class C(Component): citry = app`). Same test-isolation model as the registry.
@@ -135,14 +138,15 @@ whose contents are not frozen.
 ### 3.2 Minimal surface: pass `citry` + `component`, derive the rest
 
 Every context that concerns a specific render carries **`citry`** (the primary
-handle extensions reach for: registry, settings, caches) and, when a component
+handle extensions reach for: components, settings, caches) and, when a component
 instance exists, **`component`**. Fields trivially derivable from those are
 **dropped**:
 
 - `component_class` is `type(component)`; `component_id` is `component.id`. Both
   dropped from the per-instance render hooks. (`component.id`, `component.kwargs`,
   etc. are all on the instance.)
-- The registry is `citry.registry`, so it is not passed separately (section 6.3).
+- Component registration and lookup are available on `citry`, so no separate
+  state object is passed (section 6.3).
 
 Class-lifecycle hooks have no instance, so they carry **`citry`** +
 **`component_class`** (full name; section 3.3).
@@ -172,7 +176,7 @@ citry keeps the readable full name.)
 - **`ExtensionCommand`** - the CLI-command base (DJC: `ComponentCommand`). The
   CLI design that builds on it (the command runner, `Citry.commands`
   aggregation, and the `citry` executable) is
-  [`extension_commands.md`](extension_commands.md).
+  [`extensions_commands.md`](extensions_commands.md).
 
 ---
 
@@ -180,8 +184,59 @@ citry keeps the readable full name.)
 
 The `Component.View` / `Component.Cache` mechanism: an extension named `"view"`
 (`class_name == "View"`) lets a user define a nested `class View:` on a
-component; it is rebuilt as a subclass of the extension's `Config` (with the
-owner bound), then instantiated per render and attached as `component.view`.
+component. Citry preserves the authored class, combines it with declarations
+from the component's C3 MRO, then builds the effective class on the extension's
+`Config` (with the component bound). That effective class is instantiated per
+render and attached as `component.view`.
+
+Nested declarations inherit automatically. The child does not repeat its
+parent's nested class in the base list:
+
+```python
+class Parent(Component):
+    class View:
+        density = "comfortable"
+
+        def label(self):
+            return "parent"
+
+
+class Child(Parent):
+    class View:
+        color = "blue"
+
+        def label(self):
+            return super().label() + ":child"
+```
+
+`Child.View` sees `color`, `density`, and both method implementations. For
+multiple component bases, the nested declaration classes are bases in the same
+C3 order as their component owners. A nearer declaration wins an attribute
+conflict. An explicit `View = None` stops component-level inheritance at that
+point while retaining the current Citry instance's global defaults and the
+extension's factory defaults.
+
+Each installed extension owns one valid Python `class_name`. Those names must
+be unique, and extensions cannot claim the core schema names or the Events
+extension's special `State` declaration. Engine construction rejects a
+collision before any component can be defined.
+
+Citry keeps the original nested class objects in the effective MRO. It does not
+copy their namespaces, so descriptors, zero-argument `super()`, source paths,
+and class identity continue to refer to the authored declarations.
+
+An extension with a domain-specific merge can consume the source records
+directly. The built-in Dependencies extension does this: its `extend` setting
+walks and cuts individual component or reusable definition-base branches, so
+it does not use the generic class composition rule for its JS/CSS entry lists.
+Relative entries remain anchored to the class that authored that branch.
+
+Captured nested declarations are immutable on a concrete component class.
+Rebinding or deleting `Kwargs`, `State`, an extension config class, or another
+recognized nested declaration after class creation raises `AttributeError`.
+Define a new component subclass to change the declaration chain. This keeps
+runtime schemas, extension metadata, and the preserved source records in one
+consistent generation.
 
 ### 5.1 Component back-reference: keep the weakref + optional component
 
@@ -231,14 +286,18 @@ class CitrySettings:
 into `Citry.settings` (the `extensions` spec lives here as a tuple, section 2.1).
 This replaces the placeholder `self._settings` dict.
 
-The per-component config then merges all three DJC layers:
+The per-component config then merges all three layers:
 
 1. **Factory defaults** - attributes on the extension's `Config` base.
 2. **Global defaults** - `settings.extensions_defaults["view"]`.
 3. **Component-level** - the user's nested `class View:` on the component.
 
-Precedence: component-level > global defaults > factory, realized by base order:
-`type("View", (user_view, GlobalDefaults, Extension.Config), {"component_class": C})`.
+Precedence: component-level > global defaults > factory. The effective base
+order is the active authored `View` classes in component C3 order, followed by
+`GlobalDefaults` and `Extension.Config`.
+
+Field names at both user-facing levels (the component's nested class and the
+global defaults) are validated at declaration time; see 5.4.
 
 ### 5.3 Escape hatch dropped
 
@@ -252,16 +311,78 @@ class MyComp(Component):
         ...
 ```
 
+### 5.4 Config field validation (`Extension.validate_config_fields`)
+
+The config surface is deliberately permissive: a component's nested config
+class and an `extensions_defaults` entry can carry practically any fields,
+even methods. The cost is that, left alone, nothing catches a bad key (say
+`_guardd`, a typo of the events extension's `_guard`) until it surfaces as a
+confusing downstream error. A static allowed-keys set per extension is not
+flexible enough to fix that: the events extension accepts any callable under
+any unprefixed name (those are its event handlers), which no fixed set of
+names can express.
+
+So the base class carries an overridable method instead:
+
+```python
+class Extension:
+    def validate_config_fields(self, fields, *, component=None) -> None: ...
+```
+
+`fields` maps each declared field name to its declared value. The framework
+calls the method once per declaration, at declaration time:
+
+- **At engine construction**, with the extension's entry in the
+  `extensions_defaults` setting (`component=None`). A bad key in the setting
+  fails at startup, with the error naming the extension and the setting.
+- **At component class definition**, once per authored declaration for the
+  receiving Citry instance, including declarations supplied by reusable
+  definition bases (`component` is the concrete component class). This runs before
+  `on_component_class_created` reaches any extension and before the nested
+  class is rebuilt (5.2), and the error names the component and the nested
+  class. Framework members are never presented as fields: the `Config` base's
+  attributes and the classes the rebuild itself synthesizes (the rebuilt
+  config class, the defaults holder) are excluded from the enumeration.
+
+The base implementation accepts everything, which keeps the permissive
+behavior for any extension that does not override it. An override raises
+`ValueError` on a bad field, and because both declaration sites are checked,
+every field name is known-valid by the time the config class is rebuilt and
+instantiated.
+
+The worked example is the events extension's two-tier rule:
+
+- **Underscore names are configuration** and must be one of the recognized
+  config attributes (`_guard`, `_context`, `_csrf`, `_methods`, `_debounce`,
+  `_throttle`, `_topics`). An unknown underscore name fails with a "did you
+  mean" hint (`'_guardd' is not a recognized Events config attribute; ...
+  Did you mean '_guard'?`). On a component's `Events` class an underscore
+  `def` is exempt: those are private helpers.
+- **Unprefixed names are event handlers** and must be callable, so a
+  non-callable value under a handler-looking name fails at class definition.
+  In `extensions_defaults` unprefixed names are rejected outright: event
+  handlers are defined on each component's nested `Events` class, and this
+  design has no global default handler.
+
 ---
 
 ## 6. Hook firing: where, and the registry rethink
 
 ### 6.1 Class lifecycle
 
-`ComponentMeta.__new__` fires `on_component_class_created` then runs the
-config-class setup (`_init_component_class`), then registers.
-`ComponentMeta.__del__` fires `on_component_class_deleted`. Both reachable
-because the class knows its `Citry` at definition time.
+`ComponentMeta.__new__` snapshots the authored nested declarations and builds
+the core schema classes, then fires `on_component_class_created`, runs the
+extension config-class setup (`_init_component_class`), and registers. A
+class-created hook reads the preserved source chain with
+`ctx.nested_declarations(name)`; it never needs to infer authored declarations
+from a config attribute that Citry later replaces. Deterministic
+cleanup follows `on_component_unregistered`; garbage collection itself runs no
+extension code because Python may invoke it while arbitrary application locks
+are held. `Citry.clear()` remains a bulk engine teardown and does not emit
+per-component unregistration hooks. Extension metadata that can refer back to
+its component is stored on the component class itself, so clearing the registry
+leaves only a collectible class-owned cycle rather than a weak-map value that
+retains its own key.
 
 ### 6.2 Render
 
@@ -270,61 +391,53 @@ because the class knows its `Citry` at definition time.
 short-circuit hook (section 7.1); after `template_data`, `on_component_data`;
 after the body builds into a `CitryRender`, `on_component_rendered`.
 
-### 6.3 Registry hooks dropped; setup moves to `on_extension_created`
+### 6.3 Per-engine setup uses `on_extension_created`
 
-A `Citry` has exactly one registry, created in its `__init__`. DJC's
-`on_registry_created` / `on_registry_deleted` are **dropped** (no extension
-implements them, section 1). Any per-registry setup an extension needs is done
-in **`on_extension_created`**, whose context gains **`citry`**, so the extension
-reaches `ctx.citry.registry` directly.
+A `Citry` owns exactly one component registration state. Setup an extension
+needs for that engine is done in **`on_extension_created`**, whose context
+carries **`citry`**. The extension uses engine-level methods such as
+`ctx.citry.get()`, `ctx.citry.has()`, and `ctx.citry.components`.
 
-`on_component_registered` / `on_component_unregistered` are **kept** (extensions
-do use them) but fire from `Citry.register`/`unregister` (keeping
-`ComponentRegistry` framework-agnostic), and their contexts carry **`citry`** +
-`name` + `component_class` (no separate `registry`; use `citry.registry`).
+`on_component_registered` / `on_component_unregistered` fire from
+`Citry.register`/`unregister`, and their contexts carry **`citry`** + `name` +
+`component_class`.
 
 ---
 
 ## 7. Render-hook divergences from DJC
 
-### 7.1 `on_component_input` is mutate-only; short-circuit is deferred
+### 7.1 `on_component_input` is mutate-only; Cache owns short-circuiting
 
 DJC's `on_component_input` does two jobs (mutate inputs *and* short-circuit the
-render), and the conflation causes the leak class of #1607/#1648/#1649. R6
-proposes splitting them. Citry takes the **uncontroversial half now** and
-**defers the rest**:
+render), and the conflation causes the leak class of #1607/#1648/#1649. Citry
+splits those responsibilities:
 
-- **Now (skeleton):** `on_component_input(ctx) -> None` is **mutate-only** -
+- `on_component_input(ctx) -> None` is **mutate-only** -
   inspect/mutate `ctx.kwargs` / `ctx.slots`, single responsibility, always runs.
-  No short-circuit return.
+  No short-circuit return. The mappings are authoritative raw inputs. After all
+  hooks finish, Citry normalizes Slots and constructs the final typed inputs
+  exactly once, before data methods or cache lookup.
 
-- **Deferred:** the short-circuit mechanism (how a render is skipped and a
-  substitute supplied) is **not** added in the skeleton. An earlier draft of this
-  doc proposed a core `on_component_render` hook plus making
-  `on_component_rendered` fire on short-circuit "to dissolve the leak at the
-  root." That is **withdrawn as premature.** In DJC the cache-hit branch
-  genuinely *cannot* call `on_component_rendered`, because that hook expects
-  inputs (`template_data`, etc.) that a cache hit never computes. Whether citry's
-  pipeline has the same constraint depends on how the rest of the render skeleton
-  shapes up, so the right move is to **build more of the skeleton first, then
-  conclude** what short-circuiting and its interaction with `on_component_rendered`
-  should be.
+- After input hooks and revalidation, core asks the built-in Cache extension
+  directly for a bypass, miss plan, or replay candidate. This decision is not a
+  public `emit()` hook: Cache owns its correctness, and first-result fanout
+  would prevent later extensions from observing the decision consistently.
 
-When it does land, the likely shape is **not** a core hook but a pair of
-**cache-extension-owned custom hooks via `emit()`** (section 9.2):
-`on_component_cache` (compute key / decide whether to render) and
-`on_component_cache_hit` (observe a cache short-circuit). Keeping them owned by
-the cache extension matches citry's "caching is an extension, not core" stance
-and avoids baking a short-circuit contract into the engine before we know its
-shape.
+- After replay commits and current ownership settles, Cache emits the
+  notify-only `on_component_cache_hit` custom hook. Return values are ignored,
+  observer failures are isolated, and later observers still run.
 
-### 7.2 Short-circuit / post-render return type: `CitryRender | str | None`
+A hit skips component data methods, `on_component_data`, `on_render`, template
+nodes, and `on_component_rendered`. The separate hit notification is the honest
+observation point for extensions that need metrics or diagnostics.
 
-Both the short-circuit hook (7.1) and `on_component_rendered` accept
-**`CitryRender | str | None`**. A returned `str` is convenience: it is wrapped as
-a single-part `CitryRender` (treated as already-serialized HTML). Keeping the
-struct form available means deps stay recoverable; the `str` form is the easy
-path. (DJC used `str` only, because its render output was a string.)
+### 7.2 Post-render return type: `CitryRender | str | None`
+
+`on_component_rendered` accepts **`CitryRender | str | None`**. A returned
+`str` is convenience: it is wrapped as a single-part `CitryRender` (treated as
+already-serialized HTML). Keeping the struct form available means deps stay
+recoverable; the `str` form is the easy path. (DJC used `str` only, because its
+render output was a string.)
 
 ### 7.3 `on_component_rendered` operates on the `CitryRender`
 
@@ -415,16 +528,16 @@ So the dependency extension owns `on_dependencies` (and fires it at serialize
 time), uses `on_render_context_merge` to bubble deps up the tree, and stashes into
 `CitryContext.extra` - all without the core knowing about JS/CSS.
 
-The **cache short-circuit** (section 7.1) is the second concrete consumer of
-this mechanism: a future `CacheExtension` owns `on_component_cache` and
-`on_component_cache_hit` as `emit()` hooks, rather than the engine carrying a
-core short-circuit hook. This keeps the leak-prone short-circuit logic out of the
-core and lets other extensions observe a cache hit explicitly.
+The **cache hit notification** (section 7.1) follows the same extension-owned
+custom-hook idea but uses isolated direct dispatch. The built-in Cache extension
+owns lookup and publication, then notifies every `on_component_cache_hit`
+observer after replay commits. One observer's failure cannot stop later
+observers or roll back the committed hit.
 
 The name-keyed dispatch + `emit` mechanism is built and the core hooks route
-through it; the dependencies extension exercises custom-hook ownership
-(`on_dependencies`). The cache extension's `emit`-owned hooks remain future
-work (section 7.1).
+through it. Dependencies exercises generic custom-hook dispatch through
+`on_dependencies`; Cache owns the isolated notification contract for
+`on_component_cache_hit`.
 
 ---
 
@@ -437,21 +550,21 @@ yet) · **Dropped** · **Renamed/Reshaped**.
 |---|---|---|
 | `on_extension_created` | Skeleton | ctx gains `citry` (absorbs registry setup, section 6.3) |
 | `on_component_class_created` | Skeleton | ctx: `citry, component_class` |
-| `on_component_class_deleted` | Skeleton | ctx: `citry, component_class` |
-| `on_registry_created` | **Dropped** | one registry per Citry; use `on_extension_created` + `citry.registry` |
+| `on_registry_created` | **Dropped** | one component scope per Citry; use `on_extension_created` + `citry` |
 | `on_registry_deleted` | **Dropped** | same |
 | `on_component_registered` | Skeleton | ctx: `citry, name, component_class` (no `registry`) |
 | `on_component_unregistered` | Skeleton | ctx: `citry, name, component_class` |
 | `on_component_input` | Skeleton (reshaped) | mutate-only, `-> None` (django-components#1141 R6, 7.1) |
-| *(short-circuit)* | **Deferred** | not in skeleton; likely cache-extension-owned `on_component_cache` / `on_component_cache_hit` via `emit()` (7.1, 9.2) |
+| *(short-circuit)* | **Built (Cache-owned)** | direct built-in Cache lookup plus notify-only `on_component_cache_hit`; no public decision hook (7.1, 9.2) |
 | `on_component_data` | Wired | ctx: `citry, component, context, template_data, js_data, css_data` (7.5) |
-| `on_component_rendered` | Skeleton | operates on `CitryRender`; `-> CitryRender \| str \| None`; short-circuit interaction deferred (7.1) |
+| `on_component_rendered` | Skeleton | operates on `CitryRender`; `-> CitryRender \| str \| None`; skipped on a cache hit (7.1) |
 | `on_template_loaded` | Skeleton | ctx: `citry, component_class, content` |
 | `on_template_compiled` | Skeleton (reshaped) | fires at the node list, not a Template (7.4) |
+| *(new)* `on_template_reset` | Wired | fires after a class's loaded template and compiled form are reset; cache revision subscribers invalidate local keys |
 | `on_css_loaded` | Skeleton | wired by the asset-loading subsystem ([`asset_loading.md`](asset_loading.md) section 6); ctx: `citry, component_class, content` |
 | `on_js_loaded` | Skeleton | same as `on_css_loaded` |
-| `on_slot_rendered` | Wired | fires at the `<c-slot>` site (docs/design/slots.md section 7) |
-| *(new)* `on_attrs_resolved` | Wired | citry-only; fires per HTML element with dynamic attributes, after the attribute dict resolves and before formatting ([`html_attrs.md`](html_attrs.md) section 5.5); ctx: `citry, component, tag_name, attrs`, threaded on `attrs` |
+| `on_slot_rendered` | Wired | fires at the `<c-slot>` site (docs/design/component_slots.md section 7) |
+| *(new)* `on_attrs_resolved` | Wired | citry-only; fires per HTML element with dynamic attributes, after the attribute dict resolves and before formatting ([`template_html_attrs.md`](template_html_attrs.md) section 5.5); ctx: `citry, component, tag_name, attrs`, threaded on `attrs` |
 | `on_dependencies` | **Reshaped (built)** | not core; the `dependencies` extension fires it via `emit` at serialize time ([`dependencies.md`](dependencies.md) section 7.2) |
 | *(new)* `on_render_context_merge` | Wired | the generalized `_merge_dependencies` step (9.1); core fires it, extensions own their slice of the merge |
 | *(new)* `on_serialize` | Wired | fires at the end of `serialize()` with the joined HTML, threaded; the dependencies extension's placement point ([`dependencies.md`](dependencies.md) section 7.2) |
@@ -488,11 +601,10 @@ script endpoints are the first user.
 
 ## 12. Open questions
 
-- The whole short-circuit / caching mechanism is **deferred** until more of the
-  render skeleton exists (7.1): whether it is cache-extension-owned
-  `on_component_cache` / `on_component_cache_hit` hooks, and whether (and how)
-  `on_component_rendered` participates on a short-circuit. `on_component_input`
-  mutate-only is settled.
+- ~~Short-circuit ownership and hook behavior~~ settled (section 7.1): the
+  built-in Cache extension owns lookup directly, emits notify-only
+  `on_component_cache_hit` after replay commits, and does not run
+  `on_component_rendered` on a hit.
 - ~~Naming of the merge hook and the `emit` custom-hook API shape~~ settled
   (section 9): the hook is **`on_render_context_merge`** (it merges the
   `extra` bag between two `CitryContext`s), and `emit(name, ctx, result=...)`
@@ -520,10 +632,10 @@ script endpoints are the first user.
    population, serialize-time placement (#1144). Full design and remaining
    phases (client runtime, fragments, URLs) in
    [`dependencies.md`](dependencies.md).
-3. **Caching / short-circuit - not started (deferred decision).** Conclude how
-   short-circuiting works and how it interacts with `on_component_rendered`
-   (7.1), then build the `CacheExtension` with its `emit()`-owned
-   `on_component_cache` / `on_component_cache_hit` hooks.
+3. **Caching / short-circuit - built.** The built-in Cache extension owns
+   direct component and transparent `<c-cache>` lookup/publication, emits
+   notify-only `on_component_cache_hit` after a committed replay, and publishes
+   opt-in component introspection metadata ([`caching.md`](caching.md)).
 4. **Slots - done.** `on_slot_rendered` fires at the `<c-slot>` site.
 5. **CSS/JS - done.** The asset-loading subsystem
    ([`asset_loading.md`](asset_loading.md)) provides the `js`/`css` sources and

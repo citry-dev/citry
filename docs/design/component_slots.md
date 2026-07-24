@@ -9,12 +9,12 @@ end. This document specifies the
 slot subsystem: the `Slot` value, how `<c-fill>` content travels from a parent
 template into a child component, how `<c-slot>` resolves it, the Python-side
 `slots=` input, and how all of it interacts with the deferred render queue. It
-is the design doc that [`rendering.md`](rendering.md) section 10 and the
+is the design doc that [`component_rendering.md`](component_rendering.md) section 10 and the
 `ComponentNode` docstring defer to.
 
-It extends [`rendering.md`](rendering.md) (the three-phase
+It extends [`component_rendering.md`](component_rendering.md) (the three-phase
 `CitryElement` -> `CitryRender` -> serialize pipeline and `CitryContext`) and
-[`deferred_rendering.md`](deferred_rendering.md) (the render queue that this
+[`component_rendering_defer.md`](component_rendering_defer.md) (the render queue that this
 design must cooperate with, section 8 here). Operating rules are in
 [`/CLAUDE.md`](../../CLAUDE.md).
 
@@ -23,9 +23,9 @@ design is [`_djc_reference/slots.py`](../../packages/py/citry/_djc_reference/slo
 (the `Slot` class, `SlotNode.render`, `resolve_fills`,
 `normalize_slot_fills`), with the component-side wiring in
 [`_djc_reference/component_render.py`](../../packages/py/citry/_djc_reference/component_render.py).
-The behavioral contract is pinned by the captured DJC test suites
-[`_djc_tests/test_templatetags_slot_fill.py`](../../packages/py/citry/tests/_djc_tests/test_templatetags_slot_fill.py)
-and [`_djc_tests/test_slots.py`](../../packages/py/citry/tests/_djc_tests/test_slots.py).
+The behavioral contract is pinned by the upstream DJC suites
+[`test_templatetags_slot_fill.py`](https://github.com/django-components/django-components/blob/5d4d4f5d13dd06c80ba389f30fc63fdbb71cda75/tests/test_templatetags_slot_fill.py)
+and [`test_slots.py`](https://github.com/django-components/django-components/blob/5d4d4f5d13dd06c80ba389f30fc63fdbb71cda75/tests/test_slots.py).
 Related upstream issue: django-components
 [#1259](https://github.com/django-components/django-components/issues/1259)
 (deprecate slot context input and outer_context), which this design completes.
@@ -41,15 +41,14 @@ What already exists, verified on 2026-06-10 by running `parse_template` /
   a `<c-fill>` outside a component or inside plain HTML
   ([`parser.rs` `validate_fill_placement`](../../crates/citry_template_parser/src/parser.rs)),
   node siblings mixed with fills (`validate_fill_exclusivity`), duplicate
-  static fill names, duplicate `c-name` expressions, duplicate `c-bind`
-  tuples, dynamic-fill overflow against a tag's `allowed_slots`, and unmet
+  static fill names, dynamic-fill overflow against a tag's `allowed_slots`, and unmet
   `required_slots` counts (`validate_fill_names`). Control-flow tags are
   *transparent* for fill validation
   ([`constants.rs` `CONTROL_FLOW_TAGS`](../../crates/citry_template_parser/src/constants.rs)):
   fills inside `<c-if>`/`<c-for>` are a supported, first-class shape.
 - **Dynamic fill identity is already modeled.** `FillIdentity` distinguishes a
-  static `name`, a dynamic `c-name`, and a `c-bind` spread, resolved by a
-  right-to-left walk of the identity attributes; each collected fill carries
+  final static `name` from a dynamic `c-name` or `c-bind` provider, resolved by
+  a right-to-left walk of the identity attributes; each collected fill carries
   `inside_for_loop` / `inside_control_flow` flags
   ([`parser.rs` `FillNodeInfo`, `_extract_fill_identity`](../../crates/citry_template_parser/src/parser.rs)).
 - **The compiler output shape is locked.** `FillNode(source, pos, attrs, body,
@@ -62,13 +61,16 @@ What already exists, verified on 2026-06-10 by running `parse_template` /
   default bodies evaluate in the parent scope
   ([`compiler.rs` `compile_component_node`](../../crates/citry_template_parser/src/compiler.rs)).
 - **`template.slots`** collects `StaticNamedSlot { name, required:
-  Some(bool) | None }`; `required` is `None` when `c-required`/`c-bind` makes
-  it dynamic ([`parser.rs` `extract_slot_from_node`](../../crates/citry_template_parser/src/parser.rs)).
+  Some(bool) | None }` from the effective rightmost providers. An explicit
+  static `name` or `required` after `c-bind` restores known metadata; a final
+  `c-name`, `c-required`, or relevant `c-bind` contribution makes that metadata
+  unknown. The two explicit spellings of one logical field cannot coexist
+  ([`parser.rs` `extract_slot_from_node`](../../crates/citry_template_parser/src/parser.rs)).
 - **Runtime stubs are in place.** `SlotNode`/`FillNode` are constructible but
   raise on render; `ComponentNode.render` raises on any body
   ([`nodes/__init__.py`](../../packages/py/citry/citry/nodes/__init__.py)).
   `DeferredComponent` and `CitryElement` carry a `slots` field on purpose
-  ([`deferred_rendering.md`](deferred_rendering.md) section 7).
+  ([`component_rendering_defer.md`](component_rendering_defer.md) section 7).
 - **Per-tag slot rules are exposed to Python.** `parse_template(...,
   user_rules={tag: TagRules})` accepts `allowed_slots`/`required_slots`
   ([`_rust.pyi`](../../packages/py/citry_core/citry_core/_rust.pyi)); the
@@ -101,7 +103,7 @@ of django-components machinery.
 ## 3. The `Slot` value
 
 Lives in a new `citry/slots.py` module (the location
-[`citry_migration.md`](citry_migration.md) already reserves).
+[`migration_djc.md`](migration_djc.md) already reserves).
 
 ### 3.1 `Slot`
 
@@ -115,7 +117,7 @@ citry adaptations:
   fill renders to a `CitryRender`, so nested components inside the fill stay
   structural and JS/CSS dependencies keep bubbling through `extra`. A
   Python-supplied function may return `str | SafeString | CitryElement |
-  CitryRender`; the result goes through `_render_value`
+  ComponentLike | CitryRender`; the result goes through `_render_value`
   ([`citry_render.py`](../../packages/py/citry/citry/citry_render.py)), which
   already coerces all of these.
 - **Callable standalone and repeatedly.** `my_slot({"name": "John"})` works
@@ -132,25 +134,41 @@ citry adaptations:
   [`util/html.escape`](../../packages/py/citry/citry/util/html.py)
   (markupsafe, honors `__html__`), so `Slot("<b>")` renders escaped and
   `Slot(SafeString(...))` does not; a function result is escaped by
-  `_render_value` unless it is a `SafeString`/`CitryRender`/`CitryElement`.
+  `_render_value` unless it is a
+  `SafeString`/`CitryRender`/`CitryElement`/`ComponentLike`.
   This matches DJC's `conditional_escape` semantics
   (`test_render_slot_unsafe_content__*`).
-- **Metadata, slim:** `contents`, `component_name` (owner), `slot_name`,
-  `source_position` (the FillNode token span, for diagnostics), and an
+- **Metadata, slim:** `contents`, `component_name` (the receiving component
+  name, for diagnostics), `slot_name`, `source_position` (the static
+  originating template-node span when one exists, not a rendered invocation
+  identity), and an
   `extra: dict` bag. The `extra` bag is kept because DJC's CSS-scoping
   extension passes per-slot metadata through it, and citry's equivalent will
-  want the same seam. DJC's `nodelist` field (a Django type) and
+  want the same integration point. DJC's `nodelist` field (a Django type) and
   `do_not_call_in_templates` (Django auto-call protection) have no citry
   analog and are not carried.
 
-### 3.2 `SlotContext`
+### 3.2 `SlotContext` and `SlotData`
 
-The single argument a slot function receives: `SlotContext(data, fallback)`.
-Frozen dataclass, generic over the data type. The DJC field `context` (the
-Django template `Context`) is **not** carried: a fill already closes over its
-scope, and exposing the child's render context to the fill is exactly what
-django-components #1259 deprecates and what the repo rule "only props and
-slots" ([`citry_migration.md`](citry_migration.md) impl notes) forbids.
+The single argument a slot function receives is `SlotContext(data, fallback)`.
+It is a frozen, slotted dataclass generic over the author-declared data shape.
+At runtime `data` is always the immutable `SlotData` record described in
+section 5.
+
+The django-components source audit found that scoped slot data there is also a
+dictionary. Django template lookup makes `data.some_key` fall back to a mapping
+key, which hides that runtime shape. Named-tuple-style records exist in other
+django-components context paths, including provide/inject, but were not the
+scoped-slot mechanism to port. Citry's original dictionary preserved the data
+but Python expression evaluation uses real `getattr`, so the Django template
+convenience did not carry across. `SlotData` closes that behavioral gap without
+pretending arbitrary slot-data keys are safe dataclass fields.
+
+The DJC field `context` (the Django template `Context`) is **not** carried: a
+fill already closes over its scope, and exposing the child's render context to
+the fill is exactly what django-components #1259 deprecates and what the repo
+rule "only props and slots" ([`migration_djc.md`](migration_djc.md) impl
+notes) forbids.
 
 ### 3.3 The fallback is a `Slot`
 
@@ -171,8 +189,11 @@ citry folds that role into `Slot` too. Consumption paths:
   dependencies intact. No extra detection branch is needed.
 - In Python, `str(fallback)` serializes it via `Slot.__str__` (invoke with
   empty data, then serialize). `__str__` is defined on `Slot` itself, so every
-  slot gets the same convenience; it is dependency-losing, the same one-shot
-  caveat as `CitryRender.serialize`.
+  slot gets the same convenience. Before serialization it settles any deferred
+  component descendants through the ordinary iterative render queue; it does
+  not finalize the fill's already-rendered owning component again. The result
+  is dependency-losing, with the same one-shot caveat as
+  `CitryRender.serialize`.
 - Because it is a Slot, the fallback can be forwarded like any slot content,
   for example passed into a nested component's slots.
 
@@ -210,16 +231,19 @@ data also works with no extra machinery, because a Slot is callable inside
 the sandboxed expression: `{{ my_slot({'page': 3}) }}` returns a
 `CitryRender`, which `_render_value` already inlines.
 
-The full `_render_value` detection order becomes: `None` -> `""`, `Slot` ->
-invoke, `CitryElement` -> render, `CitryRender` -> inline, else escape. The
-fallback handle needs no entry of its own: it is a Slot (3.3).
+The full `_render_value` detection order is: `None` -> `""`, `Slot` -> invoke,
+`ComponentLike` -> resolve one `CitryElement` against the active Citry instance,
+`CitryElement` -> render, `CitryRender` -> inline, else escape. The fallback
+handle needs no entry of its own: it is a Slot (3.3). A standalone Slot that
+returns `ComponentLike` raises because no rendering instance is available;
+Citry never guesses a process-global instance.
 
 ---
 
 ## 4. Fill collection at the component boundary
 
 `ComponentNode.render` (which runs in pass 1, while the parent's context is
-live; see [`deferred_rendering.md`](deferred_rendering.md) section 4.2)
+live; see [`component_rendering_defer.md`](component_rendering_defer.md) section 4.2)
 gains a second job next to kwarg resolution: build the child's
 `dict[str, Slot]`.
 
@@ -252,18 +276,30 @@ collection point:
 
 - **Name:** static `name`, or evaluate `c-name`; a `c-bind` spread resolves a
   mapping whose recognized keys are `name`, `data`, `fallback`. Precedence is
-  rightmost-wins across the identity attributes, matching the parser's
-  right-to-left identity walk (`_extract_fill_identity`).
-- **`data` / `fallback`:** variable *names* (strings) under which the fill
-  body will see the slot data and the fallback handle. Both optional. Each
-  must be a valid identifier; `data == fallback` is an error (DJC
+  rightmost-wins across one explicit provider and any `c-bind` contributions,
+  matching the parser's right-to-left identity walk (`_extract_fill_identity`).
+  `name` and `c-name` are mutually exclusive. A `c-bind` value of `None`
+  contributes nothing; any other value must be a mapping.
+- **`data` / `fallback`:** `fallback` is one variable name. `data` is either
+  one variable name for the complete `SlotData` record or a one-level
+  destructuring pattern with selected fields, `source as target` aliases, and
+  a final optional `**rest`. All introduced targets and `fallback` must be
+  distinct valid identifiers after Python's NFKC identifier normalization;
+  a collision is an error. Source spellings remain literal `SlotData` mapping
+  keys even when a compatibility character would normalize differently (DJC
   `test_slot_data_raises_on_slot_data_and_slot_fallback_same_var`).
+  Parser metadata reports a statically known introduced variable only when its
+  direct attribute is after the final `c-bind`; an intervening spread may
+  replace either binding, so the conservative result is unknown until a later
+  direct write restores it. Destructuring cannot be supplied dynamically
+  through `c-bind` because its targets would be absent from parser metadata.
 - **Body:** wrapped as a `Slot` whose content function, when invoked with a
   `SlotContext`, renders the body against the *captured* context overlaid
-  with `{data_var: ctx.data, fallback_var: ctx.fallback}` (overlay wins on a
-  name collision, same as `ForNode` loop bindings). The overlay context
-  shares the captured context's `extra` bag, so dependencies collected while
-  a fill renders flow to the fill's lexical owner (see section 8).
+  with the whole data record or each selected field, an immutable `SlotData`
+  containing unselected fields for `**rest`, and the fallback handle. The
+  overlay context shares the captured context's `extra` bag, so dependencies
+  collected while a fill renders flow to the fill's lexical owner (see
+  section 8).
 
 ### 4.3 Runtime validation at collection
 
@@ -281,8 +317,8 @@ collection point:
   `test_comments_permitted_inside_implicit_fill_content`).
 
 The resulting `dict[str, Slot]` rides on the `CitryElement` into the
-`DeferredComponent`, exactly the slot-ready seam
-[`deferred_rendering.md`](deferred_rendering.md) section 7 reserved.
+`DeferredComponent`, exactly the slot-ready integration point
+[`component_rendering_defer.md`](component_rendering_defer.md) section 7 reserved.
 
 ### 4.4 Dispatch: nodes collect their own fills
 
@@ -327,8 +363,9 @@ Django scaffolding removed:
    `"default"` after the section 11.2 parser fix), `required` (static flag or
    dynamic `c-required`/`c-bind`), and every remaining attribute as **slot
    data** (static attrs as strings, `c-*` attrs evaluated, `c-bind` spread;
-   last write wins, left to right). Data resolves per render of the slot
-   site, so a slot inside `<c-for>` passes per-iteration data.
+   last write wins, left to right). A `c-bind` value of `None` contributes
+   nothing; every other value must be a mapping. Data resolves per render of
+   the slot site, so a slot inside `<c-for>` passes per-iteration data.
 2. **Look up** the name in the rendering component's fills
    (`context.component.raw_slots`). When the caller passed no fill and the
    component has a typed `Slots` class with a *non-`None`* default for that slot,
@@ -338,9 +375,13 @@ Django scaffolding removed:
    passed fill, then a non-`None` field default, then the in-template body.
 3. **On hit** (a passed fill, or a non-`None` field default): wrap the slot's
    own body and the current context as a fallback `Slot` (3.3) and invoke the
-   fill's Slot with `SlotContext(data=resolved_data, fallback=fallback)`. The
-   returned part is this node's render result; if it is a `CitryRender` from a
-   different context, `_render_body`'s existing merge seam copies its
+   fill's Slot with `SlotContext(data=SlotData(resolved_data),
+   fallback=fallback)`. `SlotData` is one frozen, slotted `Mapping` record:
+   valid non-reserved keys support attribute access, while every key remains
+   available by mapping access. This avoids unbounded dynamic class creation
+   and keeps `c-bind` compatibility. The returned part is this node's render
+   result; if it is a `CitryRender` from a
+   different context, `_render_body`'s existing merge path copies its
    dependencies (unchanged behavior).
 4. **On miss** (no fill and no non-`None` field default): render the slot's own
    body (the fallback) against the current context, exactly as if the `<c-slot>`
@@ -372,6 +413,12 @@ Behavioral points carried from DJC's test contract:
   names (the `add_slot_to_error_message` idea); citry derives the component
   path from the `parent` chain.
 
+A template-valued attribute is still authored and rendered in its writer
+component's context. Therefore a static `<c-slot>` inside that value belongs to
+the writer, not to the component receiving the attribute. Parser metadata
+propagates such slots into the writer's `Template.slots`, so the writer's closed
+`Slots` schema validates them exactly like slots in its ordinary body.
+
 Passthrough slots and nested slots need no code: a `<c-slot>` written inside
 a `<c-fill>` body renders when the fill is invoked, with the fill's captured
 context, whose `context.component` is the *outer* component, so it looks up
@@ -394,7 +441,7 @@ django-mode infinite-loop guard; the `{% extends %}`/`block_context`
 compatibility; `SlotIsFilled` / `component_vars.is_filled` (deprecated
 upstream, superseded by `Component.slots`); the `SlotContent`/`SlotRef`
 aliases; and the `body=` fill kwarg (superseded by section 3.5). The
-provide/inject pass-through is specified in [`provide.md`](provide.md):
+provide/inject pass-through is specified in [`component_provide.md`](component_provide.md):
 provided data rides on `CitryContext`, and the `<c-slot>` site hands its
 active provides into every `Slot` invocation.
 
@@ -422,7 +469,7 @@ returned `RenderPart` replaces it, raising propagates. There is no
 `slot_is_default` field (DJC has one because of its `default` flag; in citry
 `slot_name == "default"` carries the same information).
 
-This is the seam the future CSS-scoping/dependency extension needs (DJC's
+This is the hook the future CSS-scoping/dependency extension needs (DJC's
 scoping rewrites slot output here), which is why it ships with the MVP even
 with no built-in consumer.
 
@@ -549,7 +596,7 @@ only those names are promised not to break between releases; submodules
 (`citry.slots`, `citry.nodes`, ...) may be imported from, but their contents
 are internal and free to change. For the slot subsystem that means:
 
-- **Root (stable):** `Slot`, `SlotContext`, and the typing aliases
+- **Root (stable):** `Slot`, `SlotContext`, `SlotData`, and the typing aliases
   (`SlotInput`, `SlotResult`, `SlotFunc`), which component authors use to
   pass slots and type their `Slots` classes. The runtime node classes are
   also root exports: constructing nodes and editing a template body in the
@@ -598,6 +645,50 @@ if a known-plus-extra mode is ever added, the dead-slot check must downgrade to 
 completion hint for those components, since a non-schema slot would then be
 fillable).
 
+### 9.6 Slot-data typing and source-field validation
+
+`SlotInput[TSlotData]` describes the attribute shape a particular slot passes
+to its fill. `TSlotData` is a typing contract, not the runtime container, so a
+component author may use a plain annotated class:
+
+```python
+class RowSlotData:
+    row: Row
+    row_index: int
+
+class Slots:
+    row: SlotInput[RowSlotData]
+```
+
+No `SlotData` subclass is required. Runtime calls always receive Citry's one
+immutable `SlotData` mapping record. This separation avoids asking authors to
+construct runtime records and keeps shape declarations easy to inspect.
+
+Citry inspects each declared `Slots` field, unwraps `SlotInput[T]` and an
+optional `None`, and carries each statically known field name into Rust
+`TagRules`. A direct destructuring pattern on a statically named fill is checked
+while its parent template compiles:
+
+```html
+<c-Grid>
+  <c-fill name="row" data="{ row, row_index }">
+    ...
+  </c-fill>
+</c-Grid>
+```
+
+An explicit source outside `RowSlotData` is a positioned compile error. Aliases
+check their source name, while a whole-data binding and `**rest` select no
+additional explicit source. An explicitly empty data-shape class therefore
+allows whole-data or rest capture but rejects every named source.
+
+The check is deliberately conservative. A dynamic fill name, an effective
+`c-bind` provider, a bare `SlotInput`, an ambiguous or unresolved annotation,
+or a slot without `SlotInput[T]` metadata stays a runtime check. An unresolved
+field affects only that slot. The existing runtime missing-field error remains
+authoritative because the type contract cannot prove that every dynamic slot
+site supplies every declared field on every path.
+
 ---
 
 ## 10. Prop templates vs slots
@@ -620,6 +711,30 @@ it; pass a prop template only for plain "markup as a value" inputs that the
 receiver treats as data. A prop template cannot react to slot data, which is
 the capability boundary between the two.
 
+### 10.1 Client Alpine ownership
+
+Server rendering and client expression ownership are separate.
+Template-authored supplied fill content uses the exact Alpine source scope at
+the actual supply call site; fallback content uses the receiving child's
+scope. Nested fills can therefore transition from caller-owned supply to
+child-owned fallback and back again. The source policy for Python `Slot`,
+callable, trusted HTML, and typed-default content is locked as detached: A1
+does not invent a lexical browser owner. Detached active content receives an
+isolated empty base scope. The landed design intentionally exposes no public
+source-owner opt-in for Python-origin content.
+The graph-first target captures each transition before serialization flattens
+components and slots into HTML. Its browser runtime consumes those typed
+source links instead of inferring ownership from nearest DOM ancestry. This
+projection and provenance preservation landed in Alpine plan A7, including
+nested, mirrored, rootless, structural, and teleport coverage.
+
+This rule does not put Alpine expressions inside Python `{{ ... }}`
+interpolation. Alpine behavior stays in attributes such as `x-text` and
+`@click`; interpolation remains server-side Python. The client architecture,
+Python-provided content policy, root-shape rules, and implementation status are
+normative in [`alpinejs.md`](alpinejs.md) and tracked in
+[`alpinejs_plan.md`](alpinejs_plan.md).
+
 ---
 
 ## 11. Parser changes (spec fixes; built 2026-06-10)
@@ -637,7 +752,7 @@ are `TAG_ATTR_RULES_DATA` / validation functions, Rust tests
 ### 11.1 The fill's fallback attribute is `fallback`
 
 `<c-fill name="x" fallback="fb">` per the README. The attribute rule set for
-`c-fill` becomes `name`/`c-name` (one-of), `data`, `fallback`, `c-bind`, with
+`c-fill` becomes `name`, `c-name`, `data`, `fallback`, `c-bind`, with
 the `fallback` value treated as an introduced variable exactly as `data` is
 today. This also keeps the word `default` available to mean only "the default
 slot". (Verified 2026-06-10: the parser rejects `fallback` and accepts
@@ -654,7 +769,9 @@ error cases, section 5). Note for the implementation: today an attribute
 literally named `default` on `<c-slot>` would parse as slot *data*; that
 stays true, and the README convention is name-based only. `<c-fill>` keeps
 its name requirement: the implicit-content shortcut already covers the
-unnamed case.
+unnamed case. Static slot/fill names must contain at least one non-whitespace
+character; bare, empty, and whitespace-only `name` forms are targeted parse
+errors, while dynamic names remain runtime-validated.
 
 ### 11.3 Non-whitespace text and `{{ expr }}` cannot sit beside fills
 
@@ -666,20 +783,22 @@ elements at a level that contains a `<c-fill>`; the recursive helper
 `_contains_only_fills_and_control_flow` already applies exactly this rule one
 level down, so the top level is the anomaly. Whitespace-only text remains
 allowed and is formatting-only: never captured into a slot, never rendered
-(section 4.3). Mechanism 3 note for the implementation pass: check whether
-other sibling validations have the same nodes-only blind spot for
-`Text`/`Expr` elements.
+(section 4.3). Template comments are stripped before this check, so any number
+of whitespace nodes split by comments is still formatting-only. Mechanism 3
+note for the implementation pass: check whether other sibling validations have
+the same nodes-only blind spot for `Text`/`Expr` elements.
 
-### 11.4a Duplicate-fill detection covers only fills outside control flow
+### 11.4a Duplicate-fill detection uses resolved identities
 
 Found while building fill collection: the parser rejected the same fill name
 in mutually exclusive branches (`<c-if>`/`<c-else>`), where at most one fill
-materializes at runtime. The duplicate-identity checks (static `name`,
-`c-name` expression, `c-bind` tuple) now apply only to fills outside control
-flow, the same scoping the overflow check already used; duplicates that DO
-materialize together are caught at runtime during fill collection (section
-4.3). A future improvement could analyze branches to catch guaranteed
-duplicates (two same-name fills in one branch) statically.
+materializes at runtime. Static-name duplicate checks apply only to fills
+outside control flow, the same scoping the overflow check uses. Dynamic
+expressions are not compared by their authored text because separate
+evaluations, including repeated stateful calls, may produce different names.
+Any duplicates that materialize are caught from their resolved names during
+runtime fill collection (section 4.3). A future improvement could analyze
+branches to catch guaranteed static duplicates within one branch.
 
 ### 11.4 Adjacent cleanup (observed, same area)
 
@@ -709,18 +828,20 @@ The repo rule is dedupe-preserving-first-seen-order; fix while in
   "undeclared", never rejection. The parser's
   `user_rules` lookups are case-insensitive (lowercase keys), matching how
   component tags resolve everywhere else. Derivation rules: a no-default
-  field is required; each kwarg allows its static and `c-` spellings as a
-  mutually exclusive pair; control-flow shorthand attributes are always
-  allowed; `c-bind` and dynamic fill names keep their parser-native escape
-  hatches, so no template that could be valid at runtime is rejected. Tests
-  in `tests/test_tag_rules.py`.
-- **Provide/inject across slots**, designed in [`provide.md`](provide.md)
+  field is required; each kwarg allows its static and `c-` spellings as one
+  mutually exclusive group, and the same group lets either spelling satisfy a
+  required input. Public user-authored `TagRules` groups have that same
+  mutual-exclusion meaning.
+  Control-flow shorthand attributes are always allowed; `c-bind` and dynamic
+  fill names keep their parser-native escape hatches, so no template that
+  could be valid at runtime is rejected. Tests in `tests/test_tag_rules.py`.
+- **Provide/inject across slots**, designed in [`component_provide.md`](component_provide.md)
   (the slot-site provides ride into each `Slot` invocation).
 - **Slot metadata consumers** (CSS scoping via `Slot.extra` +
   `on_slot_rendered`), with the dependency extension.
 - **Const-folding around slots.** Slots are never part of the const
   signature; whether a fold may cross a slot site is a question for the
-  parked constness design ([`constness.md`](constness.md)), not this one.
+  parked constness design ([`component_constness.md`](component_constness.md)), not this one.
 
 ---
 
@@ -735,9 +856,9 @@ The repo rule is dedupe-preserving-first-seen-order; fix while in
   `contains_fills`; re-rendering to discover structure would reintroduce the
   string-medium workaround this engine exists to remove.
 - **Plain callables instead of a `Slot` class.** Rejected: loses the
-  normalization point for strings/elements/renders, the metadata + `extra`
-  seam extensions need, and the standalone-callable contract with escaping
-  applied consistently.
+  normalization point for strings/elements/renders, the metadata plus `extra`
+  integration point needed by extensions, and the standalone-callable
+  contract with escaping applied consistently.
 - **A standalone fallback type (DJC's `SlotFallback`).** Rejected in favor of
   the fallback being a `Slot` (3.3): one less type, the `{{ fallback }}` path
   reuses the ordinary Slot detection, `str()` coercion comes from
@@ -760,9 +881,9 @@ The repo rule is dedupe-preserving-first-seen-order; fix while in
   template, and the definition-time dead-slot check in 9.5). The binary model
   (omit `Slots` for any, declare it for a closed set) covers the cases seen so
   far. What would falsify this: a concrete component that needs a few typed,
-  required slots *and* an open-ended set of dynamically named ones; the seam is
-  the `allowed_slots` third state, and the dead-slot check would then treat a
-  non-schema slot as a completion hint rather than an error.
+  required slots *and* an open-ended set of dynamically named ones; the
+  extension point is the `allowed_slots` third state, and the dead-slot check
+  would then treat a non-schema slot as a completion hint rather than an error.
 - **Scanning only same-owner renders, with slot renders specially tagged**
   (instead of section 8's descend-everywhere). Rejected: a tag on
   `CitryRender` adds state to carry and keep correct, while

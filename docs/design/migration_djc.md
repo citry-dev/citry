@@ -1362,7 +1362,7 @@ and auto-conversion of inner data classes.
   `get_template_data(self, args, kwargs, slots, context)`. No `args`
   parameter (components take kwargs only), and no `context` parameter
   (render state stays internal; components that need data from above use
-  `self.inject()`, see [provide.md](provide.md)).
+  `self.inject()`, see [component_provide.md](component_provide.md)).
 - **Rendering is a skeleton.** The Component class defines structure and
   registration; rendering (parse, compile, exec, run the node classes) lives in
   the render pipeline (see its entry below) and currently runs with stub nodes.
@@ -1442,7 +1442,7 @@ creates a description of what to render, not the rendered output.
   functional component pattern. Users see immediately what inputs are
   available without learning the full Component instance API. The render
   context is internal; components that need data from above use
-  `self.inject()` ([provide.md](provide.md)).
+  `self.inject()` ([component_provide.md](component_provide.md)).
 - **`.render()` delegates to the render pipeline.** It calls
   `render_impl(self)` (see the render pipeline entry below) and returns a
   `CitryRender`. The pipeline is a skeleton; the value, attribute, component, and
@@ -2090,7 +2090,7 @@ str(Outer())   # '<div data-cid-c2="" data-cid-c1="">x</div>'
 argument a slot function receives), `normalize_slot_fills` (the Python-input
 boundary), the typing aliases (`SlotResult`, `SlotFunc`, `SlotInput`), and the
 `Slot` detection in `_render_value` so `{{ my_slot }}` renders slot content in
-place. This is phase 2 of [`slots.md`](slots.md); fill collection at the
+place. This is phase 2 of [`component_slots.md`](component_slots.md); fill collection at the
 component boundary and `<c-slot>` resolution are the next phases.
 
 **Why:** Every form of slot content (a string, a function, a composed
@@ -2151,7 +2151,7 @@ matching branch, a `<c-for>` contributes per iteration, each fill closing over
 its own iteration's bindings). Until `<c-slot>` resolution lands, components
 consume slots via `template_data(kwargs, slots)` and `{{ slot_var }}` /
 `{{ slot_var(data) }}` expressions. This is phase 3 of
-[`slots.md`](slots.md).
+[`component_slots.md`](component_slots.md).
 
 **Why:** The component boundary is where "what fills exist" must be decided
 (loop variables and conditions are only live in the parent's render), while
@@ -2173,7 +2173,7 @@ collection + lazy Slots is the split that supports both.
   never calls `render`, so an invalid template fails before any side effect
   runs. The alternatives (a closed `isinstance` walk; collecting by rendering
   with a channel on the context) and why they lost are recorded in
-  [`slots.md`](slots.md) sections 4.4 and 13.
+  [`component_slots.md`](component_slots.md) sections 4.4 and 13.
 - **`IfNode.active_branch_body` / `ForNode.iter_bodies`** extract the
   branch/iteration logic so rendering and fill collection cannot drift.
 - **Runtime validation mirrors the parser:** duplicate materialized names,
@@ -2181,7 +2181,7 @@ collection + lazy Slots is the split that supports both.
   `fallback` values, and `c-bind` spreads limited to `name`/`data`/`fallback`.
   In step, the parser's duplicate-fill checks were narrowed to fills outside
   control flow (the same name in exclusive `c-if`/`c-else` branches is valid;
-  see [`slots.md`](slots.md) 11.4a).
+  see [`component_slots.md`](component_slots.md) 11.4a).
 - **`CitryRender.is_component_root`** distinguishes a component's whole output
   from interior renders. Serialization frames child components by this flag
   (not by context identity, which slot-fill content breaks: it carries the
@@ -2300,7 +2300,7 @@ prefix dropped from evaluated keys, the same rule as component kwargs; data
 resolves per render of the site, so a slot in a loop passes per-iteration
 data). It then invokes the fill the component received, or its own body as
 the fallback, and threads the result through the new `on_slot_rendered`
-extension hook. This completes [`slots.md`](slots.md): slots work end to end
+extension hook. This completes [`component_slots.md`](component_slots.md): slots work end to end
 through templates alone, and the README's slot examples are tests.
 
 **Why:** This is the consumption half of the slot system; collection (the
@@ -2362,7 +2362,7 @@ component templates and nested templates (`c-body="..."`).
 **Why:** The runtime already rejects these (`Kwargs(**raw)` / `Slots(**raw)`
 raise on unknown or missing fields); this moves the same error to where the
 template is written. django-components cannot do this: its fills resolve only
-at render time. Tracked as the follow-up in [`slots.md`](slots.md)
+at render time. Tracked as the follow-up in [`component_slots.md`](component_slots.md)
 section 12, extended here to kwargs as well.
 
 **Design decisions:**

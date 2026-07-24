@@ -341,7 +341,7 @@ dependency flow (see the implementation log in
 
 Adjacent work: the **control-flow nodes** (`IfNode`, `ForNode`) and the **slot
 subsystem** (`SlotNode`, `FillNode`, default vs named slots, designed in
-[`slots.md`](slots.md)) are built.
+[`component_slots.md`](component_slots.md)) are built.
 
 **Deferred rendering** (infinite render depth and the `data-cid-<ID>`
 component-id markers) is specified separately in
