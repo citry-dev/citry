@@ -1,0 +1,85 @@
+"""
+``SearchModal`` - the search overlay, as a Citry component.
+
+Renders the centered search dialog: the input, a results region that
+``search.js`` fills from the Pagefind index, an empty state listing a few
+popular pages, and a keyboard-help footer. The header button that opens this
+modal lives in ``DocPage``; the behavior (loading the index on first use,
+debounced queries, result rendering, keyboard navigation) lives in
+``static/js/search.js``.
+
+The whole overlay carries ``data-pagefind-ignore`` so the search UI never ends
+up in its own index. The ``djc-*`` class names match the vendored
+``search.css`` / ``search.js`` and stay until the wider rebrand.
+"""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+
+from citry import Component
+
+# A few popular pages shown before the user types anything. Kept short and
+# pointing at real content URLs (a moved target shows up as a dead link).
+DEFAULT_QUICK_LINKS = [
+    SimpleNamespace(label="Getting started", path="/getting-started/installation/"),
+    SimpleNamespace(label="Components", path="/concepts/components/"),
+    SimpleNamespace(label="Slots", path="/concepts/slots/"),
+    SimpleNamespace(label="API reference", path="/reference/"),
+    SimpleNamespace(label="Examples", path="/examples/"),
+]
+
+# Where search.js loads the Pagefind index from (absolute from the site root).
+DEFAULT_PAGEFIND_PATH = "/pagefind/pagefind.js"
+
+
+class SearchModal(Component):
+    """The search overlay markup; behavior lives in search.js."""
+
+    transparent = True
+
+    class Kwargs:
+        # None falls back to DEFAULT_QUICK_LINKS (a mutable list cannot be a
+        # dataclass default, which the Kwargs class becomes).
+        quick_links: list | None = None
+        pagefind_path: str = DEFAULT_PAGEFIND_PATH
+
+    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+        return {
+            "quick_links": kwargs.quick_links if kwargs.quick_links is not None else DEFAULT_QUICK_LINKS,
+            "pagefind_path": kwargs.pagefind_path,
+        }
+
+    template = """
+      <div class="djc-search" data-pagefind-ignore>
+        <div class="djc-search__overlay" c-data-pagefind-path="pagefind_path" hidden>
+          <div class="djc-search__backdrop" data-search-close></div>
+          <div class="djc-search__dialog" id="djc-search-dialog" role="dialog" aria-modal="true" aria-label="Search documentation">
+            <div class="djc-search__inputbar">
+              <svg class="djc-search__input-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input type="search" class="djc-search__input" placeholder="Search the docs..." autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Search documentation" aria-controls="djc-search-results">
+              <button class="djc-search__esc" type="button" data-search-close aria-label="Close search">Esc</button>
+            </div>
+            <div class="djc-search__results" id="djc-search-results" role="listbox" aria-label="Search results">
+              <div class="djc-search__empty" data-search-empty>
+                <div class="djc-search__section-label">Popular pages</div>
+                <ul class="djc-search__quicklinks">
+                  <li c-for="link in quick_links"><a class="djc-search__quicklink" c-href="link.path">{{ link.label }}</a></li>
+                </ul>
+              </div>
+              <div class="djc-search__message" data-search-noresults hidden></div>
+              <div class="djc-search__message" data-search-error hidden></div>
+              <div class="djc-search__list" data-search-list></div>
+            </div>
+            <div class="djc-search__footer">
+              <span class="djc-search__hint"><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+              <span class="djc-search__hint"><kbd>&crarr;</kbd> select</span>
+              <span class="djc-search__hint"><kbd>esc</kbd> close</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    """
