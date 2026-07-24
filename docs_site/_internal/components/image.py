@@ -17,7 +17,6 @@ class Image(Component):
 
     name = "image"
     transparent = True
-    template = "{{ img }}"
 
     class Kwargs:
         src: str
@@ -25,7 +24,12 @@ class Image(Component):
         width: str = ""
         css_class: str = ""
 
-    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+    class Slots:
+        pass
+
+    template = "{{ img }}"
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         attrs = [f'src="{escape(str(kwargs.src))}"', f'alt="{escape(str(kwargs.alt))}"']
         width = str(kwargs.width)
         if width:

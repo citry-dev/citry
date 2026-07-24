@@ -38,7 +38,10 @@ class ExampleCard(Component):
         # The ExampleInfo (docs_site._internal.examples.ExampleInfo); read for example_dir.
         info: Any
 
-    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         name = str(kwargs.name)
         info = kwargs.info
         formatter = HtmlFormatter(cssclass="highlight", nowrap=False)
@@ -64,28 +67,41 @@ class ExampleCard(Component):
         }
 
     template = """
-        <div class="tabbed-set example-card" c-data-tabs="tabs_attr">
-          <input checked type="radio" c-id="rid1" c-name="group">
-          <input type="radio" c-id="rid2" c-name="group">
-          <input type="radio" c-id="rid3" c-name="group">
-          <div class="tabbed-labels">
-            <label c-bind="{'for': rid1}">Live demo</label>
-            <label c-bind="{'for': rid2}">Component</label>
-            <label c-bind="{'for': rid3}">Page</label>
-          </div>
-          <div class="tabbed-content">
-            <div class="tabbed-block tabbed-block--demo">
-              <iframe
-                c-src="demo_url"
-                class="example-demo-frame"
-                sandbox="allow-scripts allow-same-origin"
-                loading="lazy"
-              ></iframe>
-            </div>
-            <div class="tabbed-block">{{ component_code }}</div>
-            <div class="tabbed-block">{{ page_code }}</div>
-          </div>
+      <div class="tabbed-set example-card" c-data-tabs="tabs_attr">
+        <input
+          c-id="rid1"
+          c-name="group"
+          type="radio"
+          checked
+        >
+        <input
+          c-id="rid2"
+          c-name="group"
+          type="radio"
+        >
+        <input
+          c-id="rid3"
+          c-name="group"
+          type="radio"
+        >
+        <div class="tabbed-labels">
+          <label c-bind="{'for': rid1}">Live demo</label>
+          <label c-bind="{'for': rid2}">Component</label>
+          <label c-bind="{'for': rid3}">Page</label>
         </div>
+        <div class="tabbed-content">
+          <div class="tabbed-block tabbed-block--demo">
+            <iframe
+              c-src="demo_url"
+              class="example-demo-frame"
+              sandbox="allow-scripts allow-same-origin"
+              loading="lazy"
+            ></iframe>
+          </div>
+          <div class="tabbed-block">{{ component_code }}</div>
+          <div class="tabbed-block">{{ page_code }}</div>
+        </div>
+      </div>
     """
 
 
@@ -93,12 +109,16 @@ class Example(Component):
     """``<c-example name="..." />`` renders the live example card (demo + source)."""
 
     transparent = True
-    template = "{{ card }}"
 
     class Kwargs:
         name: str
 
-    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+    class Slots:
+        pass
+
+    template = "{{ card }}"
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         example_name = str(kwargs.name)
         info = get_example_registry().get(example_name)
         if info is None:

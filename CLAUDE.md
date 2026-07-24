@@ -328,6 +328,10 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   when a tag carries more than two attributes (or any long attribute), break
   the tag so each attribute sits on its own line, with the closing `>` on its
   own line at the tag's indent.
+- **Follow the component authoring guide.** Component source layout, nested
+  schemas, headless/styled separation, template attribute order, CSS formatting,
+  and the specification gate live in
+  [`docs/best-practices/component-authoring.md`](docs/best-practices/component-authoring.md).
 - **Public docstrings become the API reference.** The docs build renders every
   public `citry.*` symbol's docstring into its reference page (via griffe), so
   author it for a first-time reader: a one-sentence summary on the first line,

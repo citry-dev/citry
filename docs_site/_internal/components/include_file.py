@@ -32,13 +32,17 @@ class IncludeFile(Component):
     """``<c-include-file path="..." language="..." />`` renders a file as a fenced code block."""
 
     transparent = True
-    template = "{{ block }}"
 
     class Kwargs:
         path: str
         language: str = ""
 
-    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+    class Slots:
+        pass
+
+    template = "{{ block }}"
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         # A constant tag attribute arrives wrapped in citry's Const proxy; coerce
         # to a real str before handing it to pathlib (which type-checks).
         path = str(kwargs.path)

@@ -21,21 +21,31 @@ class UserGrid(Component):
     class Kwargs:
         # Each user is a dict from people.yml: {login, avatarUrl, url, count?}.
         users: list
-        # Contributions count is shown for contributors, hidden for maintainers.
+        # Contribution count is shown for contributors only.
         show_count: bool = False
+
+    class Slots:
+        pass
 
     template = """
       <div class="user-list">
-        <div class="user" c-for="user in users">
-          <a c-href="user['url']" target="_blank" rel="noopener">
+        <div c-for="user in users" class="user">
+          <a
+            c-href="user['url']"
+            target="_blank"
+            rel="noopener"
+          >
             <div class="avatar-wrapper">
-              <img c-src="user['avatarUrl']" c-alt="'GitHub avatar of ' + user['login']" />
+              <img
+                c-src="user['avatarUrl']"
+                c-alt="'GitHub avatar of ' + user['login']"
+              />
             </div>
             <div class="title">
               @{{ user['login'] }}
             </div>
           </a>
-          <div class="info" c-if="show_count">
+          <div c-if="show_count" class="info">
             Contributions: {{ user['count'] }}
           </div>
         </div>

@@ -16,12 +16,16 @@ class Builtin(Component):
     """``<c-builtin tag="provide" />`` renders a built-in ``<c-*>`` tag's reference."""
 
     transparent = True
-    template = "{{ rendered }}"
 
     class Kwargs:
         tag: str
 
-    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+    class Slots:
+        pass
+
+    template = "{{ rendered }}"
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         tag = str(kwargs.tag)
         data = extract_builtin(tag)
         if data is None:

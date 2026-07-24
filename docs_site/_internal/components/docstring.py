@@ -16,12 +16,16 @@ class Docstring(Component):
     """``<c-docstring path="citry.X" />`` renders one symbol's API reference."""
 
     transparent = True
-    template = "{{ rendered }}"
 
     class Kwargs:
         path: str
 
-    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+    class Slots:
+        pass
+
+    template = "{{ rendered }}"
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         path = str(kwargs.path)
         data = extract_symbol(path)
         if data is None:

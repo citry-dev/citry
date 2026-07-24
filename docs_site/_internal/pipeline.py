@@ -32,8 +32,17 @@ from citry import citry as default_citry
 
 # The custom <c-*> tags each register on import; importing them lets
 # render_content resolve <c-example>, <c-image>, <c-docstring>, <c-builtin>,
-# <c-include-file>, and <c-people> by name.
-from docs_site._internal.components import builtin, docstring, example_card, image, include_file, people  # noqa: F401
+# <c-include-file>, <c-people>, <c-search-modal>, and <c-version-picker> by name.
+from docs_site._internal.components import (  # noqa: F401
+    builtin,
+    docstring,
+    example_card,
+    image,
+    include_file,
+    people,
+    search_modal,
+    version_picker,
+)
 from docs_site._internal.components.doc_page import DocPage
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
@@ -124,21 +133,29 @@ def render_content(
     citry_instance = citry_instance or default_citry
     page_context = context or {}
 
-    content_cls = type(
-        "DocsContent",
-        (Component,),
-        {
-            "citry": citry_instance,
-            "name": f"docs-content-{next(_content_counter)}",
-            "transparent": True,
-            "template": body,
-            "template_data": lambda self, kwargs, slots=None: page_context,  # noqa: ARG005
-        },
-    )
+    class DocsContent(Component):
+        citry = citry_instance
+        name = f"docs-content-{next(_content_counter)}"
+        transparent = True
+        template = body
+
+        class Kwargs:
+            pass
+
+        class Slots:
+            pass
+
+        def template_data(
+            self,
+            kwargs: Kwargs,  # noqa: ARG002
+            slots: Slots,  # noqa: ARG002
+        ) -> dict[str, Any]:
+            return page_context
+
     try:
-        return str(content_cls())
+        return str(DocsContent())
     finally:
-        citry_instance.unregister(content_cls)
+        citry_instance.unregister(DocsContent)
 
 
 def _content_rel(source_path: Path, config: DocsConfig) -> Path | None:

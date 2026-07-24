@@ -30,7 +30,10 @@ class ReferenceSymbol(Component):
         # H1 at level 2; each nested member is one level deeper.
         level: int = 2
 
-    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         # Headings run h2..h6; members render one level deeper, capped at h6.
         level = min(max(kwargs.level, 2), 6)
         # The empty badge span carries the symbol kind so the right-rail TOC (built
@@ -45,40 +48,93 @@ class ReferenceSymbol(Component):
             "bases": Markup(", ").join(kwargs.data.bases),
         }
 
+    # Keep <pre><code> adjacent below so source indentation does not become
+    # whitespace in the displayed signature.
     template = """
-        <div class="doc-object">
-          <c-if cond="data.source_url">
-            <a class="doc-source-link" c-href="data.source_url" target="_blank" rel="noopener">
-              View source
-            </a>
-          </c-if>
-          <c-element c-is="heading_tag" c-id="data.anchor" class="doc-heading"><span c-class="kind_badge"></span><span class="doc-object-name"><code>{{ data.name }}</code></span> <span class="doc-kind">{{ data.kind }}</span></c-element>
-          <c-if cond="data.bases"><p class="doc-class-bases">Bases: {{ bases }}</p></c-if>
-          <c-if cond="data.signature"><div class="doc-signature highlight"><pre><code>{{ data.signature }}</code></pre></div></c-if>
-          <div class="doc-body">
-            {{ data.description }}
-            <c-if cond="data.params">
-              <p class="doc-section">Parameters</p>
-              <ul class="doc-list">
-                <c-for each="p in data.params"><li><code>{{ p.name }}</code><c-if cond="p.annotation"> <code>{{ p.annotation }}</code></c-if> - {{ p.description }}</li></c-for>
-              </ul>
-            </c-if>
-            <c-if cond="data.returns"><p class="doc-section">Returns</p><p class="doc-returns">{{ data.returns }}</p></c-if>
-            <c-if cond="data.raises">
-              <p class="doc-section">Raises</p>
-              <ul class="doc-list"><c-for each="r in data.raises"><li><code>{{ r.name }}</code> - {{ r.description }}</li></c-for></ul>
-            </c-if>
-            <c-if cond="data.attributes">
-              <p class="doc-section">Attributes</p>
-              <ul class="doc-list">
-                <c-for each="a in data.attributes"><li><code>{{ a.name }}</code><c-if cond="a.annotation"> <code>{{ a.annotation }}</code></c-if> - {{ a.description }}</li></c-for>
-              </ul>
-            </c-if>
-            <c-if cond="data.members">
-              <div class="doc-members">
-                <c-for each="m in data.members"><c-ReferenceSymbol c-data="m" c-level="member_level" /></c-for>
-              </div>
-            </c-if>
+      <div class="doc-object">
+        <c-if cond="data.source_url">
+          <a
+            class="doc-source-link"
+            c-href="data.source_url"
+            target="_blank"
+            rel="noopener"
+          >
+            View source
+          </a>
+        </c-if>
+        <c-element
+          c-is="heading_tag"
+          c-id="data.anchor"
+          class="doc-heading"
+        >
+          <span c-class="kind_badge"></span>
+          <span class="doc-object-name">
+            <code>{{ data.name }}</code>
+          </span>
+          <span class="doc-kind">{{ data.kind }}</span>
+        </c-element>
+        <c-if cond="data.bases">
+          <p class="doc-class-bases">Bases: {{ bases }}</p>
+        </c-if>
+        <c-if cond="data.signature">
+          <div class="doc-signature highlight">
+            <pre><code>{{ data.signature }}</code></pre>
           </div>
+        </c-if>
+        <div class="doc-body">
+          {{ data.description }}
+          <c-if cond="data.params">
+            <p class="doc-section">Parameters</p>
+            <ul class="doc-list">
+              <c-for each="p in data.params">
+                <li>
+                  <code>{{ p.name }}</code>
+                  <c-if cond="p.annotation">
+                    <code>{{ p.annotation }}</code>
+                  </c-if>
+                  - {{ p.description }}
+                </li>
+              </c-for>
+            </ul>
+          </c-if>
+          <c-if cond="data.returns">
+            <p class="doc-section">Returns</p>
+            <p class="doc-returns">{{ data.returns }}</p>
+          </c-if>
+          <c-if cond="data.raises">
+            <p class="doc-section">Raises</p>
+            <ul class="doc-list">
+              <c-for each="r in data.raises">
+                <li>
+                  <code>{{ r.name }}</code> - {{ r.description }}
+                </li>
+              </c-for>
+            </ul>
+          </c-if>
+          <c-if cond="data.attributes">
+            <p class="doc-section">Attributes</p>
+            <ul class="doc-list">
+              <c-for each="a in data.attributes">
+                <li>
+                  <code>{{ a.name }}</code>
+                  <c-if cond="a.annotation">
+                    <code>{{ a.annotation }}</code>
+                  </c-if>
+                  - {{ a.description }}
+                </li>
+              </c-for>
+            </ul>
+          </c-if>
+          <c-if cond="data.members">
+            <div class="doc-members">
+              <c-for each="m in data.members">
+                <c-ReferenceSymbol
+                  c-data="m"
+                  c-level="member_level"
+                />
+              </c-for>
+            </div>
+          </c-if>
         </div>
+      </div>
     """

@@ -27,9 +27,16 @@ class VersionPicker(Component):
     class Kwargs:
         current_version: str = ""
 
+    class Slots:
+        pass
+
     template = """
       <c-if cond="current_version">
-        <div class="djc-version-picker" data-version-picker c-data-current="current_version">
+        <div
+          class="djc-version-picker"
+          data-version-picker
+          c-data-current="current_version"
+        >
           <select class="djc-version-picker__select" aria-label="Choose docs version">
             <option c-value="current_version" selected>{{ current_version }}</option>
           </select>

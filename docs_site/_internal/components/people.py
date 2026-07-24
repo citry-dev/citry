@@ -20,12 +20,16 @@ class People(Component):
     """``<c-people group="maintainers" />`` renders the avatar grid for a people.yml group."""
 
     transparent = True
-    template = "{{ grid }}"
 
     class Kwargs:
         group: str
 
-    def template_data(self, kwargs: Kwargs, slots: Any) -> dict[str, Any]:  # noqa: ARG002
+    class Slots:
+        pass
+
+    template = "{{ grid }}"
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         group = str(kwargs.group)
         people_path = default_config.base_dir / "data" / "people.yml"
         if not people_path.is_file():
