@@ -14,6 +14,9 @@ on:
     # packages/py), so a change to either can change the docs output.
     paths:
       - "docs_site/**"
+      - "CHANGELOG.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE"
       - "packages/py/**"
       - "crates/**"
       - "third_party/**"
@@ -24,6 +27,9 @@ on:
   pull_request:
     paths:
       - "docs_site/**"
+      - "CHANGELOG.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE"
       - "packages/py/**"
       - "crates/**"
       - "third_party/**"
@@ -79,3 +85,48 @@ jobs:
 
       - name: Run the docs-site tests
         run: uv run --no-sync pytest docs_site/tests
+
+  # Browser end-to-end tests (docs_site/tests/e2e): build the real site
+  # and drive it in a headless browser. Chromium only for PR-time speed.
+  # Needs the root-owned `docs` extra (to build the site), the `citry`
+  # package's `e2e` group (for Playwright), and the browser binary.
+  docs-e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install the workspace with the docs extra
+        run: uv sync --locked --all-packages --extra docs
+
+      # The e2e group belongs to the citry workspace package. Install it
+      # additively so uv retains the root project's docs extra from above.
+      - name: Install the browser test dependencies
+        run: uv sync --locked --package citry --group e2e --inexact
+
+      - name: Install the chromium browser
+        run: uv run --no-sync playwright install --with-deps chromium
+
+      - name: Run the docs browser e2e tests
+        run: uv run --no-sync pytest docs_site/tests/e2e --browser chromium

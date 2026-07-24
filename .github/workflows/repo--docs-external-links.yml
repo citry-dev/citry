@@ -1,0 +1,92 @@
+# Weekly external-link health check for the docs site (Phase 6 maintenance).
+#
+# Out-of-band on purpose: the internal_link and anchor post-build guards already
+# validate on-site links and anchors on every PR (in repo--docs-check), but
+# external URLs rot over time independently of our own changes, so they are
+# checked on a schedule instead of blocking a pull request.
+#
+# lychee checks only outbound http(s) links in the built HTML, skipping citry's
+# own (not-yet-cut-over) domain and localhost. A broken external link turns the
+# scheduled run red so a maintainer can fix or replace it.
+name: Docs external links
+
+on:
+  schedule:
+    # 06:00 UTC every Monday.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-links:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Initialize the vendored Ruff submodule (a build/runtime dependency
+          # of the citry_core extension the docs import).
+          submodules: recursive
+          # Full history so per-page git dates render the same way the deploy
+          # build produces them; this checks the links on that same output.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # Rust is needed because `uv sync` builds the citry_core extension through
+      # the maturin backend, and the docs import `citry`, which depends on it.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # The `docs` extra pulls the build dependencies (lxml, pagefind,
+      # minify-html, ...); social cards are not needed for a link check.
+      - name: Install the workspace with the docs extra
+        run: uv sync --locked --all-packages --extra docs
+
+      # Search, social cards, and minify do not change which links appear in the
+      # rendered HTML, so skip them for speed. Build into a dedicated directory
+      # that lychee then walks.
+      - name: Build the docs site
+        run: uv run --no-sync python -m docs_site build --no-search --no-social-cards --no-minify -o "$GITHUB_WORKSPACE/link-check-site"
+
+      - name: Check external links (lychee)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          # --root-dir lets lychee resolve root-absolute internal links
+          # (`/reference/...`, `/static/...`) against the build output instead of
+          # erroring on them; the two --scheme flags then limit *checking* to
+          # outbound http(s) links, since on-site links are already covered by
+          # the internal_link guard per PR. citry's own domain is not live until
+          # cutover, so it is excluded, as is localhost. The Discord invite is
+          # excluded because discord.gg 403s automated checkers (a false failure).
+          args: >-
+            --root-dir ${{ github.workspace }}/link-check-site
+            --scheme https
+            --scheme http
+            --exclude 'citry\.dev'
+            --exclude 'discord\.gg'
+            --exclude '^https?://localhost'
+            --max-concurrency 8
+            --accept 200,206,429
+            "link-check-site/**/*.html"
+          fail: true
+          # Authenticate the many github.com links (badges, source links) so
+          # rate limiting does not turn them into a 403, which --accept does not
+          # tolerate. contents:read (granted above) is enough for link checks.
+          token: ${{ secrets.GITHUB_TOKEN }}

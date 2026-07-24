@@ -1,0 +1,54 @@
+# Monthly refresh of the docs-site people grid (docs_site/data/people.yml) from
+# merged pull requests across citry and django-components, opening a PR when the
+# data changes. Run docs_site/scripts/people.py locally to refresh by hand.
+name: Docs people
+
+on:
+  schedule:
+    - cron: "0 18 1 * *" # 18:00 UTC on the 1st of the month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-people:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # The script is pure standard library, so it needs no install step. The
+      # default token can read the public repositories the script queries.
+      - name: Refresh the people data
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python docs_site/scripts/people.py
+
+      - name: Open a PR when the data changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet -- docs_site/data/people.yml; then
+            echo "People data unchanged; nothing to do."
+            exit 0
+          fi
+          branch="docs-people-$(date -u +%Y%m%d)"
+          # De-dupe: skip if an open PR from today's branch already exists.
+          open=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head "$branch" --json number --jq 'length')
+          if [ "$open" -gt 0 ]; then
+            echo "An open people PR already exists; nothing to do."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add docs_site/data/people.yml
+          git commit -m "chore(docs): refresh community people data"
+          git push origin "$branch"
+          gh pr create --repo "$GITHUB_REPOSITORY" --title "Update docs people" \
+            --body "Automated refresh of the people grid from merged PRs across citry and django-components." \
+            --base main --head "$branch"

@@ -17,6 +17,9 @@ on:
       - "main"
     paths:
       - "docs_site/**"
+      - "CHANGELOG.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE"
       - "packages/py/**"
       - "crates/**"
       - "pyproject.toml"
@@ -49,6 +52,10 @@ jobs:
         with:
           # Initialize the vendored Ruff submodule (a build/runtime dependency)
           submodules: recursive
+          # Full history so per-page git dates (sitemap <lastmod>, article
+          # published/modified, footer "last updated") are accurate. A shallow
+          # clone makes every page report the checkout commit as its date.
+          fetch-depth: 0
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -85,7 +92,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: docs_site/.cache/og
-          key: og-cards-${{ hashFiles('docs_site/components/og_card.py', 'docs_site/content/**') }}
+          key: og-cards-${{ hashFiles('docs_site/_internal/components/og_card.py', 'docs_site/content/**') }}
           restore-keys: |
             og-cards-
 

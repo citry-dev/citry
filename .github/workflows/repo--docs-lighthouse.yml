@@ -1,0 +1,127 @@
+# Lighthouse audit of the docs site. Builds the static docs_site and runs
+# Lighthouse against a handful of representative pages, asserting the SEO,
+# accessibility, best-practices, and performance thresholds. This catches perf
+# and accessibility regressions that the post-build guards (repo--docs-check)
+# do not look for.
+#
+# Config and thresholds live in .github/lighthouserc.json. SEO and
+# best-practices are hard gates (score must be 1.0). Accessibility gates at
+# 0.95 or above. Performance is a "warn" only, because the score varies from
+# one CI run to the next.
+#
+# Runs on pull requests that touch the docs and on demand. It is not wired into
+# branch protection: make it a required check only once the thresholds are
+# confirmed on a real CI run (a browser audit can score differently than a local
+# one).
+name: Docs lighthouse
+
+on:
+  pull_request:
+    paths:
+      - "docs_site/**"
+      - "CHANGELOG.md"
+      - "CODE_OF_CONDUCT.md"
+      - "LICENSE"
+      - ".github/workflows/repo--docs-lighthouse.yml"
+      - ".github/lighthouserc.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Initialize the vendored Ruff submodule (a build/runtime dependency).
+          submodules: recursive
+          # Full history so per-page git dates (the footer "last updated") are
+          # accurate. A shallow clone reports the checkout commit for every page.
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      # Rust is needed because `uv sync` builds the citry_core extension through
+      # the maturin backend, and the docs import `citry`, which depends on it.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          # NOTE: keep in step with rust-toolchain.toml
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      # The `docs` extra pulls the build dependencies (lxml, pagefind,
+      # minify-html, ...); social cards are not needed for this audit.
+      - name: Install the workspace with the docs extra
+        run: uv sync --locked --all-packages --extra docs
+
+      # Build the static site into a served tree lhci can serve. Search and
+      # social cards are skipped: search is lazy-loaded (it is not fetched on
+      # page load, so it does not affect these audits) and the cards need a
+      # browser this job does not install (the default card image is enough
+      # here). Minify stays on so the audited HTML matches what gets deployed.
+      # The build writes its own /static into the output dir, so no separate
+      # static-collection step is needed.
+      - name: Build the docs site
+        run: uv run --no-sync python -m docs_site build --no-search --no-social-cards -o "$GITHUB_WORKSPACE/lhsite"
+
+      - name: Run Lighthouse CI
+        run: |
+          npm install -g @lhci/cli@0.14.x
+          lhci autorun --config=.github/lighthouserc.json
+
+      # lhci's assertion output only prints the category score (e.g.
+      # "best-practices ... found 0.96"), not which audit caused it. This parses
+      # the collected reports and prints every score-affecting audit that did not
+      # pass, with its details, so a failure is diagnosable from the log alone.
+      # Runs on success too (surfaces the perf warnings); a no-op if no reports.
+      - name: Lighthouse audit breakdown
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob
+          import json
+
+          reports = sorted(glob.glob(".lighthouseci/lhr-*.json"))
+          if not reports:
+              print("No Lighthouse reports found.")
+              raise SystemExit
+          seen = set()
+          for path in reports:
+              with open(path) as handle:
+                  data = json.load(handle)
+              url = data.get("finalUrl") or data.get("requestedUrl") or path
+              if url in seen:
+                  continue  # one run per URL is enough
+              seen.add(url)
+              rows = []
+              for cat in ("performance", "accessibility", "best-practices", "seo"):
+                  category = data["categories"].get(cat)
+                  if not category:
+                      continue
+                  for ref in category["auditRefs"]:
+                      audit = data["audits"][ref["id"]]
+                      score = audit.get("score")
+                      if score is not None and score < 1 and (ref.get("weight") or 0) > 0:
+                          rows.append(f"  [{cat}] {ref['id']} (score {score}, weight {ref['weight']}): {audit.get('title')}")
+                          for item in ((audit.get("details") or {}).get("items") or [])[:5]:
+                              detail = item.get("description") or item.get("label") or (item.get("node") or {}).get("snippet") or item
+                              rows.append(f"        - {detail}")
+              if rows:
+                  print(f"\n### {url}  (best-practices={data['categories'].get('best-practices',{}).get('score')}, "
+                        f"perf={data['categories'].get('performance',{}).get('score')})")
+                  print("\n".join(rows))
+          PY
