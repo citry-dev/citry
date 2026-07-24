@@ -104,6 +104,26 @@ def test_markdown_body_captures_snippet_expansion_once(tmp_path: Path) -> None:
     assert '--8<-- "missing.py"' in result.markdown_body
 
 
+def test_markdown_body_expands_nested_block_and_empty_snippets(tmp_path: Path) -> None:
+    (tmp_path / "leaf.py").write_text("NESTED_BLOCK_VALUE = 1\n", encoding="utf-8")
+    (tmp_path / "empty.py").write_text("", encoding="utf-8")
+    (tmp_path / "outer.md").write_text(
+        "--8<--\nleaf.py\nempty.py\n--8<--\n",
+        encoding="utf-8",
+    )
+
+    cfg = DocsConfig(repo_root=tmp_path, content_dir=tmp_path, site_dir=tmp_path / "site")
+    result = render_page(
+        '```python\n--8<-- "outer.md"\n```\n',
+        config=cfg,
+        wrap_in_layout=False,
+    )
+
+    assert "NESTED_BLOCK_VALUE" in result.html
+    assert "NESTED_BLOCK_VALUE = 1" in result.markdown_body
+    assert "--8<--" not in result.markdown_body
+
+
 def test_content_index_renders() -> None:
     # The home page reads the {{ version }} template global, which build and serve
     # configure at startup; do the same here so rendering the real page matches

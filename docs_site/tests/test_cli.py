@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 
 from docs_site._internal import cli
 from docs_site._internal._vendor.mike_versions import Versions
+from docs_site._internal.assemble import AssembleOutcome
+from docs_site._internal.build import BuildOutcome
 from docs_site._internal.versioning import write_build_info, write_manifest
 
 if TYPE_CHECKING:
@@ -24,6 +26,58 @@ if TYPE_CHECKING:
     import pytest
 
 _PAGE = "<html><body>hi</body></html>"
+
+
+def test_build_check_fails_when_search_index_fails(
+    monkeypatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        cli,
+        "build_site",
+        lambda **_kwargs: BuildOutcome(
+            output_dir=tmp_path,
+            search_ok=False,
+            search_message="pagefind failed",
+        ),
+    )
+
+    assert cli._run_build_check(strict=True) == 1
+    assert "Search index failed: pagefind failed" in capsys.readouterr().out
+
+
+def test_assemble_command_fails_for_partial_build(
+    monkeypatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        "docs_site._internal.assemble.assemble_site",
+        lambda **_kwargs: AssembleOutcome(
+            output_dir=tmp_path,
+            failed=1,
+            errors=[("broken.md", "RuntimeError: broken")],
+            search_ok=True,
+        ),
+    )
+
+    assert cli._run_assemble(None, build=True) == 1
+    output = capsys.readouterr().out
+    assert "1 page(s) failed" in output
+    assert "broken.md: RuntimeError: broken" in output
+
+
+def test_assemble_command_fails_without_search_index(
+    monkeypatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        "docs_site._internal.assemble.assemble_site",
+        lambda **_kwargs: AssembleOutcome(
+            output_dir=tmp_path,
+            search_ok=False,
+            search_message="pagefind failed",
+        ),
+    )
+
+    assert cli._run_assemble(None, build=True) == 1
+    assert "Search index failed: pagefind failed" in capsys.readouterr().out
 
 
 def _make_version(root: Path, version: str, *, pages: tuple[str, ...] = ("index.html",)) -> Path:

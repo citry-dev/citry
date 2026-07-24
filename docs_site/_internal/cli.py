@@ -157,6 +157,9 @@ def _run_build_check(*, strict: bool) -> int:
             for rel, message in outcome.errors:
                 print(f"  - {rel}: {message}")
             return 1
+        if not outcome.search_ok:
+            print(f"Search index failed: {outcome.search_message}")
+            return 1
         results, ok = run_guards(make_context(out, config=default_config), strict=strict)
 
     print(format_report(results))
@@ -167,6 +170,14 @@ def _run_assemble(output: Path | None, *, build: bool) -> int:
     from docs_site._internal.assemble import assemble_site  # noqa: PLC0415 - keeps `build` lean
 
     outcome = assemble_site(output_dir=output, build=build)
+    if outcome.failed:
+        print(f"{outcome.failed} page(s) failed to render:")
+        for rel, message in outcome.errors:
+            print(f"  - {rel}: {message}")
+        return 1
+    if outcome.search_ok is False:
+        print(f"Search index failed: {outcome.search_message}")
+        return 1
     print(f"Assembled deploy artifact at {outcome.output_dir}.")
     print(f"  versions mounted under /v/: {', '.join(outcome.published) or '(none)'}")
     print(f"  root version picker enabled on {outcome.picker_pages} page(s)")

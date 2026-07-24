@@ -45,6 +45,12 @@ class AssembleOutcome:
     """Where the artifact was assembled, which versions it mounted, pickers wired, old pages hidden."""
 
     output_dir: Path
+    # A current-version render failure or search-index failure makes the
+    # artifact undeployable. The CLI reports these and exits nonzero.
+    failed: int = 0
+    errors: list[tuple[str, str]] = field(default_factory=list)
+    search_ok: bool | None = None
+    search_message: str = ""
     published: list[str] = field(default_factory=list)
     picker_pages: int = 0
     # Old-version HTML pages rewritten to noindex + a canonical to the current release.
@@ -57,11 +63,20 @@ def assemble_site(
     """Build the current version into the site root and mount the committed versions under ``/v/``."""
     config = config or default_config
     site_dir = (output_dir or config.site_dir).resolve()
+    outcome = AssembleOutcome(output_dir=site_dir)
 
     if build:
-        build_site(config=config, output_dir=site_dir)  # the current version at the root
+        # The current version is the root of the deploy artifact. Do not mount
+        # versions onto it when any page or the shipped search index failed:
+        # callers must be able to reject a partial artifact before upload.
+        build_outcome = build_site(config=config, output_dir=site_dir)
+        outcome.failed = build_outcome.failed
+        outcome.errors = list(build_outcome.errors)
+        outcome.search_ok = build_outcome.search_ok
+        outcome.search_message = build_outcome.search_message
+        if outcome.failed or not outcome.search_ok:
+            return outcome
 
-    outcome = AssembleOutcome(output_dir=site_dir)
     dest_v = site_dir / "v"
     if (config.versions_dir / "versions.json").is_file():
         outcome.published = _publish_versions(config.versions_dir, dest_v, config.publish_window)

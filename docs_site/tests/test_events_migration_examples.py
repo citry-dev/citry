@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from docs_site._internal.config import config
+from docs_site._internal.guards.snippet_path import iter_snippet_refs
 from docs_site._internal.pipeline import render_page
 
 CONTENT_ROOT = Path(__file__).resolve().parents[1] / "content"
@@ -24,9 +25,9 @@ MIGRATION_PAGES = (
 )
 
 
-def _active_snippet_directives(source: str) -> list[str]:
-    """Return real includes, excluding escaped ``;--8<--`` documentation."""
-    return [line.strip() for line in source.splitlines() if line.lstrip().startswith("--8<-- ")]
+def _active_snippet_refs(source: str) -> list[str]:
+    """Return inline and block include paths, excluding escaped documentation."""
+    return [raw_path for _lineno, raw_path in iter_snippet_refs(source)]
 
 
 def test_executable_migration_snippets() -> None:
@@ -63,13 +64,24 @@ def test_parity_matrix_has_every_delivery_class_and_v1_acceptance() -> None:
 @pytest.mark.parametrize(
     ("page", "fingerprints"),
     [
-        ("migrate-from-component-view.md", ("class ContactForm", "class FragmentLoader")),
+        (
+            "migrate-from-component-view.md",
+            ("class ContactForm(Component)", "class NamedContactForm(Component)", "class FragmentLoader(Component)"),
+        ),
         (
             "migrate-from-django-unicorn.md",
-            ("class LiveSearch", "class Rating", "class Preferences"),
+            (
+                "class LiveSearch(Component)",
+                "class Rating(Component)",
+                "raise EventError(",
+                "class Preferences(Component)",
+            ),
         ),
-        ("migrate-from-tetra.md", ("class Counter", "class TaskEditor")),
-        ("migrate-from-livecomponents.md", ("class ServerCounter", "class SignedCounter")),
+        ("migrate-from-tetra.md", ("class Counter(Component)", "class TaskEditor(Component)")),
+        (
+            "migrate-from-livecomponents.md",
+            ("class ServerCounter(Component)", "class SignedCounter(Component)", "class TaskEditor(Component)"),
+        ),
     ],
 )
 def test_migration_pages_expand_their_executable_snippets(page: str, fingerprints: tuple[str, ...]) -> None:
@@ -80,21 +92,32 @@ def test_migration_pages_expand_their_executable_snippets(page: str, fingerprint
     for fingerprint in fingerprints:
         assert fingerprint in text
         assert fingerprint in result.markdown_body
-    for directive in _active_snippet_directives(source):
-        assert directive not in text
-        assert directive not in result.markdown_body
+    for snippet_ref in _active_snippet_refs(source):
+        assert snippet_ref not in text
+        assert snippet_ref not in result.markdown_body
 
 
 def test_every_snippet_page_exports_self_contained_markdown() -> None:
     snippet_pages: list[tuple[Path, str, list[str]]] = []
     for path in sorted(CONTENT_ROOT.rglob("*.md")):
         source = path.read_text(encoding="utf-8")
-        directives = _active_snippet_directives(source)
-        if directives:
-            snippet_pages.append((path, source, directives))
+        snippet_refs = _active_snippet_refs(source)
+        if snippet_refs:
+            snippet_pages.append((path, source, snippet_refs))
 
     assert snippet_pages
-    for source_path, source, directives in snippet_pages:
+    for source_path, source, snippet_refs in snippet_pages:
         result = render_page(source, config=config, wrap_in_layout=False)
-        for directive in directives:
-            assert directive not in result.markdown_body, source_path
+        assert list(iter_snippet_refs(result.markdown_body)) == [], source_path
+        for snippet_ref in snippet_refs:
+            assert snippet_ref not in result.markdown_body, source_path
+
+    by_path = {path.relative_to(CONTENT_ROOT).as_posix(): source for path, source, _directives in snippet_pages}
+    assert (
+        "# Contributor Covenant Code of Conduct"
+        in render_page(by_path["community/code-of-conduct.md"], config=config, wrap_in_layout=False).markdown_body
+    )
+    assert (
+        "Permission is hereby granted"
+        in render_page(by_path["community/license.md"], config=config, wrap_in_layout=False).markdown_body
+    )

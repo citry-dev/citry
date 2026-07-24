@@ -22,6 +22,7 @@ from docs_site._internal.guards import (
     redirect_target,
     run_guards,
     single_h1,
+    snippet_path,
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
 from docs_site._internal.guards.site_index import SiteIndex
@@ -94,6 +95,27 @@ def test_fence_validator_flags_unclosed_fence(tmp_path: Path) -> None:
     assert len(results) == 1
     assert results[0].severity is Severity.ERROR
     assert "Unclosed code fence" in results[0].message
+
+
+def test_snippet_path_ignores_escaped_markers_and_checks_both_include_forms(tmp_path: Path) -> None:
+    (tmp_path / "inline.py").write_text("inline\n", encoding="utf-8")
+    (tmp_path / "block.py").write_text("block\n", encoding="utf-8")
+    (tmp_path / "page.md").write_text(
+        ';--8<-- "intentionally-missing.py"\n--8<-- "inline.py"\n--8<--\nblock.py\n--8<--\n',
+        encoding="utf-8",
+    )
+
+    assert list(snippet_path.check(_content_ctx(tmp_path))) == []
+
+
+def test_snippet_path_reports_missing_active_include(tmp_path: Path) -> None:
+    (tmp_path / "page.md").write_text('--8<-- "missing.py"\n', encoding="utf-8")
+
+    results = list(snippet_path.check(_content_ctx(tmp_path)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "missing.py" in results[0].message
 
 
 def test_component_fence_flags_component_in_python_fence(tmp_path: Path) -> None:

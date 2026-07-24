@@ -156,10 +156,14 @@ import root that makes the example packages unable to import `docs_site`.
 For browser tests:
 
 ```bash
-uv sync --locked --all-packages --extra docs --group e2e
+uv sync --locked --all-packages --extra docs
+uv sync --locked --package citry --group e2e --inexact
 uv run --no-sync playwright install chromium
 uv run --no-sync pytest docs_site/tests/e2e --browser chromium
 ```
+
+The second sync selects the `e2e` group from its owning `citry` workspace
+package. `--inexact` keeps the root project's docs dependencies installed.
 
 The complete repository gate is:
 
@@ -241,8 +245,9 @@ maintainer decision:
 - It attempts to commit the generated snapshot back to protected `main` with
   the default `GITHUB_TOKEN`, which may need replacement with an approved
   GitHub App token or PAT.
-- It checks out `origin/main` before building, so a later `main` tip could differ
-  from the commit carrying the tag.
+- It deliberately checks out `origin/main` before dependency installation and
+  building, so the snapshot is internally consistent but a later `main` tip
+  could differ from the commit carrying the tag.
 
 A manual dispatch of the release workflow only assembles and redeploys the
 existing version tree. Snapshot creation is conditional on a tag event.

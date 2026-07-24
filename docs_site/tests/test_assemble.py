@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from docs_site._internal.assemble import _noindex_old_versions, assemble_site
-from docs_site._internal.build import build_site
+from docs_site._internal.build import BuildOutcome, build_site
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.versioning import BUILD_INFO_NAME, MANIFEST_NAME, update_manifest
 
@@ -53,6 +53,46 @@ def test_assemble_mounts_versions_and_enables_picker(tmp_path: Path) -> None:
     assert outcome.picker_pages > 0
     assert 'data-versions-root="/v/"' in (site / "index.html").read_text(encoding="utf-8")
     assert "data-versions-root" not in (site / "v" / "1.0.0" / "index.html").read_text(encoding="utf-8")
+
+
+def test_assemble_rejects_partial_current_build(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+
+    def partial_build(**_kwargs) -> BuildOutcome:
+        return BuildOutcome(
+            output_dir=config.site_dir,
+            failed=1,
+            errors=[("broken.md", "RuntimeError: broken")],
+            search_ok=True,
+        )
+
+    monkeypatch.setattr("docs_site._internal.assemble.build_site", partial_build)
+
+    outcome = assemble_site(config=config)
+
+    assert outcome.failed == 1
+    assert outcome.errors == [("broken.md", "RuntimeError: broken")]
+    assert not (config.site_dir / "v").exists()
+
+
+def test_assemble_rejects_missing_search_index(tmp_path: Path, monkeypatch) -> None:
+    config = _config(tmp_path)
+
+    def build_without_search(**_kwargs) -> BuildOutcome:
+        return BuildOutcome(
+            output_dir=config.site_dir,
+            search_ok=False,
+            search_message="pagefind failed",
+        )
+
+    monkeypatch.setattr("docs_site._internal.assemble.build_site", build_without_search)
+
+    outcome = assemble_site(config=config)
+
+    assert outcome.failed == 0
+    assert outcome.search_ok is False
+    assert outcome.search_message == "pagefind failed"
+    assert not (config.site_dir / "v").exists()
 
 
 def _snapshot_page(page: Path, canonical: str, *, mini: bool) -> None:
