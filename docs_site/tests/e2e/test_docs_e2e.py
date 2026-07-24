@@ -102,6 +102,25 @@ def test_example_standalone_demo_page_loads(page: Any, docs_site_url: str) -> No
     assert bad == [], f"example page loaded with failed requests: {bad}"
 
 
+def test_tabs_example_supports_keyboard_navigation(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/examples/tabs/")
+    tabs = page.locator('[role="tab"]')
+    panels = page.locator('[role="tabpanel"]')
+
+    tabs.first.focus()
+    page.keyboard.press("ArrowRight")
+
+    assert tabs.nth(1).get_attribute("aria-selected") == "true"
+    assert tabs.nth(1).evaluate("element => element === document.activeElement")
+    assert panels.nth(0).is_hidden()
+    assert panels.nth(1).is_visible()
+
+    page.keyboard.press("End")
+    assert tabs.nth(2).get_attribute("aria-selected") == "true"
+    page.keyboard.press("Home")
+    assert tabs.first.get_attribute("aria-selected") == "true"
+
+
 def test_fragment_loads_its_deps_on_demand(page: Any, docs_site_url: str) -> None:
     # The whole static-fragment path: the page loads the runtime from /citry/,
     # a click fetches the pre-rendered fragment, the runtime loads the component's

@@ -317,7 +317,8 @@ def _write_companion(path: Path, meta: PageMeta | None, markdown_body: str, cano
     LLMs and tools that want the raw markdown fetch this instead of scraping the
     HTML. The front matter carries just enough to identify the page (title,
     canonical URL, description); the body is the page's markdown after the custom
-    ``<c-*>`` tags were expanded (``RenderResult.markdown_body``).
+    ``<c-*>`` tags and ``--8<--`` snippet includes were expanded
+    (``RenderResult.markdown_body``).
     """
     header_lines = ["---"]
     title = meta.title if meta else ""

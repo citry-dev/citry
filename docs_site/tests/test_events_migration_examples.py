@@ -11,9 +11,10 @@ from pathlib import Path
 import pytest
 
 from docs_site._internal.config import config
-from docs_site._internal.pipeline import _pass2_markdown
+from docs_site._internal.pipeline import render_page
 
-CONTENT = Path(__file__).resolve().parents[1] / "content" / "guides"
+CONTENT_ROOT = Path(__file__).resolve().parents[1] / "content"
+CONTENT = CONTENT_ROOT / "guides"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MIGRATION_PAGES = (
     "migrate-from-component-view.md",
@@ -21,6 +22,11 @@ MIGRATION_PAGES = (
     "migrate-from-tetra.md",
     "migrate-from-livecomponents.md",
 )
+
+
+def _active_snippet_directives(source: str) -> list[str]:
+    """Return real includes, excluding escaped ``;--8<--`` documentation."""
+    return [line.strip() for line in source.splitlines() if line.lstrip().startswith("--8<-- ")]
 
 
 def test_executable_migration_snippets() -> None:
@@ -68,8 +74,27 @@ def test_parity_matrix_has_every_delivery_class_and_v1_acceptance() -> None:
 )
 def test_migration_pages_expand_their_executable_snippets(page: str, fingerprints: tuple[str, ...]) -> None:
     source_path = CONTENT / page
-    rendered_html, _toc = _pass2_markdown(source_path.read_text(encoding="utf-8"), config=config)
-    text = html_module.unescape(re.sub(r"<[^>]+>", "", rendered_html))
+    source = source_path.read_text(encoding="utf-8")
+    result = render_page(source, config=config, wrap_in_layout=False)
+    text = html_module.unescape(re.sub(r"<[^>]+>", "", result.html))
     for fingerprint in fingerprints:
         assert fingerprint in text
-    assert "--8<--" not in text
+        assert fingerprint in result.markdown_body
+    for directive in _active_snippet_directives(source):
+        assert directive not in text
+        assert directive not in result.markdown_body
+
+
+def test_every_snippet_page_exports_self_contained_markdown() -> None:
+    snippet_pages: list[tuple[Path, str, list[str]]] = []
+    for path in sorted(CONTENT_ROOT.rglob("*.md")):
+        source = path.read_text(encoding="utf-8")
+        directives = _active_snippet_directives(source)
+        if directives:
+            snippet_pages.append((path, source, directives))
+
+    assert snippet_pages
+    for source_path, source, directives in snippet_pages:
+        result = render_page(source, config=config, wrap_in_layout=False)
+        for directive in directives:
+            assert directive not in result.markdown_body, source_path

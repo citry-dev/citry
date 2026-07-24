@@ -74,6 +74,36 @@ def test_markdown_extensions_render() -> None:
     assert 'class="admonition note"' in html
 
 
+def test_markdown_body_captures_snippet_expansion_once(tmp_path: Path) -> None:
+    snippet = tmp_path / "snippet.py"
+    snippet.write_text(
+        "# --8<-- [start:example]\n"
+        "class IncludedFromSnippet:\n"
+        '    template = "{{ value }}"\n'
+        "    pass\n"
+        "# --8<-- [end:example]\n",
+        encoding="utf-8",
+    )
+    cfg = DocsConfig(repo_root=tmp_path, content_dir=tmp_path, site_dir=tmp_path / "site")
+    source = (
+        "```citry\n"
+        '--8<-- "snippet.py:example"\n'
+        "```\n\n"
+        # An escaped directive is documentation, not another include. Capturing
+        # the snippets preprocessor's output must not feed that output through a
+        # second snippets pass, which would try to resolve missing.py.
+        ';--8<-- "missing.py"\n'
+    )
+
+    result = render_page(source, config=cfg, wrap_in_layout=False)
+
+    assert "IncludedFromSnippet" in result.html
+    assert "class IncludedFromSnippet:" in result.markdown_body
+    assert '```citry\nclass IncludedFromSnippet:\n    template = "{{ value }}"\n    pass\n```' in result.markdown_body
+    assert '--8<-- "snippet.py:example"' not in result.markdown_body
+    assert '--8<-- "missing.py"' in result.markdown_body
+
+
 def test_content_index_renders() -> None:
     # The home page reads the {{ version }} template global, which build and serve
     # configure at startup; do the same here so rendering the real page matches

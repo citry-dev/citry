@@ -237,6 +237,36 @@ def test_build_writes_md_companions(tmp_path: Path) -> None:
     )
 
 
+def test_build_expands_snippets_in_markdown_outputs(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    out = tmp_path / "site"
+    config = DocsConfig(
+        base_dir=tmp_path,
+        content_dir=content,
+        site_dir=out,
+        repo_root=tmp_path,
+        site_url="https://citry.dev/",
+    )
+    (content / "_nav.yml").write_text("sections:\n- label: Home\n  path: /\n", encoding="utf-8")
+    (tmp_path / "snippet.py").write_text(
+        "# --8<-- [start:example]\nclass IncludedFromSnippet:\n    pass\n# --8<-- [end:example]\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text(
+        '---\ntitle: Home\n---\n\n```citry\n--8<-- "snippet.py:example"\n```\n',
+        encoding="utf-8",
+    )
+
+    outcome = build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert outcome.failed == 0
+    for output in (out / "index.md", out / "llms-full.txt"):
+        text = output.read_text(encoding="utf-8")
+        assert "class IncludedFromSnippet:" in text
+        assert '--8<-- "snippet.py:example"' not in text
+
+
 def test_build_refuses_unsafe_output(tmp_path: Path) -> None:
     config, content, _out = _config(tmp_path)
     (content / "index.md").write_text("# Home\n", encoding="utf-8")

@@ -11,6 +11,7 @@ enhancement and are asserted only where the inventory is monkeypatched.
 from __future__ import annotations
 
 import griffe
+from lxml import html as lxml_html
 
 from docs_site._internal import crossrefs
 from docs_site._internal.crossrefs import make_type_resolver, resolve_external_url
@@ -93,8 +94,14 @@ def test_symbol_carries_source_url() -> None:
 
 def test_source_link_renders_on_the_page() -> None:
     html = render_page('<c-docstring path="citry.format_attrs" />').html
-    assert 'class="doc-source-link"' in html
-    assert ">View source</a>" in html
+    document = lxml_html.document_fromstring(html)
+    links = document.xpath('//a[contains(@class, "doc-source-link")]')
+    data = extract_symbol("citry.format_attrs")
+
+    assert data is not None
+    assert len(links) == 1
+    assert links[0].text_content().strip() == "View source"
+    assert links[0].get("href") == data.source_url
 
 
 # --- cross-linked signatures (4.x) --------------------------------------------

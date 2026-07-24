@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 import markdown
+from markdown.extensions import Extension
+from markdown.preprocessors import Preprocessor
 
 import pygments_citry  # noqa: F401  (registers the `citry` fence lexer at build startup; migration item 1.5)
 from citry import Component
@@ -104,10 +106,40 @@ class RenderResult:
     # build reads these to assemble the sitemap, robots, and llms files without
     # re-parsing the page.
     meta: PageMeta | None = None
-    # The page body as markdown after the custom <c-*> tags were expanded
-    # (before the markdown-to-HTML pass). This is the plain-text form the
-    # llms.txt full-text export concatenates.
+    # The page body as markdown after custom <c-*> tags and --8<-- snippet
+    # includes were expanded. This is the plain-text form the llms-full.txt
+    # full-text export concatenates.
     markdown_body: str = ""
+
+
+class _CaptureExpandedMarkdown(Preprocessor):
+    """Capture Markdown immediately after the snippets preprocessor runs."""
+
+    def __init__(self, captured: list[str]) -> None:
+        super().__init__()
+        self._captured = captured
+
+    def run(self, lines: list[str]) -> list[str]:
+        """Save the snippet-expanded lines without changing the HTML pass."""
+        self._captured[:] = ["\n".join(lines)]
+        return lines
+
+
+class _CaptureExpandedMarkdownExtension(Extension):
+    """Install the capture between snippets and Markdown normalization."""
+
+    def __init__(self, captured: list[str]) -> None:
+        super().__init__()
+        self._captured = captured
+
+    def extendMarkdown(self, md: markdown.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        """Register the capture at the required preprocessor priority."""
+        md.registerExtension(self)
+        # pymdownx.snippets runs at 32 and normalize_whitespace at 30. Capturing
+        # at 31 records exactly the Markdown the snippets pass produced, while
+        # the same preprocessor run continues into HTML conversion. This avoids
+        # a second snippets pass, which would incorrectly expand escaped markers.
+        md.preprocessors.register(_CaptureExpandedMarkdown(self._captured), "capture_expanded_markdown", 31)
 
 
 # A fresh content-component class per render gets a unique registered name, so
@@ -209,8 +241,10 @@ def render_page(
         expanded = meta.body
     # Resolve [text][symbol] cross-refs to reference links (skips fenced code).
     expanded, _unresolved = resolve_crossrefs_in_prose(expanded)
-    # Pass 2: convert the expanded markdown to HTML.
-    content_html, toc_tokens = _pass2_markdown(expanded, config=config)
+    # Pass 2: expand --8<-- snippets and convert the Markdown to HTML. Capture
+    # the post-snippet Markdown from that same preprocessor run for companions
+    # and llms-full.txt; running snippets twice would break escaped markers.
+    content_html, toc_tokens, expanded = _pass2_markdown_with_expanded_source(expanded, config=config)
     # Rewrite internal `.md` links (e.g. ./other.md -> ../other/) so they resolve
     # under the clean-URL scheme. Generated pages (source_path=None) have no source
     # file to resolve against and pass through untouched. Runs before the branch
@@ -274,7 +308,13 @@ def render_page(
 
 
 def _pass2_markdown(source: str, *, config: DocsConfig) -> tuple[str, list]:
-    """Convert markdown to HTML; also return python-markdown's TOC tokens."""
+    """Convert Markdown to HTML; also return Python-Markdown's TOC tokens."""
+    html, toc_tokens, _expanded = _pass2_markdown_with_expanded_source(source, config=config)
+    return html, toc_tokens
+
+
+def _pass2_markdown_with_expanded_source(source: str, *, config: DocsConfig) -> tuple[str, list, str]:
+    """Convert Markdown and return HTML, TOC tokens, and snippet-expanded source."""
     configs = {
         **MD_EXTENSION_CONFIGS,
         # `--8<-- "path"` includes resolve against the repo root ONLY (matching
@@ -283,7 +323,13 @@ def _pass2_markdown(source: str, *, config: DocsConfig) -> tuple[str, list]:
         # the including page itself and silently produce an empty page.
         "pymdownx.snippets": {"check_paths": True, "base_path": [str(config.repo_root)]},
     }
-    md = markdown.Markdown(extensions=MD_EXTENSIONS, extension_configs=configs)
+    captured: list[str] = []
+    md = markdown.Markdown(
+        extensions=[*MD_EXTENSIONS, _CaptureExpandedMarkdownExtension(captured)],
+        extension_configs=configs,
+    )
     html = md.convert(source)
     toc_tokens = getattr(md, "toc_tokens", [])
-    return html, toc_tokens
+    # Markdown.convert returns early for blank input, before preprocessors run.
+    expanded_source = captured[0] if captured else source
+    return html, toc_tokens, expanded_source

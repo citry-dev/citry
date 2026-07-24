@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from lxml import html as lxml_html
+
 from docs_site._internal.components.doc_page import DocPage
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.nav import NavItem, NavSection, NavTree
@@ -35,18 +37,27 @@ def _render_components_page() -> str:
 
 def test_sidebar_shows_sections_and_active_item() -> None:
     html = _render_components_page()
+    document = lxml_html.document_fromstring(html)
     # A section with children renders as an inert category label.
     assert '<div class="djc-sidebar__label">Concepts</div>' in html
     # The current page's item is marked active; its sibling is not.
-    assert '<a class="djc-sidebar__link is-active" href="/concepts/components/">Components</a>' in html
-    assert '<a class="djc-sidebar__link" href="/concepts/slots/">Slots</a>' in html
+    components = document.xpath('//a[@href="/concepts/components/"]')[0]
+    slots = document.xpath('//a[@href="/concepts/slots/"]')[0]
+    assert components.text_content().strip() == "Components"
+    assert "is-active" in components.classes
+    assert slots.text_content().strip() == "Slots"
+    assert "is-active" not in slots.classes
     # A childless section renders as a standalone link.
-    assert '<a class="djc-sidebar__link djc-sidebar__link--top" href="/">Home</a>' in html
+    home = document.xpath('//a[@href="/" and contains(@class, "djc-sidebar__link")]')[0]
+    assert home.text_content().strip() == "Home"
+    assert {"djc-sidebar__link", "djc-sidebar__link--top"} <= set(home.classes)
 
 
 def test_breadcrumbs_trail() -> None:
     html = _render_components_page()
-    assert '<span class="djc-breadcrumbs__current">Components</span>' in html
+    document = lxml_html.document_fromstring(html)
+    current = document.xpath('//span[contains(@class, "djc-breadcrumbs__current")]')[0]
+    assert current.text_content().strip() == "Components"
     # The parent category is a non-link span (it has no page of its own).
     assert "<span>Concepts</span>" in html
 
@@ -149,15 +160,21 @@ def test_version_picker_omitted_without_version() -> None:
 
 def test_prev_next_links() -> None:
     html = _render_components_page()
+    document = lxml_html.document_fromstring(html)
     # In document order Home -> Components -> Slots, so prev=Home, next=Slots.
-    assert 'djc-page-nav__prev" href="/"' in html
-    assert 'djc-page-nav__next" href="/concepts/slots/"' in html
+    previous = document.xpath('//a[contains(@class, "djc-page-nav__prev")]')[0]
+    following = document.xpath('//a[contains(@class, "djc-page-nav__next")]')[0]
+    assert previous.get("href") == "/"
+    assert following.get("href") == "/concepts/slots/"
 
 
 def test_right_rail_toc_lists_h2_sections() -> None:
     html = _render_components_page()
     # The H1 is unwrapped; its h2 ("Basics") becomes a TOC entry.
-    assert '<a class="djc-toc__link" href="#basics">Basics</a>' in html
+    document = lxml_html.document_fromstring(html)
+    basics = document.xpath('//a[@href="#basics"]')[0]
+    assert "djc-toc__link" in basics.classes
+    assert basics.text_content().strip() == "Basics"
 
 
 def test_chrome_header_and_footer() -> None:
@@ -173,14 +190,30 @@ def test_header_shows_github_pypi_discord() -> None:
     # keeps the djc-gh-link hook, PyPI and Discord use djc-social-link) and as
     # text links in the mobile overflow menu.
     html = _render_components_page()
+    document = lxml_html.document_fromstring(html)
     # Icon links in the header.
-    assert 'class="djc-gh-link" href="https://github.com/citry-dev/citry" aria-label="GitHub"' in html
-    assert 'class="djc-social-link" href="https://pypi.org/project/citry/" aria-label="PyPI"' in html
-    assert 'class="djc-social-link" href="https://discord.gg/NaQ8QPyHtD" aria-label="Discord"' in html
+    github = document.xpath('//a[@aria-label="GitHub"]')[0]
+    pypi = document.xpath('//a[@aria-label="PyPI"]')[0]
+    discord = document.xpath('//a[@aria-label="Discord"]')[0]
+    assert (github.get("href"), set(github.classes)) == (
+        "https://github.com/citry-dev/citry",
+        {"djc-gh-link"},
+    )
+    assert (pypi.get("href"), set(pypi.classes)) == (
+        "https://pypi.org/project/citry/",
+        {"djc-social-link"},
+    )
+    assert (discord.get("href"), set(discord.classes)) == (
+        "https://discord.gg/NaQ8QPyHtD",
+        {"djc-social-link"},
+    )
     # Text links in the overflow menu.
-    assert 'djc-overflow__link" href="https://github.com/citry-dev/citry"' in html
-    assert 'djc-overflow__link" href="https://pypi.org/project/citry/"' in html
-    assert 'djc-overflow__link" href="https://discord.gg/NaQ8QPyHtD"' in html
+    overflow_hrefs = {link.get("href") for link in document.xpath('//a[contains(@class, "djc-overflow__link")]')}
+    assert overflow_hrefs == {
+        "https://github.com/citry-dev/citry",
+        "https://pypi.org/project/citry/",
+        "https://discord.gg/NaQ8QPyHtD",
+    }
 
 
 def test_google_site_verification_meta() -> None:

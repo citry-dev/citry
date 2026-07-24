@@ -128,6 +128,13 @@ def test_people_tag_renders_the_avatar_grid() -> None:
     assert "Contributions:" not in html
 
 
+def test_people_tag_renders_special_thanks_without_count() -> None:
+    html = render_content('<c-people group="special_thanks" />')
+
+    assert "@EmilStenstrom" in html
+    assert "Contributions:" not in html
+
+
 def test_people_tag_unknown_group_shows_inline_error() -> None:
     html = render_content('<c-people group="does-not-exist" />')
     assert 'class="docs-error"' in html
