@@ -424,7 +424,7 @@ stacks the `data-cid` markers automatically. It is rejected because:
   decided and built. An ancestor (extensions' `on_component_rendered` today;
   the `on_render` generator when it lands) may catch a descendant's error
   and substitute content; errors travel by unwinding the task stack to the
-  nearest enclosing `Finalize`. Design in [`on_render.md`](on_render.md)
+  nearest enclosing `Finalize`. Design in [`component_on_render.md`](component_on_render.md)
   sections 4-5.
 - **Exact attribute spellings** for the CSS-scoping attribute (`all_attributes`)
   and the CSS-variables binding (`root_attributes`), section 6.2.1. The element

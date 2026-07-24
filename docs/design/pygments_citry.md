@@ -123,7 +123,7 @@ string body to a sub-lexer:
 
 - `template` to `CitryHtmlLexer` (below), **not** `HtmlDjangoLexer`.
 - `js` to Pygments' `JavascriptLexer` (unchanged; Citry `js` is plain
-  JavaScript, `$onComponent(...)` is an ordinary call).
+  JavaScript, `$component(...)` is an ordinary call).
 - `css` to Pygments' `CssLexer` (unchanged).
 
 `name = "Citry Python"`, `aliases = ["citry"]`.
@@ -214,9 +214,9 @@ inputs are explicit lists that must be extended or the gate fails:
   mypy argument list (mypy is not auto-discovering).
 - `uv lock`, and commit `uv.lock` (CI syncs with `--locked`).
 
-The combined coverage gate is `fail_under = 92`, measured across every sourced
-package, so the lexer's tests must keep its own coverage above that or they drag
-the whole gate down.
+The combined coverage gate is currently `fail_under = 93` with
+`precision = 2`, measured across every sourced package, so the lexer's tests
+must keep its own coverage near that level or they drag the whole gate down.
 
 The changelog is a per-package `CHANGELOG.md`, following the `citry_core`
 precedent, which fits a package versioned independently of the root.
@@ -245,18 +245,18 @@ build). What landed:
    `[tool.uv.sources]` (`workspace = true`), so in-repo builds use the workspace
    member rather than PyPI.
 2. The lexer loads at docs-build startup: `import pygments_citry` at the top of
-   [`../../docs_site/pipeline.py`](../../docs_site/pipeline.py), the single
+   [`../../docs_site/_internal/pipeline.py`](../../docs_site/_internal/pipeline.py), the single
    chokepoint every build, serve, and build-check path funnels through.
 3. The 116 Citry component-class code fences across 31 content pages were
    switched from ` ```python ` to ` ```citry ` in one pass (the 77 non-component
    Python fences and the template-only fragments were left alone). A new
-   [`../../docs_site/guards/component_fence.py`](../../docs_site/guards/component_fence.py)
+   [`../../docs_site/_internal/guards/component_fence.py`](../../docs_site/_internal/guards/component_fence.py)
    guard warns when a ` ```python ` fence contains a component class, so it is
    not silently reintroduced; the migration and the guard share one detector
    (`fence_defines_component`) built on the shared `scan_fences` scanner (which
    grew a `body` field).
 4. The flat `PythonLexer` in
-   [`../../docs_site/components/example_card.py`](../../docs_site/components/example_card.py)
+   [`../../docs_site/_internal/components/example_card.py`](../../docs_site/_internal/components/example_card.py)
    is now `CitryPythonLexer`, keeping `HtmlFormatter(cssclass="highlight")`.
 5. The lexer-alias guard's allowlist is unchanged: the entry point makes
    `get_lexer_by_name("citry")` resolve, so the guard accepts the fence with

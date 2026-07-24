@@ -12,7 +12,7 @@ Related reading: the user-facing syntax guide is
 [`../template-syntax.md`](../template-syntax.md); the V1/V2/V3 version model is in
 [`../agent/INDEX.md`](../agent/INDEX.md); the dynamic-attribute rendering
 semantics (class/style merging, `c-bind` spread) are in
-[`html_attrs.md`](html_attrs.md); how the parse tree becomes an AST and then
+[`template_html_attrs.md`](template_html_attrs.md); how the parse tree becomes an AST and then
 generated code is in the parser crate's
 [`AGENTS.md`](../../crates/citry_template_parser/AGENTS.md) and its
 [agent INDEX](../../crates/citry_template_parser/docs/agent/INDEX.md).
@@ -191,15 +191,38 @@ operator, so `{{ a | b }}` evaluates `a | b`; it is not a Django-style filter.
 A `c-*` attribute value is classified in Rust after the grammar has found its
 bounds:
 
-- If the value starts with an HTML tag (`<tag...`) or a fragment (`<>`) and ends
-  with the matching close, it is a **nested template**, rendered against the
-  same context, e.g. `c-body="<span>{{ name }}</span>"`.
+- A trimmed value exactly enclosed by `<>` and `</>` is a **fragment-valued
+  nested template**. The delimiters must enclose the whole non-whitespace value;
+  Rust strips them before parsing the payload. They are not template nodes and
+  cannot be mixed with sibling roots (`<>a</><div>b</div>` is invalid).
+- Otherwise, a value that starts with an HTML tag (`<tag...`) and whose last
+  grammar element is a closing tag, self-closing tag, `<c-raw>` block, or HTML
+  void element is a **nested template**. It may contain one or more adjacent
+  root tags, with text, expressions, or comments between them. After trimming
+  outer whitespace, leading or trailing non-tag content requires the
+  whole-value fragment form.
 - Otherwise it is a **Python expression**, e.g. `c-class="'vip' if user.vip else ''"`.
+
+Nested templates render against the same writer-component context, e.g.
+`c-body="<span>{{ name }}</span>"`. A static `<c-slot>` inside one therefore
+belongs to the component whose template contains the attribute; its slot
+metadata is propagated to that component's `Template.slots` just like a slot in
+the ordinary body.
 
 `c-bind="mapping"` is special: it spreads a dict of attributes onto the tag. It
 does not become a `bind="..."` attribute, and a tag may carry several `c-bind`
 attributes. The rendering-time details (how dynamic `class`/`style` merge with
-static ones) live in [`html_attrs.md`](html_attrs.md).
+static ones) live in [`template_html_attrs.md`](template_html_attrs.md).
+
+Because a spread itself must evaluate to a mapping, `c-bind` is always an
+expression and never a nested-template value. It is valid on elements and
+components, including a normal tag carrying a control-flow shortcut, but not
+directly on `<c-if>`, `<c-elif>`, `<c-else>`, `<c-for>`, `<c-empty>`, or
+`<c-raw>`: those structural runtime nodes do not consume spread attributes.
+The selection/metadata expressions `c-is` on `<c-component>`/`<c-element>`,
+`c-name` on `<c-slot>`/`<c-fill>`, and `c-required` on `<c-slot>` likewise
+reject nested-template values on those special tags. The same spellings remain
+ordinary template-capable kwargs on a user component.
 
 ## Parse-time validation
 
@@ -289,9 +312,9 @@ vice versa.
 
 Within one component there is at most one fill per name. Names may be static
 (`name="header"`) or dynamic (`c-name="prefix + '_x'"`). The parser catches
-duplicate *static* names directly. It can also catch two identical dynamic
-expressions, because template variables cannot be reassigned (rule 10), so the
-same expression always resolves to the same name.
+duplicate *static* names directly. Dynamic expressions are evaluated once per
+fill and may be stateful, so identical expression source is not evidence of an
+equal result. The runtime fill collector rejects duplicate resolved names.
 
 ### 7. Allowed and required fill names
 
@@ -313,7 +336,7 @@ derived from their declared inputs. The built-in rules are:
 | `c-for` | `each` | `each` |
 | `c-empty` | (none) | (none) |
 | `c-raw` | (none) | (none) |
-| `c-fill` | one of `name` / `c-name`; `data`; `fallback`; `c-bind` | one of `name` / `c-name` / `c-bind` |
+| `c-fill` | `name`; `c-name`; `data`; `fallback`; `c-bind` | one of `name` / `c-name` / `c-bind` |
 | `c-slot` | any (no name means the `default` slot) | (none) |
 | `c-component` | any | one of `is` / `c-is` / `c-bind` |
 | `c-element` | any (only the `default` slot) | one of `is` / `c-is` / `c-bind` |
@@ -321,23 +344,74 @@ derived from their declared inputs. The built-in rules are:
 For a user component, its `Component.Kwargs` become the allowed and required
 attributes, so `<c-Table bogus="1">` (unknown input) or `<c-Table>` (missing a
 required input) fails at parse time. An input may always be supplied statically
-(`title="x"`), dynamically (`c-title="expr"`), or via `c-bind`.
+(`title="x"`), dynamically (`c-title="expr"`), or via `c-bind`. The two
+explicit spellings are mutually exclusive, while either spelling satisfies the
+parser's required-input check. A `c-bind` spread may coexist with either one
+because whether the mapping contributes that input is known only at render.
 
-### 9. No duplicate attributes
+### 9. One explicit provider per logical attribute
 
-A tag may not set the same attribute twice, and may not set both the `c-x` and
-`x` forms of one attribute. To combine values, use Python in a single
-expression, e.g. `c-class="[*base, *extra]"`. `c-bind` is the one exception: a
-tag may carry several `c-bind` attributes, and `c-bind` does not clash with a
-literal `bind` attribute (it never becomes `bind="..."`).
+A tag may not set the exact same attribute twice, or set both the static and
+dynamic spelling of one logical attribute (`x` together with `c-x`). Both
+spellings are visible when the template is written, and one would always make
+the other dead configuration. The accumulating `class` / `c-class` and `style`
+/ `c-style` pairs are the exception on HTML elements because both contributions
+are preserved and merged.
+
+`c-bind` is repeatable and may coexist with an explicit provider. A spread may
+or may not contain the logical key at render time, so its contributions resolve
+in source order. The directive does not clash with a literal `bind` attribute
+because it never becomes `bind="..."`. Structural directives such as `c-for`
+likewise do not clash with ordinary HTML attributes such as `for`.
 
 ### 10. No variable shadowing
 
 Two constructs introduce new names into a local scope: `<c-for each="x in y">`
 introduces the loop variables, and `<c-fill data="d" fallback="f">` may
-introduce `d` and `f`. A newly introduced name may not reuse a name already in
-scope. This "names are never reassigned" property is what makes rule 6 and the
-variable tracking (below) sound.
+introduce `d` and `f`. A destructured fill data binding such as
+`data="{x, source as target, **rest}"` introduces `x`, `target`, and `rest`.
+A newly introduced loop/fill binding may not reuse a name already in scope.
+This no-shadow rule keeps the binding metadata below sound; it does not ban
+assignment expressions inside ordinary Python expressions, nor imply that
+repeated calls or other stateful expressions return equal values.
+
+Using the new name inside its own loop or fill body is the purpose of the
+binding, not shadowing. The parser rejects collisions visible from template
+syntax. At render time the resolved loop targets and fill binding names are
+also checked against the actual template context, which covers component data,
+template globals, enclosing loop variables, and names supplied through
+`c-bind`.
+
+### 11. Fill-data binding language
+
+A direct `<c-fill data="...">` value is parsed as a small language layered on
+top of the general HTML attribute-value grammar. It has two forms:
+
+```text
+identifier
+{ source, source as target, **rest }
+```
+
+The destructuring form is exactly one level. Items require comma separators,
+an optional trailing comma is accepted, and whitespace or newlines may appear
+between tokens. `**rest` is optional, must be last, and may be the only item.
+Every source and target is a valid Python identifier. Source names are unique
+by their literal mapping-key spelling. Target names are unique after Python's
+NFKC identifier normalization, and overlap across those two categories is
+allowed.
+
+The parser stores the result as `FillDataPattern` on the direct `HtmlAttr` and
+records every target as an introduced variable. A later `c-bind` clears the
+known targets just as it clears a whole-data binding; a later direct `data`
+restores them. The compiler emits destructuring as `FillDataBinding` inside the
+static attribute value so normal rightmost attribute resolution chooses the
+effective provider. Dynamic `c-bind` values cannot contain a destructuring
+pattern because their targets would not be available to static scope analysis.
+
+The isolated Pest rules are `fill_data_pattern` through
+`fill_data_ws_required`. They are compound atomic so the accepted whitespace
+positions are explicit and cannot change with the general grammar's implicit
+whitespace behavior.
 
 ## Control-flow shortcuts
 
@@ -346,6 +420,11 @@ Control flow can be written two ways: as dedicated tags
 (`<div c-if="...">`, `<div c-for="...">`). The attribute form is the concise
 one, in the spirit of Vue's `v-if` / `v-for`. At compile time, a tag carrying a
 control-flow attribute is wrapped in the matching control-flow tag:
+
+The valued shortcuts are semantic expressions, even though generic `c-*`
+attributes may carry nested templates: `c-if`/`c-elif` require condition
+expressions and `c-for` requires a loop clause. `c-else`/`c-empty` are bare
+markers; any authored value, including an empty string, is rejected.
 
 1. the control-flow attribute is removed from the original tag,
 2. a wrapper tag is created around it,

@@ -617,7 +617,7 @@ A component's `Slots` class is a *closed* contract, and the choice is binary:
   render the raw fills pass through untyped.
 - **A declared `Slots` class**: its fields are the *only* fillable slots. In a
   parent template, a `<c-fill>` naming an undeclared slot fails and a missing
-  no-default slot fails (section 4.3, [`grammar.md`](grammar.md) rules 7-8); at
+  no-default slot fails (section 4.3, [`template_grammar.md`](template_grammar.md) rules 7-8); at
   render, `Slots(**fills)` (an auto-dataclass) rejects an unknown fill and
   requires the no-default ones. A field with no default is a required slot; one
   with a default is optional. This mirrors `Kwargs` exactly.

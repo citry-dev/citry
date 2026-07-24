@@ -15,7 +15,7 @@ cache backends.
 It is the successor to three "deferred" markers in the existing docs: the
 emission phase of the `dependencies` extension
 ([`asset_loading.md`](asset_loading.md) section 7.5), phases 4-5 of the render
-pipeline ([`rendering.md`](rendering.md) sections 5-6), and extension phasing
+pipeline ([`component_rendering.md`](component_rendering.md) sections 5-6), and extension phasing
 items 2 and 6 ([`extensions.md`](extensions.md) section 13).
 
 Upstream references: django-components
@@ -25,7 +25,7 @@ Upstream references: django-components
 [#897](https://github.com/django-components/django-components/issues/897)
 (fragments/partials),
 [#1650](https://github.com/django-components/django-components/issues/1650)
-(cache render objects, not strings),
+(preserve structured render data for safe cache replay),
 [#1444](https://github.com/django-components/django-components/issues/1444)
 (head tag extension),
 [#1230](https://github.com/django-components/django-components/issues/1230)
@@ -45,7 +45,7 @@ In `packages/py/citry/_djc_reference/`:
     (`:436-443`), `cache_component_js/css` (`:503`, `:584`),
     `cache_component_js_vars`/`cache_component_css_vars` which hash the
     variables JSON and cache a generated script per hash (`:548-652`).
-  - The `$onComponent(` to `registerComponent("<class_id>", ` source rewrite
+  - The `$component(` to `registerComponent("<class_id>", ` source rewrite
     (`:492-500`).
   - The CSS-variables stylesheet: `[data-djc-css-<hash>] { --key: value }`
     (`:616-652`), bound to elements via an attribute spliced onto component
@@ -138,8 +138,9 @@ The end-to-end document flow:
 1. A component declares assets (`js`/`css` pairs, `Dependencies` entries) and
    optionally per-render variables (`js_data()`/`css_data()`, section 5).
 2. During its render, the extension caches the class's scripts (once) and the
-   render's variables scripts (per distinct data), and records "this instance
-   rendered, with these variable hashes" into `CitryContext.extra`.
+   render's variables scripts (per distinct data), and records "this exact
+   class version and instance rendered, with these variable hashes" into
+   `CitryContext.extra`.
 3. As child renders are consumed, records bubble upward through the
    `on_render_context_merge` hook, preserving order.
 4. At `serialize()`, the extension turns the collected records into
@@ -187,9 +188,11 @@ class Style:            # renders <link rel="stylesheet" href="..."> or <style>.
 
 Kept from DJC: url-or-content mutual exclusivity, the `</script>`-in-content
 validity check, `render()`/`render_json()`, `to_json`/`from_json` (the cache
-storage format), equality and hashing by url-or-content (which makes
-first-seen dedupe a `dict.fromkeys` call), the IIFE wrap rule keyed on the
-`type` attribute, and `__html__`.
+storage format), equality and hashing by url-or-content, the IIFE wrap rule
+keyed on the `type` attribute, and `__html__`. Closing-tag checks follow HTML's
+case-insensitive tag-name rule, so mixed-case `</script>` and `</style>` forms
+are rejected too. Dependency lists de-duplicate by equality in first-seen
+order; a pre-rendered `__html__` object does not need to be hashable.
 
 One deliberate reshape, resolving DJC's flagged TODO_V1
 (`dependencies.py:1367`): **`Script`/`Style` objects are first-class
@@ -208,6 +211,10 @@ at emission time. DJC's path, rendering `Media` to HTML strings and re-parsing
 them with an HTMLParser (`_parse_dependency_from_string`, `TagAttrParser`), is
 not ported; the `__html__` escape hatch remains for genuinely pre-rendered
 tags, which are wrapped into a content-bearing object verbatim.
+
+Each `Dependencies.css` media value must be one entry or a list/tuple of
+entries. Invalid values fail during normalization with an error that names the
+media key and component, before emission begins.
 
 ---
 
@@ -235,15 +242,31 @@ Same scheme as DJC (`dependencies.py:436`), with the citry prefix:
 
 | Key | Value (JSON) |
 |---|---|
-| `citry:<class_id>:js` | `Script` for the class's `Component.js` (post-hook, `$onComponent` transformed) |
-| `citry:<class_id>:css` | `Style` for the class's `Component.css` |
+| `citry:<class_id>:js` | mutable compatibility entry for the current class's `Component.js` |
+| `citry:<class_id>:css` | mutable compatibility entry for the current class's `Component.css` |
+| `citry:<class_id>:js:component:<content_hash>` | immutable `Script` for one class JS version (post-hook, `$component` transformed) |
+| `citry:<class_id>:css:component:<content_hash>` | immutable `Style` for one class CSS version |
 | `citry:<class_id>:js:<vars_hash>` | generated script registering one distinct `js_data()` result |
 | `citry:<class_id>:css:<vars_hash>` | generated stylesheet defining one distinct `css_data()` result |
 
-`<vars_hash>` is the first 6 hex chars of the md5 of the variables JSON, as
-in DJC; identical data across instances (or classes) of the same component
-shares one cached script, so a large variables payload is fetched by the
-browser once.
+During a live render, empty and whitespace-only `Component.js` or
+`Component.css` content is absent from dependency delivery. It creates no live
+dependency record, component-asset cache entry, fragment URL, variables
+payload, runtime manifest, or CSS-presence record. This same rule is used
+during collection, document emission, and fragment emission, so every
+advertised component URL has substantive content to serve.
+
+`<content_hash>` is the first 12 hex characters of the md5 of the serialized
+class-level object. Generated class-script URLs include it, so old and new
+workers sharing a cache cannot overwrite the payload named by one another's
+pages. The stable keys remain for compatibility with unversioned URLs. A read
+through one of those URLs validates the stored payload against the class in
+that worker and repairs a mismatch before returning its local version.
+
+`<vars_hash>` is the first 32 hexadecimal characters of the SHA-256 digest of
+the canonical variables JSON. Identical data across instances of the same
+component shares one cached script, so a large variables payload is fetched by
+the browser once.
 
 ### 4.3 Lazy repopulation instead of eager caching (flagged divergence)
 
@@ -260,8 +283,18 @@ render that produced them), so they genuinely need a cache that outlives the
 rendering process; section 10 documents that operational requirement.
 
 `reset_files()` already fires `on_files_reset`; the extension extends its
-existing handler to also delete the class's script cache keys (the citry
-equivalent of DJC's `evict_component_scripts`).
+existing handler to also delete the class's mutable compatibility keys (the
+citry equivalent of DJC's `evict_component_scripts`). New content gets a new
+immutable key and URL on its next use.
+
+Removing a component's final registry alias deletes the same class-level JS
+and CSS compatibility keys. A replacement class may intentionally have the
+same deterministic `class_id`; payload validation and its distinct content
+hash ensure it cannot consume a retired class's content, even if the old class
+is retained and writes again or old and new workers share a backend. Removing
+only one alias keeps the compatibility entries because the same class remains
+registered. Immutable class-version and variables-script keys follow the
+cache backend's normal expiry or capacity policy.
 
 ---
 
@@ -273,7 +306,7 @@ Mirroring `template_data` (kwargs-and-slots only, no args, no context):
 
 ```python
 class Table(Component):
-    js = "..."           # may use $onComponent(...)
+    js = "..."           # may use $component(...)
     css = "..."          # may use var(--row-color)
 
     class JsData:        # optional typed schema, auto-dataclass like TemplateData
@@ -303,15 +336,21 @@ The mechanism ports from DJC conceptually unchanged:
   existing serialize marker pass: the marker list at `serialize.py:77-80` is
   already plural, so the extension only needs a way to contribute markers per
   component instance (the **root-marker hook**, section 7.4).
+  Keys must be exact strings and safe custom-property suffixes. Values are
+  limited to strings, finite numbers, or `None`; booleans and structured JSON
+  values are rejected. Quoted strings use CSSOM-style escaping, while raw CSS
+  text is checked for declaration and style-tag breakout plus balanced blocks,
+  strings, and comments. This is a structural containment check, not a full
+  CSS grammar validator.
 - **JS variables** become a cached script that calls
   `Citry.manager.registerComponentData("<class_id>", "<hash>", data)`, and
-  each instance that used `$onComponent` produces a *component call*
+  each instance that used `$component` produces a *component call*
   (`class_id`, `component_id`, `js_vars_hash`) in the serialize-time
   manifest. The client manager runs the component's registered callback for
   the elements carrying `data-cid-<component_id>` once script and data are
   loaded.
-- **`$onComponent` sugar**: the same regex rewrite as DJC, applied once when
-  the class's JS is first cached: `$onComponent(` becomes
+- **`$component` sugar**: a regex rewrite applied once when the class's JS is
+  first cached: `$component(` becomes
   `Citry.manager.registerComponent("<class_id>", `.
 
 Citry already stamps `data-cid-<id>` on component root elements, which is
@@ -332,7 +371,13 @@ hooks:
    key:
 
    ```python
-   DependencyRecord(class_id, component_id, js_vars_hash, css_vars_hash)
+   DependencyRecord(
+       class_id,
+       component_id,
+       js_vars_hash,
+       css_vars_hash,
+       component_class=type(component),
+   )
    ```
 
    The hook context must expose the render's `CitryContext` (or the record
@@ -348,10 +393,16 @@ hooks:
    what script-execution order wants. Building this hook is part of this
    package (first real consumer).
 
-Records are tiny (four strings); the heavy content lives in the cache, keyed
-by the record. This mirrors DJC's comment payload, minus the string
-smuggling, and keeps `CitryRender` objects cheap to cache (#1650: a cached
-render replays its records, and emission re-resolves scripts fresh).
+Records hold four small scalar fields plus the exact component class that
+rendered them; the heavy content lives in the cache. Retaining that class for
+the lifetime of an unfinished or caller-retained `CitryRender` is intentional. It
+ensures serialization uses the matching dependencies even if a hot replacement
+with the same deterministic `class_id` is registered between `render()` and
+`serialize()`. Releasing the render releases this ownership. This mirrors
+DJC's comment payload, minus the string smuggling. This retains class identity,
+not an immutable snapshot of its file caches: calling `reset_files()` on that
+same class before serialization deliberately makes serialization load its new
+JS/CSS.
 
 ---
 
@@ -380,7 +431,7 @@ render.serialize(
   `prepend`/`append` put the tags before/after the whole output.
 
 `str(render)` keeps using the defaults. Strategy lives at serialize, per the
-decision already recorded in [`rendering.md`](rendering.md) section 5.1.
+decision already recorded in [`component_rendering.md`](component_rendering.md) section 5.1.
 
 ### 7.2 The serialize hook
 
@@ -436,7 +487,7 @@ When a placeholder is absent (per type), default placement falls back to
 DJC's proven string pass over the final HTML: CSS before the first
 `</head>`, JS before the last `</body>` (`_insert_js_css_to_default_locations`
 ports nearly verbatim). This is the hybrid answer to the (i)-vs-(ii) fork
-deferred in [`rendering.md`](rendering.md) section 5.2: structured placement
+deferred in [`component_rendering.md`](component_rendering.md) section 5.2: structured placement
 where the user gave us structure (the placeholder tags), one bounded string
 scan as the fallback. If neither a placeholder nor the target tag exists
 (content with no `<head>`), the tags are appended/prepended like DJC does
@@ -498,30 +549,42 @@ a later fragment referencing the same component fetches nothing.
 Citry ships its own browser runtime with the same responsibilities as DJC's
 manager, renamed (`globalThis.Citry`, `data-citry`, `citry.min.js`):
 
-- `registerComponent(classId, fn)` (the `$onComponent` target),
+- `registerComponent(classId, definition)` (the `$component` target),
   `registerComponentData(classId, hash, data)`, `callComponent(classId,
   componentId, varsHash)`; calls queue until their script and data arrive,
   then run against the elements matching `[data-cid-<componentId>]`.
+  A class accepts exactly one component registration. A second registration
+  throws an error naming the class and explaining that only one `$component`
+  registration is allowed. The definition is either the bare callback or a
+  config object with `init` and optional `props`. One registration represents
+  one component definition, not a subscriber list. That is why the authoring
+  name is `$component`, while `$onEvent` remains the listener API; `init`
+  likewise names the component lifecycle phase instead of a generic handler.
+  A graph-linked call is validated against its exact revision, render ID, and
+  class before it enters the queue. Its callback payload also carries `graph`,
+  a frozen route to the render record, logical client instance, and stable
+  browser anchor.
 - Two hooks for other extensions on the callback path (contracts pinned in
   `events.md` 12.5): `decorateContext(fn)` registers a decorator that adds
-  members to the `$onComponent` payload object in place just before the
-  callbacks run (and returns an unregister function), and a callback may
-  return a cleanup function that runs before the callbacks fire again for
+  members to the `$component` payload object in place just before the
+  callback runs (and returns an unregister function), and the callback may
+  return a cleanup function that runs before the callback fires again for
   the same instance id.
 - `loadJs`/`loadCss` from JSON tag descriptors; `markScriptLoaded`/
   `isScriptLoaded` keyed by URL.
-- The `data-citry` MutationObserver.
+- One permanent MutationObserver handles graph and dependency manifests and
+  fans batches out to extension providers. The same core owns
+  `Citry.alpine`, whose permanent selector, init, magic, morph, and startup
+  hooks dispatch through replaceable providers.
 - Planned, not yet in the runtime: a console warning for a stuck call (one
   whose component script or data never arrives). Today such a call just
   stays queued, silently.
 
-The runtime ships inside the `citry` Python package as package data
-(`citry/extensions/dependencies/client/citry.js`), today as readable plain
-JS; the planned home for the source is the monorepo's first JS package,
-`packages/js/citry-client/` (TypeScript, built, minified, vendored into the
-wheel), which lands with the packaging work once a JS toolchain enters the
-repo. It is served by citry's own URL routes (9.2), so no staticfiles-like
-setup is needed.
+The dependency manager ships inside the `citry` Python package as readable
+package-data JavaScript. The pinned Alpine, morph, and Events source lives in
+`packages/js/citry-client/`; its committed classic-IIFE build also ships as
+Python package data. It is served by citry's own URL routes (9.2), so no
+staticfiles-like setup is needed.
 Improvement over DJC, flagged: in `document` mode, if no web integration is
 mounted (no URL to `src` from), the runtime is **inlined** into the page
 instead, so the zero-integration experience still works end to end;
@@ -542,7 +605,7 @@ Two, both diagnosed with explicit errors rather than silent breakage:
 
 ### 8.4 The component-instance lifecycle: teardown on removal and CSS cleanup
 
-The manager already runs an instance's `$onComponent` cleanup (8.2) when a
+The manager already runs an instance's `$component` cleanup (8.2) when a
 new call for the same instance id arrives, which covers a component that
 re-renders under the same id. Three additions complete the lifecycle for
 the cases that path never reaches. All three stay keyed by the component id
@@ -589,8 +652,11 @@ Two matching additions belong to the serializer that emits the manifests
 (7), not to this runtime: tagging each `Component.css` sheet with
 `data-citry-css-class="<class>"` so the cleanup can find it, and emitting a
 small instance-to-class presence record for instances that carry CSS but no
-`$onComponent` JS, so the manager can still count a class's live instances
-when nothing else registers them.
+`$component` JS, so the manager can still count a class's live instances
+when nothing else registers them. The record's shape, pinned by the WP4
+amendment that consumes it: a top-level `cssInstances` key holding a list
+of `[classId, componentId]` pairs, each element base64-armored like the
+`calls` entries.
 
 ---
 
@@ -605,7 +671,8 @@ This also resolves the TODO in [`extensions.md`](extensions.md) section 11:
 extension's routes, and `Citry.urls` exposes the combined table:
 
 ```
-<prefix>/cache/<class_id>.<js|css>                # class script
+<prefix>/cache/<class_id>.<js|css>                # compatibility/current class script
+<prefix>/cache/<class_id>.<content_hash>.<js|css> # immutable class version
 <prefix>/cache/<class_id>.<vars_hash>.<js|css>    # variables script
 <prefix>/citry.min.js                             # the client runtime
 <prefix>/ext/<extension_name>/...                 # extension-provided routes
@@ -699,29 +766,11 @@ through as before; `Script`/`Style` object entries say explicitly what they
 are. Flagged as a divergence from DJC per migration principle 5: there is no
 staticfiles tier to lean on, so citry serves or inlines the content itself.
 
-### 9.5 Components served at a URL, and `Component.Events` (deferred, shaped)
+### 9.5 Components served at a URL by Events
 
-DJC's view extension (`Component.View`, `get_component_url`) serves whole
-components over HTTP, which is the natural companion of fragments ("a URL
-that serves a fragment"). It is **not** in this package's first build, but
-the design slot is fixed: a future extension declares per-component routes
-through the same `Extension.urls` surface (`ext/<name>/<class_id>/...`),
-and its handler is two lines on top of this package
-(`MyComp(**inputs).render().serialize(deps_strategy="fragment")`). Until
-then, the documented pattern is a user-written host route doing exactly
-that; the FastAPI test app doubles as the worked example.
-
-The future feature is bigger than a port of `Component.View`, though. DJC's
-`View` named handlers after HTTP methods (`get`, `post`, ...), which broke
-down as soon as one component backed more than one action: two mutations had
-to squeeze into `post()` and `patch()` even when neither name fit. The
-direction (captured in [`citry_migration.md`](citry_migration.md), planned
-features) is **`Component.Events`**: handlers named by the event they handle
-(`Events.submit()`, `Events.delete()`, ...), each declaring what it accepts
-(query args, request body, file upload, eventually websocket messages), with
-a route derived per event. That needs its own design doc; this package only
-guarantees the surfaces it will stand on (`Extension.urls`, the fragment
-strategy, the mount contract).
+The built-in Events extension fills this slot with named per-component routes
+and fragment-render actions over `Extension.urls`, as specified in
+[`events.md`](events.md).
 
 ---
 
@@ -770,6 +819,23 @@ citry protocol; Django's `BaseCache` does not.
 The render-caching extension (extensions.md phasing item 3) will reuse the
 same protocol and settings field when it lands; nothing here forecloses it.
 
+### 10.3 Deployment version skew in one browser page
+
+Content-addressed class-script keys and URLs make the server/cache boundary
+version-safe: an old worker cannot overwrite the payload named by a new
+worker's URL, and delayed serialization retains the exact rendering class.
+This does not make component versions composable inside one live browser page.
+The client manager registers callbacks and tracks CSS lifetime by stable
+`class_id`, so a page that already loaded one version must not insert a
+fragment produced by another deployed version of that same class.
+
+Deployments serving fragments must prevent that version skew with worker
+draining or version-sticky routing, or force a full-page reload when the
+application version changes. Supporting mixed versions in one page would
+require a separate client protocol where the content version participates in
+callback, instance-call, and CSS ownership identity; that is outside this
+cache-lifetime fix.
+
 ---
 
 ## 11. New and changed core surface (summary)
@@ -804,7 +870,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 | Eager class-creation caching (djc `extensions/dependencies.py`) | Replaced | lazy endpoint repopulation (4.3), flagged divergence |
 | `evict_component_scripts` | Ported | folded into the existing `on_files_reset` handler (4.3) |
 | `get_js_data` / `get_css_data` / `JsData` / `CssData` | Ported (reshaped) | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` (5.1) |
-| `$onComponent` transform | Ported | target renamed to `Citry.manager.registerComponent` (5.2) |
+| `$component` transform | Ported | target is `Citry.manager.registerComponent` (5.2) |
 | CSS vars stylesheet + `data-djc-css-<hash>` | Ported | `data-ccss-<hash>` via the root-marker hook (5.2, 7.4) |
 | `set_component_attrs_for_js_and_css` | Superseded | `data-cid-<id>` already stamped at serialize; CSS marker rides the same pass |
 | `<!-- _RENDERED -->` comments + regex extraction | Superseded | `DependencyRecord`s in `CitryContext.extra` (6) |
@@ -821,7 +887,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 | `URLRoute` / `URLRouteHandler` | Ported | `citry/util/routing.py`; `Extension.urls` lands (9.1) |
 | `routes_to_django` | Ported | `citry.contrib.django`, so plain citry works with Django without django-components (9.2) |
 | `Media` entries via staticfiles URLs | Replaced | inline-or-serve decision (9.4), flagged divergence |
-| `Component.View` / `get_component_url` | Deferred (shaped) | returns as the `Component.Events` design over `Extension.urls` (9.5; planned-features entry in [`citry_migration.md`](citry_migration.md)) |
+| `Component.View` / `get_component_url` | Built (reshaped) | named handler routes and URL building ship through Events over `Extension.urls` (9.5; [`events.md`](events.md)) |
 | `get_component_media_cache` / `COMPONENTS.cache` | Replaced | `CitryCache` protocol + `CitrySettings.cache` (10) |
 | `hash_comp_cls` / `get_component_by_class_id` | Ported | `class_id` + per-instance reverse index (4.1), resolves the ❓ rows |
 | `format_url`, `serialize_css_var_value`, `get_import_path` | Ported | with this package |
@@ -834,7 +900,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
   `citry/extensions/dependencies/`:
   - `__init__.py`: the extension (existing loading half + new hooks)
   - `types.py`: `Script`, `Style`, `DependencyRecord`
-  - `scripts.py`: caching, vars hashing, `$onComponent` transform, CSS vars
+  - `scripts.py`: caching, vars hashing, `$component` transform, CSS vars
     stylesheet generation
   - `emission.py`: record resolution, categorization, dedupe, manifests,
     placement
@@ -842,7 +908,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
   - `client/`: the vendored built `citry.min.js` (package data)
 - `packages/js/citry-client/`: the runtime's TypeScript source + build.
 - Core files per the table in section 11.
-- Tests: `tests/test_ext_dependencies.py` (extend), `tests/test_deps_emission.py`,
+- Tests: `tests/test_deps.py` (extend), `tests/test_deps_emission.py`,
   `tests/test_deps_fragments.py`, `tests/test_contrib_fastapi.py`,
   `tests/test_cache.py`.
 
@@ -850,18 +916,21 @@ logic, the client runtime contract) lives in the `dependencies` extension.
 
 ## 14. Interactions
 
-- **Const folding** ([`constness.md`](constness.md)): unaffected by design;
+- **Const folding** ([`component_constness.md`](component_constness.md)): unaffected by design;
   a folded component boundary still mints a fresh render and re-records its
-  dependencies each render (the rendering.md section 7 agreement). Variables
+  dependencies each render (the component_rendering.md section 7 agreement). Variables
   hashing happens per render, after folding.
 - **Deferred rendering**: the queue is where `on_render_context_merge` fires; record
   order follows queue order (6).
-- **Render caching (#1650)**: a cached `CitryRender` carries records, not
-  rendered tags, so replaying it in a new page re-emits correctly; this is
-  the reason records are tiny and content lives in the cache (6).
-- **Error fallback / on_render**: replacement output swaps parts, not
-  contexts, so records collected by a failed subtree are discarded with its
-  context when the fallback replaces it.
+- **Render caching (#1650)**: the detached `CachedRenderArtifact` in
+  [`caching.md`](caching.md) stores stable class IDs and canonical dependency
+  data, not live records or rendered tags. Replay mints fresh component IDs and
+  rebuilds dependency records for the current page (6).
+- **Error fallback / on_render**: replacement output can reuse the original
+  context, whose record collection may still contain replaced descendants.
+  Render-cache export therefore filters dependencies to final active reachable
+  render IDs as specified in [`caching.md`](caching.md), rather than copying the
+  context collection.
 - **Streaming (#1337)**: still held off; the manifest-based fragment path is
   the likely streaming delivery mechanism later (deps at the component's own
   location), and nothing here forecloses it.
@@ -882,7 +951,7 @@ logic, the client runtime contract) lives in the `dependencies` extension.
   the hook context carries a `context` field (6).
 - ~~Whether the `document` manifest should always be emitted~~ decided: the
   manifest and the runtime are emitted when a rendered component used
-  `$onComponent`, or when a mounted page carries component assets a later
+  `$component`, or when a mounted page carries component assets a later
   fragment must dedup against (so `markLoaded` can list their cache URLs).
 - ~~Naming~~ settled at implementation: `data-ccss-<hash>` for the CSS vars
   marker, `on_serialize` for the hook.
@@ -914,13 +983,13 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    entries are `Path` objects (so emission can tell a file from a URL
    string) and are inlined, per the 9.4 default.
 3. **Client runtime + variables - built.** Vars scripts and hashing;
-   `$onComponent`; `data-ccss-` markers via the root-marker hook; the
+   `$component`; `data-ccss-` markers via the root-marker hook; the
    document manifest (mark-as-loaded + component calls); runtime inlining.
    Decisions made in code: the root-marker hook is the internal
    `CitryContext._add_root_markers` / `_get_root_markers`, storing under the
    namespaced `extra["citry"]["root_markers"]`, read by serialization next
    to the `data-cid` marker; the manifest (and the
-   runtime with it) is emitted when a rendered component used `$onComponent`, or
+   runtime with it) is emitted when a rendered component used `$component`, or
    when a mounted page carries component assets a later fragment must dedup
    against; `document` vs `simple` now genuinely differ: `simple` is
    the no-JS-runtime mode, so JS variables and component calls are
@@ -959,5 +1028,5 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    **Remaining:** the `packages/js/citry-client` TS + minification build
    (needs a JS toolchain in the repo) and the user-facing docs (fragments
    guide, production guidance from 8.3), which should wait for the
-   maintainer's pass over the whole feature. The component-URL /
-   `Component.Events` work follows separately once designed (9.5).
+   maintainer's pass over the whole feature. Named component event URLs now
+   ship through Events (9.5).

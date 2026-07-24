@@ -25,7 +25,7 @@ companion to two neighbours, and the split matters:
 - This doc is about **optimizing**: where the time goes, what we changed to
   spend less of it, and what is left. It answers "why are we that fast, and
   how do we get faster".
-- [`constness.md`](constness.md) is one specific optimization (marking inputs
+- [`component_constness.md`](component_constness.md) is one specific optimization (marking inputs
   constant so template parts that depend only on them are computed once and
   reused). It predates this doc and stands on its own; section 4 here does not
   repeat it.
@@ -98,7 +98,7 @@ The work splits into two kinds, and the split is the whole strategy:
   attributes, citry resolves each attribute, merges the contributions
   (`class`/`style` accumulate), and formats the result. The structured
   `class`/`style` values (the React/Vue-style lists and dicts, see
-  [`html_attrs.md`](html_attrs.md)) are normalized here with a chain of type
+  [`template_html_attrs.md`](template_html_attrs.md)) are normalized here with a chain of type
   checks.
 - **HTML escaping.** Every dynamic value and attribute value is escaped before
   it reaches the output. The escaping itself is C-accelerated (markupsafe),
@@ -145,7 +145,7 @@ mechanical work that merely happens to run in a tree of Python objects. So the
 gap to Django is largely reducible, and matching or beating a bare template is
 reachable, but not by trimming Python further. It means running the walk itself
 in Rust, which moves the compiler-output contract (the compiler emits Python
-node classes today, see [`rendering.md`](rendering.md)). Section 6 scopes that
+node classes today, see [`component_rendering.md`](component_rendering.md)). Section 6 scopes that
 move and the prototype that de-risks it.
 
 ## 4. Optimizations done (2026-06-22 pass)
@@ -429,7 +429,7 @@ Running the *walk* in Rust removes the interleaving that defeated the
 fine-grained moves: the traversal and string assembly stay on the Rust side, and
 the boundary is crossed only for the ~15% that is genuinely Python.
 
-Today the compiler emits Python node classes (see [`rendering.md`](rendering.md))
+Today the compiler emits Python node classes (see [`component_rendering.md`](component_rendering.md))
 that the Python runtime walks. The change is to emit a **render plan the Rust
 core executes**: Rust walks the plan, assembles static text, formats attributes,
 escapes, and joins, and calls back into Python only for `template_data` (once
@@ -638,7 +638,8 @@ Four low-risk reductions landed. Measured together (cProfile of one component's
 construction, then a component-render harness):
 
 - **Component-id generator** -> a per-process random base plus a counter,
-  format-preserving (`gen_id` in [`util/id.py`](../../packages/py/citry/citry/util/id.py)).
+  using an HTML-attribute-safe lowercase alphabet (`gen_id` in
+  [`util/id.py`](../../packages/py/citry/citry/util/id.py)).
   This replaces the `random.choices` scheme that section 4.4 describes.
 - **`has_hook` short-circuit** on `on_component_input` / `on_component_data`
   ([`extension.py`](../../packages/py/citry/citry/extension.py)).
@@ -650,8 +651,11 @@ Result: construction (the `_create_instance` + `template_data` path) got about
 **34% cheaper** (the six PRNG draws of `random.choices` are gone, and the
 `on_component_input` context dataclass is no longer built when nothing subscribes),
 which showed up as about a **19% faster** render on a page of many tiny components
-(less on richer pages where the body walk dominates). Output stays byte-identical;
-ids keep the `c[0-9A-Za-z]{6}` format and stay non-deterministic.
+(less on richer pages where the body walk dominates). The later A10 browser
+scaling gate changed the id alphabet to `c[0-9a-z]{8}`: HTML attribute names
+are case-insensitive, so mixed-case ids could collapse onto the same
+`data-cid-*` marker. Ids remain non-deterministic and the counter mechanism is
+unchanged.
 
 ### 8.2 What construction costs (the baseline)
 
@@ -701,9 +705,11 @@ iterations):
 The last row is a useful negative: one `getrandbits` plus a Python assembly loop is
 *slower* than `random.choices`, because the per-character shift-and-index in Python
 costs more than `random.choices`' C internals. Only a counter avoids the per-char
-work. The **hybrid** (random base + counter) was chosen: ~5x faster, keeps
-cross-render uniqueness (different bases pick different starting points), and keeps
-the `c[0-9A-Za-z]{6}` format. See [`util/id.py`](../../packages/py/citry/citry/util/id.py).
+work. The **hybrid** (random base + counter) was chosen: ~5x faster and keeps
+cross-render uniqueness because different bases pick different starting
+points. A10 later moved its suffix to eight lowercase base-36 characters after the `c` prefix so
+the marker name cannot collide under HTML's case folding. See
+[`util/id.py`](../../packages/py/citry/citry/util/id.py).
 
 **2. Guard `on_component_input`/`on_component_data` with `has_hook` (landed).**
 Return early when nothing subscribes, exactly as the three hot hooks already do, so

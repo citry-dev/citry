@@ -1,7 +1,7 @@
 # Design: the `on_render` hook, error bubbling, and render-path error tracing
 
 **Status (2026-06-12): built, all steps of the plan (section 12).** The
-summary entry lives in the [`citry_migration.md`](citry_migration.md)
+summary entry lives in the [`migration_djc.md`](migration_djc.md)
 implementation log. This document specifies one work package with four
 coupled parts:
 
@@ -22,9 +22,9 @@ They are one package because 1 is useless for its flagship consumer (error
 boundaries) without 2, 2 decides where 3's path frames get attached, and 4
 exercises all three end to end.
 
-For the render pipeline this hooks into see [`rendering.md`](rendering.md) and
-[`deferred_rendering.md`](deferred_rendering.md). For the migration context see
-[`citry_migration.md`](citry_migration.md) (the `on_render` and error-tracing
+For the render pipeline this hooks into see [`component_rendering.md`](component_rendering.md) and
+[`component_rendering_defer.md`](component_rendering_defer.md). For the migration context see
+[`migration_djc.md`](migration_djc.md) (the `on_render` and error-tracing
 "To migrate" rows). For operating rules see [`/CLAUDE.md`](../../CLAUDE.md).
 
 ---
@@ -64,9 +64,9 @@ citry (all paths under `packages/py/citry/citry/`):
   slot invocation site: `nodes/__init__.py` (`SlotNode.render`).
 - `Component.parent` / `root` links set across component boundaries.
 - Earlier decisions that constrain this one:
-  [`deferred_rendering.md`](deferred_rendering.md) section 8 (error
+  [`component_rendering_defer.md`](component_rendering_defer.md) section 8 (error
   interception listed as an open decision; current skeleton re-raises) and
-  [`dynamic_component.md`](dynamic_component.md) section 8, alternative B
+  [`component_dynamic.md`](component_dynamic.md) section 8, alternative B
   (dynamic components deliberately do NOT need `on_render`, so error
   boundaries are the driving use case, not delegation).
 
@@ -164,7 +164,7 @@ The protocol, step by step:
   The result is the live render object, NOT a string. Inspect its parts or
   hand it around, but do not serialize it here unless you are replacing the
   output with the serialized form: serialization is one-shot
-  ([`rendering.md`](rendering.md) section 5.3).
+  ([`component_rendering.md`](component_rendering.md) section 5.3).
 
 - **Multiple yields are supported.** Each `yield <content>` discards the
   previous output, renders the new content (deferring and resolving any
@@ -203,7 +203,7 @@ replacing output conditionally, instrumentation around a single component's
 render. Not for: passing data to the template (that is `template_data()`),
 tree-wide concerns (those are extensions; `on_component_rendered` already
 exists and fires for every component), and dynamic delegation (settled
-differently in [`dynamic_component.md`](dynamic_component.md)).
+differently in [`component_dynamic.md`](component_dynamic.md)).
 
 ---
 
@@ -518,19 +518,19 @@ built-ins).
   then extensions' `on_component_rendered` runs, then the result is committed.
   Extensions never observe intermediate yields (DJC's
   `on_component_intermediate` is already classified Superseded in
-  [`citry_migration.md`](citry_migration.md)).
+  [`migration_djc.md`](migration_djc.md)).
 - **`transparent` components** may use `on_render` like any other; the hook
   is orthogonal to serialization framing.
 - **Slots**: `on_slot_rendered` fires inside the body walk as today,
   unaffected. A `Slot` returned as replacement content goes through
   `_render_value`, which already invokes it.
-- **Streaming** ([`rendering.md`](rendering.md) section 7): the generator
+- **Streaming** ([`component_rendering.md`](component_rendering.md) section 7): the generator
   form is per-component post-processing, not output streaming; nothing here
   forecloses lazy parts. If streaming lands, a component whose `on_render`
   has a post-yield phase simply cannot stream past its own boundary (it needs
   its completed subtree), which is inherent to "post-process my output".
 - **`<c-component>` / `<c-element>`** stay as designed; alternative B of
-  [`dynamic_component.md`](dynamic_component.md) (delegating via `on_render`)
+  [`component_dynamic.md`](component_dynamic.md) (delegating via `on_render`)
   remains rejected, now on cost rather than absence grounds.
 
 ---
@@ -641,9 +641,9 @@ Order of work (each step keeps the suite green):
    bubbles to the outer), error path of an escaped error names the guarded
    child, deps of the discarded subtree do not leak (once the dependency
    extension exists; until then a placeholder via `extra`).
-8. **Docs**: `citry_migration.md` rows flip to Done with divergences noted
+8. **Docs**: `migration_djc.md` rows flip to Done with divergences noted
    (no before/after hooks, no lambda yields, object results); the
-   implementation log entry; `deferred_rendering.md` section 8's open
+   implementation log entry; `component_rendering_defer.md` section 8's open
    decision gets resolved with a pointer here.
 
 `is_generator` ports to `citry/util/misc.py` with step 4.

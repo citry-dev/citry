@@ -336,7 +336,7 @@ Status legend:
 | `JsData` / `CssData` + `get_js_data()` / `get_css_data()` (JS/CSS variables) | ✅ Done | `js_data(kwargs, slots)` / `css_data(kwargs, slots)` + auto-dataclass schemas, delivered to the browser as hashed variables scripts and `data-ccss`-scoped stylesheets ([`dependencies.md`](dependencies.md) section 5) |
 | `Media` nested class, `media` property | ✅ Done | `CitryMedia` via `get_media()`; user's class not mutated, callables lazy, `bytes` entries dropped |
 | `media_class` | ❌ Drop | Django forms `Media` output class |
-| `on_render_before` / `on_render` (incl. generator form) / `on_render_after` | ✅ Done (diverged) | A single `on_render()` hook; before/after dropped (template_data and the generator's post-yield phase cover them). No `Context`/`Template` args, no lambda yields; the generator receives the completed `CitryRender`. Design in [`on_render.md`](on_render.md) |
+| `on_render_before` / `on_render` (incl. generator form) / `on_render_after` | ✅ Done (diverged) | A single `on_render()` hook; before/after dropped (template_data and the generator's post-yield phase cover them). No `Context`/`Template` args, no lambda yields; the generator receives the completed `CitryRender`. Design in [`component_on_render.md`](component_on_render.md) |
 | `Component.on_dependencies()` | ✅ Done | A classmethod, called per rendered instance at serialize time ([`dependencies.md`](dependencies.md) section 7.2) |
 | `Cache` / `Defaults` / `View` / `DebugHighlight` nested configs | ✅ Done (mechanism) | Generic `Extension.Config` exists; DebugHighlight is now the bundled opt-in `Debug` extension, while the other extension verdicts remain in the `extensions/` review |
 | `Component.name` | ✅ Done | Registers under that name only |
@@ -372,8 +372,8 @@ Status legend:
 | `_render_impl` orchestration | ♻️ Superseded | citry `render_impl` + `_render_one` |
 | Depth-unbounded post-render queue (`component_post_render`, string parts, `<!-- _RENDERED -->` markers) | ✅ Done (diverged) | Object parts + explicit `_RenderTask`/`_FinalizeTask` stack; no marker comments or placeholder parsing |
 | Child-first `on_component_rendered` ordering | ✅ Done | |
-| Render error tracing with component path (`render_with_error_trace`, `ErrorPart`, "MyComp > slot > Child" paths) | ✅ Done (diverged) | Paths derive from the instance `parent` chain (no `full_path` threading); errors bubble by unwinding the task stack, no `ErrorPart` queue items. Plus template-position snippets djc could not show ([`on_render.md`](on_render.md) sections 5-6) |
-| `on_render` generator driving (`make_renderer_generator`, `GeneratorResult`, `_call_generator`) | ✅ Done (diverged) | The `settle` step in `render_impl`: no lambda yields (the framework owns rendering), no version bookkeeping (object parts are swapped and re-queued), generator settles before extensions ([`on_render.md`](on_render.md) section 4) |
+| Render error tracing with component path (`render_with_error_trace`, `ErrorPart`, "MyComp > slot > Child" paths) | ✅ Done (diverged) | Paths derive from the instance `parent` chain (no `full_path` threading); errors bubble by unwinding the task stack, no `ErrorPart` queue items. Plus template-position snippets djc could not show ([`component_on_render.md`](component_on_render.md) sections 5-6) |
+| `on_render` generator driving (`make_renderer_generator`, `GeneratorResult`, `_call_generator`) | ✅ Done (diverged) | The `settle` step in `render_impl`: no lambda yields (the framework owns rendering), no version bookkeeping (object parts are swapped and re-queued), generator settles before extensions ([`component_on_render.md`](component_on_render.md) section 4) |
 | `on_component_intermediate` per-part callbacks | ♻️ Superseded | `_FinalizeTask` |
 | `on_component_tree_rendered` + final dependency pass (`render_dependencies`) | ✅ Done (diverged) | The `on_serialize` core hook + the dependencies extension's emission ([`dependencies.md`](dependencies.md) section 7); operates on collected records, not regex over HTML |
 | `ComponentTreeContext` / `ComponentContext` structs | ♻️ Superseded | `CitryContext` |
@@ -701,7 +701,7 @@ stays in django-components; the verdicts below are about each *field*.
 | `BaseNode` declarative tag definition (`tag` / `end_tag` / `allowed_flags`, params derived from `render` signature) | ♻️ Superseded | In V3 the Rust grammar parses tags; citry node classes are compiler output, not tag parsers |
 | Tag input features (flags, literal lists/dicts, spread `...`, self-closing `/`) | ♻️ Superseded | The V3 grammar covers these natively (boolean attrs, expressions, `c-bind`, self-closing tags) |
 | `template_tag()` decorator (user-defined custom tags) | ❌ Drop | citry's user-facing tag is the component (`<c-*>`); there is no user-defined custom-tag or custom-`Node` API, so there is nothing to port |
-| `_format_error_with_template_position` (errors point at template line/col, with caret) | ✅ Done (diverged) | Via the shared formatter, now public as `citry_core.safe_eval.format_error_with_context`; citry applies it per failing node with the full template source + node span ([`on_render.md`](on_render.md) section 6.3), broader than djc's tag-signature-TypeError-only use |
+| `_format_error_with_template_position` (errors point at template line/col, with caret) | ✅ Done (diverged) | Via the shared formatter, now public as `citry_core.safe_eval.format_error_with_context`; citry applies it per failing node with the full template source + node span ([`component_on_render.md`](component_on_render.md) section 6.3), broader than djc's tag-signature-TypeError-only use |
 | `_modify_typeerror_message` (friendlier missing-kwarg TypeErrors) | ♻️ Superseded | Typed `Kwargs` validation + parse-time tag rules produce the errors up front |
 | `NodeMeta` signature validation | ♻️ Superseded | |
 
@@ -803,7 +803,7 @@ These exist in `_djc_reference/` but were not in the classification tables.
 | Feature | Status | Notes |
 |---|---|---|
 | `DynamicComponent` (`{% component "dynamic" is=... %}`) | ✅ Done | As the `<c-component>` built-in (components only), with a new `<c-element>` sibling for render-time HTML element names; full design and DJC surface table in [`component_dynamic.md`](component_dynamic.md). The class-valued `is` form works without any registered name, so it squares with djc #1195 |
-| `ErrorFallback` (error boundary, React-style; fallback kwarg or slot with `error` data) | ✅ Done (diverged) | The `<c-error-fallback>` built-in (`citry/components/error_fallback.py`, reserved name); built on the `on_render` generator. Slot-based fallback invokes the fill with the error as data, no template re-render ([`on_render.md`](on_render.md) section 7) |
+| `ErrorFallback` (error boundary, React-style; fallback kwarg or slot with `error` data) | ✅ Done (diverged) | The `<c-error-fallback>` built-in (`citry/components/error_fallback.py`, reserved name); built on the `on_render` generator. Slot-based fallback invokes the fill with the error as data, no template re-render ([`component_on_render.md`](component_on_render.md) section 7) |
 
 </details>
 
@@ -2532,7 +2532,7 @@ always carries the latest table with the how-to-reproduce context.
 ### The `on_render` hook, error tracing, and `<c-error-fallback>` (`citry/component_render.py`, `citry/util/exception.py`, `citry/components/error_fallback.py`, `citry_core/safe_eval/error.py`)
 
 **What:** One work package, four parts (full design in
-[`on_render.md`](on_render.md)): the per-component `Component.on_render()`
+[`component_on_render.md`](component_on_render.md)): the per-component `Component.on_render()`
 hook in plain and generator form; error bubbling up the component tree;
 render-path error tracing (component path + underlined template snippet in
 error messages); and the `<c-error-fallback>` built-in error boundary built
