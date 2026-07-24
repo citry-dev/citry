@@ -8,6 +8,8 @@ import pytest
 
 from docs_site._internal.nav import load_nav
 
+CONTENT_NAV = Path(__file__).resolve().parents[1] / "content" / "_nav.yml"
+
 NAV_YAML = """\
 sections:
   - label: Home
@@ -98,3 +100,39 @@ def test_both_items_and_groups_rejected(tmp_path: Path) -> None:
     )
     with pytest.raises(ValueError, match="both 'items' and 'groups'"):
         load_nav(bad)
+
+
+def test_real_nav_places_cli_in_advanced_and_security_in_about() -> None:
+    tree = load_nav(CONTENT_NAV)
+    by_label = {section.label: section for section in tree.sections}
+
+    assert [(item.title, item.path) for item in by_label["Advanced"].items][-1] == ("Command line", "/cli/")
+    assert [(item.title, item.path) for item in by_label["About"].items][-1] == ("Security", "/security/")
+    assert "Command line" not in {section.label for section in tree.sections}
+    assert "Security" not in {section.label for section in tree.sections}
+    assert tree.find_breadcrumbs("/cli/") == [("Advanced", ""), ("Command line", "")]
+    assert tree.find_breadcrumbs("/security/") == [("About", ""), ("Security", "")]
+
+
+def test_real_nav_splits_events_before_guides() -> None:
+    tree = load_nav(CONTENT_NAV)
+    by_label = {section.label: section for section in tree.sections}
+    labels = [section.label for section in tree.sections]
+
+    assert labels.index("Events") + 1 == labels.index("Guides")
+    assert [(item.title, item.path) for item in by_label["Events"].items] == [
+        ("Server events", "/guides/server-events/"),
+        ("Migrate from Component.View", "/guides/migrate-from-component-view/"),
+        ("Migrate from django-unicorn", "/guides/migrate-from-django-unicorn/"),
+        ("Migrate from Tetra", "/guides/migrate-from-tetra/"),
+        ("Migrate from livecomponents", "/guides/migrate-from-livecomponents/"),
+        ("Events migration parity", "/guides/events-migration-parity/"),
+    ]
+    assert [(item.title, item.path) for item in by_label["Guides"].items] == [
+        ("Web frameworks", "/web-frameworks/"),
+        ("Troubleshooting", "/guides/troubleshooting/"),
+        ("Hot reload", "/guides/dev-server/"),
+    ]
+    assert "Web frameworks" not in {section.label for section in tree.sections}
+    assert tree.find_breadcrumbs("/guides/server-events/") == [("Events", ""), ("Server events", "")]
+    assert tree.find_breadcrumbs("/web-frameworks/") == [("Guides", ""), ("Web frameworks", "")]

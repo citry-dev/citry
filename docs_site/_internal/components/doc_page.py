@@ -28,11 +28,12 @@ from urllib.parse import urlparse
 from markupsafe import Markup
 
 from citry import Component
+from docs_site._internal.nav import NavTree
 
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from docs_site._internal.nav import NavSection, NavTree
+    from docs_site._internal.nav import NavSection
 
 # Site-level social-card image used when a page sets no og_image of its own.
 _DEFAULT_OG_IMAGE_PATH = "/static/img/favicon.png"
@@ -42,6 +43,17 @@ _DEFAULT_OG_IMAGE_PATH = "/static/img/favicon.png"
 _REPO_URL = "https://github.com/citry-dev/citry"
 _PYPI_URL = "https://pypi.org/project/citry/"
 _DISCORD_URL = "https://discord.gg/NaQ8QPyHtD"
+
+# The primary site areas. Docs owns every ordinary sidebar section; the other
+# three entries promote one named section out of that tree into its own tab.
+# Community has no landing page yet, so its tab opens the first existing page.
+_TOP_NAV_SPECS = (
+    ("Docs", "/getting-started/installation/", "", ""),
+    ("Examples", "/examples/", "examples", "Examples"),
+    ("Reference", "/reference/", "reference", "Reference"),
+    ("Community", "/community/people/", "community", "Community"),
+)
+_PROMOTED_SECTION_LABELS = frozenset(section_label for _, _, _, section_label in _TOP_NAV_SPECS if section_label)
 
 
 class DocPage(Component):
@@ -99,11 +111,13 @@ class DocPage(Component):
         breadcrumbs: list[SimpleNamespace] = []
         prev_page = next_page = None
         nav_tree: NavTree | None = kwargs.nav_tree
+        top_nav_items = _build_top_nav_view(kwargs.current_path)
         if nav_tree is not None:
             nav_tree.set_active(kwargs.current_path)
-            nav_sections = _build_nav_view(nav_tree.sections, kwargs.current_path)
+            sidebar_sections = _sidebar_sections(nav_tree.sections, kwargs.current_path)
+            nav_sections = _build_nav_view(sidebar_sections, kwargs.current_path)
             breadcrumbs = _build_breadcrumbs(nav_tree, kwargs.current_path)
-            prev_page, next_page = nav_tree.find_prev_next(kwargs.current_path)
+            prev_page, next_page = NavTree(sections=sidebar_sections).find_prev_next(kwargs.current_path)
 
         toc_items = _flatten_toc(kwargs.toc_items or [])
         last_updated = kwargs.last_updated.strftime("%-d %b %Y") if kwargs.last_updated else ""
@@ -150,6 +164,7 @@ class DocPage(Component):
             "pypi_url": _PYPI_URL,
             "discord_url": _DISCORD_URL,
             "google_site_verification": kwargs.google_site_verification,
+            "top_nav_items": top_nav_items,
             "nav_sections": nav_sections,
             "breadcrumbs": breadcrumbs,
             "prev_page": prev_page,
@@ -289,8 +304,15 @@ class DocPage(Component):
               <a class="djc-logo" href="/">
                 <span class="djc-logo__wordmark">Citry</span>
               </a>
-              <nav class="djc-header__nav">
-                <a href="/getting-started/installation/">Docs</a>
+              <nav class="djc-header__nav" aria-label="Primary navigation">
+                <a
+                  c-for="item in top_nav_items"
+                  c-class="{'is-active': item.active}"
+                  c-href="item.path"
+                  c-aria-current="item.aria_current"
+                >
+                  {{ item.label }}
+                </a>
               </nav>
               <div class="djc-header__actions">
                 <button
@@ -571,11 +593,17 @@ class DocPage(Component):
 
           <div class="djc-layout">
             <aside class="djc-sidebar" id="djc-sidebar">
-              <nav class="djc-sidebar__topnav">
-                <a href="/getting-started/installation/">Docs</a>
-                <a href="/examples/">Examples</a>
+              <nav class="djc-sidebar__topnav" aria-label="Primary drawer navigation">
+                <a
+                  c-for="item in top_nav_items"
+                  c-class="{'is-active': item.active}"
+                  c-href="item.path"
+                  c-aria-current="item.aria_current"
+                >
+                  {{ item.label }}
+                </a>
               </nav>
-              <nav class="djc-sidebar__nav">
+              <nav class="djc-sidebar__nav" aria-label="Section navigation">
                 <div
                   c-for="section in nav_sections"
                   c-class="['djc-sidebar__section', {'djc-sidebar__section--standalone': section.is_standalone}]"
@@ -901,6 +929,37 @@ class DocPage(Component):
         </body>
       </html>
     """
+
+
+def _active_top_nav_label(current_path: str) -> str:
+    """The primary site area containing ``current_path``."""
+    current = current_path.strip("/")
+    for label, _path, prefix, _section_label in _TOP_NAV_SPECS[1:]:
+        if current == prefix or current.startswith(f"{prefix}/"):
+            return label
+    return "Docs"
+
+
+def _build_top_nav_view(current_path: str) -> list[SimpleNamespace]:
+    """Build the shared desktop and drawer top-navigation model."""
+    active_label = _active_top_nav_label(current_path)
+    return [
+        SimpleNamespace(
+            label=label,
+            path=path,
+            active=label == active_label,
+            aria_current="true" if label == active_label else None,
+        )
+        for label, path, _prefix, _section_label in _TOP_NAV_SPECS
+    ]
+
+
+def _sidebar_sections(sections: list[NavSection], current_path: str) -> list[NavSection]:
+    """Show only the active primary area's sections in the sidebar."""
+    active_label = _active_top_nav_label(current_path)
+    if active_label == "Docs":
+        return [section for section in sections if section.label not in _PROMOTED_SECTION_LABELS]
+    return [section for section in sections if section.label == active_label]
 
 
 def _build_nav_view(sections: list[NavSection], current_path: str) -> list[SimpleNamespace]:

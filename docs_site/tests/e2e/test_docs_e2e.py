@@ -80,12 +80,50 @@ def test_active_nav_item_is_marked(page: Any, docs_site_url: str) -> None:
     assert page.locator(".djc-sidebar__link.is-active").count() >= 1
 
 
+def test_events_and_guides_are_separate_ordered_docs_sections(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/guides/server-events/")
+    labels = page.locator(".djc-sidebar__label").all_inner_texts()
+    assert "EVENTS" in labels, labels
+    assert "GUIDES" in labels, labels
+    assert labels.index("EVENTS") + 1 == labels.index("GUIDES")
+    assert page.locator('.djc-sidebar__link.is-active[href="/guides/server-events/"]').count() == 1
+
+    page.goto(docs_site_url + "/web-frameworks/")
+    assert page.locator('.djc-sidebar__link.is-active[href="/web-frameworks/"]').count() == 1
+    assert page.locator(".djc-breadcrumbs").inner_text().split() == ["Guides", "/", "Web", "frameworks"]
+
+
+def test_desktop_primary_navigation_does_not_overlap_actions(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/community/help/")
+    for width in (769, 800, 900, 1024):
+        page.set_viewport_size({"width": width, "height": 800})
+        nav = page.locator(".djc-header__nav")
+        actions = page.locator(".djc-header__actions")
+        assert nav.is_visible()
+        nav_box = nav.bounding_box()
+        actions_box = actions.bounding_box()
+        assert nav_box is not None
+        assert actions_box is not None
+        assert nav_box["x"] + nav_box["width"] <= actions_box["x"]
+
+
 def test_mobile_shows_overflow_menu(page: Any, docs_site_url: str) -> None:
     # Below 768px the desktop header controls are hidden and the overflow menu
-    # button takes over; it must exist and be reachable.
+    # button takes over. The drawer carries the same primary navigation as the
+    # desktop header, in the same order.
     page.set_viewport_size({"width": 375, "height": 800})
     page.goto(docs_site_url + "/reference/component/")
     assert page.locator(".djc-overflow__btn").is_visible()
+    page.locator(".djc-hamburger").click()
+    links = page.locator(".djc-sidebar__topnav a")
+    assert links.all_inner_texts() == ["Docs", "Examples", "Reference", "Community"]
+    assert links.evaluate_all("els => els.map(el => el.getAttribute('href'))") == [
+        "/getting-started/installation/",
+        "/examples/",
+        "/reference/",
+        "/community/people/",
+    ]
+    assert page.locator('.djc-sidebar__topnav a[aria-current="true"]').inner_text() == "Reference"
 
 
 def test_examples_gallery_renders_live_demos(page: Any, docs_site_url: str) -> None:

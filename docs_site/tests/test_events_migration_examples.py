@@ -92,27 +92,22 @@ def test_migration_pages_expand_their_executable_snippets(page: str, fingerprint
     for fingerprint in fingerprints:
         assert fingerprint in text
         assert fingerprint in result.markdown_body
-    for snippet_ref in _active_snippet_refs(source):
-        assert snippet_ref not in text
-        assert snippet_ref not in result.markdown_body
+    assert list(iter_snippet_refs(result.markdown_body)) == []
 
 
 def test_every_snippet_page_exports_self_contained_markdown() -> None:
-    snippet_pages: list[tuple[Path, str, list[str]]] = []
+    snippet_pages: list[tuple[Path, str]] = []
     for path in sorted(CONTENT_ROOT.rglob("*.md")):
         source = path.read_text(encoding="utf-8")
-        snippet_refs = _active_snippet_refs(source)
-        if snippet_refs:
-            snippet_pages.append((path, source, snippet_refs))
+        if _active_snippet_refs(source):
+            snippet_pages.append((path, source))
 
     assert snippet_pages
-    for source_path, source, snippet_refs in snippet_pages:
+    for source_path, source in snippet_pages:
         result = render_page(source, config=config, wrap_in_layout=False)
         assert list(iter_snippet_refs(result.markdown_body)) == [], source_path
-        for snippet_ref in snippet_refs:
-            assert snippet_ref not in result.markdown_body, source_path
 
-    by_path = {path.relative_to(CONTENT_ROOT).as_posix(): source for path, source, _directives in snippet_pages}
+    by_path = {path.relative_to(CONTENT_ROOT).as_posix(): source for path, source in snippet_pages}
     assert (
         "# Contributor Covenant Code of Conduct"
         in render_page(by_path["community/code-of-conduct.md"], config=config, wrap_in_layout=False).markdown_body

@@ -768,8 +768,16 @@ body {
   transition: color 0.15s;
 }
 
-.djc-header__nav a:hover {
+.djc-header__nav a:hover,
+.djc-header__nav a.is-active {
   color: var(--c-fg);
+}
+
+.djc-header__nav a.is-active {
+  text-decoration: underline;
+  text-decoration-color: var(--c-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.4rem;
 }
 
 .djc-header__actions {
@@ -986,6 +994,10 @@ body {
   font-size: 0.95rem;
   font-weight: 600;
   padding: 0.3rem 0;
+}
+
+.djc-sidebar__topnav a.is-active {
+  color: var(--c-accent);
 }
 
 .djc-sidebar__section {

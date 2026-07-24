@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from lxml import html as lxml_html
 
 from docs_site._internal.components.doc_page import DocPage
 from docs_site._internal.config import DocsConfig
-from docs_site._internal.nav import NavItem, NavSection, NavTree
+from docs_site._internal.nav import NavItem, NavSection, NavTree, load_nav
 from docs_site._internal.pipeline import render_page
+from docs_site._internal.reference_pages import reference_nav_section
 
 
 def _nav() -> NavTree:
@@ -35,6 +37,12 @@ def _render_components_page() -> str:
     ).html
 
 
+def _render_real_nav(current_path: str) -> str:
+    nav = load_nav(Path(__file__).resolve().parents[1] / "content" / "_nav.yml")
+    nav.sections.append(reference_nav_section())
+    return render_page("# Page\n\nText.", nav_tree=nav, current_path=current_path).html
+
+
 def test_sidebar_shows_sections_and_active_item() -> None:
     html = _render_components_page()
     document = lxml_html.document_fromstring(html)
@@ -51,6 +59,55 @@ def test_sidebar_shows_sections_and_active_item() -> None:
     home = document.xpath('//a[@href="/" and contains(@class, "djc-sidebar__link")]')[0]
     assert home.text_content().strip() == "Home"
     assert {"djc-sidebar__link", "djc-sidebar__link--top"} <= set(home.classes)
+
+
+def test_primary_navigation_order_and_active_state() -> None:
+    expected = [
+        ("Docs", "/getting-started/installation/"),
+        ("Examples", "/examples/"),
+        ("Reference", "/reference/"),
+        ("Community", "/community/people/"),
+    ]
+    cases = {
+        "advanced/caching/": "Docs",
+        "examples/": "Examples",
+        "reference/component/": "Reference",
+        "community/help/": "Community",
+    }
+
+    for current_path, active_label in cases.items():
+        document = lxml_html.document_fromstring(_render_real_nav(current_path))
+        for nav_class in ("djc-header__nav", "djc-sidebar__topnav"):
+            links = document.xpath(f'//nav[contains(@class, "{nav_class}")]/a')
+            assert [(link.text_content().strip(), link.get("href")) for link in links] == expected
+            active = [link for link in links if "is-active" in link.classes]
+            assert [link.text_content().strip() for link in active] == [active_label]
+            assert active[0].get("aria-current") == "true"
+
+        assert document.xpath('//nav[@aria-label="Primary navigation"]')
+        assert document.xpath('//nav[@aria-label="Primary drawer navigation"]')
+        assert document.xpath('//nav[@aria-label="Section navigation"]')
+
+
+def test_primary_areas_have_scoped_sidebars_and_page_navigation() -> None:
+    community = lxml_html.document_fromstring(_render_real_nav("community/people/"))
+    community_sidebar = community.xpath('//nav[contains(@class, "djc-sidebar__nav")]')[0]
+    community_hrefs = community_sidebar.xpath(".//a/@href")
+    assert community_hrefs
+    assert all(href.startswith("/community/") for href in community_hrefs)
+    assert community.xpath('//a[contains(@class, "djc-page-nav__prev")]') == []
+    assert community.xpath('//a[contains(@class, "djc-page-nav__next")]/@href') == ["/community/contributing/"]
+
+    reference = lxml_html.document_fromstring(_render_real_nav("reference/component/"))
+    reference_hrefs = reference.xpath('//nav[contains(@class, "djc-sidebar__nav")]//a/@href')
+    assert reference_hrefs
+    assert all(href.startswith("/reference/") for href in reference_hrefs)
+
+    docs = lxml_html.document_fromstring(_render_real_nav("advanced/caching/"))
+    docs_hrefs = docs.xpath('//nav[contains(@class, "djc-sidebar__nav")]//a/@href')
+    assert "/cli/" in docs_hrefs
+    assert "/security/" in docs_hrefs
+    assert not any(href.startswith(("/community/", "/examples/", "/reference/")) for href in docs_hrefs)
 
 
 def test_breadcrumbs_trail() -> None:
