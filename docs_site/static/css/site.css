@@ -128,9 +128,12 @@ body {
   font-weight: normal;
 }
 
+.prose h1:hover .headerlink,
 .prose h2:hover .headerlink,
 .prose h3:hover .headerlink,
-.prose h4:hover .headerlink {
+.prose h4:hover .headerlink,
+.prose h5:hover .headerlink,
+.prose h6:hover .headerlink {
   opacity: 1;
 }
 
@@ -148,6 +151,18 @@ body {
 }
 
 .prose .heading-anchor:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+/* A reference symbol heading wraps a badge, the symbol name, and a kind label in
+   one link; underlining the whole run (and the gaps between the parts) on hover
+   looks broken, so underline only the symbol name. */
+.prose .doc-heading .heading-anchor:hover {
+  text-decoration: none;
+}
+
+.prose .doc-heading .heading-anchor:hover .doc-object-name {
   text-decoration: underline;
   text-underline-offset: 0.18em;
 }
@@ -1071,7 +1086,7 @@ a.djc-sidebar__label:hover {
 }
 
 .djc-sidebar__caret {
-  font-size: 1rem;
+  font-size: 0.85rem;
   color: var(--c-fg-subtle);
   transition: transform 0.15s;
 }
@@ -1083,6 +1098,32 @@ a.djc-sidebar__label:hover {
 /* Indent items inside a group */
 .djc-sidebar__group .djc-sidebar__items {
   padding-left: 0.75rem;
+}
+
+/* A top-level collapsible section (e.g. Release notes): its toggle reads as a
+   category label - like the inert section labels around it - so it is a peer of
+   the other top-level sections rather than looking like a nested sub-group. */
+.djc-sidebar__group--top > .djc-sidebar__group-label {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  color: var(--c-fg-subtle);
+}
+
+.djc-sidebar__group--top > .djc-sidebar__group-label:hover {
+  color: var(--c-fg);
+}
+
+/* Its items line up with every other section's items (no extra group indent). */
+.djc-sidebar__group--top > .djc-sidebar__items {
+  padding-left: 0;
+}
+
+/* The caret sits next to a small uppercase label, so keep it small to match. */
+.djc-sidebar__group--top > .djc-sidebar__group-label .djc-sidebar__caret {
+  font-size: 0.7rem;
 }
 
 /* ------------------------------------------------------------------ */

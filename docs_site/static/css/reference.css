@@ -1,0 +1,119 @@
+/* API reference: the .doc-* classes emitted by the ReferenceSymbol component. */
+
+.doc-object {
+  margin: 1.25rem 0;
+}
+
+.doc-heading {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+.doc-heading code {
+  font-size: 1em;
+}
+
+.doc-kind {
+  margin-left: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.55;
+}
+
+.doc-signature {
+  margin: 0.25rem 0 0.6rem;
+}
+.doc-signature pre {
+  margin: 0;
+}
+
+.doc-section {
+  margin: 0.6rem 0 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.doc-list {
+  margin: 0 0 0.5rem;
+  padding-left: 1.25rem;
+}
+
+.doc-returns {
+  margin: 0 0 0.5rem;
+}
+
+/* A class's members are indented under it, with a rule down the left. */
+.doc-members {
+  margin-top: 0.75rem;
+  padding-left: 1rem;
+  border-left: 2px solid rgba(128, 128, 128, 0.2);
+}
+
+.docs-error {
+  color: #c0392b;
+}
+
+/* "Bases: ..." line under a class heading. */
+.doc-class-bases {
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  color: var(--c-fg-muted);
+}
+
+/* "View source" link: quiet by default, right-aligned onto the heading line. */
+a.doc-source-link {
+  float: right;
+  /* Lift the link into a positioned layer: a float paints below the heading's
+     inline line box, so without this the heading's empty right-side line swallows
+     the click even though the link shows on top. */
+  position: relative;
+  z-index: 1;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--c-fg-subtle);
+  text-decoration: none;
+}
+a.doc-source-link:hover {
+  color: var(--c-link-hover);
+  text-decoration: underline;
+}
+
+/* Cross-linked type inside a signature: reads as a link without shouting in code. */
+a.doc-type-link {
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px dotted var(--c-link);
+}
+a.doc-type-link:hover {
+  color: var(--c-link-hover);
+  border-bottom-style: solid;
+}
+
+/* Docstring "Examples" block. */
+.doc-examples {
+  margin: 0.6rem 0 0.8rem;
+}
+.doc-examples .doc-section-title {
+  margin: 0 0 0.3rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* Note lifted from a docstring admonition; mirrors the prose admonition look. */
+.doc-admonition {
+  margin: 0.8rem 0;
+  padding: 0.6rem 0.9rem;
+  border-left: 3px solid var(--c-note);
+  border-radius: 0 0.25rem 0.25rem 0;
+  background: oklch(from var(--c-note) l c h / 6%);
+}
+.doc-admonition-title {
+  margin-bottom: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--c-note);
+}

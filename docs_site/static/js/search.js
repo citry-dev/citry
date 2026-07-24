@@ -273,7 +273,7 @@
     errorEl.textContent = 'Search is unavailable right now. ';
     var link = document.createElement('a');
     link.href =
-      'https://www.google.com/search?q=site:django-components.github.io+' + encodeURIComponent(query || '');
+      'https://www.google.com/search?q=site:citry.dev+' + encodeURIComponent(query || '');
     link.target = '_blank';
     link.rel = 'noopener';
     link.textContent = 'Search with Google instead';

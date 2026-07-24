@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from docs_site.nav import load_nav
+from docs_site._internal.nav import load_nav
 
 NAV_YAML = """\
 sections:
