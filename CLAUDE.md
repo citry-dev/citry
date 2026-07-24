@@ -78,7 +78,7 @@ first, and lead your proposal with what you searched (see Mechanism 1).
   read the complete grammar trio:
   [`grammar.pest`](crates/citry_template_parser/src/grammar.pest),
   [`grammar.rs`](crates/citry_template_parser/src/grammar.rs), and
-  [`grammar.md`](docs/design/grammar.md). Do not infer the syntax contract from
+  [`template_grammar.md`](docs/design/template_grammar.md). Do not infer the syntax contract from
   parser code or tests alone. Read the gotcha below before touching it.
 - **The AST structs**
   ([`crates/citry_template_parser/src/ast.rs`](crates/citry_template_parser/src/ast.rs)).

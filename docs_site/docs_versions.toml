@@ -1,0 +1,45 @@
+# Which git tags `docs build-all` rebuilds into docs_site/versions/, and how many
+# of those versions a deploy publishes.
+#
+# `docs build-all` is the one-off bootstrap / disaster-recovery command: it walks
+# the tags selected here, checks each one out, and runs `docs build` against it.
+# Day to day you never run it - each release is a single `docs build`. See the
+# command table in docs/design/docs_site.md.
+#
+# A tag can only be rebuilt if its checkout actually contains the docs builder
+# (the docs_site/ tree). Tags from before the docs site existed do not, so they
+# are skipped automatically and land in `skipped_no_builder`.
+
+[versions]
+# Regex a tag must match to be built. Citry uses full major.minor.patch versions
+# (see CLAUDE.md), so this matches a 3-part semver with an optional leading `v`,
+# e.g. `0.2.0` or `v0.2.0`. The value is a TOML basic string, so each backslash is
+# doubled.
+pattern = "^v?\\d+\\.\\d+\\.\\d+$"
+
+# Extra real tags to build even when they do not match `pattern`. Empty for now:
+# every doc version so far is a normal release tag.
+include = []
+
+# Known-broken or deleted tags to never build. Empty for now.
+exclude = []
+
+# Do not build versions older than this. Set to citry's first release so a stray
+# run cannot walk older refs; lower it if historical versions are ever rebuilt.
+oldest = "0.1.0"
+
+# Upper bound on the versions to build. "" means no upper bound.
+newest = ""
+
+[aliases]
+# Which version the `latest/` alias redirects to. "" means the newest selected
+# version that actually built.
+latest = ""
+
+[publish]
+# How many of the newest release versions a deploy publishes to the live site.
+# The committed versions/ tree always keeps every version (for reproducibility);
+# this only bounds what `docs assemble` mounts under /v/, because GitHub Pages
+# caps a published site at 1 GB and frozen historical builds add up. dev and the
+# latest alias are always published. 0 = publish everything (no limit).
+window = 15
