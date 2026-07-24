@@ -28,8 +28,8 @@ the paths that are candidates for moving into Rust) see
 [`performance.md`](performance.md).
 
 For the migration context (what citry keeps and drops from DJC) see
-[`citry_migration.md`](citry_migration.md). For the Const optimization that
-the `citry-const` variant exercises see [`constness.md`](constness.md).
+[`migration_djc.md`](migration_djc.md). For the Const optimization that
+the `citry-const` variant exercises see [`component_constness.md`](component_constness.md).
 For the JS/CSS dependency rendering that gates the large scenario see
 [`asset_loading.md`](asset_loading.md) section 7.4. For operating rules see
 [`/CLAUDE.md`](../../CLAUDE.md).
@@ -93,10 +93,9 @@ In this repo:
   **`benchmark_safe_eval.py`**: micro-benchmarks of the Rust HTML transformer
   and of `safe_eval` dispatch. Different layer (citry_core primitives, not
   component rendering).
-- **The vendoring pattern**: `packages/py/citry/_djc_reference/` and
-  `packages/py/citry/tests/_djc_tests/` already hold DJC material copied into
-  this repo for porting work. Vendoring the DJC benchmark files continues an
-  established pattern.
+- **The vendoring pattern**: `packages/py/citry/_djc_reference/` holds pinned
+  DJC engine source copied into this repo for porting work. Vendoring the DJC
+  benchmark files continues the source-reference pattern.
 - **`docs/codebase.md`** "Running tests" and the root `pyproject.toml`:
   Python dev deps are mirrored between each package's
   `[dependency-groups].dev` and the root extras; any new benchmark deps must
@@ -163,8 +162,7 @@ Decisions made with the maintainer:
      plus a Rust toolchain in DJC's CI.
    - The longitudinal axis that matters is citry's commit history
      (section 2), and asv tracks the repo it lives in.
-   - The vendoring direction already exists here (`_djc_reference/`,
-     `tests/_djc_tests/`).
+   - The vendoring direction already exists here (`_djc_reference/`).
 2. **Two-stage harness.** Stage one is a plain comparison script (the
    `benchmark_const.py` style) that runs all engine variants at HEAD and
    prints a table; stage two adopts asv for per-commit tracking and
@@ -453,7 +451,7 @@ The large citry scenario runs as two engine rows:
   in which each component's `template_data()` marks `Const` exactly the values
   that are the same on every render (literal attribute dicts, the module-level
   theme, slices of the icon table) and nothing derived from the per-render
-  data ([`constness.md`](constness.md)). This row shows the headroom an
+  data ([`component_constness.md`](component_constness.md)). This row shows the headroom an
   opted-in user gets; it has no DJC/Django equivalent, so within the table it
   reads as "citry vs itself".
 
@@ -616,7 +614,7 @@ Phases 1-2 gave the first citry-vs-DJC-vs-Django numbers. Phase 3's gates
   nothing (the precompute cache grows by one entry over the auto-marked baseline)
   and does not move the render time, because the page is loop-dominated and
   `Const` does not survive iteration or indexing into the per-render data
-  (section 11 log, section 6.4). Closing that gap is a `constness.md` design
+  (section 11 log, section 6.4). Closing that gap is a `component_constness.md` design
   question (propagating the marker through iteration/indexing), not a
   benchmark one.
 
@@ -631,7 +629,7 @@ Phases 1-2 gave the first citry-vs-DJC-vs-Django numbers. Phase 3's gates
 - **Dependency extension (feature C)** (asset_loading.md section 7.4,
   extensions.md phasing): phase 3's gate. The large scenario becomes its
   first integration-scale consumer and benchmark.
-- **Const optimization** (constness.md): exercised at scenario level by the
+- **Const optimization** (component_constness.md): exercised at scenario level by the
   `citry-const` variant (section 6.4); `benchmark_const.py` remains the
   micro-level benchmark of the same machinery.
 - **V3 parser work** (`crates/citry_template_parser/`): the large scenario is
@@ -777,7 +775,7 @@ progress entry above:
   consumed by child components that mix them with dynamic data, so they do not
   precompute either. The honest conclusion is that `Const` does not help a
   loop-over-data page; it is built for templates with large static blocks.
-  Propagating the marker through iteration/indexing is a `constness.md`
+  Propagating the marker through iteration/indexing is a `component_constness.md`
   question, separate from the benchmark.
 
 ### 2026-06-22 - render-path optimization pass

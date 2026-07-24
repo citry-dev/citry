@@ -6,7 +6,7 @@ the citry monorepo: how the `citry_core` (Rust/maturin) and `citry`
 work folds in the uv-workspace conversion
 ([#8](https://github.com/citry-dev/citry/issues/8)). It is the persistent
 reference for that multi-PR effort, in the same spirit as
-[`citry_migration.md`](citry_migration.md).
+[`migration_djc.md`](migration_djc.md).
 
 For operating rules see [`/CLAUDE.md`](../../CLAUDE.md). For the documented
 dev/build/release conventions (some marked unverified) see
@@ -137,7 +137,7 @@ per [`/CLAUDE.md`](../../CLAUDE.md) Mechanism 1 here is what was surveyed.
 
 ### 3.3 Where CI/CD is and is not documented
 
-The migration doc [`citry_migration.md`](citry_migration.md) has **no** CI/CD
+The migration doc [`migration_djc.md`](migration_djc.md) has **no** CI/CD
 content; its "feature/file index" is a per-file feature audit. The real source
 of release conventions is [`docs/codebase.md`](../codebase.md), which documents
 the manual release steps and the workflow-naming convention, but carries a

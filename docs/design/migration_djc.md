@@ -94,7 +94,7 @@ designed. Grouped by which part of the architecture they impact.
 
 | Issue | Feature | Architecture impact |
 |---|---|---|
-| [#1650](https://github.com/django-components/django-components/issues/1650) | `Component()` returns a `CitryElement`, not a string | Three-phase pipeline: `Component()` composes a `CitryElement`; `.render()` produces a `CitryRender` (rendered parts + collected metadata); `.serialize()` produces the HTML string. The render output is a struct so JS/CSS deps travel as data, not as marker strings. Cache stores objects. Full design in [`rendering.md`](rendering.md). |
+| [#1650](https://github.com/django-components/django-components/issues/1650) | `Component()` returns a `CitryElement`, not a string | Three-phase pipeline: `Component()` composes a `CitryElement`; `.render()` produces a live `CitryRender` (rendered parts + collected metadata); `.serialize()` produces the HTML string. JS/CSS dependencies travel as structured data. Cross-request output caching stores a detached `CachedRenderArtifact` and replays it with current-call identity. See [`component_rendering.md`](component_rendering.md) and [`caching.md`](caching.md). |
 | [#1083](https://github.com/django-components/django-components/issues/1083) | `Const()` marker for 50% perf gain | Nodes detect constant inputs and replace themselves with static text. Rendering context must track constness. |
 | [#1473](https://github.com/django-components/django-components/issues/1473) | Expression caching | Variable tracking (already in AST) enables memoizing expression results across renders when inputs are unchanged. Tracked in citry [#18](https://github.com/citry-dev/citry/issues/18). |
 | [#1337](https://github.com/django-components/django-components/issues/1337) | Lazy/streaming rendering | Rendering may be deferred; components produce futures or generators instead of synchronous strings. Tracked in citry [#19](https://github.com/citry-dev/citry/issues/19). |
@@ -103,7 +103,7 @@ designed. Grouped by which part of the architecture they impact.
 The render-output model (the three-phase `CitryElement` -> `CitryRender` ->
 HTML pipeline, the `CitryContext` render-scoped state, and the JS/CSS dependency
 flow that drives the struct shape) is captured separately in
-[`rendering.md`](rendering.md). It is built: `.render()` returns a
+[`component_rendering.md`](component_rendering.md). It is built: `.render()` returns a
 `CitryRender`, rendering is deferred (depth-unbounded, stack-driven), and
 `serialize()` stamps the per-component `data-cid-<id>` markers. Placing
 collected JS/CSS dependencies into `<head>`/`<body>` at serialize time is
@@ -112,7 +112,7 @@ built (the five dependency-rendering phases in
 
 The `Const()` (#1083), expression-caching (#1473), and render-body-caching
 design (and its many edge cases) is captured separately in
-[`constness.md`](constness.md). Both the const *flow* (the
+[`component_constness.md`](component_constness.md). Both the const *flow* (the
 `wrapt.ObjectProxy`-based `Const` marker, detection, and the `Citry`-scoped
 body cache keyed by const signature) and the *precompute pass* are built: precomputing
 pre-computes const expressions and attributes, drops untaken `<c-if>`
@@ -147,7 +147,7 @@ across-render expression caching (citry [#18](https://github.com/citry-dev/citry
 | [#897](https://github.com/django-components/django-components/issues/897) | Partials support | Related to fragments. |
 | [#1471](https://github.com/django-components/django-components/issues/1471) | Language server / linter | Variable tracking in AST already supports this. |
 | [#1118](https://github.com/django-components/django-components/issues/1118) | MCP for component metadata | CLI/tooling integration. |
-| (no issue yet) | Component URLs + `Component.Events` | Components served over HTTP (djc's `Component.View` / `get_component_url`), redesigned: handlers named by the *event* they handle (`Events.submit()`, `Events.delete()`, ...) instead of by HTTP method. DJC's `View` forced every action onto an HTTP-method name, which broke down when one component backed several mutations (one had to go under `post()`, another under `patch()`). Each handler declares what it accepts (query args, request body, file upload, eventually websocket events). Builds on `Extension.urls`, the fragment strategy, and the mount contract from [`dependencies.md`](dependencies.md) section 9.5. Needs its own design doc. |
+| (no issue yet) | Component URLs + `Component.Events` | ✅ Shipped as the Events extension. Components served over HTTP use named handlers (`Events.submit()`, `Events.delete()`, ...) instead of forcing every action onto an HTTP-method name. Each handler declares what it accepts, and `ViewEvents` provides the initial verb-shaped migration route. URL building, host mounts, typed inputs, return actions, and the client lifecycle are specified in [`events.md`](events.md). |
 | [#473](https://github.com/django-components/django-components/issues/473) | Define public API | citry gets a clean public API from scratch. |
 
 ---
@@ -194,7 +194,7 @@ with Vue-like `class`/`style` merging.
 | `<c-provide>` | Dependency injection | Implemented (`citry/components/provide.py`, a `transparent` component) |
 | `<c-js>` | JS dependency rendering | Implemented (`citry/components/js_css.py`); renders a `Placeholder` part the dependencies extension fills at serialize ([`dependencies.md`](dependencies.md) section 7.3) |
 | `<c-css>` | CSS dependency rendering | Implemented (`citry/components/js_css.py`); same mechanism |
-| `<c-component>` | Dynamic component (components only) | Implemented (`citry/components/dynamic.py`); design in [`dynamic_component.md`](dynamic_component.md) |
+| `<c-component>` | Dynamic component (components only) | Implemented (`citry/components/dynamic.py`); design in [`component_dynamic.md`](component_dynamic.md) |
 | `<c-element>` | Dynamic HTML element (any tag name) | Implemented (`citry/components/dynamic.py`); sibling of `<c-component>`, same doc |
 
 ---
@@ -289,9 +289,9 @@ below for the per-feature verdicts.
 | `extensions/defaults.py` | Partial |
 | `extensions/dependencies.py` | Django |
 | `extensions/cache.py` | Partial |
-| `extensions/view.py` | Django |
+| `extensions/view.py` | Citry (reshaped as Events) |
 | `extensions/autodiscovery.py` | Django |
-| `extensions/debug_highlight.py` | Django |
+| `extensions/debug_highlight.py` | Citry extension |
 
 ---
 
@@ -338,7 +338,7 @@ Status legend:
 | `media_class` | ❌ Drop | Django forms `Media` output class |
 | `on_render_before` / `on_render` (incl. generator form) / `on_render_after` | ✅ Done (diverged) | A single `on_render()` hook; before/after dropped (template_data and the generator's post-yield phase cover them). No `Context`/`Template` args, no lambda yields; the generator receives the completed `CitryRender`. Design in [`on_render.md`](on_render.md) |
 | `Component.on_dependencies()` | ✅ Done | A classmethod, called per rendered instance at serialize time ([`dependencies.md`](dependencies.md) section 7.2) |
-| `Cache` / `Defaults` / `View` / `DebugHighlight` nested configs | ✅ Done (mechanism) | Generic `Extension.Config` exists; the bundled extensions themselves are reviewed with `extensions/` (View/DebugHighlight likely stay Django) |
+| `Cache` / `Defaults` / `View` / `DebugHighlight` nested configs | ✅ Done (mechanism) | Generic `Extension.Config` exists; DebugHighlight is now the bundled opt-in `Debug` extension, while the other extension verdicts remain in the `extensions/` review |
 | `Component.name` | ✅ Done | Registers under that name only |
 | `registered_name` | ❌ Drop | Registered names phased out (djc #1195) |
 | `Component.id` (render id) | ✅ Done | Plus `data-cid-<id>` serialize markers |
@@ -346,7 +346,7 @@ Status legend:
 | `kwargs` / `raw_kwargs` / `slots` / `raw_slots` accessors | ✅ Done | |
 | `context` / `outer_context` | ⏭️ Skip (Django) | Django `Context`; `outer_context` deprecated (djc #1259). citry passes only props + slots between components |
 | `deps_strategy` (`document`/`fragment`/...) | ✅ Done (diverged) | `serialize(deps_strategy=..., deps_position=...)`, not context state; `fragment` raises until the client-runtime phase |
-| `Component.registry` / `Component.node` | ♻️ Superseded / ❌ Drop | Registry reached via `component.citry.registry`. `ComponentNode` is an internal node type in citry, not part of the public component surface, so a `Component.node` back-reference is deliberately not carried over |
+| `Component.registry` / `Component.node` | ♻️ Superseded / ❌ Drop | Component registration and lookup are reached through `component.citry`. `ComponentNode` is an internal node type in citry, not part of the public component surface, so a `Component.node` back-reference is deliberately not carried over |
 | `is_filled` / `ComponentVars` (`{{ component_vars.* }}`) | ♻️ Superseded | djc injected template globals; in citry slots are explicit `template_data` inputs, so "is filled" is `slots.get(...)` |
 | `request`, `context_processors_data`, `as_view()`, `render_to_response()`, `response_class` | ⏭️ Skip (Django) | The view extension stays in django-components |
 | `parent` / `root` | ✅ Done | Set across the component boundary during render |
@@ -357,7 +357,6 @@ Status legend:
 | `all_components()` | ♻️ Superseded | `Citry.components` |
 | `get_component_by_class_id()` / `_class_hash` | ✅ Done | `Component.class_id` + `Citry.get_component_by_class_id()` ([`dependencies.md`](dependencies.md) section 4.1) |
 | `ComponentMeta` registration at class definition | ✅ Done | |
-| `ComponentMeta.__del__` -> class-deleted hook | ✅ Done | Fires `on_component_class_deleted` |
 | `on_component_garbage_collected` (provide cache cleanup) | ♻️ Superseded | Provides travel on `CitryContext.provides`; no global cache to clean |
 | `ComponentNode` (`{% component %}` tag, spread args, `only` isolation flag) | ✅ Done / ♻️ Superseded | citry `ComponentNode` resolves attrs -> kwargs, `c-bind` spread; isolation flags are moot (no outer context is ever passed) |
 
@@ -417,7 +416,7 @@ Status legend:
 
 | Feature | Status | Notes |
 |---|---|---|
-| `ComponentExtension` base + hook surface | ✅ Done | As `Extension`; hooks wired: extension-created, class created/deleted, registered/unregistered, input, data, rendered, slot-rendered, template loaded/compiled, js/css loaded, plus citry-only `on_attrs_resolved` |
+| `ComponentExtension` base + hook surface | ✅ Done | As `Extension`; hooks wired: extension-created, class-created, registered/unregistered, input, data, rendered, slot-rendered, template loaded/compiled, js/css loaded, plus citry-only `on_attrs_resolved`. The GC-time `on_component_class_deleted` hook and context are dropped; cleanup for explicit removal belongs in `on_component_unregistered`. `Citry.clear()` is a bulk teardown without per-component hooks. |
 | `on_registry_created` / `on_registry_deleted` | ♻️ Superseded | The registry is 1:1 with a `Citry` instance now; separate hooks no longer needed |
 | `on_dependencies` hook | ✅ Done | Extension-owned custom hook fired via `emit` at serialize time; the first real consumer of the custom-hook mechanism |
 | `ExtensionComponentConfig` (nested per-component config) | ✅ Done | As `ExtensionConfig`; the `<name>_class` escape hatch dropped |
@@ -426,7 +425,7 @@ Status legend:
 | Extension specs as import strings (`"path.to.Ext"`) | ✅ Done | |
 | `extensions_defaults` | ✅ Done | |
 | `get_extension(name)` / `get_extension_command(name, cmd)` | ✅ Done | |
-| `ComponentCommand` (CLI commands) | ✅ Done (reshaped) | Built as the grown `ExtensionCommand` plus the framework-neutral `build_parser` / `run` in `citry/command.py`, aggregated across extensions via `Citry.commands` and surfaced by the `citry` executable ([`extension_commands.md`](extension_commands.md)) |
+| `ComponentCommand` (CLI commands) | ✅ Done (reshaped) | Built as the grown `ExtensionCommand` plus the framework-neutral `build_parser` / `run` in `citry/command.py`, aggregated across extensions via `Citry.commands` and surfaced by the `citry` executable ([`extensions_commands.md`](extensions_commands.md)) |
 | `add_extension_urls` / `remove_extension_urls` (`URLRoute`) | ✅ Done (reshaped) | `Extension.urls` (list or property) combined into `Citry.urls`; user extensions namespaced under `ext/<name>/` ([`dependencies.md`](dependencies.md) section 9.1) |
 | `mark_extension_hook_api` doc marker | ♻️ Superseded | Docs tooling concern |
 
@@ -439,7 +438,7 @@ Status legend:
 
 | Feature | Status | Notes |
 |---|---|---|
-| `ComponentRegistry` (register/unregister/get/has/all/clear) | ✅ Done (diverged) | Owned by `Citry` (`citry.registry`); name normalization + kebab-case aliases; reserved built-in names with lazy builtin creation |
+| `ComponentRegistry` (register/unregister/get/has/all/clear) | ✅ Done (diverged) | Public methods live on `Citry`; name normalization + kebab-case aliases; reserved built-in names with lazy builtin creation |
 | `AlreadyRegistered` / `NotRegistered` + duplicate detection | ✅ Done | Re-registering the same class is a no-op |
 | Registration extension hooks | ✅ Done | `on_component_registered` / `on_component_unregistered` |
 | `RegistrySettings` (`context_behavior`, `tag_formatter`) | ⏭️ Skip (Django) | Tag formatters dropped entirely |
@@ -490,7 +489,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 | Per-component attr injection for JS/CSS scoping (`set_component_attrs_for_js_and_css`) | ✅ Done | `data-cid-<id>` at serialize plus `data-ccss-<hash>` via the root-marker hook (internal `CitryContext._add_root_markers`); the every-element `all_attributes` mode belongs to scoped CSS (#1230), a separate feature |
 | `<!-- _RENDERED ... -->` dependency comments + `insert_component_dependencies_comment` | ♻️ Superseded | Dependencies travel as data on the render objects, not marker strings |
 | `TagAttrParser` / `_parse_html_tag_attrs` | ♻️ Superseded | No re-parsing of rendered HTML in the object pipeline |
-| Client-side runtime (`_core_js`, pre-loader, `Components.onComponent` transform, exec-script manifests) | ✅ Done (rewritten) | Citry's own runtime (`extensions/dependencies/client/citry.js`, `globalThis.Citry.manager`): `$onComponent` callbacks called with `{id, els, data}` per instance via `data-cid` markers; `data-citry` JSON manifests, base64-armored. The fragment pre-loader lands with the fragments phase |
+| Client-side runtime (`_core_js`, pre-loader, component transform, exec-script manifests) | ✅ Done (rewritten) | Citry's own runtime (`ext/dependencies/client/citry.js`, `globalThis.Citry.manager`): `$component` callbacks called with `{id, els, data}` per instance via `data-cid` markers; `data-citry` JSON manifests, base64-armored. The fragment pre-loader lands with the fragments phase |
 | `cached_script_view` + `urlpatterns` (serving cached JS/CSS over HTTP) | ✅ Done (reshaped) | Framework-neutral endpoints in the extension (`routes.py`: cache + runtime), with lazy repopulation for class scripts; served by the `citry.contrib` adapters ([`dependencies.md`](dependencies.md) section 9) |
 
 </details>
@@ -561,7 +560,7 @@ pipeline (`CitryRender` parts + `CitryContext.extra`).
 
 | Feature | Status | Notes |
 |---|---|---|
-| `UID_LENGTH` / `COMP_ID_PREFIX` / `COMP_ID_LENGTH` | ✅ Done | Copied verbatim to `citry/constants.py` |
+| `UID_LENGTH` / `COMP_ID_PREFIX` / `COMP_ID_LENGTH` | ✅ Done | Implemented in `citry/constants.py`; A10 widened the generated suffix to eight lowercase base-36 characters after the `c` prefix so HTML attribute names remain case-safe |
 
 </details>
 
@@ -619,8 +618,8 @@ stays in django-components; the verdicts below are about each *field*.
 | `libraries` | ❌ Drop | An explicit list of component modules to import. It dates to when django-components was a pure-template tool with no component `.py` files to discover; with component classes the `dirs` scan (or a plain `import`) covers it, and it is being dropped upstream too |
 | `cache` (named cache backend for component media) | ✅ Done | `Citry(cache=...)` / `CitrySettings.cache` ([`dependencies.md`](dependencies.md) section 10); `citry.contrib.django.DjangoCache` adapts any configured Django cache |
 | `context_behavior` (`django` / `isolated`) | ❌ Drop | citry passes only props + slots; there is one behavior |
-| `debug_highlight_components` / `debug_highlight_slots` | ⏭️ Skip (Django) | Belongs to the debug-highlight extension (reviewed with `extensions/`) |
-| `dynamic_component_name` | ❌ Drop | The `<c-component>` built-in's name is reserved in the registry, so the name conflict this setting solved cannot arise; see [`dynamic_component.md`](dynamic_component.md) section 6 |
+| `debug_highlight_components` / `debug_highlight_slots` | ✅ Done (diverged) | Replaced by strict `highlight_components` / `highlight_slots` fields on `citry.ext.debug.Debug`, configured through `extensions_defaults["debug"]` or a component's nested `Debug` class |
+| `dynamic_component_name` | ❌ Drop | The `<c-component>` built-in's name is reserved in the registry, so the name conflict this setting solved cannot arise; see [`component_dynamic.md`](component_dynamic.md) section 6 |
 | `multiline_tags` | ♻️ Superseded | Existed to patch Django's tag regex; V3 syntax is HTML and multiline by nature |
 | `reload_on_file_change` (+ `ReloadMode` hot/restart) | ✅ Done (citry half) | The invalidation seam is in citry (`Citry.get_components_for_file`, `reset_template`/`reset_files`); the host-neutral watcher that drives the seam is designed in [`hot_reload.md`](hot_reload.md) (the hot/restart policy stays host-specific) |
 | `reload_on_template_change` | ❌ Drop | Deprecated alias of `reload_on_file_change` |
@@ -726,7 +725,7 @@ stays in django-components; the verdicts below are about each *field*.
 
 | Feature | Status | Notes |
 |---|---|---|
-| `{% cache %}` compat (`DjcCacheNode`, eager fragment assembly on cache miss) | ⏭️ Skip (Django) | Patches Django's cache tag around djc's two-pass render. **Lesson to keep:** its documented limitations (frozen `data-djc-id`s and stale js/css hashes inside cached strings) are exactly why citry caches must store `CitryElement`/`CitryRender` objects, never serialized HTML (djc #1650; already the citry design) |
+| `{% cache %}` compat (`DjcCacheNode`, eager fragment assembly on cache miss) | ⏭️ Skip (Django) / ♻️ Replace | The Django patch does not port. Citry's `<c-cache>` covers the portable rendered-region use case and stores the detached `CachedRenderArtifact` from [`caching.md`](caching.md), whose replay restores fresh identities and dependency state. |
 
 </details>
 
@@ -759,7 +758,7 @@ stays in django-components; the verdicts below are about each *field*.
 
 | Feature | Status | Notes |
 |---|---|---|
-| `components` CLI (`list`, `create`, `upgrade`, `ext list`, `ext run`) + Django management bridge | ✅ Done (diverged) | The standalone `citry` CLI ships `list` / `create` / `ext list` / `ext run`, plus `--app module:attribute` engine selection and `--version` (`citry/commands/`, `citry/__main__.py`). `upgrade` is dropped (Django-template legacy); the Django management bridge and an MCP server were deliberately not built ([`extension_commands.md`](extension_commands.md) section 14) |
+| `components` CLI (`list`, `create`, `upgrade`, `ext list`, `ext run`) + Django management bridge | ✅ Done (diverged) | The standalone `citry` CLI ships `list` / `create` / `ext list` / `ext run`, plus `--app module:attribute` engine selection and `--version` (`citry/commands/`, `citry/__main__.py`). `upgrade` is dropped (Django-template legacy); the Django management bridge and an MCP server were deliberately not built ([`extensions_commands.md`](extensions_commands.md) section 14) |
 | `startcomponent` / `upgradecomponent` scaffolding commands | ⏭️ Skip (Django) | Generate Django-flavored files; a citry scaffolder would be new design, not a port |
 
 </details>
@@ -771,7 +770,7 @@ stays in django-components; the verdicts below are about each *field*.
 
 | Feature | Status | Notes |
 |---|---|---|
-| `load_as_django_command` (`ComponentCommand` -> Django management command) | ⏭️ Skip (Django) | citry deliberately adds no Django management-command bridge; Django projects call the installed `citry` binary directly ([`extension_commands.md`](extension_commands.md) section 14) |
+| `load_as_django_command` (`ComponentCommand` -> Django management command) | ⏭️ Skip (Django) | citry deliberately adds no Django management-command bridge; Django projects call the installed `citry` binary directly ([`extensions_commands.md`](extensions_commands.md) section 14) |
 | `routes_to_django` (`URLRoute` -> Django urlpatterns) | ✅ Done | `citry.contrib.django.urlpatterns()`; uses `re_path` where two parameters share a path segment ([`dependencies.md`](dependencies.md) section 9.2) |
 
 </details>
@@ -803,7 +802,7 @@ These exist in `_djc_reference/` but were not in the classification tables.
 
 | Feature | Status | Notes |
 |---|---|---|
-| `DynamicComponent` (`{% component "dynamic" is=... %}`) | ✅ Done | As the `<c-component>` built-in (components only), with a new `<c-element>` sibling for render-time HTML element names; full design and DJC surface table in [`dynamic_component.md`](dynamic_component.md). The class-valued `is` form works without any registered name, so it squares with djc #1195 |
+| `DynamicComponent` (`{% component "dynamic" is=... %}`) | ✅ Done | As the `<c-component>` built-in (components only), with a new `<c-element>` sibling for render-time HTML element names; full design and DJC surface table in [`component_dynamic.md`](component_dynamic.md). The class-valued `is` form works without any registered name, so it squares with djc #1195 |
 | `ErrorFallback` (error boundary, React-style; fallback kwarg or slot with `error` data) | ✅ Done (diverged) | The `<c-error-fallback>` built-in (`citry/components/error_fallback.py`, reserved name); built on the `on_render` generator. Slot-based fallback invokes the fill with the error as data, no template re-render ([`on_render.md`](on_render.md) section 7) |
 
 </details>
@@ -1021,8 +1020,8 @@ Ported function by function, on demand. Current state:
 
 | Feature | Status | Notes |
 |---|---|---|
-| `ComponentCommand` + `CommandArg`/`CommandArgGroup`/`CommandSubcommand` (declarative, framework-neutral argparse CLI) | ✅ Done | The arg dataclasses live in `citry/command.py` with their argparse-aligned names; `ComponentCommand`'s role is filled by the grown `ExtensionCommand` ([`extension_commands.md`](extension_commands.md) section 3) |
-| `setup_parser_from_command` (argparse wiring) | ✅ Done | `build_parser` in `citry/command.py`, paired with the `run` dispatch loop lifted out of the Django bridge ([`extension_commands.md`](extension_commands.md) section 3.2) |
+| `ComponentCommand` + `CommandArg`/`CommandArgGroup`/`CommandSubcommand` (declarative, framework-neutral argparse CLI) | ✅ Done | The arg dataclasses live in `citry/command.py` with their argparse-aligned names; `ComponentCommand`'s role is filled by the grown `ExtensionCommand` ([`extensions_commands.md`](extensions_commands.md) section 3) |
+| `setup_parser_from_command` (argparse wiring) | ✅ Done | `build_parser` in `citry/command.py`, paired with the `run` dispatch loop lifted out of the Django bridge ([`extensions_commands.md`](extensions_commands.md) section 3.2) |
 | `style_success` / `style_warning` (ANSI colors) | ✅ Done | Internal helpers in `citry/command.py`, gated on a color TTY / `NO_COLOR` so piped output stays plain |
 
 </details>
@@ -1053,7 +1052,7 @@ extension and a good dogfood test for citry's hook system.
 
 ### `extensions/defaults.py` (269 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
@@ -1082,10 +1081,10 @@ extension and a good dogfood test for citry's hook system.
 
 | Feature | Status | Notes |
 |---|---|---|
-| `Component.Cache` config (`enabled`, `ttl`, `cache_name`) + cache key from kwargs hash | 🚧 To migrate | The caching extension. Critically, citry must cache the `CitryElement` / `CitryRender` *objects*, not HTML strings; djc's string caching is what freezes render ids and js/css hashes (the `cache_tag.py` lesson, djc #1650) |
-| `include_slots` (hash slot fills into the key; cannot account for context vars used inside fills, djc #1164) | 🚧 To migrate (improved) | citry can do better than djc here: the AST tracks used variables, so a fill's free variables are knowable and can join the cache key instead of being silently ignored |
-| Cache miss/hit short-circuit via `on_component_input` return | ❓ Ambiguous | Depends on the deferred short-circuit/caching hook split (django-components#1141 R6, noted as deferred in the extension-system log entry). Decide that hook design first |
-| Django `BaseCache` storage | ⏭️ Skip (Django) | The storage goes through whatever the citry cache-backend protocol ends up being |
+| `Component.Cache` config (`enabled`, `ttl`, `cache_name`) + cache key from kwargs hash | ✅ Migrated (improved) | Citry uses `enabled`, `ttl`, `version`, default canonical typed-input variation, and an instance `Cache.vary()` method. Entries are detached `CachedRenderArtifact` values. Named backends are deferred. See [`caching.md`](caching.md). |
+| `include_slots` (hash slot fills into the key; cannot account for context vars used inside fills, djc #1164) | ✅ Migrated (improved) | Citry does not infer Slot output from source. A supplied fill or typed Slot default/factory that produces content requires explicit `Cache.vary()` coverage. |
+| Cache miss/hit short-circuit via `on_component_input` return | ✅ Migrated (reshaped) | Input hooks remain mutate-only. Cache lookup follows input hooks and typed-input revalidation; successful misses publish only after the settled subtree and rendered hooks complete. `on_component_cache_hit` is the observer hook. |
+| Django `BaseCache` storage | ⏭️ Skip (Django) / ♻️ Replace | V1 uses the existing string-valued `CitryCache` protocol and the one backend owned by each `Citry` instance. |
 
 </details>
 
@@ -1096,8 +1095,8 @@ extension and a good dogfood test for citry's hook system.
 
 | Feature | Status | Notes |
 |---|---|---|
-| `ComponentView` (`Component.View` with get/post/..., `as_view()`) | ❌ Drop (API shape) | The HTTP-method-named handler API is not ported; the concept returns redesigned as `Component.Events` (planned-features table above; [`dependencies.md`](dependencies.md) section 9.5) |
-| `get_component_url()` / public view auto-registration | 🚧 To migrate (later) | Returns with the `Component.Events` design, on `Extension.urls` + the fragment strategy ([`dependencies.md`](dependencies.md) section 9.5) |
+| `ComponentView` (`Component.View` with get/post/..., `as_view()`) | ❌ Drop (API shape) / ✅ Done (concept) | The Django view class and direct component verb methods are not ported. The completed Events extension replaces them with named handlers, while `class Events(ViewEvents):` supplies the initial verb-shaped migration route; see [`events.md`](events.md) section 10. |
+| `get_component_url()` / public view auto-registration | ✅ Done (reshaped) | Named handlers use `get_event_url()` or `component.events.url()` with query/fragment support. Events mounts fixed routes and handler placement is the allowlist, so there is no `public` flag, per-class auto-registration, or custom route reversal. |
 
 </details>
 
@@ -1114,13 +1113,13 @@ extension and a good dogfood test for citry's hook system.
 
 ### `extensions/debug_highlight.py` (142 lines)
 
-<details open>
+<details>
 <summary>Features</summary>
 
 | Feature | Status | Notes |
 |---|---|---|
-| Visual debug overlay (wrap component/slot output in colored, labeled wrappers via `on_component_rendered` / `on_slot_rendered`) | 🚧 To migrate | Nothing Django about it: both hooks exist in citry and support replacing the output. Port it as a citry extension; it doubles as a real-world test of the hook system. Wrinkle to solve: it wraps *strings*, citry hooks see `CitryRender` parts |
-| `debug_highlight_components` / `debug_highlight_slots` settings | 🚧 To migrate | As the extension's own config (per-component `Extension.Config` + `extensions_defaults`), not core `CitrySettings` fields |
+| Visual debug overlay (wrap component/slot output in colored, labeled wrappers via `on_component_rendered` / `on_slot_rendered`) | ✅ Done | Bundled as the opt-in `citry.ext.debug.Debug` extension. Serialize-time placeholder pairs preserve authored-root markers, skip document and transparent boundaries, and support nested/string/multi-root output. See [`extensions_debug.md`](extensions_debug.md) |
+| `debug_highlight_components` / `debug_highlight_slots` settings | ✅ Done | Named `highlight_components` / `highlight_slots` on the extension's own strict nested `Debug` config and `extensions_defaults["debug"]`, not core `CitrySettings` fields |
 
 </details>
 
@@ -1191,10 +1190,10 @@ packages/py/citry/
   pyproject.toml           # depends on citry-core; no Django
   citry/
     __init__.py            # Public API (__all__ is the stability contract)
-    citry.py               # Citry instance: registry, settings, caches, file index
+    citry.py               # Citry instance: components, settings, caches, file index
     settings.py            # CitrySettings schema
     component.py           # Component class + ComponentMeta
-    component_registry.py  # ComponentRegistry (owned by Citry, builtin names)
+    component_registry.py  # Private component-name storage and reserved names
     autodiscovery.py       # Find + import component modules under Citry(dirs=...)
     component_render.py    # Render pipeline (deferred, stack-driven)
     citry_element.py       # CitryElement (composition phase)
@@ -1300,9 +1299,9 @@ one object. Deleting the instance cleans everything. Per DJC issue
 - **Lazy default instance.** A default `Citry()` is created the first time
   a Component is defined without an explicit `citry` field. Users who never
   call `Citry()` get the same behavior as before.
-- **WeakSet for components.** The Citry instance holds a `WeakSet` of
-  component classes. If a class is garbage-collected, it automatically
-  disappears from the set. No manual cleanup needed.
+- **Strong registration ownership.** The Citry registry holds every registered
+  component class strongly. `unregister()` and `clear()` define the explicit
+  lifetime; weak secondary indexes do not keep an unregistered class alive.
 - **`citry` module-level default instance.** Exported from the `citry`
   package as `from citry import citry`. Created eagerly at import time.
   If `Citry.__init__` ever grows dependencies that import from the package,
@@ -1409,7 +1408,7 @@ class Card(Component):
 Holds the component class, kwargs, and slots. Rendering is deferred
 until `.render()` is called.
 
-> **Render-output model (see [`rendering.md`](rendering.md) and the "Render
+> **Render-output model (see [`component_rendering.md`](component_rendering.md) and the "Render
 > output" entry below).** `.render()` returns a `CitryRender` (a distinct
 > render-phase struct carrying rendered parts plus an `extra` bag for metadata
 > such as JS/CSS dependencies), and `CitryRender.serialize()` produces the HTML
@@ -1418,10 +1417,11 @@ until `.render()` is called.
 
 **Why:** In DJC, `Component.render()` returns a finished HTML string.
 This has problems (DJC #1650): cached strings carry frozen per-instance
-IDs and stale JS/CSS variable hashes that break on replay. The fix is
-to split composition (creating the CitryElement) from rendering
-(producing HTML). Each `.render()` call mints fresh state, so caching
-the CitryElement instead of the string is safe.
+IDs and stale JS/CSS variable hashes that break on replay. Splitting
+composition (creating the `CitryElement`) from rendering lets each `.render()`
+call mint fresh state. A `CitryElement` is reusable composition data and still
+performs the render; output caching uses the detached replay artifact in
+[`caching.md`](caching.md).
 
 This is the React `ReactElement` pattern: `<MyComp title="Hi" />`
 creates a description of what to render, not the rendered output.
@@ -1477,25 +1477,16 @@ page = Page(content=card)
 html = page.render().serialize()
 ```
 
-### Component registry (on `Citry` class)
-
-> **Superseded in part:** the registry has since been split into its own
-> `ComponentRegistry` class (`citry/component_registry.py`), owned by the
-> `Citry` instance as `citry.registry` (with `register`/`unregister`/
-> `get`/`has` still delegated from `Citry`). The registry also now reserves
-> the built-in component names (`provide`, `js`, `css`) and creates the
-> built-ins lazily on first lookup. The naming/validation/duplicate rules
-> below still hold.
+### Component registration on `Citry`
 
 **What:** The `Citry` class now serves as the component registry. Components
 are registered by name at class definition time. Lookup, manual
 register/unregister, and validation are all methods on `Citry`.
 
-**Why:** DJC has a standalone `ComponentRegistry` class with a Django
-`Library` dependency. In citry, the `Citry` instance already scopes all
-component state, so the registry is a natural part of it. No separate
-registry class needed. Per DJC #1195 (phase out registered names, use
-class names directly).
+**Why:** The `Citry` instance scopes all component state, including names,
+settings, extensions, caches, and asset roots. One public engine-level API
+keeps those operations synchronized. Per DJC #1195 (phase out registered
+names, use class names directly).
 
 **Design decisions:**
 - **Name derived from class name by default.** `class MyCard(Component)`
@@ -1610,7 +1601,7 @@ ported.
   the element; it was removed. Reusing an already-optimized body across renders
   is the job of the const-precomputing cache, not the element. The full const-precomputing
   and render-body-caching design (including the decision to build `Const` on
-  `wrapt.ObjectProxy`) is parked in [`constness.md`](constness.md).
+  `wrapt.ObjectProxy`) is parked in [`component_constness.md`](component_constness.md).
 - **`TemplateData` validation.** If a component declares `TemplateData`, the
   `template_data()` output is validated by constructing `TemplateData(**data)`,
   which raises on a missing or unexpected field. Skipped when `template_data()`
@@ -1646,7 +1637,7 @@ detection of const-marked context variables, a const signature, and a
 inputs the author marks constant. This lands the *flow* (so the render pipeline
 is const-aware and loads the body via the signature) without the optimization
 itself. The full design and its edge cases are in
-[`constness.md`](constness.md).
+[`component_constness.md`](component_constness.md).
 
 **Design decisions:**
 - **Detection on the `template_data` output, not kwargs.** `Const` flows into
@@ -1699,7 +1690,7 @@ extensions.
 **Why:** The render output must be an object, not a string, so a pre-rendered
 subtree stays composable and carries metadata (JS/CSS dependencies) as data
 rather than as marker strings smuggled through HTML (the DJC workaround). The
-full design and reasoning are in [`rendering.md`](rendering.md); this entry
+full design and reasoning are in [`component_rendering.md`](component_rendering.md); this entry
 records what is built.
 
 **Design decisions:**
@@ -1715,12 +1706,12 @@ records what is built.
   `template_data`); `CitryContext.extra` is tree-wide scratch for extensions
   (dependencies bubble up). Conflating them is the thing to avoid.
 - **`component` stored on the context.** This resolves the open question in
-  [`rendering.md`](rendering.md) section 4.1: the current component is on the
+  [`component_rendering.md`](component_rendering.md) section 4.1: the current component is on the
   context, giving nodes the registry (to resolve child names) and parent/root
   linkage. Each component render gets its own `CitryContext`.
 - **Serialization is the recursive join only, for now.** Placing collected
   dependencies into `<head>`/`<body>`, document-vs-fragment mode, and the
-  injection strategy are future work (see [`rendering.md`](rendering.md)
+  injection strategy are future work (see [`component_rendering.md`](component_rendering.md)
   sections 5-6).
 
 **Usage:**
@@ -1987,16 +1978,21 @@ all become extensions on top of this surface.
   extension such as a future Storybook port has `component=None`). The DJC
   `<name>_class` escape hatch (a `media_class` legacy mirror) is dropped.
 - **Hooks wired this phase:** `on_extension_created`,
-  `on_component_class_created`/`deleted`, `on_component_registered`/
-  `unregistered`, `on_component_input` (mutate-only), `on_component_data`,
+  `on_component_class_created`, `on_component_registered`/`unregistered`,
+  `on_component_input` (mutate-only), `on_component_data`,
   `on_component_rendered` (operates on the `CitryRender`; return replaces, raise
   errors), `on_template_loaded` (per class, before parse),
   `on_template_compiled` (per built body, at the node list, before caching).
+  The GC-time `on_component_class_deleted` hook and its context object are
+  dropped; extensions move explicit-removal cleanup to
+  `on_component_unregistered`. `Citry.clear()` performs bulk teardown without
+  per-component hooks.
   **Deferred:** the short-circuit/caching split (django-components#1141 R6), the
   dependency/`on_render_context_merge`/`on_dependencies` hooks, slots, and CSS/JS hooks.
-- **Known skeleton caveat:** `on_component_input` mutations land on
-  `raw_kwargs`/`raw_slots` but do not yet propagate to the already-built typed
-  `kwargs`/`slots`; that propagation is deferred (see [`extensions.md`](extensions.md) 7.1).
+- **Post-input typed construction:** `on_component_input` mutations land on
+  the authoritative `raw_kwargs`/`raw_slots`. Citry then normalizes Slots and
+  constructs the final typed `kwargs`/`slots` exactly once before data methods
+  or cache lookup (see [`extensions.md`](extensions.md) 7.1).
 
 **Usage:**
 
@@ -2037,7 +2033,7 @@ nesting at Python's recursion limit (about 60 component levels). Working through
 list makes depth heap-bound. The markers are how a browser runtime will later
 scope CSS and run per-instance JS; they are the citry form of django-components'
 `data-djc-id` attributes. Full design and reasoning in
-[`deferred_rendering.md`](deferred_rendering.md).
+[`component_rendering_defer.md`](component_rendering_defer.md).
 
 **Design decisions:**
 - **`DeferredComponent` is the deferral point.** `ComponentNode.render` resolves
@@ -2132,7 +2128,7 @@ the DJC scope machinery removed.
 ```python
 from citry import Slot
 
-slot = Slot(lambda ctx: f"Hello, {ctx.data['name']}!")
+slot = Slot(lambda ctx: f"Hello, {ctx.data.name}!")
 slot({"name": "John"})        # 'Hello, John!' - standalone, repeatable
 
 MyPage(slots={"header": "Hi", "footer": slot})   # normalized at the boundary
@@ -2428,13 +2424,13 @@ class Card(Component):
   via Context.
   - See `_template_render` in `django_monkeypatch.py`
 - Dropped the `@register()` decorator - duplicate (`@register("my_component", registry=my_reg)`)
-- Dropped the global default registry `registry` (`from django_components import registry`)
-  - Now lives under the default Citry obj - `citry.registry`.
+- The default `citry` object owns default component registration state.
 - Dropped ComponentRegistry.settings
 - Dropped ComponentRegistry.library - Django-specific
   - NOTE - when updating DJC onto Citry, make it a 2-pass flow -> first render as django template,
     then as citry. Thus, the new DJC will NOT have to handle Django library mgmt and similar.
-- Registry.clear - all entries must go through unregister to trigger extension hooks
+- `Citry.clear()` resets the complete component scope without per-class
+  unregister hooks.
 - un/register in DJC will be tricky. See _register_to_library in `component_registry.py`
 - Dropped context_processors_data
 - Dropped tag formatters entirely
@@ -2445,7 +2441,7 @@ class Card(Component):
 by `is`: a registered name or a `Component` class) and its new sibling
 `<c-element is="...">` (render a plain HTML element whose tag name is decided
 at render time). Full design, alternatives, and the DJC surface table live in
-[`dynamic_component.md`](dynamic_component.md); this entry is the summary.
+[`component_dynamic.md`](component_dynamic.md); this entry is the summary.
 
 **Why:** `<c-component>` migrates DJC's `DynamicComponent`. `<c-element>`
 replaces a capability Django got for free from text templates
@@ -2464,8 +2460,8 @@ immediate driver is the benchmark Form component's div/table/ul switch
   as `component` / `element`; both names joined `BUILTIN_COMPONENT_NAMES`.
 - **Static forms compile away** (`compiler.rs`): `<c-component is="X">`
   rewrites to `<c-X>` (pre-existing, now tested), `<c-element is="div">`
-  (no fills) rewrites to the literal element. `is` + `c-is` together is now
-  a compile error on both tags.
+  (no fills) rewrites to the literal element. `is` + `c-is` together is a
+  parse error on both tags.
 - **`<c-element>` is one generic class**, not a synthesized class per tag
   name: the open/close tags are computed `Markup` values in a fixed template
   (`{{ open }}<c-slot />{{ close }}`), with attributes resolved through the
@@ -2700,7 +2696,7 @@ rendered output.
   (`emission.py`); the core knows nothing about JS/CSS.
 - **Placeholders**: `<c-js>`/`<c-css>` are transparent built-ins whose
   `on_render` returns a core `Placeholder` part. The serializer renders each
-  as a `<template c-render-id="deps:js:N">` tag (the same machinery child
+  as a `<template c-render-id="deps:js:N:IDENTITY">` tag (the same machinery child
   components ride), reports id -> exact-text to the hook, and the extension
   fills the first occurrence per kind and removes the rest (divergence from
   djc, which duplicated tags into every occurrence).
@@ -2753,10 +2749,10 @@ class Table(Component):
 ### Dependency rendering, phase 3: JS/CSS variables and the client runtime (`extensions/dependencies/`, `client/citry.js`, `util/css.py`)
 
 **What:** Per-render data now reaches the browser. `js_data()` results are
-delivered to the component's `$onComponent` callback per instance;
+delivered to the component's `$component` callback per instance;
 `css_data()` results become CSS custom properties scoped to the instance's
 elements. The pieces: hashed variables scripts, the `data-ccss-<hash>` root
-markers, the `$onComponent` source transform, citry's own client-side
+markers, the `$component` source transform, citry's own client-side
 dependency manager, and the page manifest that ties them together. Phase 3
 of [`dependencies.md`](dependencies.md).
 
@@ -2786,14 +2782,14 @@ records rather than parsed HTML comments.
   `Citry.manager.registerComponentData(class_id, hash, data)`, with the
   JSON riding as base64 so no value can break out of the script tag.
   Generated only when the class's JS registers a callback.
-- **`$onComponent`** is expanded once per class, when the class script is
-  cached: `$onComponent(` becomes
+- **`$component`** is expanded once per class, when the class script is
+  cached: `$component(` becomes
   `Citry.manager.registerComponent("<class_id>", `. The callback receives
   `{id, els, data}` per instance (`els` are the elements carrying the
   instance's `data-cid-<id>` marker).
 - **The manifest** is a `data-citry` JSON script tag (schema: `markLoaded`
   URLs, `fetch` descriptors for fragments, `calls` triples), emitted, with
-  the runtime, when a rendered component used `$onComponent`, or when a
+  the runtime, when a rendered component used `$component`, or when a
   mounted page carries component assets a later fragment must dedup against
   (so `markLoaded` can list their cache URLs). A page with neither stays as
   lean as `simple`. Built after the `on_dependencies` hook, so URLs added
@@ -2817,7 +2813,7 @@ records rather than parsed HTML comments.
 class Table(Component):
     template = "<table>...</table>"
     css = ".table-row { color: var(--row-color); }"
-    js = "$onComponent(({ els, data }) => { console.log(els, data.rows); });"
+    js = "$component(({ els, data }) => { console.log(els, data.rows); });"
 
     def js_data(self, kwargs, slots):
         return {"rows": kwargs["rows"]}
@@ -2854,7 +2850,8 @@ neutral handlers, and adapters of a dozen lines each.
   user extensions' under `ext/<name>/` so they cannot collide. The manager
   now sets a `citry` back-reference on every extension instance, which is
   how route handlers (and anything else extension-owned) reach engine state.
-- **The endpoints** (`routes.py`): `cache/{class_id}.{script_type}` and the
+- **The endpoints** (`routes.py`): compatibility
+  `cache/{class_id}.{script_type}`, content-addressed class scripts, and the
   vars variant serve the cached `Script`/`Style` content with the right
   mime type; class-level scripts repopulate the cache on a miss (the
   phase-1 lazy-repopulation rule, now actually exercised over HTTP);

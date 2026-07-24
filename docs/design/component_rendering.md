@@ -8,13 +8,13 @@ the whole shape. All of it is implemented: `render_impl` returns a
 (see [`dependencies.md`](dependencies.md)).
 
 For the broader migration context see
-[`citry_migration.md`](citry_migration.md). For the const-folding feature that
-sits on top of this flow see [`constness.md`](constness.md). For operating rules
+[`migration_djc.md`](migration_djc.md). For the const-folding feature that
+sits on top of this flow see [`component_constness.md`](component_constness.md). For operating rules
 see [`/CLAUDE.md`](../../CLAUDE.md).
 
 Upstream references: django-components
 [#1650](https://github.com/django-components/django-components/issues/1650)
-(cache the render object, not the string),
+(preserve structured render data for safe cache replay),
 [#1144](https://github.com/django-components/django-components/issues/1144)
 (media becomes an extension),
 [#1340](https://github.com/django-components/django-components/issues/1340)
@@ -108,7 +108,7 @@ terminal form, produced once, at the edge.
   either a `str` (static or already-serialized text) or a nested `CitryRender`
   (an embedded subtree not yet joined). Deferring the join keeps embedding cheap
   and keeps deps recoverable until the final serialize. This mirrors the
-  heterogeneous body list in [`constness.md`](constness.md) section 5
+  heterogeneous body list in [`component_constness.md`](component_constness.md) section 5
   (`str | child | dynamic node`).
 - **The `CitryContext` used during the render** (section 4). For the first
   iteration `CitryRender` keeps the whole context object rather than pre-selected
@@ -120,10 +120,16 @@ terminal form, produced once, at the edge.
 The detection happens at the leaf nodes that can surface an arbitrary value:
 
 - `ExprNode.render(ctx)` evaluates a `{{ ... }}` expression. If the result is a
-  `CitryRender`, it merges that render's collected deps into `ctx` and inlines
-  its HTML parts.
-- The dynamic attribute nodes (`ExprHtmlAttr`, `TemplateHtmlAttr`) do the same
-  for values that land in attributes.
+  `ComponentLike`, it first resolves exactly one `CitryElement` against the
+  Citry instance rendering the expression. A `CitryElement` renders in place;
+  a `CitryRender` merges its collected deps into `ctx` and inlines its HTML
+  parts.
+- Attribute expressions do not resolve `ComponentLike`: `ExprHtmlAttr`
+  returns a scalar value for normal attribute merging and formatting. A
+  `TemplateHtmlAttr` renders only its explicitly authored nested template to a
+  `CitryRender`, preserving components written inside that template. An
+  arbitrary component-like value used as an HTML attribute remains an
+  attribute value rather than becoming component output.
 - `ComponentNode.render(ctx)` renders a child component inline, which produces a
   child `CitryRender`, then merges its deps into `ctx`.
 
@@ -150,7 +156,7 @@ conflated**:
    variables from its own `template_data`, computed from its own props/slots, not
    inherited from the parent. (This is the existing impl-note rule "DO NOT PASS
    CONTEXT BETWEEN NODES. ONLY PROPS AND SLOTS" in
-   [`citry_migration.md`](citry_migration.md).)
+   [`migration_djc.md`](migration_djc.md).)
 2. **The tree-wide collection (extensions).** An `extra` container (a dict, or
    typed per-extension containers) where extensions stash data during the
    render. The dependency extension stores collected JS/CSS here. This concern
@@ -242,26 +248,28 @@ Because deps travel as data on the struct (not as markers in HTML), no string
 post-processing is needed to know what rendered. The media subsystem itself
 becomes an extension (#1144) that hooks the lifecycle to do steps 2 and 4; the
 extension system is a prerequisite for building it (see the ordering in
-[`citry_migration.md`](citry_migration.md)).
+[`migration_djc.md`](migration_djc.md)).
 
 ---
 
 ## 7. Interactions and non-goals
 
-- **Const-folding stays consistent** ([`constness.md`](constness.md) section 6).
+- **Const-folding stays consistent** ([`component_constness.md`](component_constness.md) section 6).
   A folded component boundary cannot collapse to frozen text: each render it must
   still mint a fresh render id and re-merge its deps into the parent. So a folded
   placeholder is a recipe that produces a child `CitryRender` each render, not a
   baked string. The two designs agree.
 - **Expression caching (#1473) is a separate, value-keyed layer.** It must not be
   entangled with `CitryRender` or `CitryContext`; see
-  [`constness.md`](constness.md) section 10.
+  [`component_constness.md`](component_constness.md) section 10.
 - **Class-level body caching (#1326) is unaffected.** The parsed+compiled
   body-generating function is cached per component class; `CitryRender` is
   per-render. The two caches are orthogonal.
-- **#1650 alignment.** `CitryRender` is the render object #1650 says to cache.
-  Caching the object (rather than the final string) is what lets each
-  consumption re-mint ids and re-merge deps.
+- **Render caching (#1650).** A live `CitryRender` represents one render
+  occurrence and preserves its component IDs. Output caching uses the detached
+  `CachedRenderArtifact` designed in [`caching.md`](caching.md); replay binds
+  the current boundary, mints fresh descendant IDs, and restores dependency
+  metadata without retaining the original render context.
 - **Streaming (#1337) is held off.** The core conflict: efficient streaming
   cannot move JS/CSS into `<head>` (or any already-streamed location) after the
   fact. If pursued later, streaming would likely be constrained to placing deps
@@ -305,7 +313,7 @@ extension system is a prerequisite for building it (see the ordering in
 Status as of 2026-06-13: all phases below are built, along with the
 control-flow nodes, the slot subsystem, deferred rendering, and the JS/CSS
 dependency flow (see the implementation log in
-[`citry_migration.md`](citry_migration.md) and
+[`migration_djc.md`](migration_djc.md) and
 [`dependencies.md`](dependencies.md)).
 
 1. **Done.** `CitryRender` + `CitryContext` skeleton: `render()` returns a
@@ -314,7 +322,7 @@ dependency flow (see the implementation log in
    yet.
 2. **Done.** Value nodes render against `CitryContext`: `ExprNode` and
    `TemplateNode`, with embedded-`CitryRender`/`CitryElement` detection and the
-   merge seam (section 3.1). Note: a dynamic attribute on a *plain HTML element*
+   merge boundary (section 3.1). Note: a dynamic attribute on a *plain HTML element*
    is compiled to an inline `ExprNode` (between literal quote strings), not an
    attribute node; the attribute nodes are component inputs and were done with
    phase 3.
@@ -324,7 +332,7 @@ dependency flow (see the implementation log in
    text or `<c-fill>`) renders through the slot subsystem.
 4. **Done.** Extension hook points, the dependency extension populating
    `extra`, and serialize-time placement in document mode (section 6). The
-   `_merge_dependencies` seam now only fires the `on_render_context_merge` hook.
+   `_merge_dependencies` boundary now only fires the `on_render_context_merge` hook.
    Built per [`dependencies.md`](dependencies.md).
 5. **Done.** The injection-strategy fork (section 5.2) resolved as a hybrid:
    structured `<c-js>`/`<c-css>` placeholder parts, with one string pass over
@@ -337,7 +345,20 @@ subsystem** (`SlotNode`, `FillNode`, default vs named slots, designed in
 
 **Deferred rendering** (infinite render depth and the `data-cid-<ID>`
 component-id markers) is specified separately in
-[`deferred_rendering.md`](deferred_rendering.md) and is built: it replaced
+[`component_rendering_defer.md`](component_rendering_defer.md) and is built: it replaced
 `ComponentNode`'s recursive child render (which inherited Django's ~60-level
 limit) with a heap-bound queue over the `parts` tree, and the
 `_merge_dependencies` call site lives in that queue.
+
+When an embedded or Slot-produced render has a different context and still
+contains deferred children, its context merge is queued after those children.
+This preserves the same inner-to-outer merge order as an ordinary component
+tree and prevents an enclosing render from observing incomplete extension
+metadata.
+
+A deferred component also keeps the physical Slot region that contained its
+occurrence. The queue restores that region while the component renders and
+finalizes. Storing it directly on deferred work is necessary for Python-composed
+render-hook replacements, which have no template invocation record. Any Slot
+regions created by the child therefore preserve the same ancestry as their
+eventual physical nesting, including through transparent components.

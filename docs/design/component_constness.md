@@ -13,10 +13,11 @@ What exists (all in `citry/constness.py`):
   value inside, detected on the `template_data` output, and carried into
   child components so they get the optimization too.
 - The cache key (`freeze_const` / `extract_const_vars`): built from the
-  const variables' names and values, value-based (equal values share an
+  used const variables' names and values plus the complete set of names visible
+  in the render context. Const values are value-based (equal values share an
   entry; computed once per marker and remembered). A value that cannot be
-  keyed safely is simply treated as not const. Only variables the template
-  actually uses go into the key.
+  keyed safely is simply treated as not const. The visible-name partition keeps
+  cached loop/fill precomputation consistent with the no-shadow contract.
 - The cache (`ConstBodyCache`): one pre-computed template per component
   class per combination of const values, scoped to the `Citry` instance,
   capped in size (the least recently used entry drops first), guarded by a
@@ -49,7 +50,7 @@ render-body caching it enables. It records the reasoning and the (many) edge
 cases.
 
 For the broader migration context see
-[`citry_migration.md`](citry_migration.md). For operating rules see
+[`migration_djc.md`](migration_djc.md). For operating rules see
 [`/CLAUDE.md`](../../CLAUDE.md).
 
 Upstream references: django-components
@@ -58,7 +59,7 @@ Upstream references: django-components
 [#1473](https://github.com/django-components/django-components/issues/1473)
 (expression caching),
 [#1650](https://github.com/django-components/django-components/issues/1650)
-(cache the render object, not the string),
+(preserve structured render data for safe cache replay),
 [#1326](https://github.com/django-components/django-components/issues/1326)
 (avoid double-parsing). The variable-provenance notes in
 [`TODO/v2_TODO.md`](../../TODO/v2_TODO.md) (the "Expression caching" section)
@@ -96,8 +97,8 @@ This is the Citry form of django-components #1083.
 - On every render, the dynamic inputs are applied fresh; the const parts are
   already precomputed.
 
-The cache is a memoization keyed by "which inputs are const, and to what
-values," scoped so it can be cleared and bounded.
+The cache is a memoization keyed by "which used inputs are const, to what
+values, and which names are visible," scoped so it can be cleared and bounded.
 
 ---
 
@@ -113,9 +114,9 @@ Three layers, from most-shared to least:
    [`packages/py/citry/citry/component_render.py`](../../packages/py/citry/citry/component_render.py)).
    Calling it yields a fresh, unoptimized node list.
 2. **Const cache: the optimized body.** Keyed by `(component class, const
-   signature)`. The value is a specialized node list where all-const nodes
-   have been precomputed and dead control-flow branches pruned. Scoped to the
-   `Citry` instance and bounded (see 7.2).
+   signature, visible-name set)`. The value is a specialized node list where
+   all-const nodes have been precomputed and dead control-flow branches pruned.
+   Scoped to the `Citry` instance and bounded (see 7.2).
 3. **Per render: dynamic evaluation.** The non-const nodes in the optimized
    body evaluate against the live context each render.
 
@@ -136,8 +137,8 @@ At render time, inside `render_impl` (not at composition). When resolving the
 template to render, the engine determines which context values are const,
 builds the const signature, and fetches (or builds and caches) the optimized
 body. The body therefore lives in the const cache, keyed by signature, not on
-the element. (Today `render_impl` just calls the class-level generator each
-render; there is no per-element or per-signature body cache yet.)
+the element. `render_impl` consults that per-signature cache on each render;
+the element itself owns no specialized-body cache.
 
 ### 3.4 First render vs cache hit
 
@@ -310,7 +311,7 @@ that placeholder is a `CitryRender` (see section 6).
 ## 6. The composition and render structs
 
 Two distinct structs sit on either side of `.render()` (full design in
-[`rendering.md`](rendering.md)):
+[`component_rendering.md`](component_rendering.md)):
 
 - **`CitryElement`** (inspired by React's `ReactElement`) is what calling a
   component produces: the description of a component invocation (class plus
@@ -333,12 +334,15 @@ The key is built from the **`template_data` output** (the context variables
 that are still const after the marker has flowed through, see section 4), not
 from the raw kwargs.
 
-Key = `(component class identity, frozenset of (const context variable name,
-const value))`. Order-independent (frozenset). The const VALUES participate, so
-differing const values miss; the const VARIABLE SET participates, so a
-different set of const variables misses. Dynamic variables do not participate
-(they are re-rendered each call), which is correct because foldability depends
-only on which variables are const, not on the dynamic ones.
+Key = `(weak reference to component class identity, frozenset of (const context
+variable name, const value), visible variable names)`. The weak reference has
+identity semantics while the class is alive but does not keep an unregistered
+class alive by itself. Const entries are order-independent (frozenset). The
+const VALUES participate, so differing const values miss; the const VARIABLE
+SET participates, so a different set of const variables misses. Dynamic values
+do not participate because they re-render each call. Visible variable names do
+participate because a binder must reject an already-visible name even when the
+template does not otherwise read it.
 
 ### 7.2 Hashing strategy
 
@@ -362,10 +366,16 @@ risk a wrong or unstable key.
 
 ### 7.3 Bounding and scoping
 
-The cache is unbounded by default and will leak if const values are
-high-cardinality. It must be a bounded LRU scoped to the `Citry` instance and
-cleared by `Citry.clear()`, consistent with why the `Citry` instance exists
-(all transient state bound to a lifetime, no module globals).
+The cache is a bounded LRU scoped to the `Citry` instance (512 entries by
+default) and is cleared by `Citry.clear()`. Its component-class key is weak;
+an ordinary cache lookup, eviction, inspection, or length check prunes entries
+whose class has been collected. The weak reference has no callback because
+dropping a cached body during garbage collection could run destructors from an
+arbitrary interrupted context. A successful final-alias unregister evicts that
+class's current entries immediately. The cache remains bounded even if no
+later operation performs lazy pruning. Together these rules keep transient
+render work within the engine and component lifetimes while preserving
+explicit hot-reload eviction.
 
 `Const(user.id)` and similar high-cardinality "const per render" values are an
 **anti-pattern**. Document this as guidance: `Const` is for values that are
@@ -380,10 +390,14 @@ Foldability is per node and per scope.
 
 - A node is precomputable iff **all** of its used variables are const in the node's
   scope. One non-const variable poisons the node.
-- **Scope and shadowing:** `<c-for each="x in items">` introduces `x`; inside
-  the loop `x` is not const even if an outer variable of the same name is.
-  `<c-fill>` introduces its data/default variables similarly. Use the AST's
-  `used_variables` and `introduced_variables` to mask correctly.
+- **Scope and shadowing:** `<c-for each="x in items">` introduces `x`, and
+  `<c-fill>` may introduce its `data`/`fallback` names. Reusing an already
+  visible name is an error. Within a valid body the new binding is never treated
+  as an outer const; use `used_variables` / `introduced_variables` to mask it.
+  Dynamic `c-bind` fill names keep variable-dependent body expressions live.
+- **Unrolled-loop guard:** an all-const loop may bake its text, but a lightweight
+  `ForNode` remains and rechecks its target names against the live context. This
+  covers both cache hits and a context mapping mutated earlier in the render.
 - **Control-flow pruning:** `<c-if cond="cols > 2">` with `cols` const can be
   evaluated at precompute time and the dead branch dropped (a large part of the
   win). With `cols` non-const, keep both branches.
@@ -397,8 +411,9 @@ already tracked in the AST.
 
 - **Per-render state is never precomputed.** The render ID, component id, and any
   scoped CSS/JS hashes derived from it must be injected fresh on every render,
-  never baked into the cached body. This is the same reason #1650 caches the
-  element rather than the string.
+  never baked into the cached body. Const-body caching stores a recipe that
+  still runs for each occurrence; cross-request output caching uses the
+  detached replay artifact in [`caching.md`](caching.md).
 - **`Const` is a user promise, not verified.** If a user marks a value const
   and then mutates it, output goes stale. That is acceptable and must be
   documented.
@@ -465,8 +480,8 @@ already tracked in the AST.
   concurrent renders need a lock or a concurrent map. First-render precomputing
   under a lock.
 - **Hot reload / invalidation.** If a template changes (hot reload) the cached
-  optimized bodies are stale. Invalidate on class redefinition and on
-  `Citry.clear()`.
+  optimized bodies are stale. `reset_template()` and successful final-alias
+  unregistration evict that class, while `Citry.clear()` evicts all classes.
 
 ---
 
@@ -500,8 +515,8 @@ already tracked in the AST.
    wrapped value, and flows down the tree (not unwrapped at the boundary). At
    render, read the const-marked variables off the `template_data` output. This
    already covers pass-through const variables.
-2. The const-keyed, `Citry`-scoped, bounded body cache, keyed on the const
-   context variables and values (sections 3, 7).
+2. The const-keyed, `Citry`-scoped, bounded body cache, keyed on the used const
+   variables/values and the complete visible-name set (sections 3, 7).
 3. A `precompute(body, const_vars, scope)` pass over the existing node list using
    `used_variables` / `introduced_variables`, with `c-if` branch pruning
    (section 8), producing the heterogeneous body of section 5.

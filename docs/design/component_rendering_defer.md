@@ -16,10 +16,10 @@ and [`test_markers.py`](../../packages/py/citry/tests/test_markers.py). The only
 part still deferred is the CSS-scoping attribute (`all_attributes`, section 6.2.1),
 which lands with the dependency extension.
 
-It extends [`rendering.md`](rendering.md), which defines the three-phase
+It extends [`component_rendering.md`](component_rendering.md), which defines the three-phase
 pipeline (`CitryElement` -> `CitryRender` -> serialize) and the `CitryContext`.
 That doc's section 10 phasing stops before this work. For the const-folding
-interaction see [`constness.md`](constness.md); for the extension lifecycle that
+interaction see [`component_constness.md`](component_constness.md); for the extension lifecycle that
 owns the dependency flow see [`extensions.md`](extensions.md). Operating rules
 are in [`/CLAUDE.md`](../../CLAUDE.md).
 
@@ -121,18 +121,24 @@ Add a third member to the `RenderPart` union (today `str | CitryRender` in
 
 ```python
 class DeferredComponent:
-    __slots__ = ("element", "parent", "inherited_attrs", "resolved")
+    __slots__ = ("element", "parent", "provides", "physical_parent_region_id")
     # element:         CitryElement, with kwargs ALREADY resolved against the
     #                  live context (see 4.2). Slots/body are carried here too
     #                  once the slot subsystem lands.
     # parent:          Component, for parent/root linkage on the child render.
-    # resolved:        CitryRender | None, filled when the queue resolves it.
+    # provides:        provide/inject entries active at the occurrence.
+    # physical_parent_region_id:
+    #                  Slot region containing the occurrence, if any.
 ```
 
 `DeferredComponent` carries no marker state. Markers are applied at serialize
-time (section 6.2): a component's own id is read from
-`resolved.context.component.id`, and the inherited root attributes are passed as a
-parameter of the serialization recursion, never stored on a render-phase struct.
+time (section 6.2): a component's own id is read from the completed child
+render's `RenderFrame`, and inherited root attributes are passed through the
+serialization traversal, never stored on deferred work.
+Its physical parent region is render ownership state, not marker state. The
+queue restores that scope during render and finalization so child Slot regions
+match their physical nesting. Keeping it on the deferred occurrence also covers
+Python-composed render-hook replacements, which have no template invocation ID.
 
 ### 4.2 Resolve kwargs eagerly, defer only the render
 
@@ -282,7 +288,8 @@ The marker attribute is **`data-cid-<ID>`**, a valueless (boolean) attribute,
 where `<ID>` is the component render id (already `c`-prefixed, see
 [`constants.py`](../../packages/py/citry/citry/constants.py)). `mark_html`
 writes a boolean attribute in its empty-value form, so a marker reads
-`data-cid-cAb3d9=""`. The boolean form lets multiple component ids sit on one
+`data-cid-c1ab3d9ef=""`. Render IDs are lowercase because HTML attribute names
+are case-insensitive. The boolean form lets multiple component ids sit on one
 element, which is what the parent-root-is-child case (6.1) requires.
 
 ### 6.1 The structural fact to reproduce
@@ -394,7 +401,7 @@ stacks the `data-cid` markers automatically. It is rejected because:
   (fill bodies can defer grandchildren).
 - **Const-folding.** A folded component boundary must still mint a fresh render
   id and re-merge its deps each render
-  ([`constness.md`](constness.md) section 6, [`rendering.md`](rendering.md)
+  ([`component_constness.md`](component_constness.md) section 6, [`component_rendering.md`](component_rendering.md)
   section 7). A folded placeholder therefore produces a `DeferredComponent` each
   render, not a baked string. The two designs agree.
 - **`on_component_rendered` timing.** This hook fires **the moment a component's

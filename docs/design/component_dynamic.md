@@ -22,15 +22,15 @@ resolution order, no component-shadows-element ambiguity, and no settings
 needed to police the boundary.
 
 This is a migration item: it resolves the two ❓ rows in
-[`citry_migration.md`](citry_migration.md) for `DynamicComponent` and the
+[`migration_djc.md`](migration_djc.md) for `DynamicComponent` and the
 `dynamic_component_name` setting. It is also "feature B" in
 [`benchmarking.md`](benchmarking.md) section 6.3, where the large benchmark
 scenario's Form component picks its content tag (div/table/ul) at render
 time. For the transparent-built-in pattern both tags reuse see
 [`provide.md`](provide.md); for how an element embedded in an expression
-renders see [`rendering.md`](rendering.md); for slot pass-through see
+renders see [`component_rendering.md`](component_rendering.md); for slot pass-through see
 [`slots.md`](slots.md); for the Const interactions see
-[`constness.md`](constness.md). Operating rules: [`/CLAUDE.md`](../../CLAUDE.md).
+[`component_constness.md`](component_constness.md). Operating rules: [`/CLAUDE.md`](../../CLAUDE.md).
 
 ---
 
@@ -183,10 +183,11 @@ Decisions made with the maintainer:
    bound, and no render-time class minting (which would also have collided
    with the metaclass's auto-registration). An earlier draft synthesized a
    class per tag; section 8, alternative E records why that lost.
-5. **The compiler's static-`is` rewrite stays as-is** (it is correct under
-   components-only semantics), gains conflict checks, and gets a
-   `<c-element>` mirror that compiles a static tag choice into a literal
-   element (section 5.2).
+5. **The compiler's static-`is` rewrite applies only without `c-bind`.** A
+   spread can supply a later (or earlier) `is`, so mixed forms stay on the
+   runtime path where source order selects the target. The same guarded rewrite
+   is shared by `<c-component>` and the `<c-element>` mirror that compiles a
+   spread-free static tag choice into a literal element (section 5.2).
 6. **Dropped DJC surface**: the `registry` kwarg and the all-registries
    search (citry's registry is 1:1 with a `Citry` instance), the
    component-instance form (a Django-template auto-call artifact), and the
@@ -199,8 +200,8 @@ Decisions made with the maintainer:
 ## 3. The template surface
 
 ```html
-<!-- Component target, static name: resolved at compile time, zero
-     render-time cost (rewritten to <c-MyTable>) -->
+<!-- Component target, static name without a spread: resolved at compile time,
+     zero render-time cost (rewritten to <c-MyTable>) -->
 <c-component is="MyTable" c-rows="rows" />
 
 <!-- Component target, dynamic: any expression yielding a registered name
@@ -228,9 +229,25 @@ Rules:
 
 - On both tags, one of `is` / `c-is` / `c-bind` is required (the existing
   `constants.rs:184` rule for `c-component`; `c-element` gets the same).
-- `is` together with `c-is` is a compile error on both tags (section 5.2).
-- Every other attribute passes through to the target: as kwargs for
-  `<c-component>`, as HTML attributes for `<c-element>`.
+- A direct static `is` must contain a non-whitespace value; bare, empty, and
+  whitespace-only forms are parse errors. Dynamic `c-is` expressions and
+  `c-bind` spreads remain runtime-resolved, where missing or falsy `is` values
+  are rejected.
+- `is` together with `c-is` is a parse error on both tags (section 5.2).
+- `is` together with `c-bind` is source-ordered, not a conflict: the rightmost
+  contribution to `is` wins. Mixed forms therefore use the runtime path.
+- Every other ordinary attribute passes through to the target: as kwargs for
+  `<c-component>`, as HTML attributes for `<c-element>`. The accepted
+  graph-first target adds a narrow client-boundary split on `<c-component>`:
+  `$c-props`, Alpine event handlers, and Citry `@c-*` handlers become relay
+  metadata and forward to the actual selected component. Citry `:c-*` State
+  bindings remain invalid there, and `#c-*` keeps its separate parser-level
+  rules. `<c-element>` instead rejects `$c-props`, while Alpine handlers,
+  `@c-*`, and `:c-*` use the selected HTML element's normal path. A1 has
+  landed the server split and transparent forwarding to the actual selected
+  component. A2 through A9 serialize, adopt, evaluate, replace, and retire
+  those relay records through the browser ownership graph. See [`alpinejs.md`](alpinejs.md) and
+  [`alpinejs_plan.md`](alpinejs_plan.md).
 - The body passes through: fills become the component target's slots. For
   `<c-element>` only the default slot exists (the body, or an explicit
   `<c-fill name="default">`); named fills are rejected at parse time via
@@ -267,10 +284,10 @@ The value must be a string and is used as the element's tag name, verbatim
 accepted (decision 3); there is no registry consultation, so a component
 registered as `table` is irrelevant here, and conversely
 `<c-component is="table">` errors unless such a component exists. The only
-validation: the string must be a syntactically valid tag name (the same
+validation: the entire string must be a syntactically valid tag name (the same
 charset rule the registry applies, `component_registry.py:72`), so values
-containing whitespace, `>`, quotes, etc. raise immediately rather than
-producing broken markup. This validation is also what makes emitting the
+containing whitespace, `>`, quotes, or a final newline raise immediately
+rather than producing broken markup. This validation is also what makes emitting the
 tag name into output safe (section 5.1). Void elements reject a body.
 
 Polymorphic targets (one variable naming *either* a component or an
@@ -379,15 +396,11 @@ Notes on this shape:
   markup.
 - **Attribute semantics parity is a stated contract**: `<c-element
   class="a" c-bind="{'class': 'b'}">` must render the same as the
-  statically written `<div class="a" c-bind="{'class': 'b'}">`. One known
-  nuance: on a component tag, `ComponentNode._resolve_kwargs` collapses
-  duplicate attribute spellings last-one-wins *before* `template_data`
-  sees them, while a static element hands all sources to
-  `ElementAttrsNode`. Today both end at last-one-wins (README "Attribute
-  spreading"), so the results agree; if class/style *merging* semantics
-  ever land (benchmarking.md feature A), `<c-element>` must adopt them in
-  the same change, which is why the shared-helper seat matters. The
-  parity tests in section 9 lock this.
+  statically written `<div class="a" c-bind="{'class': 'b'}">`.
+  `ComponentNode._resolve_inputs` therefore preserves every `class` and
+  `style` contribution for the dynamic `element` built-in and merges them
+  before `template_data`; ordinary component kwargs remain last-one-wins.
+  The parity tests in section 9 lock this.
 
 `transparent = True` keeps the output identical to writing the target
 directly: no extra `data-cid` marker for the wrappers, and a component
@@ -400,26 +413,23 @@ All changes live in the `C_COMPONENT_TAG` match arm, a new sibling
 `C_ELEMENT_TAG` arm, and the rules tables (no AST, grammar, or `LangImpl`
 changes):
 
-1. **The static-`is` rewrite on `<c-component>` stays exactly as it is.**
-   Under components-only semantics, rewriting `<c-component is="Xyz">` to
-   `<c-Xyz>` is always correct: an unregistered name fails at render with
-   `NotRegistered` either way. (The earlier fallback design needed
-   list-driven skip logic here; this design deletes that need.)
-2. **A mirror static rewrite for `<c-element>`**: `<c-element is="div" ...>`
+1. **The static-`is` rewrite on `<c-component>` is guarded by the absence of
+   `c-bind`.** Rewriting `<c-component is="Xyz">` to `<c-Xyz>` is correct
+   only when a spread cannot also supply `is`. Any mixed static-`is`/spread
+   form remains a `ComponentNode`, where left-to-right resolution chooses the
+   rightmost target and the built-in removes `is` before forwarding kwargs.
+2. **A mirror guarded static rewrite for `<c-element>`**:
+   `<c-element is="div" ...>` without `c-bind`
    with no fills in its body mutates into the plain `<div ...>` HTML node
    (the `is` attribute dropped), compiling exactly as if the element had
    been written statically: zero render cost for the benchmark Form case
    with a static choice. When the body contains fills, the runtime path is
    kept: a `<c-fill name="default">` is legal (it is the default slot) and
    unwrapping it at compile time is not worth the complexity.
-3. **Reject `is` together with `c-is`** on both tags with a compile error.
-   Today the `c-component` rewrite consumes `is` and leaves `c-is` behind,
-   which then reaches the target as a literal `is` kwarg; without the
-   rewrite, both spellings collapse onto the same kwarg key in
-   `ComponentNode._resolve_kwargs` (`nodes/__init__.py:759`) and the last
-   one silently wins. The parse rules cannot express this exclusion
-   (allowed-attrs is `None` for these tags, and mutual exclusion rides on
-   allowed groups), so the compiler arm is the right seat.
+3. **Reject `is` together with `c-is`** on both tags at parse time. They are
+   two explicit providers for one logical target, so the parser's generic
+   logical-attribute conflict check catches them before a static rewrite or
+   runtime resolution can silently discard one.
 4. **Rules tables** (`constants.rs`): `C_ELEMENT_TAG = "c-element"`;
    `TAG_ATTR_RULES_DATA` gains `(C_ELEMENT_TAG, (None, &[&["is", "c-is", "c-bind"]]))`,
    mirroring `c-component`; `TAG_SLOT_RULES_DATA` gains
@@ -502,7 +512,7 @@ What moves with this change, classified:
   framing. `<c-element>` fires `on_attrs_resolved` like a static element
   (section 5.1).
 - **Const and folding.** A literal `is` and other literal attributes
-  arrive `Const`-marked via `ComponentNode._resolve_kwargs`, so each
+  arrive `Const`-marked via `ComponentNode._resolve_inputs`, so each
   built-in's const-body cache keys include the target; two sites with
   different static targets never share an entry, and only
   template-authored (finite) values are ever cached. Dynamic `c-is` values
@@ -519,7 +529,7 @@ What moves with this change, classified:
 - **Error identity.** Resolution errors name the built-in tag and the `is`
   value; errors from inside a component target are the target's own (the
   wrapper adds no frame to blame). When render-path error tracing lands
-  (the to-migrate row in `citry_migration.md`), the wrappers should appear
+  (the to-migrate row in `migration_djc.md`), the wrappers should appear
   in the component path like any parent.
 - **`provide`/`inject`** flow through unchanged: the built-ins are normal
   components for context purposes, and `_render_value` hands the active
@@ -539,7 +549,7 @@ so this would have to come from heavy dynamic-target usage).
 
 **Alternative B: delegate via an `on_render` hook, as DJC does.** Rejected
 for now: the `on_render` hook family is still a to-migrate row with an
-unsettled shape (`citry_migration.md`, `component.py` review), and blocking
+unsettled shape (`migration_djc.md`, `component.py` review), and blocking
 the benchmark's large scenario on it buys nothing; `template_data` +
 `{{ target }}` is a documented, tested path.
 
@@ -615,7 +625,7 @@ or extending the parser suites; authored observe-then-lock per CLAUDE.md):
 - `<c-element is="div">` rewrites to the plain `<div>` HTML node; `is`
   dropped; body and attributes carried over; not rewritten when the body
   contains fills.
-- `is` + `c-is` is a compile error on both tags.
+- `is` + `c-is` is a parse error on both tags, in either source order.
 - Missing all of `is`/`c-is`/`c-bind` is a parse error on both tags
   (extends the existing `constants.rs:184` rule, currently untested).
 - Named `<c-fill>` inside `<c-element>` is a parse error; default fill and
@@ -634,6 +644,12 @@ DJC behavior contract plus the `<c-element>` half:
   with did-you-mean (and the `<c-element>` hint for element-looking
   names), missing `is` raising `TypeError`, `CitryElement` as `is`
   rejected.
+- Alpine plan A5 added the client-boundary acceptance matrix: direct, dynamic,
+  and `c-bind` relays target the actual selected component; the original
+  invoking component remains their source; ordinary attrs stay kwargs; and
+  replacing the selection cleans the old relay lifetime exactly once. The
+  browser acceptance coverage lives with the Alpine boundary and morph suites,
+  in addition to the server-only dynamic-component tests above.
 - `<c-element>`: static and dynamic tag names, custom-element names
   (`my-widget`), SVG camelCase (`clipPath`) rendered verbatim, body as
   children (implicit and via explicit default fill), void elements compact
@@ -669,7 +685,7 @@ DJC behavior contract plus the `<c-element>` half:
   *merging* semantics land, `<c-element>` must adopt them in the same
   change (the parity contract in section 5.1); the shared attrs helpers
   are the single seat for both.
-- **`citry_migration.md`**: resolves the `DynamicComponent` ❓ row (migrate,
+- **`migration_djc.md`**: resolves the `DynamicComponent` ❓ row (migrate,
   as specified here) and the `dynamic_component_name` ❓ row (drop); the
   built-in components table gains both tags.
 - **README.md** (the north star): gains the `<c-element>` row;
