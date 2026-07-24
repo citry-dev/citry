@@ -21,6 +21,12 @@ updates:
     schedule:
       interval: "weekly"
 
+  # JS - root package.json (the pinned pyright the check gate runs; pnpm lockfile)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
   # GitHub Actions
   - package-ecosystem: github-actions
     # This actually targets ./.github/workflows/
