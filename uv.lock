@@ -223,7 +223,7 @@ e2e = [
 requires-dist = [
     { name = "citry-core", editable = "packages/py/citry_core" },
     { name = "markupsafe", specifier = ">=2.1" },
-    { name = "typing-extensions", specifier = ">=4.4" },
+    { name = "typing-extensions", specifier = ">=4.6" },
     { name = "watchdog", marker = "extra == 'watcher-watchdog'", specifier = ">=4.0" },
     { name = "watchfiles", marker = "extra == 'watcher-watchfiles'", specifier = ">=1.0" },
     { name = "wrapt", specifier = ">=1.16" },
@@ -335,12 +335,20 @@ dependencies = [
 dev = [
     { name = "pytest" },
 ]
+storybook = [
+    { name = "playwright" },
+    { name = "uvicorn" },
+]
 
 [package.metadata]
 requires-dist = [{ name = "citry", editable = "packages/py/citry" }]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8.3.5" }]
+storybook = [
+    { name = "playwright", specifier = ">=1.49" },
+    { name = "uvicorn", specifier = ">=0.49" },
+]
 
 [[package]]
 name = "click"

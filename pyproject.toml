@@ -84,7 +84,7 @@ exclude = [
     # Third-party dependencies (git submodules)
     "third_party",
     # Vendored third-party code, kept byte-compatible with upstream.
-    "docs_site/_vendor",
+    "docs_site/_internal/_vendor",
     # benchmark files, not linted.
     "packages/py/citry/tests/test_benchmark*.py",
     "packages/py/citry_core/tests/benchmark*.py",
@@ -158,6 +158,7 @@ ignore = [
 "packages/py/**/tests/*" = [
     "ARG001",  # Unused function argument (mock/callback signatures in tests)
     "ARG002",  # Unused method argument
+    "ARG003",  # Unused classmethod argument (e.g. on_dependencies hook stubs)
     "ANN",     # Annotations are not needed for tests
     "N806",    # Variable in function should be lowercase
     "PLC0415", # `import` should be at the top-level of a file
@@ -176,10 +177,8 @@ ignore = [
 "benchmarks/*" = [
     "T201",    # The comparison runner prints its results
 ]
-"docs_site/cli.py" = [
+"docs_site/_internal/*" = [
     "T201",    # the CLI prints its build summary to stdout
-]
-"docs_site/components/*" = [
     "E501",    # page-chrome templates carry long inline SVG icon and HTML lines
 ]
 "docs_site/examples/*" = [
@@ -187,6 +186,7 @@ ignore = [
     "ARG002",  # template_data takes slots even when an example does not use them
     "D",       # example modules are demonstrations, not documented APIs
     "INP001",  # examples are imported by file path, not as a package
+    "S101",    # the per-example regression tests use assert
 ]
 "docs_site/tests/*" = [
     "ANN",     # Annotations are not needed for tests
@@ -230,21 +230,41 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["citry", "citry_core", "pygments_citry"]
+known-first-party = ["citry", "citry_core", "citry_ui", "pygments_citry"]
 
 [tool.mypy]
 check_untyped_defs = true
 ignore_missing_imports = true
-exclude = ["build", "docs_site/_vendor"]
+exclude = ["build", "docs_site/_internal/_vendor"]
 
 [[tool.mypy.overrides]]
 module = "citry_core.*"
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = "citry_ui.*"
 disallow_untyped_defs = true
 
 # pygments-citry is a small public package; hold it to the strict bar too.
 [[tool.mypy.overrides]]
 module = "pygments_citry.*"
 disallow_untyped_defs = true
+
+# BasedPyright (the VS Code type-checker) crawls the whole workspace by default,
+# so keep it out of the vendored trees the other tools already exclude.
+[tool.pyright]
+extraPaths = ["packages/py/citry", "packages/py/citry_ui"]
+exclude = [
+    # Built-in defaults (restate them)
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    # Third-party (git submodules)
+    "third_party",
+    # Other
+    "docs_site/_internal/_vendor",
+    "build",
+]
 
 [tool.pytest.ini_options]
 # Collect only the published packages' suites. Without explicit paths, pytest
@@ -254,13 +274,14 @@ disallow_untyped_defs = true
 testpaths = [
     "packages/py/citry_core/tests",
     "packages/py/citry/tests",
+    "packages/py/citry_ui/tests",
     "packages/py/pygments_citry/tests",
 ]
 
 [tool.coverage.run]
 # NOTE: The Rust half of citry_core is covered separately by `cargo test`;
 #       only its Python wrapper is seen here.
-source = ["citry", "citry_core", "pygments_citry"]
+source = ["citry", "citry_core", "citry_ui", "pygments_citry"]
 branch = true
 omit = [
     "*/tests/*", # the test files themselves are not the measured code
@@ -268,7 +289,8 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 92 # baseline measured 2026-07-02
+fail_under = 93 # ratchet below the current measured coverage; raise as coverage recovers
+precision = 2
 show_missing = true
 skip_covered = true
 exclude_also = [
