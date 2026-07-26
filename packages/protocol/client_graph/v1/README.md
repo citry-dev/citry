@@ -4,10 +4,16 @@ When the server renders a page that has client-side behavior, it tells the
 browser which component owns which part of the HTML by sending one block of
 JSON in a `<script type="application/json" data-citry-graph>` tag. This
 directory is the language-neutral contract for that JSON: protocol major 1. It
-is the source of truth every implementation follows, in any language. Start
-with [`spec.md`](spec.md), which explains the JSON and defines every term the
-other files use (graph, component instance, nested component, fill, slot
-region, and source location).
+is the source of truth every implementation follows, in any language.
+
+A **component-tag client binding** is browser behavior resolved from a nested
+component tag, such as `$c-props="{ theme }"`, `@click="select()"`, or
+`@c-poll.5s="refresh()"`. The parent owns the expression or handler, while the
+child supplies the component boundary where the browser applies it.
+
+Start with [`spec.md`](spec.md), which explains the JSON and defines every
+term the other files use: graph, component instance, nested component,
+component-tag client binding, fill, slot region, and source location.
 
 ## What is in this directory
 
@@ -17,12 +23,12 @@ region, and source location).
   a JSON Schema (Draft 2020-12). It checks structure only; the rules that go
   beyond structure live in the spec and the validator.
 - [`validate.py`](validate.py) is the reference checker. It confirms the
-  example manifests in `fixtures/` behave the way `index.json` says they
+  example manifests in `tests/` behave the way `index.json` says they
   should, using the schema plus every rule from the spec. It needs only the
   standard library, so anyone can run it without installing anything.
-- [`fixtures/`](fixtures/) holds worked example manifests, correct ones and
+- [`tests/`](tests/) holds worked example manifests, correct ones and
   deliberately broken ones, that every implementation is checked against.
-  [`fixtures/README.md`](fixtures/README.md) says what each one nails down and
+  [`tests/README.md`](tests/README.md) says what each one nails down and
   how to regenerate them.
 
 ## Who follows this contract, and how it is checked
@@ -44,7 +50,7 @@ the files here:
 `validate.py` is a third, language-neutral reader: it never renders a page, it
 only checks the JSON. Keeping all three in step is the whole point of the
 fixture set; both the writer and the browser pass today and are kept passing
-in CI. [`fixtures/README.md`](fixtures/README.md) states exactly what "a
+in CI. [`tests/README.md`](tests/README.md) states exactly what "a
 reader passes" and "a writer passes" mean.
 
 ## Running the checks
@@ -84,9 +90,9 @@ files, so a change is not done until all of them move together in one PR:
    and every reader (the browser
    [`citry.js`](../../../py/citry/citry/ext/dependencies/client/citry.js), and
    any future language binding): make them produce or accept the new shape.
-5. [`fixtures/`](fixtures/): add an example that locks the new rule, a correct
+5. [`tests/`](tests/): add an example that locks the new rule, a correct
    one and usually a broken one the rule rejects, then regenerate and re-sign
-   as [`fixtures/README.md`](fixtures/README.md) describes.
+   as [`tests/README.md`](tests/README.md) describes.
 
 Two rules of thumb keep this honest: the reference checker and the browser
 must agree on every example, and a rule you cannot show with a fixture is a
@@ -119,8 +125,9 @@ and releases.
 
 - Change what the manifest contains: follow "Changing the protocol" above.
 - Add or regenerate a fixture, or re-sign one after editing it: see
-  [`fixtures/README.md`](fixtures/README.md), "Keeping the examples in sync".
-- Look up a term (graph, component instance, nested component, fill, slot
-  region, or source location): see [`spec.md`](spec.md).
+  [`tests/README.md`](tests/README.md), "Keeping the examples in sync".
+- Look up a term (graph, component instance, nested component, component-tag
+  client binding, fill, slot region, or source location): see
+  [`spec.md`](spec.md).
 - Check everything at once: `python scripts/check.py` from the
   repository root, plus the browser command above for the end-to-end tests.

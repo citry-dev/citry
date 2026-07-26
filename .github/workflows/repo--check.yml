@@ -74,3 +74,10 @@ jobs:
       # reports.
       - name: Run the check suite
         run: python scripts/check.py
+
+      # Run the package's CLI directly as well as through pytest. `-S` hides
+      # installed site packages, exercising its standard-library schema checker.
+      # `always()` preserves check.py's run-every-phase diagnostic behavior.
+      - name: Validate the client graph protocol package directly
+        if: always()
+        run: python -S packages/protocol/client_graph/v1/validate.py

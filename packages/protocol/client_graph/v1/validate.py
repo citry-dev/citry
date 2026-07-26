@@ -1,9 +1,9 @@
 """
 Check that this package's example manifests still behave the way the spec says.
 
-The files in ``fixtures/`` are worked examples of the JSON the server sends the
+The files in ``tests/`` are worked examples of the JSON the server sends the
 browser: some are correct manifests a reader should accept, some are
-deliberately broken ones a reader should reject. ``fixtures/index.json`` lists
+deliberately broken ones a reader should reject. ``tests/index.json`` lists
 them and says which is which. This script reads that list and confirms each
 example behaves as listed: every ``"expect": "valid"`` file passes the JSON
 Schema and every rule below, every ``"expect": "invalid"`` file is rejected
@@ -36,13 +36,12 @@ except ImportError:
     jsonschema = None
 
 ROOT = Path(__file__).resolve().parent
-FIXTURES = ROOT / "fixtures"
-MAX_MANIFEST_BYTES = 1_000_000
+TESTS = ROOT / "tests"
 RENDER_ID_RE = re.compile(r"^[a-z0-9_-]+$")
 
 # An index entry may carry only these keys. `manifest` and `expect` are
 # required; the rest describe an invalid fixture for the tests that replay it
-# (see fixtures/README.md).
+# (see tests/README.md).
 _INDEX_REQUIRED = {"manifest", "expect"}
 _INDEX_OPTIONAL = {"locks", "defect", "problem", "browserProblem", "harness", "preserveRevision"}
 
@@ -105,7 +104,9 @@ def _structural_errors(value: Any, schema: dict[str, Any], root: dict[str, Any],
 
     if "oneOf" in schema:
         matches = sum(1 for branch in schema["oneOf"] if not _structural_errors(value, branch, root, path))
-        if matches != 1:
+        if matches == 0:
+            problems.append(f"{path}: is not valid under any of the given schemas")
+        elif matches > 1:
             problems.append(f"{path}: {matches} oneOf branches matched, expected exactly 1")
 
     if isinstance(value, dict):
@@ -210,31 +211,36 @@ def slot_region_cycle_errors(parents: dict[int, int | None], graph_index: int) -
     return problems
 
 
-def _relay_key_errors(payload: Any, relay_key: str | None, event: str | None, graph_index: int) -> list[str]:
+def _client_binding_key_errors(
+    payload: Any,
+    binding_key: str | None,
+    event: str | None,
+    graph_index: int,
+) -> list[str]:
     """
-    The relay key and its payload must agree, the same way the browser checks
-    them: the key is the template attribute the relay was authored on, so a
-    payload of one kind under another kind's key is a producer bug.
+    The client-binding key and its payload must agree, the same way the browser
+    checks them. The key is the resolved component-tag attribute, so a payload
+    of one kind under another kind's key is a producer bug.
     """
-    if relay_key is None or not isinstance(payload, dict):
+    if binding_key is None or not isinstance(payload, dict):
         return []
     payload_type = payload.get("type")
     problems: list[str] = []
-    if payload_type == "props" and relay_key != "$c-props":
-        problems.append(f"graphs[{graph_index}] props relay payload must use the $c-props relay key")
+    if payload_type == "props" and binding_key != "$c-props":
+        problems.append(f"graphs[{graph_index}] props client binding must use the $c-props key")
     if payload_type == "alpine-handler" and not (
-        (relay_key.startswith("@") and not relay_key.startswith("@c-")) or relay_key.startswith("x-on:")
+        (binding_key.startswith("@") and not binding_key.startswith("@c-")) or binding_key.startswith("x-on:")
     ):
-        problems.append(f"graphs[{graph_index}] Alpine-handler relay payload has a non-Alpine relay key")
+        problems.append(f"graphs[{graph_index}] Alpine-handler client binding has a non-Alpine key")
     if payload_type == "citry-dom-event":
         # The event segment decides poll-vs-DOM-event, matching the server's
         # classifier: "@c-poll.5s" is a poll, "@c-pollchange" is a DOM event.
-        if not relay_key.startswith("@c-") or relay_key[3:].split(".")[0] == "poll":
-            problems.append(f"graphs[{graph_index}] Citry DOM-event relay payload has a non-event relay key")
-        elif event is not None and relay_key[3:].split(".")[0] != event:
-            problems.append(f"graphs[{graph_index}] Citry DOM-event relay payload disagrees with its relay key")
-    if payload_type == "citry-poll" and not relay_key.startswith("@c-poll."):
-        problems.append(f"graphs[{graph_index}] Citry poll relay payload must use an @c-poll relay key")
+        if not binding_key.startswith("@c-") or binding_key[3:].split(".")[0] == "poll":
+            problems.append(f"graphs[{graph_index}] Citry DOM-event client binding has a non-event key")
+        elif event is not None and binding_key[3:].split(".")[0] != event:
+            problems.append(f"graphs[{graph_index}] Citry DOM-event client binding disagrees with its key")
+    if payload_type == "citry-poll" and not binding_key.startswith("@c-poll."):
+        problems.append(f"graphs[{graph_index}] Citry poll client binding must use an @c-poll key")
     return problems
 
 
@@ -242,9 +248,6 @@ def semantic_errors(manifest: Any) -> list[str]:
     problems: list[str] = []
     if not isinstance(manifest, dict):
         return ["manifest is not an object"]
-    encoded_size = len(json.dumps(manifest, separators=(",", ":"), sort_keys=True).encode("utf8"))
-    if encoded_size > MAX_MANIFEST_BYTES:
-        problems.append(f"manifest is {encoded_size} bytes; the limit is {MAX_MANIFEST_BYTES}")
     unsigned = {key: value for key, value in manifest.items() if key != "revision"}
     canonical = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode("utf8")
     expected = hashlib.sha256(canonical).hexdigest()
@@ -300,8 +303,11 @@ def semantic_errors(manifest: Any) -> list[str]:
             for invocation in graph.get("nestedComponents", []):
                 if invocation.get("locationId") is not None:
                     problems.append(f"graphs[{graph_index}] production invocation has a location reference")
-                if any(relay.get("locationId") is not None for relay in invocation.get("relays", [])):
-                    problems.append(f"graphs[{graph_index}] production relay has a location reference")
+                if any(
+                    client_binding.get("locationId") is not None
+                    for client_binding in invocation.get("clientBindings", [])
+                ):
+                    problems.append(f"graphs[{graph_index}] production client binding has a location reference")
             for fill in graph.get("fills", []):
                 if fill.get("locationId") is not None or fill.get("fallbackLocationId") is not None:
                     problems.append(f"graphs[{graph_index}] production fill has a location reference")
@@ -321,6 +327,7 @@ def semantic_errors(manifest: Any) -> list[str]:
         classes_by_render: dict[str, str] = {}
         instances_by_id: dict[int, str] = {}
         instance_records: list[tuple[str | None, str | None, Any]] = []
+        instances_by_invocation: dict[int, list[tuple[str | None, str | None, Any]]] = {}
         instance_parents: dict[str, str | None] = {}
         for index, record in enumerate(graph.get("componentInstances", [])):
             where = f"graphs[{graph_index}].componentInstances[{index}]"
@@ -344,7 +351,11 @@ def semantic_errors(manifest: Any) -> list[str]:
             parent = record.get("parentRenderId")
             if render is not None:
                 instance_parents[render] = parent
-            instance_records.append((render, parent, record.get("invocationId")))
+            instance_record = (render, parent, record.get("invocationId"))
+            instance_records.append(instance_record)
+            invocation_id = record.get("invocationId")
+            if isinstance(invocation_id, int):
+                instances_by_invocation.setdefault(invocation_id, []).append(instance_record)
         for index, record in enumerate(graph.get("componentInstances", [])):
             parent = record.get("parentRenderId")
             if parent is not None and parent not in renders:
@@ -395,17 +406,19 @@ def semantic_errors(manifest: Any) -> list[str]:
                 )
             if isinstance(invocation.get("invocationId"), int):
                 invocation_edges[invocation["invocationId"]] = (source, target)
-            for relay in invocation.get("relays", []):
-                relay_key = relay.get("key")
+            for client_binding in invocation.get("clientBindings", []):
+                binding_key = client_binding.get("key")
                 if dev:
-                    if relay.get("locationId") not in ids["sourceLocations"]:
-                        problems.append(f"graphs[{graph_index}] relay has an unknown location")
-                    if location_owners.get(relay.get("locationId")) != (source, source_class):
-                        problems.append(f"graphs[{graph_index}] relay location owner is mismatched")
-                payload = relay.get("payload", {})
+                    if client_binding.get("locationId") not in ids["sourceLocations"]:
+                        problems.append(f"graphs[{graph_index}] client binding has an unknown location")
+                    if location_owners.get(client_binding.get("locationId")) != (source, source_class):
+                        problems.append(f"graphs[{graph_index}] client-binding location owner is mismatched")
+                    if location_kinds.get(client_binding.get("locationId")) != "component-tag-client-binding":
+                        problems.append(f"graphs[{graph_index}] client-binding location kind is mismatched")
+                payload = client_binding.get("payload", {})
                 if payload.get("type") in {"citry-dom-event", "citry-poll"} and payload.get("classId") != source_class:
-                    problems.append(f"graphs[{graph_index}] Citry relay class is not its source parent")
-                problems.extend(_relay_key_errors(payload, relay_key, payload.get("event"), graph_index))
+                    problems.append(f"graphs[{graph_index}] Citry client-binding class is not its source parent")
+                problems.extend(_client_binding_key_errors(payload, binding_key, payload.get("event"), graph_index))
 
         for record in graph.get("componentInstances", []):
             invocation_id = record.get("invocationId")
@@ -420,7 +433,7 @@ def semantic_errors(manifest: Any) -> list[str]:
             if invocation_edges.get(invocation_id) != (parent, render):
                 problems.append(f"graphs[{graph_index}] instance endpoints do not match their invocation")
         for invocation_id in ids["nestedComponents"]:
-            targets = [record for record in instance_records if record[2] == invocation_id]
+            targets = instances_by_invocation.get(invocation_id, [])
             if len(targets) != 1:
                 problems.append(f"graphs[{graph_index}] invocation does not bind exactly one target instance")
 
@@ -611,7 +624,7 @@ def check_index_entries(index: Any, problems: list[str]) -> list[dict[str, Any]]
 def check_index_matches_disk(
     entries: list[dict[str, Any]],
     problems: list[str],
-    fixtures_dir: Path = FIXTURES,
+    fixtures_dir: Path = TESTS,
 ) -> None:
     listed = [entry["manifest"] for entry in entries]
     for name in listed:
@@ -627,7 +640,7 @@ def check_index_matches_disk(
         problems.append(f"{name} exists on disk but is not listed in index.json")
 
 
-def check_fixture(entry: dict[str, Any], schema: dict[str, Any], fixtures_dir: Path = FIXTURES) -> list[str]:
+def check_fixture(entry: dict[str, Any], schema: dict[str, Any], fixtures_dir: Path = TESTS) -> list[str]:
     """Check one index entry's fixture against its declared expectation."""
     name = entry["manifest"]
     try:
@@ -649,7 +662,7 @@ def main() -> int:
     schema = load_json(ROOT / "manifest.schema.json")
     problems: list[str] = []
     try:
-        index = load_json(FIXTURES / "index.json")
+        index = load_json(TESTS / "index.json")
     except (OSError, json.JSONDecodeError) as error:
         print(f"FAIL index.json: cannot load: {error}", file=sys.stderr)  # noqa: T201 - standalone validator CLI
         return 1

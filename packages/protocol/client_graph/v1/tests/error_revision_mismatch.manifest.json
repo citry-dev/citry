@@ -1,0 +1,34 @@
+{
+ "delimiters": {
+  "format": "citry:g1"
+ },
+ "graphs": [
+  {
+   "componentClasses": [
+    {
+     "classId": "Host_4d8d7d",
+     "className": "Host"
+    }
+   ],
+   "fills": [],
+   "graphId": 0,
+   "componentExecutionOrderConstraints": [],
+   "componentInstances": [
+    {
+     "classId": "Host_4d8d7d",
+     "instanceId": 1,
+     "invocationId": null,
+     "parentRenderId": null,
+     "renderId": "c1",
+     "transparent": false
+    }
+   ],
+   "nestedComponents": [],
+   "sourceLocations": [],
+   "slotRegions": []
+  }
+ ],
+ "mode": "development",
+ "protocol": "citry-client-graph/1",
+ "revision": "0000000000000000000000000000000000000000000000000000000000000000"
+}

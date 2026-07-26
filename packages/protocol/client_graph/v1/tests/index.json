@@ -1,0 +1,315 @@
+[
+ {
+  "manifest": "minimal.manifest.json",
+  "expect": "valid",
+  "locks": "the smallest complete development graph"
+ },
+ {
+  "manifest": "component_tag_client_bindings.manifest.json",
+  "expect": "valid",
+  "locks": "all four component-tag client binding payload kinds on one nested component, plus source locations and component execution order constraints"
+ },
+ {
+  "manifest": "dynamic_spread_loop.manifest.json",
+  "expect": "valid",
+  "locks": "spread and server-dynamic client-binding sources with spread mapping source locations"
+ },
+ {
+  "manifest": "supplied_fills.manifest.json",
+  "expect": "valid",
+  "locks": "a named fill rendered through two outlets of one slot"
+ },
+ {
+  "manifest": "fallback_fill.manifest.json",
+  "expect": "valid",
+  "locks": "an unsupplied slot rendering its client-active fallback"
+ },
+ {
+  "manifest": "detached_fills.manifest.json",
+  "expect": "valid",
+  "locks": "a Python-supplied fill and a typed-default fill on one receiver"
+ },
+ {
+  "manifest": "nested_slot_regions.manifest.json",
+  "expect": "valid",
+  "locks": "nested cache slot regions with scope transitions and transparent component instances"
+ },
+ {
+  "manifest": "multi_graph.manifest.json",
+  "expect": "valid",
+  "locks": "two graphs in physical order with graph-local record ids"
+ },
+ {
+  "manifest": "utf8_offsets.manifest.json",
+  "expect": "valid",
+  "locks": "source offsets counted in UTF-8 bytes across multibyte text"
+ },
+ {
+  "manifest": "error_protocol_version.manifest.json",
+  "expect": "invalid",
+  "defect": "a different protocol major",
+  "problem": "citry-client-graph/1",
+  "browserProblem": "unsupported protocol"
+ },
+ {
+  "manifest": "error_delimiter_format.manifest.json",
+  "expect": "invalid",
+  "defect": "an ownership-comment prefix the protocol does not define",
+  "problem": "citry:g1",
+  "browserProblem": "unsupported delimiter format"
+ },
+ {
+  "manifest": "error_extra_top_key.manifest.json",
+  "expect": "invalid",
+  "defect": "an unknown top-level member",
+  "problem": "surprise",
+  "browserProblem": "unknown or missing fields"
+ },
+ {
+  "manifest": "error_revision_mismatch.manifest.json",
+  "expect": "invalid",
+  "defect": "a tampered revision",
+  "problem": "revision does not match",
+  "browserProblem": "revision does not match",
+  "preserveRevision": true
+ },
+ {
+  "manifest": "error_bad_mode.manifest.json",
+  "expect": "invalid",
+  "defect": "an unknown mode value",
+  "problem": "staging",
+  "browserProblem": "mode"
+ },
+ {
+  "manifest": "error_render_id_uppercase.manifest.json",
+  "expect": "invalid",
+  "defect": "an uppercase render id",
+  "problem": "renderId is not safe",
+  "browserProblem": "render ID must be safe"
+ },
+ {
+  "manifest": "error_duplicate_render_id.manifest.json",
+  "expect": "invalid",
+  "defect": "two component instances share a render id",
+  "problem": "duplicate render ids",
+  "browserProblem": "duplicate render id"
+ },
+ {
+  "manifest": "error_duplicate_record_id.manifest.json",
+  "expect": "invalid",
+  "defect": "two component instances share a record id",
+  "problem": "duplicate ids",
+  "browserProblem": "componentInstances[1].instanceId"
+ },
+ {
+  "manifest": "error_graph_id_not_dense.manifest.json",
+  "expect": "invalid",
+  "defect": "a graph id that is not its position",
+  "problem": "not dense and ordered",
+  "browserProblem": "dense and ordered"
+ },
+ {
+  "manifest": "error_cross_graph_render_dup.manifest.json",
+  "expect": "invalid",
+  "defect": "one render id in two graphs",
+  "problem": "appears in more than one graph",
+  "browserProblem": "appears in more than one graph",
+  "harness": "adoption"
+ },
+ {
+  "manifest": "error_location_unknown_carrier.manifest.json",
+  "expect": "invalid",
+  "defect": "a location carried by no instance",
+  "problem": "unknown carrier",
+  "browserProblem": "unknown source carrier"
+ },
+ {
+  "manifest": "error_location_owner_mismatch.manifest.json",
+  "expect": "invalid",
+  "defect": "a location whose class is not its owner's",
+  "problem": "location owner is unknown or mismatched",
+  "browserProblem": "source owner and class do not match"
+ },
+ {
+  "manifest": "error_location_reversed_range.manifest.json",
+  "expect": "invalid",
+  "defect": "a byte range that ends before it starts",
+  "problem": "reversed byte range",
+  "browserProblem": "must be an integer >="
+ },
+ {
+  "manifest": "error_invocation_location_kind.manifest.json",
+  "expect": "invalid",
+  "defect": "a nested component whose location is not a component-call",
+  "problem": "invocation location kind is mismatched",
+  "browserProblem": "invocation location has the wrong kind"
+ },
+ {
+  "manifest": "error_invocation_endpoint_mismatch.manifest.json",
+  "expect": "invalid",
+  "defect": "a child instance whose parent disagrees with its nested component",
+  "problem": "instance endpoints do not match",
+  "browserProblem": "instance endpoints do not match"
+ },
+ {
+  "manifest": "error_invocation_no_target.manifest.json",
+  "expect": "invalid",
+  "defect": "a nested component bound by no child instance",
+  "problem": "exactly one target",
+  "browserProblem": "exactly one target instance"
+ },
+ {
+  "manifest": "error_client_binding_props_key.manifest.json",
+  "expect": "invalid",
+  "defect": "a props payload not under $c-props",
+  "problem": "$c-props key",
+  "browserProblem": "$c-props key"
+ },
+ {
+  "manifest": "error_client_binding_event_key_mismatch.manifest.json",
+  "expect": "invalid",
+  "defect": "a DOM-event payload whose event disagrees with its key",
+  "problem": "disagrees with its key",
+  "browserProblem": "disagrees with its key"
+ },
+ {
+  "manifest": "error_client_binding_poll_key.manifest.json",
+  "expect": "invalid",
+  "defect": "a poll payload under a non-@c-poll key",
+  "problem": "@c-poll key",
+  "browserProblem": "@c-poll key"
+ },
+ {
+  "manifest": "error_client_binding_dom_event_poll_key.manifest.json",
+  "expect": "invalid",
+  "defect": "a DOM-event payload under the poll key",
+  "problem": "non-event key",
+  "browserProblem": "non-event key"
+ },
+ {
+  "manifest": "error_client_binding_class_mismatch.manifest.json",
+  "expect": "invalid",
+  "defect": "a Citry handler class that is not the source parent",
+  "problem": "not its source parent",
+  "browserProblem": "not the source parent"
+ },
+ {
+  "manifest": "error_client_binding_location_kind.manifest.json",
+  "expect": "invalid",
+  "defect": "a component-tag client binding whose location is marked as a component call",
+  "problem": "client-binding location kind is mismatched",
+  "browserProblem": "client binding location has the wrong kind"
+ },
+ {
+  "manifest": "error_client_binding_expression_type.manifest.json",
+  "expect": "invalid",
+  "defect": "a props binding whose expression is not a string",
+  "problem": "is not valid under any of the given schemas",
+  "browserProblem": "payload.expression must be a string"
+ },
+ {
+  "manifest": "error_client_binding_dom_handler_type.manifest.json",
+  "expect": "invalid",
+  "defect": "a Citry DOM-event binding whose handler name is not a string",
+  "problem": "is not valid under any of the given schemas",
+  "browserProblem": "payload.handler must be a string"
+ },
+ {
+  "manifest": "error_client_binding_poll_args_type.manifest.json",
+  "expect": "invalid",
+  "defect": "a Citry poll binding whose optional argument expression is not a string or null",
+  "problem": "is not valid under any of the given schemas",
+  "browserProblem": "payload.args must be a string"
+ },
+ {
+  "manifest": "error_fill_kind_location_mismatch.manifest.json",
+  "expect": "invalid",
+  "defect": "a named fill with an implicit-fill location kind",
+  "problem": "template fill source location kind is mismatched",
+  "browserProblem": "template fill source location"
+ },
+ {
+  "manifest": "error_supplied_fill_no_carrier.manifest.json",
+  "expect": "invalid",
+  "defect": "a supplied fill without its source call",
+  "problem": "supplied fill carrier is inconsistent",
+  "browserProblem": "supplied fill source carrier"
+ },
+ {
+  "manifest": "error_fallback_fill_with_carrier.manifest.json",
+  "expect": "invalid",
+  "defect": "a fallback fill carrying a source call",
+  "problem": "fallback fill carrier is inconsistent",
+  "browserProblem": "fallback fill source carrier"
+ },
+ {
+  "manifest": "error_detached_fill_with_owner.manifest.json",
+  "expect": "invalid",
+  "defect": "a detached Python fill claiming an owner",
+  "problem": "detached Python fill",
+  "browserProblem": "owner and source location"
+ },
+ {
+  "manifest": "error_detached_fill_with_fallback.manifest.json",
+  "expect": "invalid",
+  "defect": "a detached Python fill carrying a fallback location",
+  "problem": "detached Python fill",
+  "browserProblem": "detached Python fill ownership"
+ },
+ {
+  "manifest": "error_uninvoked_with_parent.manifest.json",
+  "expect": "invalid",
+  "defect": "an uninvoked instance naming a parent",
+  "problem": "uninvoked instance has a parent",
+  "browserProblem": "uninvoked instance cannot name a parent"
+ },
+ {
+  "manifest": "error_component_execution_order_cycle.manifest.json",
+  "expect": "invalid",
+  "defect": "component execution order constraints form a cycle",
+  "problem": "component execution order contains a cycle",
+  "browserProblem": "instance ancestry contains a cycle"
+ },
+ {
+  "manifest": "error_slot_region_cycle.manifest.json",
+  "expect": "invalid",
+  "defect": "a slot region that is its own parent",
+  "problem": "slot region ancestry contains a cycle",
+  "browserProblem": "slot region ancestry contains a cycle"
+ },
+ {
+  "manifest": "error_slot_region_transition_mismatch.manifest.json",
+  "expect": "invalid",
+  "defect": "a slot-region transition disagreeing with its ancestry",
+  "problem": "slot region scope transition",
+  "browserProblem": "slot region scope transition"
+ },
+ {
+  "manifest": "error_instance_parent_cycle.manifest.json",
+  "expect": "invalid",
+  "defect": "an instance-parent cycle from consistent nested components",
+  "problem": "logical instance ancestry contains a cycle",
+  "browserProblem": "instance ancestry contains a cycle"
+ },
+ {
+  "manifest": "error_parent_slot_region_unknown.manifest.json",
+  "expect": "invalid",
+  "defect": "a nested component whose parentRegionId names no slot region",
+  "problem": "nested component parentRegionId references an unknown slot region",
+  "browserProblem": "nested component parent slot region is unknown"
+ },
+ {
+  "manifest": "error_production_with_locations.manifest.json",
+  "expect": "invalid",
+  "defect": "a production manifest carrying source locations",
+  "problem": "production manifest has sourceLocations",
+  "browserProblem": "production"
+ },
+ {
+  "manifest": "error_production_location_ref.manifest.json",
+  "expect": "invalid",
+  "defect": "a production manifest with a non-null source-location reference",
+  "problem": "production invocation has a location reference",
+  "browserProblem": "production"
+ }
+]

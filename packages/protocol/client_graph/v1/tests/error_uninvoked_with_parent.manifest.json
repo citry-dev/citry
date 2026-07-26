@@ -1,0 +1,42 @@
+{
+ "delimiters": {
+  "format": "citry:g1"
+ },
+ "graphs": [
+  {
+   "componentClasses": [
+    {
+     "classId": "Host_4d8d7d",
+     "className": "Host"
+    }
+   ],
+   "componentExecutionOrderConstraints": [],
+   "componentInstances": [
+    {
+     "classId": "Host_4d8d7d",
+     "instanceId": 1,
+     "invocationId": null,
+     "parentRenderId": "r2",
+     "renderId": "c1",
+     "transparent": false
+    },
+    {
+     "classId": "Host_4d8d7d",
+     "instanceId": 2,
+     "invocationId": null,
+     "parentRenderId": null,
+     "renderId": "r2",
+     "transparent": false
+    }
+   ],
+   "fills": [],
+   "graphId": 0,
+   "nestedComponents": [],
+   "slotRegions": [],
+   "sourceLocations": []
+  }
+ ],
+ "mode": "development",
+ "protocol": "citry-client-graph/1",
+ "revision": "5457e05f774ea01f9c1c0317a870227c534617c482b088bb54e3b7f916f72aab"
+}

@@ -13,7 +13,7 @@ For those pages, the server sends one block of inert JSON:
 
 This is the **graph manifest**. This package defines its JSON shape and the
 checks a browser must make before using it. [`validate.py`](validate.py) is the
-reference checker, and [`fixtures/`](fixtures/) contains worked examples.
+reference checker, and [`tests/`](tests/) contains worked examples.
 
 ## Why the browser needs more than the HTML
 
@@ -130,21 +130,33 @@ their Alpine scopes separate. This is why the term can appear on a component
 that did not directly use the feature that first required the graph.
 
 The server emits a graph if the settled output contains at least one
-client-active occurrence. Once a graph is needed, it retains every surviving
-non-transparent component occurrence in that output, including static ones. A
-transparent component is structural: its output joins the surrounding
-component's output and gets no `data-cid-*` marker of its own. It is retained
-only when a slot region refers to it. `client-active` is therefore an internal
-condition, not an author-facing switch or a JSON field, and it is narrower than
-`retained`.
+client-active occurrence. Once a graph is needed, it includes every
+non-transparent component occurrence present in the settled render tree being
+serialized, including static ones. Rendering a component is not enough if its
+result is discarded:
+
+```python
+def on_render(self):
+    Other().render()
+    return "replacement"
+```
+
+`Other` ran, but its result is absent from the selected render tree, so the
+graph does not include it. Returning `Other().render()` would include that
+occurrence. A transparent component is structural: its output joins the
+surrounding component's output and gets no `data-cid-*` marker of its own. The
+graph includes a transparent occurrence only when a slot region still needs
+its identity. `client-active` is therefore an internal condition that decides
+whether Citry must send a graph, not an author-facing switch or JSON field.
 
 ## How the graph reaches the browser
 
 1. While templates render, the server records component relationships,
    bindings, fills, slot regions, and required setup order.
 2. Once rendering settles, it discards records for output that did not make it
-   into the response. Paired HTML comments mark every retained component and
-   slot region without forcing wrapper elements into the page.
+   into the selected render tree. Paired HTML comments mark every component
+   instance included in the graph and every slot region without forcing
+   wrapper elements into the page.
 3. It writes the manifest after Citry's core dependency manager and before the
    Events and dependency blocks that use it.
 4. The browser checks the complete JSON and every expected comment pair before
@@ -160,19 +172,36 @@ its own. References never cross from one graph to another.
 Start with these records:
 
 - **`componentInstances`** contains one record for each component occurrence whose
-  result remains in the response after rendering settles. Failed, replaced, or
-  discarded output does not count. A surviving component still counts if it
-  rendered several elements, only text, or nothing visible. Every surviving
-  non-transparent component is retained; a transparent component is retained
-  only when a slot region refers to it. These are rendered occurrences, not
-  every Python `Component` object created along the way.
+  result is present in the settled render tree being serialized. Failed,
+  replaced, or discarded output does not count. An included component still
+  counts if it rendered several elements, only text, or nothing visible. Every
+  non-transparent occurrence in that tree is included; a transparent
+  occurrence is included only when a slot region refers to it. These are
+  rendered occurrences, not every Python `Component` object created along the
+  way.
 - **`nestedComponents`** contains one record for each nested component tag
   (`<c-*>`) executed by a parent template. It connects that parent to the
-  resulting child and records the tag location and bindings that crossed the
-  boundary. The record's `invocationId` identifies that one execution. Here,
-  invocation does not mean constructing `MyComp(...)` in Python, and it is not
-  a DOM placement. Every invocation has exactly one child instance. A directly
-  rendered graph root has no invocation.
+  resulting child and records the tag location and its component-tag client
+  bindings. A **component-tag client binding** is `$c-props`, an Alpine event
+  handler such as `@click`, or a Citry handler such as `@c-save` or
+  `@c-poll.5s`, resolved from a nested component tag:
+
+  ```html
+  <c-chart-card
+    $c-props="{ theme: selectedTheme }"
+    @click="selected = true"
+    @c-save="saveSelection({ selected })"
+    @c-poll.5s="refresh()"
+  />
+  ```
+
+  The parent owns each expression or server handler, while the child supplies
+  the component boundary where the browser applies it. The graph records only
+  the winning value after direct, server-dynamic, and `c-bind` contributions
+  are resolved. The record's `invocationId` identifies that one execution.
+  Here, invocation does not mean constructing `MyComp(...)` in Python, and it
+  is not a DOM placement. Every invocation has exactly one child instance. A
+  directly rendered graph root has no invocation.
 - **`fills`** describes content supplied to a slot or a slot's fallback
   content. For template-authored content, its owner is the component whose
   browser data Alpine and Citry expressions use. Python template expressions
@@ -246,19 +275,20 @@ interface ClientGraphManifest {
 
 ### `GraphDelimiters`
 
-This value tells the reader which HTML markers locate component instances and
-slot regions.
+`format` is the literal prefix at the start of every ownership comment. It is
+not an abstract name for a separate formatting rule.
 
 ```ts
 interface GraphDelimiters {
-  format: "comment-v1";
+  format: "citry:g1";
 }
 ```
 
 ### `ClientGraph`
 
-One graph groups retained records that were produced together during rendering.
-Its arrays use the record types defined below.
+One graph groups records that were produced together and selected for the
+settled render tree being serialized. Its arrays use the record types defined
+below.
 
 ```ts
 interface ClientGraph {
@@ -286,8 +316,8 @@ interface ComponentClassRecord {
 
 ### `ComponentInstanceRecord`
 
-This record identifies one retained component occurrence. A root component
-instance has null invocation and parent references.
+This record identifies one component occurrence included in the graph. A root
+component instance has null invocation and parent references.
 
 ```ts
 interface ComponentInstanceRecord {
@@ -333,7 +363,7 @@ interface SourceLocation {
   locationId: number;
   kind:
     | "component-call"
-    | "boundary-relay"
+    | "component-tag-client-binding"
     | "implicit-fill"
     | "named-fill"
     | "fallback-fill"
@@ -352,8 +382,8 @@ interface SourceLocation {
 ### `NestedComponent`
 
 This record connects one executed occurrence of an authored component tag to
-the child instance it produced. Relays carry the bindings that crossed that
-component boundary.
+the child instance it produced. `clientBindings` carries the winning
+browser-side bindings resolved from that tag.
 
 ```ts
 interface NestedComponent {
@@ -365,64 +395,64 @@ interface NestedComponent {
   targetClassId: string;
   targetRenderId: string;
   parentRegionId: number | null;
-  relays: BoundaryRelay[];
+  clientBindings: ComponentTagClientBinding[];
 }
 ```
 
-### `BoundaryRelay`
+### `ComponentTagClientBinding`
 
-This record carries one browser-side binding that a parent handed to a child,
-plus how it was written and its typed payload.
+This record carries one component-tag client binding, how its winning value was
+contributed, and its typed payload.
 
 ```ts
-interface BoundaryRelay {
+interface ComponentTagClientBinding {
   key: string;
   source: "direct" | "server-dynamic" | "spread";
   locationId: number | null;
-  payload: BoundaryRelayPayload;
+  payload: ComponentTagClientBindingPayload;
 }
 ```
 
-### `BoundaryRelayPayload`
+### `ComponentTagClientBindingPayload`
 
 The `type` property selects exactly one of the four payload shapes.
 
 ```ts
-type BoundaryRelayPayload =
-  | PropsRelayPayload
-  | AlpineHandlerRelayPayload
-  | CitryDomEventRelayPayload
-  | CitryPollRelayPayload;
+type ComponentTagClientBindingPayload =
+  | PropsClientBindingPayload
+  | AlpineHandlerClientBindingPayload
+  | CitryDomEventClientBindingPayload
+  | CitryPollClientBindingPayload;
 ```
 
-### `PropsRelayPayload`
+### `PropsClientBindingPayload`
 
 This payload passes one Alpine expression through `$c-props`.
 
 ```ts
-interface PropsRelayPayload {
+interface PropsClientBindingPayload {
   type: "props";
   expression: string;
 }
 ```
 
-### `AlpineHandlerRelayPayload`
+### `AlpineHandlerClientBindingPayload`
 
 This payload passes one Alpine handler expression to a child boundary.
 
 ```ts
-interface AlpineHandlerRelayPayload {
+interface AlpineHandlerClientBindingPayload {
   type: "alpine-handler";
   expression: string;
 }
 ```
 
-### `CitryDomEventRelayPayload`
+### `CitryDomEventClientBindingPayload`
 
 This payload carries a compiled Citry handler for one DOM event.
 
 ```ts
-interface CitryDomEventRelayPayload {
+interface CitryDomEventClientBindingPayload {
   type: "citry-dom-event";
   classId: string;
   event: string;
@@ -438,12 +468,12 @@ interface CitryDomEventRelayPayload {
 }
 ```
 
-### `CitryPollRelayPayload`
+### `CitryPollClientBindingPayload`
 
 This payload carries a compiled Citry polling handler and its interval.
 
 ```ts
-interface CitryPollRelayPayload {
+interface CitryPollClientBindingPayload {
   type: "citry-poll";
   classId: string;
   handler: string;
@@ -531,9 +561,9 @@ The top-level object has exactly these members, no more and no fewer:
 - `graphs`: the graphs themselves, in the order they were first seen in the
   HTML. Each graph has a dense `graphId` (0, 1, 2, and so on) and numbers its
   own records from 1; a record id only means something inside its own graph.
-- `delimiters`: the object `{ "format": "comment-v1" }`. It names the format of
-  the paired HTML comments that bracket the start and end of each piece (see
-  "Where each piece sits in the HTML").
+- `delimiters`: the object `{ "format": "citry:g1" }`. The value is the exact
+  prefix at the start of every ownership comment (see "How comments mark each
+  rendered range").
 
 The manifest writes strings in place: a render id, class id, name, expression,
 or slot name is the JSON string itself, not an index into a shared table. Every
@@ -542,24 +572,25 @@ some relationship would force the server to point from one graph into another,
 the server refuses to emit the manifest rather than write a cross-graph
 reference.
 
-At a component boundary the server hands the browser a set of bindings, called
-**boundary relays**, and each relay says which kind it is. A `props` or
-`alpine-handler` relay carries one Alpine expression string. A `citry-dom-event`
-or `citry-poll` relay carries a server-handler binding that is already compiled,
-plus an optional opaque Alpine argument-expression. The browser never takes a
-Citry handler value and re-reads it as if it were one whole Alpine expression.
+Each component-tag client binding says which kind it is. A `props` or
+`alpine-handler` binding carries one Alpine expression string. A
+`citry-dom-event` or `citry-poll` binding carries a compiled parent-owned
+server-handler binding plus an optional opaque Alpine argument expression. The
+browser never takes a Citry handler value and re-reads it as one whole Alpine
+expression.
 
 ## Where things were written: source locations (development only)
 
 In development the server records where each nested component tag (`<c-*>`),
-relay, fill, and slot was written, in a graph's `sourceLocations` array. It never
+component-tag client binding, fill, and slot was written, in a graph's
+`sourceLocations` array. It never
 copies the source text; each location points at it. A location carries the
 `origin` it came from (a file or an inline-template marker), a `sourceOffset`
 (a `{start, end}` UTF-8 byte range into the template source as it stands after
 the `on_template_loaded` template hook runs, not the author's original file and
 not the delivered HTML or DOM), a `sourcePos` (`{line, column}` for error
-messages), and the `carrierInstanceId` of the
-retained instance whose template execution produced it.
+messages), and the `carrierInstanceId` of the component instance included in
+the graph whose template execution produced it.
 
 These offsets are provenance for tooling, such as a future error overlay that
 maps a runtime failure back to its authored template snippet; the browser
@@ -606,32 +637,71 @@ fall back to a typed default, carry neither a source invocation, an owner, nor a
 source location, and the browser never treats their receiver as a source.
 
 In development the `kind` of a location is checked: a nested component tag
-uses the wire value `component-call`, a fill's own location uses its matching
-`implicit-fill`, `named-fill`, or `fallback-fill` kind, and a slot or fallback
+uses the wire value `component-call`; each of that tag's client bindings uses
+`component-tag-client-binding`; a fill's own location uses its matching
+`implicit-fill`, `named-fill`, or `fallback-fill` kind; and a slot or fallback
 location uses `slot-outlet`.
 
-## Where each piece sits in the HTML
+## How comments mark each rendered range
 
-The server wraps each rendered component instance and slot region in one pair
-of HTML comments, its delimiters, that mark where it starts and ends:
+The server puts one start comment immediately before a rendered range and one
+end comment immediately after it. It constructs both comments from the same
+six parts:
 
-```text
-<!--citry:g1:<revision>:<graph>:i:<instance-id>:s-->
-<!--citry:g1:<revision>:<graph>:i:<instance-id>:e-->
-<!--citry:g1:<revision>:<graph>:r:<region-id>:s-->
-<!--citry:g1:<revision>:<graph>:r:<region-id>:e-->
+```html
+<!--{prefix}:{revision}:{graph_id}:{kind}:{record_id}:{side}-->
 ```
 
-A start and its end share one parent, nest properly inside outer pairs, and
-never cross. There is one exception, forced by how the HTML parser moves
-comments around: for a complete document that the author did not wrap in an
-`<html>` element, the parser may leave the opening comment under the `Document`
-node while moving the closing comment under the implicit `body`. The browser
-accepts only that one exact `Document`-to-`body` pairing. This comment scheme
-works for single-root, multi-root, and rootless content, for adjacent and
-nested pieces, for fragments in table, select, and SVG contexts, and for the
-same slot rendered several times, all without the server inventing a wrapper
-element.
+| Part | Meaning |
+|---|---|
+| `prefix` | The exact value of `delimiters.format` (`citry:g1`). It identifies a Citry client-graph v1 ownership comment. |
+| `revision` | The 64-character lowercase SHA-256 revision from this manifest. |
+| `graph-id` | The `graphId` of the graph that owns the record. |
+| `kind` | `i` for a record in `componentInstances`; `r` for a record in `slotRegions`. |
+| `record-id` | The component's `instanceId` when `kind` is `i`; the slot region's `regionId` when `kind` is `r`. |
+| `side` | `s` for the comment before the range; `e` for the comment after it. |
+
+A component instance pair brackets exactly the HTML that component produced,
+whether that is one element, several elements, text, or nothing:
+
+```html
+<!--citry:g1:<revision>:0:i:3:s-->
+<button>Save</button><span>Ready</span>
+<!--citry:g1:<revision>:0:i:3:e-->
+```
+
+A slot region pair brackets one place where a fill was rendered. Rendering the
+same fill through two outlets creates two slot-region records and therefore two
+separate pairs:
+
+```html
+<!--citry:g1:<revision>:0:r:4:s-->
+<strong>Filled by the parent</strong>
+<!--citry:g1:<revision>:0:r:4:e-->
+```
+
+An empty range has adjacent comments:
+
+```html
+<!--citry:g1:<revision>:0:i:5:s--><!--citry:g1:<revision>:0:i:5:e-->
+```
+
+Every `componentInstances` and `slotRegions` record has exactly one matching
+pair. A pair uses the same prefix, revision, graph, kind, and record id on both
+sides; only `side` changes. Pairs are balanced, nest without crossing, and
+their start and end normally share one DOM parent. The physical nesting must
+also agree with each record's `parentRegionId`: a component or slot region
+whose parent is slot region 4 sits inside region 4's comments.
+
+There is one parser-driven exception to the same-parent rule. In a complete
+document without an authored `<html>` element, the parser may leave the start
+comment under `Document` while moving the end comment under the implicit
+`body`. The browser accepts only that exact `Document`-to-`body` pairing.
+
+These comments work for single-root, multi-root, rootless, adjacent, and nested
+output, including table, select, and SVG contexts, without adding wrapper
+elements. Minifiers, sanitizers, streaming transforms, and client DOM updates
+must preserve their text, order, and placement.
 
 ## How the browser checks the manifest before using it
 
@@ -648,8 +718,10 @@ its source invocation, that component execution order and slot-region nesting
 contain no cycles, that scope
 transitions are valid, and that the logical parent-child structure matches the
 nesting of the paired HTML comments. No record from the graph becomes visible
-to the rest of the page until all of that passes. The server and browser both
-cap one manifest at 1,000,000 UTF-8 bytes.
+to the rest of the page until all of that passes. These correctness checks run
+in both development and production; only source-provenance checks are
+development-only. The protocol has no fixed manifest byte limit, so a reader
+does not reject an otherwise valid graph solely because it is large.
 
 A malformed or partial fragment commits nothing and leaves already-committed
 revisions untouched. The browser processes each script node once, keyed on the
