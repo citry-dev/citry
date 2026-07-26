@@ -1,0 +1,11 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_history",
+  "calls": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "history",
+      "args": {}
+    }
+  ]
+}

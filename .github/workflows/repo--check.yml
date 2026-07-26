@@ -81,3 +81,7 @@ jobs:
       - name: Validate the client graph protocol package directly
         if: always()
         run: python -S packages/protocol/client_graph/v1/validate.py
+
+      - name: Validate the Events protocol package directly
+        if: always()
+        run: python -S packages/protocol/events/v1/validate.py

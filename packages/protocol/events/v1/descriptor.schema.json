@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "citry-events/1 component class descriptor",
+  "description": "One strict component-class record from a data-citry-events manifest.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["componentClassId", "eventHandlers"],
+  "properties": {
+    "componentClassId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The server-assigned ID used by calls targeting this component class."
+    },
+    "eventHandlers": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/eventHandler"
+      },
+      "description": "Maps each public handler name to the browser hints for that handler."
+    },
+    "writableStateFields": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Public State fields the browser may update. Omitted when every public field is writable; an empty array allows none."
+    }
+  },
+  "$defs": {
+    "eventHandler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["httpMethod"],
+      "properties": {
+        "httpMethod": {
+          "type": "string",
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Z-]+$",
+          "description": "The uppercase HTTP method used for the handler's route."
+        },
+        "usesState": {
+          "const": true,
+          "description": "Present only when the handler receives State."
+        },
+        "debounceMilliseconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "throttleMilliseconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "latestCallWins": {
+          "const": true,
+          "description": "Present only when a newer queued call supersedes older calls to this handler."
+        },
+        "allowBatching": {
+          "const": false,
+          "description": "Present only when the handler must be sent alone."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_forbidden",
+  "results": [
+    {
+      "ok": false,
+      "sendSequence": 7,
+      "error": {
+        "status": 403,
+        "code": "forbidden",
+        "message": "The name 'admin' is reserved."
+      }
+    }
+  ]
+}

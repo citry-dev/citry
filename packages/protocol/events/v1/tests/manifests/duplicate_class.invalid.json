@@ -1,0 +1,9 @@
+{
+  "protocol": "citry-events/1",
+  "clientGraphRevision": null,
+  "componentClasses": [
+    {"componentClassId": "Clock_123abc", "eventHandlers": {}},
+    {"componentClassId": "Clock_123abc", "eventHandlers": {}}
+  ],
+  "componentInstances": []
+}

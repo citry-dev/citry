@@ -1,0 +1,11 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_unknown_component",
+  "calls": [
+    {
+      "componentClassId": "Gadget_000000",
+      "handlerName": "increment",
+      "args": {}
+    }
+  ]
+}

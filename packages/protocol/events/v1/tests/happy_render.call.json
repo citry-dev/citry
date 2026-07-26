@@ -1,0 +1,20 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_happy_render",
+  "capabilities": {
+    "swaps": [
+      "replace",
+      "morph"
+    ]
+  },
+  "calls": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "increment",
+      "callerRenderId": "c9zk1q00",
+      "args": {},
+      "stateToken": "cev1.eyJ2IjoxLCJjIjoiQ291bnRlcl9hMWIyYzMiLCJzIjp7ImNvdW50IjowLCJuYW1lIjoiQ291bnRlciJ9fQ.bm90LWEtcmVhbC1zaWduYXR1cmU",
+      "sendSequence": 4
+    }
+  ]
+}

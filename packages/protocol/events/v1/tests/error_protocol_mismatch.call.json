@@ -1,0 +1,13 @@
+{
+  "protocol": "citry-events/2",
+  "requestId": "r_error_protocol_mismatch",
+  "calls": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    }
+  ]
+}

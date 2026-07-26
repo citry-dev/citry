@@ -1,0 +1,13 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_invalid_args",
+  "calls": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "rename",
+      "callerRenderId": "c9zk1q00",
+      "args": {},
+      "stateToken": "cev1.eyJ2IjoxLCJjIjoiQ291bnRlcl9hMWIyYzMiLCJzIjp7ImNvdW50IjowLCJuYW1lIjoiQ291bnRlciJ9fQ.bm90LWEtcmVhbC1zaWduYXR1cmU"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "componentClassId": "SearchPanel_a1b2c3",
+  "eventHandlers": {
+    "search": {
+      "httpMethod": "GET",
+      "usesState": true,
+      "debounceMilliseconds": 300,
+      "latestCallWins": true
+    },
+    "export": {
+      "httpMethod": "POST",
+      "allowBatching": false
+    }
+  },
+  "writableStateFields": ["query"]
+}

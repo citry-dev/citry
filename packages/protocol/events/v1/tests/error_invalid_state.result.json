@@ -1,0 +1,14 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_invalid_state",
+  "results": [
+    {
+      "ok": false,
+      "error": {
+        "status": 403,
+        "code": "invalid_state",
+        "message": "The state token failed verification (tampered or malformed)."
+      }
+    }
+  ]
+}

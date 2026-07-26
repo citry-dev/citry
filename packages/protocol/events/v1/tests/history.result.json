@@ -1,0 +1,23 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_history",
+  "results": [
+    {
+      "ok": true,
+      "actions": [
+        {
+          "action": "url",
+          "url": "/counters?page=2",
+          "mode": "push",
+          "delay": 0.25,
+          "wait": false
+        },
+        {
+          "action": "url",
+          "url": "/counters?page=3",
+          "mode": "replace"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "citry-events/1 call envelope",
+  "description": "The strict request envelope a client sends to a citry-events/1 server.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "requestId", "calls"],
+  "properties": {
+    "protocol": {
+      "const": "citry-events/1"
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Client-created correlation ID, echoed verbatim in the result envelope."
+    },
+    "capabilities": {
+      "$ref": "#/$defs/capabilities"
+    },
+    "calls": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/call"
+      },
+      "description": "The calls; results[i] answers calls[i]."
+    }
+  },
+  "$defs": {
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "swaps": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/swap"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/actionKind"
+          }
+        }
+      },
+      "description": "Exactly the swaps and actions this client can apply. An absent object or key uses the v1 baseline."
+    },
+    "swap": {
+      "enum": ["morph", "replace", "inner", "append", "prepend", "remove", "none"]
+    },
+    "actionKind": {
+      "enum": ["render", "data", "state", "event", "redirect", "url"]
+    },
+    "call": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["componentClassId", "handlerName", "args"],
+      "properties": {
+        "componentClassId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The server-assigned ID of the component class that owns the handler."
+        },
+        "handlerName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The handler's public event name."
+        },
+        "callerRenderId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$",
+          "description": "The render ID of the component instance that sent the call. Omitted for calls with no rendered caller."
+        },
+        "args": {
+          "type": "object",
+          "description": "Open application data passed to the handler."
+        },
+        "stateToken": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The caller's opaque signed state token. Omitted for stateless calls."
+        },
+        "stateUpdates": {
+          "type": "object",
+          "description": "Open application data containing writable State updates applied before the handler runs."
+        },
+        "sendSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "The increasing send counter for the browser's stable record of this caller. The result echoes it so the browser can discard older responses."
+        }
+      }
+    }
+  }
+}

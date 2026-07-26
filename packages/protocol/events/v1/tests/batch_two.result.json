@@ -1,0 +1,29 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_batch_two",
+  "results": [
+    {
+      "ok": true,
+      "sendSequence": 7,
+      "actions": [
+        {
+          "action": "render",
+          "target": "render:c9zk1q00",
+          "swap": "morph",
+          "html": "<div data-cid-c9zk1q00><h2>Counter</h2><button>Clicked 1 times</button></div>\n<script type=\"application/json\" data-citry>{\"loaded\":[]}</script>\n<script type=\"application/json\" data-citry-events>{\"instances\":[[\"Yzl6azFxMDA=\",\"Q291bnRlcl9hMWIyYzM=\",\"Y2V2MS5leUoySWpveExDSmpJam9pUTI5MWJuUmxjbDloTVdJeVl6TWlMQ0p6SWpwN0ltTnZkVzUwSWpveExDSnVZVzFsSWpvaVEyOTFiblJsY2lKOWZRLmJtOTBMV0V0Y21WaGJDMXphV2R1WVhSMWNtVQ==\",\"eyJjb3VudCI6MSwibmFtZSI6IkNvdW50ZXIifQ==\"]],\"classes\":{\"Q291bnRlcl9hMWIyYzM=\":\"eyJldmVudHMiOnsiaW5jcmVtZW50Ijp7Im1ldGhvZCI6IlBPU1QifSwicmVuYW1lIjp7Im1ldGhvZCI6IlBPU1QifSwiY3Jhc2giOnsibWV0aG9kIjoiUE9TVCJ9LCJzcXVhcmUiOnsibWV0aG9kIjoiR0VUIn19fQ==\"}}</script>"
+        }
+      ]
+    },
+    {
+      "ok": true,
+      "actions": [
+        {
+          "action": "data",
+          "value": {
+            "value": 9
+          }
+        }
+      ]
+    }
+  ]
+}

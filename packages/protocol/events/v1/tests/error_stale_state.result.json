@@ -1,0 +1,14 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_stale_state",
+  "results": [
+    {
+      "ok": false,
+      "error": {
+        "status": 409,
+        "code": "stale_state",
+        "message": "The state token is stale (expired or rotated out); reload the page to get a fresh one."
+      }
+    }
+  ]
+}

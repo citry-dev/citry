@@ -1,0 +1,8 @@
+{
+  "componentClassId": "Clock_123abc",
+  "eventHandlers": {
+    "refresh": {
+      "httpMethod": "POST"
+    }
+  }
+}

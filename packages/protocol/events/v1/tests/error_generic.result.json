@@ -1,0 +1,14 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_generic",
+  "results": [
+    {
+      "ok": false,
+      "error": {
+        "status": 418,
+        "code": "error",
+        "message": "The counter cannot do that."
+      }
+    }
+  ]
+}

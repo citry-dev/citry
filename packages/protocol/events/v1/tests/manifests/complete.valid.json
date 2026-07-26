@@ -1,0 +1,26 @@
+{
+  "protocol": "citry-events/1",
+  "clientGraphRevision": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "componentClasses": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "eventHandlers": {
+        "increment": {
+          "httpMethod": "POST",
+          "usesState": true
+        }
+      },
+      "writableStateFields": ["count"]
+    }
+  ],
+  "componentInstances": [
+    {
+      "renderId": "c9zk1q00",
+      "componentClassId": "Counter_a1b2c3",
+      "stateToken": "opaque-state-token",
+      "publicState": {
+        "count": 0
+      }
+    }
+  ]
+}

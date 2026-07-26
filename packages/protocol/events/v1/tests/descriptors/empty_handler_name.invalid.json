@@ -1,0 +1,8 @@
+{
+  "componentClassId": "Clock_123abc",
+  "eventHandlers": {
+    "": {
+      "httpMethod": "POST"
+    }
+  }
+}

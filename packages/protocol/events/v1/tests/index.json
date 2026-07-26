@@ -1,0 +1,160 @@
+[
+  {
+    "call": "happy_render.call.json",
+    "result": "happy_render.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken",
+      "result.results[0].actions[0].target",
+      "result.results[0].actions[0].html"
+    ]
+  },
+  {
+    "call": "baseline_swap.call.json",
+    "result": "baseline_swap.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken",
+      "result.results[0].actions[0].target",
+      "result.results[0].actions[0].html"
+    ]
+  },
+  {
+    "call": "data_only.call.json",
+    "result": "data_only.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId"
+    ]
+  },
+  {
+    "call": "history.call.json",
+    "result": "history.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId"
+    ]
+  },
+  {
+    "call": "rename_coerce.call.json",
+    "result": "rename_coerce.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken",
+      "result.results[0].actions[1].target",
+      "result.results[0].actions[0].targetRenderId",
+      "result.results[0].actions[0].stateToken"
+    ]
+  },
+  {
+    "call": "batch_two.call.json",
+    "result": "batch_two.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken",
+      "call.calls[1].componentClassId",
+      "result.results[0].actions[0].target",
+      "result.results[0].actions[0].html"
+    ]
+  },
+  {
+    "call": "error_conflict.call.json",
+    "result": "error_conflict.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId"
+    ]
+  },
+  {
+    "call": "error_csrf_failed.call.json",
+    "result": "error_csrf_failed.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken"
+    ]
+  },
+  {
+    "call": "error_forbidden.call.json",
+    "result": "error_forbidden.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken"
+    ]
+  },
+  {
+    "call": "error_generic.call.json",
+    "result": "error_generic.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId"
+    ]
+  },
+  {
+    "call": "error_handler_error.call.json",
+    "result": "error_handler_error.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken"
+    ]
+  },
+  {
+    "call": "error_invalid_args.call.json",
+    "result": "error_invalid_args.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken"
+    ]
+  },
+  {
+    "call": "error_invalid_state.call.json",
+    "result": "error_invalid_state.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId"
+    ]
+  },
+  {
+    "call": "error_not_found.call.json",
+    "result": "error_not_found.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId"
+    ]
+  },
+  {
+    "call": "error_payload_too_large.call.json",
+    "result": "error_payload_too_large.result.json",
+    "dynamic_fields": []
+  },
+  {
+    "call": "error_protocol_mismatch.call.json",
+    "result": "error_protocol_mismatch.result.json",
+    "dynamic_fields": []
+  },
+  {
+    "call": "error_stale_state.call.json",
+    "result": "error_stale_state.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken"
+    ]
+  },
+  {
+    "call": "error_unknown_component.call.json",
+    "result": "error_unknown_component.result.json",
+    "dynamic_fields": []
+  },
+  {
+    "call": "error_unknown_event.call.json",
+    "result": "error_unknown_event.result.json",
+    "dynamic_fields": [
+      "call.calls[0].componentClassId",
+      "call.calls[0].callerRenderId",
+      "call.calls[0].stateToken"
+    ]
+  }
+]

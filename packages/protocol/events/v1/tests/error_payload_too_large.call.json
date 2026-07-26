@@ -1,0 +1,125 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_payload_too_large",
+  "calls": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    },
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "square",
+      "args": {
+        "value": 2
+      }
+    }
+  ]
+}

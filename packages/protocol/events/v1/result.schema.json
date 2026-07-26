@@ -1,0 +1,293 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "citry-events/1 result envelope",
+  "description": "The strict response envelope a citry-events/1 server returns.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "requestId", "results"],
+  "properties": {
+    "protocol": {
+      "const": "citry-events/1"
+    },
+    "requestId": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "The echoed request ID. Null only when a transport failure prevented the server from reading one."
+    },
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/result"
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "requestId": {"type": "null"}
+        },
+        "required": ["requestId"]
+      },
+      "then": {
+        "properties": {
+          "results": {
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {"$ref": "#/$defs/edgeErrorResult"}
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "result": {
+      "oneOf": [
+        {"$ref": "#/$defs/okResult"},
+        {"$ref": "#/$defs/errorResult"}
+      ]
+    },
+    "okResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "actions"],
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "sendSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Present exactly when the answered call carried sendSequence and equal to it."
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/action"
+          }
+        }
+      }
+    },
+    "errorResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "error"],
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "sendSequence": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Present exactly when the answered call carried sendSequence and equal to it."
+        },
+        "error": {
+          "$ref": "#/$defs/error"
+        }
+      }
+    },
+    "edgeErrorResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ok", "error"],
+      "properties": {
+        "ok": {"const": false},
+        "error": {"$ref": "#/$defs/edgeError"}
+      },
+      "description": "The one error returned when the request could not be decoded far enough to read its request ID or calls."
+    },
+    "edgeError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "code", "message"],
+      "properties": {
+        "status": {"enum": [400, 413]},
+        "code": {"enum": ["protocol_mismatch", "payload_too_large"]},
+        "message": {"type": "string", "minLength": 1}
+      },
+      "oneOf": [
+        {"properties": {"code": {"const": "protocol_mismatch"}, "status": {"const": 400}}},
+        {"properties": {"code": {"const": "payload_too_large"}, "status": {"const": 413}}}
+      ]
+    },
+    "error": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "code", "message"],
+      "properties": {
+        "status": {
+          "type": "integer",
+          "minimum": 400,
+          "maximum": 599
+        },
+        "code": {
+          "enum": [
+            "invalid_args",
+            "invalid_state",
+            "stale_state",
+            "unknown_event",
+            "unknown_component",
+            "forbidden",
+            "not_found",
+            "conflict",
+            "error",
+            "csrf_failed",
+            "payload_too_large",
+            "protocol_mismatch",
+            "handler_error"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "fieldErrors": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Application field names mapped to validation messages."
+        }
+      },
+      "oneOf": [
+        {"properties": {"code": {"const": "invalid_args"}, "status": {"const": 422}}},
+        {"properties": {"code": {"const": "invalid_state"}, "status": {"const": 403}}},
+        {"properties": {"code": {"const": "stale_state"}, "status": {"const": 409}}},
+        {"properties": {"code": {"const": "unknown_event"}, "status": {"const": 404}}},
+        {"properties": {"code": {"const": "unknown_component"}, "status": {"const": 404}}},
+        {"properties": {"code": {"const": "forbidden"}, "status": {"const": 403}}},
+        {"properties": {"code": {"const": "not_found"}, "status": {"const": 404}}},
+        {"properties": {"code": {"const": "conflict"}, "status": {"const": 409}}},
+        {"properties": {"code": {"const": "error"}, "status": {"type": "integer", "minimum": 400, "maximum": 599}}},
+        {"properties": {"code": {"const": "csrf_failed"}, "status": {"const": 403}}},
+        {"properties": {"code": {"const": "payload_too_large"}, "status": {"const": 413}}},
+        {"properties": {"code": {"const": "protocol_mismatch"}, "status": {"const": 400}}},
+        {"properties": {"code": {"const": "handler_error"}, "status": {"const": 500}}}
+      ]
+    },
+    "action": {
+      "oneOf": [
+        {"$ref": "#/$defs/renderAction"},
+        {"$ref": "#/$defs/dataAction"},
+        {"$ref": "#/$defs/stateAction"},
+        {"$ref": "#/$defs/eventAction"},
+        {"$ref": "#/$defs/redirectAction"},
+        {"$ref": "#/$defs/urlAction"}
+      ]
+    },
+    "renderAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "target", "swap", "html"],
+      "properties": {
+        "action": {"const": "render"},
+        "target": {"$ref": "#/$defs/target"},
+        "swap": {"$ref": "#/$defs/swap"},
+        "html": {
+          "type": "string",
+          "description": "A complete Citry fragment, including its inert manifest tags."
+        },
+        "delay": {"$ref": "#/$defs/delay"},
+        "wait": {"$ref": "#/$defs/wait"}
+      }
+    },
+    "dataAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "value"],
+      "properties": {
+        "action": {"const": "data"},
+        "value": {
+          "description": "Any JSON application value, including null."
+        },
+        "delay": {"$ref": "#/$defs/delay"},
+        "wait": {"$ref": "#/$defs/wait"}
+      }
+    },
+    "stateAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "targetRenderId", "stateToken"],
+      "properties": {
+        "action": {"const": "state"},
+        "targetRenderId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "stateToken": {
+          "type": "string",
+          "minLength": 1
+        },
+        "delay": {"$ref": "#/$defs/delay"},
+        "wait": {"$ref": "#/$defs/wait"}
+      }
+    },
+    "eventAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "eventName"],
+      "properties": {
+        "action": {"const": "event"},
+        "eventName": {
+          "type": "string",
+          "minLength": 1,
+          "not": {
+            "pattern": "^citry:"
+          }
+        },
+        "detail": {
+          "description": "Any JSON application value; absent means null."
+        },
+        "target": {"$ref": "#/$defs/target"},
+        "delay": {"$ref": "#/$defs/delay"},
+        "wait": {"$ref": "#/$defs/wait"}
+      }
+    },
+    "redirectAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "url"],
+      "properties": {
+        "action": {"const": "redirect"},
+        "url": {"type": "string", "minLength": 1},
+        "delay": {"$ref": "#/$defs/delay"},
+        "wait": {"$ref": "#/$defs/wait"}
+      }
+    },
+    "urlAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "url", "mode"],
+      "properties": {
+        "action": {"const": "url"},
+        "url": {"type": "string", "minLength": 1},
+        "mode": {"enum": ["push", "replace"]},
+        "delay": {"$ref": "#/$defs/delay"},
+        "wait": {"$ref": "#/$defs/wait"}
+      }
+    },
+    "target": {
+      "type": "string",
+      "minLength": 1,
+      "oneOf": [
+        {"pattern": "^render:[a-z0-9_-]+$"},
+        {"not": {"pattern": "^render:"}}
+      ],
+      "description": "A CSS selector, or render:<renderId> for one component instance."
+    },
+    "swap": {
+      "enum": ["morph", "replace", "inner", "append", "prepend", "remove", "none"]
+    },
+    "delay": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Seconds to wait before applying the action; omitted at zero."
+    },
+    "wait": {
+      "const": false,
+      "description": "Present only as false when the action queue must not wait for the delay."
+    }
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "citry-events/1 browser manifest",
+  "description": "The strict JSON object inside one data-citry-events script tag.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "clientGraphRevision", "componentClasses", "componentInstances"],
+  "properties": {
+    "protocol": {
+      "const": "citry-events/1"
+    },
+    "clientGraphRevision": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "The client-graph revision emitted with the same render, or null when that render has no client graph."
+    },
+    "componentClasses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/componentClass"
+      }
+    },
+    "componentInstances": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/componentInstance"
+      }
+    }
+  },
+  "$defs": {
+    "componentClass": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["componentClassId", "eventHandlers"],
+      "properties": {
+        "componentClassId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "eventHandlers": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/eventHandler"
+          }
+        },
+        "writableStateFields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "eventHandler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["httpMethod"],
+      "properties": {
+        "httpMethod": {
+          "type": "string",
+          "pattern": "^[!#$%&'*+.^_`|~0-9A-Z-]+$"
+        },
+        "usesState": {
+          "const": true
+        },
+        "debounceMilliseconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "throttleMilliseconds": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "latestCallWins": {
+          "const": true
+        },
+        "allowBatching": {
+          "const": false
+        }
+      }
+    },
+    "componentInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["renderId", "componentClassId", "stateToken", "publicState"],
+      "properties": {
+        "renderId": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z0-9_-]+$"
+        },
+        "componentClassId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "stateToken": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "publicState": {
+          "type": "object",
+          "description": "Open application data used to initialize the browser State object."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_protocol_mismatch",
+  "results": [
+    {
+      "ok": false,
+      "error": {
+        "status": 400,
+        "code": "protocol_mismatch",
+        "message": "Unknown protocol 'citry-events/2'; this server speaks 'citry-events/1'."
+      }
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "componentClassId": "Clock_123abc",
+  "eventHandlers": {
+    "refresh": {}
+  }
+}

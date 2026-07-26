@@ -1,0 +1,33 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_rename_coerce",
+  "results": [
+    {
+      "ok": true,
+      "sendSequence": 5,
+      "actions": [
+        {
+          "action": "state",
+          "targetRenderId": "c9zk1q00",
+          "stateToken": "cev1.eyJ2IjoxLCJjIjoiQ291bnRlcl9hMWIyYzMiLCJzIjp7ImNvdW50IjowLCJuYW1lIjoiVGFsbHkifX0.bm90LWEtcmVhbC1zaWduYXR1cmU"
+        },
+        {
+          "action": "event",
+          "eventName": "counter:renamed",
+          "detail": {
+            "name": "Tally"
+          },
+          "target": "render:c9zk1q00",
+          "delay": 1.5,
+          "wait": false
+        },
+        {
+          "action": "data",
+          "value": {
+            "name": "Tally"
+          }
+        }
+      ]
+    }
+  ]
+}

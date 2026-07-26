@@ -1,0 +1,11 @@
+[
+  {"file": "complete.valid.json", "valid": true},
+  {"file": "minimal.valid.json", "valid": true},
+  {"file": "extra_field.invalid.json", "valid": false},
+  {"file": "missing_event_handlers.invalid.json", "valid": false},
+  {"file": "missing_http_method.invalid.json", "valid": false},
+  {"file": "empty_handler_name.invalid.json", "valid": false},
+  {"file": "bad_http_method.invalid.json", "valid": false},
+  {"file": "default_value.invalid.json", "valid": false},
+  {"file": "handler_extra_field.invalid.json", "valid": false}
+]

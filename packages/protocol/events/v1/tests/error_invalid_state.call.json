@@ -1,0 +1,13 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_invalid_state",
+  "calls": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "increment",
+      "callerRenderId": "c9zk1q00",
+      "args": {},
+      "stateToken": "cev1.eyJ2IjoxfQ.dGFtcGVyZWQ"
+    }
+  ]
+}

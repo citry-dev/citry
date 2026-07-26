@@ -1,0 +1,17 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_data_only",
+  "results": [
+    {
+      "ok": true,
+      "actions": [
+        {
+          "action": "data",
+          "value": {
+            "value": 49
+          }
+        }
+      ]
+    }
+  ]
+}

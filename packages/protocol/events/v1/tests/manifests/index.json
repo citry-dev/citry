@@ -1,0 +1,10 @@
+[
+  {"file": "complete.valid.json", "valid": true},
+  {"file": "stateless.valid.json", "valid": true},
+  {"file": "extra_field.invalid.json", "valid": false},
+  {"file": "missing_protocol.invalid.json", "valid": false},
+  {"file": "unknown_class.invalid.json", "valid": false},
+  {"file": "duplicate_class.invalid.json", "valid": false},
+  {"file": "bad_graph_revision.invalid.json", "valid": false},
+  {"file": "stateless_public_state.invalid.json", "valid": false}
+]

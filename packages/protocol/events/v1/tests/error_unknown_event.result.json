@@ -1,0 +1,14 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_unknown_event",
+  "results": [
+    {
+      "ok": false,
+      "error": {
+        "status": 404,
+        "code": "unknown_event",
+        "message": "Component 'Counter' has no event 'reset'."
+      }
+    }
+  ]
+}

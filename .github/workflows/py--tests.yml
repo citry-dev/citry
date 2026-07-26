@@ -8,12 +8,14 @@ on:
       - "dev"
     # Run Python tests when any of following changes:
     # - Python code
+    # - The language-neutral protocol packages exercised by the Python tests
     # - Rust code (because some Python packages depend on Rust crates)
     # - Workflows themselves (e.g. this file)
     # - Third-party dependencies (e.g., Ruff submodule) used by both Rust and Python
     # - Submodule configuration changes (e.g. .gitmodules)
     paths:
       - "packages/py/**"
+      - "packages/protocol/**"
       - "crates/**"
       - "third_party/**"
       - ".github/**"
@@ -21,6 +23,7 @@ on:
   pull_request:
     paths:
       - "packages/py/**"
+      - "packages/protocol/**"
       - "crates/**"
       - "third_party/**"
       - ".github/**"

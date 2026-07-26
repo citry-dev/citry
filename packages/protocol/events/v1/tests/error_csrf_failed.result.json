@@ -1,0 +1,14 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_csrf_failed",
+  "results": [
+    {
+      "ok": false,
+      "error": {
+        "status": 403,
+        "code": "csrf_failed",
+        "message": "The call failed the CSRF check; reload the page and try again."
+      }
+    }
+  ]
+}

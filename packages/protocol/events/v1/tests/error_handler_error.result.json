@@ -1,0 +1,14 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_handler_error",
+  "results": [
+    {
+      "ok": false,
+      "error": {
+        "status": 500,
+        "code": "handler_error",
+        "message": "The event handler raised an unexpected error."
+      }
+    }
+  ]
+}

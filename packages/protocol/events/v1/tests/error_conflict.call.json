@@ -1,0 +1,13 @@
+{
+  "protocol": "citry-events/1",
+  "requestId": "r_error_conflict",
+  "calls": [
+    {
+      "componentClassId": "Counter_a1b2c3",
+      "handlerName": "fail",
+      "args": {
+        "status": 409
+      }
+    }
+  ]
+}

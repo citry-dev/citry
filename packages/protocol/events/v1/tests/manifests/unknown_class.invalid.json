@@ -1,0 +1,13 @@
+{
+  "protocol": "citry-events/1",
+  "clientGraphRevision": null,
+  "componentClasses": [],
+  "componentInstances": [
+    {
+      "renderId": "clock_1",
+      "componentClassId": "Clock_123abc",
+      "stateToken": null,
+      "publicState": {}
+    }
+  ]
+}
