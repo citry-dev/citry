@@ -1,0 +1,121 @@
+{
+ "delimiters": {
+  "format": "comment-v1"
+ },
+ "graphs": [
+  {
+   "componentClasses": [
+    {
+     "classId": "Card_0f1c15",
+     "className": "Card"
+    }
+   ],
+   "componentExecutionOrderConstraints": [],
+   "componentInstances": [
+    {
+     "classId": "Card_0f1c15",
+     "instanceId": 1,
+     "invocationId": null,
+     "parentRenderId": null,
+     "renderId": "c1",
+     "transparent": false
+    }
+   ],
+   "fills": [
+    {
+     "fallbackLocationId": 1,
+     "fillId": 1,
+     "kind": "python",
+     "locationId": null,
+     "ownerClassId": null,
+     "ownerRenderId": null,
+     "policy": "python-detached",
+     "receiverClassId": "Card_0f1c15",
+     "receiverRenderId": "c1",
+     "slotName": "default",
+     "sourceInvocationId": null
+    },
+    {
+     "fallbackLocationId": null,
+     "fillId": 3,
+     "kind": "typed-default",
+     "locationId": null,
+     "ownerClassId": null,
+     "ownerRenderId": null,
+     "policy": "typed-default-detached",
+     "receiverClassId": "Card_0f1c15",
+     "receiverRenderId": "c1",
+     "slotName": "header",
+     "sourceInvocationId": null
+    }
+   ],
+   "graphId": 0,
+   "nestedComponents": [],
+   "slotRegions": [
+    {
+     "fillId": 3,
+     "ownerRenderId": null,
+     "parentRegionId": null,
+     "receiverRenderId": "c1",
+     "regionId": 1,
+     "resultOwnerRenderId": null,
+     "slotLocationId": 1,
+     "sourceLocationId": null,
+     "transitionFromRenderId": "c1"
+    },
+    {
+     "fillId": 1,
+     "ownerRenderId": null,
+     "parentRegionId": null,
+     "receiverRenderId": "c1",
+     "regionId": 2,
+     "resultOwnerRenderId": null,
+     "slotLocationId": 3,
+     "sourceLocationId": null,
+     "transitionFromRenderId": "c1"
+    }
+   ],
+   "sourceLocations": [
+    {
+     "carrierInstanceId": 1,
+     "kind": "slot-outlet",
+     "locationId": 1,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Card",
+     "ownerClassId": "Card_0f1c15",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 69,
+      "start": 45
+     },
+     "sourcePos": {
+      "column": 25,
+      "line": 3
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "slot-outlet",
+     "locationId": 3,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Card",
+     "ownerClassId": "Card_0f1c15",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 111,
+      "start": 101
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 4
+     }
+    }
+   ]
+  }
+ ],
+ "mode": "development",
+ "protocol": "citry-client-graph/1",
+ "revision": "a0bcfa8db731a591310e50058c3425b9853818ec6262d1d694df694fe2e613c7"
+}

@@ -1,0 +1,431 @@
+{
+ "delimiters": {
+  "format": "comment-v1"
+ },
+ "graphs": [
+  {
+   "componentClasses": [
+    {
+     "classId": "Page_df2715",
+     "className": "Page"
+    },
+    {
+     "classId": "Item_de91bb",
+     "className": "Item"
+    }
+   ],
+   "componentExecutionOrderConstraints": [
+    {
+     "childRenderId": "c2",
+     "invocationId": 1,
+     "parentRenderId": "c1"
+    },
+    {
+     "childRenderId": "c3",
+     "invocationId": 2,
+     "parentRenderId": "c1"
+    }
+   ],
+   "componentInstances": [
+    {
+     "classId": "Page_df2715",
+     "instanceId": 1,
+     "invocationId": null,
+     "parentRenderId": null,
+     "renderId": "c1",
+     "transparent": false
+    },
+    {
+     "classId": "Item_de91bb",
+     "instanceId": 2,
+     "invocationId": 1,
+     "parentRenderId": "c1",
+     "renderId": "c2",
+     "transparent": false
+    },
+    {
+     "classId": "Item_de91bb",
+     "instanceId": 3,
+     "invocationId": 2,
+     "parentRenderId": "c1",
+     "renderId": "c3",
+     "transparent": false
+    }
+   ],
+   "fills": [
+    {
+     "fallbackLocationId": null,
+     "fillId": 1,
+     "kind": "implicit",
+     "locationId": 4,
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "policy": "template",
+     "receiverClassId": "Item_de91bb",
+     "receiverRenderId": "c2",
+     "slotName": "default",
+     "sourceInvocationId": 1
+    },
+    {
+     "fallbackLocationId": null,
+     "fillId": 2,
+     "kind": "implicit",
+     "locationId": 9,
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "policy": "template",
+     "receiverClassId": "Item_de91bb",
+     "receiverRenderId": "c3",
+     "slotName": "default",
+     "sourceInvocationId": 2
+    }
+   ],
+   "graphId": 0,
+   "nestedComponents": [
+    {
+     "invocationId": 1,
+     "locationId": 5,
+     "parentRegionId": null,
+     "relays": [
+      {
+       "key": "$c-props",
+       "locationId": 1,
+       "payload": {
+        "expression": "{index: 0}",
+        "type": "props"
+       },
+       "source": "server-dynamic"
+      },
+      {
+       "key": "@click",
+       "locationId": 2,
+       "payload": {
+        "expression": "selected = true",
+        "type": "alpine-handler"
+       },
+       "source": "spread"
+      },
+      {
+       "key": "@c-click",
+       "locationId": 3,
+       "payload": {
+        "args": null,
+        "classId": "Page_df2715",
+        "debounce": null,
+        "event": "click",
+        "handler": "choose",
+        "key": null,
+        "once": false,
+        "prevent": false,
+        "self": false,
+        "stop": false,
+        "throttle": null,
+        "type": "citry-dom-event"
+       },
+       "source": "spread"
+      }
+     ],
+     "sourceClassId": "Page_df2715",
+     "sourceRenderId": "c1",
+     "tagName": "item",
+     "targetClassId": "Item_de91bb",
+     "targetRenderId": "c2"
+    },
+    {
+     "invocationId": 2,
+     "locationId": 10,
+     "parentRegionId": null,
+     "relays": [
+      {
+       "key": "$c-props",
+       "locationId": 6,
+       "payload": {
+        "expression": "{index: 1}",
+        "type": "props"
+       },
+       "source": "server-dynamic"
+      },
+      {
+       "key": "@click",
+       "locationId": 7,
+       "payload": {
+        "expression": "selected = true",
+        "type": "alpine-handler"
+       },
+       "source": "spread"
+      },
+      {
+       "key": "@c-click",
+       "locationId": 8,
+       "payload": {
+        "args": null,
+        "classId": "Page_df2715",
+        "debounce": null,
+        "event": "click",
+        "handler": "choose",
+        "key": null,
+        "once": false,
+        "prevent": false,
+        "self": false,
+        "stop": false,
+        "throttle": null,
+        "type": "citry-dom-event"
+       },
+       "source": "spread"
+      }
+     ],
+     "sourceClassId": "Page_df2715",
+     "sourceRenderId": "c1",
+     "tagName": "item",
+     "targetClassId": "Item_de91bb",
+     "targetRenderId": "c3"
+    }
+   ],
+   "slotRegions": [
+    {
+     "fillId": 1,
+     "ownerRenderId": "c1",
+     "parentRegionId": null,
+     "receiverRenderId": "c2",
+     "regionId": 1,
+     "resultOwnerRenderId": "c1",
+     "slotLocationId": 11,
+     "sourceLocationId": 4,
+     "transitionFromRenderId": "c2"
+    },
+    {
+     "fillId": 2,
+     "ownerRenderId": "c1",
+     "parentRegionId": null,
+     "receiverRenderId": "c3",
+     "regionId": 2,
+     "resultOwnerRenderId": "c1",
+     "slotLocationId": 13,
+     "sourceLocationId": 9,
+     "transitionFromRenderId": "c3"
+    }
+   ],
+   "sourceLocations": [
+    {
+     "carrierInstanceId": 1,
+     "kind": "boundary-relay",
+     "locationId": 1,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 164,
+      "start": 138
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 6
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "boundary-relay",
+     "locationId": 2,
+     "mappingIndex": 0,
+     "mappingKey": "@click",
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 212,
+      "start": 187
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 7
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "boundary-relay",
+     "locationId": 3,
+     "mappingIndex": 1,
+     "mappingKey": "@c-click",
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 212,
+      "start": 187
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 7
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "implicit-fill",
+     "locationId": 4,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 262,
+      "start": 108
+     },
+     "sourcePos": {
+      "column": 21,
+      "line": 5
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "component-call",
+     "locationId": 5,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 262,
+      "start": 108
+     },
+     "sourcePos": {
+      "column": 21,
+      "line": 5
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "boundary-relay",
+     "locationId": 6,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 164,
+      "start": 138
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 6
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "boundary-relay",
+     "locationId": 7,
+     "mappingIndex": 0,
+     "mappingKey": "@click",
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 212,
+      "start": 187
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 7
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "boundary-relay",
+     "locationId": 8,
+     "mappingIndex": 1,
+     "mappingKey": "@c-click",
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 212,
+      "start": 187
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 7
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "implicit-fill",
+     "locationId": 9,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 262,
+      "start": 108
+     },
+     "sourcePos": {
+      "column": 21,
+      "line": 5
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "component-call",
+     "locationId": 10,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 262,
+      "start": 108
+     },
+     "sourcePos": {
+      "column": 21,
+      "line": 5
+     }
+    },
+    {
+     "carrierInstanceId": 2,
+     "kind": "slot-outlet",
+     "locationId": 11,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Item",
+     "ownerClassId": "Item_de91bb",
+     "ownerRenderId": "c2",
+     "sourceOffset": {
+      "end": 33,
+      "start": 23
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 2
+     }
+    },
+    {
+     "carrierInstanceId": 3,
+     "kind": "slot-outlet",
+     "locationId": 13,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Item",
+     "ownerClassId": "Item_de91bb",
+     "ownerRenderId": "c3",
+     "sourceOffset": {
+      "end": 33,
+      "start": 23
+     },
+     "sourcePos": {
+      "column": 23,
+      "line": 2
+     }
+    }
+   ]
+  }
+ ],
+ "mode": "development",
+ "protocol": "citry-client-graph/1",
+ "revision": "ba4b913a55894a05955cb47ec91d1f64b0ffa4dbe48ad6e4f1bcb34535d9b639"
+}

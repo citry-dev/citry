@@ -1,0 +1,242 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://citry.dev/protocol/client_graph/v1/manifest.schema.json",
+  "title": "Citry client ownership graph v1",
+  "description": "What the server sends the browser: the JSON that says which component owns which part of the rendered HTML. spec.md in this directory explains it and the terms; validate.py checks the rules that go beyond this shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "revision", "mode", "graphs", "delimiters"],
+  "properties": {
+    "protocol": {
+      "description": "The protocol name and major version. Always the exact string 'citry-client-graph/1'; a reader rejects anything else.",
+      "const": "citry-client-graph/1"
+    },
+    "revision": {
+      "description": "This manifest's fingerprint: the lowercase SHA-256 hex of the canonical JSON with 'revision' removed.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "mode": {
+      "description": "The build that produced this manifest. 'development' ships source provenance in sourceLocations; 'production' keeps sourceLocations empty and nulls every location reference.",
+      "enum": ["production", "development"]
+    },
+    "delimiters": {
+      "description": "The format of the HTML comment markers that bracket each component instance and slot region in the rendered HTML.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format"],
+      "properties": {
+        "format": {
+          "description": "Always 'comment-v1'; a reader rejects anything else.",
+          "const": "comment-v1"
+        }
+      }
+    },
+    "graphs": {
+      "description": "The ownership graphs, in the order they first appear in the HTML.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/graph"}
+    }
+  },
+  "$defs": {
+    "str": {"type": "string"},
+    "nullableStr": {"oneOf": [{"type": "string"}, {"type": "null"}]},
+    "id": {"description": "A record id, unique within its collection in one graph, starting at 1.", "type": "integer", "minimum": 1},
+    "nullableId": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
+    "offset": {"type": "integer", "minimum": 0},
+    "componentClass": {
+      "description": "One component class referenced by this graph.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["classId", "className"],
+      "properties": {
+        "classId": {"description": "The component's stable class id.", "type": "string"},
+        "className": {"description": "The component's display name.", "type": "string"}
+      }
+    },
+    "componentInstance": {
+      "description": "One rendered component instance.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["instanceId", "renderId", "classId", "invocationId", "parentRenderId", "transparent"],
+      "properties": {
+        "instanceId": {"description": "This component instance's record id.", "$ref": "#/$defs/id"},
+        "renderId": {"description": "The component instance's runtime identity; element-root instances use it as the suffix in data-cid-<render-id>, and roots marked as Citry-managed Alpine boundaries also include it as a whitespace-separated token in data-cid. Matches ^[a-z0-9_-]+$.", "type": "string"},
+        "classId": {"description": "The component instance's class id; must match one of this graph's componentClasses records.", "type": "string"},
+        "invocationId": {"description": "Record id of the nested component tag execution that produced this component instance, or null for a graph root.", "$ref": "#/$defs/nullableId"},
+        "parentRenderId": {"description": "Render id of the parent component instance, or null when it has no parent in this graph.", "$ref": "#/$defs/nullableStr"},
+        "transparent": {"description": "True when the structural instance adds no data-cid-<render-id> attribute of its own and is located by comment delimiters.", "type": "boolean"}
+      }
+    },
+    "sourceOffset": {
+      "description": "A UTF-8 byte range into the owner's template source (development only).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"description": "Start of the byte range.", "$ref": "#/$defs/offset"},
+        "end": {"description": "End of the byte range; not before start.", "$ref": "#/$defs/offset"}
+      }
+    },
+    "sourcePos": {
+      "description": "A human-readable source position (development only).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "column"],
+      "properties": {
+        "line": {"description": "Line in the source, starting at 1.", "type": "integer", "minimum": 1},
+        "column": {"description": "Column in the source, starting at 1.", "type": "integer", "minimum": 1}
+      }
+    },
+    "sourceLocation": {
+      "description": "Where a nested component tag, relay, fill, or slot was written in a component's source. Records are emitted only in development; the sourceLocations collection is empty in production.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["locationId", "kind", "ownerRenderId", "ownerClassId", "carrierInstanceId", "origin", "sourceOffset", "sourcePos", "mappingKey", "mappingIndex"],
+      "properties": {
+        "locationId": {"description": "This location's record id.", "$ref": "#/$defs/id"},
+        "kind": {"description": "What was written here.", "enum": ["component-call", "boundary-relay", "implicit-fill", "named-fill", "fallback-fill", "slot-outlet"]},
+        "ownerRenderId": {"description": "Render id of the component whose source this is.", "type": "string"},
+        "ownerClassId": {"description": "Class id of the owner; must match the owner.", "type": "string"},
+        "carrierInstanceId": {"description": "Record id of the retained instance whose template execution produced this location.", "$ref": "#/$defs/id"},
+        "origin": {"description": "Where the source came from (a file path or inline-template marker), or null.", "$ref": "#/$defs/nullableStr"},
+        "sourceOffset": {"$ref": "#/$defs/sourceOffset"},
+        "sourcePos": {"$ref": "#/$defs/sourcePos"},
+        "mappingKey": {"description": "The spread key this location came from, or null.", "$ref": "#/$defs/nullableStr"},
+        "mappingIndex": {"description": "Position within the spread this location came from, or null.", "oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]}
+      }
+    },
+    "expressionPayload": {
+      "description": "A relay that carries an Alpine expression: component props or an Alpine event handler.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "expression"],
+      "properties": {
+        "type": {"enum": ["props", "alpine-handler"]},
+        "expression": {"description": "The Alpine expression.", "type": "string"}
+      }
+    },
+    "domPayload": {
+      "description": "A relay that carries a compiled Citry DOM-event handler.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "classId", "event", "handler", "args", "prevent", "stop", "self", "once", "key", "debounce", "throttle"],
+      "properties": {
+        "type": {"const": "citry-dom-event"},
+        "classId": {"description": "Class id of the handling component (the relay's source parent).", "type": "string"},
+        "event": {"description": "The DOM event name, for example 'click'.", "type": "string"},
+        "handler": {"description": "The server handler name.", "type": "string"},
+        "args": {"description": "An opaque Alpine argument expression, or null.", "$ref": "#/$defs/nullableStr"},
+        "prevent": {"type": "boolean"}, "stop": {"type": "boolean"}, "self": {"type": "boolean"}, "once": {"type": "boolean"},
+        "key": {"description": "A keyboard-key filter, or null.", "$ref": "#/$defs/nullableStr"},
+        "debounce": {"description": "Debounce delay in milliseconds, or null.", "oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]},
+        "throttle": {"description": "Throttle interval in milliseconds, or null.", "oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]}
+      }
+    },
+    "pollPayload": {
+      "description": "A relay that carries a compiled Citry polling handler.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "classId", "handler", "args", "interval"],
+      "properties": {
+        "type": {"const": "citry-poll"},
+        "classId": {"description": "Class id of the polling component (the relay's source parent).", "type": "string"},
+        "handler": {"description": "The server handler name.", "type": "string"},
+        "args": {"description": "An opaque Alpine argument expression, or null.", "$ref": "#/$defs/nullableStr"},
+        "interval": {"description": "Poll interval in milliseconds, at least 1.", "type": "integer", "minimum": 1}
+      }
+    },
+    "relay": {
+      "description": "One binding handed from a parent to a child at a nested component boundary.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["key", "source", "locationId", "payload"],
+      "properties": {
+        "key": {"description": "The template attribute the relay was written on, for example '$c-props' or '@c-click'.", "type": "string"},
+        "source": {"description": "How the relay was written.", "enum": ["direct", "server-dynamic", "spread"]},
+        "locationId": {"description": "Record id of the boundary-relay location, or null in production.", "$ref": "#/$defs/nullableId"},
+        "payload": {"oneOf": [{"$ref": "#/$defs/expressionPayload"}, {"$ref": "#/$defs/domPayload"}, {"$ref": "#/$defs/pollPayload"}]}
+      }
+    },
+    "nestedComponent": {
+      "description": "One executed occurrence of a component tag: a parent component rendering one child occurrence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invocationId", "sourceRenderId", "sourceClassId", "locationId", "tagName", "targetClassId", "targetRenderId", "parentRegionId", "relays"],
+      "properties": {
+        "invocationId": {"description": "This nested component execution's record id.", "$ref": "#/$defs/id"},
+        "sourceRenderId": {"description": "Render id of the parent component.", "type": "string"},
+        "sourceClassId": {"description": "Class id of the parent component.", "type": "string"},
+        "locationId": {"description": "Record id of the component-call location, or null in production.", "$ref": "#/$defs/nullableId"},
+        "tagName": {"description": "The nested component tag name.", "type": "string"},
+        "targetClassId": {"description": "Class id of the child component.", "type": "string"},
+        "targetRenderId": {"description": "Render id of the child component.", "type": "string"},
+        "parentRegionId": {"description": "Record id of the slot region this nested component sits inside, or null.", "$ref": "#/$defs/nullableId"},
+        "relays": {"description": "The bindings handed to the child component.", "type": "array", "items": {"$ref": "#/$defs/relay"}}
+      }
+    },
+    "componentExecutionOrderConstraint": {
+      "description": "One parent-to-child edge in the order components initialize.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invocationId", "parentRenderId", "childRenderId"],
+      "properties": {
+        "invocationId": {"description": "Record id of the nested component this constraint comes from.", "$ref": "#/$defs/id"},
+        "parentRenderId": {"description": "Render id of the parent component.", "type": "string"},
+        "childRenderId": {"description": "Render id of the child component.", "type": "string"}
+      }
+    },
+    "fill": {
+      "description": "One slot fill: content given to a component's slot.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fillId", "kind", "slotName", "policy", "ownerRenderId", "ownerClassId", "locationId", "sourceInvocationId", "receiverRenderId", "receiverClassId", "fallbackLocationId"],
+      "properties": {
+        "fillId": {"description": "This fill's record id.", "$ref": "#/$defs/id"},
+        "kind": {"enum": ["implicit", "named", "fallback", "python", "typed-default"]},
+        "slotName": {"description": "The slot name being filled.", "type": "string"},
+        "policy": {"enum": ["template", "python-detached", "typed-default-detached"]},
+        "ownerRenderId": {"description": "Render id of the component whose template supplied the fill, or null for a detached fill.", "$ref": "#/$defs/nullableStr"},
+        "ownerClassId": {"description": "Class id of the owner, or null.", "$ref": "#/$defs/nullableStr"},
+        "locationId": {"description": "Record id of the fill's own source location, or null.", "$ref": "#/$defs/nullableId"},
+        "sourceInvocationId": {"description": "Record id of the nested component tag where the filled slot was created, or null.", "$ref": "#/$defs/nullableId"},
+        "receiverRenderId": {"description": "Render id of the component that receives the fill, or null.", "$ref": "#/$defs/nullableStr"},
+        "receiverClassId": {"description": "Class id of the receiver, or null.", "$ref": "#/$defs/nullableStr"},
+        "fallbackLocationId": {"description": "Record id of the receiver's slot-outlet location used as a fallback source, or null.", "$ref": "#/$defs/nullableId"}
+      }
+    },
+    "slotRegion": {
+      "description": "One physical stretch of HTML where a fill is rendered, bracketed by comment delimiters.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["regionId", "fillId", "receiverRenderId", "slotLocationId", "ownerRenderId", "sourceLocationId", "parentRegionId", "transitionFromRenderId", "resultOwnerRenderId"],
+      "properties": {
+        "regionId": {"description": "This slot region's record id.", "$ref": "#/$defs/id"},
+        "fillId": {"description": "Record id of the fill this slot region renders.", "$ref": "#/$defs/id"},
+        "receiverRenderId": {"description": "Render id of the receiving component, or null.", "$ref": "#/$defs/nullableStr"},
+        "slotLocationId": {"description": "Record id of the receiver's slot-outlet location, or null.", "$ref": "#/$defs/nullableId"},
+        "ownerRenderId": {"description": "Render id of the owning component, or null.", "$ref": "#/$defs/nullableStr"},
+        "sourceLocationId": {"description": "Record id of the fill's source location, or null.", "$ref": "#/$defs/nullableId"},
+        "parentRegionId": {"description": "Record id of the enclosing slot region, or null for a top-level slot region.", "$ref": "#/$defs/nullableId"},
+        "transitionFromRenderId": {"description": "Render id whose scope this slot region transitions from, or null.", "$ref": "#/$defs/nullableStr"},
+        "resultOwnerRenderId": {"description": "Render id that owns the slot region's rendered result, or null.", "$ref": "#/$defs/nullableStr"}
+      }
+    },
+    "graph": {
+      "description": "One ownership graph: the components from a single independent render, and how they own each other.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["graphId", "componentClasses", "componentInstances", "sourceLocations", "nestedComponents", "componentExecutionOrderConstraints", "fills", "slotRegions"],
+      "properties": {
+        "graphId": {"description": "This graph's id, dense and zero-based, equal to its position in 'graphs'.", "type": "integer", "minimum": 0},
+        "componentClasses": {"type": "array", "items": {"$ref": "#/$defs/componentClass"}},
+        "componentInstances": {"type": "array", "items": {"$ref": "#/$defs/componentInstance"}},
+        "sourceLocations": {"description": "Source locations (development only; empty in production).", "type": "array", "items": {"$ref": "#/$defs/sourceLocation"}},
+        "nestedComponents": {"type": "array", "items": {"$ref": "#/$defs/nestedComponent"}},
+        "componentExecutionOrderConstraints": {"type": "array", "items": {"$ref": "#/$defs/componentExecutionOrderConstraint"}},
+        "fills": {"type": "array", "items": {"$ref": "#/$defs/fill"}},
+        "slotRegions": {"type": "array", "items": {"$ref": "#/$defs/slotRegion"}}
+      }
+    }
+  }
+}

@@ -1,0 +1,121 @@
+{
+ "delimiters": {
+  "format": "comment-v1"
+ },
+ "graphs": [
+  {
+   "componentClasses": [
+    {
+     "classId": "Page_df2715",
+     "className": "Page"
+    },
+    {
+     "classId": "Child_3b64a6",
+     "className": "Child"
+    }
+   ],
+   "componentExecutionOrderConstraints": [
+    {
+     "childRenderId": "c2",
+     "invocationId": 1,
+     "parentRenderId": "c1"
+    }
+   ],
+   "componentInstances": [
+    {
+     "classId": "Page_df2715",
+     "instanceId": 1,
+     "invocationId": null,
+     "parentRenderId": null,
+     "renderId": "c1",
+     "transparent": false
+    },
+    {
+     "classId": "Child_3b64a6",
+     "instanceId": 2,
+     "invocationId": 1,
+     "parentRenderId": "c1",
+     "renderId": "c2",
+     "transparent": false
+    }
+   ],
+   "fills": [],
+   "graphId": 0,
+   "nestedComponents": [
+    {
+     "invocationId": 1,
+     "locationId": 2,
+     "parentRegionId": null,
+     "relays": [
+      {
+       "key": "@c-click",
+       "locationId": 1,
+       "payload": {
+        "args": null,
+        "classId": "Page_df2715",
+        "debounce": null,
+        "event": "click",
+        "handler": "save",
+        "key": null,
+        "once": false,
+        "prevent": false,
+        "self": false,
+        "stop": false,
+        "throttle": null,
+        "type": "citry-dom-event"
+       },
+       "source": "direct"
+      }
+     ],
+     "sourceClassId": "Page_df2715",
+     "sourceRenderId": "c1",
+     "tagName": "child",
+     "targetClassId": "Child_3b64a6",
+     "targetRenderId": "c2"
+    }
+   ],
+   "slotRegions": [],
+   "sourceLocations": [
+    {
+     "carrierInstanceId": 1,
+     "kind": "boundary-relay",
+     "locationId": 1,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 28,
+      "start": 11
+     },
+     "sourcePos": {
+      "column": 11,
+      "line": 1
+     }
+    },
+    {
+     "carrierInstanceId": 1,
+     "kind": "component-call",
+     "locationId": 2,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 31,
+      "start": 2
+     },
+     "sourcePos": {
+      "column": 2,
+      "line": 1
+     }
+    }
+   ]
+  }
+ ],
+ "mode": "development",
+ "protocol": "citry-client-graph/1",
+ "revision": "7f1ca4a2e37134bfef277c9b2f6ac9a6fa77b689af649777be38863f90783509"
+}

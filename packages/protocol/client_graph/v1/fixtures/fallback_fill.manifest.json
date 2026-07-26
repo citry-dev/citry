@@ -1,0 +1,145 @@
+{
+ "delimiters": {
+  "format": "comment-v1"
+ },
+ "graphs": [
+  {
+   "componentClasses": [
+    {
+     "classId": "Page_df2715",
+     "className": "Page"
+    },
+    {
+     "classId": "Card_0f1c15",
+     "className": "Card"
+    }
+   ],
+   "componentExecutionOrderConstraints": [
+    {
+     "childRenderId": "c2",
+     "invocationId": 1,
+     "parentRenderId": "c1"
+    }
+   ],
+   "componentInstances": [
+    {
+     "classId": "Page_df2715",
+     "instanceId": 1,
+     "invocationId": null,
+     "parentRenderId": null,
+     "renderId": "c1",
+     "transparent": false
+    },
+    {
+     "classId": "Card_0f1c15",
+     "instanceId": 2,
+     "invocationId": 1,
+     "parentRenderId": "c1",
+     "renderId": "c2",
+     "transparent": false
+    }
+   ],
+   "fills": [
+    {
+     "fallbackLocationId": 2,
+     "fillId": 1,
+     "kind": "fallback",
+     "locationId": 3,
+     "ownerClassId": "Card_0f1c15",
+     "ownerRenderId": "c2",
+     "policy": "template",
+     "receiverClassId": "Card_0f1c15",
+     "receiverRenderId": "c2",
+     "slotName": "default",
+     "sourceInvocationId": null
+    }
+   ],
+   "graphId": 0,
+   "nestedComponents": [
+    {
+     "invocationId": 1,
+     "locationId": 1,
+     "parentRegionId": null,
+     "relays": [],
+     "sourceClassId": "Page_df2715",
+     "sourceRenderId": "c1",
+     "tagName": "card",
+     "targetClassId": "Card_0f1c15",
+     "targetRenderId": "c2"
+    }
+   ],
+   "slotRegions": [
+    {
+     "fillId": 1,
+     "ownerRenderId": "c2",
+     "parentRegionId": null,
+     "receiverRenderId": "c2",
+     "regionId": 1,
+     "resultOwnerRenderId": "c2",
+     "slotLocationId": 2,
+     "sourceLocationId": 3,
+     "transitionFromRenderId": "c2"
+    }
+   ],
+   "sourceLocations": [
+    {
+     "carrierInstanceId": 1,
+     "kind": "component-call",
+     "locationId": 1,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Page",
+     "ownerClassId": "Page_df2715",
+     "ownerRenderId": "c1",
+     "sourceOffset": {
+      "end": 25,
+      "start": 15
+     },
+     "sourcePos": {
+      "column": 15,
+      "line": 2
+     }
+    },
+    {
+     "carrierInstanceId": 2,
+     "kind": "slot-outlet",
+     "locationId": 2,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Card",
+     "ownerClassId": "Card_0f1c15",
+     "ownerRenderId": "c2",
+     "sourceOffset": {
+      "end": 71,
+      "start": 24
+     },
+     "sourcePos": {
+      "column": 24,
+      "line": 2
+     }
+    },
+    {
+     "carrierInstanceId": 2,
+     "kind": "fallback-fill",
+     "locationId": 3,
+     "mappingIndex": null,
+     "mappingKey": null,
+     "origin": "fixture://Card",
+     "ownerClassId": "Card_0f1c15",
+     "ownerRenderId": "c2",
+     "sourceOffset": {
+      "end": 71,
+      "start": 24
+     },
+     "sourcePos": {
+      "column": 24,
+      "line": 2
+     }
+    }
+   ]
+  }
+ ],
+ "mode": "development",
+ "protocol": "citry-client-graph/1",
+ "revision": "7364ea8f0112e97f515528b1847634329c93560913560df58cb7aaae6ded1ab6"
+}
