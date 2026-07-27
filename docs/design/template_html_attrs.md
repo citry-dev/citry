@@ -182,10 +182,14 @@ that sees the whole attribute set), so they ship together. Decisions:
 5. **Component tags are out of scope.** Ordinary attributes on `<c-Comp>` are
    kwargs, not HTML attributes; explicit static/dynamic pairs are rejected,
    while `c-bind` spreads keep source-ordered last-one-wins behavior.
-   Client relays (`$c-props`, Alpine event handlers, and Citry `@c-*`
-   handlers) follow the same explicit-provider rule; their `c-bind`
+   **Component-tag client bindings** are browser-side bindings such as
+   `$c-props="{ theme }"`, `@click="select()"`, and
+   `@c-poll.5s="refresh()"` resolved from a nested `<c-*>` tag. They follow the
+   same explicit-provider rule: the parent owns the expression or handler,
+   while the child supplies the component boundary where the browser applies
+   it. Their `c-bind`
    contributions remain source ordered. [`alpinejs.md`](alpinejs.md) is
-   normative for relay behavior. `x-show`,
+   normative for client binding behavior. `x-show`,
    `x-model`, `:class`, `x-transition`, `class`, and all other non-reserved
    attrs stay kwargs. `:c-*` remains invalid on component tags and `#c-*`
    keeps its parser-level contract. There is no automatic Vue-style

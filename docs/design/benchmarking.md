@@ -388,7 +388,7 @@ Everything else maps mechanically:
 | Filters: `json`, `alpine`, `js`, `get_item`, `escape`, `title`, `linebreaksbr`, `default_if_none` | plain function calls in expressions; helpers passed via template data (V3 has no filter syntax by design) |
 | `{% define expr as var %}` (used once, `:1932`) | inline the expression at the use site |
 | `{% static 'js/htmx.js' %}` (used once, `:2757`) | a `static()` helper passed via template data |
-| Alpine attributes (`@click`, `:class`, `x-data`) | the names parse as-is (the grammar allows any non-delimiter chars). One catch: a static attribute's value is literal in citry (html_attrs.md), so an Alpine value that embeds `{{ var }}` (e.g. `@click="{{ model }} = ..."`) must use the dynamic `c-` form to interpolate, or it renders the braces verbatim |
+| Alpine attributes (`@click`, `:class`, `x-data`) | the names parse as-is (the grammar allows any non-delimiter chars). One catch: a static attribute's value is literal in citry (template_html_attrs.md), so an Alpine value that embeds `{{ var }}` (e.g. `@click="{{ model }} = ..."`) must use the dynamic `c-` form to interpolate, or it renders the braces verbatim |
 | `mark_safe` | markupsafe / `mark_html()` |
 | `naturaltime` (django.contrib.humanize) | small local reimplementation, so the citry file does not import Django at module level and the import-time benchmark stays honest |
 
@@ -413,7 +413,7 @@ forms that the engine normalizes at render time:
   **merge**. This is a deliberate special case, matching Vue's class/style
   bindings.
 
-Designed in [`html_attrs.md`](html_attrs.md). The audit there found the
+Designed in [`template_html_attrs.md`](template_html_attrs.md). The audit there found the
 scope is larger than value normalization: the compiler currently flattens
 plain-element attributes into string chunks, so the feature also covers
 `c-bind` spreading and boolean attribute semantics, and it includes a
@@ -426,7 +426,7 @@ render time (`<{{ form_content_tag }}>` resolving to div/table/ul,
 design adds a `<c-element is="...">` built-in (sibling of `<c-component>`,
 which stays components-only) that renders a plain HTML element named at
 render time; the Form case becomes `<c-element c-is="form_content_tag">`.
-Designed in [`dynamic_component.md`](dynamic_component.md), built in
+Designed in [`component_dynamic.md`](component_dynamic.md), built in
 `39824bb`. Needed by the large scenario only.
 
 **Feature C - JS/CSS dependency rendering.** Designed in

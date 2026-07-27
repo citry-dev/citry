@@ -239,14 +239,17 @@ Rules:
 - Every other ordinary attribute passes through to the target: as kwargs for
   `<c-component>`, as HTML attributes for `<c-element>`. The accepted
   graph-first target adds a narrow client-boundary split on `<c-component>`:
-  `$c-props`, Alpine event handlers, and Citry `@c-*` handlers become relay
-  metadata and forward to the actual selected component. Citry `:c-*` State
+  `$c-props`, Alpine event handlers such as `@click`, and Citry handlers such
+  as `@c-save` or `@c-poll.5s` become **component-tag client bindings** and
+  forward to the actual selected component. The parent owns each expression
+  or server handler, while the selected child supplies the component boundary
+  where the browser applies it. Citry `:c-*` State
   bindings remain invalid there, and `#c-*` keeps its separate parser-level
   rules. `<c-element>` instead rejects `$c-props`, while Alpine handlers,
   `@c-*`, and `:c-*` use the selected HTML element's normal path. A1 has
   landed the server split and transparent forwarding to the actual selected
   component. A2 through A9 serialize, adopt, evaluate, replace, and retire
-  those relay records through the browser ownership graph. See [`alpinejs.md`](alpinejs.md) and
+  those client-binding records through the browser ownership graph. See [`alpinejs.md`](alpinejs.md) and
   [`alpinejs_plan.md`](alpinejs_plan.md).
 - The body passes through: fills become the component target's slots. For
   `<c-element>` only the default slot exists (the body, or an explicit
@@ -645,9 +648,9 @@ DJC behavior contract plus the `<c-element>` half:
   names), missing `is` raising `TypeError`, `CitryElement` as `is`
   rejected.
 - Alpine plan A5 added the client-boundary acceptance matrix: direct, dynamic,
-  and `c-bind` relays target the actual selected component; the original
+  and `c-bind` client bindings target the actual selected component; the original
   invoking component remains their source; ordinary attrs stay kwargs; and
-  replacing the selection cleans the old relay lifetime exactly once. The
+  replacing the selection cleans the old client binding lifetime exactly once. The
   browser acceptance coverage lives with the Alpine boundary and morph suites,
   in addition to the server-only dynamic-component tests above.
 - `<c-element>`: static and dynamic tag names, custom-element names

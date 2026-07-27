@@ -571,7 +571,11 @@ manager, renamed (`globalThis.Citry`, `data-citry`, `citry.min.js`):
   return a cleanup function that runs before the callback fires again for
   the same instance id.
 - `loadJs`/`loadCss` from JSON tag descriptors; `markScriptLoaded`/
-  `isScriptLoaded` keyed by URL.
+  `isScriptLoaded` keyed by URL. URL stylesheets share one in-flight promise,
+  settle on the browser's load or error event, and can retry after failure.
+  Graph-linked component callbacks wait for their CSS and sequential
+  JavaScript dependencies, so a callback never treats an inserted but still
+  loading stylesheet as ready.
 - One permanent MutationObserver handles graph and dependency manifests and
   fans batches out to extension providers. The same core owns
   `Citry.alpine`, whose permanent selector, init, magic, morph, and startup
@@ -635,13 +639,11 @@ concept.
   old instance id and only then registers the fresh one, so at the moment of
   retirement a solo instance of a class can momentarily look like the
   class's last, even though a same-class render is about to land. Running
-  the check inline would drop the class's sheet on every such re-render; for
-  a sheet served from a URL that is worse than a flicker, because the manager
-  still records the URL as loaded (8.2) and would not re-fetch it, so the
-  class would lose its styling for good. Deferring the check to a later task
-  and re-counting the live instances then lets the arriving same-class
-  render cancel it; a genuine last-instance departure still collects the
-  sheet.
+  the check inline would drop the class's sheet on every such re-render.
+  Deferring the check to a later task and re-counting the live instances then
+  lets the arriving same-class render cancel it; a genuine last-instance
+  departure still collects the sheet. Collection clears the stylesheet's
+  loaded marker, so a later instance can fetch and apply the URL again.
 - **Re-entrant flush safety.** When the manager flushes queued calls it
   snapshots and clears the pending list before iterating it, so a callback
   or context decorator that synchronously triggers another flush cannot

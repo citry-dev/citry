@@ -61,6 +61,7 @@ As such, the Rust crates are ideal for:
 - **Rust**: Install via [rustup](https://rustup.rs/) v1.93 or higher (nightly toolchain required for edition 2024)
 - **Python**: 3.10 or higher
 - **UV**: Fast Python package installer (recommended)
+- **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based phases: `pyright` (a pinned pyright from `node_modules`) and `citry-client` (TypeScript type-check, Biome lint, and the canary test of the events client package under `packages/js/citry-client`). A current LTS Node is fine; run `pnpm install` once after cloning. pnpm is the repo's Node package manager: the committed lockfile is `pnpm-lock.yaml`, CI installs from it with `pnpm install --frozen-lockfile`, and one root install also covers the workspace members under `packages/js/`. npm is not a substitute here: it does not read `pnpm-workspace.yaml`, so it would skip the `packages/js/citry-client` toolchain and the gate's `citry-client` phase would fail.
 
 ### Installing and Managing Rust
 

@@ -10,8 +10,8 @@ field pairs (`template`/`template_file`, `js`/`js_file`, `css`/`css_file`), the
 hot-reload seam.
 
 For the broader migration context see
-[`citry_migration.md`](citry_migration.md). For the render model that consumes
-the loaded template see [`rendering.md`](rendering.md); for the hook system the
+[`migration_djc.md`](migration_djc.md). For the render model that consumes
+the loaded template see [`component_rendering.md`](component_rendering.md); for the hook system the
 loaders fire into see [`extensions.md`](extensions.md). For operating rules see
 [`/CLAUDE.md`](../../CLAUDE.md).
 
@@ -94,7 +94,7 @@ Decisions made with the maintainer:
    considered and rejected (CSS is not a script, and it collides with the
    planned `Script`/`Style` entry objects). `Dependencies` matches the
    vocabulary the rest of the design already uses (the dependency flow in
-   [`rendering.md`](rendering.md) section 6, the dependency extension in
+   [`component_rendering.md`](component_rendering.md) section 6, the dependency extension in
    [`extensions.md`](extensions.md)). Implementing it as a built-in extension
    realizes DJC #1144 directly instead of deferring it: the extension named
    `dependencies` derives the nested config class name `Dependencies` through
@@ -197,10 +197,12 @@ For each pair (`template`/`template_file`, `js`/`js_file`, `css`/`css_file`):
 Each primary accessor resolves on first call and caches the result in the
 asking class's own `__dict__`: `_citry_template` (the `CitryTemplate`, which
 also carries its compiled form once first rendered, section 4), `_resolved_js`,
-and `_resolved_css`. The merged `Dependencies` result is cached differently: on the
-built-in extension instance, in a weak-keyed per-class map (section 7.3), since
-extension state belongs to the extension, not to user classes. No filesystem
-I/O happens at import time, and a class is never resolved twice.
+and `_resolved_css`. The merged `Dependencies` result is also cached on the
+asking class as `_citry_dependencies_cache` (section 7.3). Keeping a resolved
+`HasHtml` object and any closure back to the component inside that class-owned
+cycle lets garbage collection reclaim the complete generation after registry
+removal or `Citry.clear()`. No filesystem I/O happens at import time, and a
+class is never resolved twice.
 
 One consequence to know about: a subclass that inherits its parent's
 declaration caches its *own* copy of the resolved content. Both classes
@@ -258,7 +260,7 @@ class CitryTemplate:
   cached and compiled. The firing moved out of `_get_compiled_template` into the
   loader so there is exactly one place content enters the engine.
 - The struct's role in #1240 template-only components is recorded with that
-  feature in [`citry_migration.md`](citry_migration.md) (planned-features
+  feature in [`migration_djc.md`](migration_djc.md) (planned-features
   table).
 
 ---
@@ -284,12 +286,17 @@ app = Citry(dirs=["/proj/components"])
 For a `*_file` value (and for `Dependencies` file entries, section 7.4):
 
 1. **Absolute path**: used as-is (must exist).
-2. **Relative to the component's module directory**: the directory of the
-   `.py` file where the class is defined (via `__module__` ->
-   `sys.modules[...].__file__`). This is the colocated single-dir component
-   layout (`card.py` + `card.html` side by side), DJC's most-used pattern.
-   Components without a module file (REPL, exec) skip this tier.
-3. **Relative to each entry of `comp_cls.citry.settings.dirs`**, in order.
+2. **Relative to the declaring class's module directory**: the directory of
+   the `.py` file for the class whose own `__dict__` supplied the file value
+   (via `__module__` -> `sys.modules[...].__file__`). An inherited declaration
+   stays anchored beside its base class rather than moving beside the
+   subclass. This is the colocated single-dir component layout (`card.py` +
+   `card.html` side by side), DJC's most-used pattern. Classes without a module
+   file (REPL, exec) skip this tier.
+3. **Relative to each entry of the component's owning
+   `citry.settings.dirs`**, in order. A plain mixin may supply the declaration
+   and module-directory tier; the concrete component still supplies the
+   engine and its configured roots.
 
 First existing file wins, resolved to an **absolute** `Path`. There is no
 staticfiles tier and no rewriting of the user's path into a comp-dir-relative
@@ -405,13 +412,11 @@ did *this* class declare", which four parts of the merge semantics consume:
 - **`Dependencies = None`.** The rebuild replaces `None` with a synthesized
   config class, erasing the "no entries, no inheritance" signal.
 
-So the extension captures the raw declaration early, in its
-`on_component_class_created` hook, which fires before the config rebuild: at
-that moment `cls.__dict__.get("Dependencies")` is still exactly what the user
-wrote (a class, `None`, or absent). The extension stores that in a weak-keyed
-per-class map and the merge walk reads only these captured declarations. The
-rebuilt config class remains the runtime access point
-(`component.dependencies`); the captured declaration is the merge input.
+ComponentMeta therefore preserves each raw declaration before the config
+rebuild. The extension's branch walk reads those shared source records for
+component and reusable definition bases instead of consulting the rebuilt
+attribute. The rebuilt config class remains the runtime access point
+(`component.dependencies`); the preserved declaration is the merge input.
 
 ### 7.3 `CitryDependencies`: the merged result
 
@@ -425,12 +430,14 @@ class CitryDependencies:
 - `Card.get_dependencies()` (a classmethod delegating through
   `cls.citry.extensions` to the built-in extension instance, section 3.1;
   the implementation lives in `citry/extensions/dependencies.py`) resolves
-  the class's own captured declaration
+  each preserved source declaration
   (normalize shapes, invoke callables, resolve paths and globs relative to
-  *that class's* module dir, then the Citry dirs) and merges ancestors per
-  `extend`: `True` inherits from `__bases__`, `False` inherits nothing, a list
-  of component classes inherits from exactly those. A captured `Dependencies =
-  None` means no own entries and no inheritance.
+  *the declaring class's* module dir, then the Citry dirs) and merges component
+  and reusable definition-base ancestors per `extend`: `True` inherits from
+  `__bases__`, `False` inherits nothing, and a list inherits from exactly those
+  classes. A captured `Dependencies = None` means no own entries and no
+  inheritance for that branch. Resolved files remain registered to the
+  concrete component that consumes the definition.
 - Merge order is **bases first, own entries last** (bases in their declaration
   order, then the class's own), de-duplicated preserving first-seen order (the
   repo-wide determinism rule: never let set iteration order into output). The
@@ -442,24 +449,30 @@ class CitryDependencies:
   (`component_media.py:577-594`) with no recorded rationale, and citry
   deliberately restores the cascade-friendly order. Flagged divergence from
   DJC per migration principle 5.
-- Resolution is recursive over the inheritance graph, cached per class in a
-  weak-keyed map held by the extension instance (state belongs to the
-  extension, and the `Citry`-scoping rule #1413 is satisfied because the
-  extension itself is per-`Citry`).
+- Resolution is recursive over the inheritance graph and cached on each exact
+  Citry-bound component class. File resets and final-alias unregistration
+  remove the entry; bulk clear can release the whole class-owned cache cycle
+  without running per-component extension hooks.
 
 ### 7.4 Dependencies path semantics
 
 Each non-`__html__` entry:
 
-- URLs (`http://`, `https://`, `://`, `/` prefixes) pass through unresolved.
+- A `Path` or other `PathLike` always denotes filesystem input. Existing files
+  become absolute `Path` values; missing values raise `FileNotFoundError`.
+- URL-shaped strings (`http://`, `https://`, `://`, `/` prefixes) pass through
+  unresolved. This keeps `/static/app.css` as a URL while
+  `Path("/tmp/app.css")` remains a file.
 - Globs (`*?[`) expand relative to the module dir, then relative to the Citry
-  dirs; matches become absolute paths.
+  dirs; matches become absolute paths. Absolute `PathLike` globs expand from
+  their absolute location.
 - Plain paths resolve through the section 5.2 chain (the extension reuses
   `assets.py`'s resolution helpers); a path that resolves to an existing file
   becomes absolute and is registered in the reverse index.
-- A path that matches nothing is **kept as-is** (it may be meaningful to the
-  consumer, e.g. a server-side static route), unlike the primary `*_file`
-  fields which raise. This mirrors DJC.
+- A string path that matches nothing is **kept as-is** (it may be meaningful
+  to the consumer, e.g. a server-side static route), unlike `PathLike` entries
+  and the primary `*_file` fields, which raise. This mirrors DJC's unresolved
+  string behavior while keeping Python path objects unambiguously local.
 
 ### 7.5 Loading and emission, same extension
 
@@ -507,8 +520,8 @@ accessors in 3.1):
   `on_template_loaded`, and re-compiles.
 - `Card.reset_files()` - drops the cached primary JS/CSS content, then fires
   the `on_files_reset` hook so extensions evict their own per-class state. The `dependencies` built-in implements it to drop its merged
-  `CitryDependencies` cache; the future emission phase evicts its script cache
-  the same way (DJC's `reset_files` evicts the script cache directly, but in
+  `CitryDependencies` cache and its mutable script compatibility keys the same
+  way (DJC's `reset_files` evicts the script cache directly, but in
   citry the core must not reach into a specific extension). This is the first
   concrete consumer of the custom-hook dispatch
   ([`extensions.md`](extensions.md) section 9).
@@ -554,14 +567,16 @@ The watcher that calls these on file change is designed in
 - **The `dependencies` extension exists from day one** (section 7), carrying
   the loading half. Its emission half (built later, see
   [`dependencies.md`](dependencies.md)) stashes collected assets into
-  `CitryContext.extra` and places them at serialize time (rendering.md
+  `CitryContext.extra` and places them at serialize time (component_rendering.md
   section 6), consuming `get_js`, `get_css`, and its own `get_dependencies`.
 - **Built-in extensions are a new extension-system capability** (section 7.2):
   a fixed built-in set prepended by the manager (`_builtin_extensions()`), reserved names. Noted
   in [`extensions.md`](extensions.md) section 2.
 - **Const-body cache**: gains per-class eviction (`_evict_component_cache`),
-  used by `reset_template`. Folding (constness.md) is unaffected; a template
-  reload simply invalidates all signatures for that class.
+  used by `reset_template` and successful final-alias unregistration. Its
+  component keys are weak references, so cached render work does not keep a
+  dropped class alive. Folding (component_constness.md) is unaffected; a template reload
+  simply invalidates all signatures for that class.
 - **Body generator cache** (#1326): unchanged mechanism; `reset_template`
   clears it together with the template.
 - **Template-only components** (#1240): `CitryTemplate` is the synthesis seat;
@@ -592,9 +607,9 @@ The subsystem as built:
   (template/js/css resolution chain, content loading + hooks, reverse-index
   registration, the reset implementations + the reset hook).
 - `citry/extensions/dependencies.py` (built-in extension): the
-  `DependenciesExtension` (`name = "dependencies"`), declaration capture,
+  `DependenciesExtension` (`name = "dependencies"`), source-record traversal,
   normalization, glob/path resolution of entries, `CitryDependencies` + merge,
-  the weak-keyed merged cache.
+  and the class-owned merged cache.
 - `citry/component.py`: `js`, `js_file`, `css`, `css_file` fields; the
   accessor/reset classmethods (`get_template`, `get_js`, `get_css`,
   `get_dependencies`, `reset_template`, `reset_files`), thin delegates into
@@ -612,4 +627,4 @@ The subsystem as built:
 - `citry/util/misc.py`: `get_module_info`, `is_glob`.
 - Package top level exports the structs only (`CitryTemplate`,
   `CitryDependencies`); no `get_*` / `reset_*` function exports.
-- Tests: `tests/test_assets.py`, `tests/test_ext_dependencies.py`.
+- Tests: `tests/test_assets.py`, `tests/test_deps.py`.

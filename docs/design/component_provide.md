@@ -1,11 +1,12 @@
 # Design: provide / inject and the `<c-provide>` component
 
-**Status (2026-07-24): built.** All phases are implemented: the
+**Status (2026-07-24): server and client contracts implemented.** The
 `CitryContext.provides` plumbing, the hand-over at component and slot
 boundaries, `Component.provide()`/`inject()`, the `<c-provide>` built-in with
-the `transparent` flag, `Component.deinject()` compound-scope boundaries,
+the `transparent` flag, `Component.unprovide()` compound-scope boundaries,
 lazy per-instance built-in registration, and the reserved-name guard. Tests in
 [`tests/test_provide.py`](../../packages/py/citry/tests/test_provide.py).
+Section 10 specifies the corresponding Alpine client API and graph routing.
 
 This document specifies how a component passes data to components rendered
 deep below it, without threading the data through every kwarg in between:
@@ -13,6 +14,12 @@ the provide/inject feature (React's `ContextProvider`, Vue's
 `provide()`/`inject()`). It covers how the data travels, the
 `Component.provide()` / `Component.inject()` APIs, the `<c-provide>` built-in
 component, and how the data reaches slot content.
+
+The server and client channels intentionally share descendant-only lookup,
+nearest-provider replacement, slot-site visibility, and explicit blocking.
+They do not share values automatically. The client model is summarized and
+cross-linked from
+[`alpinejs.md`](alpinejs.md#47-client-ambient-context).
 
 It extends [`component_rendering.md`](component_rendering.md) (the three-phase pipeline and
 `CitryContext`), [`component_rendering_defer.md`](component_rendering_defer.md) (children
@@ -112,7 +119,7 @@ not only around the place it was written.
 
 Choosing "rendered" keeps the provider state from the "written" side unless a
 component explicitly establishes a compound-scope boundary with
-`deinject()`. Normally, the content was picked up at the component call
+`unprovide()`. Normally, the content was picked up at the component call
 (`<c-provider>` above), the receiving component inherits everything provided
 around that call, and on the way to its `<c-slot>` it can only provide more.
 So rendering slot content with the provides of the slot site keeps everything
@@ -199,7 +206,7 @@ only what was provided *above* the component, never the component's own
 `provide()` calls, and keeps working after the render finishes for as long
 as the component instance is kept (the data sits on a plain attribute).
 
-### 5.3 `Component.deinject(key, /)`
+### 5.3 `Component.unprovide(key, /)`
 
 Hides one inherited provide from this component's descendants. The current
 component can still inject the inherited payload because its own outgoing
