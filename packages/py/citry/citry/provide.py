@@ -11,7 +11,7 @@ This is the citry form of React's ContextProvider and Vue's
 The data travels on ``CitryContext.provides`` along the render path (the
 chain of contexts that rendering passes through), so it reaches components
 inside slot content rendered below the provider, not just components written
-below it. See docs/design/provide.md for the full model.
+below it. See docs/design/component_provide.md for the full model.
 
 This module holds the building blocks: the immutable payload
 (``make_provided``), the key validation, the inject lookup, and the

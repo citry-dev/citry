@@ -23,7 +23,7 @@ a queue):
 2. Bottom-up: join each component's segments back together with each child's
    finished HTML in its placeholder's slot.
 
-See docs/design/deferred_rendering.md section 6.
+See docs/design/component_rendering_defer.md section 6.
 """
 
 from __future__ import annotations

@@ -6,7 +6,7 @@ implicit default-slot body, a plain string, a Python function, an already
 composed ``CitryElement``, or an already rendered ``CitryRender``. All of them
 normalize to a ``Slot``: a callable that is invoked at the ``<c-slot>`` site
 with the slot data and a handle to the slot's fallback content. See
-docs/design/slots.md section 3.
+docs/design/component_slots.md section 3.
 
 A Slot is:
 

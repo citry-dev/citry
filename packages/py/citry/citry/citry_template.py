@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 class DeclaredSlot(NamedTuple):
     """
     A ``<c-slot>`` the template declares, kept for checking the component's own
-    template against its ``Slots`` schema (see docs/design/slots.md section 9.5):
+    template against its ``Slots`` schema (see docs/design/component_slots.md section 9.5):
     the static slot name and its (line, column) for error messages.
     """
 

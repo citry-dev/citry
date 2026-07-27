@@ -13,7 +13,7 @@ match ``argparse.ArgumentParser.add_argument`` so they can be handed straight to
 argparse. Keeping the model as data (rather than imperative parser-building code)
 means one command definition can feed more than one front end later, for example
 a Model Context Protocol tool schema. The full design is in
-``docs/design/extension_commands.md``.
+``docs/design/extensions_commands.md``.
 
 This module uses only the standard library (``argparse`` and ``dataclasses``);
 importing it pulls in no third-party code.
