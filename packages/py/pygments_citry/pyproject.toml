@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools"]
+# The `license-files` field below needs setuptools 77 or newer.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -18,6 +19,9 @@ keywords = [
 ]
 authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
 classifiers = [
+    "Environment :: Plugins",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
@@ -27,8 +31,10 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Text Processing :: Markup :: HTML",
     "Topic :: Software Development :: Documentation",
+    "Typing :: Typed",
 ]
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 # Only Pygments. The floor is where the plugin lexer API we rely on is stable;
 # the docs environment keeps its own upper pin (see the root pyproject `docs`
 # extra), which resolves against this floor.
