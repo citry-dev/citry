@@ -803,6 +803,7 @@ Tags follow the format: `<package-name>@<version>`. A tag with no language prefi
 
 - `citry-core@1.3.0` - the citry-core Python package
 - `citry@0.2.0` - the citry Python package
+- `pygments-citry@0.1.0` - the Citry Pygments lexer
 
 **Note:** When a second host language (JS/PHP/Go) is published, we will revisit how to disambiguate its tags from the Python ones (likely a `<language>@` prefix on the non-default languages); until then the prefix would be noise. The version after `@` must match the package's `pyproject.toml` version: the publish workflow checks this and fails the release on a mismatch.
 
@@ -824,12 +825,23 @@ Currently, releases are managed manually:
    makes CI fail its `uv sync --locked --all-packages` step (in `repo--check` and
    the test workflows), not only at publish time.
 3. **Update CHANGELOG.md** with release notes
-4. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use `citry@0.2.0` for the citry package)
+4. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
 5. **Push the tag**: `git push origin citry-core@1.3.0`
 
 Pushing the tag triggers the package's publish workflow, which verifies the tag matches the pyproject version, builds the distributions, smoke-tests them, and uploads to PyPI. **Release ordering**: citry depends on `citry-core`, so when bumping both, publish `citry-core` first and let it reach PyPI before tagging `citry`.
 
-`citry` and `citry-core` are versioned and released **independently on purpose**, so each can ship on its own cadence. That is why the ordering above is a deliberate manual step rather than an automated cross-package release orchestrator: an orchestrator would couple the two releases, which is exactly what we want to avoid.
+The packages are versioned and released **independently on purpose**, so each
+can ship on its own cadence. The ordering rule applies only when `citry` and
+`citry-core` both change; `pygments-citry` has no cross-package release
+ordering requirement.
+
+**`citry` pins one exact `citry-core` version** (`citry-core==1.4.0`, not a
+range). The runtime node classes in `citry.nodes` read the source that
+citry-core's compiler emits, so a citry-core release that changes that output
+would otherwise reach an already-published `citry` that cannot read it. Raise
+the pin in the same change that bumps citry-core's version, before tagging
+either. That makes the two releases a pair: publish `citry-core` first, wait
+for PyPI, then tag `citry`.
 
 ### Chronological Ordering
 
@@ -879,6 +891,7 @@ Since GitHub Actions workflows cannot be nested in subdirectories (all workflow 
 **Examples:**
 
 - `py--citry-core--publish.yml` - Publish Python citry-core package
+- `py--pygments-citry--publish.yml` - Publish the Citry Pygments lexer
 - `py--citry-core--test.yml` - Test Python citry-core package (future)
 - `js--citry-core--publish.yml` - Publish JavaScript citry-core package (future)
 - `go--citry-core--publish.yml` - Publish Go citry-core package (future)
@@ -995,13 +1008,17 @@ The repository uses **three separate test workflows** to optimize CI performance
 
 ### Publishing
 
-Each Python package has its own tag-triggered publish workflow (`py--citry-core--publish.yml`, `py--citry--publish.yml`). Pushing a `<package>@<version>` tag builds the distributions, smoke-tests them, publishes to PyPI, and creates a matching GitHub Release.
+Each published Python package has its own tag-triggered workflow:
+`py--citry-core--publish.yml`, `py--citry--publish.yml`, or
+`py--pygments-citry--publish.yml`. Pushing a `<package>@<version>` tag builds
+the distributions, smoke-tests them, publishes to PyPI, and creates a matching
+GitHub Release.
 
 **PyPI auth is Trusted Publishing (OIDC), not a stored API token.** The release jobs carry `id-token: write` and target a GitHub environment named `pypi`; PyPI verifies the workflow's OIDC identity, so there is no secret to keep. Before a package's first publish, configure a PyPI **publisher** (a *pending publisher* if the project does not exist yet) with:
 
-- PyPI project name (`citry-core` / `citry`)
+- PyPI project name (`citry-core`, `citry`, or `pygments-citry`)
 - Owner and repository (`citry-dev/citry`)
-- Workflow filename (`py--citry-core--publish.yml` / `py--citry--publish.yml`)
+- Matching workflow filename under `.github/workflows/`
 - Environment name (`pypi`)
 
 The first publish from a configured pending publisher creates the project. The GitHub `pypi` environment is also where you can add a manual-approval gate on releases.
