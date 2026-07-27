@@ -36,10 +36,9 @@ done without them.
   writes or edits code runs the same map, delegate, verify loop you do (see
   Working mode above), so say so in the brief. A read-only research or
   enumeration agent does not need it.
-- **Effort for delegated work.** Give a delegated task at least **xhigh**
+- **Effort for delegated work.** Give a delegated task at least **high or greater**
   reasoning effort; for coding, and for detailed analysis (line-by-line review,
-  per-file audits), use **max**, or ultracode when the task warrants a full
-  multi-agent pass. Delegated work gets the same effort you would give it
+  per-file audits). Delegated work gets the same effort you would give it
   yourself, not less. In a Workflow, set `effort` on the `agent()` calls; for a
   subagent, run the session at that effort (or pick an agent/model tier that
   matches). When the delegated work is simply lookup, enumeration, or another
@@ -114,6 +113,21 @@ When a docstring, `.pyi` stub, or README seems to constrain the answer,
 is authoritative; stubs and prose can lag behind it. The same applies in
 reverse: before editing a doc or docstring, read the code it describes. A
 confidently-worded but stale or wrong claim is worse than no doc at all.
+
+## You own every downstream artifact your change touches
+
+When you change something, you are responsible for updating **everything that
+goes stale because of it**, across the whole codebase, not just the file you
+started in. A schema change means the reference validator, the producer, every
+consumer, the fixtures, the tests, the spec, and the design docs all move in
+the same change. "I only touched the JSON, the Python validator is not my
+problem" is wrong: leaving a downstream artifact on the old shape is drift, and
+drift is a defect. Before calling a change done, walk its blast radius (the
+cross-binding audit in Mechanism 4 is one instance of this) and either update
+each stale artifact or record explicitly, in the change and to the user, what
+you deliberately left for a later stage and why. The only reason to skip a
+downstream update is an explicit decision to defer it (a later phase, a
+separate task you name); silence is not deferral.
 
 ## Mechanism 2 - plan mode for structural changes
 
@@ -191,7 +205,7 @@ change, any claim you are about to call settled - **dispatch a separate agent
 (or a Workflow review stage) to review it adversarially.** Brief the reviewer
 to hunt for holes, missed cases, untested assertions, and wrong claims, not to
 confirm; name the artifact and its sources; tell it to read `CLAUDE.md` first;
-run it at **max** effort. Fold its findings back before delivery.
+run it at **high or greater** effort. Fold its findings back before delivery.
 
 - **"Self-critique before delivery" means route the critique to a fresh
   agent**, not reread your own output. The fable-mode skill's final step is
@@ -292,6 +306,16 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   are harder to read than direct positives.
 - **New or changed behavior comes with tests.** Tests are the primary
   evidence the change works and the guard against regressions.
+- **Docs tests cover machinery, not page content.** Tests under
+  `docs_site/tests/` use synthetic inputs to verify the renderer, builder,
+  components, and guard implementations. Do not lock a user-facing Markdown
+  page's wording, headings, journey order, links, example output, or snippet
+  membership into pytest assertions. Validate content-wide requirements with
+  a registered guard under `docs_site/_internal/guards/`, and report the
+  Markdown source and line so a content author can fix the page without
+  hunting through test files. An executable example that needs automated
+  validation must opt in to a general guard; do not hard-code its page in a
+  test.
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.
@@ -351,6 +375,15 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   - Prefer plain words over compiler/CS jargon ("computed once and reused"
     over "memoized"; "pre-render the constant parts" over "fold"; "drops the
     least recently used entry" over "LRU eviction").
+  - Describe through actions, not nouns, and lead with the data flow (who does
+    what to what). A noun-centric label leaves the reader to deduce the flow;
+    the action states it. "The server sends the browser this JSON" beats "the
+    server-to-browser manifest"; "the browser checks the manifest before using
+    it" beats "manifest validation". State the verb instead of packing it into
+    a noun phrase the reader has to unpack ("ownership manifest emission
+    ordering" -> "the server writes the manifest before the later blocks
+    run"). This is why docs that open with a noun definition read as hard to
+    skim: the reader still has to reconstruct what happens.
   - Do not coin a vague adjective and then reuse it as the name of a thing
     ("flat function", "folded body", "the const-keyed body"). The adjective
     means nothing to someone who did not build it. Say what the thing is or
@@ -365,7 +398,30 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   - The test: would the sentence still mean something to a reader who has
     not opened any other file? If not, unpack it or add the one-line
     explanation.
+- **Use the client-graph spec as the internal-doc reference and public-facing checklist.**
+  [`packages/protocol/client_graph/v1/spec.md`](packages/protocol/client_graph/v1/spec.md)
+  demonstrates how a protocol or design document can stay precise without
+  reading like committee paperwork:
+  - Start with what happens and why the reader needs it. Put the motivating
+    problem before a glossary, implementation conditions, or record names.
+  - Use numbered cases when each case needs its own code example. Show the
+    smallest template or data fragment that proves the point; omit class and
+    setup scaffolding that does not change the explanation.
+  - Introduce a term only when the reader reaches the relationship it names.
+    Define it through an action and, when two terms are easy to confuse, state
+    the one difference that separates them.
+  - Keep the welcoming walkthrough separate from the exact interfaces and
+    validation rules. A casual reader can stop after the first part, while an
+    implementer can continue without losing precision.
+  - Avoid the failure pattern that made the earlier draft hard to read:
+    definitions before motivation, abstract noun-heavy prose, repeated
+    explanations of the same relationship, full component classes where a
+    template fragment suffices, and examples that apply equally to both terms
+    they are supposed to distinguish.
 - **User-facing docs (README, future docs site) additionally:**
+  - Keep lines in code blocks at 70 characters or fewer when practical. The
+    rendered documentation column is narrower than a terminal. This applies
+    to fenced code in Markdown and code examples inside docstrings.
   - Lead with the symptom, not the mechanism. Frame a gotcha around what
     the reader will see ("the second render shows stale text"), not the
     internal cause; mention the mechanism only when the reader needs it to
@@ -400,6 +456,13 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 - Prefer a robust solution over a one-line shortcut. When choosing between
   proper architecture and a quick patch, recommend the proper one outright.
 - Honest analysis. Do not validate user suggestions uncritically.
+- **Design docs must state error modes, not only the happy path.** When a
+  design doc proposes a setting, field, format, or mechanism, say what happens
+  on invalid or unexpected input: rejected at construction, ignored, defaulted,
+  or degraded. A reader deciding whether to rely on the thing needs its failure
+  behavior, and the answer often surfaces a design gap. For a setting, cover at
+  least the out-of-range value; for a wire field, the missing, extra, or wrong
+  value; for a mechanism, the input it cannot handle.
 - Sentence case for markdown headings.
 
 ## Writing rule - don't document what isn't there
