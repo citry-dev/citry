@@ -417,5 +417,8 @@ class template_parser:
     # Constants
 
     HTML_VOID_ELEMENTS: frozenset[str]
-    RESERVED_TAG_NAMES: frozenset[str]
     """HTML void elements (elements that cannot have children, e.g. ``<br/>``)."""
+
+    RESERVED_TAG_NAMES: frozenset[str]
+    """Structural ``<c-*>`` tags the parser handles itself (e.g. ``c-if``, ``c-slot``),
+    so they never resolve to a user component."""
