@@ -28,12 +28,13 @@ pub mod parser;
 pub mod parser_context;
 pub mod utils {
     pub mod pest;
+    pub(crate) mod template_fragment;
 }
 
 // Re-export the types that users need
 pub use crate::ast::{
-    Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot,
-    Template, TemplateElement, Text, Token,
+    Comment, Expr, FillDataField, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlEndTag,
+    HtmlStartTag, Node, StaticNamedSlot, Template, TemplateElement, Text, Token,
 };
 pub use crate::error::ParseError;
 pub use crate::lang::lang::{Lang, LangImpl, ParseExprResult};

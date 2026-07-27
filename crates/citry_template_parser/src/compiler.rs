@@ -19,7 +19,8 @@
 //! | (inline string) | Plain text, static HTML | `"""text"""` |
 //! | `ExprNode` | `{{ expr }}` | `ExprNode(source, (start, end,), """expr""", ("var1",))` |
 //! | `TemplateNode` | Nested template on an HTML tag's dynamic attr | `TemplateNode(source, (start, end,), """expr""", ("var1",))` |
-//! | `ComponentNode` | `<c-Card>`, `<c-component>`, any `<c-*>` | `ComponentNode(source, (start, end,), (attrs,), [body], (used_vars,), """name""", contains_fills)` |
+//! | `ElementAttrsNode` | An HTML tag's attribute region when any attr is dynamic | `ElementAttrsNode(source, (start, end,), (attrs,), (used_vars,))` |
+//! | `ComponentNode` | `<c-Card>`, `<c-component>`, any `<c-*>` | `ComponentNode(source, (start, end,), (attrs,), [body], (used_vars,), """name""", contains_fills)` - a tag carrying `#c-key` appends one trailing argument, the key expression as an `ExprHtmlAttr` |
 //! | `IfNode` | `<c-if>/<c-elif>/<c-else>` | `IfNode(source, (branch, ...,), (used_vars,))` |
 //! | `ForNode` | `<c-for>/<c-empty>` | `ForNode(source, (branch, ...,), (used_vars,))` |
 //! | `SlotNode` | `<c-slot>` | `SlotNode(source, (start, end,), (attrs,), [body], (used_vars,), (introduced_vars,))` |
@@ -28,7 +29,8 @@
 //! Each `IfNode`/`ForNode` branch is a tuple:
 //! `((start, end,), (attrs,), [body], (introduced_vars,))`
 //!
-//! **Attribute nodes** (inside the `(attrs,)` tuple of component/slot/fill nodes):
+//! **Attribute nodes** (inside the `(attrs,)` tuple of component/slot/fill
+//! nodes and `ElementAttrsNode`):
 //!
 //! | Attr class | Citry source | Signature (Python) |
 //! |---|---|---|
@@ -36,10 +38,15 @@
 //! | `ExprHtmlAttr` | `c-class="expr"` | `ExprHtmlAttr(source, (start, end,), """key""", """expr""", (used_vars,))` |
 //! | `TemplateHtmlAttr` | `c-body="<div>...</div>"` | `TemplateHtmlAttr(source, (start, end,), """key""", """template""", (used_vars,))` |
 //!
-//! On regular HTML tags (not components), dynamic attributes are **not**
-//! wrapped in `*HtmlAttr` calls. Instead they are split inline: static
-//! string fragments with an `ExprNode`/`TemplateNode` between them,
-//! concatenated at runtime to form the final HTML attribute string.
+//! On regular HTML tags (not components), the attribute region compiles in
+//! one of two forms. A purely static tag flattens its attributes into the
+//! surrounding plain-HTML strings. When any attribute is dynamic (a `c-*`
+//! expression or template value, `c-bind` included), the compiler emits one
+//! `ElementAttrsNode` covering the whole ordinary attribute region, static
+//! attributes included in source order, each wrapped in a `*HtmlAttr` call;
+//! the node resolves the set to a single attribute string at render time
+//! (spreads, `True`/`False`/`None` values, and `class`/`style` merging are
+//! runtime decisions).
 //!
 //! ## Formatting conventions (Python output)
 //!
@@ -55,6 +62,12 @@
 //!   (`<div></div>`).
 //! - `<c-raw>` compiles its body to a single literal text part; the inner
 //!   content is emitted verbatim, with no template processing.
+//! - `#c-*` framework metadata never joins the attribute set. On a plain
+//!   element, `#c-key="expr"` emits ` data-citry-key=":` + `ExprNode(expr)` +
+//!   `"` (an empty scope segment before the colon) and `#c-ignore` emits the
+//!   literal ` data-citry-morph="ignore"`, both after the ordinary
+//!   attributes. On a component tag, `#c-key` rides as the `ComponentNode`'s
+//!   trailing key argument (see the table above), never as a kwarg.
 //!
 //! ## Determinism
 //!
@@ -67,17 +80,22 @@ use std::iter::Peekable;
 use std::rc::Rc;
 use std::vec::IntoIter;
 
+use unicode_normalization::UnicodeNormalization;
+
 use crate::ast::{
     HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template, TemplateElement, Token,
 };
 use crate::constants::{
     COMPONENT_NODE, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELEMENT_TAG,
     C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG,
-    ELEMENT_ATTRS_NODE, EXPR_ATTR_NODE, EXPR_NODE, FILL_NODE, FOR_NODE, HTML_VOID_ELEMENTS,
-    IF_NODE, SLOT_NODE, STATIC_ATTR_NODE, TAG_ATTR_RULES, TEMPLATE_ATTR_NODE,
+    ELEMENT_ATTRS_NODE, EXPR_ATTR_NODE, EXPR_NODE, FILL_DATA_BINDING, FILL_NODE, FOR_NODE,
+    HTML_VOID_ELEMENTS, IF_NODE, KEY_OUTPUT_ATTR, META_ATTR_IGNORE, META_ATTR_KEY,
+    MORPH_OUTPUT_ATTR, MORPH_OUTPUT_IGNORE_VALUE, SLOT_NODE, STATIC_ATTR_NODE, TAG_ATTR_RULES,
+    TEMPLATE_ATTR_NODE,
 };
 use crate::error::CompileError;
 use crate::lang::lang::{Lang, LangImpl, LangSpecArgument, LangSpecStruct};
+use crate::utils::template_fragment::template_fragment;
 
 /// Compile a template AST into language-specific source code.
 ///
@@ -458,24 +476,35 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
     // The tag name can technically contain quote characters, so we escape the string.
     items.push(LangSpecArgument::UnsafeString(format!("<{}", tag_name)));
 
+    // `#c-*` attributes are framework metadata, not part of the tag's
+    // attribute set: they are split off and emitted as their own output
+    // fragments after the ordinary attributes, so the attribute region (and
+    // the on_attrs_resolved hook behind it) never sees them. `partition`
+    // keeps source order on both sides, so the output is deterministic.
+    let (meta_attrs, ordinary_attrs): (Vec<&HtmlAttr>, Vec<&HtmlAttr>) = start_tag_attrs
+        .iter()
+        .partition(|attr| attr.kind == HtmlAttrKind::Meta);
+
     // When any attribute is dynamic (a `c-*` expression/template value, which
     // includes `c-bind`), the whole attribute set must stay structured until
     // render time: spreads, True/False/None values, and class/style merging
-    // are all decided by runtime values (docs/design/html_attrs.md section 5).
+    // are all decided by runtime values (docs/design/template_html_attrs.md section 5).
     // Emit one ElementAttrsNode covering the attribute region; it renders to
     // ` key="value" ...` (with a leading space) or to an empty string.
     // Purely static tags keep the flattened fast path below.
-    let has_dynamic_attr = start_tag_attrs
+    let has_dynamic_attr = ordinary_attrs
         .iter()
         .any(|attr| matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template));
 
     if has_dynamic_attr {
         let start_tag = node.start_tag();
-        let attr_args: Vec<LangSpecArgument> =
-            start_tag_attrs.iter().map(compile_html_attr).collect();
+        let attr_args: Vec<LangSpecArgument> = ordinary_attrs
+            .iter()
+            .map(|attr| compile_html_attr(attr))
+            .collect::<Result<Vec<_>, _>>()?;
         // Used variables for the node are those of its attributes (the tag's
         // body is compiled separately below). Deduped in first-seen order.
-        let attr_var_tokens: Vec<Token> = start_tag_attrs
+        let attr_var_tokens: Vec<Token> = ordinary_attrs
             .iter()
             .flat_map(|attr| attr.used_variables.iter().cloned())
             .collect();
@@ -508,7 +537,7 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
         // All attributes are static: emit them as plain string chunks.
         // Format: ` key="value"` or ` key` (for boolean)
         // Note: HTML escaping of quotes in values will be handled at runtime
-        for attr in start_tag_attrs {
+        for attr in ordinary_attrs {
             // Note: Use `HtmlAttr.value` so we format also quotes around the value.
             // In HTML, `key=""` and `key=''` are boolean attributes (same as bare `key`),
             // so we normalize empty values to boolean form.
@@ -527,6 +556,12 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
             };
             items.push(LangSpecArgument::UnsafeString(attr_str));
         }
+    }
+
+    // `#c-*` framework metadata renders last in the start tag, after the
+    // ordinary attributes, in source order.
+    for attr in meta_attrs {
+        compile_meta_attr_on_element(attr, &mut items)?;
     }
 
     // Handle closing of start tag
@@ -552,6 +587,59 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
     }
 
     Ok(items)
+}
+
+/// Emit the rendered form of one `#c-*` attribute on a plain HTML element,
+/// appending output fragments to the element's start-tag items.
+///
+/// - `#c-key="expr"` emits ` data-citry-key=":` + `ExprNode(expr)` + `"`.
+///   The attribute value is composite: a scope segment, a colon, then the
+///   evaluated key. On a plain element the scope segment is empty, which
+///   keeps element keys and component instance keys (whose scope is the
+///   child's class id) from ever pairing with each other during a morph.
+///   The expression evaluates at render time (per loop iteration inside
+///   `<c-for>`), and the runtime escapes its result like any expression.
+/// - `#c-ignore` emits the literal ` data-citry-morph="ignore"` marker the
+///   client's morph hook reads to leave the subtree untouched.
+fn compile_meta_attr_on_element(
+    attr: &HtmlAttr,
+    items: &mut Vec<LangSpecArgument>,
+) -> Result<(), CompileError> {
+    match attr.key.content.as_str() {
+        META_ATTR_KEY => {
+            // The parser guarantees the key carries a non-empty expression.
+            let inner_value = attr.inner_value.as_ref().ok_or_else(|| {
+                CompileError::Generic(format!(
+                    "Internal error: '{}' reached the compiler without its expression value",
+                    META_ATTR_KEY
+                ))
+            })?;
+            items.push(LangSpecArgument::UnsafeString(format!(
+                " {}=\":",
+                KEY_OUTPUT_ATTR
+            )));
+            items.push(format_expr_node(
+                EXPR_NODE,
+                &attr.token,
+                &inner_value.content,
+                &attr.used_variables,
+            ));
+            items.push(LangSpecArgument::UnsafeString("\"".to_string()));
+        }
+        META_ATTR_IGNORE => {
+            items.push(LangSpecArgument::UnsafeString(format!(
+                " {}=\"{}\"",
+                MORPH_OUTPUT_ATTR, MORPH_OUTPUT_IGNORE_VALUE
+            )));
+        }
+        other => {
+            return Err(CompileError::Generic(format!(
+                "Internal error: unexpected '#c-*' attribute '{}' reached the compiler (the parser accepts only '{}' and '{}')",
+                other, META_ATTR_KEY, META_ATTR_IGNORE
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Reject `is` together with `c-is` on `<c-component>` / `<c-element>`.
@@ -628,8 +716,9 @@ fn dedupe_variable_names(tokens: &[Token]) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut names: Vec<String> = Vec::new();
     for token in tokens {
-        if seen.insert(token.content.clone()) {
-            names.push(token.content.clone());
+        let canonical_name: String = token.content.nfkc().collect();
+        if seen.insert(canonical_name.clone()) {
+            names.push(canonical_name);
         }
     }
     names
@@ -866,11 +955,20 @@ fn compile_component_node(node: Node) -> Result<LangSpecArgument, CompileError> 
     // Get has_fills boolean (before moving node)
     let has_fills = node.contains_fills();
 
-    // Compile all attributes as HtmlAttr calls:
+    // `#c-*` attributes are framework metadata: they never become the child's
+    // kwargs, so they are split off from the ordinary attributes here. The
+    // parser only lets `#c-key` through on a component tag.
+    let (meta_attrs, ordinary_attrs): (Vec<HtmlAttr>, Vec<HtmlAttr>) = node
+        .attrs()
+        .iter()
+        .cloned()
+        .partition(|attr| attr.kind == HtmlAttrKind::Meta);
+
+    // Compile the ordinary attributes as HtmlAttr calls:
     // `(HtmlAttr(...), HtmlAttr(...), ...)`
     let mut attr_args = Vec::new();
-    for attr in node.attrs() {
-        attr_args.push(compile_html_attr(attr));
+    for attr in &ordinary_attrs {
+        attr_args.push(compile_html_attr(attr)?);
     }
 
     // Get used variables from the node, deduped while preserving first-seen
@@ -892,38 +990,60 @@ fn compile_component_node(node: Node) -> Result<LangSpecArgument, CompileError> 
     //    ("var1", "var2", ...),
     //    "comp-name",
     //    has_fills,
+    //    ExprHtmlAttr(...),     # only when the tag carries `#c-key`
     // )`
+    let mut arguments = vec![
+        // Argument 1: `source` - original template source string as variable used for error reporting
+        LangSpecArgument::Variable("source".to_string()),
+        // Argument 2: `(start, end)` - positional metadata for error reporting
+        LangSpecArgument::Tuple(vec![
+            LangSpecArgument::Int(start_pos),
+            LangSpecArgument::Int(end_pos),
+        ]),
+        // Argument 3: `(HtmlAttr(...), HtmlAttr(...), ...)` - tuple of attributes
+        LangSpecArgument::Tuple(attr_args),
+        // Argument 4: `[body_item1, body_item2, ...]` - list of body items
+        LangSpecArgument::List(body_items),
+        // Argument 5: `("var1", "var2", ...)` - tuple of used variables
+        LangSpecArgument::Tuple(
+            used_variables
+                .iter()
+                .map(|name| LangSpecArgument::SafeString(name.clone()))
+                .collect(),
+        ),
+        // Argument 6: `"comp-name"` - component name
+        LangSpecArgument::UnsafeString(comp_name),
+        // Argument 7: `has_fills` - boolean whether the body contains fills
+        LangSpecArgument::Bool(has_fills),
+    ];
+
+    // Argument 8 (only when the tag is keyed): the `#c-key` expression as an
+    // `ExprHtmlAttr`, resolved by the runtime and stamped onto the child's
+    // root element(s) as the composite key attribute. It rides as its own
+    // trailing argument, never inside the attrs tuple, so it can never become
+    // a kwarg (plain `key` and `c-key` inputs stay completely ordinary).
+    // Unkeyed tags emit no argument, so their generated code is unchanged and
+    // the runtime class defaults the parameter to None.
+    for attr in &meta_attrs {
+        if attr.key.content == META_ATTR_KEY {
+            arguments.push(build_attr_struct(EXPR_ATTR_NODE, attr));
+        } else {
+            // The parser rejects every other `#c-*` name on component tags.
+            return Err(CompileError::Generic(format!(
+                "Internal error: unexpected '#c-*' attribute '{}' on component tag",
+                attr.key.content
+            )));
+        }
+    }
+
     Ok(LangSpecArgument::Struct(LangSpecStruct {
         name: COMPONENT_NODE.to_string(),
-        arguments: vec![
-            // Argument 1: `source` - original template source string as variable used for error reporting
-            LangSpecArgument::Variable("source".to_string()),
-            // Argument 2: `(start, end)` - positional metadata for error reporting
-            LangSpecArgument::Tuple(vec![
-                LangSpecArgument::Int(start_pos),
-                LangSpecArgument::Int(end_pos),
-            ]),
-            // Argument 3: `(HtmlAttr(...), HtmlAttr(...), ...)` - tuple of attributes
-            LangSpecArgument::Tuple(attr_args),
-            // Argument 4: `[body_item1, body_item2, ...]` - list of body items
-            LangSpecArgument::List(body_items),
-            // Argument 5: `("var1", "var2", ...)` - tuple of used variables
-            LangSpecArgument::Tuple(
-                used_variables
-                    .iter()
-                    .map(|name| LangSpecArgument::SafeString(name.clone()))
-                    .collect(),
-            ),
-            // Argument 6: `"comp-name"` - component name
-            LangSpecArgument::UnsafeString(comp_name),
-            // Argument 7: `has_fills` - boolean whether the body contains fills
-            LangSpecArgument::Bool(has_fills),
-        ],
+        arguments,
     }))
 }
 
 /// Compile a `<c-element>` node (a plain HTML element whose tag name is
-/// decided at render time). See docs/design/dynamic_component.md.
+/// decided at render time). See docs/design/component_dynamic.md.
 ///
 /// With a static `is` and no fills in the body, the tag name is known here,
 /// so the node compiles exactly as if the element had been written out:
@@ -1213,7 +1333,29 @@ fn compile_control_flow_node(
 /// Then, we know the output will never change, and we can replace `HtmlAttr` instance
 /// with its result as text. Thus, on subsequent renders, we won't have to re-evaluate the expression
 /// or template.
-fn compile_html_attr(attr: &HtmlAttr) -> LangSpecArgument {
+fn compile_html_attr(attr: &HtmlAttr) -> Result<LangSpecArgument, CompileError> {
+    // Use different class based on kind
+    let class_name = match attr.kind {
+        HtmlAttrKind::Expression => EXPR_ATTR_NODE,
+        HtmlAttrKind::Template => TEMPLATE_ATTR_NODE,
+        HtmlAttrKind::Static => STATIC_ATTR_NODE,
+        // `#c-*` attributes have their own emission (inline output fragments
+        // on plain elements, the trailing key argument on component nodes);
+        // reaching here means a caller forgot to split them off first.
+        HtmlAttrKind::Meta => {
+            return Err(CompileError::Generic(format!(
+                "Internal error: '#c-*' attribute '{}' reached ordinary attribute compilation",
+                attr.key.content
+            )));
+        }
+    };
+    Ok(build_attr_struct(class_name, attr))
+}
+
+/// Build the `<Class>(source, (start, end), key, value, (vars,))` call for one
+/// attribute. Shared by `compile_html_attr` (which picks the class from the
+/// attribute kind) and the component `#c-key` emission (which pins the class).
+fn build_attr_struct(class_name: &str, attr: &HtmlAttr) -> LangSpecArgument {
     let start_pos = attr.token.start_index;
     let end_pos = attr.token.end_index;
 
@@ -1227,7 +1369,13 @@ fn compile_html_attr(attr: &HtmlAttr) -> LangSpecArgument {
     // Template fragments are attribute-level grouping syntax, so emit only
     // their inner payload. Template values always remain strings: notably,
     // `<></>` becomes `""`, not the boolean-attribute sentinel `True`.
-    let attr_value = if attr.kind == HtmlAttrKind::Template {
+    let attr_value = if let Some(pattern) = &attr.fill_data_pattern {
+        if let Some(whole) = &pattern.whole {
+            LangSpecArgument::UnsafeString(whole.content.nfkc().collect())
+        } else {
+            compile_fill_data_binding(pattern)
+        }
+    } else if attr.kind == HtmlAttrKind::Template {
         let template = attr.inner_value.as_ref().map_or("", |inner_value| {
             template_fragment(&inner_value.content)
                 .map_or(inner_value.content.as_str(), |fragment| fragment.inner)
@@ -1270,6 +1418,31 @@ fn compile_html_attr(attr: &HtmlAttr) -> LangSpecArgument {
                     .map(|name| LangSpecArgument::SafeString(name.clone()))
                     .collect(),
             ),
+        ],
+    })
+}
+
+fn compile_fill_data_binding(pattern: &crate::ast::FillDataPattern) -> LangSpecArgument {
+    let fields = pattern
+        .fields
+        .iter()
+        .map(|field| {
+            LangSpecArgument::Tuple(vec![
+                LangSpecArgument::SafeString(field.source.content.clone()),
+                LangSpecArgument::SafeString(field.target.content.nfkc().collect()),
+            ])
+        })
+        .collect();
+    let rest = pattern
+        .rest
+        .as_ref()
+        .map_or_else(String::new, |token| token.content.nfkc().collect());
+
+    LangSpecArgument::Struct(LangSpecStruct {
+        name: FILL_DATA_BINDING.to_string(),
+        arguments: vec![
+            LangSpecArgument::Tuple(fields),
+            LangSpecArgument::SafeString(rest),
         ],
     })
 }

@@ -6,6 +6,7 @@
 use std::collections::HashSet;
 
 use pyo3::prelude::*;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::grammar::Rule;
 
@@ -226,6 +227,84 @@ impl Comment {
 // HTML ATTRIBUTE
 // #########################################################
 
+/// One source-to-target field in a `<c-fill data="{ ... }">` binding.
+#[pyclass]
+#[derive(Debug, PartialEq, Clone)]
+pub struct FillDataField {
+    /// Slot-data key read by this field.
+    #[pyo3(get)]
+    pub source: Token,
+    /// Template variable introduced for the field value.
+    #[pyo3(get)]
+    pub target: Token,
+}
+
+#[pymethods]
+impl FillDataField {
+    #[new]
+    fn new(source: Token, target: Token) -> Self {
+        Self { source, target }
+    }
+
+    fn __eq__(&self, other: &FillDataField) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "FillDataField(source={:?}, target={:?})",
+            self.source, self.target
+        )
+    }
+}
+
+/// Parsed binding form for a `<c-fill>` `data` attribute.
+#[pyclass]
+#[derive(Debug, PartialEq, Clone)]
+pub struct FillDataPattern {
+    /// Token containing the complete binding expression.
+    #[pyo3(get)]
+    pub token: Token,
+    /// Variable receiving the whole slot-data record, for `data="data"`.
+    #[pyo3(get)]
+    pub whole: Option<Token>,
+    /// Selected fields, empty for a whole-record binding.
+    #[pyo3(get)]
+    pub fields: Vec<FillDataField>,
+    /// Variable receiving unselected fields after `**`, when present.
+    #[pyo3(get)]
+    pub rest: Option<Token>,
+}
+
+#[pymethods]
+impl FillDataPattern {
+    #[new]
+    fn new(
+        token: Token,
+        whole: Option<Token>,
+        fields: Vec<FillDataField>,
+        rest: Option<Token>,
+    ) -> Self {
+        Self {
+            token,
+            whole,
+            fields,
+            rest,
+        }
+    }
+
+    fn __eq__(&self, other: &FillDataPattern) -> bool {
+        self == other
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "FillDataPattern(token={:?}, whole={:?}, fields={:?}, rest={:?})",
+            self.token, self.whole, self.fields, self.rest
+        )
+    }
+}
+
 /// The kind of HTML attribute, determining how it should be processed
 #[pyclass]
 #[derive(Debug, PartialEq, Clone)]
@@ -246,6 +325,14 @@ pub enum HtmlAttrKind {
     ///
     /// Cannot be boolean attribute, as value MUST start/end with HTML tags.
     Template,
+    /// Framework-metadata attribute - name starts with `#c-`. An instruction
+    /// to the framework about the node itself (how it is identified and
+    /// morphed), never render data or a component input.
+    ///
+    /// Two members exist: `#c-key="expr"` (expression-valued, server-evaluated
+    /// like an Expression attribute) and the bare `#c-ignore` marker. The
+    /// parser rejects any other `#c-*` name.
+    Meta,
 }
 
 #[pymethods]
@@ -255,6 +342,7 @@ impl HtmlAttrKind {
             HtmlAttrKind::Static => "HtmlAttrKind::Static".to_string(),
             HtmlAttrKind::Expression => "HtmlAttrKind::Expression".to_string(),
             HtmlAttrKind::Template => "HtmlAttrKind::Template".to_string(),
+            HtmlAttrKind::Meta => "HtmlAttrKind::Meta".to_string(),
         }
     }
 }
@@ -290,11 +378,15 @@ pub struct HtmlAttr {
     /// All variables used in the attribute
     #[pyo3(get)]
     pub used_variables: Vec<Token>,
+    /// Parsed binding for a direct `<c-fill data="...">` attribute.
+    #[pyo3(get)]
+    pub fill_data_pattern: Option<FillDataPattern>,
 }
 
 #[pymethods]
 impl HtmlAttr {
     #[new]
+    #[pyo3(signature = (token, key, value, inner_value, quote_char, kind, comments, used_variables, fill_data_pattern=None))]
     fn new(
         token: Token,
         key: Token,
@@ -304,6 +396,7 @@ impl HtmlAttr {
         kind: HtmlAttrKind,
         comments: Vec<Comment>,
         used_variables: Vec<Token>,
+        fill_data_pattern: Option<FillDataPattern>,
     ) -> Self {
         Self {
             token,
@@ -314,6 +407,7 @@ impl HtmlAttr {
             kind,
             comments,
             used_variables,
+            fill_data_pattern,
         }
     }
 
@@ -326,11 +420,12 @@ impl HtmlAttr {
             && self.kind == other.kind
             && self.comments == other.comments
             && self.used_variables == other.used_variables
+            && self.fill_data_pattern == other.fill_data_pattern
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "HtmlAttr(token={:?}, key={:?}, value={:?}, inner_value={:?}, quote_char={:?}, kind={:?}, comments={:?}, used_variables={:?})",
+            "HtmlAttr(token={:?}, key={:?}, value={:?}, inner_value={:?}, quote_char={:?}, kind={:?}, comments={:?}, used_variables={:?}, fill_data_pattern={:?})",
             self.token,
             self.key,
             self.value,
@@ -338,7 +433,8 @@ impl HtmlAttr {
             self.quote_char,
             self.kind,
             self.comments,
-            self.used_variables
+            self.used_variables,
+            self.fill_data_pattern
         )
     }
 }
@@ -732,13 +828,13 @@ pub(crate) fn remove_introduced_variables(
     if introduced_variables.is_empty() {
         return used_variables;
     }
-    let introduced_names: HashSet<&str> = introduced_variables
+    let introduced_names: HashSet<String> = introduced_variables
         .iter()
-        .map(|v| v.content.as_str())
+        .map(|v| v.content.nfkc().collect())
         .collect();
     used_variables
         .into_iter()
-        .filter(|v| !introduced_names.contains(v.content.as_str()))
+        .filter(|v| !introduced_names.contains(&v.content.nfkc().collect::<String>()))
         .collect()
 }
 

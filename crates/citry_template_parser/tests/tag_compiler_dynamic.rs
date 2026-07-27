@@ -1,7 +1,7 @@
 // Tests for the dynamic-target built-in tags: `<c-component>` (dynamic
 // component) and `<c-element>` (dynamic HTML element).
 //
-// See docs/design/dynamic_component.md. The compiler handles the static
+// See docs/design/component_dynamic.md. The compiler handles the static
 // cases at compile time:
 // - `<c-component is="X">` rewrites to the named component node (`<c-X>`).
 // - `<c-element is="x">` (no fills in the body) rewrites to the plain HTML

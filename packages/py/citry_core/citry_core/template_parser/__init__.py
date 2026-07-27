@@ -38,6 +38,8 @@ from citry_core.template_parser.parse import parse_template
 Token: TypeAlias = _rust.template_parser.Token
 Comment: TypeAlias = _rust.template_parser.Comment
 HtmlAttrKind: TypeAlias = _rust.template_parser.HtmlAttrKind
+FillDataField: TypeAlias = _rust.template_parser.FillDataField
+FillDataPattern: TypeAlias = _rust.template_parser.FillDataPattern
 HtmlAttr: TypeAlias = _rust.template_parser.HtmlAttr
 HtmlStartTag: TypeAlias = _rust.template_parser.HtmlStartTag
 HtmlEndTag: TypeAlias = _rust.template_parser.HtmlEndTag
@@ -55,6 +57,8 @@ TagRules: TypeAlias = _rust.template_parser.TagRules
 # HTML void elements (elements that cannot have children, e.g. <br/>),
 # single-sourced from the Rust parser.
 HTML_VOID_ELEMENTS: frozenset[str] = _rust.template_parser.HTML_VOID_ELEMENTS
+# Structural ``<c-*>`` tags, single-sourced from the Rust parser.
+RESERVED_TAG_NAMES: frozenset[str] = _rust.template_parser.RESERVED_TAG_NAMES
 
 __all__ = [
     # Functions
@@ -64,6 +68,8 @@ __all__ = [
     "Token",
     "Comment",
     "HtmlAttrKind",
+    "FillDataField",
+    "FillDataPattern",
     "HtmlAttr",
     "HtmlStartTag",
     "HtmlEndTag",
@@ -77,4 +83,5 @@ __all__ = [
     "TagRules",
     # Constants
     "HTML_VOID_ELEMENTS",
+    "RESERVED_TAG_NAMES",
 ]

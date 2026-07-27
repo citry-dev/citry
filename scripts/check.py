@@ -3,13 +3,16 @@
 The project gate: run every check in one pass and report all results.
 
 Phases: cargo fmt, cargo clippy, cargo test, ruff check, ruff format, mypy,
-pytest, and the custom validators (scripts/validate.py). Every phase runs even
-after an earlier one fails, so a single invocation surfaces every problem at
-once instead of one-at-a-time.
+pyright, citry-client (tsc, biome, and the canary over the events client
+package), pytest, and the custom validators (scripts/validate.py). Every phase
+runs even after an earlier one fails, so a single invocation surfaces every
+problem at once instead of one-at-a-time.
 
 This only CHECKS; it never edits files. Fix the reported issues yourself, then
-re-run. It assumes the workspace is already set up (`uv sync --all-packages`)
-and that `cargo`, `uv`, and a Rust toolchain are on PATH.
+re-run. It assumes the workspace is already set up (`uv sync --all-packages`,
+plus `pnpm install` for the pinned Node tools: pyright and the citry-client
+toolchain) and that `cargo`, `uv`, `node`, `pnpm`, and a Rust toolchain are
+on PATH.
 
 Usage:
     python scripts/check.py                    # human-readable, streamed output
@@ -57,7 +60,7 @@ def _phases() -> list[tuple[str, list[str]]]:
             ],
         ),
         # `--cov` (no target) uses [tool.coverage.run] source; pytest-cov enforces
-        # `fail_under` from [tool.coverage.report] (docs/design/citry_migration_tests.md).
+        # `fail_under` from [tool.coverage.report] (docs/design/migration_djc_tests.md).
         ("pytest", [*uvr, "pytest", "--cov", "--cov-report=term-missing:skip-covered"]),
         ("validators", [sys.executable, "scripts/validate.py"]),
     ]

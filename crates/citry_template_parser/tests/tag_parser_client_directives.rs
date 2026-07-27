@@ -104,6 +104,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules = Rc::new(rules);
@@ -126,6 +127,7 @@ mod tests {
                 required_attrs: vec![vec!["title".to_string()]],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules = Rc::new(rules);

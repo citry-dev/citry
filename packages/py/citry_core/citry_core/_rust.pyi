@@ -241,15 +241,50 @@ class template_parser:
         value: template_parser.Token
 
     class HtmlAttrKind:
-        """Enum: Static, Expression, or Template."""
+        """Enum: Static, Expression, Template, or Meta."""
 
         Static: template_parser.HtmlAttrKind
         Expression: template_parser.HtmlAttrKind
         Template: template_parser.HtmlAttrKind
+        Meta: template_parser.HtmlAttrKind
+
+    class FillDataField:
+        """One source-to-target field in a fill-data destructuring pattern."""
+
+        def __init__(self, source: template_parser.Token, target: template_parser.Token) -> None: ...
+        source: template_parser.Token
+        target: template_parser.Token
+
+    class FillDataPattern:
+        """A parsed whole-record or one-level fill-data binding."""
+
+        def __init__(
+            self,
+            token: template_parser.Token,
+            whole: template_parser.Token | None,
+            fields: list[template_parser.FillDataField],
+            rest: template_parser.Token | None,
+        ) -> None: ...
+        token: template_parser.Token
+        whole: template_parser.Token | None
+        fields: list[template_parser.FillDataField]
+        rest: template_parser.Token | None
 
     class HtmlAttr:
-        """An HTML attribute (static, dynamic expression, or nested template)."""
+        """An HTML attribute (static, dynamic expression, nested template, or #c-* framework metadata)."""
 
+        def __init__(
+            self,
+            token: template_parser.Token,
+            key: template_parser.Token,
+            value: template_parser.Token | None,
+            inner_value: template_parser.Token | None,
+            quote_char: str | None,
+            kind: template_parser.HtmlAttrKind,
+            comments: list[template_parser.Comment],
+            used_variables: list[template_parser.Token],
+            fill_data_pattern: template_parser.FillDataPattern | None = None,
+        ) -> None: ...
         token: template_parser.Token
         key: template_parser.Token
         value: template_parser.Token | None
@@ -257,6 +292,7 @@ class template_parser:
         quote_char: str | None
         used_variables: list[template_parser.Token]
         comments: list[template_parser.Comment]
+        fill_data_pattern: template_parser.FillDataPattern | None
 
     class HtmlStartTag:
         """An HTML opening tag with its attributes."""
@@ -370,13 +406,16 @@ class template_parser:
             required_attrs: list[list[str]] | None = None,
             allowed_slots: list[str] | None = None,
             required_slots: list[str] | None = None,
+            slot_data_fields: dict[str, list[str]] | None = None,
         ) -> None: ...
         allowed_attrs: list[list[str]] | None
         required_attrs: list[list[str]]
         allowed_slots: list[str] | None
         required_slots: list[str]
+        slot_data_fields: dict[str, list[str]]
 
     # Constants
 
     HTML_VOID_ELEMENTS: frozenset[str]
+    RESERVED_TAG_NAMES: frozenset[str]
     """HTML void elements (elements that cannot have children, e.g. ``<br/>``)."""

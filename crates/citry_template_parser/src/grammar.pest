@@ -211,8 +211,21 @@ html_tag_name = @{
 // - name (boolean attribute)
 // Value optional to support boolean attributes
 // E.g. `<div disabled>` is valid.
+//
+// Attribute names starting with `#c-` are citry framework metadata (the
+// `#c-key` / `#c-ignore` channel). They get their own name rule, tried first,
+// so the parser can tell the channel apart from ordinary attributes by rule
+// alone. Names starting with `#` but not `#c-` stay ordinary attributes.
 html_attribute = {
-    html_attribute_name ~ html_attribute_value?
+    (html_meta_attribute_name | html_attribute_name) ~ html_attribute_value?
+}
+
+// Framework-metadata attribute name: `#c-` followed by the same character set
+// as an ordinary attribute name. Which `#c-*` names actually exist is
+// validated in the parser (unknown names are a parse error), not here, so the
+// error can name the known members instead of failing to match.
+html_meta_attribute_name = @{
+    "#c-" ~ (!(WHITESPACE | "=" | "/" | ">" | "<" | ("{" ~ "#")) ~ ANY)*
 }
 
 // Attribute name
@@ -366,6 +379,37 @@ python_esc = _{ "\\" ~ ANY }
 // MUST match the count of `{` and `}`, they don't have to match the count of `(` and `)`.
 python_nested_curly = _{ "{" ~ python_expr ~ "}" }
 python_other_char = { !"}" ~ !"{" ~ ANY }
+
+/////////////////////////////
+// FILL DATA BINDINGS
+/////////////////////////////
+
+// Citry supports Vue-like destructuring-and-binding of slot data.
+// Eg what in Vue is `<template #body="{ field1, field2: fieldB }">`
+// In Citry is `<c-fill data="{ field1, field2 as fieldB }">`
+// We intentionally don't use colon `:` to map the fields as that's
+// pattern specific to JavaScript. Instead, we use `field2 as fieldB`.
+
+// Parsed independently from an attribute's inner value. Compound atomicity
+// disables Pest's implicit whitespace so every accepted whitespace position
+// is visible in this small language.
+fill_data_pattern = ${
+    SOI ~ fill_data_ws ~ (fill_data_destructure | fill_data_identifier) ~ fill_data_ws ~ EOI
+}
+fill_data_destructure = {
+    "{" ~ fill_data_ws ~ fill_data_item ~
+    (fill_data_ws ~ "," ~ fill_data_ws ~ fill_data_item)* ~
+    fill_data_ws ~ ","? ~ fill_data_ws ~ "}"
+}
+fill_data_item = { fill_data_rest | fill_data_field }
+fill_data_rest = { "**" ~ fill_data_ws ~ fill_data_identifier }
+fill_data_field = {
+    fill_data_identifier ~
+    (fill_data_ws_required ~ "as" ~ fill_data_ws_required ~ fill_data_identifier)?
+}
+fill_data_identifier = @{ ("_" | XID_START) ~ ("_" | XID_CONTINUE)* }
+fill_data_ws = _{ WHITESPACE* }
+fill_data_ws_required = _{ WHITESPACE+ }
 
 /////////////////////////////
 // UTILITIES

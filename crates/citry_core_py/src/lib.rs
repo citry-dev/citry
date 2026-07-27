@@ -12,10 +12,10 @@ pub mod template_parser;
 use pyo3::prelude::*;
 use pyo3::types::PyFrozenSet;
 
-use citry_template_parser::constants::HTML_VOID_ELEMENTS;
+use citry_template_parser::constants::{HTML_VOID_ELEMENTS, RESERVED_TAG_NAMES};
 use citry_template_parser::{
-    Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot,
-    TagRules, Template, TemplateElement, Text, Token,
+    Comment, Expr, FillDataField, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlEndTag,
+    HtmlStartTag, Node, StaticNamedSlot, TagRules, Template, TemplateElement, Text, Token,
 };
 
 use crate::html_transform::{mark_html, transform_html};
@@ -52,6 +52,8 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     template_parser_mod.add_class::<Token>()?;
     template_parser_mod.add_class::<Comment>()?;
     template_parser_mod.add_class::<HtmlAttrKind>()?;
+    template_parser_mod.add_class::<FillDataField>()?;
+    template_parser_mod.add_class::<FillDataPattern>()?;
     template_parser_mod.add_class::<HtmlAttr>()?;
     template_parser_mod.add_class::<HtmlStartTag>()?;
     template_parser_mod.add_class::<HtmlEndTag>()?;
@@ -69,6 +71,12 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     template_parser_mod.add(
         "HTML_VOID_ELEMENTS",
         PyFrozenSet::new(m.py(), HTML_VOID_ELEMENTS)?,
+    )?;
+    // Structural <c-*> names come from the parser itself, so Python registries
+    // and documentation guards cannot drift from the grammar's reserved set.
+    template_parser_mod.add(
+        "RESERVED_TAG_NAMES",
+        PyFrozenSet::new(m.py(), RESERVED_TAG_NAMES)?,
     )?;
 
     Ok(())

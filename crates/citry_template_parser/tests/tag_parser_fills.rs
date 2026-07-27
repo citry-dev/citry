@@ -4,13 +4,50 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
+    use std::collections::{BTreeMap, HashMap};
     use std::rc::Rc;
 
     use citry_template_parser::parser::parse_template;
     use citry_template_parser::parser_context::TagRules;
+    use citry_template_parser::{Node, Template, TemplateElement};
 
     use super::common::assert_parse_error;
+
+    fn first_fill(template: &Template) -> &Node {
+        let TemplateElement::Node(component) = &template.elements[0] else {
+            panic!("expected an outer component");
+        };
+        let Node::WithBody { body, .. } = component else {
+            panic!("expected the outer component to have a body");
+        };
+        body.elements
+            .iter()
+            .find_map(|element| match element {
+                TemplateElement::Node(node) if node.tag_name() == "c-fill" => Some(node),
+                _ => None,
+            })
+            .expect("expected a c-fill child")
+    }
+
+    fn rules_with_slot_data(slot_name: &str, fields: &[&str]) -> Rc<HashMap<String, TagRules>> {
+        let mut slot_data_fields = BTreeMap::new();
+        slot_data_fields.insert(
+            slot_name.to_string(),
+            fields.iter().map(|field| (*field).to_string()).collect(),
+        );
+        let mut rules = HashMap::new();
+        rules.insert(
+            "c-grid".to_string(),
+            TagRules {
+                allowed_attrs: None,
+                required_attrs: vec![],
+                allowed_slots: Some(vec![slot_name.to_string()]),
+                required_slots: vec![],
+                slot_data_fields,
+            },
+        );
+        Rc::new(rules)
+    }
 
     // #######################################
     // FILL PLACEMENT AND CONSTRAINTS
@@ -305,6 +342,240 @@ mod tests {
     }
 
     #[test]
+    fn test_fill_data_destructuring_records_fields_aliases_rest_and_targets() {
+        let input = r#"<c-my-comp><c-fill name="default" data="{
+            root_attrs,
+            table_attrs as inner_table_attrs,
+            **rest,
+        }">{{ root_attrs }}{{ inner_table_attrs }}{{ rest }}</c-fill></c-my-comp>"#;
+        let template = parse_template(input, None, None).unwrap();
+        let fill = first_fill(&template);
+        let pattern = fill
+            .attrs()
+            .iter()
+            .find(|attr| attr.key.content == "data")
+            .and_then(|attr| attr.fill_data_pattern.as_ref())
+            .expect("direct data has a parsed pattern");
+
+        assert!(pattern.whole.is_none());
+        assert_eq!(
+            pattern
+                .fields
+                .iter()
+                .map(|field| (field.source.content.as_str(), field.target.content.as_str()))
+                .collect::<Vec<_>>(),
+            vec![
+                ("root_attrs", "root_attrs"),
+                ("table_attrs", "inner_table_attrs")
+            ]
+        );
+        assert_eq!(
+            pattern.rest.as_ref().map(|token| token.content.as_str()),
+            Some("rest")
+        );
+        assert_eq!(
+            fill.introduced_variables()
+                .iter()
+                .map(|token| token.content.as_str())
+                .collect::<Vec<_>>(),
+            vec!["root_attrs", "inner_table_attrs", "rest"]
+        );
+        assert!(template.used_variables.is_empty());
+    }
+
+    #[test]
+    fn test_fill_data_destructuring_accepts_single_rest_unicode_and_unquoted_forms() {
+        for input in [
+            r#"<c-my-comp><c-fill name="default" data="{ **rest }">{{ rest }}</c-fill></c-my-comp>"#,
+            r#"<c-my-comp><c-fill name="default" data="{ café as résultat }">{{ résultat }}</c-fill></c-my-comp>"#,
+            r#"<c-my-comp><c-fill name="default" data={value}>{{ value }}</c-fill></c-my-comp>"#,
+        ] {
+            let template = parse_template(input, None, None);
+            assert!(
+                template.is_ok(),
+                "expected valid destructuring for {input:?}: {template:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_fill_data_destructuring_rejects_malformed_or_ambiguous_patterns() {
+        for input in [
+            "{}",
+            "{, x}",
+            "{x,, y}",
+            "{x y}",
+            "{x as}",
+            "{as y}",
+            "{x AS y}",
+            "{x as y as z}",
+            "{x as {y}}",
+            "{x.y}",
+            "{x[0]}",
+            "{'x'}",
+            "{x: y}",
+            "{*rest}",
+            "{***rest}",
+            "{**}",
+            "{**rest as other}",
+            "{x, **rest, y}",
+            "{**rest, **other}",
+            "{class}",
+        ] {
+            let template = format!(
+                "<c-my-comp><c-fill name=\"default\" data=\"{input}\">body</c-fill></c-my-comp>"
+            );
+            assert_parse_error(&template, "<c-fill>");
+        }
+    }
+
+    #[test]
+    fn test_fill_data_destructuring_rejects_duplicate_sources_and_targets() {
+        for (binding, message) in [
+            ("{x as y, x}", "field 'x' more than once"),
+            ("{x as y, y}", "variable 'y' more than once"),
+            ("{x as rest, **rest}", "variable 'rest' more than once"),
+            ("{x as K, y as K}", "variable 'K' more than once"),
+        ] {
+            let template = format!(
+                "<c-my-comp><c-fill name=\"default\" data=\"{binding}\">body</c-fill></c-my-comp>"
+            );
+            assert_parse_error(&template, message);
+        }
+    }
+
+    #[test]
+    fn test_fill_data_bindings_follow_python_identifier_normalization() {
+        let template = parse_template(
+            r#"<c-my-comp><c-fill name="default" data="{ x as K }">{{ K }}</c-fill></c-my-comp>"#,
+            None,
+            None,
+        )
+        .unwrap();
+        let fill = first_fill(&template);
+        assert_eq!(
+            fill.introduced_variables()
+                .iter()
+                .map(|token| token.content.as_str())
+                .collect::<Vec<_>>(),
+            vec!["K"]
+        );
+        assert!(template.used_variables.is_empty());
+    }
+
+    #[test]
+    fn test_typed_slot_data_accepts_known_sources_aliases_whole_and_rest() {
+        let rules = rules_with_slot_data("row", &["item", "index"]);
+        for binding in [
+            "data",
+            "{ item as current_item, index }",
+            "{ item, **rest }",
+            "{ **rest }",
+        ] {
+            let template =
+                format!("<c-grid><c-fill name=\"row\" data=\"{binding}\">body</c-fill></c-grid>");
+            let result = parse_template(&template, None, Some(&rules));
+            assert!(
+                result.is_ok(),
+                "expected known slot-data binding {binding:?} to parse: {:?}",
+                result.err()
+            );
+        }
+    }
+
+    #[test]
+    fn test_typed_slot_data_rejects_unknown_explicit_source() {
+        let rules = rules_with_slot_data("row", &["item", "index"]);
+        let input = r#"<c-grid><c-fill name="row" data="{ missing }">body</c-fill></c-grid>"#;
+        let error = parse_template(input, None, Some(&rules)).unwrap_err();
+        let message = error.to_string();
+        assert!(message.contains("does not expose a slot-data field named 'missing'"));
+        assert!(message.contains("Available fields: item, index."));
+        assert!(message.contains("data=\"{ missing }\""));
+    }
+
+    #[test]
+    fn test_typed_slot_data_empty_shape_rejects_explicit_source() {
+        let rules = rules_with_slot_data("empty", &[]);
+        let input = r#"<c-grid><c-fill name="empty" data="{ value }">body</c-fill></c-grid>"#;
+        let error = parse_template(input, None, Some(&rules)).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("slot's declared data shape has no fields"));
+    }
+
+    #[test]
+    fn test_typed_slot_data_defers_dynamic_or_unknown_shapes() {
+        let rules = rules_with_slot_data("row", &["item"]);
+        let dynamic_name =
+            r#"<c-grid><c-fill c-name="slot_name" data="{ missing }">body</c-fill></c-grid>"#;
+        assert!(parse_template(dynamic_name, None, Some(&rules)).is_ok());
+
+        let mut unknown_rules = HashMap::new();
+        unknown_rules.insert(
+            "c-grid".to_string(),
+            TagRules {
+                allowed_attrs: None,
+                required_attrs: vec![],
+                allowed_slots: Some(vec!["row".to_string()]),
+                required_slots: vec![],
+                slot_data_fields: Default::default(),
+            },
+        );
+        let unknown_rules = Rc::new(unknown_rules);
+        let unknown_shape =
+            r#"<c-grid><c-fill name="row" data="{ missing }">body</c-fill></c-grid>"#;
+        assert!(parse_template(unknown_shape, None, Some(&unknown_rules)).is_ok());
+    }
+
+    #[test]
+    fn test_typed_slot_data_uses_effective_rightmost_providers() {
+        let rules = rules_with_slot_data("row", &["item"]);
+
+        let dynamic_data = r#"<c-grid><c-fill data="{ missing }" c-bind="attrs" name="row">body</c-fill></c-grid>"#;
+        assert!(parse_template(dynamic_data, None, Some(&rules)).is_ok());
+
+        let direct_data = r#"<c-grid><c-fill c-bind="attrs" name="row" data="{ missing }">body</c-fill></c-grid>"#;
+        let error = parse_template(direct_data, None, Some(&rules)).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("does not expose a slot-data field named 'missing'"));
+    }
+
+    #[test]
+    fn test_fill_destructured_targets_follow_source_order_around_c_bind() {
+        let template = parse_template(
+            r#"<c-my-comp><c-fill name="header" data="{x}" c-bind="attrs">{{ x }}</c-fill></c-my-comp>"#,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            template
+                .used_variables
+                .iter()
+                .map(|var| var.content.as_str())
+                .collect::<Vec<_>>(),
+            vec!["x", "attrs"]
+        );
+
+        let template = parse_template(
+            r#"<c-my-comp><c-fill name="header" c-bind="attrs" data="{x as y, **rest}">{{ y }}{{ rest }}</c-fill></c-my-comp>"#,
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            template
+                .used_variables
+                .iter()
+                .map(|var| var.content.as_str())
+                .collect::<Vec<_>>(),
+            vec!["attrs"]
+        );
+    }
+
+    #[test]
     fn test_fill_introduced_vars_follow_source_order_around_c_bind() {
         let template = parse_template(
             r#"<c-my-comp><c-fill name="header" data="x" c-bind="attrs">{{ x }}</c-fill></c-my-comp>"#,
@@ -440,6 +711,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["header".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules = Rc::new(rules);
@@ -459,6 +731,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["default".to_string()]),
                 required_slots: vec!["default".to_string()],
+                slot_data_fields: Default::default(),
             },
         );
         let required_rules = Rc::new(required_rules);
@@ -593,6 +866,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["h".to_string(), "f".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -619,6 +893,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["h".to_string(), "f".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -643,6 +918,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["h".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -670,6 +946,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["h".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -697,6 +974,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["h".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -723,6 +1001,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["h".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);

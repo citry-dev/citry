@@ -95,6 +95,7 @@ fn build_attr(
         kind,
         comments: vec![],
         used_variables: vec![],
+        fill_data_pattern: None,
     }
 }
 
@@ -131,6 +132,16 @@ pub fn expr_attr_unquoted(key: Token, inner_value: Token) -> HtmlAttr {
 /// Build a double-quoted Template attribute (c-* prefix, nested template).
 pub fn template_attr(key: Token, inner_value: Token) -> HtmlAttr {
     build_attr(key, Some(inner_value), Some('"'), HtmlAttrKind::Template)
+}
+
+/// Build a double-quoted framework-metadata attribute (`#c-key="expr"`).
+pub fn meta_attr(key: Token, inner_value: Token) -> HtmlAttr {
+    build_attr(key, Some(inner_value), Some('"'), HtmlAttrKind::Meta)
+}
+
+/// Build a bare framework-metadata attribute (`#c-ignore`).
+pub fn meta_bool_attr(key: Token) -> HtmlAttr {
+    build_attr(key, None, None, HtmlAttrKind::Meta)
 }
 
 /// Modifier: set used_variables on an HtmlAttr.

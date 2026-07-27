@@ -111,7 +111,10 @@ attribute conflicts, `c-bind`, fill names, variable shadowing). **`<c-raw>` is
 the exception:** `process_html_raw` builds the node directly and bypasses
 `validate_node`, so it calls `validate_attributes_present` itself to reject
 attributes on raw tags. Attribute and slot rules per tag are data-driven in
-`constants::TAG_ATTR_RULES_DATA` / `TAG_SLOT_RULES_DATA`.
+`constants::TAG_ATTR_RULES_DATA` / `TAG_SLOT_RULES_DATA`. User `TagRules` also
+carry optional per-slot data-field names. A direct destructuring source is
+checked only when the effective fill name and data provider are both static;
+dynamic providers keep the runtime check.
 
 ## Compiler (`compiler.rs`) and the output-format contract
 

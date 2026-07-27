@@ -17,3 +17,4 @@ pest_derive = { workspace = true }
 thiserror = { workspace = true }
 regex = { workspace = true }
 lazy_static = { workspace = true }
+unicode-normalization = { workspace = true }

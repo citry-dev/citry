@@ -31,6 +31,37 @@ pub const C_SLOT_TAG: &str = "c-slot";
 pub const C_COMPONENT_TAG: &str = "c-component";
 pub const C_ELEMENT_TAG: &str = "c-element";
 
+// Citry client-runtime directives are evaluated by the browser integration,
+// not as Python component inputs. These constants reserve the props
+// spellings while generic attribute nodes preserve their authored source.
+/// Direct client props expression authored on a component tag.
+pub const CLIENT_PROPS_ATTR: &str = "$c-props";
+/// Server-dynamic form whose Python result is the complete client expression.
+pub const DYNAMIC_CLIENT_PROPS_ATTR: &str = "c-$c-props";
+
+// The `#c-*` framework-metadata attribute channel.
+//
+// A `#c-*` attribute is an instruction to the framework about the node itself
+// (how it is identified and morphed), not render data. The channel has exactly
+// two members; any other `#c-*` name is a parse error (see
+// docs/design/events.md section 5.1).
+/// Prefix that marks an attribute as framework metadata (the grammar routes
+/// names starting with this to their own rule).
+pub const META_ATTR_PREFIX: &str = "#c-";
+/// The keying attribute: `#c-key="expr"`. Expression-valued, server-evaluated.
+pub const META_ATTR_KEY: &str = "#c-key";
+/// The whole-subtree morph opt-out marker: bare `#c-ignore`.
+pub const META_ATTR_IGNORE: &str = "#c-ignore";
+/// The rendered attribute `#c-key` compiles to. Its value is composite: a
+/// scope segment, a colon, then the evaluated key (empty scope for a plain
+/// element, the child's class id for a component instance root).
+pub const KEY_OUTPUT_ATTR: &str = "data-citry-key";
+/// The rendered attribute `#c-ignore` compiles to (`data-citry-morph="ignore"`),
+/// read by the client's morph hook.
+pub const MORPH_OUTPUT_ATTR: &str = "data-citry-morph";
+/// The value `#c-ignore` stamps into the morph output attribute.
+pub const MORPH_OUTPUT_IGNORE_VALUE: &str = "ignore";
+
 // Node class name constants
 // These are the class/struct names that need to be defined in each language implementation.
 // They represent the different types of nodes in the compiled template tree.
@@ -41,6 +72,7 @@ pub const IF_NODE: &str = "IfNode";
 pub const FOR_NODE: &str = "ForNode";
 pub const SLOT_NODE: &str = "SlotNode";
 pub const FILL_NODE: &str = "FillNode";
+pub const FILL_DATA_BINDING: &str = "FillDataBinding";
 // Renders the whole attribute region of an HTML start tag that has at least
 // one dynamic attribute (c-* value or c-bind spread). See compile_html_node.
 pub const ELEMENT_ATTRS_NODE: &str = "ElementAttrsNode";
@@ -248,6 +280,7 @@ lazy_static! {
                     required_attrs,
                     allowed_slots,
                     required_slots,
+                    slot_data_fields: Default::default(),
                 },
             );
         }

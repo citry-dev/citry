@@ -21,6 +21,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -54,6 +55,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["header".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -95,6 +97,7 @@ mod tests {
                 required_attrs: vec![vec!["id".to_string()]],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -125,6 +128,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -168,6 +172,7 @@ mod tests {
                 required_attrs: vec![vec!["id".to_string()]],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -210,6 +215,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -235,6 +241,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["default".to_string(), "footer".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -277,6 +284,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -311,6 +319,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec![]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -361,6 +370,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec!["default".to_string(), "footer".to_string()],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -404,6 +414,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec!["default".to_string(), "footer".to_string()],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -447,6 +458,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: Some(vec!["default".to_string()]),
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -472,6 +484,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec!["default".to_string(), "footer".to_string()],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -523,6 +536,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec!["default".to_string(), "footer".to_string()],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -557,6 +571,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec!["default".to_string(), "footer".to_string()],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);
@@ -590,6 +605,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec!["default".to_string(), "footer".to_string()],
+                slot_data_fields: Default::default(),
             },
         );
         let rules_rc = Rc::new(rules);

@@ -1,33 +1,58 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::rc::Rc;
 
 use pest::Parser;
+use unicode_normalization::UnicodeNormalization;
 
 use crate::ast::{
-    remove_introduced_variables, Comment, Expr, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag,
-    Node, StaticNamedSlot, Template, TemplateElement, Text, Token,
+    remove_introduced_variables, Comment, Expr, FillDataField, FillDataPattern, HtmlAttr,
+    HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, StaticNamedSlot, Template, TemplateElement, Text,
+    Token,
 };
 use crate::constants::{
-    CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG,
-    C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_SLOT_TAG, FORBIDDEN_HTML_TAG_NAMES, HTML_VOID_ELEMENTS,
-    RESERVED_TAG_NAMES, TAG_ATTR_RULES, TAG_ORDERING_RULES,
+    CLIENT_PROPS_ATTR, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELEMENT_TAG,
+    C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG,
+    DYNAMIC_CLIENT_PROPS_ATTR, FORBIDDEN_HTML_TAG_NAMES, HTML_VOID_ELEMENTS, META_ATTR_IGNORE,
+    META_ATTR_KEY, RESERVED_TAG_NAMES, TAG_ATTR_RULES, TAG_ORDERING_RULES,
 };
 use crate::error::{assert_rule, assert_rules, ParseError};
 use crate::grammar::{GrammarParser, Rule};
 use crate::lang::lang::{ForLoopVars, Lang, LangImpl};
+use crate::lang::python::PYTHON_LANG;
 use crate::parser_context::{ParserContext, TagRules};
-use crate::utils::pest::{span_from_str, unwrap_pair};
+use crate::utils::pest::unwrap_pair;
+use crate::utils::template_fragment::template_fragment;
 
 /// Result of processing an HTML tag
 enum HtmlTagResult {
     /// Start tag - Will start new layer in stack. Carries the variables the tag
-    /// introduces into its body scope (computed alongside attribute enrichment).
-    StartTag(HtmlStartTag, Vec<Token>),
+    /// introduces into its body scope and slots declared by nested-template
+    /// attributes (computed alongside attribute enrichment).
+    StartTag(ProcessedStartTag),
     /// End tag - Will close current layer in stack
     EndTag(HtmlEndTag),
     /// Self-closing tag - Will be added to current layer in stack
     /// without changing the stack.
-    SelfClosing(Node),
+    SelfClosing(Node, Vec<StaticNamedSlot>),
+}
+
+/// Private parser data produced while processing a start tag.
+struct ProcessedStartTag {
+    start_tag: HtmlStartTag,
+    introduced_variables: Vec<Token>,
+    attribute_slots: Vec<StaticNamedSlot>,
+}
+
+/// Parsed attributes plus slots declared inside their nested-template values.
+struct ParsedHtmlAttributes {
+    attrs: Vec<HtmlAttr>,
+    slots: Vec<StaticNamedSlot>,
+}
+
+/// A parsed attribute and metadata that belongs to its containing template.
+struct ParsedHtmlAttribute {
+    attr: HtmlAttr,
+    slots: Vec<StaticNamedSlot>,
 }
 
 /// Stack entry for tracking open HTML tags with bodies
@@ -43,6 +68,8 @@ struct TagStackEntry {
     /// tag is processed and carried here until the node is finalized at its end
     /// tag.
     introduced_variables: Vec<Token>,
+    /// Slots declared inside nested-template attributes on the start tag.
+    attribute_slots: Vec<StaticNamedSlot>,
 }
 
 /// Parse a complete template into a Template AST
@@ -104,7 +131,7 @@ pub fn parse_template_with_custom_lang(
         .map(Rc::clone)
         .unwrap_or_else(|| Rc::new(HashMap::new()));
 
-    let context = ParserContext::new(&lang, &rules);
+    let context = ParserContext::for_source(input, &lang, &rules);
     parse_template_inner(input, &context)
 }
 
@@ -122,20 +149,16 @@ fn parse_template_inner(input: &str, context: &ParserContext) -> Result<Template
         });
     }
 
-    let mut pairs = GrammarParser::parse(Rule::template, input).map_err(|e| {
-        ParseError::from_span(
-            span_from_str(input),
-            format!("Failed to parse template: {}", e),
-        )
-    })?;
+    let mut pairs = GrammarParser::parse(Rule::template, input)
+        .map_err(|error| context.error_from_pest(error, "Failed to parse template: "))?;
 
     // Stack for tracking open HTML tags with bodies
     let mut tag_stack: Vec<TagStackEntry> = Vec::new();
 
     // There should be only one top-level template
-    let template_pair = pairs.next().ok_or_else(|| {
-        ParseError::from_span(span_from_str(input), "Template is empty".to_string())
-    })?;
+    let template_pair = pairs
+        .next()
+        .ok_or_else(|| context.error_from_absolute_source("Template is empty".to_string()))?;
     assert_rule(&template_pair, Rule::template)?;
 
     // template -> template_element*
@@ -173,19 +196,20 @@ fn parse_template_inner(input: &str, context: &ParserContext) -> Result<Template
     if !tag_stack.is_empty() {
         let last_unclosed_entry = tag_stack.last().unwrap();
         let last_unclosed_tag_name = &last_unclosed_entry.start_tag.name.content;
-        let last_unclosed_start_tag_span = last_unclosed_entry
-            .start_tag
-            .token
-            .as_span_with_input(input)
-            .unwrap();
-        return Err(ParseError::from_span(
-            last_unclosed_start_tag_span,
+        return Err(context.error_from_token(
+            &last_unclosed_entry.start_tag.token,
             format!(
                 "Unclosed tag <{}>: expected </{}> before end of template",
                 last_unclosed_tag_name, last_unclosed_tag_name
             ),
         ));
     }
+
+    // Construction-time metadata is necessarily local. Recompute free
+    // variables from the completed tree so loop/fill bindings mask only their
+    // lexical bodies, then validate the no-shadow contract top-down.
+    recompute_template_used_variables(&mut root_template);
+    validate_template_variable_shadowing(&root_template, context)?;
 
     Ok(root_template)
 }
@@ -200,7 +224,7 @@ fn process_template_element(
     //                     | template_expression | template_comment | text
     let element_span = element_pair.as_span();
     let inner = element_pair.into_inner().next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             element_span,
             "template_element should always have an inner rule".to_string(),
         )
@@ -246,11 +270,15 @@ fn process_template_element(
             let tag_result = process_html_tag(inner, context)?;
             match tag_result {
                 // Push as body element of the current layer
-                HtmlTagResult::SelfClosing(node) => {
-                    finalize_node(node, tag_stack, root_template, context)?;
+                HtmlTagResult::SelfClosing(node, attribute_slots) => {
+                    finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
                 }
                 // Create new layer in the stack (unless it's a void element)
-                HtmlTagResult::StartTag(start_tag, introduced_variables) => {
+                HtmlTagResult::StartTag(ProcessedStartTag {
+                    start_tag,
+                    introduced_variables,
+                    attribute_slots,
+                }) => {
                     // Check if this is an HTML void element (br, img, input, etc.)
                     // These don't need closing tags and are treated as self-closing
                     let tag_name = start_tag.name.content.as_str();
@@ -274,7 +302,7 @@ fn process_template_element(
                             introduced_variables,
                             contains_fills: false,
                         };
-                        finalize_node(node, tag_stack, root_template, context)?;
+                        finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
                     } else {
                         let body = Template {
                             elements: vec![],
@@ -286,6 +314,7 @@ fn process_template_element(
                             start_tag,
                             body,
                             introduced_variables,
+                            attribute_slots,
                         });
                     }
                 }
@@ -295,7 +324,7 @@ fn process_template_element(
 
                     // Check if tag stack is empty
                     if tag_stack.is_empty() {
-                        return Err(ParseError::from_span(
+                        return Err(context.error_from_local_span(
                             tag_span,
                             format!(
                                 "Unexpected closing tag '</{}>': no matching opening tag",
@@ -307,7 +336,7 @@ fn process_template_element(
                     // Check if end tag matches the current stack entry
                     let stack_entry = tag_stack.last().unwrap();
                     if &stack_entry.start_tag.name.content != end_tag_name {
-                        return Err(ParseError::from_span(
+                        return Err(context.error_from_local_span(
                             tag_span,
                             format!(
                                 "Mismatched tags: expected closing tag '</{}>', found '</{}>'",
@@ -321,6 +350,7 @@ fn process_template_element(
                         start_tag,
                         body,
                         introduced_variables,
+                        attribute_slots,
                     } = tag_stack.pop().unwrap();
 
                     // `introduced_variables` was computed when the start tag was
@@ -332,12 +362,12 @@ fn process_template_element(
                         introduced_variables,
                     );
 
-                    finalize_node(node, tag_stack, root_template, context)?;
+                    finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
                 }
             }
         }
         _ => {
-            return Err(ParseError::from_span(
+            return Err(context.error_from_local_span(
                 inner.as_span(),
                 format!("Unexpected template element rule: {:?}", inner_rule),
             ));
@@ -349,6 +379,7 @@ fn process_template_element(
 /// Logic that runs when we construct a Node (either from SelfClosing, or finished with bodied Node).
 fn finalize_node(
     mut node: Node,
+    attribute_slots: Vec<StaticNamedSlot>,
     tag_stack: &mut [TagStackEntry],
     root_template: &mut Template,
     context: &ParserContext,
@@ -362,7 +393,7 @@ fn finalize_node(
 
     validate_node(&node, &fill_nodes, tag_stack, context)?;
     let parent_template = get_current_template(tag_stack, root_template);
-    validate_node_against_parent(&node, parent_template)?;
+    validate_node_against_parent(&node, parent_template, context)?;
 
     // Let components know how to handle body based on whether it contains fills
     node.set_contains_fills(contains_fills);
@@ -371,6 +402,10 @@ fn finalize_node(
     if let Some(slot) = extract_slot_from_node(&node) {
         parent_template.slots.push(slot);
     }
+
+    // Attribute values are authored before the body, so preserve that order
+    // when carrying their statically named slots into the containing template.
+    parent_template.slots.extend(attribute_slots);
 
     // Propagate slots from body upwards (if node has body)
     if let Node::WithBody { body, .. } = &node {
@@ -452,7 +487,7 @@ fn process_template_expression(
 
     // Find expression_content - It should be the only non-comment, non-spacing pair
     let python_expr_pair = filtered_pairs.next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             expr_span,
             "python_expr should contain python_expr".to_string(),
         )
@@ -486,8 +521,12 @@ fn process_expression(
         .lang
         .parse_expression(&value_token.content)
         .map_err(|e| {
-            let value_span = value_span.unwrap_or_else(|| value_token.as_span().unwrap());
-            ParseError::from_span(value_span, format!("Failed to parse expression: {}", e))
+            let message = format!("Failed to parse expression: {}", e);
+            if let Some(value_span) = value_span {
+                context.error_from_local_span(value_span, message)
+            } else {
+                context.error_from_token(value_token, message)
+            }
         })?;
 
     // Calculate offsets for adjusting token positions
@@ -523,20 +562,13 @@ fn process_template_string(
 ) -> Result<Template, ParseError> {
     let content = &template_token.content;
 
-    // Calculate offsets for the nested template, combining with parent offsets
+    // Tokens created by ParserContext already carry root-absolute coordinates.
+    // Use that absolute origin directly: adding the parent's offsets again
+    // would double-count every recursive template-attribute level.
     let (line, col) = template_token.line_col;
-
-    // Template strings may be recursively nested, so we need to combine offsets:
-    // - Line offset accumulates
-    // - Column offset: parent's col_offset only applies if we're on line 1
-    // - Index offset accumulates
-    let new_line_offset = parent_context.line_offset + (line - 1);
-    let new_col_offset = if line == 1 {
-        parent_context.col_offset + (col - 1)
-    } else {
-        col - 1
-    };
-    let new_index_offset = parent_context.index_offset + template_token.start_index;
+    let new_line_offset = line - 1;
+    let new_col_offset = col - 1;
+    let new_index_offset = template_token.start_index;
 
     let nested_context =
         parent_context.create_child_context(new_line_offset, new_col_offset, new_index_offset);
@@ -554,7 +586,7 @@ fn process_html_tag(
     // html_tag -> html_start_tag | html_end_tag | html_self_closing_tag
     let tag_span = tag_pair.as_span();
     let inner = tag_pair.into_inner().next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             tag_span,
             "html_tag should contain a start, end, or self-closing tag".to_string(),
         )
@@ -563,18 +595,18 @@ fn process_html_tag(
 
     match inner_rule {
         Rule::html_start_tag => {
-            let (start_tag, introduced_variables) = process_html_start_tag(inner, context)?;
-            Ok(HtmlTagResult::StartTag(start_tag, introduced_variables))
+            let processed_start_tag = process_html_start_tag(inner, context)?;
+            Ok(HtmlTagResult::StartTag(processed_start_tag))
         }
         Rule::html_end_tag => {
             let end_tag = process_html_end_tag(inner, context)?;
             Ok(HtmlTagResult::EndTag(end_tag))
         }
         Rule::html_self_closing_tag => {
-            let node = process_html_self_closing_tag(inner, context)?;
-            Ok(HtmlTagResult::SelfClosing(node))
+            let (node, attribute_slots) = process_html_self_closing_tag(inner, context)?;
+            Ok(HtmlTagResult::SelfClosing(node, attribute_slots))
         }
-        _ => Err(ParseError::from_span(
+        _ => Err(context.error_from_local_span(
             inner.as_span(),
             format!("Unexpected HTML tag rule: {:?}", inner_rule),
         )),
@@ -585,7 +617,7 @@ fn process_html_tag(
 fn process_html_start_tag(
     start_tag_pair: pest::iterators::Pair<Rule>,
     context: &ParserContext,
-) -> Result<(HtmlStartTag, Vec<Token>), ParseError> {
+) -> Result<ProcessedStartTag, ParseError> {
     // html_start_tag = "<" ~ html_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
     let start_tag_span = start_tag_pair.as_span();
     let start_tag_token = context.create_token(&start_tag_pair);
@@ -597,7 +629,7 @@ fn process_html_start_tag(
 
     // Get tag name
     let name_pair = filtered_pairs.next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             start_tag_span,
             "html_start_tag should contain html_tag_name".to_string(),
         )
@@ -611,7 +643,7 @@ fn process_html_start_tag(
     // Check if this is a forbidden tag name (skip for html_raw_tag_name which is expected)
     if name_rule == Rule::html_tag_name && FORBIDDEN_HTML_TAG_NAMES.contains(&name.content.as_str())
     {
-        return Err(ParseError::from_span(
+        return Err(context.error_from_local_span(
             name_pair.as_span(),
             format!(
                 "Tag name '{}' is reserved and cannot be used as a regular HTML tag. Use the special syntax instead.",
@@ -621,7 +653,10 @@ fn process_html_start_tag(
     }
 
     // Parse attributes from the remaining filtered pairs
-    let mut attrs = parse_html_attributes(filtered_pairs, context)?;
+    let ParsedHtmlAttributes {
+        mut attrs,
+        slots: attribute_slots,
+    } = parse_html_attributes(filtered_pairs, context)?;
 
     // Enrich control-flow attributes and compute the variables this tag
     // introduces, in one pass (see process_control_flow_metadata).
@@ -636,7 +671,11 @@ fn process_html_start_tag(
         comments,
     };
 
-    Ok((start_tag, introduced_variables))
+    Ok(ProcessedStartTag {
+        start_tag,
+        introduced_variables,
+        attribute_slots,
+    })
 }
 
 /// Process an HTML end tag: validates and returns the end tag
@@ -657,7 +696,7 @@ fn process_html_end_tag(
 
     // Get tag name
     let name_pair = filtered_pairs.next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             end_tag_span,
             format!("{:?} should contain tag name", end_tag_rule),
         )
@@ -670,7 +709,7 @@ fn process_html_end_tag(
     // Check if this is a forbidden tag name (skip for html_raw_tag_name which is expected)
     if name_rule == Rule::html_tag_name && FORBIDDEN_HTML_TAG_NAMES.contains(&name.content.as_str())
     {
-        return Err(ParseError::from_span(
+        return Err(context.error_from_local_span(
             name_pair.as_span(),
             format!(
                 "Tag name '{}' is reserved and cannot be used as a regular HTML tag. Use the special syntax instead.",
@@ -684,7 +723,7 @@ fn process_html_end_tag(
     let next_attr_pair = filtered_pairs.next();
     if let Some(attr_pair) = next_attr_pair {
         let attr_span = attr_pair.as_span();
-        return Err(ParseError::from_span(
+        return Err(context.error_from_local_span(
             attr_span,
             format!("{:?} must not contain any attributes", end_tag_rule),
         ));
@@ -703,7 +742,7 @@ fn process_html_end_tag(
 fn process_html_self_closing_tag(
     self_closing_pair: pest::iterators::Pair<Rule>,
     context: &ParserContext,
-) -> Result<Node, ParseError> {
+) -> Result<(Node, Vec<StaticNamedSlot>), ParseError> {
     // html_self_closing_tag = "<" ~ html_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ "/" ~ ">"
     let self_closing_span = self_closing_pair.as_span();
     let self_closing_token = context.create_token(&self_closing_pair);
@@ -715,7 +754,7 @@ fn process_html_self_closing_tag(
 
     // Get tag name
     let name_pair = filtered_pairs.next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             self_closing_span,
             "html_self_closing_tag should contain html_tag_name".to_string(),
         )
@@ -725,7 +764,7 @@ fn process_html_self_closing_tag(
 
     // Check if this is a forbidden tag name
     if FORBIDDEN_HTML_TAG_NAMES.contains(&name.content.as_str()) {
-        return Err(ParseError::from_span(
+        return Err(context.error_from_local_span(
             name_pair.as_span(),
             format!(
                 "Tag name '{}' is reserved and cannot be used as a regular HTML tag. Use the special syntax instead.",
@@ -735,7 +774,10 @@ fn process_html_self_closing_tag(
     }
 
     // Parse attributes from the remaining filtered pairs
-    let mut attrs = parse_html_attributes(filtered_pairs, context)?;
+    let ParsedHtmlAttributes {
+        mut attrs,
+        slots: attribute_slots,
+    } = parse_html_attributes(filtered_pairs, context)?;
 
     // Enrich control-flow attributes and compute the introduced variables in one
     // pass (see process_control_flow_metadata).
@@ -766,21 +808,25 @@ fn process_html_self_closing_tag(
         comments: comments_from_tag,
     };
 
-    Ok(Node::SelfClosing {
-        start_tag,
-        used_variables,
-        introduced_variables,
-        comments,
-        contains_fills: false, // Self-closing nodes never have fills
-    })
+    Ok((
+        Node::SelfClosing {
+            start_tag,
+            used_variables,
+            introduced_variables,
+            comments,
+            contains_fills: false, // Self-closing nodes never have fills
+        },
+        attribute_slots,
+    ))
 }
 
 /// Parse HTML attributes from Pest pairs
 fn parse_html_attributes<'a>(
     attrs_pairs: impl Iterator<Item = pest::iterators::Pair<'a, Rule>>,
     context: &ParserContext,
-) -> Result<Vec<HtmlAttr>, ParseError> {
+) -> Result<ParsedHtmlAttributes, ParseError> {
     let mut attrs = Vec::new();
+    let mut slots = Vec::new();
 
     // Collect all html_attribute pairs, skipping spacing
     for attr_pair in attrs_pairs {
@@ -791,18 +837,22 @@ fn parse_html_attributes<'a>(
             continue;
         }
 
-        let attr = parse_html_attribute(attr_pair, context)?;
+        let ParsedHtmlAttribute {
+            attr,
+            slots: attr_slots,
+        } = parse_html_attribute(attr_pair, context)?;
         attrs.push(attr);
+        slots.extend(attr_slots);
     }
 
-    Ok(attrs)
+    Ok(ParsedHtmlAttributes { attrs, slots })
 }
 
 /// Parse a single html_attribute into HtmlAttr
 fn parse_html_attribute(
     attr_pair: pest::iterators::Pair<Rule>,
     context: &ParserContext,
-) -> Result<HtmlAttr, ParseError> {
+) -> Result<ParsedHtmlAttribute, ParseError> {
     assert_rule(&attr_pair, Rule::html_attribute)?;
 
     let attr_token = context.create_token(&attr_pair);
@@ -811,14 +861,21 @@ fn parse_html_attribute(
     // html_attribute = html_attribute_name ~ html_attribute_value?
     let mut inner: pest::iterators::Pairs<Rule> = attr_pair.into_inner();
 
-    // Get attribute name
+    // Get attribute name. The grammar routes `#c-*` names to their own rule
+    // (html_meta_attribute_name), so the framework-metadata channel is told
+    // apart from ordinary attributes here by rule, not by string matching.
     let name_pair = inner.next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             attr_span,
             "html_attribute should contain html_attribute_name".to_string(),
         )
     })?;
-    assert_rule(&name_pair, Rule::html_attribute_name)?;
+    assert_rules(
+        &name_pair,
+        &[Rule::html_attribute_name, Rule::html_meta_attribute_name],
+    )?;
+    let is_meta = name_pair.as_rule() == Rule::html_meta_attribute_name;
+    let name_span = name_pair.as_span();
     let key = context.create_token(&name_pair);
 
     // Get attribute value (optional)
@@ -828,7 +885,7 @@ fn parse_html_attribute(
         |pair| {
             let pair_span = pair.as_span();
             pair.into_inner().next().ok_or_else(|| {
-                ParseError::from_span(
+                context.error_from_local_span(
                     pair_span,
                     "html_attribute_value should contain double_quoted_value, single_quoted_value, or unquoted_value".to_string(),
                 )
@@ -858,117 +915,221 @@ fn parse_html_attribute(
         None => (None, None, None),
         Some(other) => {
             let value_span = other.as_span();
-            return Err(ParseError::from_span(
+            return Err(context.error_from_local_span(
                 value_span,
-                format!("Expected double_quoted_value, single_quoted_value, or unquoted_value, got {:?}", other),
+                format!(
+                    "Expected double_quoted_value, single_quoted_value, or unquoted_value, got {:?}",
+                    other
+                ),
             ));
         }
     };
 
+    // `c-else` and `c-empty` are presence-only branch markers. Accepting a
+    // value here would silently discard it during control-flow lowering.
+    if matches!(key.content.as_str(), C_ELSE_TAG | C_EMPTY_TAG) && inner_value.is_some() {
+        return Err(context.error_from_local_span(
+            attr_span,
+            format!(
+                "'{}' takes no value. Write it as a bare control-flow marker.",
+                key.content
+            ),
+        ));
+    }
+
     // Determine attribute kind based on key name and value
     // Clone inner_value since we need it later for HtmlAttr, but also need to use it for processing
     let inner_value_for_attr = inner_value.clone();
-    let (kind, used_variables, comments) = if key.content.starts_with("c-") {
-        // Check if it's a template attribute (value starts/ends with HTML tags or fragment).
-        // E.g. `<span>...</span>` or `<>...</>`
-        //
-        // We require strict detection to avoid treating arbitrary text like
-        // `< THIS IS TEXT >` or `<< lol >>` as templates:
-        //
-        // 1. Fragment: trimmed starts with `<>` and ends with `</>`
-        // 2. HTML tag: trimmed starts with `<` + ASCII alpha (e.g. `<span`, `<c-btn`)
-        //    AND ends with either a close tag (`</tag>`) or self-closing (`/>`)
+    let (kind, used_variables, comments, slots) = if is_meta {
+        // Framework-metadata channel (`#c-*`). Exactly two members exist, and
+        // an unknown name is an authoring mistake, so the error lists both.
+        match key.content.as_str() {
+            META_ATTR_KEY => {
+                // `#c-key` holds a server-evaluated expression, riding the same
+                // expression machinery as a `c-*` attribute value. A key is
+                // always an expression, never a nested template, so there is no
+                // template-value detection here.
+                let has_expression = inner_value
+                    .as_ref()
+                    .is_some_and(|v| !v.content.trim().is_empty());
+                if !has_expression {
+                    return Err(context.error_from_local_span(
+                        attr_span,
+                        format!(
+                            "'{}' must have an expression value whose result is the node's key, e.g. {}=\"item.id\".",
+                            META_ATTR_KEY, META_ATTR_KEY
+                        ),
+                    ));
+                }
+                let (used_variables, comments) =
+                    process_expression(inner_value.as_ref().unwrap(), None, context)?;
+                (HtmlAttrKind::Meta, used_variables, comments, Vec::new())
+            }
+            META_ATTR_IGNORE => {
+                // `#c-ignore` is a bare marker by design; a value (even an
+                // empty one) has no meaning and is rejected rather than
+                // silently dropped.
+                if inner_value.is_some() {
+                    return Err(context.error_from_local_span(
+                        attr_span,
+                        format!(
+                            "'{}' takes no value. Write the bare marker ('{}') to opt this element and its subtree out of morphing.",
+                            META_ATTR_IGNORE, META_ATTR_IGNORE
+                        ),
+                    ));
+                }
+                (HtmlAttrKind::Meta, Vec::new(), Vec::new(), Vec::new())
+            }
+            other => {
+                return Err(context.error_from_local_span(
+                    name_span,
+                    format!(
+                        "Unknown '#c-*' attribute '{}'. The '#c-*' channel is reserved for framework metadata about the node, and has exactly two members: '{}' and '{}'.",
+                        other, META_ATTR_KEY, META_ATTR_IGNORE
+                    ),
+                ));
+            }
+        }
+    } else if key.content.starts_with("c-") {
+        // Check if it's a template attribute. Fragment delimiters must enclose
+        // the whole value. Otherwise the grammar, rather than a duplicate tag
+        // name character whitelist, decides whether the final item is a real
+        // closing, self-closing, raw, or HTML void tag.
         let (is_fragment, is_template) = inner_value
             .as_ref()
             .map(|inner_value| {
-                let trimmed = inner_value.content.trim();
-
-                // Fragment: <>...</>
-                let is_fragment = trimmed.starts_with("<>") && trimmed.ends_with("</>");
-                if is_fragment {
-                    return (true, true);
-                }
-
-                // HTML tag: must start with <[a-zA-Z]
-                let starts_with_tag = trimmed.len() >= 2
-                    && trimmed.starts_with('<')
-                    && trimmed.as_bytes()[1].is_ascii_alphabetic();
-
-                if !starts_with_tag {
-                    return (false, false);
-                }
-
-                // Must end with </tag_name> or />
-                let ends_with_self_closing = trimmed.ends_with("/>");
-                let ends_with_close_tag = if let Some(close_start) = trimmed.rfind("</") {
-                    let after_close = &trimmed[close_start + 2..];
-                    // After </ we expect: tag_name + optional whitespace + >
-                    let after_close_trimmed = after_close.trim_end();
-                    after_close_trimmed.ends_with('>')
-                        && after_close_trimmed.len() > 1
-                        && after_close_trimmed[..after_close_trimmed.len() - 1]
-                            .trim_end()
-                            .chars()
-                            .all(|c| {
-                                c.is_ascii_alphanumeric()
-                                    || c == '-'
-                                    || c == ':'
-                                    || c == '_'
-                                    || c == '.'
-                            })
-                } else {
-                    false
-                };
-
-                (false, ends_with_close_tag || ends_with_self_closing)
+                let is_fragment = template_fragment(&inner_value.content).is_some();
+                (
+                    is_fragment,
+                    is_fragment || is_tag_bounded_nested_template(&inner_value.content),
+                )
             })
             .unwrap_or((false, false));
 
         if is_template {
+            if matches!(key.content.as_str(), C_IF_TAG | C_ELIF_TAG) {
+                return Err(context.error_from_local_span(
+                    attr_span,
+                    format!(
+                        "'{}' condition must be an expression; template values are not allowed.",
+                        key.content
+                    ),
+                ));
+            }
+            if key.content == C_FOR_TAG {
+                return Err(context.error_from_local_span(
+                    attr_span,
+                    "'c-for' must contain a for-loop clause expression; template values are not allowed."
+                        .to_string(),
+                ));
+            }
+
             // c-... attribute WITH nested template value.
             // If fragment, strip the <> and </> delimiters (and surrounding whitespace)
             // before parsing the inner content as a template.
             let template = if is_fragment {
                 let iv = inner_value.as_ref().unwrap();
                 let content = &iv.content;
-                let ws_before = content.len() - content.trim_start().len();
-                let ws_after = content.len() - content.trim_end().len();
-                let start_skip = (ws_before + 2) as isize; // whitespace + "<>"
-                let end_skip = -((ws_after + 3) as isize); // "</>" + whitespace
+                let fragment = template_fragment(content)
+                    .expect("is_fragment is true only when fragment delimiters were found");
+                let start_skip = fragment.inner_start as isize;
+                let end_skip = -((content.len() - fragment.inner_end) as isize);
                 let fragment_inner = iv.clone().crop_cols(start_skip, end_skip);
                 process_template_string(&fragment_inner, context)?
             } else {
                 process_template_string(inner_value.as_ref().unwrap(), context)?
             };
+            let nested_bindings = collect_template_binding_tokens(&template, context);
+            context.record_nested_template_bindings(&attr_token, nested_bindings);
             let comments = template.comments.clone();
             let used_variables = template.used_variables.clone();
-            (HtmlAttrKind::Template, used_variables, comments)
+            let slots = template.slots;
+            (HtmlAttrKind::Template, used_variables, comments, slots)
         } else {
             // c-... attribute WITH expression value
             if let Some(ref inner_value_ref) = inner_value {
                 let (used_variables, comments) =
                     process_expression(inner_value_ref, None, context)?;
-                (HtmlAttrKind::Expression, used_variables, comments)
+                (
+                    HtmlAttrKind::Expression,
+                    used_variables,
+                    comments,
+                    Vec::new(),
+                )
             // c-... attribute WITHOUT value
             } else {
-                (HtmlAttrKind::Expression, Vec::new(), Vec::new())
+                (HtmlAttrKind::Expression, Vec::new(), Vec::new(), Vec::new())
             }
         }
     } else {
         // Non-prefixed attributes are static, e.g. `class="static_value"`
-        (HtmlAttrKind::Static, Vec::new(), Vec::new())
+        (HtmlAttrKind::Static, Vec::new(), Vec::new(), Vec::new())
     };
 
-    Ok(HtmlAttr {
-        token: attr_token,
-        key,
-        value,
-        inner_value: inner_value_for_attr,
-        quote_char,
-        kind,
-        comments,
-        used_variables,
+    Ok(ParsedHtmlAttribute {
+        attr: HtmlAttr {
+            token: attr_token,
+            key,
+            value,
+            inner_value: inner_value_for_attr,
+            quote_char,
+            kind,
+            comments,
+            used_variables,
+            fill_data_pattern: None,
+        },
+        slots,
     })
+}
+
+/// Whether a dynamic attribute value is bounded by real HTML tags.
+///
+/// The opening check keeps ordinary expressions out of the template path. The
+/// final boundary is taken from the Pest grammar so this classifier accepts
+/// exactly the same tag-name alphabet as top-level templates and cannot mistake
+/// trailing text ending in `/>` for a self-closing tag.
+fn is_tag_bounded_nested_template(content: &str) -> bool {
+    let trimmed = content.trim();
+    let starts_with_tag = trimmed.len() >= 2
+        && trimmed.starts_with('<')
+        && trimmed.as_bytes()[1].is_ascii_alphabetic();
+    if !starts_with_tag {
+        return false;
+    }
+
+    let Ok(mut pairs) = GrammarParser::parse(Rule::template, trimmed) else {
+        return false;
+    };
+    let Some(template_pair) = pairs.next() else {
+        return false;
+    };
+    let Some(last_element) = template_pair
+        .into_inner()
+        .rfind(|pair| pair.as_rule() == Rule::template_element)
+    else {
+        return false;
+    };
+    let Some(last_inner) = last_element.into_inner().next() else {
+        return false;
+    };
+
+    match last_inner.as_rule() {
+        Rule::html_raw => true,
+        Rule::html_tag => {
+            let Some(tag) = last_inner.into_inner().next() else {
+                return false;
+            };
+            match tag.as_rule() {
+                Rule::html_end_tag | Rule::html_self_closing_tag => true,
+                Rule::html_start_tag => tag
+                    .into_inner()
+                    .find(|pair| pair.as_rule() == Rule::html_tag_name)
+                    .is_some_and(|name| HTML_VOID_ELEMENTS.contains(&name.as_str())),
+                _ => false,
+            }
+        }
+        _ => false,
+    }
 }
 
 /// Process an html_raw tag: <c-raw>...</c-raw>
@@ -983,18 +1144,22 @@ fn process_html_raw(
 
     // Get start tag
     let start_tag_pair = inner.next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             raw_span,
             "html_raw should contain html_raw_start_tag".to_string(),
         )
     })?;
     assert_rule(&start_tag_pair, Rule::html_raw_start_tag)?;
     // `<c-raw>` allows no attributes, so it introduces no variables.
-    let (start_tag, _introduced_variables) = process_html_start_tag(start_tag_pair, context)?;
+    let ProcessedStartTag {
+        start_tag,
+        introduced_variables: _,
+        attribute_slots: _,
+    } = process_html_start_tag(start_tag_pair, context)?;
 
     // Get content
     let content_pair = inner.next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             raw_span,
             "html_raw should contain html_raw_content".to_string(),
         )
@@ -1014,7 +1179,7 @@ fn process_html_raw(
 
     // Get end tag
     let end_tag_pair = inner.next().ok_or_else(|| {
-        ParseError::from_span(
+        context.error_from_local_span(
             raw_span,
             "html_raw should contain html_raw_end_tag".to_string(),
         )
@@ -1026,7 +1191,11 @@ fn process_html_raw(
 
     // `<c-raw>` allows no attributes. Validate here because raw nodes are pushed
     // directly to the template and bypass the normal `validate_node` path.
+    // Citry-owned attribute channels get their pointed placement checks before
+    // the generic no-attributes diagnostic.
+    validate_client_props_placement(&node, context)?;
     validate_attributes_present(&node, context)?;
+    validate_meta_attr_placement(&node, context)?;
 
     Ok(node)
 }
@@ -1054,17 +1223,180 @@ fn validate_node(
     tag_stack: &[TagStackEntry],
     context: &ParserContext,
 ) -> Result<(), ParseError> {
-    validate_fill_placement(node, tag_stack)?;
+    validate_fill_placement(node, tag_stack, context)?;
+    validate_client_props_placement(node, context)?;
     validate_attributes_present(node, context)?;
-    validate_attribute_conflicts(node)?;
-    validate_dynamic_attr_values(node)?;
+    validate_meta_attr_placement(node, context)?;
+    validate_attribute_conflicts(node, context)?;
+    validate_attribute_values(node, context)?;
     validate_fill_names(node, fill_nodes, context)?;
-    validate_variable_shadowing(node)?;
+    Ok(())
+}
+
+/// Validate the two authored forms of Citry's client props directive.
+///
+/// The direct form carries a browser expression as inert text. The
+/// server-dynamic form evaluates Python and supplies that complete browser
+/// expression. Both belong only on component call sites; `<c-element>` and
+/// ordinary tags render plain HTML and cannot own the directive.
+fn validate_client_props_placement(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    // Component names are case-insensitive and compile to lowercase. Apply
+    // the placement rule to that same identity so `<c-Element>` cannot evade
+    // the `<c-element>` restriction and `<c-IF>` cannot evade the reserved-tag
+    // restriction.
+    let normalized_tag_name = tag_name.to_ascii_lowercase();
+    let is_component_boundary = normalized_tag_name.starts_with("c-")
+        && normalized_tag_name != C_ELEMENT_TAG
+        && !RESERVED_TAG_NAMES.contains(&normalized_tag_name.as_str());
+
+    for attr in node.attrs() {
+        let name = attr.key.content.as_str();
+        let is_case_variant = name.eq_ignore_ascii_case(CLIENT_PROPS_ATTR)
+            || name.eq_ignore_ascii_case(DYNAMIC_CLIENT_PROPS_ATTR);
+        if !is_case_variant {
+            continue;
+        }
+
+        let (line, col) = attr.token.line_col;
+        if name != CLIENT_PROPS_ATTR && name != DYNAMIC_CLIENT_PROPS_ATTR {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "Citry client directive names are lowercase. Write '{}' or '{}' instead of '{}'.",
+                    CLIENT_PROPS_ATTR, DYNAMIC_CLIENT_PROPS_ATTR, name
+                ),
+            ));
+        }
+
+        if name == CLIENT_PROPS_ATTR
+            && !attr
+                .inner_value
+                .as_ref()
+                .is_some_and(|value| !value.content.trim().is_empty())
+        {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'{}' must have a non-empty client expression value, e.g. {}=\"{{ theme: currentTheme }}\".",
+                    CLIENT_PROPS_ATTR, CLIENT_PROPS_ATTR
+                ),
+            ));
+        }
+
+        if !is_component_boundary {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'{}' is not supported on '<{}>' (line {}, column {}). It is a client props directive and belongs on a Citry component tag, including '<c-component>'.",
+                    name, tag_name, line, col
+                ),
+            ));
+        }
+    }
 
     Ok(())
 }
 
-/// Validate that every dynamic (`c-*`) attribute has a non-empty value.
+fn is_client_props_attr(name: &str) -> bool {
+    name == CLIENT_PROPS_ATTR || name == DYNAMIC_CLIENT_PROPS_ATTR
+}
+
+fn is_component_boundary_tag(tag_name: &str) -> bool {
+    let normalized = tag_name.to_ascii_lowercase();
+    normalized.starts_with("c-")
+        && normalized != C_ELEMENT_TAG
+        && !RESERVED_TAG_NAMES.contains(&normalized.as_str())
+}
+
+fn is_component_boundary_handler_attr(name: &str) -> bool {
+    let resolved = name.strip_prefix("c-").unwrap_or(name);
+    resolved.starts_with('@') || resolved.starts_with("x-on:")
+}
+
+fn is_component_tag_client_binding_attr(name: &str) -> bool {
+    is_client_props_attr(name) || is_component_boundary_handler_attr(name)
+}
+
+/// Validate where `#c-*` framework-metadata attributes may sit.
+///
+/// The general attribute rules (validate_attributes_present) deliberately skip
+/// the `#c-*` channel (it is framework metadata, never one of the tag's
+/// inputs), so this is the single place its placement is decided:
+///
+/// - `#c-key` belongs on a plain HTML element (where it is the morph pairing
+///   key) or on a component tag (where it keys the child instance). The
+///   reserved special tags (`<c-if>`, `<c-slot>`, `<c-fill>`, ...) are
+///   neither, so a key there is rejected. `<c-component>` and `<c-element>`
+///   are not in the reserved list on purpose: they behave as component tags.
+/// - `#c-ignore` belongs on a plain HTML element only. On a `<c-*>` tag the
+///   marker would sit on a component instance's root element, which the morph
+///   opt-out does not support (skipping a root desynchronizes the instance
+///   registry from the DOM), so the error points at the supported placements.
+fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    let is_c_tag = tag_name.starts_with("c-");
+
+    for attr in node.attrs() {
+        if attr.kind != HtmlAttrKind::Meta {
+            continue;
+        }
+        // Validation here runs on the built AST, where the span only covers
+        // the attribute's own text, so the message itself carries the real
+        // template position (`Token.line_col` is already offset-adjusted).
+        let (line, col) = attr.token.line_col;
+        match attr.key.content.as_str() {
+            META_ATTR_KEY => {
+                if RESERVED_TAG_NAMES.contains(&tag_name) {
+                    return Err(context.error_from_token(
+                        &attr.token,
+                        format!(
+                            "'{}' is not supported on '<{}>' (line {}, column {}). It belongs on a plain HTML element (the morph pairing key) or on a component tag (the key of the child instance).",
+                            META_ATTR_KEY, tag_name, line, col
+                        ),
+                    ));
+                }
+            }
+            META_ATTR_IGNORE => {
+                // The reserved special tags render no element of their own, so
+                // the fix differs from the component-tag case below.
+                if RESERVED_TAG_NAMES.contains(&tag_name) {
+                    return Err(context.error_from_token(
+                        &attr.token,
+                        format!(
+                            "'{}' is not supported on '<{}>' (line {}, column {}). Put it on the HTML element whose subtree should be left alone, or on a wrapper element.",
+                            META_ATTR_IGNORE, tag_name, line, col
+                        ),
+                    ));
+                }
+                if is_c_tag {
+                    return Err(context.error_from_token(
+                        &attr.token,
+                        format!(
+                            "'{}' is not supported on '<{}>' (line {}, column {}): it would opt out a component instance's root element. Put it on an element inside the child's own template below the template's root element, or on a wrapper element around '<{}>'.",
+                            META_ATTR_IGNORE, tag_name, line, col, tag_name
+                        ),
+                    ));
+                }
+            }
+            // parse_html_attribute rejects every other `#c-*` name, so
+            // reaching here with one is a parser bug, not user error.
+            other => {
+                return Err(context.error_from_token(
+                    &attr.token,
+                    format!(
+                        "Internal error: unexpected '#c-*' attribute '{}' reached placement validation.",
+                        other
+                    ),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Validate semantic attribute values whose contracts are narrower than the
+/// grammar's general static/expression/template classification.
 ///
 /// A dynamic attribute's value is an expression (or a nested template), so a
 /// bare `c-foo`, an empty `c-foo=""`, or a whitespace-only `c-foo="   "` has
@@ -1073,12 +1405,77 @@ fn validate_node(
 ///
 /// The exceptions are the control-flow shorthand attributes that take no
 /// value by design (`c-else`, `c-empty`).
-fn validate_dynamic_attr_values(node: &Node) -> Result<(), ParseError> {
+fn validate_attribute_values(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    let tag_name = node.tag_name();
+    // User-facing component names compile to lowercase. The dynamic built-ins
+    // are registered components too, so case variants such as `<c-Component>`
+    // reach the same runtime target and must not bypass their `c-is` contract.
+    let is_dynamic_builtin = tag_name.eq_ignore_ascii_case(C_COMPONENT_TAG)
+        || tag_name.eq_ignore_ascii_case(C_ELEMENT_TAG);
+
     for attr in node.attrs() {
+        let attr_name = attr.key.content.as_str();
+
+        if is_dynamic_builtin && attr_name == "is" {
+            let has_nonempty_value = attr
+                .inner_value
+                .as_ref()
+                .is_some_and(|value| !value.content.trim().is_empty());
+            if !has_nonempty_value {
+                return Err(context.error_from_token(
+                    &attr.token,
+                    format!(
+                        "Tag '<{}>' static 'is' must have a non-empty value.",
+                        tag_name
+                    ),
+                ));
+            }
+        }
+
+        if matches!(tag_name, C_SLOT_TAG | C_FILL_TAG) && attr_name == "name" {
+            let has_nonempty_value = attr
+                .inner_value
+                .as_ref()
+                .is_some_and(|value| !value.content.trim().is_empty());
+            if !has_nonempty_value {
+                return Err(context.error_from_token(
+                    &attr.token,
+                    format!(
+                        "Tag '<{}>' static 'name' must have a non-empty value.",
+                        tag_name
+                    ),
+                ));
+            }
+        }
+
+        if attr.kind == HtmlAttrKind::Template {
+            let expression_only = attr_name == "c-bind"
+                || (is_dynamic_builtin && attr_name == "c-is")
+                || (matches!(tag_name, C_SLOT_TAG | C_FILL_TAG) && attr_name == "c-name")
+                || (tag_name == C_SLOT_TAG && attr_name == "c-required");
+            if expression_only {
+                let message = if attr_name == "c-bind" {
+                    "'c-bind' must be an expression that resolves to a mapping; template values are not allowed."
+                        .to_string()
+                } else {
+                    format!(
+                        "'{}' on '<{}>' must be an expression; template values are not allowed.",
+                        attr_name, tag_name
+                    )
+                };
+                return Err(context.error_from_token(&attr.token, message));
+            }
+        }
+
         if attr.kind == HtmlAttrKind::Static {
             continue;
         }
-        let attr_name = &attr.key.content;
+        // `#c-*` attributes have their own value rules (`#c-key` requires an
+        // expression, `#c-ignore` must be bare), enforced when the attribute
+        // is parsed; the `c-*` message below would mislead for them.
+        if attr.kind == HtmlAttrKind::Meta {
+            continue;
+        }
         if attr_name == C_ELSE_TAG || attr_name == C_EMPTY_TAG {
             continue;
         }
@@ -1093,7 +1490,7 @@ fn validate_dynamic_attr_values(node: &Node) -> Result<(), ParseError> {
 
         // Control-flow attrs (c-if, c-elif, c-for) miss their condition or
         // iterable; suggesting a static attribute would mislead there.
-        let message = if attr_name == "c-bind" || CONTROL_FLOW_TAGS.contains(&attr_name.as_str()) {
+        let message = if attr_name == "c-bind" || CONTROL_FLOW_TAGS.contains(attr_name) {
             format!("'{}' attribute must have a non-empty value.", attr_name)
         } else {
             format!(
@@ -1103,10 +1500,7 @@ fn validate_dynamic_attr_values(node: &Node) -> Result<(), ParseError> {
                 attr_name
             )
         };
-        return Err(ParseError::from_span(
-            attr.token.as_span().unwrap(),
-            message,
-        ));
+        return Err(context.error_from_token(&attr.token, message));
     }
     Ok(())
 }
@@ -1114,9 +1508,13 @@ fn validate_dynamic_attr_values(node: &Node) -> Result<(), ParseError> {
 /// Validate a Node against its parent template.
 ///
 /// This runs after we popped the Node from the stack.
-fn validate_node_against_parent(node: &Node, parent_template: &Template) -> Result<(), ParseError> {
-    validate_tag_grouping(node, parent_template)?;
-    validate_fill_exclusivity(node, parent_template)?;
+fn validate_node_against_parent(
+    node: &Node,
+    parent_template: &Template,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    validate_tag_grouping(node, parent_template, context)?;
+    validate_fill_exclusivity(node, parent_template, context)?;
 
     Ok(())
 }
@@ -1183,7 +1581,11 @@ fn validate_node_against_parent(node: &Node, parent_template: &Template) -> Resu
 ///   </c-if>
 /// </c-my-comp>
 /// ```
-fn validate_fill_placement(node: &Node, tag_stack: &[TagStackEntry]) -> Result<(), ParseError> {
+fn validate_fill_placement(
+    node: &Node,
+    tag_stack: &[TagStackEntry],
+    context: &ParserContext,
+) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
 
     // Only validate if this is a <c-fill> tag
@@ -1193,7 +1595,6 @@ fn validate_fill_placement(node: &Node, tag_stack: &[TagStackEntry]) -> Result<(
 
     // Get the start_tag token for error reporting
     let start_tag_token = &node.start_tag().token;
-    let start_tag_span = start_tag_token.as_span().unwrap();
 
     // Walk up the tag stack, skipping transparent tags
     for stack_entry in tag_stack.iter().rev() {
@@ -1206,8 +1607,8 @@ fn validate_fill_placement(node: &Node, tag_stack: &[TagStackEntry]) -> Result<(
 
         // If we find a reserved tag, raise error
         if RESERVED_TAG_NAMES.contains(&parent_tag_name) {
-            return Err(ParseError::from_span(
-                start_tag_span,
+            return Err(context.error_from_token(
+                start_tag_token,
                 format!(
                     "Tag '<c-fill>' cannot be inside '<{}>'. It must be inside a component tag (e.g., '<c-component>' or '<c-MyComp>').",
                     parent_tag_name
@@ -1219,8 +1620,8 @@ fn validate_fill_placement(node: &Node, tag_stack: &[TagStackEntry]) -> Result<(
         // NOTE: Regular HTML tags can be INSIDE `<c-fill>`, but not the other way around,
         // as <c-fill> mark the start of a content block.
         if !parent_tag_name.starts_with("c-") {
-            return Err(ParseError::from_span(
-                start_tag_span,
+            return Err(context.error_from_token(
+                start_tag_token,
                 format!(
                     "Tag '<c-fill>' cannot be inside '<{}>'. It must be inside a component tag (e.g., '<c-component>' or '<c-MyComp>').",
                     parent_tag_name
@@ -1234,8 +1635,8 @@ fn validate_fill_placement(node: &Node, tag_stack: &[TagStackEntry]) -> Result<(
     }
 
     // If we've exhausted the stack, we're at the root - raise error
-    Err(ParseError::from_span(
-        start_tag_span,
+    Err(context.error_from_token(
+        start_tag_token,
         "Tag '<c-fill>' must be inside a component tag (e.g., '<c-component>' or '<c-MyComp>')."
             .to_string(),
     ))
@@ -1285,7 +1686,11 @@ fn validate_fill_placement(node: &Node, tag_stack: &[TagStackEntry]) -> Result<(
 /// # Errors
 /// - If a fill-compatible tag follows a non-fill-compatible sibling (or vice versa)
 /// - If a control flow tag sibling of `<c-fill>` contains non-fill, non-control-flow content
-fn validate_fill_exclusivity(node: &Node, template: &Template) -> Result<(), ParseError> {
+fn validate_fill_exclusivity(
+    node: &Node,
+    template: &Template,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
 
     // Find the last Node in template.elements (skip Text and Expr)
@@ -1303,7 +1708,6 @@ fn validate_fill_exclusivity(node: &Node, template: &Template) -> Result<(), Par
 
     // Get the start_tag token for error reporting
     let start_tag_token = &node.start_tag().token;
-    let start_tag_span = start_tag_token.as_span().unwrap();
 
     /// A tag is "fill-compatible" if it's `<c-fill>` or a control flow tag.
     /// At a sibling level that contains `<c-fill>`, only fill-compatible tags are allowed.
@@ -1333,8 +1737,8 @@ fn validate_fill_exclusivity(node: &Node, template: &Template) -> Result<(), Par
 
     // If current is fill-compatible and previous is NOT, raise error
     if is_current_compat && !is_prev_compat {
-        return Err(ParseError::from_span(
-            start_tag_span,
+        return Err(context.error_from_token(
+            start_tag_token,
             format!(
                 "Tag '<{}>' cannot follow '<{}>' here. '<c-fill>' (and control flow) tags must be grouped together, not mixed with other tags.",
                 tag_name, prev_tag_name
@@ -1344,8 +1748,8 @@ fn validate_fill_exclusivity(node: &Node, template: &Template) -> Result<(), Par
 
     // If current is NOT fill-compatible and previous IS, raise error
     if !is_current_compat && is_prev_compat {
-        return Err(ParseError::from_span(
-            start_tag_span,
+        return Err(context.error_from_token(
+            start_tag_token,
             format!(
                 "Tag '<{}>' cannot follow '<{}>' here. '<c-fill>' (and control flow) tags must be grouped together, not mixed with other tags.",
                 tag_name, prev_tag_name
@@ -1361,8 +1765,8 @@ fn validate_fill_exclusivity(node: &Node, template: &Template) -> Result<(), Par
         if CONTROL_FLOW_TAGS.contains(tag_name) {
             if let Node::WithBody { body, .. } = node {
                 if !_contains_only_fills_and_control_flow(body) {
-                    return Err(ParseError::from_span(
-                        start_tag_span,
+                    return Err(context.error_from_token(
+                        start_tag_token,
                         format!(
                             "Control flow tag '<{}>' is a sibling of '<c-fill>' but contains non-fill content. \
                             When mixed with '<c-fill>' tags, control flow tags must contain only '<c-fill>' or other control flow tags.",
@@ -1378,9 +1782,8 @@ fn validate_fill_exclusivity(node: &Node, template: &Template) -> Result<(), Par
         if CONTROL_FLOW_TAGS.contains(prev_tag_name) {
             if let Node::WithBody { body, .. } = prev_node {
                 if !_contains_only_fills_and_control_flow(body) {
-                    let prev_start_tag_span = prev_node.start_tag().token.as_span().unwrap();
-                    return Err(ParseError::from_span(
-                        prev_start_tag_span,
+                    return Err(context.error_from_token(
+                        &prev_node.start_tag().token,
                         format!(
                             "Control flow tag '<{}>' is a sibling of '<c-fill>' but contains non-fill content. \
                             When mixed with '<c-fill>' tags, control flow tags must contain only '<c-fill>' or other control flow tags.",
@@ -1454,13 +1857,16 @@ fn _contains_only_fills_and_control_flow(template: &Template) -> bool {
 /// one and additionally covers text and expression elements, and non-fill
 /// content inside a control flow tag at a level with no direct `<c-fill>`
 /// sibling.
-fn validate_fill_group_content(template: &Template) -> Result<(), ParseError> {
+fn validate_fill_group_content(
+    template: &Template,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
     for element in &template.elements {
         match element {
             TemplateElement::Text(text) => {
                 if !text.token.content.trim().is_empty() {
-                    return Err(ParseError::from_span(
-                        text.token.as_span().unwrap(),
+                    return Err(context.error_from_token(
+                        &text.token,
                         "Text cannot appear next to '<c-fill>' tags. When a component body \
                         contains '<c-fill>' tags, all other content must be inside the fills \
                         (whitespace-only text is allowed for formatting)."
@@ -1469,8 +1875,8 @@ fn validate_fill_group_content(template: &Template) -> Result<(), ParseError> {
                 }
             }
             TemplateElement::Expr(expr) => {
-                return Err(ParseError::from_span(
-                    expr.token.as_span().unwrap(),
+                return Err(context.error_from_token(
+                    &expr.token,
                     "Expression cannot appear next to '<c-fill>' tags. When a component body \
                     contains '<c-fill>' tags, all other content must be inside the fills."
                         .to_string(),
@@ -1485,11 +1891,11 @@ fn validate_fill_group_content(template: &Template) -> Result<(), ParseError> {
                     // Control flow may hold nested fills; its body must satisfy
                     // the same rule.
                     if let Node::WithBody { body, .. } = node {
-                        validate_fill_group_content(body)?;
+                        validate_fill_group_content(body, context)?;
                     }
                 } else {
-                    return Err(ParseError::from_span(
-                        node.start_tag().token.as_span().unwrap(),
+                    return Err(context.error_from_token(
+                        &node.start_tag().token,
                         format!(
                             "Tag '<{}>' cannot appear next to '<c-fill>' tags. When a component \
                             body contains '<c-fill>' tags, all other content must be inside the fills.",
@@ -1503,46 +1909,265 @@ fn validate_fill_group_content(template: &Template) -> Result<(), ParseError> {
     Ok(())
 }
 
-/// Validate that introduced variables don't conflict with used variables.
+/// Recompute a template's free-variable metadata from the completed tree.
 ///
-/// This prevents variable shadowing where a node introduces a variable that is already
-/// used in its body.
+/// Construction-time aggregation cannot distinguish a binding header from its
+/// body. This pass applies the actual lexical scopes:
 ///
-/// This simplifies the templates, because we don't need to worry about variable shadowing.
-///
-/// Applies to:
-/// - `<c-for>` nodes: variables from the `each` attribute
-/// - `<c-fill>` nodes: variables from `data` and `default` attributes
-fn validate_variable_shadowing(node: &Node) -> Result<(), ParseError> {
-    let tag_name = node.tag_name();
-
-    // Get introduced variables from the node
-    let introduced_vars = node.introduced_variables();
-
-    if introduced_vars.is_empty() {
-        return Ok(());
-    }
-
-    // Get used variables from the node's body
-    let used_vars = node.used_variables();
-
-    // Check for conflicts
-    for introduced_var in introduced_vars {
-        let introduced_name = &introduced_var.content;
-        for used_var in used_vars {
-            let used_name = &used_var.content;
-            if used_name == introduced_name {
-                return Err(ParseError::from_span(
-                    introduced_var.as_span().unwrap(),
-                    format!(
-                        "Cannot define variable '{}' in tag '<{}>' - variable name is already taken. Variable shadowing is not allowed, use a different name.",
-                        introduced_name, tag_name
-                    ),
-                ));
+/// - explicit `c-for` and `c-fill` attributes resolve outside their bindings;
+/// - their bodies resolve with the new names in scope;
+/// - on a shorthand `c-for` host, control-flow attributes are outside the loop
+///   while ordinary/meta/template attributes and the body are inside it.
+fn recompute_template_used_variables(template: &mut Template) -> Vec<Token> {
+    let mut used_variables = Vec::new();
+    for element in &mut template.elements {
+        match element {
+            TemplateElement::Expr(expr) => used_variables.extend(expr.used_variables.clone()),
+            TemplateElement::Node(node) => {
+                used_variables.extend(recompute_node_used_variables(node));
             }
+            TemplateElement::Text(_) => {}
         }
     }
+    template.used_variables = used_variables.clone();
+    used_variables
+}
 
+fn recompute_node_used_variables(node: &mut Node) -> Vec<Token> {
+    match node {
+        Node::WithBody {
+            start_tag,
+            body,
+            used_variables,
+            introduced_variables,
+            ..
+        } => {
+            let body_variables = recompute_template_used_variables(body);
+            let tag_name = start_tag.name.content.as_str();
+            let is_shorthand_for = tag_name != C_FOR_TAG
+                && tag_name != C_FILL_TAG
+                && !introduced_variables.is_empty()
+                && start_tag
+                    .attrs
+                    .iter()
+                    .any(|attr| attr.key.content == C_FOR_TAG);
+
+            let mut recomputed = filter_bound_variables(body_variables, introduced_variables);
+            for attr in &start_tag.attrs {
+                if is_shorthand_for && !is_control_flow_attribute(&attr.key.content) {
+                    recomputed.extend(filter_bound_variables(
+                        attr.used_variables.clone(),
+                        introduced_variables,
+                    ));
+                } else {
+                    recomputed.extend(attr.used_variables.clone());
+                }
+            }
+            *used_variables = recomputed.clone();
+            recomputed
+        }
+        Node::SelfClosing {
+            start_tag,
+            used_variables,
+            introduced_variables,
+            ..
+        } => {
+            let tag_name = start_tag.name.content.as_str();
+            let is_shorthand_for = tag_name != C_FOR_TAG
+                && tag_name != C_FILL_TAG
+                && !introduced_variables.is_empty()
+                && start_tag
+                    .attrs
+                    .iter()
+                    .any(|attr| attr.key.content == C_FOR_TAG);
+
+            let mut recomputed = Vec::new();
+            for attr in &start_tag.attrs {
+                if is_shorthand_for && !is_control_flow_attribute(&attr.key.content) {
+                    recomputed.extend(filter_bound_variables(
+                        attr.used_variables.clone(),
+                        introduced_variables,
+                    ));
+                } else {
+                    recomputed.extend(attr.used_variables.clone());
+                }
+            }
+            *used_variables = recomputed.clone();
+            recomputed
+        }
+    }
+}
+
+fn filter_bound_variables(used_variables: Vec<Token>, bindings: &[Token]) -> Vec<Token> {
+    if bindings.is_empty() {
+        return used_variables;
+    }
+    let binding_names: HashSet<String> = bindings
+        .iter()
+        .map(|binding| canonical_identifier(&binding.content))
+        .collect();
+    used_variables
+        .into_iter()
+        .filter(|token| !binding_names.contains(&canonical_identifier(&token.content)))
+        .collect()
+}
+
+fn canonical_identifier(identifier: &str) -> String {
+    identifier.nfkc().collect()
+}
+
+fn is_control_flow_attribute(attr_name: &str) -> bool {
+    CONTROL_FLOW_GROUPS
+        .iter()
+        .any(|group| group.contains(&attr_name))
+}
+
+/// Collect all statically known loop/fill declarations in a template,
+/// including declarations nested inside template-valued attributes.
+fn collect_template_binding_tokens(template: &Template, context: &ParserContext) -> Vec<Token> {
+    let mut bindings = Vec::new();
+    for element in &template.elements {
+        let TemplateElement::Node(node) = element else {
+            continue;
+        };
+        bindings.extend(node.introduced_variables().clone());
+        for attr in node.attrs() {
+            bindings.extend(context.nested_template_bindings(&attr.token));
+        }
+        if let Node::WithBody { body, .. } = node {
+            bindings.extend(collect_template_binding_tokens(body, context));
+        }
+    }
+    bindings
+}
+
+/// Validate loop/fill declarations against the complete lexical context.
+fn validate_template_variable_shadowing(
+    template: &Template,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let root_free_names: HashSet<String> = template
+        .used_variables
+        .iter()
+        .map(|token| canonical_identifier(&token.content))
+        .collect();
+    validate_template_bindings(template, &root_free_names, &[], context)
+}
+
+fn validate_template_bindings(
+    template: &Template,
+    root_free_names: &HashSet<String>,
+    active_bindings: &[String],
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    for element in &template.elements {
+        let TemplateElement::Node(node) = element else {
+            continue;
+        };
+
+        let tag_name = node.tag_name();
+        let bindings = node.introduced_variables();
+        validate_binding_site(
+            bindings,
+            root_free_names,
+            active_bindings,
+            &format!("tag '<{}>'", tag_name),
+            context,
+        )?;
+
+        let is_shorthand_for = tag_name != C_FOR_TAG
+            && tag_name != C_FILL_TAG
+            && !bindings.is_empty()
+            && node
+                .attrs()
+                .iter()
+                .any(|attr| attr.key.content == C_FOR_TAG);
+        let mut body_bindings = active_bindings.to_vec();
+        body_bindings.extend(
+            bindings
+                .iter()
+                .map(|token| canonical_identifier(&token.content)),
+        );
+
+        for attr in node.attrs() {
+            let nested_bindings = context.nested_template_bindings(&attr.token);
+            let nested_active = if is_shorthand_for && !is_control_flow_attribute(&attr.key.content)
+            {
+                body_bindings.as_slice()
+            } else {
+                active_bindings
+            };
+            validate_bindings_against_outer_scope(
+                &nested_bindings,
+                root_free_names,
+                nested_active,
+                "nested template attribute",
+                context,
+            )?;
+        }
+
+        if let Node::WithBody { body, .. } = node {
+            validate_template_bindings(body, root_free_names, &body_bindings, context)?;
+        }
+    }
+    Ok(())
+}
+
+/// Nested templates validate their own lexical structure while they are parsed.
+/// This outer pass only needs to reject their declarations when they collide
+/// with names visible in the writer's surrounding scope. The collected tokens
+/// are intentionally flat, so repeated names may represent legal sibling scopes.
+fn validate_bindings_against_outer_scope(
+    bindings: &[Token],
+    root_free_names: &HashSet<String>,
+    active_bindings: &[String],
+    site: &str,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    for binding in bindings {
+        let name = canonical_identifier(&binding.content);
+        if root_free_names.contains(&name) || active_bindings.iter().any(|active| active == &name) {
+            return Err(context.error_from_token(
+                binding,
+                format!(
+                    "Cannot define variable '{}' in {} - variable name is already taken. Variable shadowing is not allowed, use a different name.",
+                    binding.content, site
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_binding_site(
+    bindings: &[Token],
+    root_free_names: &HashSet<String>,
+    active_bindings: &[String],
+    site: &str,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let mut local_names = HashSet::new();
+    for binding in bindings {
+        let name = canonical_identifier(&binding.content);
+        if !local_names.insert(name.clone()) {
+            return Err(context.error_from_token(
+                binding,
+                format!(
+                    "Cannot define variable '{}' more than once in {}. Use a distinct name for each binding.",
+                    binding.content, site
+                ),
+            ));
+        }
+        if root_free_names.contains(&name) || active_bindings.iter().any(|active| active == &name) {
+            return Err(context.error_from_token(
+                binding,
+                format!(
+                    "Cannot define variable '{}' in {} - variable name is already taken. Variable shadowing is not allowed, use a different name.",
+                    binding.content, site
+                ),
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -1577,17 +2202,70 @@ fn process_control_flow_metadata(
     attrs: &mut [HtmlAttr],
     context: &ParserContext,
 ) -> Result<Vec<Token>, ParseError> {
-    // `<c-fill>` introduces its data/fallback variables; nothing to enrich.
+    // A spread on a physical structural tag is accepted by the broad grammar,
+    // but none of these runtime nodes resolves spread attributes. Reject it
+    // before the explicit `<c-for>` path reports only the secondary missing
+    // `each` error. A shorthand host has a different physical tag name and
+    // keeps its ordinary element/component spread behavior.
+    if matches!(
+        tag_name,
+        C_IF_TAG | C_ELIF_TAG | C_ELSE_TAG | C_FOR_TAG | C_EMPTY_TAG | C_RAW_TAG
+    ) {
+        if let Some(attr) = attrs.iter().find(|attr| attr.key.content == "c-bind") {
+            return Err(context.error_from_token(
+                &attr.token,
+                format!(
+                    "'c-bind' is not supported directly on '<{}>'. Put the spread on an element or component inside it, or write control flow on the spread host (for example, '<div c-if=\"...\" c-bind=\"...\">').",
+                    tag_name
+                ),
+            ));
+        }
+    }
+
+    // `<c-fill>` introduces statically known data/fallback variables. A later
+    // c-bind may replace either name, so only direct attributes after the last
+    // spread are certain to be in scope. Keep their authored order for stable
+    // AST/compiler metadata.
     if tag_name == C_FILL_TAG {
-        let mut introduced = Vec::new();
-        for attr in attrs.iter() {
-            if attr.key.content == "data" || attr.key.content == "fallback" {
-                if let Some(inner_value) = &attr.inner_value {
-                    introduced.push(inner_value.clone());
+        let mut data: Option<(usize, Vec<Token>)> = None;
+        let mut fallback: Option<(usize, Vec<Token>)> = None;
+        for (index, attr) in attrs.iter_mut().enumerate() {
+            match attr.key.content.as_str() {
+                "c-bind" => {
+                    data = None;
+                    fallback = None;
                 }
+                "data" => {
+                    if let Some(inner_value) = &attr.inner_value {
+                        let pattern = parse_fill_data_pattern(inner_value, context)?;
+                        let introduced = if let Some(whole) = &pattern.whole {
+                            vec![whole.clone()]
+                        } else {
+                            pattern
+                                .fields
+                                .iter()
+                                .map(|field| field.target.clone())
+                                .chain(pattern.rest.iter().cloned())
+                                .collect()
+                        };
+                        attr.fill_data_pattern = Some(pattern);
+                        data = Some((index, introduced));
+                    }
+                }
+                "fallback" => {
+                    if let Some(inner_value) = &attr.inner_value {
+                        fallback = Some((index, vec![inner_value.clone()]));
+                    }
+                }
+                _ => {}
             }
         }
-        return Ok(introduced);
+        let mut introduced: Vec<(usize, Vec<Token>)> = data.into_iter().chain(fallback).collect();
+        introduced.sort_by_key(|(index, _)| *index);
+        return Ok(introduced
+            .into_iter()
+            .flat_map(|(_, tokens)| tokens)
+            .collect());
     }
 
     // Explicit `<c-for each="...">`: the `each` attribute is required and must
@@ -1597,14 +2275,14 @@ fn process_control_flow_metadata(
             .iter_mut()
             .find(|attr| attr.key.content == "each")
             .ok_or_else(|| {
-                ParseError::from_span(
-                    tag_token.as_span().unwrap(),
+                context.error_from_token(
+                    tag_token,
                     "Tag '<c-for>' must have an 'each' attribute.".to_string(),
                 )
             })?;
         let each_value = each_attr.inner_value.clone().ok_or_else(|| {
-            ParseError::from_span(
-                each_attr.token.as_span().unwrap(),
+            context.error_from_token(
+                &each_attr.token,
                 "Tag '<c-for>' attribute 'each' must have a value.".to_string(),
             )
         })?;
@@ -1652,6 +2330,172 @@ fn process_control_flow_metadata(
     Ok(introduced)
 }
 
+/// Parse the small binding language used by a direct `<c-fill data="...">`.
+fn parse_fill_data_pattern(
+    value: &Token,
+    context: &ParserContext,
+) -> Result<FillDataPattern, ParseError> {
+    let mut parsed = GrammarParser::parse(Rule::fill_data_pattern, &value.content).map_err(|_| {
+        context.error_from_token(
+            value,
+            "Invalid <c-fill> data binding. Use a variable name or one-level destructuring such as '{ root_attrs, table_attrs as inner_table_attrs, **rest }'."
+                .to_string(),
+        )
+    })?;
+    let pattern_pair = parsed
+        .next()
+        .expect("a successful fill_data_pattern parse has one pair");
+    let form = pattern_pair
+        .into_inner()
+        .find(|pair| {
+            matches!(
+                pair.as_rule(),
+                Rule::fill_data_identifier | Rule::fill_data_destructure
+            )
+        })
+        .expect("fill_data_pattern contains one binding form");
+
+    if form.as_rule() == Rule::fill_data_identifier {
+        let whole = fill_data_token(&form, value);
+        validate_fill_data_identifier(&whole, context)?;
+        return Ok(FillDataPattern {
+            token: value.clone(),
+            whole: Some(whole),
+            fields: Vec::new(),
+            rest: None,
+        });
+    }
+
+    let items: Vec<_> = form
+        .into_inner()
+        .filter(|pair| pair.as_rule() == Rule::fill_data_item)
+        .collect();
+    let mut fields = Vec::new();
+    let mut rest = None;
+    let mut sources = HashSet::new();
+    let mut targets = HashSet::new();
+
+    for (index, item) in items.iter().enumerate() {
+        let item_kind = item
+            .clone()
+            .into_inner()
+            .next()
+            .expect("fill_data_item contains a field or rest binding");
+        match item_kind.as_rule() {
+            Rule::fill_data_field => {
+                let mut identifiers = item_kind
+                    .into_inner()
+                    .filter(|pair| pair.as_rule() == Rule::fill_data_identifier);
+                let source = fill_data_token(
+                    &identifiers
+                        .next()
+                        .expect("fill_data_field contains a source identifier"),
+                    value,
+                );
+                let target = identifiers
+                    .next()
+                    .map_or_else(|| source.clone(), |pair| fill_data_token(&pair, value));
+                validate_fill_data_identifier(&source, context)?;
+                validate_fill_data_identifier(&target, context)?;
+                if !sources.insert(source.content.clone()) {
+                    return Err(context.error_from_token(
+                        &source,
+                        format!(
+                            "Cannot read slot-data field '{}' more than once in a <c-fill> data binding.",
+                            source.content
+                        ),
+                    ));
+                }
+                if !targets.insert(canonical_identifier(&target.content)) {
+                    return Err(context.error_from_token(
+                        &target,
+                        format!(
+                            "Cannot define variable '{}' more than once in a <c-fill> data binding.",
+                            target.content
+                        ),
+                    ));
+                }
+                fields.push(FillDataField { source, target });
+            }
+            Rule::fill_data_rest => {
+                let identifier = item_kind
+                    .into_inner()
+                    .find(|pair| pair.as_rule() == Rule::fill_data_identifier)
+                    .expect("fill_data_rest contains a target identifier");
+                let target = fill_data_token(&identifier, value);
+                validate_fill_data_identifier(&target, context)?;
+                if index + 1 != items.len() {
+                    return Err(context.error_from_token(
+                        &target,
+                        "The '**rest' binding must be the last item in a <c-fill> data binding."
+                            .to_string(),
+                    ));
+                }
+                if rest.is_some() {
+                    return Err(context.error_from_token(
+                        &target,
+                        "A <c-fill> data binding may contain only one '**rest' item.".to_string(),
+                    ));
+                }
+                if !targets.insert(canonical_identifier(&target.content)) {
+                    return Err(context.error_from_token(
+                        &target,
+                        format!(
+                            "Cannot define variable '{}' more than once in a <c-fill> data binding.",
+                            target.content
+                        ),
+                    ));
+                }
+                rest = Some(target);
+            }
+            _ => unreachable!("fill_data_item grammar has only field and rest variants"),
+        }
+    }
+
+    Ok(FillDataPattern {
+        token: value.clone(),
+        whole: None,
+        fields,
+        rest,
+    })
+}
+
+fn fill_data_token(pair: &pest::iterators::Pair<'_, Rule>, value: &Token) -> Token {
+    Token::from_pair(pair).offset(
+        value.start_index,
+        value.line_col.0.saturating_sub(1),
+        value.line_col.1.saturating_sub(1),
+    )
+}
+
+fn validate_fill_data_identifier(token: &Token, context: &ParserContext) -> Result<(), ParseError> {
+    let parsed = PYTHON_LANG.parse_expression(&token.content).map_err(|_| {
+        context.error_from_token(
+            token,
+            format!(
+                "<c-fill> data bindings require valid Python identifiers, got {:?}.",
+                token.content
+            ),
+        )
+    })?;
+    let is_one_name = parsed.assigned_vars.is_empty()
+        && parsed.comments.is_empty()
+        && parsed.used_vars.len() == 1
+        && parsed.used_vars[0].content == token.content
+        && parsed.used_vars[0].start_index == 0
+        && parsed.used_vars[0].end_index == token.content.len();
+    if !is_one_name {
+        return Err(context.error_from_token(
+            token,
+            format!(
+                "<c-fill> data bindings require valid Python identifiers, got {:?}.",
+                token.content
+            ),
+        ));
+    }
+    Ok(())
+}
+
 /// Analyse a `<c-for>` clause and return its introduced (loop target) and used
 /// (free) variables, with token positions adjusted into the template's
 /// coordinate space.
@@ -1666,8 +2510,8 @@ fn extract_forloop_variables(
         .lang
         .parse_forloop_variables(&each_value.content)
         .map_err(|e| {
-            ParseError::from_span(
-                each_value.as_span().unwrap(),
+            context.error_from_token(
+                each_value,
                 format!("Failed to parse 'each' attribute: {}", e),
             )
         })?;
@@ -1683,8 +2527,22 @@ fn extract_forloop_variables(
             .collect()
     };
 
+    let introduced = adjust(vars.introduced);
+    let mut seen_names = HashSet::new();
+    for token in &introduced {
+        if !seen_names.insert(canonical_identifier(&token.content)) {
+            return Err(context.error_from_token(
+                token,
+                format!(
+                    "Cannot define variable '{}' more than once in a '<c-for>' clause. Use a distinct name for each loop target.",
+                    token.content
+                ),
+            ));
+        }
+    }
+
     Ok(ForLoopVars {
-        introduced: adjust(vars.introduced),
+        introduced,
         used: adjust(vars.used),
     })
 }
@@ -1702,15 +2560,25 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
 
     // Get the start_tag token for error reporting
     let start_tag_token = &node.start_tag().token;
-    let start_tag_span = start_tag_token.as_span().unwrap();
+    let is_component_boundary = is_component_boundary_tag(tag_name);
 
     // Extract attribute names, excluding `c-bind` which always bypasses
     // allowed/required attrs checks (it spreads a dict at runtime, so it
-    // could provide any attributes dynamically).
+    // could provide any attributes dynamically). `#c-*` attributes are also
+    // excluded: they are framework metadata about the node, never one of the
+    // tag's inputs, so a tag's allowed/required attribute rules do not apply
+    // to them (their placement rules live in validate_meta_attr_placement).
+    // The client props directive is likewise a component-boundary instruction,
+    // not a declared Python kwarg.
     let attr_names: Vec<&str> = attrs
         .iter()
+        .filter(|attr| attr.kind != HtmlAttrKind::Meta)
         .map(|attr| attr.key.content.as_str())
-        .filter(|&name| name != "c-bind")
+        .filter(|&name| {
+            name != "c-bind"
+                && !is_client_props_attr(name)
+                && !(is_component_boundary && is_component_boundary_handler_attr(name))
+        })
         .collect();
     let attr_names_set: HashSet<&str> = attr_names.iter().copied().collect();
     let has_c_bind = attrs.iter().any(|attr| attr.key.content == "c-bind");
@@ -1766,8 +2634,8 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
                     .flat_map(|group| group.iter().map(|s| s.as_str()))
                     .collect::<Vec<&str>>()
                     .join("', '");
-                return Err(ParseError::from_span(
-                    start_tag_span,
+                return Err(context.error_from_token(
+                    start_tag_token,
                     format!(
                         "Tag '<{}>' can only have the following attributes: '{}'. Found invalid attributes: {}.",
                         tag_name,
@@ -1792,8 +2660,8 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
 
                 // Raise error if more than one attribute is found in the group
                 if found_in_group.len() > 1 {
-                    return Err(ParseError::from_span(
-                        start_tag_span,
+                    return Err(context.error_from_token(
+                        start_tag_token,
                         format!(
                             "Tag '<{}>' must have only one of the attributes: {}, but found multiple: {}.",
                             tag_name,
@@ -1823,8 +2691,8 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
             // If none matched, report error.
             if !has_any_required {
                 if required_group.len() == 1 {
-                    return Err(ParseError::from_span(
-                        start_tag_span,
+                    return Err(context.error_from_token(
+                        start_tag_token,
                         format!(
                             "Tag '<{}>' must have a '{}' attribute.",
                             tag_name, required_group[0]
@@ -1832,8 +2700,8 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
                     ));
                 } else {
                     let options = required_group.join("', '");
-                    return Err(ParseError::from_span(
-                        start_tag_span,
+                    return Err(context.error_from_token(
+                        start_tag_token,
                         format!(
                             "Tag '<{}>' must have one of the following attributes: '{}'.",
                             tag_name, options
@@ -1849,10 +2717,11 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
 
 /// Validate that a tag does not have duplicate or conflicting attributes.
 ///
-/// A static and a dynamic form of the same attribute (`class` + `c-class`)
-/// is allowed: attributes resolve left to right, so duplicates across forms
-/// have well-defined semantics (last one wins; `class`/`style` merge). See
-/// docs/design/html_attrs.md section 4.
+/// A static and dynamic spelling of one logical attribute (`id` + `c-id`) is
+/// an explicit duplicate and therefore an error. Plain HTML elements and
+/// `<c-element>` keep the accumulating `class`/`c-class` and
+/// `style`/`c-style` exceptions. Dynamic `c-bind` contributions are not known
+/// until render and remain repeatable/interlaceable.
 ///
 /// **Case 1: Duplicate attributes**
 ///
@@ -1886,20 +2755,30 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
 ///
 /// - If duplicate attribute names are found (except c-bind)
 /// - If multiple control flow attributes from the same group are found
-fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
+fn validate_attribute_conflicts(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     let attrs = node.attrs();
+    let tag_name = node.tag_name();
+    let normalized_tag_name = tag_name.to_ascii_lowercase();
+    let accumulates_html_attrs =
+        normalized_tag_name == C_ELEMENT_TAG || !normalized_tag_name.starts_with("c-");
+    let component_boundary = is_component_boundary_tag(tag_name);
 
     // Track full attribute names for duplicate detection (except c-bind)
     let mut seen_full_names = HashSet::new();
+    // Track the rendered/input key after removing exactly one dynamic `c-`
+    // prefix. This catches two explicit spellings of one logical input while
+    // keeping directives and spreads out of the ordinary attribute namespace.
+    let mut seen_logical_names: HashMap<String, String> = HashMap::new();
 
-    // Track control flow attributes - Group name -> (group_index, attr_name, is_first_item, attr_span)
-    let mut seen_control_flow_groups: HashMap<String, (usize, String, bool, pest::Span)> =
+    // Track control flow attributes - Group name -> (group_index, attr_name, is_first_item, token)
+    let mut seen_control_flow_groups: HashMap<String, (usize, String, bool, Token)> =
         HashMap::new();
 
     for attr in attrs {
         let attr_name = &attr.key.content;
 
-        // c-bind are special case, because they get spread into other attributes.
+        // c-bind is a dynamic spread, so it is both repeatable and excluded
+        // from explicit logical-key conflicts.
         if attr_name == "c-bind" {
             continue;
         }
@@ -1907,8 +2786,8 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
         // Case 1: Check for duplicate attribute names
         // E.g. `<div class="x" class="y">` is invalid.
         if !seen_full_names.insert(attr_name.clone()) {
-            return Err(ParseError::from_span(
-                attr.token.as_span().unwrap(),
+            return Err(context.error_from_token(
+                &attr.token,
                 format!(
                     "Duplicate attribute '{}' found. Each attribute name can only appear once (except 'c-bind').",
                     attr_name
@@ -1916,12 +2795,34 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
             ));
         }
 
-        // NOTE: A static and a dynamic form of the same attribute on one tag
-        // (`<div class="x" c-class="y">`) is allowed: attributes resolve left
-        // to right in source order, duplicates are last-one-wins (`class` and
-        // `style` merge instead), the same rule as `c-bind` interlacing. See
-        // docs/design/html_attrs.md section 4 and the README's "Attribute
-        // spreading" examples.
+        // Structural directives do not render an ordinary attribute, so for
+        // example HTML `for` and Citry `c-for` are different inputs.
+        let is_control_flow_directive = CONTROL_FLOW_GROUPS
+            .iter()
+            .any(|group| group.contains(&attr_name.as_str()));
+        if attr.kind != HtmlAttrKind::Meta && !is_control_flow_directive {
+            let logical_name = attr_name.strip_prefix("c-").unwrap_or(attr_name);
+            let is_accumulator =
+                accumulates_html_attrs && matches!(logical_name, "class" | "style");
+            if !is_accumulator {
+                if let Some(previous_name) = seen_logical_names.get(logical_name) {
+                    let source_ordered_client_binding = component_boundary
+                        && is_component_tag_client_binding_attr(previous_name)
+                        && is_component_tag_client_binding_attr(attr_name);
+                    if previous_name != attr_name && !source_ordered_client_binding {
+                        return Err(context.error_from_token(
+                            &attr.token,
+                            format!(
+                                "Attributes '{}' and '{}' provide the same logical attribute '{}'. Choose one explicit spelling; use 'c-bind' for values supplied dynamically.",
+                                previous_name, attr_name, logical_name
+                            ),
+                        ));
+                    }
+                } else {
+                    seen_logical_names.insert(logical_name.to_string(), attr_name.clone());
+                }
+            }
+        }
 
         // Case 2: Check for control flow attribute conflicts
         //
@@ -1947,8 +2848,8 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
             if seen_control_flow_groups.contains_key(&group_name) {
                 // We've already seen an attribute from this group.
                 let (_, prev_attr, _, _) = seen_control_flow_groups.get(&group_name).unwrap();
-                return Err(ParseError::from_span(
-                    attr.token.as_span().unwrap(),
+                return Err(context.error_from_token(
+                    &attr.token,
                     format!(
                         "Cannot have both '{}' and '{}' attributes on the same tag. Only one control flow attribute from the group [{}] is allowed.",
                         prev_attr,
@@ -1959,10 +2860,14 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
             }
 
             let is_first_item = attr_name == group[0];
-            let attr_span = attr.token.as_span().unwrap();
             seen_control_flow_groups.insert(
                 group_name,
-                (group_index, attr_name.clone(), is_first_item, attr_span),
+                (
+                    group_index,
+                    attr_name.clone(),
+                    is_first_item,
+                    attr.token.clone(),
+                ),
             );
 
             // Found the group that matches current attribute, no need to check
@@ -1993,7 +2898,7 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
     // Only check if we have multiple control flow groups
     if seen_control_flow_groups.len() > 1 {
         // Sort by group_index (priority) from 0 (highest) to up
-        let mut sorted_groups: Vec<(usize, String, bool, pest::Span)> =
+        let mut sorted_groups: Vec<(usize, String, bool, Token)> =
             seen_control_flow_groups.into_values().collect();
         sorted_groups.sort_by_key(|(group_index, _, _, _)| *group_index);
 
@@ -2005,16 +2910,13 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
         // We also know that there CAN'T be multiple attributes from the SAME group.
         // So all items in `sorted_groups[1..]` will have different group_index. And this group_index
         // will be go higher, because we've already sorted the list by group_index.
-        for (_, attr_name, is_first_item, attr_span) in &sorted_groups[1..] {
+        for (_, attr_name, is_first_item, attr_token) in &sorted_groups[1..] {
             if !is_first_item {
-                return Err(ParseError::from_span(
-                    *attr_span,
+                return Err(context.error_from_token(
+                    attr_token,
                     format!(
                         "Cannot have '{}' together with '{}'. '{}' has higher priority and will wrap the content before '{}'.",
-                        first_attr,
-                        attr_name,
-                        first_attr,
-                        attr_name,
+                        first_attr, attr_name, first_attr, attr_name,
                     ),
                 ));
             }
@@ -2024,12 +2926,11 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
     Ok(())
 }
 
-/// Validate that there are no duplicate `<c-fill>` names within a component node.
+/// Validate statically known `<c-fill>` names within a component node.
 ///
-/// For `<c-fill>` tags, we check both "name" and "c-name" attributes:
-/// - Multiple `<c-fill>` tags with the same `name` value → error
-/// - Multiple `<c-fill>` tags with the same `c-name` value → error
-/// - NOTE: We cannot compare across "name" and "c-name" attributes
+/// Only an effective static `name` participates in parse-time equality. A
+/// `c-name` or `c-bind` expression is evaluated separately for every fill, so
+/// identical authored expressions may still resolve to different names.
 ///
 /// This validation applies only to component Nodes with body (e.g. `<c-component>` or `<c-MyComp>`).
 ///
@@ -2043,7 +2944,6 @@ fn validate_attribute_conflicts(node: &Node) -> Result<(), ParseError> {
 /// **Errors**
 ///
 /// - If duplicate `name` values are found
-/// - If duplicate `c-name` values are found
 /// - If slot name is not allowed (only when name value came from `name` attr, not dynamic `c-name`)
 /// - If required slots are missing (only when no `<c-fill>` tags with `c-name` or `c-bind` attrs are present)
 /// - If default slot is used but "default" slot name is not allowed
@@ -2066,30 +2966,38 @@ fn validate_fill_names(
     // User rules are keyed by lowercase tag name (same rule as the attribute
     // validation: component tags match case-insensitively).
     let no_required: Vec<String> = vec![];
+    let no_slot_data_fields: BTreeMap<String, Vec<String>> = BTreeMap::new();
     let tag_name_lower = tag_name.to_lowercase();
-    let (allowed_slots, required_slots) = if let Some(builtin_rules) = TAG_ATTR_RULES.get(tag_name)
-    {
-        // Built-in rules for built-in tags
-        (&builtin_rules.allowed_slots, &builtin_rules.required_slots)
-    } else if let Some(user_rules) = context.user_rules.get(tag_name_lower.as_str()) {
-        // User-defined rules for user-defined tags
-        (&user_rules.allowed_slots, &user_rules.required_slots)
-    } else {
-        // No slot rules defined for this tag - allow any slots, require none,
-        // but still check for duplicates below.
-        (&None, &no_required)
-    };
+    let (allowed_slots, required_slots, slot_data_fields) =
+        if let Some(builtin_rules) = TAG_ATTR_RULES.get(tag_name) {
+            // Built-in rules for built-in tags
+            (
+                &builtin_rules.allowed_slots,
+                &builtin_rules.required_slots,
+                &builtin_rules.slot_data_fields,
+            )
+        } else if let Some(user_rules) = context.user_rules.get(tag_name_lower.as_str()) {
+            // User-defined rules for user-defined tags
+            (
+                &user_rules.allowed_slots,
+                &user_rules.required_slots,
+                &user_rules.slot_data_fields,
+            )
+        } else {
+            // No slot rules defined for this tag - allow any slots, require none,
+            // but still check for duplicates below.
+            (&None, &no_required, &no_slot_data_fields)
+        };
 
     let has_meaningful_content = match node {
         Node::WithBody { body, .. } => _has_fill_meaningful_content(body),
         Node::SelfClosing { .. } => false,
     };
 
-    fn format_error(node: &Node, message: String) -> Result<(), ParseError> {
+    let format_error = |node: &Node, message: String| -> Result<(), ParseError> {
         let start_tag_token = &node.start_tag().token;
-        let start_tag_span = start_tag_token.as_span().unwrap();
-        Err(ParseError::from_span(start_tag_span, message.to_string()))
-    }
+        Err(context.error_from_token(start_tag_token, message))
+    };
 
     // Collect slot names from explicit <c-fill> tags
     let mut found_slots: HashSet<String> = HashSet::new();
@@ -2141,14 +3049,12 @@ fn validate_fill_names(
         // Explicit <c-fill> tags found - the body is a fill group, so nothing
         // outside the fills is allowed (whitespace-only text is formatting).
         if let Node::WithBody { body, .. } = node {
-            validate_fill_group_content(body)?;
+            validate_fill_group_content(body, context)?;
         }
 
-        // Validate the fills themselves.
-        // Track identities for duplicate detection, one set per variant type
+        // Validate the fills themselves. Only final static identities can be
+        // compared without evaluating user expressions.
         let mut seen_static_names: HashMap<String, &Node> = HashMap::new();
-        let mut seen_dynamic_names: HashMap<String, &Node> = HashMap::new();
-        let mut seen_bind_tuples: HashMap<Vec<(String, String)>, &Node> = HashMap::new();
 
         // For overflow detection: count unique dynamic fills NOT inside any control flow tag.
         // These are fills whose identity is resolved at runtime (c-name or c-bind) and are
@@ -2186,6 +3092,14 @@ fn validate_fill_names(
                         static_fills_in_allowed.insert(name_value.clone());
                     }
 
+                    validate_fill_data_sources(
+                        fill_node,
+                        tag_name,
+                        name_value,
+                        slot_data_fields,
+                        context,
+                    )?;
+
                     // Check for duplicate static name values.
                     //
                     // Duplicate detection only covers fills OUTSIDE control flow:
@@ -2211,50 +3125,10 @@ fn validate_fill_names(
                     }
                     found_slots.insert(name_value.clone());
                 }
-                FillIdentity::DynamicName(name_value) => {
-                    // Check for duplicate c-name values.
-                    // Like the static-name check, this only covers fills outside
-                    // control flow (two fills with the same c-name expression in
-                    // different branches may never materialize together; a loop
-                    // re-binds the expression per iteration). Materialized
-                    // duplicates are caught at runtime, during fill collection.
+                FillIdentity::Dynamic => {
+                    // Dynamic identities are resolved independently at runtime,
+                    // where duplicate resolved names are validated.
                     if !fill_info.inside_control_flow {
-                        if seen_dynamic_names.contains_key(name_value) {
-                            return format_error(
-                                fill_node,
-                                format!(
-                                    "Duplicate <c-fill> with c-name='{}' found. Each fill name can only appear once.",
-                                    name_value
-                                ),
-                            );
-                        }
-                        seen_dynamic_names.insert(name_value.clone(), fill_node);
-
-                        // Track dynamic fills not inside control flow for overflow detection
-                        dynamic_fills_outside_control_flow += 1;
-                    }
-                    found_slots.insert(name_value.clone());
-                }
-                FillIdentity::DynamicBind(pairs) => {
-                    // Check for duplicate c-bind tuples (same ordered list of (key, value) pairs).
-                    // Only fills outside control flow, same rule as the name checks.
-                    if !fill_info.inside_control_flow {
-                        if seen_bind_tuples.contains_key(pairs) {
-                            let pairs_str = pairs
-                                .iter()
-                                .map(|(k, v)| format!("{}=\"{}\"", k, v))
-                                .collect::<Vec<_>>()
-                                .join(" ");
-                            return format_error(
-                                fill_node,
-                                format!(
-                                    "Duplicate <c-fill> with identical bind identity ({}) found. Each fill must have a unique identity.",
-                                    pairs_str
-                                ),
-                            );
-                        }
-                        seen_bind_tuples.insert(pairs.clone(), fill_node);
-
                         // Track dynamic fills not inside control flow for overflow detection
                         dynamic_fills_outside_control_flow += 1;
                     }
@@ -2365,24 +3239,12 @@ fn validate_fill_names(
     Ok(())
 }
 
-/// Check if a template body has meaningful content (not empty and not just whitespace).
-///
-/// A body has NO meaningful content when:
-/// 1. `body.elements` is empty, OR
-/// 2. `body.elements` contains only a single text node that contains only whitespace.
+/// Check if a template body has content beyond formatting whitespace.
 fn _has_fill_meaningful_content(body: &Template) -> bool {
-    if body.elements.is_empty() {
-        return false;
-    }
-
-    // Check if it's a single text node with only whitespace
-    if body.elements.len() == 1 {
-        if let TemplateElement::Text(text) = &body.elements[0] {
-            return !text.token.content.trim().is_empty();
-        }
-    }
-
-    true
+    body.elements.iter().any(|element| match element {
+        TemplateElement::Text(text) => !text.token.content.trim().is_empty(),
+        TemplateElement::Expr(_) | TemplateElement::Node(_) => true,
+    })
 }
 
 /// Info about a `<c-fill>` node found during extraction, including whether it's
@@ -2490,44 +3352,27 @@ fn extract_fill_nodes(
     fill_nodes
 }
 
-/// Extract the name from a `<c-fill>` node.
-///
-/// Returns `(Some(name), is_c_name, has_c_bind)` where:
-/// - `Some(name)` is the name value (from either "name" or "c-name" attribute) or None if neither found.
-/// - `is_c_name` indicates if it came from "c-name" (true) or "name" (false)
-/// - `has_c_bind` indicates if the node has a "c-bind" attribute
-///
-/// Returns `None` if the node has neither "name" nor "c-name" attribute.
-/// The "identity" of a `<c-fill>` node for uniqueness/duplicate checking.
+/// The effective identity category of a `<c-fill>` node.
 ///
 /// Determined by walking the node's attributes right-to-left and finding the
 /// rightmost `name`, `c-name`, or `c-bind` attribute.
 ///
 /// - If rightmost is `name` -> `StaticName(value)`
-/// - If rightmost is `c-name` -> `DynamicName(value)`
-/// - If rightmost is `c-bind` -> collect all identity attrs (`name`/`c-name`/`c-bind`)
-///   going backwards from the end, stopping at (and including) the first `name`/`c-name`.
-///   If no `name`/`c-name` is found, all `c-bind` attrs are included.
-///   -> `DynamicBind(ordered_pairs)`
+/// - If rightmost is `c-name` or `c-bind` -> `Dynamic`
 /// - If none found -> `None`
 ///
 /// Examples:
 /// - `<c-fill c-bind="b" name="a">` -> rightmost=`name` -> `StaticName("a")`
-/// - `<c-fill name="a" c-bind="b">` -> rightmost=`c-bind` -> `DynamicBind([("c-bind","b"), ("name","a")])`
-/// - `<c-fill c-bind="c" name="a" c-bind="b">` -> `DynamicBind([("c-bind","b"), ("name","a")])`
-/// - `<c-fill c-bind="c" c-name="a" c-bind="b">` -> `DynamicBind([("c-bind","b"), ("c-name","a")])`
-/// - `<c-fill c-bind="c" c-bind="b">` -> `DynamicBind([("c-bind","b"), ("c-bind","c")])`
-/// - `<c-fill c-bind="c" c-bind="b" c-name="a">` -> rightmost=`c-name` -> `DynamicName("a")`
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// - `<c-fill name="a" c-bind="b">` -> rightmost=`c-bind` -> `Dynamic`
+///
+/// Explicit `name` and `c-name` cannot coexist; `c-bind` may interlace with
+/// either explicit provider because its keys are known only at render time.
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum FillIdentity {
     /// Rightmost identity attr is `name="..."` -> static slot name
     StaticName(String),
-    /// Rightmost identity attr is `c-name="..."` -> dynamic slot name (variable)
-    DynamicName(String),
-    /// Rightmost identity attr is `c-bind="..."` -> dynamic bind(s).
-    /// Contains ordered (key, value) pairs from rightmost backwards to closest
-    /// `name`/`c-name` (inclusive). If no `name`/`c-name` found, all c-bind attrs included.
-    DynamicBind(Vec<(String, String)>),
+    /// Rightmost identity attr is `c-name="..."` or `c-bind="..."`.
+    Dynamic,
     /// No identity attrs at all (no name, c-name, or c-bind)
     None,
 }
@@ -2535,10 +3380,7 @@ enum FillIdentity {
 impl FillIdentity {
     /// Returns true if this identity is dynamic (resolved at runtime).
     fn is_dynamic(&self) -> bool {
-        matches!(
-            self,
-            FillIdentity::DynamicName(_) | FillIdentity::DynamicBind(_)
-        )
+        matches!(self, FillIdentity::Dynamic)
     }
 }
 
@@ -2546,69 +3388,90 @@ impl FillIdentity {
 ///
 /// See [`FillIdentity`] for the full identity resolution rules.
 fn _extract_fill_identity(node: &Node) -> FillIdentity {
-    let attrs = node.attrs();
-
-    // Identity attributes are: name, c-name, c-bind
-    let identity_attrs: Vec<(&str, &str)> = attrs
+    node.attrs()
         .iter()
-        .filter_map(|attr| {
-            let key = attr.key.content.as_str();
-            match key {
-                "name" | "c-name" | "c-bind" => {
-                    let value = attr
-                        .inner_value
-                        .as_ref()
-                        .map(|v| v.content.as_str())
-                        .unwrap_or("");
-                    Some((key, value))
-                }
-                _ => Option::None,
-            }
+        .rev()
+        .find_map(|attr| match attr.key.content.as_str() {
+            "name" => Some(FillIdentity::StaticName(
+                attr.inner_value
+                    .as_ref()
+                    .map(|value| value.content.clone())
+                    .unwrap_or_default(),
+            )),
+            "c-name" | "c-bind" => Some(FillIdentity::Dynamic),
+            _ => None,
         })
-        .collect();
+        .unwrap_or(FillIdentity::None)
+}
 
-    if identity_attrs.is_empty() {
-        return FillIdentity::None;
-    }
+/// Validate explicit source fields in the effective direct `data` binding.
+///
+/// Both the slot identity and the data provider use rightmost-provider
+/// semantics. The caller invokes this helper only for a statically named fill;
+/// if a rightmost `c-bind` can provide `data`, the data shape remains a runtime
+/// concern. Whole-data bindings and `**rest` select no explicit source fields.
+fn validate_fill_data_sources(
+    fill_node: &Node,
+    component_tag_name: &str,
+    slot_name: &str,
+    slot_data_fields: &BTreeMap<String, Vec<String>>,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let Some(allowed_fields) = slot_data_fields.get(slot_name) else {
+        return Ok(());
+    };
+    let Some(pattern) = _extract_effective_fill_data_pattern(fill_node) else {
+        return Ok(());
+    };
 
-    // Check the rightmost identity attribute
-    let (rightmost_key, rightmost_value) = identity_attrs.last().unwrap();
-
-    match *rightmost_key {
-        "name" => FillIdentity::StaticName(rightmost_value.to_string()),
-        "c-name" => FillIdentity::DynamicName(rightmost_value.to_string()),
-        "c-bind" => {
-            // Collect attrs from right to left, stopping at (and including) first name/c-name
-            let mut pairs: Vec<(String, String)> = Vec::new();
-            for &(key, value) in identity_attrs.iter().rev() {
-                pairs.push((key.to_string(), value.to_string()));
-                if key == "name" || key == "c-name" {
-                    break;
-                }
-            }
-            FillIdentity::DynamicBind(pairs)
+    for field in &pattern.fields {
+        if allowed_fields.contains(&field.source.content) {
+            continue;
         }
-        _ => FillIdentity::None,
+        let available = if allowed_fields.is_empty() {
+            "This slot's declared data shape has no fields.".to_string()
+        } else {
+            format!("Available fields: {}.", allowed_fields.join(", "))
+        };
+        return Err(context.error_from_token(
+            &field.source,
+            format!(
+                "Slot '{}' on tag '<{}>' does not expose a slot-data field named '{}'. {}",
+                slot_name, component_tag_name, field.source.content, available
+            ),
+        ));
     }
+    Ok(())
+}
+
+/// Return the effective direct data pattern, or `None` for no data provider or
+/// a rightmost dynamic `c-bind` provider.
+fn _extract_effective_fill_data_pattern(node: &Node) -> Option<&FillDataPattern> {
+    node.attrs()
+        .iter()
+        .rev()
+        .find_map(|attr| match attr.key.content.as_str() {
+            "data" => Some(attr.fill_data_pattern.as_ref()),
+            "c-bind" => Some(None),
+            _ => None,
+        })?
 }
 
 /// Extract slot information from a `<c-slot>` node.
 ///
 /// Returns `Some(StaticNamedSlot)` if:
 /// - The node is a `<c-slot>` tag
-/// - Its name is statically known: either a static `name` attribute, or no
-///   name-providing attribute at all (no `name`, `c-name`, nor `c-bind`), in
-///   which case the slot is the default slot, named `"default"`. The synthesized
-///   name token carries the start-tag token's position (there is no name in the
-///   source to point at).
+/// - Its effective name is statically known: the rightmost name provider is a
+///   static `name` attribute, or there is no name provider (`name`, `c-name`,
+///   or `c-bind`), in which case the slot is named `"default"`. The synthesized
+///   default-name token carries the start-tag token's position.
 ///
-/// Returns `None` when the name is dynamic (`c-name`, or `c-bind` which may
-/// supply a name at runtime).
+/// Returns `None` when the rightmost name provider is dynamic (`c-name`, or
+/// `c-bind` which may supply a name at runtime).
 ///
-/// The `required` field is determined as:
-/// - `Some(true)`: required (has static `required` attribute)
-/// - `Some(false)`: not required (no `required`, nor `c-bind`, nor `c-required` attribute)
-/// - `None`: unknown (no `required`, but has `c-bind` or `c-required` attribute)
+/// The rightmost requiredness provider determines `required` independently:
+/// static `required` gives `Some(true)`, `c-required` or `c-bind` gives `None`,
+/// and no provider gives `Some(false)`.
 fn extract_slot_from_node(node: &Node) -> Option<StaticNamedSlot> {
     let tag_name = node.tag_name();
     if tag_name != C_SLOT_TAG {
@@ -2616,69 +3479,39 @@ fn extract_slot_from_node(node: &Node) -> Option<StaticNamedSlot> {
     }
 
     let attrs = node.attrs();
-    let mut name_token: Option<Token> = None;
-    let mut has_required = false;
-    let mut has_c_name = false;
-    let mut has_c_bind = false;
-    let mut has_c_required = false;
 
-    for attr in attrs {
-        let attr_name = &attr.key.content;
-        match attr_name.as_str() {
-            "name" => {
-                // Found static "name" attribute - extract the token
-                if let Some(inner_value) = &attr.inner_value {
-                    name_token = Some(inner_value.clone());
-                }
+    // Runtime attributes resolve left to right. The rightmost name provider
+    // therefore decides whether this slot can be declared statically.
+    let name_token = match attrs
+        .iter()
+        .rev()
+        .find(|attr| matches!(attr.key.content.as_str(), "name" | "c-name" | "c-bind"))
+    {
+        Some(attr) if attr.key.content == "name" => attr.inner_value.clone()?,
+        Some(_) => return None,
+        None => {
+            // No name provider means the default slot. Anchor the synthesized
+            // token at the start tag because there is no source value.
+            let tag_token = &node.start_tag().token;
+            Token {
+                content: "default".to_string(),
+                start_index: tag_token.start_index,
+                end_index: tag_token.end_index,
+                line_col: tag_token.line_col,
             }
-            "required" => {
-                // Found "required" attribute
-                has_required = true;
-            }
-            "c-name" => {
-                // Found "c-name" attribute - name is dynamic
-                has_c_name = true;
-            }
-            "c-bind" => {
-                // Found "c-bind" attribute
-                has_c_bind = true;
-            }
-            "c-required" => {
-                // Found "c-required" attribute
-                has_c_required = true;
-            }
-            _ => {}
         }
-    }
+    };
 
-    // A dynamic name (c-name, or c-bind which may supply one) cannot be
-    // collected statically.
-    if name_token.is_none() && (has_c_name || has_c_bind) {
-        return None;
-    }
-
-    // No name attribute at all: this is the default slot. Synthesize the
-    // "default" name, anchored at the start-tag token for diagnostics.
-    let name_token = name_token.unwrap_or_else(|| {
-        let tag_token = &node.start_tag().token;
-        Token {
-            content: "default".to_string(),
-            start_index: tag_token.start_index,
-            end_index: tag_token.end_index,
-            line_col: tag_token.line_col,
-        }
-    });
-
-    // Determine required field
-    let required = if has_required {
-        // Explicitly required - There is `required` attribute
-        Some(true)
-    } else if has_c_bind || has_c_required {
-        // Unknown - `required` NOT present, but `c-required` or `c-bind` may be set dynamically
-        None
-    } else {
-        // Not required - no `required`, nor `c-required`, nor `c-bind` attribute
-        Some(false)
+    // The same rightmost-provider rule applies independently to requiredness.
+    let required = match attrs.iter().rev().find(|attr| {
+        matches!(
+            attr.key.content.as_str(),
+            "required" | "c-required" | "c-bind"
+        )
+    }) {
+        Some(attr) if attr.key.content == "required" => Some(true),
+        Some(_) => None,
+        None => Some(false),
     };
 
     Some(StaticNamedSlot {
@@ -2708,10 +3541,38 @@ fn extract_slot_from_node(node: &Node) -> Option<StaticNamedSlot> {
 /// # Errors
 /// - If the tag requires a previous tag but `template.elements` is empty
 /// - If the tag requires a previous tag but `template.elements` contains no Nodes
-/// - If the tag requires a previous tag but the last Node's name is not in the allowed set
-///   and it neither has an attribute that matches one of the allowed attributes.
-fn validate_tag_grouping(node: &Node, template: &Template) -> Result<(), ParseError> {
-    let tag_name = node.tag_name();
+/// - If the effective outer control-flow tag of the previous Node is not in the
+///   allowed set.
+fn effective_control_flow_tag(node: &Node) -> &str {
+    let physical_tag = node.tag_name();
+    if CONTROL_FLOW_TAGS.contains(physical_tag) {
+        return physical_tag;
+    }
+
+    // Match the compiler's lowering precedence exactly. A node carrying both
+    // `c-if` and `c-for` becomes an if whose body is a for, so a following
+    // `c-empty` must not attach to that inner loop across the outer if.
+    for group in CONTROL_FLOW_GROUPS {
+        for control_tag in *group {
+            if node
+                .attrs()
+                .iter()
+                .any(|attr| attr.key.content == *control_tag)
+            {
+                return control_tag;
+            }
+        }
+    }
+
+    physical_tag
+}
+
+fn validate_tag_grouping(
+    node: &Node,
+    template: &Template,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let tag_name = effective_control_flow_tag(node);
 
     // If this tag has no ordering constraints, it's valid
     let Some(allowed_previous_tags) = TAG_ORDERING_RULES.get(tag_name) else {
@@ -2720,7 +3581,6 @@ fn validate_tag_grouping(node: &Node, template: &Template) -> Result<(), ParseEr
 
     // Get the start_tag token for error reporting
     let start_tag_token = &node.start_tag().token;
-    let start_tag_span = start_tag_token.as_span().unwrap();
 
     // Format allowed tags for error message
     let allowed_tags_str = || -> String {
@@ -2752,8 +3612,8 @@ fn validate_tag_grouping(node: &Node, template: &Template) -> Result<(), ParseEr
             }
             TemplateElement::Text(text) if text.token.content.trim().is_empty() => continue,
             TemplateElement::Text(_) | TemplateElement::Expr(_) => {
-                return Err(ParseError::from_span(
-                    start_tag_span,
+                return Err(context.error_from_token(
+                    start_tag_token,
                     format!(
                         "Tag '<{}>' must follow one of: {}. Found other content in between.",
                         tag_name,
@@ -2765,8 +3625,8 @@ fn validate_tag_grouping(node: &Node, template: &Template) -> Result<(), ParseEr
     }
     let previous_node = previous_node.ok_or_else(|| {
         // No previous node found
-        ParseError::from_span(
-            start_tag_span,
+        context.error_from_token(
+            start_tag_token,
             format!(
                 "Tag '<{}>' must follow one of: {}. No previous tag found.",
                 tag_name,
@@ -2776,24 +3636,11 @@ fn validate_tag_grouping(node: &Node, template: &Template) -> Result<(), ParseEr
     })?;
 
     // We've found the previous node. Now check if it's allowed
-    let prev_tag_name = previous_node.tag_name();
-    let prev_tag_attr_names = previous_node
-        .attrs()
-        .iter()
-        .map(|attr| attr.key.content.as_str())
-        .collect::<Vec<&str>>();
+    let prev_tag_name = effective_control_flow_tag(previous_node);
 
-    // For the grouping to be valid, the previous node must EITHER:
-    // - Match the tag name, e.g `<c-if>`, `<c-for>`, etc.
-    // - OR have an attribute that matches one of the allowed attributes for the current tag.
-    //   E.g. `<div c-if="...">...</div>`
-    if !allowed_previous_tags.contains(prev_tag_name)
-        && !allowed_previous_tags
-            .iter()
-            .any(|allowed| prev_tag_attr_names.contains(allowed))
-    {
-        return Err(ParseError::from_span(
-            start_tag_span,
+    if !allowed_previous_tags.contains(prev_tag_name) {
+        return Err(context.error_from_token(
+            start_tag_token,
             format!(
                 "Tag '<{}>' must follow one of: {}. Found '<{}>' instead.",
                 tag_name,

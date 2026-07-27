@@ -160,7 +160,7 @@ mod tests {
     // keeps its whole attribute set structured: the compiler emits one
     // ElementAttrsNode covering the attribute region, and the runtime decides
     // spreads, True/False/None handling, and class/style merging
-    // (docs/design/html_attrs.md section 5). Signature:
+    // (docs/design/template_html_attrs.md section 5). Signature:
     //   ElementAttrsNode(source, (start, end,), (attrs,), (used_vars,))
 
     #[test]
@@ -506,6 +506,14 @@ mod tests {
         assert_compile(
             r#"<c-Card><c-fill name="header" data="d" fallback="fb">{{ d }} {{ fb }}</c-fill></c-Card>"#,
             r#"[ComponentNode(source, (0, 87,), (), [FillNode(source, (8, 78,), (StaticHtmlAttr(source, (16, 29,), """name""", """header""", ()), StaticHtmlAttr(source, (30, 38,), """data""", """d""", ()), StaticHtmlAttr(source, (39, 52,), """fallback""", """fb""", ()),), [ExprNode(source, (53, 60,), """d """, ("d",)), """ """, ExprNode(source, (61, 69,), """fb """, ("fb",)),], (), ("d", "fb",)),], (), """card""", True),]"#,
+        );
+    }
+
+    #[test]
+    fn test_fill_data_destructuring_compiles_a_binding_plan() {
+        assert_compile(
+            r#"<c-Card><c-fill name="header" data="{a, b as c, **rest}">{{ a }}{{ c }}{{ rest }}</c-fill></c-Card>"#,
+            r#"[ComponentNode(source, (0, 99,), (), [FillNode(source, (8, 90,), (StaticHtmlAttr(source, (16, 29,), """name""", """header""", ()), StaticHtmlAttr(source, (30, 56,), """data""", FillDataBinding((("a", "a",), ("b", "c",),), "rest"), ()),), [ExprNode(source, (57, 64,), """a """, ("a",)), ExprNode(source, (64, 71,), """c """, ("c",)), ExprNode(source, (71, 81,), """rest """, ("rest",)),], (), ("a", "c", "rest",)),], (), """card""", True),]"#,
         );
     }
 

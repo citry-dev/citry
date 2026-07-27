@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
 use std::rc::Rc;
 
+use pest::error::InputLocation;
 use pyo3::prelude::*;
 
 use crate::ast::{Comment, Token};
@@ -15,7 +17,7 @@ use crate::lang::lang::LangImpl;
 /// # Examples
 ///
 /// ```ignore
-/// use std::collections::HashMap;
+/// use std::collections::{BTreeMap, HashMap};
 /// use citry_template_parser::{TagRules, parse_template};
 ///
 /// let mut rules = HashMap::new();
@@ -24,6 +26,7 @@ use crate::lang::lang::LangImpl;
 ///     required_attrs: vec![vec!["id".to_string(), "c-id".to_string()]],
 ///     allowed_slots: Some(vec!["default".to_string()]),
 ///     required_slots: vec!["default".to_string()],
+///     slot_data_fields: BTreeMap::new(),
 /// });
 ///
 /// let template = parse_template("<my-tag id=\"test\"></my-tag>", None, Some(&rules))?;
@@ -59,30 +62,43 @@ pub struct TagRules {
     /// - If `vec!["default", "footer"]`, both "default" and "footer" slots must be present.
     #[pyo3(get)]
     pub required_slots: Vec<String>,
+    /// Statically known slot-data fields, keyed by slot name.
+    /// - A missing slot key means its data shape is unknown and is not checked.
+    /// - A present key with an empty list means the slot has a known empty shape.
+    /// - Explicit fields in a direct `<c-fill data="{ ... }">` binding must
+    ///   belong to the effective statically named slot's list.
+    #[pyo3(get)]
+    pub slot_data_fields: BTreeMap<String, Vec<String>>,
 }
 
 #[pymethods]
 impl TagRules {
     #[new]
-    #[pyo3(signature = (allowed_attrs=None, required_attrs=Vec::new(), allowed_slots=None, required_slots=Vec::new()))]
+    #[pyo3(signature = (allowed_attrs=None, required_attrs=Vec::new(), allowed_slots=None, required_slots=Vec::new(), slot_data_fields=BTreeMap::new()))]
     fn new(
         allowed_attrs: Option<Vec<Vec<String>>>,
         required_attrs: Vec<Vec<String>>,
         allowed_slots: Option<Vec<String>>,
         required_slots: Vec<String>,
+        slot_data_fields: BTreeMap<String, Vec<String>>,
     ) -> Self {
         Self {
             allowed_attrs,
             required_attrs,
             allowed_slots,
             required_slots,
+            slot_data_fields,
         }
     }
 
     fn __repr__(&self) -> String {
         format!(
-            "TagRules(allowed_attrs={:?}, required_attrs={:?}, allowed_slots={:?}, required_slots={:?})",
-            self.allowed_attrs, self.required_attrs, self.allowed_slots, self.required_slots
+            "TagRules(allowed_attrs={:?}, required_attrs={:?}, allowed_slots={:?}, required_slots={:?}, slot_data_fields={:?})",
+            self.allowed_attrs,
+            self.required_attrs,
+            self.allowed_slots,
+            self.required_slots,
+            self.slot_data_fields
         )
     }
 }
@@ -100,6 +116,19 @@ pub struct ParserContext {
     pub user_rules: Rc<HashMap<String, TagRules>>,
     /// Language-specific implementation for parsing expressions
     pub lang: Rc<dyn LangImpl>,
+    /// Complete source passed to the outermost parser invocation.
+    ///
+    /// Nested template attributes are parsed from substrings, but diagnostics
+    /// must still point into this source rather than displaying the substring
+    /// as a separate template.
+    root_source: Rc<String>,
+    /// Statically known loop/fill bindings declared inside nested-template
+    /// attribute values, keyed by the absolute span of the containing attr.
+    ///
+    /// `HtmlAttr` intentionally keeps its public shape and stores only the
+    /// nested template's free variables. This parser-private side table lets
+    /// the outer scope validator still see declarations inside that value.
+    nested_template_bindings: Rc<RefCell<HashMap<(usize, usize), Vec<Token>>>>,
 }
 
 impl ParserContext {
@@ -111,7 +140,20 @@ impl ParserContext {
             index_offset: 0,
             lang: Rc::clone(lang),
             user_rules: Rc::clone(user_rules),
+            root_source: Rc::new(String::new()),
+            nested_template_bindings: Rc::new(RefCell::new(HashMap::new())),
         }
+    }
+
+    /// Create the root parsing context for a complete source string.
+    pub(crate) fn for_source(
+        source: &str,
+        lang: &Rc<dyn LangImpl>,
+        user_rules: &Rc<HashMap<String, TagRules>>,
+    ) -> Self {
+        let mut context = Self::new(lang, user_rules);
+        context.root_source = Rc::new(source.to_string());
+        context
     }
 
     /// Create a child context with specified offsets
@@ -131,7 +173,87 @@ impl ParserContext {
             user_rules: Rc::clone(&self.user_rules),
             // Language implementation is inherited from the parent context via Rc (no cloning).
             lang: Rc::clone(&self.lang),
+            root_source: Rc::clone(&self.root_source),
+            nested_template_bindings: Rc::clone(&self.nested_template_bindings),
         }
+    }
+
+    /// Record the declarations found inside one nested-template attribute.
+    pub(crate) fn record_nested_template_bindings(&self, attr_token: &Token, bindings: Vec<Token>) {
+        self.nested_template_bindings
+            .borrow_mut()
+            .insert((attr_token.start_index, attr_token.end_index), bindings);
+    }
+
+    /// Return declarations found inside one nested-template attribute.
+    pub(crate) fn nested_template_bindings(&self, attr_token: &Token) -> Vec<Token> {
+        self.nested_template_bindings
+            .borrow()
+            .get(&(attr_token.start_index, attr_token.end_index))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Build an error from a span in the substring currently being parsed.
+    pub(crate) fn error_from_local_span(
+        &self,
+        span: pest::Span<'_>,
+        message: String,
+    ) -> ParseError {
+        self.error_from_absolute_range(
+            self.index_offset.saturating_add(span.start()),
+            self.index_offset.saturating_add(span.end()),
+            message,
+        )
+    }
+
+    /// Build an error from a token whose indices are already root-absolute.
+    pub(crate) fn error_from_token(&self, token: &Token, message: String) -> ParseError {
+        self.error_from_absolute_range(token.start_index, token.end_index, message)
+    }
+
+    /// Build an error spanning the complete outer source.
+    pub(crate) fn error_from_absolute_source(&self, message: String) -> ParseError {
+        self.error_from_absolute_range(0, self.root_source.len(), message)
+    }
+
+    /// Rebase a Pest grammar error from the current substring onto the root source.
+    pub(crate) fn error_from_pest(
+        &self,
+        error: pest::error::Error<Rule>,
+        prefix: &str,
+    ) -> ParseError {
+        let message = format!("{}{}", prefix, error.variant.message());
+        match error.location {
+            InputLocation::Pos(position) => self
+                .error_from_absolute_position(self.index_offset.saturating_add(position), message),
+            InputLocation::Span((start, end)) => self.error_from_absolute_range(
+                self.index_offset.saturating_add(start),
+                self.index_offset.saturating_add(end),
+                message,
+            ),
+        }
+    }
+
+    fn error_from_absolute_position(&self, position: usize, message: String) -> ParseError {
+        let source = self.root_source.as_str();
+        if let Some(position) = pest::Position::new(source, position) {
+            return ParseError::Syntax(pest::error::Error::new_from_pos(
+                pest::error::ErrorVariant::CustomError { message },
+                position,
+            ));
+        }
+
+        ParseError::Value(message)
+    }
+
+    fn error_from_absolute_range(&self, start: usize, end: usize, message: String) -> ParseError {
+        let source = self.root_source.as_str();
+        if let Some(span) = pest::Span::new(source, start, end) {
+            return ParseError::from_span(span, message);
+        }
+
+        ParseError::Value(message)
     }
 
     // /////////////////////////////////////////////////////
@@ -144,7 +266,7 @@ impl ParserContext {
 
         // A comment must be at least 4 characters: {# #}
         if token.content.len() < 4 {
-            return Err(ParseError::from_span(
+            return Err(self.error_from_local_span(
                 pair.as_span(),
                 format!("Invalid comment: too short ({})", token.content.clone()),
             ));

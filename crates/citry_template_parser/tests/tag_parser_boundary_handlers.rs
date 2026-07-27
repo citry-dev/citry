@@ -21,6 +21,7 @@ mod tests {
                 required_attrs: vec![],
                 allowed_slots: None,
                 required_slots: vec![],
+                slot_data_fields: Default::default(),
             },
         );
         Rc::new(rules)

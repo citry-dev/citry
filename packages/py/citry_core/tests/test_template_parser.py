@@ -11,11 +11,24 @@ lang parameter.
 import pytest
 
 from citry_core.template_parser import (
+    RESERVED_TAG_NAMES,
+    FillDataField,
+    FillDataPattern,
+    HtmlAttr,
+    HtmlAttrKind,
     TagRules,
     Template,
+    Token,
     compile_template,
     parse_template,
 )
+
+
+def test_reserved_tag_names_are_exposed_from_the_parser() -> None:
+    assert "c-if" in RESERVED_TAG_NAMES
+    assert "c-slot" in RESERVED_TAG_NAMES
+    assert all(name.startswith("c-") for name in RESERVED_TAG_NAMES)
+
 
 # =========================================================================
 # Dummy runtime node classes
@@ -57,6 +70,12 @@ class StaticHtmlAttr:
         self.used_vars = used_vars
 
 
+class FillDataBinding:
+    def __init__(self, fields, rest):
+        self.fields = fields
+        self.rest = rest
+
+
 class ExprHtmlAttr:
     def __init__(self, source, position, key, expr, used_vars):
         self.source = source
@@ -76,7 +95,9 @@ class TemplateHtmlAttr:
 
 
 class ComponentNode:
-    def __init__(self, source, position, attrs, body, used_vars, name, contains_fills):
+    # The trailing `key` argument is emitted only when the tag carries
+    # `#c-key`, so it defaults here like in the real runtime class.
+    def __init__(self, source, position, attrs, body, used_vars, name, contains_fills, key=None):
         self.source = source
         self.position = position
         self.attrs = attrs
@@ -84,6 +105,7 @@ class ComponentNode:
         self.used_vars = used_vars
         self.name = name
         self.contains_fills = contains_fills
+        self.key = key
 
 
 class IfNode:
@@ -171,9 +193,39 @@ class TestParseTemplate:
         comp = t.elements[0]._0
         assert comp.contains_fills is True
 
+    def test_fill_data_pattern_is_exposed_through_python_ast(self):
+        t = parse_template('<c-Card><c-fill name="header" data="{ a, b as c, **rest }">body</c-fill></c-Card>')
+        fill = t.elements[0]._0.body.elements[0]._0
+        data_attr = next(attr for attr in fill.start_tag.attrs if attr.key.content == "data")
+        pattern = data_attr.fill_data_pattern
+
+        assert isinstance(pattern, FillDataPattern)
+        assert pattern.whole is None
+        assert all(isinstance(field, FillDataField) for field in pattern.fields)
+        assert [(field.source.content, field.target.content) for field in pattern.fields] == [
+            ("a", "a"),
+            ("b", "c"),
+        ]
+        assert pattern.rest.content == "rest"
+
+    def test_html_attr_constructor_keeps_the_pre_pattern_signature(self):
+        token = Token("title", 0, 5, (1, 1))
+        attr = HtmlAttr(token, token, None, None, None, HtmlAttrKind.Static, [], [])
+
+        assert attr.fill_data_pattern is None
+
     def test_raw(self):
         t = parse_template("<c-raw>{{ not parsed }}</c-raw>")
         assert len(t.elements) == 1
+
+    def test_meta_kind_enum_member(self):
+        # The `#c-*` framework channel's attribute kind is part of the
+        # Python contract (mirrored in _rust.pyi).
+        assert isinstance(HtmlAttrKind.Meta, HtmlAttrKind)
+        # A template carrying the channel parses through the binding.
+        t = parse_template('<li #c-key="item.id">x</li>')
+        assert len(t.elements) == 1
+        assert t.used_variables[0].content == "item"
 
     def test_comment_tracked(self):
         t = parse_template("Hello {# comment #} world")
@@ -229,6 +281,17 @@ class TestCompileTemplate:
         code = compile_template(t)
         assert "ExprHtmlAttr" in code
 
+    def test_meta_key_on_element(self):
+        t = parse_template('<li #c-key="item.id">x</li>')
+        code = compile_template(t)
+        assert 'data-citry-key=\\":' in code
+        assert '"""item.id"""' in code
+
+    def test_meta_ignore_on_element(self):
+        t = parse_template("<div #c-ignore>x</div>")
+        code = compile_template(t)
+        assert 'data-citry-morph=\\"ignore\\"' in code
+
 
 # =========================================================================
 # Round-trip: parse -> compile -> exec with stub nodes
@@ -250,6 +313,7 @@ class TestRoundTrip:
             "ForNode": ForNode,
             "SlotNode": SlotNode,
             "FillNode": FillNode,
+            "FillDataBinding": FillDataBinding,
             "StaticHtmlAttr": StaticHtmlAttr,
             "ExprHtmlAttr": ExprHtmlAttr,
             "TemplateHtmlAttr": TemplateHtmlAttr,
@@ -286,6 +350,34 @@ class TestRoundTrip:
         assert isinstance(comp, ComponentNode)
         assert len(comp.attrs) == 1
         assert isinstance(comp.attrs[0], StaticHtmlAttr)
+
+    def test_component_with_meta_key(self):
+        body = self._exec_template('<c-Card #c-key="item.id" title="Hi" />')
+        comp = body[0]
+        assert isinstance(comp, ComponentNode)
+        # The key rides as the trailing argument, never inside attrs (so it
+        # can never become a kwarg).
+        assert isinstance(comp.key, ExprHtmlAttr)
+        assert comp.key.key == "#c-key"
+        assert comp.key.expr == "item.id"
+        assert comp.key.used_vars == ("item",)
+        assert len(comp.attrs) == 1
+        assert isinstance(comp.attrs[0], StaticHtmlAttr)
+
+    def test_unkeyed_component_key_defaults_none(self):
+        body = self._exec_template("<c-Card />")
+        assert body[0].key is None
+
+    def test_element_meta_key(self):
+        body = self._exec_template('<li #c-key="item.id">x</li>')
+        assert body[0] == '<li data-citry-key=":'
+        assert isinstance(body[1], ExprNode)
+        assert body[1].expr == "item.id"
+        assert body[2] == '">x</li>'
+
+    def test_element_meta_ignore(self):
+        body = self._exec_template("<div #c-ignore>x</div>")
+        assert body == ['<div data-citry-morph="ignore">x</div>']
 
     def test_if_node(self):
         body = self._exec_template('<c-if cond="x">yes</c-if>')
@@ -345,6 +437,12 @@ class TestRoundTrip:
 
 
 class TestErrors:
+    def test_unknown_meta_attr_raises_naming_members(self):
+        # The `#c-*` channel has exactly two members; the parse error names
+        # them so the author knows what exists.
+        with pytest.raises(SyntaxError, match="'#c-key' and '#c-ignore'"):
+            parse_template('<div #c-bogus="1">x</div>')
+
     def test_unclosed_tag_raises_syntax_error(self):
         with pytest.raises(SyntaxError):
             parse_template("<c-my-tag>")
@@ -395,6 +493,10 @@ class TestLangParameter:
 
 
 class TestTagRules:
+    def test_slot_data_fields_round_trip(self):
+        rules = TagRules(slot_data_fields={"row": ["item", "index"], "empty": []})
+        assert rules.slot_data_fields == {"empty": [], "row": ["item", "index"]}
+
     def test_allowed_attrs_passes(self):
         rules = {"c-card": TagRules(allowed_attrs=[["title"]])}
         t = parse_template('<c-card title="hi"></c-card>', user_rules=rules)
