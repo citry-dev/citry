@@ -22,4 +22,9 @@ All notable changes to `pygments-citry` are documented here. The format follows
   `get_lexer_by_name("citry")` and `get_lexer_by_name("citry-html")` resolve
   once the package is installed.
 
+### Fixed
+
+- Built-in Citry tag names now receive the same tag styling as HTML and user
+  component tags, including in dark themes.
+
 [0.1.0]: https://github.com/citry-dev/citry/releases/tag/pygments-citry@0.1.0

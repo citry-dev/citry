@@ -1,7 +1,7 @@
 """Token-stream tests for the Citry template constructs inside a ``template`` string."""
 
 from pygments.lexers import get_lexer_by_name
-from pygments.token import Comment, Name, Operator, Punctuation, String, Text
+from pygments.token import Comment, Error, Keyword, Name, Operator, Punctuation, String, Text
 
 
 def lex_template(body):
@@ -43,10 +43,11 @@ def test_lone_brace_is_text_not_interpolation():
     assert (Punctuation, "{{") not in toks
 
 
-def test_builtin_tag_distinct_from_user_component():
+def test_builtin_and_user_component_names_are_html_tag_tokens():
     toks = lex_template("<c-slot></c-slot><c-Card></c-Card>")
-    assert (Name.Builtin, "c-slot") in toks
+    assert (Name.Tag, "c-slot") in toks
     assert (Name.Tag, "c-Card") in toks
+    assert (Name.Builtin, "c-slot") not in toks
 
 
 def test_dynamic_attribute_value_is_python():
@@ -62,9 +63,32 @@ def test_dynamic_attribute_single_quoted_and_bare():
     assert (Name, "y") in toks
 
 
+def test_direct_client_props_value_is_javascript():
+    toks = lex_template('<c-child $c-props="{ enabled: true, count: localCount }" />')
+    assert (Name.Attribute, "$c-props") in toks
+    assert (Keyword.Constant, "true") in toks
+    assert (Name.Other, "localCount") in toks
+    assert not any(token is Error for token, _ in toks)
+
+
+def test_server_dynamic_client_props_value_is_python():
+    toks = lex_template('<c-child c-$c-props="primary if enabled else fallback" />')
+    assert (Name.Attribute, "c-$c-props") in toks
+    assert (Keyword, "if") in toks
+    assert (Keyword, "else") in toks
+    assert (Name, "fallback") in toks
+    assert not any(token is Error for token, _ in toks)
+
+
+def test_only_exact_client_props_name_gets_special_highlighting():
+    toks = lex_html('<div $other="true" $c-props-extra="true"></div>')
+    assert (Error, "$") in toks
+    assert (Name.Attribute, "$c-props") not in toks
+
+
 def test_c_raw_body_is_verbatim():
     toks = lex_template("<c-raw>a < b {{ z }}</c-raw>")
-    assert (Name.Builtin, "c-raw") in toks
+    assert (Name.Tag, "c-raw") in toks
     # nothing inside c-raw is interpreted
     assert (Punctuation, "{{") not in toks
     assert (Name, "z") not in toks
@@ -90,15 +114,30 @@ def test_interpolation_boundary_counts_nested_braces():
     assert (Punctuation, "{") in toks  # the dict braces are highlighted as Python
 
 
-def test_builtin_tag_special_attributes_are_python():
-    # cond / each / is on a built-in tag hold Python expressions, not strings
-    toks = lex_template('<c-if cond="a and b"></c-if><c-for each="x in xs"></c-for><c-component is="widget" />')
+def test_control_flow_tag_attributes_are_python():
+    toks = lex_template('<c-if cond="a and b"></c-if><c-elif cond="c or d"></c-elif><c-for each="x in xs" />')
     assert (Name.Attribute, "cond") in toks
     assert (Name.Attribute, "each") in toks
-    assert (Name.Attribute, "is") in toks
     assert (Operator.Word, "and") in toks  # cond value lexed as Python
+    assert (Operator.Word, "or") in toks  # c-elif uses the same condition state
     assert (Operator.Word, "in") in toks  # each value lexed as Python
-    assert (Name, "widget") in toks  # is value lexed as Python
+
+
+def test_dynamic_component_static_and_python_targets_are_distinct():
+    toks = lex_template('<c-component is="widget" /><c-element c-is="widget" />')
+
+    assert (Name.Attribute, "is") in toks
+    assert (String, '"widget"') in toks
+    assert (Name.Attribute, "c-is") in toks
+    assert (Name, "widget") in toks
+
+
+def test_control_flow_attribute_names_on_other_tags_stay_strings():
+    toks = lex_template('<c-slot cond="a and b" each="x in xs" is="widget" />')
+
+    assert toks.count((String, '"a and b"')) == 1
+    assert toks.count((String, '"x in xs"')) == 1
+    assert toks.count((String, '"widget"')) == 1
 
 
 def test_is_on_an_ordinary_tag_stays_a_string():
@@ -140,9 +179,53 @@ def test_malformed_interpolations_do_not_crash():
 
 def test_standalone_citry_html_lexer_on_a_bare_template():
     toks = lex_html('<c-if cond="ok">{# note #}<c-slot />{{ user.name }}</c-if>')
-    assert (Name.Builtin, "c-if") in toks
-    assert (Name.Builtin, "c-slot") in toks
+    assert (Name.Tag, "c-if") in toks
+    assert (Name.Tag, "c-slot") in toks
     assert (Comment, "{# note #}") in toks
     assert (Name.Attribute, "cond") in toks
     assert (Name, "ok") in toks  # cond value is Python
     assert (Name, "user") in toks  # {{ }} body is Python
+
+
+def test_every_citry_tag_name_uses_the_html_tag_token():
+    tags = (
+        "c-if",
+        "c-elif",
+        "c-else",
+        "c-for",
+        "c-empty",
+        "c-slot",
+        "c-fill",
+        "c-component",
+        "c-element",
+        "c-provide",
+        "c-css",
+        "c-js",
+        "c-raw",
+        "c-cache",
+        "c-error-fallback",
+        "c-template",
+        "c-Card",
+    )
+    toks = lex_html("".join(f"<{tag}></{tag}>" for tag in tags))
+
+    for tag in tags:
+        assert toks.count((Name.Tag, tag)) == 2
+        assert (Name.Builtin, tag) not in toks
+
+
+def test_builtin_prefixes_do_not_steal_user_component_names():
+    tags = (
+        "c-if-panel",
+        "c-elif-panel",
+        "c-for-panel",
+        "c-slot-panel",
+        "c-component-card",
+        "c-raw-data",
+    )
+    toks = lex_html("".join(f"<{tag}>{{{{ value }}}}</{tag}>" for tag in tags))
+
+    for tag in tags:
+        assert toks.count((Name.Tag, tag)) == 2
+    assert toks.count((Punctuation, "{{")) == len(tags)
+    assert toks.count((Punctuation, "}}")) == len(tags)
