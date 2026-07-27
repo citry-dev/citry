@@ -355,7 +355,10 @@ def configure_docs_globals(config: DocsConfig) -> str:
     dogfoods Citry's global-variables feature instead of a dedicated tag).
     """
     version = _citry_version()
-    default_citry.template_globals.update({"version": version, "site_name": config.site_name})
+    default_citry.template_globals.update({
+        "version": version,
+        "site_name": config.site_name,
+    })
     return version
 
 

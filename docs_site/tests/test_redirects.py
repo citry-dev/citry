@@ -5,14 +5,12 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from docs_site._internal.redirects import REDIRECTS, emit_redirects
+from docs_site._internal.redirects import emit_redirects
 
 
-def test_no_redirects_writes_nothing(tmp_path: Path) -> None:
-    # Citry has not moved any URLs yet, so the default map is empty.
-    assert REDIRECTS == {}
-    assert emit_redirects(tmp_path, site_url="https://x.test") == 0
-    assert not any(tmp_path.iterdir())
+def test_empty_redirect_map_writes_nothing(tmp_path: Path) -> None:
+    assert emit_redirects(tmp_path, site_url="https://x.test", redirects={}) == 0
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_redirect_stub_forwards_and_self_excludes(tmp_path: Path) -> None:

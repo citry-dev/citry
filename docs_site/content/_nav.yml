@@ -1,0 +1,42 @@
+# Navigation tree for the docs sidebar.
+# A section has EITHER a `path` (a standalone link), `items` (one level), or
+# `groups` (two levels), never more than one. Paths are clean URLs.
+
+sections:
+
+  - label: Home
+    path: /
+
+  - label: Getting started
+    items:
+      - { title: Install Citry, path: /getting-started/installation/ }
+      - { title: Your first component, path: /getting-started/your-first-component/ }
+      - { title: Use data in components, path: /getting-started/parametrising-components/ }
+      - { title: Build a page from components, path: /getting-started/components-in-templates/ }
+      - { title: Add flexible content, path: /getting-started/adding-slots/ }
+      - { title: Add browser behavior, path: /getting-started/browser-interactivity/ }
+      - { title: Connect components in the browser, path: /getting-started/client-props-and-handlers/ }
+      - { title: Serve the page with FastAPI, path: /getting-started/fastapi/ }
+      - { title: Call Python from a click, path: /getting-started/call-python/ }
+      - { title: Keep a value between calls, path: /getting-started/state/ }
+      - { title: Handle and validate a form, path: /getting-started/forms/ }
+      - { title: Replace part of the page from Python, path: /getting-started/server-rendered-updates/ }
+
+  - label: About
+    items:
+      - { title: Compatibility, path: /about/compatibility/ }
+      - { title: Benchmarks, path: /about/benchmarks/ }
+      - { title: Security, path: /security/ }
+
+  - label: Community
+    items:
+      - { title: People, path: /community/people/ }
+      - { title: Getting help, path: /community/help/ }
+      - { title: Contributing, path: /community/contributing/ }
+      - { title: Code of conduct, path: /community/code-of-conduct/ }
+      - { title: Development, path: /community/development/ }
+      - { title: AI bot policy, path: /community/ai-bot-policy/ }
+      - { title: License, path: /community/license/ }
+
+  - label: Examples
+    path: /examples/
