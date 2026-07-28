@@ -7,16 +7,23 @@
 # current site on every push to main). It runs only on a version tag push
 # (citry@X.Y.Z) or a manual dispatch.
 #
-# REVIEW BEFORE THE FIRST REAL RELEASE (see the deploy notes in the PR):
-#   - Commit-back token: the build-and-commit step pushes to the default branch
-#     using the default GITHUB_TOKEN (contents: write). If the default branch is
-#     protected, that push is rejected. Switch to a GitHub App token or a PAT with
-#     contents: write then (django-components' release-docs.yml shows the
-#     create-github-app-token shape) and pass it to actions/checkout `token:`.
-#   - Committed vs artifact-only: this commits every built snapshot to the repo.
-#     To keep versions out of git instead, drop the commit-back step and build the
-#     versions during assemble. citry's committed versions.json means committed is
-#     the current model.
+# Operating notes:
+#   - Pages deploys are gated by the github-pages environment's deployment branch
+#     policy, which lists the refs allowed to publish. This workflow runs on the
+#     citry@X.Y.Z tag, so that policy holds a `citry@*` tag rule next to `main`.
+#     Without it the deploy job is rejected before any step runs, with "is not
+#     allowed to deploy to github-pages due to environment protection rules".
+#   - This workflow deploys the site itself rather than leaving it to the
+#     main-push deploy in repo--docs-deploy.yml, because the snapshot commit below
+#     is pushed with the default GITHUB_TOKEN, and a GITHUB_TOKEN push starts no
+#     further workflow runs.
+#   - The commit-back pushes to the default branch with the default GITHUB_TOKEN
+#     (contents: write), which works while that branch is unprotected. Protecting
+#     it means passing a GitHub App token or a PAT with contents: write to
+#     actions/checkout `token:` (django-components' release-docs.yml shows the
+#     create-github-app-token shape).
+#   - Every built snapshot is committed to the repo, matching the committed
+#     docs_site/versions/versions.json.
 #   - The snapshot is built from the default branch's tip labelled as the tag
 #     version. A release is tagged on that tip, so they coincide; if main advances
 #     between tagging and this run, the snapshot reflects main's tip.
