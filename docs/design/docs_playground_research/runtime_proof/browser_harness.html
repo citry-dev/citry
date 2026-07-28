@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Citry playground browser proof</title>
+  </head>
+  <body>
+    <main>
+      <h1>Citry playground browser proof</h1>
+      <div id="frames"></div>
+    </main>
+    <script type="module">
+      const delay = (milliseconds) =>
+        new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+      function startWorker(mode) {
+        const worker = new Worker("/runtime_worker.mjs", { type: "module" });
+        worker.postMessage({
+          indexURL: "/artifacts/pyodide/",
+          mode,
+          type: "start",
+          wheelURL: "/artifacts/citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+        });
+        return worker;
+      }
+
+      window.runWorkerSmoke = () =>
+        new Promise((resolve, reject) => {
+          const worker = startWorker("smoke");
+          let floodMessages = 0;
+          const phases = [];
+          const timeout = setTimeout(() => {
+            worker.terminate();
+            reject(new Error(`worker smoke timed out after phases: ${phases.join(", ")}`));
+          }, 20_000);
+          worker.onerror = (event) => {
+            clearTimeout(timeout);
+            reject(new Error(`${event.message} at ${event.filename}:${event.lineno}`));
+          };
+          worker.onmessage = ({ data }) => {
+            if (typeof data === "string" && data.startsWith("worker-flood:")) {
+              floodMessages += 1;
+              return;
+            }
+            if (data.type === "phase") {
+              phases.push(data.phase);
+              return;
+            }
+            if (data.type === "failure") {
+              clearTimeout(timeout);
+              worker.terminate();
+              reject(new Error(`${data.error}\n${data.stack}`));
+              return;
+            }
+            if (data.type === "result") {
+              clearTimeout(timeout);
+              worker.terminate();
+              resolve({ ...data, floodMessages, phases });
+            }
+          };
+        });
+
+      window.runWorkerTermination = () =>
+        new Promise((resolve, reject) => {
+          const worker = startWorker("infinite");
+          const timeout = setTimeout(() => {
+            worker.terminate();
+            reject(new Error("infinite-loop worker did not initialize in 20 seconds"));
+          }, 20_000);
+          worker.onerror = (event) => {
+            clearTimeout(timeout);
+            reject(new Error(event.message));
+          };
+          worker.onmessage = async ({ data }) => {
+            if (data.type !== "loop-started") {
+              return;
+            }
+            clearTimeout(timeout);
+            const terminatedAt = performance.now();
+            let pong = false;
+            worker.onmessage = ({ data: laterData }) => {
+              if (laterData.type === "pong") {
+                pong = true;
+              }
+            };
+            await delay(100);
+            worker.postMessage({ type: "ping" });
+            await delay(150);
+            worker.terminate();
+            const recoveryStarted = performance.now();
+            try {
+              const recovery = await window.runWorkerSmoke();
+              resolve({
+                blockedWorkerAnsweredPing: pong,
+                recovery,
+                recovery_ms: performance.now() - recoveryStarted,
+                termination_ms: performance.now() - terminatedAt,
+              });
+            } catch (error) {
+              reject(error);
+            }
+          };
+        });
+
+      function iframeSource() {
+        const baseURL = location.origin;
+        return `<!doctype html>
+<html><body><script type="module">
+const baseURL = ${JSON.stringify(baseURL)};
+const result = { origin: location.origin };
+try {
+  result.parentAccess = Boolean(parent.document.body);
+} catch (error) {
+  result.parentAccess = false;
+  result.parentAccessError = error.name;
+}
+try {
+  localStorage.setItem("probe", "value");
+  result.localStorage = true;
+} catch (error) {
+  result.localStorage = false;
+  result.localStorageError = error.name;
+}
+try {
+  result.indexedDB = Boolean(indexedDB.open("probe"));
+} catch (error) {
+  result.indexedDB = false;
+  result.indexedDBError = error.name;
+}
+try {
+  const response = await fetch(baseURL + "/iframe-fetch");
+  result.fetch = { ok: response.ok, server: await response.json() };
+} catch (error) {
+  result.fetch = { ok: false, error: String(error) };
+}
+try {
+  await fetch("https://example.com/citry-external-probe");
+  result.externalFetch = true;
+} catch (error) {
+  result.externalFetch = false;
+  result.externalFetchError = error.name;
+}
+const loadImage = (url) => new Promise((resolve) => {
+  const image = new Image();
+  image.onload = () => resolve(true);
+  image.onerror = () => resolve(false);
+  image.src = url;
+});
+result.relativeImage = await loadImage("/pixel.png?kind=relative");
+result.absoluteImage = await loadImage(baseURL + "/pixel.png?kind=absolute");
+result.externalImage = await loadImage("https://example.com/citry-external.png");
+try {
+  result.popup = Boolean(window.open(baseURL + "/popup", "_blank"));
+} catch (error) {
+  result.popup = false;
+  result.popupError = error.name;
+}
+try {
+  top.location.href = baseURL + "/top-nav";
+  result.topNavigationAssignment = true;
+} catch (error) {
+  result.topNavigationAssignment = false;
+  result.topNavigationError = error.name;
+}
+const download = document.createElement("a");
+download.download = "probe.txt";
+download.href = baseURL + "/download";
+document.body.append(download);
+download.click();
+parent.postMessage({ type: "iframe-result", result }, "*");
+for (let index = 0; index < 250; index += 1) {
+  parent.postMessage("iframe-flood:" + index, "*");
+}
+parent.postMessage({ type: "iframe-flood-done" }, "*");
+setTimeout(() => { location.href = baseURL + "/frame-nav"; }, 100);
+<\/script></body></html>`;
+      }
+
+      window.runIframeProbe = () =>
+        new Promise((resolve, reject) => {
+          const iframe = document.createElement("iframe");
+          iframe.sandbox = "allow-scripts";
+          iframe.srcdoc = iframeSource();
+          document.querySelector("#frames").append(iframe);
+          let floodMessages = 0;
+          let report;
+          const timeout = setTimeout(() => {
+            window.removeEventListener("message", onMessage);
+            reject(new Error("iframe probe timed out"));
+          }, 10_000);
+          function onMessage(event) {
+            if (event.source !== iframe.contentWindow) {
+              return;
+            }
+            if (typeof event.data === "string" && event.data.startsWith("iframe-flood:")) {
+              floodMessages += 1;
+              return;
+            }
+            if (event.data?.type === "iframe-result") {
+              report = { messageOrigin: event.origin, ...event.data.result };
+              return;
+            }
+            if (event.data?.type === "iframe-flood-done") {
+              clearTimeout(timeout);
+              window.removeEventListener("message", onMessage);
+              resolve({ floodMessages, report });
+            }
+          }
+          window.addEventListener("message", onMessage);
+        });
+    </script>
+  </body>
+</html>

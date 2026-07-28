@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, interactive-widget=resizes-content"
+    />
+    <meta name="color-scheme" content="light dark" />
+    <title>Citry playground layout proof</title>
+    <link rel="stylesheet" href="./layout.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#playground-main">Citry</a>
+      <button
+        class="mobile-menu-button"
+        type="button"
+        aria-expanded="false"
+        aria-controls="primary-navigation"
+      >
+        Menu
+      </button>
+      <nav id="primary-navigation" aria-label="Primary">
+        <a href="#docs">Docs</a>
+        <a href="#examples">Examples</a>
+        <a href="#playground-main" aria-current="page">Try it</a>
+      </nav>
+    </header>
+
+    <main id="playground-main" aria-labelledby="playground-title">
+      <h1 id="playground-title" class="visually-hidden">Try Citry</h1>
+
+      <div class="mobile-pane-switch" role="group" aria-label="Playground panel">
+        <button
+          id="show-code"
+          type="button"
+          aria-controls="code-panel"
+          aria-pressed="true"
+        >
+          Code
+        </button>
+        <button
+          id="show-result"
+          type="button"
+          aria-controls="result-panel"
+          aria-pressed="false"
+        >
+          Result
+        </button>
+      </div>
+
+      <div class="workspace" data-active-pane="code">
+        <section id="code-panel" class="panel code-panel" aria-labelledby="code-title">
+          <header class="panel-toolbar">
+            <h2 id="code-title">Code</h2>
+            <span class="toolbar-spacer"></span>
+            <button id="run-button" type="button">Run</button>
+            <button id="restore-button" type="button">Restore starter</button>
+            <button id="equal-panes-button" type="button">Equal panes</button>
+          </header>
+
+          <div class="panel-content code-content">
+            <label class="visually-hidden" for="source-editor">Python module</label>
+            <textarea id="source-editor" spellcheck="false" wrap="off">from citry import Component
+
+class Welcome(Component):
+    template = """
+    &lt;main class="card"&gt;
+      &lt;h2&gt;Hello {{ name }}&lt;/h2&gt;
+      &lt;button @click="count++"&gt;
+        Clicked &lt;span x-text="count"&gt;&lt;/span&gt; times
+      &lt;/button&gt;
+    &lt;/main&gt;
+    """
+
+    js = """
+    const count = 0;
+    """
+
+    css = """
+    .card { padding: 1rem; }
+    """
+
+Welcome(name="Ada")</textarea>
+          </div>
+
+          <aside class="diagnostic" aria-labelledby="python-error-title">
+            <details open>
+              <summary id="python-error-title">Python diagnostic</summary>
+              <pre tabindex="0">Example traceback remains available until the next successful run.</pre>
+            </details>
+            <button class="copy-diagnostic" type="button">Copy details</button>
+          </aside>
+        </section>
+
+        <div
+          id="workspace-separator"
+          class="workspace-separator"
+          role="separator"
+          aria-label="Resize code and result panels"
+          aria-orientation="vertical"
+          aria-valuemin="30"
+          aria-valuemax="70"
+          aria-valuenow="50"
+          aria-valuetext="Code panel 50 percent"
+          aria-describedby="separator-help"
+          tabindex="0"
+        >
+          <span aria-hidden="true"></span>
+        </div>
+
+        <section id="result-panel" class="panel result-panel" aria-labelledby="result-title">
+          <header class="panel-toolbar">
+            <h2 id="result-title">Result</h2>
+            <span class="toolbar-spacer"></span>
+            <output id="preview-status">Previous result</output>
+          </header>
+
+          <div class="panel-content result-content">
+            <iframe
+              id="result-frame"
+              title="Citry result preview"
+              sandbox="allow-scripts"
+              srcdoc="<!doctype html><html lang='en'><head><meta charset='utf-8'></head><body></body></html>"
+            ></iframe>
+          </div>
+
+          <aside class="diagnostic" aria-labelledby="browser-error-title">
+            <details open>
+              <summary id="browser-error-title">Result diagnostic</summary>
+              <pre tabindex="0">Client errors stay with the result panel and never cover its controls.</pre>
+            </details>
+            <button class="copy-diagnostic" type="button">Copy details</button>
+          </aside>
+        </section>
+      </div>
+
+      <p id="separator-help" class="visually-hidden">
+        Use the left and right arrow keys to resize by one percent. Hold Shift
+        for ten percent. Home and End select the limits. Enter restores equal panes.
+      </p>
+      <div id="announcer" class="visually-hidden" aria-live="polite"></div>
+    </main>
+
+    <script type="module" src="./layout.js"></script>
+  </body>
+</html>

@@ -40,7 +40,7 @@ class Welcome(Component):
         return {"count": len(kwargs.messages)}
 
     js = """
-      $onComponent(({ els, data }) => {
+      $component(({ els, data }) => {
         els[0].title = `${data.count} new messages`;
       });
     """
@@ -72,7 +72,7 @@ Use Citry to build UI, HTML, XML, SVG, or anything that serializes to text.
 Citry is:
 
 - **Familiar** - if you know HTML and Vue/React, you are ready
-- **Simple** - just 2 rules and 13 built-in tags
+- **Simple** - just 2 rules and 15 built-in tags
 - **Fast** - Rust-powered parsing
 - **Safe** - expressions are sandboxed to block dangerous operations
 - **Smart** - manages JS and CSS scripts for you
@@ -177,7 +177,7 @@ If you know HTML, you already know most of Citry.
 
 ## Built-in tags
 
-Beyond your own components, Citry provides 13 built-in tags. With these, Citry
+Beyond your own components, Citry provides 15 built-in tags. With these, Citry
 is as expressive as Vue or React.
 
 | Tag             | Purpose                                                       |
@@ -192,6 +192,8 @@ is as expressive as Vue or React.
 | `<c-component>` | Render a component chosen at render time                     |
 | `<c-element>`   | Render an HTML element whose tag name is chosen at render time |
 | `<c-provide>`   | Provide a value to descendant components                     |
+| `<c-cache>`     | Cache and replay a named transparent template region          |
+| `<c-error-fallback>` | Render fallback content when its body raises             |
 | `<c-css>`       | Render the collected component CSS here                      |
 | `<c-js>`        | Render the collected component JS here                       |
 | `<c-raw>`       | Treat the contents as literal text                           |
@@ -339,9 +341,9 @@ class Chart(Component):
       <div class="chart"></div>
     """
     js = """
-      $onComponent(({ els, data }) => {
+      $component(({ els, data }) => {
         draw(els[0], data.points);
-      )};
+      });
     """
     css = """
       .chart {
@@ -433,7 +435,10 @@ class Card(Component):
 
 Fragments are rendered components that can be inserted into a page.
 
-In browser, Citry smartly loads the fragments' JS/CSS scripts for you.
+In the browser, Citry adopts a client-active fragment's ownership graph and
+loads its JS/CSS assets. Alpine directives, component props and boundary
+handlers, slots, and Events therefore keep the same ownership rules as a full
+document. See [Client interactivity](https://citry.dev/concepts/client-interactivity/).
 
 Render a component specifically as a fragment with `.serialize()`:
 
@@ -442,7 +447,7 @@ card = Card(title="Welcome")
 card.render().serialize(deps_strategy="fragment")
 ```
 
-To use fragements, you must [mount a web framework](#use-with-web-framework).
+To use fragments, you must [mount a web framework](#use-with-web-framework).
 
 ### Performance - Render the constant parts once
 
@@ -496,7 +501,15 @@ from citry.contrib.fastapi import mount
 
 # `app` is your web framework's application object
 mount(app, citry)
+
+# Run this from the framework's startup lifecycle before request threads start.
+citry.initialize()
 ```
+
+`initialize()` imports configured component Python modules, registers built-ins,
+and builds parse-time tag rules. Template, JavaScript, and CSS asset files stay
+lazy. See the [web-framework guide](https://citry.dev/web-frameworks/) for the
+right startup hook in each supported host.
 
 Supported hosts:
 

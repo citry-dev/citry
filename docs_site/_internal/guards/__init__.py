@@ -24,6 +24,10 @@ from docs_site._internal.guards import (
     anchor,
     api_symbols,
     asset,
+    authored_reference,
+    blog,
+    blog_feed,
+    builtin_tags,
     code_lang,
     component_fence,
     cross_version_link,
@@ -72,12 +76,16 @@ GUARDS: list[Guard] = [
     code_lang.check,
     component_fence.check,
     snippet_path.check,
+    blog.check,
     nav.check,
     frontmatter.check,
     example_contract.check,
+    builtin_tags.check,
+    authored_reference.check,
     api_symbols.check,
     # --- post-build (SiteIndex) ---
     internal_link.check,
+    blog_feed.check,
     anchor.check,
     asset.check,
     html_wellformed.check,
@@ -106,6 +114,7 @@ def make_context(build_dir: Path, *, config: DocsConfig) -> GuardContext:
         nav_path=config.content_dir / "_nav.yml",
         static_dir=config.base_dir / "static",
         repo_root=config.repo_root,
+        base_path=config.base_path,
         site_index=SiteIndex(build_dir),
         example_registry=get_example_registry(),
     )
@@ -126,6 +135,7 @@ def make_versions_context(versions_root: Path | None = None) -> GuardContext:
         nav_path=default_config.content_dir / "_nav.yml",
         static_dir=default_config.base_dir / "static",
         repo_root=default_config.repo_root,
+        base_path=default_config.base_path,
         versions_dir=root,
     )
 

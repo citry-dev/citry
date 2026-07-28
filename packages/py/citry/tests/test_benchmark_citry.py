@@ -92,7 +92,7 @@ def _plain(value: Any) -> Any:
 
     json.dumps and other C-level APIs reject the proxy, and the scenario marks
     inputs Const in const mode (and static attrs are auto-marked anyway), so
-    the serializing helpers unwrap first. See docs/design/constness.md.
+    the serializing helpers unwrap first. See docs/design/component_constness.md.
     """
     if isinstance(value, wrapt.ObjectProxy):
         value = value.__wrapped__

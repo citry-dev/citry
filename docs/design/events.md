@@ -1,6 +1,9 @@
 # Design: the Events extension (`Component.Events`)
 
-**Status (2026-07-22): Events v1 shipped.** The Alpine and
+**Status (2026-07-26): Events v1 is implemented but not yet frozen or
+released as the v1 beta.** The exact current wire contract is
+[`packages/protocol/events/v1/spec.md`](../../packages/protocol/events/v1/spec.md);
+this document owns the product and implementation design behind it. The Alpine and
 frontend-boundary source of truth is now [`alpinejs.md`](alpinejs.md); this
 document remains normative for the Events protocol, State, actions,
 transport, and queue. The full
@@ -28,7 +31,11 @@ locked whole Alpine handler expressions and optional Citry argument
 expressions to the exact authored source scope. `$el`, `$dispatch`, and
 `$event` come from the physical child; native `currentTarget` remains
 untouched and follows DOM listener mode and timing. Server-handler validation,
-serialization, registry, relay, and morph integration are now landed as
+serialization, registry, component-tag client bindings (`$c-props`, Alpine
+handlers such as `@click`, and Citry handlers such as `@c-save` or
+`@c-poll.5s` resolved from a nested `<c-*>` tag), and morph integration are
+now landed. The parent owns each binding's expression or server handler, while
+the child supplies the component boundary where the browser applies it, as
 recorded in [`alpinejs_plan.md`](alpinejs_plan.md). On
 2026-07-20 the maintainer selected graph-first Alpine and the public Citry
 props directive `$c-props`, including the orthogonal `c-$c-props` form. The
@@ -149,7 +156,7 @@ class ContactForm(Component):
     template = """
       <form @c-submit="submit">
         <input name="email">
-        <span x-text="$error?.fields.email"></span>
+        <span x-text="$error?.fieldErrors.email"></span>
         <textarea name="message"></textarea>
         <button type="submit" :disabled="$loading()">
           Send
@@ -724,7 +731,7 @@ class ContactForm(Component):
         <form @c-submit.prevent="submit">
           <input name="name">
           <input name="email">
-          <span x-text="$error?.fields.email"></span>
+          <span x-text="$error?.fieldErrors.email"></span>
           <button type="submit" :disabled="$loading()">Send</button>
         </form>
       </c-else>
@@ -1317,7 +1324,7 @@ request-derived context, which is `_context`.
 - **User-raised**: `raise EventError(message, fields=None, status=422)`.
   `fields` is the per-field error map the client receives, keyed by
   data-schema field names (`{"email": "Enter a valid email address."}`)
-  and surfaced as `$error.fields` for inline display next to inputs,
+  and surfaced as `$error.fieldErrors` for inline display next to inputs,
   while `message` is the human summary for a toast or banner. Schema
   validation fills the same map automatically on `invalid_args`. One
   error class with a status argument covers forbidden, not-found, and conflict
@@ -1368,8 +1375,8 @@ limiters, access logs, curl, and OpenAPI all see:
 
 ```
 curl -X POST http://localhost:8000/citry/ext/events/e/Counter_a1b2c3/increment \
-  -H 'content-type: application/json' -H 'x-citry-events: 1' \
-  -d '{"protocol": "citry-events/1", "id": "r1", "calls": [{"event": "increment", "instance": "c9zk1q00", "args": {}, "state": "cev1..."}]}'
+  -H 'content-type: application/citry-events+json' -H 'x-citry-events: 1' \
+  -d '{"protocol":"citry-events/1","requestId":"r1","calls":[{"componentClassId":"Counter_a1b2c3","handlerName":"increment","callerRenderId":"c9zk1q00","args":{},"stateToken":"cev1..."}]}'
 ```
 
 `component.events.url("submit", query=..., fragment=...)` builds event URLs
@@ -1408,19 +1415,22 @@ spec.md                  # prose spec, normatively worded
 call.schema.json         # JSON Schema 2020-12 for the call envelope
 result.schema.json       # for the result envelope
 descriptor.schema.json   # for the class descriptor (4.4)
-fixtures/                # golden request/response pairs against a canonical
-                         # fixture component, volatile JSON paths declared
+manifest.schema.json     # for the complete browser manifest (4.4)
+tests/                   # golden exchanges plus valid/invalid descriptor
+                         # and manifest examples, dynamic fields declared
+validate.py              # dependency-free package self-check
 ```
 
 Every server binding (Python now; JS/PHP/Go later) must pass the same
-fixture suite; the client runtime's tests replay the result fixtures into a
+example suite; the client runtime's tests replay the results into a
 DOM harness. This is the repo's observe-then-lock testing discipline (run
 the real code, observe its output, lock that output into the assertion)
-applied to the protocol: any protocol change lands as a fixture and schema
-change in the same PR. Fixtures declare volatile paths (instance ids, state
-tokens, asset hashes) exactly the way the compiler's locked-output tests
-do. Error message texts, including the per-field `invalid_args`
-messages, are authored in the fixtures and are contract from then on.
+applied to the protocol: any protocol change lands as an example and schema
+change in the same PR. Golden exchanges declare `dynamic_fields` for values
+that necessarily change between renders, such as render IDs, state tokens,
+and rendered HTML. Error message texts, including the per-field
+`invalid_args` messages, are authored in the examples and are contract from
+then on.
 The state token is exempt from cross-binding conformance by design: it
 is opaque, minted and verified by the same binding.
 
@@ -1429,31 +1439,34 @@ is opaque, minted and verified by the same binding.
 ```json
 {
   "protocol": "citry-events/1",
-  "id": "r_8f2k1c",
-  "capabilities": { "swaps": ["replace", "morph"] },
+  "requestId": "r_8f2k1c",
+  "capabilities": {
+    "swaps": ["replace", "morph"],
+    "actions": ["render", "data", "state", "event", "redirect", "url"]
+  },
   "calls": [
     {
-      "component": "TodoList_a1b2c3",
-      "event": "add",
-      "instance": "c9zk1q00",
+      "componentClassId": "TodoList_a1b2c3",
+      "handlerName": "add",
+      "callerRenderId": "c9zk1q00",
       "args": { "text": "Buy milk" },
-      "state": "cev1.eyJ...9mYt",
-      "updates": { "query": "shoes" },
-      "epoch": 4
+      "stateToken": "cev1.eyJ...9mYt",
+      "stateUpdates": { "query": "shoes" },
+      "sendSequence": 4
     }
   ]
 }
 ```
 
 - `protocol`: exactly `citry-events/<major>`; unknown majors are rejected.
-- `id`: client-minted correlation id, echoed back (needed for WebSocket
+- `requestId`: client-minted correlation id, echoed back (needed for WebSocket
   multiplexing, harmless over HTTP).
 - `capabilities`: what the client runtime can apply, keyed `swaps` (swap
   strategies) and `actions` (action kinds). The server never emits a swap
   or action outside the advertised set; it downgrades instead (`morph` to
   `replace`). An absent field means the **protocol baseline**: one fixed
   constant per protocol major, defined in the protocol package's spec and
-  fixtures. For v1 that is every swap except `morph` plus all six v1
+  tests. For v1 that is every swap except `morph` plus all six v1
   action kinds, named `CAPABILITIES_BASELINE_V1`. The server therefore
   holds a single constant per major, not a table of runtime versions; the
   dispatcher applies it at encode time. This is what lets a stale cached
@@ -1466,33 +1479,36 @@ is opaque, minted and verified by the same binding.
   event queue bundles queued calls that become eligible together into
   one envelope at dequeue (5.6), and same-tick coalescing (merging
   calls made in the same JS tick) is a
-  v2 client feature. On the per-event route, `component`/`event` are bound
-  from the URL and must match if present.
-- `instance`: the calling instance's render id, when known; the server
+  v2 client feature. Every canonical call names `componentClassId`,
+  `handlerName`, and `args`. On the per-event route, transport adapters build
+  those fields from the authoritative URL; an explicit canonical envelope
+  must match it.
+- `callerRenderId`: the calling component occurrence's render ID, when known; the server
   uses it to self-address render and state actions, and `event` actions
   a handler returns without an explicit target (4.3). It is absent
   whenever the caller is not the runtime acting for a DOM instance: a
   curl or API client hitting a data handler's URL (the Component.Ninja
   use), a hand-written form posting to a per-event URL without the
-  hidden instance field, or host-page JS invoking a handler without a
+  hidden caller field, or host-page JS invoking a handler without a
   component. Such calls still run; they just have no default
   self-render target on the JSON/wire path (handlers address targets
   explicitly) and no client registry entry to refresh. The compatibility /
   no-JS HTTP path is the one exception: a targetless render becomes the
   whole HTML response body, so it needs no client-side target.
-- `args`: a JSON object, named keys only. Validated server-side.
-- `state`: the opaque state token, echoed verbatim. Absent for stateless
+- `args`: a required JSON object, named keys only. Validated server-side.
+- `stateToken`: the opaque state token, echoed verbatim. Absent for stateless
   handlers.
-- `updates`: two-way binding updates (`_model` State fields, 7.2)
+- `stateUpdates`: two-way binding updates (`_model` State fields, 7.2)
   carried by this call. The designed flush is the binding's named handler
   (5.1). When another call from the instance fires while an update's
   debounce timer is still pending, that call carries the update too,
   closing the stale-state race.
-- `epoch`: a monotonic counter kept per **anchor** (the stable,
+- `sendSequence`: a monotonic counter kept per **anchor** (the stable,
   client-internal identity of one interactive DOM position, 5.5), the
   out-of-order guard. The runtime increments it on every send from an
   anchor and remembers the highest epoch it has applied there; the
-  response echoes the request's value.
+  response echoes the request's value. The browser implementation calls the
+  same counter an epoch internally; `sendSequence` is the wire name.
   A response's instance-mutating actions (the self-targeted render,
   the `state` token refresh) apply only when its epoch is **strictly
   greater** than the anchor's highest-applied; otherwise they are
@@ -1536,15 +1552,15 @@ the template.
 ```json
 {
   "protocol": "citry-events/1",
-  "id": "r_8f2k1c",
+  "requestId": "r_8f2k1c",
   "results": [
     {
       "ok": true,
-      "epoch": 4,
+      "sendSequence": 4,
       "actions": [
         {
           "action": "render",
-          "target": "cid:c9zk1q00",
+          "target": "render:c9zk1q00",
           "swap": "morph",
           "html": "<button data-cid-c9zk1q00 ...>...</button>
             <script type=\"application/json\" data-citry>...</script>
@@ -1556,9 +1572,9 @@ the template.
         },
         {
           "action": "event",
-          "name": "todo:added",
+          "eventName": "todo:added",
           "detail": { "id": 17 },
-          "target": "cid:c9zk1q00"
+          "target": "render:c9zk1q00"
         }
       ]
     }
@@ -1585,8 +1601,8 @@ Streams and htmx out-of-band swaps are the same shape):
 |---|---|---|
 | `render` | `target`, `swap`, `html` | Insert or update HTML. `html` is a complete citry fragment (markup plus the inert `data-citry` and `data-citry-events` manifest tags), so the existing MutationObserver machinery loads assets and re-fires `$component` with zero new insertion mechanics. |
 | `data` | `value` | Resolve the calling instance's promise with this JSON value. At most one per result: a handler whose return would encode two `data` actions is an encode-time error naming the fix (two bare dicts in one list is semantically contradictory, which promise value wins?), unlike the trailing-after-redirect case, whose actions are individually valid and merely unreliable, so it warns. |
-| `state` | `instance`, `token` | Replace the stored state token for an instance whose handler mutated state without re-rendering; the server places it before the handler's own actions. (A `render` action needs no companion; the fresh fragment's manifest carries the new token.) Client rule, either carrier: the runtime applies a result's token refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token. |
-| `event` | `name`, `detail`, `target` | Dispatch one bubbling DOM CustomEvent under the **exact given name** on the target instance's first live root, or on `document`. A multi-root or mirrored instance uses one canonical root deliberately: dispatching the same logical action on every root would duplicate document/global delivery and `onEvent` callbacks. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the calling instance (the call's `instance`); only instance-less calls produce a document-targeted dispatch. |
+| `state` | `targetRenderId`, `stateToken` | Replace the stored state token for a rendered component occurrence whose handler mutated state without re-rendering; the server places it before the handler's own actions. (A `render` action needs no companion; the fresh fragment's manifest carries the new token.) Client rule, either carrier: the runtime applies a result's token refresh to its registry before applying the actions array, so user code running mid-application (a dispatch listener that immediately sends) already carries the fresh token. |
+| `event` | `eventName`, `detail`, `target` | Dispatch one bubbling DOM CustomEvent under the **exact given name** on the target instance's first live root, or on `document`. A multi-root or mirrored instance uses one canonical root deliberately: dispatching the same logical action on every root would duplicate document/global delivery and `onEvent` callbacks. Raw names are the field's converged interop choice (Livewire and htmx both fire developer-chosen names verbatim); `citry:*` is reserved for the runtime's own events, and the documented best practice is prefixing with the component name (`MyCard:submit`, the BEM idea applied to events). A handler-returned `event` action with no explicit target is self-addressed by the server at encode time to the caller's `callerRenderId`; only calls without a rendered caller produce a document-targeted dispatch. |
 | `redirect` | `url` | Navigate the page. |
 | `url` | `url`, `mode` | History push or replace without navigation. `PushUrl` and `ReplaceUrl` are its two producers; the client accepts only exact `push` or `replace` modes, preserves `history.state`, and skips invalid or browser-rejected updates without interrupting later actions. |
 
@@ -1595,11 +1611,11 @@ matches** (`querySelectorAll`, so comma unions work natively; the
 all-matches rule is the field's unanimous answer, per Turbo's `targets`,
 htmx's out-of-band selector swaps, and Datastar). A selector matching
 nothing logs a zero-match warning instead of silently doing nothing. The
-optional `cid:<instance id>` form targets a specific component instance
+optional `render:<render id>` form targets a specific rendered component occurrence
 (the elements carrying its `data-cid-<id>` marker); it is what the
-runtime uses for self-renders, and `cid:` is a reserved prefix no real
-selector starts with. Its instance uses the case-safe `^[a-z0-9_-]+$`
-render-ID grammar, and the same constraint applies to `state.instance`. The
+runtime uses for self-renders, and `render:` is a reserved prefix. Its ID uses
+the case-safe `^[a-z0-9_-]+$` render-ID grammar, and the same constraint
+applies to `state.targetRenderId`. The
 client rejects an unsafe suffix before constructing a `data-cid-*` selector.
 A selector that targets a non-component region makes
 that region's structure part of the page's contract; prefer instance
@@ -1650,18 +1666,19 @@ in milliseconds per that convention's own field norm. The Python kwarg
 is `wait` rather than a raw `async` flag because `async` is a reserved
 word and the house rule prefers positive names.)
 
-The action set is **closed in v1**. Custom client behavior goes through
+The action set is **closed in v1**. The browser validates the complete result
+and every action before applying the first one; an unknown kind, swap, missing
+field, or extra field rejects the response atomically. Custom client behavior goes through
 the `event` action: dispatch a named event and let the page's or
 component's own JS decide what happens (Tetra's open server-calls-your-JS
 channel, retroactively whitelisted down to nine methods after shipping,
-is the cautionary tale). The door stays open structurally: actions are
-data, so a later minor can add kinds behind `capabilities` negotiation plus a
-client-side `registerAction`, if a real consumer appears. Interception
-never requires custom actions: `on_event_result` (server) and
+is the cautionary tale). If a real consumer needs an extension, design that
+protocol point then rather than treating unknown fields as an implicit
+extension API. Interception never requires custom actions: `on_event_result` (server) and
 `applyActions` plus the lifecycle events (client) see every action as
 data.
 
-Error results carry `{status, code, message, fields?}` with stable string
+Error results carry `{status, code, message, fieldErrors?}` with stable string
 codes, each with a fixed status except the catch-all: `invalid_args`
 (422), `invalid_state` (403, a malformed token), `stale_state` (409, an
 expired or rotated-out token), `unknown_event` and `unknown_component`
@@ -1682,8 +1699,8 @@ honest rotated-out token, so it takes the 409 path; the payload's
 values are only used to pick the error code, never trusted before the
 signature verifies. On the per-event route
 the HTTP status mirrors the call's status; the batch endpoint answers 200
-with per-call statuses inside (one batch can mix outcomes). `fields` is
-the per-field error map, surfaced client-side as `$error.fields` (5.5).
+with per-call statuses inside (one batch can mix outcomes). `fieldErrors` is
+the per-field error map, surfaced client-side as `$error.fieldErrors` (5.5).
 
 ### 4.4 How the state token reaches the client
 
@@ -1694,54 +1711,55 @@ containing an Events-declaring component:
 ```html
 <script type="application/json" data-citry-events>
   {
-    "instances": [
-      ["Y5Wms...", "VG9kb0...", "Y2V2MS4...", "eyJxdWVyeSI6..."]
+    "protocol": "citry-events/1",
+    "clientGraphRevision": null,
+    "componentClasses": [
+      {
+        "componentClassId": "TodoList_a1b2c3",
+        "eventHandlers": {
+          "add": {"httpMethod": "POST", "usesState": true},
+          "filter": {
+            "httpMethod": "GET",
+            "usesState": true,
+            "debounceMilliseconds": 300
+          }
+        },
+        "writableStateFields": ["query"]
+      }
     ],
-    "classes": {
-      "VG9kb0...": "eyJldmVudHMiOnsi..."
-    }
+    "componentInstances": [
+      {
+        "renderId": "c9zk1q00",
+        "componentClassId": "TodoList_a1b2c3",
+        "stateToken": "cev1.eyJ...9mYt",
+        "publicState": {"query": "shoes", "show": "open"}
+      }
+    ]
   }
 </script>
 ```
 
-Every string field is base64-encoded like its sibling manifest's fields,
-so content can never break the script tag open and the tag stays inert
-however the HTML is inserted. Decoded, an `instances` entry is the
-4-tuple `[instance id, class id, state token, public values]`:
+Manifest entries are named JSON objects embedded directly in the inert script
+block. The server escapes `<` as `\u003c`, so application State cannot close
+the script tag. `clientGraphRevision` links the Events sidecar to the ownership
+graph from the same render, or is `null` when no graph was emitted.
 
-```json
-["c9zk1q00", "TodoList_a1b2c3", "cev1.eyJ...9mYt", {"query": "shoes", "show": "open"}]
-```
+`componentClasses` carries handler names and browser hints. Each handler has
+`httpMethod`; the optional non-default hints are `usesState: true`,
+`debounceMilliseconds`, `throttleMilliseconds`, `latestCallWins: true`, and
+`allowBatching: false`. `writableStateFields` carries a narrowed
+`State._model` capability in declaration order. It is omitted when `_model`
+equals `_public`, while an explicit empty list means all public State is
+read-only.
 
-The values object holds the instance's **public** State fields only; it
-is what one-way bindings and `$state` reads are seeded from, while the
-token stays opaque (7.1) and non-public fields appear nowhere in it. A
-decoded `classes` entry is the per-class descriptor the runtime uses for
-client hints:
+`componentInstances` carries each occurrence's `renderId`, class reference,
+opaque `stateToken`, and `publicState`. `publicState` seeds one-way bindings
+and `$state` reads; non-public fields appear nowhere in it. A stateless record
+uses `stateToken: null` and an empty `publicState` object.
 
-```json
-{
-  "events": {
-    "add":      { "method": "POST", "state": true },
-    "filter":   { "method": "GET", "state": true, "debounce": 300 },
-    "autosave": { "method": "POST", "state": true, "debounce": 400, "latest_wins": true },
-    "export":   { "method": "POST", "bundle": false }
-  },
-  "model": ["query"]
-}
-```
-
-It carries the event names with their method, a `state: true` hint when a
-handler declares the State injectable, timing hints (the resolved
-`_debounce` / `_throttle` defaults, 3.5), and the queue knobs
-`latest_wins` and `bundle` (3.5), which the runtime reads at queue time
-(5.6). The optional `model` list carries a narrowed `State._model`
-capability in declaration order. It is omitted when `_model` equals
-`_public`, while an explicit empty list means all public State is read-only.
 The runtime rejects an out-of-model `$state` write before changing reactive
 State or queueing an update; the server independently enforces the same list.
-The server stays the
-authority, the descriptor is a client convenience. A re-rendered
+The server stays the authority, the descriptor is a client convenience. A re-rendered
 fragment carries its own manifest, so morphing it in updates the client
 registry automatically; fragments stay self-contained however they are
 delivered. (A valued root-element attribute was considered and rejected:
@@ -1750,15 +1768,12 @@ the shipped pattern with no core change; see section 14.)
 
 ### 4.5 Versioning
 
-The major lives in the protocol string; within a major, evolution is
-additive, and anything the client must act on is gated by
-`capabilities`. Unknown
-fields on known structures are ignored by both sides. The runtime and the
-server ship in one wheel, so version skew (client and server running
-different releases) exists only across deploys, and `capabilities`
-plus the `stale_state` flow make it graceful: both surface as a
-`citry:events:stale` DOM event (reason `version`, 5.2) whose default
-handling (configurable) is a soft reload prompt.
+The major lives in the protocol string. Every fixed v1 structure is strict:
+missing and extra fields, unknown action kinds, swaps, capabilities, and error
+codes are errors. Only documented application-data bags remain open. Until
+the v1 beta freezes, incompatible corrections may change v1 in place as long
+as the spec, schemas, examples, server, browser, tests, and current docs move
+together. After that freeze, an incompatible wire shape starts v2.
 
 ---
 
@@ -1772,7 +1787,7 @@ and installs exact Alpine 3.15.x plus morph into the permanent
 `Citry.alpine` broker. The broker owns the single startup, root selector,
 init interceptor, mutation fan-out, magic dispatchers, morph entry point, and
 duplicate-instance warning. Events-declaring components create Events
-anchors; any instance with `$component` or boundary relay activity also
+anchors; any instance with `$component` or client binding activity also
 enters the general client-instance registry and gets the stable scope
 described in 5.5. Components with none of those client surfaces pay no
 initialization cost
@@ -1796,7 +1811,7 @@ construction, so there is nothing to disambiguate. On a plain HTML element,
 plain `@click`, `:class`, and every other attribute pass through to the final
 HTML untouched by the citry compiler, and since citry ships Alpine (5.5),
 inside any Alpine scope they are simply ordinary Alpine syntax. At a component
-boundary, 5.5's narrow relay rule applies: only `$c-props`, Alpine event
+boundary, 5.5's narrow client binding rule applies: only `$c-props`, Alpine event
 handlers, and Citry `@c-*` event handlers are relocated. `<c-element>` is an
 HTML-element target, not a component boundary: it rejects `$c-props`, while
 Alpine and Citry event/State bindings become attributes of its selected HTML
@@ -1817,8 +1832,8 @@ its own grammar channel by construction.
 | `@c-poll.30s="handler"` | Send the named event on an interval, paused on hidden tabs. The interval is seconds, one time segment exactly (`.30s`; a second time segment is a template-load error rather than guessing whether units add or conflict). |
 
 The modifiers, exhaustively, for a binding on one HTML element. A component-
-boundary `@c-*` relay follows 5.5's spike-proven `RootGroup` contract instead:
-`.self` means any member root and `.once` is one shared relay lifetime. A
+boundary `@c-*` client binding follows 5.5's spike-proven `RootGroup` contract instead:
+`.self` means any member root and `.once` is one shared client binding lifetime. A
 pointed error is reserved for a concrete unsupported case rather than silently
 becoming once-per-root.
 
@@ -1876,7 +1891,7 @@ one ever proves needed.
 - **State bindings are HTML-element-only.** A `:c-*` attribute on a semantic
   component target is a template-load error with guidance: a child binds its
   own State to controls in its own template. An `@c-*` handler is different:
-  on a child component target it is a parent-owned events-up relay (5.5). The
+  on a child component target it is a parent-owned events-up client binding (5.5). The
   handler name remains validated, queued, and loaded against the source parent
   Events instance; its optional argument expression is evaluated at the exact
   parent source. The child root is its physical DOM event carrier.
@@ -1961,7 +1976,7 @@ effect over `$state`, two-way as a `$state` write plus the named handler,
 one author-code part, carried verbatim and handed to Alpine's evaluator like
 any Alpine attribute (5.1 Arguments).
 
-A semantic component-target `@c-*` takes the relay path instead. The template-
+A semantic component-target `@c-*` takes the client binding path instead. The template-
 load pass validates a literal binding against the source component class but
 leaves or encodes enough structure for `ComponentNode.render` to attach the
 compiled spec and source identity to the selected child. Dynamic and `c-bind`
@@ -1977,8 +1992,8 @@ pattern pervasive with Alpine attributes. The template-load pass (above) handles
 everything written literally in templates; a second pass in the existing
 `on_attrs_resolved` hook (which fires per element after dynamic
 attributes resolve) rewrites HTML-element `@c-*` / `:c-*` keys that arrive
-through spreads or dynamic attributes. Component-tag relay keys instead join
-the source-ordered relay split in 5.5. Bindings contributed this way are
+through spreads or dynamic attributes. Component-tag client-binding keys instead join
+the source-ordered client binding split in 5.5. Bindings contributed this way are
 validated at that moment rather than at template load: still
 server-side, still a loud error, just later.
 
@@ -2050,7 +2065,7 @@ form's `submit`, the runtime serializes the form's named controls into
 the wire args payload (explicit expression args win on collision),
 mirroring the urlencoded no-JS codec (6.2): the JS path and the no-JS
 path deliver the same call. Control `name` attributes map to schema
-fields, schema validation produces the 422 `fields` map for the error
+fields, schema validation produces the 422 `fieldErrors` map for the error
 display, and a failed submit re-renders nothing, so the DOM keeps the
 user's input:
 
@@ -2072,8 +2087,8 @@ class Events:
         ...
 ```
 Forms therefore need neither State nor bindings (the form example in
-section 2), and the old batched-updates channel does not exist: `updates`
-on the wire carries two-way binding values only.
+section 2), and the old batched-updates channel does not exist:
+`stateUpdates` on the wire carries two-way binding values only.
 
 ### 5.2 Component JS: `sendEvent` and `onEvent`
 
@@ -2125,7 +2140,7 @@ class Chart(Component):
 - `sendEvent(name, args?, opts?) -> Promise`: bound to this instance (id
   and state token resolved from the registry); resolves with the `data`
   action's value, rejects with a structured error (`{status, code,
-  message, fields?}`). `opts` carries the per-call overrides: `timeout`
+  message, fieldErrors?}`). `opts` carries the per-call overrides: `timeout`
   (the `configure` field below) and `wait` (default `true`;
   `wait: false` bypasses the event queue, 5.6).
 - `onEvent(name, fn) -> unsubscribe`: fires for `event` actions targeting
@@ -2172,7 +2187,7 @@ bubbling DOM CustomEvents, all under the reserved `citry:` prefix:
 |---|---|---|
 | `citry:events:before` | Just before a call is sent. Cancellable: `e.preventDefault()` stops the send and rejects the caller's promise. | none |
 | `citry:events:after` | When a call settles, success and failure alike (the stop-side counterpart to `before`). | `ok` (boolean) |
-| `citry:events:error` | When a call fails: a transport failure, an error result, or a timeout (5.6). | `error`: the `{status, code, message, fields?}` envelope (3.7) |
+| `citry:events:error` | When a call fails: a transport failure, an error result, or a timeout (5.6). | `error`: the `{status, code, message, fieldErrors?}` envelope (3.7) |
 | `citry:events:swapped` | After a `render` action has updated the DOM. | `els`: the swapped-in root elements |
 | `citry:events:stale` | Something was dropped or cancelled, and this is the one event that says so (research doc R3): every drop the runtime performs, of a response's application, of a queued call it cancels before sending, or of a one-shot send it drops at fire time (5.5 machinery item 5), fires it with a `reason` naming the cause. (The one cancel outside the claim is a send stopped by a `citry:events:before` listener's `preventDefault`: the page performed that cancel itself and already knows.) The reasons: `epoch` (an out-of-order response: its echoed epoch, 4.2, is not newer than what the anchor already applied, so its instance-mutating actions, the self-targeted render and the token refresh, drop rather than roll newer state back to older; the caller's promise still resolves with its `data` and all other actions apply), `retired` (the response's instance, or a single action's target, left the DOM, 5.5), `cancelled` (a send's dispatching element was dead when it was due to fire, at dequeue, 5.6, or at a one-shot closure's fire time, 5.5: never sent, promise rejected), `superseded` (a newer call superseded it under `@event(latest_wins=True)`, 3.5), `timeout` (a response arrived after its call timed out, 5.6), `version` (the version-skew prompt of 4.5 rides this same event under this reason; its default handling is the soft reload prompt). The `epoch` case in one line: a custom input sends on every keystroke through `sendEvent(..., {wait: false})`, you typed "ab" then "abc", "abc" answered first, and the slower "ab" response would overwrite newer results with older ones, so its application is dropped and this event fires instead. | `reason`, plus the dropped result's `event` name |
 
@@ -2191,10 +2206,10 @@ promise outcome, so no drop path is left to guesswork:
 | `version` | nothing call-scoped: the version-skew prompt of 4.5 rides this reason | no call promise involved; a stale-state call settles through its own error result |
 
 Client-minted rejections (`cancelled`, `superseded`, `timeout`) carry
-the same `{status, code, message, fields?}` envelope contract as server
+the same `{status, code, message, fieldErrors?}` envelope contract as server
 errors, so one rejection handler covers both: `code` is the reason,
 `status` is `0` (no server verdict exists; the browser's own convention
-for a request that got no response), and `fields` is absent. The other two
+for a request that got no response), and `fieldErrors` is absent. The other two
 failure surfaces compose by reason: a timeout is a failed call, so it
 sets `$error` (5.5) and fires `citry:events:error` (5.6), while
 `cancelled` and `superseded` are routine queue outcomes, so they set
@@ -2210,7 +2225,7 @@ htmx, or vanilla code integrates with zero citry API:
 
 ```js
 // global error toast: `error` on the detail is
-// `{status, code, message, fields?}` envelope from 3.7
+// `{status, code, message, fieldErrors?}` envelope from 3.7
 document.addEventListener("citry:events:error", (e) => {
   const { event, error } = e.detail;
   showToast(`${event} failed: ${error.message}`);
@@ -2305,7 +2320,7 @@ audience this extension targets. Rules:
   events runtime, 5.5). The runtime ties the changing component id to its
   anchor through an in-memory index it re-links as each render lands, and
   routes a response to the right anchor by the call-correlation id (the
-  envelope `id`, 4.2), never by the component id. So the server needs no
+  envelope `requestId`, 4.2), never by the component id. So the server needs no
   id-reuse policy and nothing new rides the wire.
 - **Link before morph.** The runtime binds the fresh component id to the
   anchor and updates the anchor's `$state` *before* it calls morph,
@@ -2649,7 +2664,7 @@ magics, morphs, and `$component` members read and write that one object.
 **Scopes.** During manifest processing, before `Alpine.start()`, the runtime
 creates one general registry record for every instance the ownership graph
 marks client-active. Reasons include an Events anchor, a `$component`
-registration/call, a boundary relay, an explicit component scope, or a
+registration/call, a client binding, an explicit component scope, or a
 supplied/fallback fill whose Alpine expressions need a source projection.
 [`alpinejs.md`](alpinejs.md) owns the complete trigger set. Events anchors
 remain the owners of State, epochs, and server calls; the general record also
@@ -2670,7 +2685,7 @@ re-render even as the component id under them changes. The runtime ties the
 two through a
 component-id-to-anchor index (a plain in-memory map, re-linked as each
 render lands), and routes a render response to the right anchor by the
-call-correlation id (the envelope `id`, 4.2), never by the component id.
+call-correlation id (the envelope `requestId`, 4.2), never by the component id.
 Because continuity rides the anchor, the server needs no id-reuse policy
 and nothing new rides the wire.
 
@@ -2747,7 +2762,7 @@ scope (and, where noted, as members of the `$component` payload):
 |---|---|
 | `$state` | The graph-selected Events owner's reactive State (public fields). Reads are reactive. Writes work on any public field not clamped by `_model` and throw a pointed error otherwise (client-only UI state belongs in your own `x-data`). A write queues a pending update: it rides the next call from that owner, whatever sends it (the designed flush is the event you send; the piggyback rule of 4.2 applies). |
 | `$loading` | Callable: `$loading()` is true while any call from this instance is queued or in flight (busy spans the queue, 5.6); `$loading('save')` scopes to one handler. An unknown handler name throws the pointed error naming the declared handlers (the class descriptor carries the list). Read-only. |
-| `$error` | The instance's last error envelope (`{status, code, message, fields?}`) or `null`; set on a failed call (an error result, a transport failure, or a timeout; `cancelled` and `superseded` rejections leave it untouched, 5.2), cleared on the next successful one. Read-only. |
+| `$error` | The instance's last error envelope (`{status, code, message, fieldErrors?}`) or `null`; set on a failed call (an error result, a transport failure, or a timeout; `cancelled` and `superseded` rejections leave it untouched, 5.2), cleared on the next successful one. Read-only. |
 | `$sendEvent(name, args?)` | Send an event from an Alpine expression; the same function the `$component` payload carries. An unknown event name throws the pointed error client-side, before anything hits the wire (the same descriptor check as `$loading`). |
 | `$onEvent(name, fn)` | Listen for server-dispatched events targeting this instance; returns the unsubscribe function. |
 
@@ -2976,7 +2991,7 @@ keeps no surviving counter. Continuity is owned by a region's own
 correlated self-renders, and by keyed matches, alone; a handler whose
 selector happens to resolve to its own region gets replace semantics,
 not the three-way split (self-continuity rides only the runtime's
-`cid:` self-address). Races to one target from unrelated anchors (two
+`render:` self-address). Races to one target from unrelated anchors (two
 different
 callers rendering into `#cart-badge`) stay last-write-wins in arrival
 order and are answered in userland by the ordering patterns the docs
@@ -3053,7 +3068,7 @@ option A mechanics):
    `event` action whose target id is dead, which drops rather than
    falling back to a document dispatch (that would change delivery
    semantics silently). Liveness and its `retired` surface belong to
-   instance-addressed work alone (the caller's anchor, `cid:`
+instance-addressed work alone (the caller's anchor, `render:`
    targets, the self-addressed defaults): a plain-selector target is
    never live or dead, so a selector that stops matching, whatever
    earlier action or host mutation removed its matches, surfaces only
@@ -3110,9 +3125,9 @@ teaching, because they demystify the sugar:
 <button @click="$sendEvent('save')">
 
 <span
-  x-text="$error?.fields.email"
+  x-text="$error?.fieldErrors.email"
   :class="{
-    'c-error-active': $error?.fields.email
+    'c-error-active': $error?.fieldErrors.email
   }"
 ></span>
 ```
@@ -3217,15 +3232,15 @@ writes one Alpine object expression where the child is invoked:
 spelling identifies Citry-owned client-runtime behavior without claiming
 Alpine's `x-*` namespace or the server-evaluated `#c-*` channel.
 `ComponentNode.render` resolves the tag's attribute contributions in source
-order, then splits them into ordinary Python kwargs and structured relay
-records. Three families relay across a component boundary: `$c-props`, Alpine
+order, then splits them into ordinary Python kwargs and structured client binding
+records. Three families become client bindings across a component boundary: `$c-props`, Alpine
 event handlers (`@...` and `x-on:...`), and Citry event handlers (`@c-*`,
 classified before generic `@...`). Every other non-reserved attribute,
 including `x-show`, `x-model`, `:class`, `x-transition`, and ordinary `class`,
 remains a Python render-time component input. `:c-*` and `#c-*` retain their
 separate 5.1 rules. There is no general root-attribute fallthrough.
 
-This relay split applies to registered component targets and transparent
+This client binding split applies to registered component targets and transparent
 `<c-component>`. `<c-element>` instead produces one selected HTML element: it
 rejects `$c-props`, and its Alpine handlers, `@c-*`, and `:c-*` use the normal
 HTML-element attribute/rewrite path.
@@ -3244,7 +3259,7 @@ The recommended arbitrary-attribute API is a child-declared `attrs` mapping:
 The child may instead apply that mapping to another root or nested element.
 Direct, server-dynamic (`c-$c-props`, `c-@click`, `c-@c-save`), and
 component-tag `c-bind` contributions resolve left to right; exact-key
-last-one-wins; final `None` or `False` removes the relay; `True` is invalid;
+last-one-wins; final `None` or `False` removes the client binding; `True` is invalid;
 and a present value must be a string. `$c-props`
 and Alpine handler values are raw Alpine expressions. A Citry `@c-*` value is
 a declared server handler name with an optional parenthesized Alpine argument
@@ -3255,7 +3270,7 @@ the `c-bind` span and mapping key. A literal `$c-props` on plain HTML is a
 template-load error; a dynamically contributed one fails when attributes
 resolve.
 
-The relay record names the exact lexical source, logical owner, actual child
+The client binding record names the exact lexical source, logical owner, actual child
 target, and current graph revision after the component tag disappears. Supply
 evaluates through that source record, not through the child's physical parent
 or nearest DOM stack. One logical supplier effect belongs to the child
@@ -3344,20 +3359,20 @@ This explicit props path is how the parent chooses to share behavior. Merely
 placing a handler on `<c-action-button>` never grants it access to child scope.
 
 Static `<c-component is="Card">` already compiles to its selected target. The
-dynamic `<c-component c-is="selected">` path must forward relays separately
+dynamic `<c-component c-is="selected">` path must forward client bindings separately
 from kwargs to the actual selected `CitryElement`; the transparent built-in is
-never the relay target. Replacement cleans the old target's relay lifetime
+never the client binding target. Replacement cleans the old target's client binding lifetime
 exactly once.
 
 The multi-root `RootGroup` mechanism and stable live `els` representation are
 proved by the cross-browser
 [`RootGroup` spike](alpinejs/spike-root-group.md) and landed in Alpine plan A6
-together with the real boundary relay. The cross-browser
+together with the real client binding. The cross-browser
 [`rootless lifecycle spike`](alpinejs/spike-rootless-lifecycle.md) proves a
 comment-owned lifetime for text-only or empty client-active output, with
 stable-anchor normalization, grouped mirrored regions, contextual parsing,
 and a nested-range island guard; A6 lands those range mechanisms. A2 already
-settled O11 by requiring exact `comment-v1` caps and cap-preserving deployment.
+settled O11 by requiring exact `citry:g1` caps and cap-preserving deployment.
 A8 landed atomic incoming graph, Events, dependency, and DOM adoption with
 rollback before publication.
 The remaining gated edge mechanism is a named
@@ -3370,7 +3385,7 @@ insufficient. The complete edge matrices and fallback errors live in the
 Ambient context that should cross component boundaries (theme, locale) is
 **provide/inject**, which deliberately pierces isolation and is never
 used for per-instance inputs. Events travel up through native bubbling,
-parent-owned component-target handler relays, or `Dispatch` / `$onEvent` for
+parent-owned component-target handler client bindings, or `Dispatch` / `$onEvent` for
 server-touched paths. Two boundary facts keep this channel small: Citry
 components never need client props for their own server inputs (that passing
 happened server-side, kwargs to `state_data` to a seeded scope, per instance),
@@ -3580,9 +3595,10 @@ one dispatcher implementation, and every transport hands its requests to
 it.
 
 **The envelope** is the one JSON object a transport hands the dispatcher
-per request: the call envelope of 4.2 (`protocol`, `id`, optional
-`capabilities`, and `calls`, where each call names the component,
-instance, event, args, state token, pending updates, and epoch). The
+per request: the call envelope of 4.2 (`protocol`, `requestId`, optional
+`capabilities`, and `calls`, where each call carries `componentClassId`,
+`handlerName`, optional `callerRenderId`, `args`, optional `stateToken`,
+optional `stateUpdates`, and optional `sendSequence`). The
 dispatcher returns the matching result envelope of 4.3 (`results[i]`
 answers `calls[i]`). Transports never look inside either; they carry
 bytes.
@@ -3648,13 +3664,13 @@ transports would both need belongs in the dispatcher, never duplicated):
 |---|---|---|
 | Envelope validation | Structural check of the call envelope (field presence, types, the 16-call cap) before any other work. | Plain Python checks, not JSON-Schema loading at runtime; the protocol package's schemas bind in tests (plan WP18). Cap violations map to `payload_too_large` (413). |
 | Version and capabilities | Reject unknown protocol majors; resolve an absent `capabilities` field to the baseline; hand the resolved set to action encoding so `morph` downgrades to `replace` and no action kind outside the set is ever emitted. | The baseline constant is the protocol package's `CAPABILITIES_BASELINE_V1`; rejections mirror per call so `results[i]` always answers `calls[i]`. |
-| Component and event resolution | The per-event URL is authoritative; body fields must match it when present. A failed lookup produces the wire error codes `unknown_component` / `unknown_event` (protocol constants from the 3.7 table, status 404), never a lookup of any user-defined name: there is no magic fallback component or handler to define. Custom not-found behavior hangs off the `on_event_error` hook or host middleware on the real URLs. | `Citry.get_component_by_class_id` resolves the class; wire names come from the handler metadata captured at class creation (plan WP7). |
-| Token verification and updates | Verify the signed State token (malformed 403, expired or rotated-out 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `updates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
+| Component and event resolution | The per-event URL is authoritative; explicit `componentClassId` and `handlerName` fields must match it. A failed lookup produces the wire error codes `unknown_component` / `unknown_event` (protocol constants from the 3.7 table, status 404), never a lookup of any user-defined name: there is no magic fallback component or handler to define. Custom not-found behavior hangs off the `on_event_error` hook or host middleware on the real URLs. | `Citry.get_component_by_class_id` resolves the class; wire names come from the handler metadata captured at class creation (plan WP7). |
+| Token verification and updates | Verify the signed `stateToken` (malformed 403, expired or rotated-out 409; the split is payload well-formedness, per the error-codes rule in 4.3), rebuild State, apply `_model`-gated `stateUpdates` with per-field 422s. | `verify_state_token` / `apply_state_updates` (plan WP8). |
 | Args validation | Validate the wire args payload against the handler's `data` schema with the 3.3 coercions; failures are per-field 422s, never host 500s. | The data-schema machinery (plan WP9) returns structured results that the error mapping consumes. |
 | Per-call context and guards | `on_event` emit (veto), then the `_context` hook, then guards most-specific-wins (engine default, component `_guard`, `@event(guard=...)`). | Pipeline order is normative (3.6, 3.7): a guard must see `_context`'s result. |
 | Handler invocation | By-name injection of `data` / `state` / `context` / `request` / `event`; the same values populate the ambient attributes on the per-call events instance. | Async dispatch awaits `async def` handlers; sync handlers offload to a worker thread via the routing helper `call_maybe_sync` (plan WP2). |
 | Action encoding | Return-value coercion, result resolvers, faithful ordering, and the render-to-fragment serialize. | The actions module (plan WP11); a `Render` re-enters the normal fragment serialize, so its HTML carries a fresh manifest. |
-| State re-sign | Changed State means a fresh token in the response: riding the render action's manifest when there is one, else as an explicit `state` action placed before the handler's actions (4.3). | Mint via plan WP8; the request's `epoch` echoes per result. |
+| State re-sign | Changed State means a fresh token in the response: riding the render action's manifest when there is one, else as an explicit `state` action placed before the handler's actions (4.3). | Mint via plan WP8; the request's `sendSequence` echoes per result. |
 | Error mapping | `EventError` and uncaught exceptions map to the fixed code-to-status table (3.7); tracebacks only in debug mode. | Message content is contract: tests assert the text, not just the exception type. |
 
 The "custom transport" story is honest and small: call the dispatcher
@@ -3688,9 +3704,9 @@ registry keyed by content type; user codecs ride
 | Codec | Content type | Status | What it does |
 |---|---|---|---|
 | Envelope | `application/citry-events+json` | v1 | The identity codec: the body already is the envelope. What the runtime sends. The vendor media type is what distinguishes an envelope from flat JSON, so classification never depends on body shape (a user schema could legitimately declare fields named `v` or `calls`). The batch route takes only the envelope and accepts it under plain `application/json` too, since a batch body has no flat reading. |
-| Flat JSON | `application/json` | v1 | Flat handler fields as one JSON object (`POST {"email": "a@b.c"}`), per-event route only: what an external API client sends without knowing the protocol. Fields bind per 3.3's JSON rules (native types, strict); the reserved `_citry_state` / `_citry_instance` keys map into the envelope like the form codec's. |
-| Form | `application/x-www-form-urlencoded` | v1 | Classic form posts: fields become the args payload; the reserved `_citry_state` / `_citry_instance` fields map into the envelope; the source-aware binding rule (3.3) turns the strings into typed values, including `int` / `float` / `bool` fields. |
-| Query | GET query string | v1 | Args ride as query parameters, bound per the same source-aware rule (3.3); the state token rides `_citry_state` only when the handler declares `state` (3.5). Browser calls additionally reserve `_citry_protocol`, `_citry_id`, and JSON `_citry_capabilities` for the flattened envelope, plus `_citry_instance` and `_citry_epoch` for call metadata. |
+| Flat JSON | `application/json` | v1 | Flat handler fields as one JSON object (`POST {"email": "a@b.c"}`), per-event route only: what an external API client sends without knowing the protocol. Fields bind per 3.3's JSON rules (native types, strict); the reserved `_citry_state_token` / `_citry_caller_render_id` keys map into the envelope like the form codec's. |
+| Form | `application/x-www-form-urlencoded` | v1 | Classic form posts: fields become the args payload; the reserved `_citry_state_token` / `_citry_caller_render_id` fields map into the envelope; the source-aware binding rule (3.3) turns the strings into typed values, including `int` / `float` / `bool` fields. |
+| Query | GET query string | v1 | Args ride as query parameters, bound per the same source-aware rule (3.3); the state token rides `_citry_state_token` only when the handler declares State (3.5). Browser calls additionally reserve `_citry_protocol`, `_citry_request_id`, and JSON `_citry_capabilities` for the flattened envelope, plus `_citry_caller_render_id` and `_citry_send_sequence` for call metadata. |
 | Multipart | `multipart/form-data` | v1.x | File uploads: the envelope JSON rides as one part, each file as its own part, bound to `UploadedFile` fields ("Files, precisely" below). |
 | Msgpack | `application/msgpack` | candidate, unscheduled | A binary envelope for apps where payload size matters; would pair with symmetric response encoding negotiated via `Accept`. Open an issue when someone measures the need. |
 
@@ -3801,7 +3817,7 @@ is a real adoption path for livecomponents users mid-migration.
 One socket per page, multiplexed at `ext/events/ws`, never per component
 (the unanimous industry answer). Frames wrap the same envelopes with a
 `type` discriminator (`call` / `result` / `push` / `ping` / `pong`);
-correlation is the envelope `id` the client already mints. Because every
+correlation is the envelope `requestId` the client already mints. Because every
 call carries its own state token, **the socket holds no per-connection
 component state**: it is a faster pipe plus a push channel, reconnect is a
 re-subscribe with nothing to resume, and the dispatcher is byte-for-byte
@@ -3880,7 +3896,7 @@ Rules, each closing a named prior-art hole:
   page.
 
 On each call the order is: verify token (cheapest rejection first), check
-the class id against the route, rebuild `cls.State(**s)`, apply `updates`
+the class id against the route, rebuild `cls.State(**s)`, apply `stateUpdates`
 to `_model` fields (7.2), validate args, run `_context`, run guards, run the
 handler. After the handler, a mutated State is re-signed and returned
 (inside the fragment manifest when a render action exists, as a `state`
@@ -3918,7 +3934,7 @@ field, always.
   signed, not encrypted, so nothing in State is secret from its own user
   either way (7.1).
 - **`_model`**: the subset of public fields the client may write
-  (through two-way bindings or `$state`); `updates` entries outside it
+  (through two-way bindings or `$state`); `stateUpdates` entries outside it
   are rejected, and each accepted value must satisfy the field's type.
   Defaults to **the same fields as `_public`**: public means visible
   and writable, and `_model = (...)` exists only to clamp down (a
@@ -3931,10 +3947,10 @@ field, always.
   simplest examples to spell out the `_model` list, dragging an
   advanced, niche feature into the happy path.
 
-  The class descriptor in the events manifest carries `model` only when this
+  The class descriptor in the events manifest carries `writableStateFields` only when this
   list narrows `_public`; omission therefore preserves the common all-public-
-  fields-writable case without repeating field names. `model: []` is not an
-  omission: it is the explicit capability for read-only public State. The
+  fields-writable case without repeating field names. `writableStateFields: []`
+  is not an omission: it is the explicit capability for read-only public State. The
   browser applies that gate before local mutation or pending-queue insertion,
   and refreshes the gate when a later manifest updates a live class
   descriptor. If the refreshed contract removes a field that was already
@@ -3951,7 +3967,7 @@ purposes, and each carries the same obligations as its plain-HTTP
 equivalent: re-rendering UI (apply the same permission checks as when
 serving the page fresh) and action or form submission (treat it like
 any request body the browser sent). The signed token makes state
-trustworthy *as the server last minted it*; the `updates` channel makes
+trustworthy *as the server last minted it*; the `stateUpdates` channel makes
 public fields writable on top. Pretending State is secure would be
 worse than admitting it is input, because a false sense of security is
 the more dangerous failure. A handler must authorize what it does with
@@ -4014,21 +4030,21 @@ traversal of any object graph; extra arg keys are rejected, not absorbed.
   inject the CSRF token; this is that helper, absorbed.)
 - GET handlers are opt-in, csrf-exempt by nature, and read-only by
   contract; their args ride as query parameters, and the state token
-  rides as a `_citry_state` query parameter only when the handler
+  rides as a `_citry_state_token` query parameter only when the handler
   declares `state` in its signature (3.5), so read-only GET URLs stay
   pasteable and token-free (the docs note URL length limits and the
   id-plus-reload fix for large-State components).
-  The per-handler descriptor carries `state: true` only when the handler
+  The per-handler descriptor carries `usesState: true` only when the handler
   declares the State injectable, so the browser can enforce that URL rule.
   The built-in browser transport selects GET for a single call to a
   GET-declared handler. It serializes scalar string, boolean, and finite
   number args, and non-empty arrays of those values as repeated query
   parameters; a value with no unambiguous flat-query representation rejects
   locally with `transport_error`. Browser calls also carry `_citry_protocol`,
-  `_citry_id`, and JSON `_citry_capabilities`, preserving version rejection,
+  `_citry_request_id`, and JSON `_citry_capabilities`, preserving version rejection,
   response correlation, and morph/action negotiation from the ordinary
-  envelope. `_citry_instance` and `_citry_epoch` preserve call metadata;
-  `_citry_state` appears only for a state-declaring handler. The query codec
+  envelope. `_citry_caller_render_id` and `_citry_send_sequence` preserve call metadata;
+  `_citry_state_token` appears only for a state-declaring handler. The query codec
   removes those reserved fields before input validation. A GET call never flushes or consumes pending
   two-way writes: those remain queued for the next mutating call. A mixed or
   multi-call envelope still uses the POST-only batch endpoint, including when
@@ -4363,17 +4379,17 @@ demand shows.
 
 The protocol package (4.1) is the source of truth. Conformance is how a
 binding proves it implements the protocol, and it is checked by replay:
-fed each fixture's call envelope, the binding must produce that fixture's
+fed each test case's call envelope, the binding must produce that case's
 result envelope. The two envelopes must match exactly, except at the
-paths the fixture declares volatile (4.1). On top of the replay,
+paths its `dynamic_fields` declares (4.1). On top of the replay,
 everything the binding emits must validate against the schemas. Python
-runs the fixtures through `EventsDispatcher` in pytest; the client
-replays result fixtures through `Citry.events.applyActions` in a DOM
+runs the examples through `EventsDispatcher` in pytest; the client
+replays result examples through `Citry.events.applyActions` in a DOM
 harness, plus one Playwright e2e driving a real round trip (the
 `test_fragment_e2e.py` pattern). Nothing in the suite is Python-shaped:
-fixtures are JSON, the canonical fixture component is citry syntax, and
-volatility is declared as JSON paths. When JS/PHP/Go server
-bindings arrive they import the same fixture directory.
+the examples are JSON, the conformance component is Citry syntax, and
+dynamic values are declared as JSON paths. When JS/PHP/Go server
+bindings arrive they import the same `tests/` directory.
 
 Rust involvement in v1: none. The render walk stays in Python (settled
 performance decision), and no grammar, AST, compiler, `LangImpl`, or PyO3
@@ -4449,7 +4465,7 @@ and set a response header.
 
 **v1.0, the extension (HTTP)**, in order:
 
-1. **Protocol package first**: spec, schemas, fixtures merged before server
+1. **Protocol package first**: spec, schemas, and protocol tests merged before server
    code.
 2. **The morph spike** (gate for all client work): a re-rendered fragment
    with a pinned instance id morphs over the live DOM; `$component`
@@ -4471,7 +4487,7 @@ and set a response header.
    urlencoded, GET query), the compatibility/no-JS mode, `_context`,
    guards and CSRF wiring, the action constructors and return coercions,
    emit hooks, `events.url()`, the `ViewEvents` shim, the OpenAPI command.
-   Exit: the counter works via curl under FastAPI and Django; fixtures
+   Exit: the counter works via curl under FastAPI and Django; protocol tests
    green.
 4. Client: `citry-events.js` (embedded pinned Alpine plus
    `@alpinejs/morph`; scope attach with isolation at manifest time; the
@@ -4713,7 +4729,7 @@ design-panel decisions argued the other way:
     added the timing fields (`delay` in seconds, `wait` for
     non-blocking) so redirect-after-toast is expressible without
     reordering. Targets: plain CSS selector by default applying to all
-    matches (the unanimous field answer), `cid:` demoted to an optional
+    matches (the unanimous field answer), `render:` kept as the explicit
     instance override. Server-dispatched events fire under their exact
     names (Livewire and htmx precedent), `citry:*` reserved,
     component-name prefixes documented as the convention. `PushUrl` /
@@ -4990,7 +5006,7 @@ Concrete outcomes that would prove this design wrong, checkable early:
    blocks, binding-shaped text in attribute values). Consequence: the
    node-level transform in `on_template_compiled` moves from v1.x into v1.
 10. **Protocol neutrality fails**: the first non-Python binding cannot
-    implement the protocol from the fixtures without consulting Python
+    implement the protocol from the protocol examples without consulting Python
     semantics. Consequence: strip the offending fields into
     binding-private extensions and re-cut the schemas.
 11. **The dependency-DAG queue proves unworkable** (5.6), with two

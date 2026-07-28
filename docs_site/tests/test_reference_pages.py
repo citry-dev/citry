@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+import pytest
 from starlette.testclient import TestClient
 
 from docs_site._internal.build import build_site
@@ -70,6 +71,7 @@ def test_every_public_entrypoint_declares_all() -> None:
 def test_component_class_identity_members_are_visible_to_reference_extraction() -> None:
     assert extract_symbol("citry.Component.class_id") is not None
     assert extract_symbol("citry.Component.definition_id") is not None
+    assert extract_symbol("citry.Component.State") is not None
     assert extract_symbol("citry.Citry.engine_id") is not None
     assert extract_symbol("citry.Citry.inspect_component") is not None
     assert extract_symbol("citry.Citry.inspect_components") is not None
@@ -80,24 +82,17 @@ def test_page_markdown_uses_the_right_directive() -> None:
     assert "# HTML attributes" in attrs
     assert '<c-docstring path="citry.format_attrs" />' in attrs
 
-    builtins = reference_page_markdown(category("builtins"))
-    assert '<c-builtin tag="provide" />' in builtins
-    assert '<c-builtin tag="cache" />' in builtins
+    with pytest.raises(ValueError, match="authored"):
+        reference_page_markdown(category("builtins"))
+    with pytest.raises(ValueError, match="authored"):
+        reference_page_markdown(category("browser-apis"))
 
 
 def test_builtin_directive_renders() -> None:
-    html = render_page('<c-builtin tag="provide" />').html
+    html = render_page('<c-builtin tag="provide" c-level="3" />').html
     assert "&lt;c-provide&gt;" in html  # the tag name, escaped
-    assert "Provide data" in html  # from the built-in class docstring
+    assert '<h3 id="c-provide"' in html
     assert "<c-builtin" not in html
-
-
-def test_cache_builtin_reference_describes_public_controls() -> None:
-    html = render_page('<c-builtin tag="cache" />').html
-
-    assert "named transparent template region" in html
-    assert "vary" in html
-    assert "version" in html
 
 
 def test_unknown_builtin_shows_error() -> None:
@@ -108,17 +103,36 @@ def test_unknown_builtin_shows_error() -> None:
 def test_build_writes_reference_pages(tmp_path: Path) -> None:
     out = tmp_path / "site"
     outcome = build_site(config=DocsConfig(site_dir=out))
-    assert outcome.reference == len(CATEGORIES) + 1  # the categories plus the index
+    generated = sum(not cat.authored for cat in CATEGORIES)
+    assert outcome.reference == generated + 1  # generated categories plus index
     assert (out / "reference" / "index.html").is_file()
     component_page = out / "reference" / "component" / "index.html"
     assert component_page.is_file()
     assert "<code>Component</code>" in component_page.read_text(encoding="utf-8")
+
+    # Each authored category owns one record and a Markdown companion. The
+    # generated pass must not overwrite or duplicate either one.
+    for slug in ("browser-apis", "builtins"):
+        records = [record for record in outcome.records if record.url == f"reference/{slug}/"]
+        assert len(records) == 1
+        assert records[0].source_md is not None
+        assert records[0].source_md.name == f"{slug}.md"
+        assert (out / "reference" / slug / "index.md").is_file()
 
 
 def test_serve_reference_routes(tmp_path: Path) -> None:
     content = tmp_path / "content"
     content.mkdir()
     (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (content / "reference").mkdir()
+    (content / "reference" / "builtins.md").write_text(
+        "# Built-in tags\n\nAuthored marker.\n",
+        encoding="utf-8",
+    )
+    (content / "reference" / "browser-apis.md").write_text(
+        "# Browser APIs\n\nBrowser marker.\n",
+        encoding="utf-8",
+    )
     config = DocsConfig(content_dir=content, site_dir=tmp_path / "site", repo_root=tmp_path)
     client = TestClient(create_app(config=config))
 
@@ -126,4 +140,10 @@ def test_serve_reference_routes(tmp_path: Path) -> None:
     page = client.get("/reference/nodes/")
     assert page.status_code == 200
     assert "Nodes" in page.text
+    builtins = client.get("/reference/builtins/")
+    assert builtins.status_code == 200
+    assert "Authored marker." in builtins.text
+    browser = client.get("/reference/browser-apis/")
+    assert browser.status_code == 200
+    assert "Browser marker." in browser.text
     assert client.get("/reference/nope/").status_code == 404

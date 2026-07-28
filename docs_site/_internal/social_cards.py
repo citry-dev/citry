@@ -147,10 +147,16 @@ def _page_html_path(output_dir: Path, url: str) -> Path:
 
 
 def _section_label(nav_tree: NavTree, url: str) -> str:
-    """Eyebrow label for the card: the page's top nav section (e.g. ``Concepts``)."""
-    for label, _path in nav_tree.find_breadcrumbs(url):
-        if label and label.lower() != "home":
-            return label
+    """Use a page's group when present, otherwise its primary area."""
+    area = nav_tree.find_area(url)
+    if area is None:
+        return "Documentation"
+    normalized = url.strip("/")
+    for group in area.groups:
+        if any(item.path.strip("/") == normalized for item in group.items):
+            return group.label
+    if area.label:
+        return area.label
     return "Documentation"
 
 

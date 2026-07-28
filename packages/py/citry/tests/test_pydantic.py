@@ -2,9 +2,9 @@
 Tests for Kwargs/Slots declared as Pydantic models.
 
 Citry does not depend on Pydantic; ``util.misc.get_fields`` recognizes
-Pydantic v2 models by their attribute protocol, and ``Component.__init__``
-constructs the typed view by calling the class with the raw inputs, which for
-a Pydantic model runs its validation. These tests pin that end-user path:
+Pydantic v2 models by their attribute protocol. Citry constructs the typed
+view from the final post-input-hook raw values, which runs Pydantic validation.
+These tests pin that end-user path:
 declaration, validation, defaults, parse-time tag rules, slots, and how the
 ``Const`` marker behaves through Pydantic validation.
 
@@ -15,7 +15,7 @@ Pydantic is a dev/test dependency only; the suite skips cleanly without it.
 
 import pytest
 
-from citry import Citry, Component, Const
+from citry import Citry, Component, Const, Extension
 from citry.constness import is_const
 from citry.nodes import ExprNode
 from citry.slots import Slot
@@ -23,9 +23,34 @@ from citry.slots import Slot
 pydantic = pytest.importorskip("pydantic")
 BaseModel = pydantic.BaseModel
 ConfigDict = pydantic.ConfigDict
+BaseModelV1 = pytest.importorskip("pydantic.v1").BaseModel
 
 
 class TestPydanticKwargs:
+    @pytest.mark.parametrize("model_base", [BaseModel, BaseModelV1])
+    def test_same_generation_models_merge_across_c3_branches(self, model_base):
+        c = Citry()
+
+        class LeftSchema(model_base):
+            left: str = "left"
+
+        class RightSchema(model_base):
+            right: str = "right"
+
+        class Left(Component):
+            citry = c
+            Kwargs = LeftSchema
+
+        class Right(Component):
+            citry = c
+            Kwargs = RightSchema
+
+        class Combined(Left, Right):
+            pass
+
+        value = Combined.Kwargs()
+        assert (value.left, value.right) == ("left", "right")
+
     def test_typed_view_is_validated_model(self):
         c = Citry()
 
@@ -56,6 +81,31 @@ class TestPydanticKwargs:
 
         with pytest.raises(pydantic.ValidationError):
             Card(cols="not an int").render()
+
+    def test_input_hook_mutation_is_coerced_and_validated(self):
+        class Coerce(Extension):
+            name = "coerce"
+
+            def on_component_input(self, ctx):
+                ctx.kwargs["cols"] = "7"
+
+        c = Citry(extensions=[Coerce])
+
+        class Card(Component):
+            citry = c
+            template = """
+            <p>{{ cols }}</p>
+            """
+
+            class Kwargs(BaseModel):
+                cols: int
+
+            def template_data(self, kwargs, slots):
+                assert kwargs.cols == 7
+                assert type(kwargs.cols) is int
+                return {"cols": kwargs.cols}
+
+        assert Card(cols=1).render().serialize().strip() == '<p data-cid-c1="">7</p>'
 
     def test_missing_required_kwarg_raises(self):
         c = Citry()

@@ -34,18 +34,22 @@ from citry.ext.dependencies.scripts import (
     cache_component_js,
     get_component_script,
     get_script,
-    uses_oncomponent,
+    has_component_asset,
+    uses_component,
 )
 from citry.ext.dependencies.types import Dependency, Script, Style
+from citry.ownership_manifest import EXTRA_KEY as OWNERSHIP_MANIFEST_KEY
+from citry.ownership_manifest import OwnershipManifestArtifact
 from citry.util.html import SafeString
 
 if TYPE_CHECKING:
     from citry.citry import Citry
+    from citry.citry_context import CitryContext
     from citry.component import Component
     from citry.ext.dependencies.types import DependencyRecord
     from citry.extension import OnSerializeContext
 
-# One "run this instance's $onComponent callback" entry for the client-side
+# One "run this instance's $component callback" entry for the client-side
 # manager: (class_id, component_id, js_vars_hash or None).
 _ComponentCall: TypeAlias = tuple[str, str, "str | None"]
 
@@ -53,7 +57,8 @@ _ComponentCall: TypeAlias = tuple[str, str, "str | None"]
 EXTRA_KEY = "dependencies"
 
 # The Placeholder keys the <c-js> / <c-css> built-ins render. The serializer
-# makes each occurrence unique by appending a counter ("deps:js:1", ...).
+# makes each occurrence unique by appending a counter and private
+# per-serialization identity ("deps:js:1:<identity>", ...).
 JS_PLACEHOLDER_KEY = "deps:js"
 CSS_PLACEHOLDER_KEY = "deps:css"
 
@@ -65,9 +70,9 @@ class OnDependenciesContext:
     extension (not a "core" hook: any extension that defines an
     ``on_dependencies`` method receives it, via the manager's ``emit``).
 
-    Fires at serialize time with the final, deduplicated tag lists, just
-    before they are rendered into the page. Mutate the lists in place to
-    add, remove, or reorder entries.
+    Fires at serialize time with the final, deduplicated tag lists (possibly
+    empty), just before they are rendered into the page. Mutate the lists in
+    place to add, remove, or reorder entries.
     """
 
     citry: Citry
@@ -76,6 +81,20 @@ class OnDependenciesContext:
     """The ``<script>`` entries about to be emitted, in document order (mutable)."""
     styles: list[Dependency]
     """The stylesheet entries about to be emitted, in document order (mutable)."""
+    context: CitryContext
+    """The root render's ``CitryContext``. Its ``extra`` carries everything
+    that bubbled up during the render, so an extension can read back what its
+    render-time hooks collected."""
+    strategy: str
+    """The ``serialize(deps_strategy=...)`` value this emission runs under
+    (``"document"``, ``"simple"``, or ``"fragment"``)."""
+    before_manifest: list[Dependency]
+    """Entries rendered as tags immediately before the ``data-citry`` page
+    manifest tag (mutable). For anything that must already be in the DOM when
+    the client-side manager processes the manifest, e.g. the events
+    extension's own manifest tag. Only the strategies that emit the page
+    manifest render these (``"document"`` and ``"fragment"``); under
+    ``"simple"`` they are not emitted."""
 
 
 @dataclass(eq=False)
@@ -113,7 +132,7 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
     # "fragment": nothing is inlined; the output carries a pre-loader plus a
     # manifest of URLs for the client-side manager to fetch (section 8).
     if ctx.deps_strategy == "fragment":
-        return _emit_fragment(citry, ctx.html, records, all_placeholder_texts)
+        return _emit_fragment(citry, ctx, records, all_placeholder_texts)
 
     # "document" includes the client-side manager and everything that needs
     # it (the JS-variables scripts, the per-instance component calls, the
@@ -127,26 +146,57 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
 
     # The extension-owned custom hook: other extensions adjust the lists in
     # place (docs/design/extensions.md section 9.2). The hook sees the
-    # component-derived entries; the runtime and the manifest are appended
-    # after it, so URLs an extension adds here are still marked as loaded.
-    if scripts or styles:
-        hook_ctx = OnDependenciesContext(citry=citry, scripts=scripts, styles=styles)
-        citry.extensions.emit("on_dependencies", hook_ctx)
-        scripts, styles = hook_ctx.scripts, hook_ctx.styles
+    # component-derived entries (possibly none); the runtime and the manifest
+    # are appended after it, so URLs an extension adds here are still marked
+    # as loaded.
+    hook_ctx = OnDependenciesContext(
+        citry=citry,
+        scripts=scripts,
+        styles=styles,
+        context=ctx.context,
+        strategy=ctx.deps_strategy,
+        before_manifest=[],
+    )
+    citry.extensions.emit("on_dependencies", hook_ctx)
+    scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
+    ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
+    graph_revision: str | None = None
+    if isinstance(ownership, OwnershipManifestArtifact):
+        graph_revision = ownership.revision
+        before_manifest.insert(
+            0,
+            Script(
+                kind="core",
+                content=ownership.json(),
+                attrs={"type": "application/json", "data-citry-graph": True},
+            ),
+        )
 
     # The client runtime and the page manifest ride along when the page either
-    # runs per-instance JS (a component registered an `$onComponent` callback,
+    # runs per-instance JS (a component registered a `$component` callback,
     # so `calls` is non-empty) OR carries mounted component assets a later
-    # fragment must dedup against (the `mark_*_urls`, only filled when mounted).
-    # The manifest's `markLoaded` tells the client which cache URLs this page
-    # already has, so a fragment inserted later does not fetch them again. A
-    # page with neither stays as lean as "simple".
+    # fragment must dedup against (the `mark_*_urls`, only filled when mounted)
+    # OR an extension contributed tags that must precede the manifest (the
+    # events manifest tag). The manifest's `markLoaded` tells the client which
+    # cache URLs this page already has, so a fragment inserted later does not
+    # fetch them again. A page with none of the three stays as lean as
+    # "simple". The `before_manifest` entries sit between the runtime and the
+    # manifest tag, so they are already parsed when the manager processes the
+    # manifest (the events boot-order rule, docs/design/events.md 5.2).
     core_scripts: list[Dependency] = []
-    if with_client_js and (calls or resolved.mark_js_urls or resolved.mark_css_urls):
+    if with_client_js and (calls or resolved.mark_js_urls or resolved.mark_css_urls or before_manifest):
         mark_js = [*(script.url for script in scripts if script.url), *resolved.mark_js_urls]
         mark_css = [*(style.url for style in styles if style.url), *resolved.mark_css_urls]
-        manifest = _build_manifest(mark_js=mark_js, mark_css=mark_css, fetch_js=[], fetch_css=[], calls=calls)
-        core_scripts = [_runtime_script(citry), manifest]
+        manifest = _build_manifest(
+            mark_js=mark_js,
+            mark_css=mark_css,
+            fetch_js=[],
+            fetch_css=[],
+            calls=calls,
+            css_instances=resolved.css_instances,
+            graph_revision=graph_revision,
+        )
+        core_scripts = [_runtime_script(citry), *before_manifest, manifest]
 
     js_html = "".join(str(script.render()) for script in [*core_scripts, *scripts])
     css_html = "".join(str(style.render()) for style in styles)
@@ -183,6 +233,12 @@ class _Resolved:
     # a fragment inserted later does not fetch them again.
     mark_js_urls: list[str]
     mark_css_urls: list[str]
+    # (class_id, component_id) of instances whose class has Component.css but
+    # no $component callback. Nothing else registers such an instance with
+    # the client-side manager, so the manifest declares it present and the
+    # manager can count the class's live instances for the Component.css
+    # cleanup (docs/design/dependencies.md 8.4).
+    css_instances: list[tuple[str, str]]
 
 
 def _resolve_records(
@@ -232,19 +288,26 @@ def _resolve_records(
     calls: list[_ComponentCall] = []
     mark_js_urls: list[str] = []
     mark_css_urls: list[str] = []
+    css_instances: list[tuple[str, str]] = []
 
     # The class-level entries (a class's Dependencies plus its own JS/CSS) are
     # identical for every instance of the class, so resolve them once per class
     # and reuse them: a page commonly renders many instances of the same
     # component. Only the per-instance variables scripts and the client-side
-    # call below differ between instances. Cached as
-    # (scripts, styles, mark_js_url, mark_css_url, uses_oncomponent).
-    class_deps: dict[str, tuple[list[Dependency], list[Dependency], str | None, str | None, bool]] = {}
+    # call below differ between instances. Cached as (scripts, styles,
+    # mark_js_url, mark_css_url, uses_component, css_only_presence).
+    class_deps: dict[
+        type[Component], tuple[list[Dependency], list[Dependency], str | None, str | None, bool, bool]
+    ] = {}
 
     for record in records:
-        comp_cls = citry.get_component_by_class_id(record.class_id)
+        # A render can be serialized after hot replacement installed a new
+        # class with the same deterministic ID. Prefer the exact class that
+        # rendered this record; the fallback keeps manually constructed and
+        # older records compatible.
+        comp_cls = record.component_class or citry.get_component_by_class_id(record.class_id)
 
-        cached = class_deps.get(record.class_id)
+        cached = class_deps.get(comp_cls)
         if cached is None:
             scripts: list[Dependency] = []
             styles: list[Dependency] = []
@@ -260,16 +323,26 @@ def _resolve_records(
 
             # The class's own JS/CSS: inlined content for a page, a cache URL for
             # a fragment (the endpoint serves what the cache write here stores).
+            # Either way the Component.css sheet is tagged with its class id
+            # (data-citry-css-class), which is how the client-side manager's
+            # cleanup finds the sheet when the class's last instance leaves the
+            # page (docs/design/dependencies.md 8.4).
+            css_class_attr: dict[str, str | bool] = {"data-citry-css-class": comp_cls.class_id}
             if as_urls:
-                if comp_cls.get_js() is not None:
+                if has_component_asset("js", comp_cls):
                     cache_component_js(comp_cls)
                     scripts.append(
                         Script(url=script_url(comp_cls, "js"), kind="component", origin_class_id=comp_cls.class_id)
                     )
-                if comp_cls.get_css() is not None:
+                if has_component_asset("css", comp_cls):
                     cache_component_css(comp_cls)
                     styles.append(
-                        Style(url=script_url(comp_cls, "css"), kind="component", origin_class_id=comp_cls.class_id)
+                        Style(
+                            url=script_url(comp_cls, "css"),
+                            attrs=css_class_attr,
+                            kind="component",
+                            origin_class_id=comp_cls.class_id,
+                        )
                     )
             else:
                 comp_js = get_component_script("js", comp_cls)
@@ -279,14 +352,24 @@ def _resolve_records(
                         mark_js = script_url(comp_cls, "js")
                 comp_css = get_component_script("css", comp_cls)
                 if comp_css is not None:
-                    styles.append(comp_css)
+                    styles.append(replace(comp_css, attrs={**comp_css.attrs, **css_class_attr}))
                     if mounted:
                         mark_css = script_url(comp_cls, "css")
 
-            cached = (scripts, styles, mark_js, mark_css, with_client_js and uses_oncomponent(comp_cls))
-            class_deps[record.class_id] = cached
+            cached = (
+                scripts,
+                styles,
+                mark_js,
+                mark_css,
+                with_client_js and uses_component(comp_cls),
+                # An instance of a class with Component.css but no $component
+                # callback appears in the manifest's presence record; see
+                # _Resolved.css_instances.
+                with_client_js and has_component_asset("css", comp_cls) and not uses_component(comp_cls),
+            )
+            class_deps[comp_cls] = cached
 
-        cls_scripts, cls_styles, cls_mark_js, cls_mark_css, cls_uses_oncomp = cached
+        cls_scripts, cls_styles, cls_mark_js, cls_mark_css, cls_uses_oncomp, cls_css_presence = cached
         # Copy the class lists so the per-instance scripts below (and any
         # on_dependencies edit) never mutate the cached entry.
         instance_scripts: list[Dependency] = list(cls_scripts)
@@ -333,6 +416,8 @@ def _resolve_records(
 
         if cls_uses_oncomp:
             calls.append((record.class_id, record.component_id, record.js_vars_hash))
+        if cls_css_presence:
+            css_instances.append((record.class_id, record.component_id))
 
         # Per-component hook: adjust this instance's lists before they join
         # the page-wide ones.
@@ -351,6 +436,7 @@ def _resolve_records(
         calls=calls,
         mark_js_urls=list(dict.fromkeys(mark_js_urls)),
         mark_css_urls=list(dict.fromkeys(mark_css_urls)),
+        css_instances=css_instances,
     )
 
 
@@ -405,6 +491,8 @@ def _build_manifest(
     fetch_js: list[Dependency],
     fetch_css: list[Dependency],
     calls: list[_ComponentCall],
+    css_instances: list[tuple[str, str]],
+    graph_revision: str | None = None,
 ) -> Script:
     """
     The page manifest: a ``<script type="application/json" data-citry>`` tag
@@ -412,8 +500,10 @@ def _build_manifest(
 
     Carries which URLs are already on this page (so a fragment inserted later
     does not fetch them again), which tags to fetch (filled by fragments,
-    empty for a document), and which component instances to call. String
-    fields ride as base64, so no value can break out of the script tag.
+    empty for a document), which component instances to call, and which
+    instances are present for CSS only (a ``Component.css`` instance with no
+    ``$component`` callback, counted live for the per-class CSS cleanup).
+    String fields ride as base64, so no value can break out of the script tag.
     """
     manifest = {
         "markLoaded": {
@@ -428,11 +518,18 @@ def _build_manifest(
             [_b64(class_id), _b64(component_id), None if vars_hash is None else _b64(vars_hash)]
             for class_id, component_id, vars_hash in calls
         ],
+        "cssInstances": [[_b64(class_id), _b64(component_id)] for class_id, component_id in css_instances],
+        "graph": graph_revision,
     }
     return Script(kind="core", content=json.dumps(manifest), attrs={"type": "application/json", "data-citry": True})
 
 
-def _emit_fragment(citry: Citry, html: str, records: list[DependencyRecord], placeholder_texts: list[str]) -> str:
+def _emit_fragment(
+    citry: Citry,
+    ctx: OnSerializeContext,
+    records: list[DependencyRecord],
+    placeholder_texts: list[str],
+) -> str:
     """
     The "fragment" strategy: content followed by the pre-loader and a
     fetch-manifest, nothing inlined.
@@ -444,30 +541,65 @@ def _emit_fragment(citry: Citry, html: str, records: list[DependencyRecord], pla
     (the URLs must point somewhere), and, with multiple worker processes, a
     shared cache backend (docs/design/dependencies.md section 8.3).
     """
-    # A fragment whose components carry no assets has nothing to load, so it
-    # needs no pre-loader or manifest (and no mounted integration).
-    if not records:
-        return _blank(html, placeholder_texts)
-    if citry.mounted_prefix is None:
-        msg = (
-            "serialize(deps_strategy='fragment') needs a mounted web integration:"
-            " the fragment references its JS/CSS by URL. Mount one (e.g."
-            " citry.contrib.fastapi.mount(app, citry_instance)), or use"
-            " set_mounted_prefix() in processes that only render."
-        )
-        raise RuntimeError(msg)
-
-    resolved = _resolve_records(citry, records, with_client_js=True, as_urls=True)
+    fragment_needs_mount_msg = (
+        "serialize(deps_strategy='fragment') needs a mounted web integration:"
+        " the fragment references its JS/CSS by URL. Mount one (e.g."
+        " citry.contrib.fastapi.mount(app, citry_instance)), or use"
+        " set_mounted_prefix() in processes that only render."
+    )
+    if records:
+        if citry.mounted_prefix is None:
+            raise RuntimeError(fragment_needs_mount_msg)
+        resolved = _resolve_records(citry, records, with_client_js=True, as_urls=True)
+    else:
+        resolved = _Resolved(scripts=[], styles=[], calls=[], mark_js_urls=[], mark_css_urls=[], css_instances=[])
     scripts, styles = resolved.scripts, resolved.styles
 
-    if scripts or styles:
-        hook_ctx = OnDependenciesContext(citry=citry, scripts=scripts, styles=styles)
-        citry.extensions.emit("on_dependencies", hook_ctx)
-        scripts, styles = hook_ctx.scripts, hook_ctx.styles
+    hook_ctx = OnDependenciesContext(
+        citry=citry,
+        scripts=scripts,
+        styles=styles,
+        context=ctx.context,
+        strategy="fragment",
+        before_manifest=[],
+    )
+    citry.extensions.emit("on_dependencies", hook_ctx)
+    scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
+    ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
+    graph_revision: str | None = None
+    if isinstance(ownership, OwnershipManifestArtifact):
+        graph_revision = ownership.revision
+        before_manifest.insert(
+            0,
+            Script(
+                kind="core",
+                content=ownership.json(),
+                attrs={"type": "application/json", "data-citry-graph": True},
+            ),
+        )
 
-    manifest = _build_manifest(mark_js=[], mark_css=[], fetch_js=scripts, fetch_css=styles, calls=resolved.calls)
-    html = _blank(html, placeholder_texts)
-    return html + str(_preloader_script(citry).render()) + str(manifest.render())
+    # A fragment that carries nothing at all has nothing to load, so it needs
+    # no pre-loader or manifest (and no mounted integration).
+    if not scripts and not styles and not resolved.calls and not resolved.css_instances and not before_manifest:
+        return _blank(ctx.html, placeholder_texts)
+    if citry.mounted_prefix is None:
+        raise RuntimeError(fragment_needs_mount_msg)
+
+    manifest = _build_manifest(
+        mark_js=[],
+        mark_css=[],
+        fetch_js=scripts,
+        fetch_css=styles,
+        calls=resolved.calls,
+        css_instances=resolved.css_instances,
+        graph_revision=graph_revision,
+    )
+    html = _blank(ctx.html, placeholder_texts)
+    # The `before_manifest` entries render as real tags (not fetch
+    # descriptors) directly before the manifest tag, so they are already in
+    # the DOM when the client-side manager processes the manifest.
+    before_html = "".join(str(dep.render()) for dep in before_manifest)
+    return html + str(_preloader_script(citry).render()) + before_html + str(manifest.render())
 
 
 def _bucket(dep: Dependency, core: list[Dependency], extra: list[Dependency], component: list[Dependency]) -> None:

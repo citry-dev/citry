@@ -5,6 +5,25 @@ vanilla Django templates, and Jinja2. The design, scope, and roadmap live in
 [`docs/design/benchmarking.md`](../docs/design/benchmarking.md); this README
 covers running the comparison and reading its output.
 
+Citry's graph-first browser workload has a separate runner because browser
+startup, fragment adoption, morph, heap, and client payloads are not comparable
+to server render time. Run it with:
+
+```bash
+uv run --no-sync python benchmarks/client.py \
+  --browser chromium --counts 10 100 325 --rounds 9 --memory
+```
+
+It discards one cold round, reports median and p95, and rejects samples with
+browser errors, incomplete runtime resources, or wrong initializer and
+cleanup counts. `--json` emits the complete measurement record, including a
+Git description whose `-dirty` suffix preserves uncommitted-run provenance.
+Deterministic payload limits are enforced by
+`packages/py/citry/tests/test_client_performance_payload.py`; browser timings
+are informational. The exact workload, interpretation rules, and budgets are
+recorded in
+[`docs/design/alpinejs/a10_performance.md`](../docs/design/alpinejs/a10_performance.md).
+
 ## How it works
 
 The benchmarked code lives in `packages/py/citry/tests/` as self-contained
@@ -24,7 +43,7 @@ Engines:
 | `django` | Vanilla Django templates (vendored DJC scenario; it still imports django-components for `{% html_attrs %}`, so read it as "the relative cost of components", not pure Django) |
 | `django-components` | The DJC component scenario, vendored byte-close to upstream |
 | `citry` | The citry port of the same UI, plain inputs |
-| `citry-const` | The same port with each component's render-invariant literals marked `Const` (the opt-in render-caching optimization, see `docs/design/constness.md`); large scenario only |
+| `citry-const` | The same port with each component's render-invariant literals marked `Const` (the opt-in render-caching optimization, see `docs/design/component_constness.md`); large scenario only |
 | `jinja2` | The same UI in Jinja2, the first engine beyond the Django family. Jinja2 has no component model, so each citry component becomes a macro; provide/inject is threaded as macro arguments, and each component's inline JS is collected by a per-render registry and injected at the `<c-js>` marker. Its `html_attrs` global stands in for Django's `{% html_attrs %}` tag. Both scenarios |
 
 Test types, mirroring upstream so the methodology stays comparable:
@@ -168,6 +187,8 @@ doing its job: surfacing a real scaling bug that the small scenario could not.
 ```
 benchmarks/
     README.md    this file
+    client.py    graph-first browser startup, adoption, morph, and heap runner
+    client_scenario.py reusable production-shaped browser workload and payload sizing
     compare.py   the comparison runner (one table per scenario size)
     utils.py     marker slicing shared by runners
     plot.py      draws the project README chart from the large-scenario table

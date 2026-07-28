@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import sys
 from importlib import import_module
+from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from citry.citry import Citry
@@ -63,6 +64,13 @@ def _resolve_engine(argv: list[str]) -> tuple[Citry, list[str]]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the citry CLI. Returns a process exit code."""
+    # Resolve --app against the working directory, the way uvicorn, gunicorn,
+    # and flask do: the console script (unlike 'python -m citry') starts
+    # without the cwd on sys.path, so 'citry --app app:engine' would not find
+    # a project-root app.py otherwise.
+    cwd = str(Path.cwd())
+    if cwd not in sys.path:
+        sys.path.insert(0, cwd)
     args = list(sys.argv[1:] if argv is None else argv)
     engine, rest = _resolve_engine(args)
     root = build_cli(engine)

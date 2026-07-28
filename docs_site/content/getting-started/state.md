@@ -207,7 +207,7 @@ The new list and selected choice stay in Alpine. The counter is named
 `batches_loaded` in Python and `batchesLoaded` in Alpine, following each
 language's usual style:
 
-```
+```text
 batchesLoaded = $event.detail.batches_loaded;
 ^^^^^^^^^^^^^                 ^^^^^^^^^^^^^^^
   Alpine var                  data from Python

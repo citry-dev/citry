@@ -1,5 +1,5 @@
 """
-Tests for the control-flow nodes: IfNode and ForNode (rendering.md control-flow
+Tests for the control-flow nodes: IfNode and ForNode (component_rendering.md control-flow
 phase).
 
 Covers both authoring forms (the explicit ``<c-if cond=...>``/``<c-for
@@ -11,7 +11,8 @@ escaping of loop output.
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, CitryContext, Component
+from citry.nodes import ExprHtmlAttr, ForNode
 
 
 def _html(template, **data):
@@ -114,10 +115,17 @@ class TestForNode:
         # A single target over tuples binds the whole tuple, not its first element.
         assert _html('<c-for each="p in pairs">{{ p }}</c-for>', pairs=[(1, 2), (3, 4)]) == "(1, 2)(3, 4)"
 
-    def test_loop_variable_does_not_leak_outside(self):
-        # `i` is only bound inside the loop body; the surrounding `i` is unchanged.
-        tpl = '<c-for each="i in items">{{ i }}</c-for>-{{ i }}'
-        assert _html(tpl, items=[1, 2], i="outer") == "12-outer"
+    def test_loop_variable_cannot_reuse_context_name_even_when_empty(self):
+        tpl = '<c-for each="i in items">{{ i }}</c-for><c-empty>none</c-empty>'
+        with pytest.raises(RuntimeError, match=r"Cannot define variable 'i'.*Variable shadowing is not allowed"):
+            _html(tpl, items=[], i="outer")
+
+    def test_duplicate_loop_targets_are_rejected_defensively_at_runtime(self):
+        each_attr = ExprHtmlAttr(None, (0, 0), "each", "x, x in pairs", ("pairs",))
+        node = ForNode(None, (((0, 0), (each_attr,), [], ("x", "x")),), ("pairs",))
+
+        with pytest.raises(RuntimeError, match=r"Cannot define variable 'x' more than once"):
+            list(node.iter_bodies(CitryContext(variables={"pairs": [(1, 2)]})))
 
     def test_outer_variable_visible_in_body(self):
         tpl = '<c-for each="i in items">{{ i }}{{ sep }}</c-for>'

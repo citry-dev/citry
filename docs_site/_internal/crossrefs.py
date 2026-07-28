@@ -53,11 +53,12 @@ def symbol_url_index() -> dict[str, str]:
     # Pass 1: entry-level keys (a symbol's own page wins over a same-named member).
     for cat in CATEGORIES:
         base = f"/reference/{cat.slug}/"
-        if cat.source == "builtin":
-            for tag in cat.symbols:
-                url = f"{base}#{anchor(f'c-{tag}')}"
-                index.setdefault(f"c-{tag}", url)
-                index.setdefault(tag, url)
+        if cat.source != "griffe":
+            for entry in cat.entries:
+                url = f"{base}#{entry.anchor}"
+                index.setdefault(entry.key, url)
+                for alias in entry.aliases:
+                    index.setdefault(alias, url)
             continue
         for path in cat.symbols:
             url = f"{base}#{anchors.get(path, anchor(path))}"
@@ -173,14 +174,19 @@ def make_type_resolver(current_url: str | None = None) -> Callable[[str, str], s
 
 def build_objects_inv(version: str, *, project: str = "citry") -> bytes:
     """Build a Sphinx v2 ``objects.inv`` for citry's symbols (so other sites can link in)."""
-    entries = sorted(
-        (name, url.lstrip("/")) for name, url in symbol_url_index().items() if name.startswith(("citry.", "c-"))
-    )
+    index = symbol_url_index()
+    entries = {name: ("py:obj", url.lstrip("/")) for name, url in index.items() if name.startswith("citry.")}
+    for cat in CATEGORIES:
+        for entry in cat.entries:
+            entries[entry.key] = (
+                entry.inventory_role,
+                index[entry.key].lstrip("/"),
+            )
     header = (
         f"# Sphinx inventory version 2\n"
         f"# Project: {project}\n"
         f"# Version: {version}\n"
         f"# The remainder of this file is compressed using zlib.\n"
     ).encode()
-    lines = "".join(f"{name} py:obj -1 {url} -\n" for name, url in entries)
+    lines = "".join(f"{name} {role} -1 {url} -\n" for name, (role, url) in sorted(entries.items()))
     return header + zlib.compress(lines.encode("utf-8"), 9)

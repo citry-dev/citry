@@ -4,7 +4,7 @@
 # attribute dicts, module constants like the theme or icon paths), and ONLY
 # those. Values derived from the per-render inputs (the project data) are left
 # plain, because Const promises "this is the same on every render" and the
-# engine takes the promise at face value (docs/design/constness.md).
+# engine takes the promise at face value (docs/design/component_constness.md).
 #
 # This is the right way to exercise the Const optimization: marking the whole
 # input tree Const (an earlier approach) is both dishonest and useless here,
@@ -93,7 +93,7 @@ def _plain(value: Any) -> Any:
 
     json.dumps and other C-level APIs reject the proxy, and the scenario marks
     inputs Const in const mode (and static attrs are auto-marked anyway), so
-    the serializing helpers unwrap first. See docs/design/constness.md.
+    the serializing helpers unwrap first. See docs/design/component_constness.md.
     """
     if isinstance(value, wrapt.ObjectProxy):
         value = value.__wrapped__

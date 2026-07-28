@@ -13,7 +13,7 @@ from docs_site._internal.release_notes import (
     parse_changelog,
     release_index_markdown,
     release_page_markdown,
-    releases_nav_section,
+    releases_nav_items,
 )
 
 _SAMPLE = """\
@@ -166,13 +166,16 @@ def test_release_index_markdown_links_every_release_with_clean_urls() -> None:
     assert "- [v0.1.0 (2026-06-30)](v0.1.0/)" in md
 
 
-def test_releases_nav_section_is_a_collapsible_section_with_version_items() -> None:
-    section = releases_nav_section(parse_changelog(_SAMPLE))
-    assert section.label == "Release notes"
-    assert section.path == "/releases/"  # index: linkable breadcrumb + Overview
-    assert section.collapsible is True  # closed-by-default group in the sidebar
-    assert [i.title for i in section.items] == ["Unreleased", "v0.2.0", "v0.1.0 (2026-06-30)"]
-    assert [i.path for i in section.items] == [
+def test_releases_nav_source_includes_overview_and_versions() -> None:
+    items = releases_nav_items(parse_changelog(_SAMPLE))
+    assert [item.title for item in items] == [
+        "Overview",
+        "Unreleased",
+        "v0.2.0",
+        "v0.1.0 (2026-06-30)",
+    ]
+    assert [item.path for item in items] == [
+        "/releases/",
         "/releases/unreleased/",
         "/releases/v0.2.0/",
         "/releases/v0.1.0/",
@@ -180,13 +183,40 @@ def test_releases_nav_section_is_a_collapsible_section_with_version_items() -> N
 
 
 def test_release_version_page_breadcrumbs_back_to_the_index() -> None:
-    from docs_site._internal.nav import NavTree
+    from docs_site._internal.nav import (
+        NavArea,
+        NavGroup,
+        NavItem,
+        NavTree,
+    )
 
-    tree = NavTree(sections=[releases_nav_section(parse_changelog(_SAMPLE))])
+    tree = NavTree(
+        areas=[
+            NavArea(
+                label="Docs",
+                items=[NavItem(title="Home", path="/")],
+                groups=[
+                    NavGroup(
+                        label="Release notes",
+                        items=releases_nav_items(
+                            parse_changelog(_SAMPLE),
+                        ),
+                    ),
+                ],
+            ),
+        ],
+    )
     # A version page: parent "Release notes" crumb links back to the index.
-    assert tree.find_breadcrumbs("releases/v0.2.0") == [("Release notes", "/releases/"), ("v0.2.0", "")]
+    assert tree.find_breadcrumbs("releases/v0.2.0") == [
+        ("Docs", "/"),
+        ("Release notes", "/releases/"),
+        ("v0.2.0", ""),
+    ]
     # The index page is just the current crumb.
-    assert tree.find_breadcrumbs("releases") == [("Release notes", "")]
+    assert tree.find_breadcrumbs("releases") == [
+        ("Docs", "/"),
+        ("Release notes", ""),
+    ]
 
 
 # --- rendering behavior: release prose that shows citry syntax ---
@@ -230,8 +260,7 @@ def test_real_changelog_index_renders() -> None:
 
 
 def test_llms_full_txt_includes_per_version_release_notes(tmp_path: Path) -> None:
-    # The per-version pages are not sidebar items, so llms-full.txt must pull
-    # them from the records or the changelog is missing from the full-text export.
+    # Generated version items must reach llms-full.txt through the resolved nav.
     from docs_site._internal.build import PageRecord
     from docs_site._internal.llms import write_llms_full_txt
     from docs_site._internal.nav import NavTree
@@ -248,10 +277,24 @@ def test_llms_full_txt_includes_per_version_release_notes(tmp_path: Path) -> Non
             markdown_body=body,
         )
 
-    # The per-version items are in the section, so flat_pages (and thus the
-    # full-text export) reaches them the same way it reaches reference pages.
-    section = releases_nav_section(parse_changelog("# Release notes\n\n## v0.2.0\n\n- x\n"))
-    nav = NavTree(sections=[section])
+    # flat_pages reaches generated items the same way it reaches authored pages.
+    from docs_site._internal.nav import NavArea, NavGroup
+
+    items = releases_nav_items(
+        parse_changelog(
+            "# Release notes\n\n## v0.2.0\n\n- x\n",
+        ),
+    )
+    nav = NavTree(
+        areas=[
+            NavArea(
+                label="Docs",
+                groups=[
+                    NavGroup(label="Release notes", items=items),
+                ],
+            ),
+        ],
+    )
     by_url = {
         "releases": rec("releases/", "Release notes", "Pick a version."),
         "releases/v0.2.0": rec("releases/v0.2.0/", "v0.2.0", "A feature landed in v0.2.0."),

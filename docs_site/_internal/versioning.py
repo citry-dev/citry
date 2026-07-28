@@ -33,7 +33,7 @@ from docs_site._internal._vendor.mike_versions import Versions
 
 # Stamped into every _build_info.json. Bump when the builder's output format
 # changes in a way that warrants rebuilding historical versions.
-DOCS_BUILDER_VERSION = "1.0.0"
+DOCS_BUILDER_VERSION = "1.1.0"
 
 MANIFEST_NAME = "versions.json"
 BUILD_INFO_NAME = "_build_info.json"
@@ -176,7 +176,8 @@ def write_build_info(
     source_tag: str | None = None,
     builder_version: str = DOCS_BUILDER_VERSION,
     built_at: str | None = None,
-) -> dict[str, str]:
+    site_routes: tuple[str, ...] | None = None,
+) -> dict[str, object]:
     """
     Write ``version_dir/_build_info.json`` recording how this version was built.
 
@@ -190,6 +191,8 @@ def write_build_info(
         "built_at": built_at if built_at is not None else datetime.now(UTC).isoformat(),
         "builder_version": builder_version,
     }
+    if site_routes is not None:
+        info["site_routes"] = list(site_routes)
     version_dir.mkdir(parents=True, exist_ok=True)
     (version_dir / BUILD_INFO_NAME).write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
     return info

@@ -245,8 +245,9 @@ Quality is enforced by one explicit command, not a commit-time hook: `python scr
 #### Running the checks
 
 ```bash
-# The full gate: cargo fmt/clippy/test, ruff check/format, mypy, pytest, and the
-# custom validators. Runs every phase, then reports all results in one pass.
+# The full gate: cargo fmt/clippy/test, ruff check/format, mypy, pyright, the
+# citry-client package checks, pytest, and the custom validators. Runs every
+# phase, then reports all results in one pass.
 python scripts/check.py
 
 # Machine-readable: one JSON object with per-phase status (and the tail of any
@@ -257,7 +258,7 @@ python scripts/check.py --reporter agent
 python scripts/validate.py
 ```
 
-`check.py` only checks; it never edits files. It assumes the workspace is set up (`uv sync --all-packages`) and that `cargo`, `uv`, and the Rust toolchain are on PATH.
+`check.py` only checks; it never edits files. It assumes the workspace is set up (`uv sync --all-packages`, plus `pnpm install` for the pinned Node tools) and that `cargo`, `uv`, `node`, `pnpm`, and the Rust toolchain are on PATH. The `pyright` phase runs the pinned pyright (from `node_modules`) over the Events typing contract test, sitting alongside the mypy phase. The `citry-client` phase runs the events client package's own gate (`pnpm run check` in `packages/js/citry-client`: `tsc --noEmit` over the TypeScript runtime source, `biome check` for lint and format, and the pinned-version canary). One root `pnpm install` covers both phases, the same way `uv sync` installs the Python tools.
 
 #### Custom validators
 
@@ -334,17 +335,15 @@ Rules:
    extension of the same name.
 2. **Import the optional dependency lazily**, inside the module that needs it, so
    plain `import citry` never requires it (the contrib adapters and
-   [`docs_site/cli.py`](../docs_site/cli.py) are the precedent).
-3. **Mirror the pin into the root extras only if a test or the shared venv needs
-   it.** Per the mirrored-dependency gotcha in [`/CLAUDE.md`](../CLAUDE.md),
-   test and tooling deps are declared in both the package and the root
-   `pyproject.toml` because CI and the shared venv install from the root. A
-   runtime-only extra that no test imports (for example a watcher backend that
-   the test suite exercises only through its protocol, never importing the
-   backend) lives on the package alone. Either way, grep the name across all
-   `pyproject.toml` files and CI workflows before pinning. (The mirroring goes
-   away with the uv workspace conversion,
-   [#8](https://github.com/citry-dev/citry/issues/8).)
+   [`docs_site/_internal/cli.py`](../docs_site/_internal/cli.py) are the precedent).
+3. **Declare each dependency once, at its owner.** Runtime extras stay on the
+   `citry` package. A dependency imported only by that package's tests belongs
+   in its `[dependency-groups].dev`. Only repo-wide tools belong in the root
+   dev group. The uv workspace installs every member's selected groups into the
+   shared environment with `uv sync --all-packages`, so no root mirror is
+   needed. Refresh `uv.lock`, and grep CI workflows before changing a pin
+   because jobs may select groups or extras explicitly. This is the landed
+   workspace model from [#8](https://github.com/citry-dev/citry/issues/8).
 
 ### Adding a git submodule
 
@@ -828,7 +827,7 @@ Currently, releases are managed manually:
 4. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
 5. **Push the tag**: `git push origin citry-core@1.3.0`
 
-Pushing the tag triggers the package's publish workflow, which verifies the tag matches the pyproject version, builds the distributions, smoke-tests them, and uploads to PyPI. **Release ordering**: citry depends on `citry-core`, so when bumping both, publish `citry-core` first and let it reach PyPI before tagging `citry`.
+Pushing the tag triggers the package's publish workflow, which verifies the tag matches the pyproject version, builds the distributions, smoke-tests them, and uploads to PyPI. A `citry@X.Y.Z` tag also triggers the documentation release workflow that builds, validates, commits, and deploys a version snapshot; sibling package tags do not. Review the snapshot procedure and first-release blockers in [`docs_site/README.md`](../docs_site/README.md#release-version-snapshots) before pushing a Citry release tag. **Release ordering**: citry depends on `citry-core`, so when bumping both, publish `citry-core` first and let it reach PyPI before tagging `citry`.
 
 The packages are versioned and released **independently on purpose**, so each
 can ship on its own cadence. The ordering rule applies only when `citry` and

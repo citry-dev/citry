@@ -61,6 +61,8 @@ class GuardContext:
     nav_path: Path  # content/_nav.yml
     static_dir: Path  # docs_site/static (source of /static/* assets)
     repo_root: Path  # the repo root, for resolving --8<-- snippet includes
+    # Deployment prefix already applied to root-absolute URLs, e.g. "/citry".
+    base_path: str = ""
     # Post-build index of the rendered site. None during source-only runs.
     site_index: SiteIndex | None = None
     # name -> ExampleInfo, from the example autodiscovery registry.

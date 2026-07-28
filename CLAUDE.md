@@ -352,9 +352,13 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   when a tag carries more than two attributes (or any long attribute), break
   the tag so each attribute sits on its own line, with the closing `>` on its
   own line at the tag's indent.
+- **Order component members from inputs to output.** Put nested `Kwargs`,
+  `Slots`, and `State` schemas first, event handlers next, data methods such as
+  `template_data()` next, and `template`, `js`, and `css` last. Keep helpers
+  beside the behavior they support without reversing that overall direction.
 - **Follow the component authoring guide.** Component source layout, nested
-  schemas, headless/styled separation, template attribute order, CSS formatting,
-  and the specification gate live in
+  schemas, Python-to-browser naming, headless/styled separation, template
+  attribute order, CSS formatting, and the specification gate live in
   [`docs/best-practices/component-authoring.md`](docs/best-practices/component-authoring.md).
 - **Public docstrings become the API reference.** The docs build renders every
   public `citry.*` symbol's docstring into its reference page (via griffe), so
@@ -422,6 +426,10 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   - Keep lines in code blocks at 70 characters or fewer when practical. The
     rendered documentation column is narrower than a terminal. This applies
     to fenced code in Markdown and code examples inside docstrings.
+  - Use `citry` for complete Python component examples and `citry-html` for
+    template-only examples. Use `html` only for plain HTML without Citry or
+    Alpine syntax. The ordinary HTML lexer marks valid attributes such as
+    `$c-props` as errors.
   - Lead with the symptom, not the mechanism. Frame a gotcha around what
     the reader will see ("the second render shows stale text"), not the
     internal cause; mention the mechanism only when the reader needs it to

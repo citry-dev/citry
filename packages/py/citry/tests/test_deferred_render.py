@@ -1,5 +1,5 @@
 """
-Tests for deferred component rendering (docs/design/deferred_rendering.md, Phase A).
+Tests for deferred component rendering (docs/design/component_rendering_defer.md, Phase A).
 
 ``ComponentNode`` no longer recurses; it returns a ``DeferredComponent`` part,
 and ``render_impl`` drives a heap-bound, depth-first queue that resolves every
@@ -38,6 +38,42 @@ class TestInfiniteDepth:
         out = globals()["_C0"]().render().serialize()
         assert out.count("<span ") == depth + 1
         assert out.endswith("leaf" + "</span>" * (depth + 1))
+
+
+class TestSelfRecursion:
+    def test_guarded_self_recursion_renders_every_level_once(self):
+        # A component that invokes its own tag, stopped by a kwarg-driven
+        # c-if cutoff (the django-components recursive-component pattern).
+        # Every level must emit its own markup, not just the leaf: each depth
+        # marker appears exactly once, in depth order, parents wrapping
+        # children. Depth is modest on purpose; extreme depth is
+        # TestInfiniteDepth's job.
+        c = Citry()
+        limit = 6
+
+        class Recursive(Component):
+            citry = c
+            template = (
+                "<div><span>d{{ depth }};</span>"
+                '<c-if cond="depth <= limit"><c-recursive c-depth="depth" /></c-if>'
+                "</div>"
+            )
+
+            def template_data(self, kwargs, slots):
+                # The root call has no kwargs; each self-call passes its
+                # current depth, so the child renders at depth + 1.
+                return {"depth": kwargs.get("depth", 0) + 1, "limit": limit}
+
+        assert Recursive().render().serialize() == (
+            '<div data-cid-c1=""><span>d1;</span>'
+            '<div data-cid-c2=""><span>d2;</span>'
+            '<div data-cid-c3=""><span>d3;</span>'
+            '<div data-cid-c4=""><span>d4;</span>'
+            '<div data-cid-c5=""><span>d5;</span>'
+            '<div data-cid-c6=""><span>d6;</span>'
+            '<div data-cid-c7=""><span>d7;</span>'
+            "</div></div></div></div></div></div></div>"
+        )
 
 
 class TestLoopVarKwargs:

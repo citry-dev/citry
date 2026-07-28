@@ -1,0 +1,83 @@
+import {
+  loadCitryScenario,
+  renderCitryScenario,
+} from "../../src/html-adapter.js";
+
+const meta = {
+  title: "Citry UI/Table/Static",
+  argTypes: {
+  "state": {
+    "control": {
+      "type": "select"
+    },
+    "description": "Server-rendered table state.",
+    "options": [
+      "ready",
+      "loading",
+      "error"
+    ]
+  },
+  "density": {
+    "control": {
+      "type": "select"
+    },
+    "description": "Cell spacing.",
+    "options": [
+      "comfortable",
+      "compact"
+    ]
+  },
+  "striped": {
+    "control": {
+      "type": "boolean"
+    },
+    "description": "Stripe alternating rows."
+  },
+  "hover": {
+    "control": {
+      "type": "boolean"
+    },
+    "description": "Highlight the hovered row."
+  },
+  "sticky_header": {
+    "control": {
+      "type": "boolean"
+    },
+    "description": "Keep the header at the scroll boundary."
+  }
+},
+  parameters: {
+  "citry": {
+    "catalogSchemaVersion": 2,
+    "clientInteractive": false,
+    "generatorVersion": 1,
+    "scenarioId": "table/static",
+    "sourceDigest": "877d819f4bf67fe9974f7e98e85dfffe77f5305e77a1d637e28c83046a6e656c"
+  },
+  "docs": {
+    "description": {
+      "component": "Semantic table states with a nested Button."
+    },
+    "source": {
+      "code": "from citry_ui import CTable, CTableColumn, CTableRow\n\ntable = CTable(\n    columns=(CTableColumn(\"name\", \"Project\", row_header=True),),\n    rows=(CTableRow(\"citry\", {\"name\": \"Citry\"}),),\n    slots={\"caption\": \"Projects\"},\n)",
+      "language": "python"
+    }
+  }
+},
+  tags: ["autodocs"],
+};
+
+export default meta;
+
+export const Preview = {
+  name: "Preview",
+  args: {
+  "state": "ready",
+  "density": "comfortable",
+  "striped": true,
+  "hover": true,
+  "sticky_header": false
+},
+  loaders: [loadCitryScenario],
+  render: renderCitryScenario,
+};

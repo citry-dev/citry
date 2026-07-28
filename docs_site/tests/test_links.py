@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from docs_site._internal.links import linkify_headings
+from pathlib import Path
+
+from docs_site._internal.links import (
+    linkify_headings,
+    project_internal_markdown_urls,
+    rewrite_internal_md_links,
+    rewrite_internal_md_links_in_markdown,
+)
+from docs_site._internal.nav import SCOPE_SITE, NavArea, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
 
 _MARKDOWN_HEADING = (
@@ -55,3 +63,84 @@ def test_pipeline_links_content_and_reference_headings_without_a_glyph() -> None
     assert '<a class="heading-anchor" href="#refactor">Refactor</a>' in html  # h2 wrapped
     assert '<a class="heading-anchor" href="#t">T</a>' in html  # the h1 too
     assert "\xa4" not in html  # no permalink glyph remains
+
+
+def test_link_rewriting_uses_stable_source_route_for_page_and_target(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    blog = content / "blog"
+    guide = content / "guide"
+    blog.mkdir(parents=True)
+    guide.mkdir()
+    post = blog / "2026-07-28-first.md"
+    target = blog / "2026-07-27-second.md"
+    post.write_text("post", encoding="utf-8")
+    target.write_text("target", encoding="utf-8")
+    routes = {
+        post.resolve(): "/blog/first/",
+        target.resolve(): "/blog/second/",
+    }
+
+    html = rewrite_internal_md_links(
+        '<a href="./2026-07-27-second.md?view=full#part">Second</a>',
+        source_path=post,
+        content_dir=content,
+        current_public_path="/blog/first/",
+        source_to_public_path=routes,
+    )
+
+    assert 'href="../second/?view=full#part"' in html
+
+
+def test_markdown_link_rewriting_uses_routes_and_skips_fences(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    blog = content / "blog"
+    blog.mkdir(parents=True)
+    post = blog / "2026-07-28-first.md"
+    target = blog / "2026-07-27-second.md"
+    post.write_text("post", encoding="utf-8")
+    target.write_text("target", encoding="utf-8")
+    routes = {
+        post.resolve(): "/blog/first/",
+        target.resolve(): "/blog/second/",
+    }
+    source = "[Second](./2026-07-27-second.md#part)\n\n```markdown\n[Literal](./2026-07-27-second.md)\n```\n"
+
+    rewritten = rewrite_internal_md_links_in_markdown(
+        source,
+        source_path=post,
+        content_dir=content,
+        current_public_path="/blog/first/",
+        source_to_public_path=routes,
+    )
+
+    assert "[Second](../second/#part)" in rewritten
+    assert "[Literal](./2026-07-27-second.md)" in rewritten
+
+
+def test_generated_markdown_projects_versioned_and_site_routes() -> None:
+    tree = NavTree(
+        areas=[
+            NavArea(label="Reference", items=[NavItem(title="Widget", path="/reference/widget/")]),
+            NavArea(
+                label="Blog",
+                items=[NavItem(title="Post", path="/blog/post/", scope=SCOPE_SITE)],
+                scope=SCOPE_SITE,
+            ),
+        ]
+    )
+    source = (
+        "[Widget](/reference/widget/?view=all#api)\n\n"
+        "[Post](/blog/post/)\n\n"
+        "```markdown\n[Literal](/reference/widget/)\n```\n"
+    )
+
+    projected = project_internal_markdown_urls(
+        source,
+        current_public_path="reference/",
+        nav_tree=tree,
+        version_prefix="/v/1.2.3",
+    )
+
+    assert "[Widget](/v/1.2.3/reference/widget/?view=all#api)" in projected
+    assert "[Post](/blog/post/)" in projected
+    assert "[Literal](/reference/widget/)" in projected

@@ -25,13 +25,21 @@ def test_version_mode_writes_a_committed_snapshot(tmp_path: Path) -> None:
     assert outcome.docs_version == "1.0.0"
     assert (versions / "1.0.0" / "index.html").is_file()
     # Stamped and recorded in the manifest.
-    assert json.loads((versions / "1.0.0" / BUILD_INFO_NAME).read_text(encoding="utf-8"))["version"] == "1.0.0"
+    build_info = json.loads((versions / "1.0.0" / BUILD_INFO_NAME).read_text(encoding="utf-8"))
+    assert build_info["version"] == "1.0.0"
+    assert "/blog/*" in build_info["site_routes"]
+    assert "/community/*" in build_info["site_routes"]
     assert [v["version"] for v in json.loads((versions / MANIFEST_NAME).read_text(encoding="utf-8"))] == ["1.0.0"]
     # The alias is materialized, and the snapshot canonicals to its own /v/ tree.
     assert outcome.alias_redirects > 0
     assert (versions / "latest" / "index.html").is_file()
     page = (versions / "1.0.0" / "concepts" / "components" / "index.html").read_text(encoding="utf-8")
     assert "/v/1.0.0/concepts/components/" in page
+    assert 'href="/v/1.0.0/getting-started/installation/"' in page
+    assert 'href="/community/people/"' in page
+    assert 'href="/blog/"' in page
+    assert not (versions / "1.0.0" / "community").exists()
+    assert not (versions / "1.0.0" / "blog").exists()
     # Site-wide crawl files belong to the root build, not the snapshot.
     assert not (versions / "1.0.0" / "sitemap.xml").exists()
 
@@ -52,6 +60,8 @@ def test_assemble_mounts_versions_and_enables_picker(tmp_path: Path) -> None:
     assert (site / "sitemap.xml").is_file()
     assert outcome.picker_pages > 0
     assert 'data-versions-root="/v/"' in (site / "index.html").read_text(encoding="utf-8")
+    assert "data-version-picker" not in (site / "blog" / "index.html").read_text(encoding="utf-8")
+    assert "data-versions-root" not in (site / "community" / "people" / "index.html").read_text(encoding="utf-8")
     assert "data-versions-root" not in (site / "v" / "1.0.0" / "index.html").read_text(encoding="utf-8")
 
 

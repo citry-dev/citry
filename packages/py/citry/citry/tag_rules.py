@@ -10,7 +10,8 @@ render, and not silently) when it:
 - passes an attribute the component's ``Kwargs`` does not declare,
 - omits a required (no-default) kwarg,
 - fills a slot the component's ``Slots`` does not declare, or
-- omits a required (no-default) slot.
+- omits a required (no-default) slot, or
+- destructures a field outside a statically known ``SlotInput[T]`` data shape.
 
 The rules are opt-in per dimension: a component without a ``Kwargs`` class
 accepts any attributes, one without a ``Slots`` class accepts any fills, and a
@@ -31,8 +32,13 @@ instance (see ``Citry._tag_rules``).
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import inspect
+import sys
+import types
+import typing
+from typing import TYPE_CHECKING, Any, get_args, get_origin, get_type_hints
 
+from citry.slots import SlotInput
 from citry.util.misc import get_fields
 from citry_core.template_parser import TagRules
 
@@ -55,7 +61,7 @@ def build_tag_rules(citry: Citry) -> dict[str, TagRules]:
     declare neither ``Kwargs`` nor ``Slots`` contribute no entry.
     """
     rules: dict[str, TagRules] = {}
-    for name, comp_cls in citry.registry.all().items():
+    for name, comp_cls in citry.components.items():
         tag_rules = _component_tag_rules(comp_cls)
         if tag_rules is not None:
             rules[f"c-{name}"] = tag_rules
@@ -80,9 +86,11 @@ def _component_tag_rules(comp_cls: type[Component]) -> TagRules | None:
     required_attrs: list[list[str]] = []
     if kwargs_fields is not None:
         # Each kwarg may be passed statically (`title="x"`) or dynamically
-        # (`c-title="expr"`); putting both spellings in one group also makes
-        # them mutually exclusive. `c-bind` needs no entry: the parser always
-        # lets it through (it can supply any attribute at runtime).
+        # (`c-title="expr"`). Both spellings name one logical input, so putting
+        # them in one group rejects an explicit duplicate while either form
+        # still satisfies the required-input check.
+        # `c-bind` needs no entry: the parser always lets it through (it can
+        # supply any attribute at runtime).
         allowed_attrs = [[field.name, f"c-{field.name}"] for field in kwargs_fields]
         allowed_attrs += [[attr] for attr in _CONTROL_FLOW_ATTRS]
         required_attrs = [[field.name, f"c-{field.name}"] for field in kwargs_fields if field.required]
@@ -98,4 +106,134 @@ def _component_tag_rules(comp_cls: type[Component]) -> TagRules | None:
         required_attrs=required_attrs,
         allowed_slots=allowed_slots,
         required_slots=required_slots,
+        slot_data_fields=_slot_data_fields(comp_cls, allowed_slots or []),
     )
+
+
+def _slot_data_fields(comp_cls: type[Component], slot_names: list[str]) -> dict[str, list[str]]:
+    """Return statically known slot-data field names for typed slots."""
+    slots_cls = comp_cls.Slots
+    if slots_cls is None:
+        return {}
+
+    annotations = _resolved_schema_annotations(comp_cls, slots_cls)
+    result: dict[str, list[str]] = {}
+    for slot_name in slot_names:
+        annotation = annotations.get(slot_name)
+        data_shape = _slot_input_data_shape(annotation)
+        field_names = _data_shape_field_names(data_shape)
+        if field_names is not None:
+            result[slot_name] = field_names
+    return result
+
+
+def _resolved_schema_annotations(comp_cls: type[Component], schema_cls: type) -> dict[str, object]:
+    """Resolve schema fields independently so one bad annotation stays local."""
+    raw_annotations: dict[str, object] = {}
+    for candidate in reversed(schema_cls.__mro__):
+        if candidate is object:
+            continue
+        try:
+            candidate_annotations = inspect.get_annotations(candidate, eval_str=False)
+        except (NameError, TypeError, ValueError):
+            candidate_annotations = candidate.__dict__.get("__annotations__", {})
+        if isinstance(candidate_annotations, dict):
+            raw_annotations.update(candidate_annotations)
+
+    module = sys.modules.get(comp_cls.__module__)
+    globalns = dict(vars(module)) if module is not None else {}
+    localns = dict(globalns)
+    localns["SlotInput"] = SlotInput
+    for candidate in reversed(comp_cls.__mro__):
+        localns.update(vars(candidate))
+    for candidate in reversed(schema_cls.__mro__):
+        localns.update(vars(candidate))
+    localns[comp_cls.__name__] = comp_cls
+    localns[schema_cls.__name__] = schema_cls
+
+    resolved: dict[str, object] = {}
+    for field_name, annotation in raw_annotations.items():
+        resolved[field_name] = _resolve_schema_annotation(annotation, globalns, localns)
+    return resolved
+
+
+def _resolve_schema_annotation(
+    annotation: object,
+    globalns: dict[str, object],
+    localns: dict[str, object],
+) -> object:
+    """Resolve one annotation without coupling it to its sibling fields."""
+
+    def annotation_probe() -> None:
+        pass
+
+    annotation_probe.__annotations__ = {"value": annotation}
+    try:
+        return get_type_hints(
+            annotation_probe,
+            globalns=globalns,
+            localns=localns,
+            include_extras=True,
+        )["value"]
+    except (AttributeError, NameError, SyntaxError, TypeError, ValueError):
+        return annotation
+
+
+def _slot_input_data_shape(annotation: object) -> object | None:
+    """Unwrap ``SlotInput[T]`` with optional ``None`` and ``Annotated``."""
+    if annotation is None:
+        return None
+
+    origin = get_origin(annotation)
+    if origin is typing.Annotated:
+        arguments = get_args(annotation)
+        return _slot_input_data_shape(arguments[0]) if arguments else None
+    if origin in {typing.Union, types.UnionType}:
+        members = [member for member in get_args(annotation) if member is not type(None)]
+        return _slot_input_data_shape(members[0]) if len(members) == 1 else None
+    if origin is not SlotInput:
+        return None
+
+    arguments = get_args(annotation)
+    if len(arguments) != 1 or arguments[0] is Any or arguments[0] is object:
+        return None
+    return arguments[0]
+
+
+def _data_shape_field_names(data_shape: object | None) -> list[str] | None:
+    """Read the finite field set of one supported slot-data shape."""
+    if not isinstance(data_shape, type) or vars(data_shape).get("__module__") == "builtins":
+        return None
+
+    schema_fields = get_fields(data_shape)
+    if schema_fields is not None:
+        return [field.name for field in schema_fields]
+
+    annotations: dict[str, object] = {}
+    for candidate in reversed(data_shape.__mro__):
+        if candidate is object:
+            continue
+        try:
+            candidate_annotations = inspect.get_annotations(candidate, eval_str=False)
+        except (NameError, TypeError, ValueError):
+            candidate_annotations = candidate.__dict__.get("__annotations__", {})
+        if not isinstance(candidate_annotations, dict):
+            return None
+        for name, annotation in candidate_annotations.items():
+            if _is_classvar(annotation):
+                annotations.pop(name, None)
+        annotations.update(
+            {name: annotation for name, annotation in candidate_annotations.items() if not _is_classvar(annotation)}
+        )
+
+    return list(annotations)
+
+
+def _is_classvar(annotation: object) -> bool:
+    """Recognize runtime and postponed ``ClassVar`` annotations."""
+    if annotation is typing.ClassVar or get_origin(annotation) is typing.ClassVar:
+        return True
+    if not isinstance(annotation, str):
+        return False
+    compact = annotation.replace(" ", "")
+    return compact == "ClassVar" or compact.startswith(("ClassVar[", "typing.ClassVar["))

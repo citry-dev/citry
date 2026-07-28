@@ -15,9 +15,9 @@ run twice: a value already under the base path is left alone.
 Note: the build serves Citry's runtime under the ``/citry`` mount prefix. If the
 deploy base path is also ``/citry`` (a project-Pages repo named "citry"), the
 already-under-base guard skips the runtime URL, which is correct only for the
-chrome URLs. Pages with component JavaScript would need the runtime prefix and
-the base path kept distinct; the shipped pages have no component JavaScript, so
-this does not bite yet.
+chrome URLs. A subpath deploy with interactive component demos therefore needs
+the runtime prefix and the base path kept distinct. The primary custom-domain
+deploy has an empty base path and is unaffected.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ _URL_ATTRS = (
     "formaction",
     "poster",
     "data-pagefind-path",
+    "data-fragment-url",
 )
 
 

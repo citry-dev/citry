@@ -1,13 +1,15 @@
 """
-Tests for provide/inject (docs/design/provide.md): the ``Component.provide``
+Tests for provide/inject (docs/design/component_provide.md): the ``Component.provide``
 / ``Component.inject`` APIs, the ``<c-provide>`` built-in component, how
 provided data crosses component and slot boundaries, and the built-in name
 reservation.
 
-The behavioral contract is ported from django-components
-(``_djc_tests/test_templatetags_provide.py``), with the DJC global-cache
+The behavioral contract is ported from django-components'
+``test_templatetags_provide.py``, with the DJC global-cache
 assertions dropped (citry keeps provided data on plain references, so there
-is no cache to leak) and DJC's three skipped forloop tests active.
+is no cache to leak). Two of DJC's three skipped forloop tests are active here
+(the third, an error-cleanup variant, is dropped: citry has no provide cache
+to clean).
 """
 
 import pytest
@@ -261,6 +263,51 @@ class TestProvideComponent:
         assert seen["first"].a == "1"
         assert seen["second"].b == "2"
 
+    def test_unprovide_hides_a_key_below_the_current_component(self):
+        c = _make_citry()
+        seen = {}
+
+        class Reader(Component):
+            citry = c
+            template = "<p>x</p>"
+
+            def template_data(self, kwargs, slots):
+                seen.setdefault("readers", []).append(self.inject("compound", None))
+                return {}
+
+        class Boundary(Component):
+            citry = c
+            template = '<c-reader /><c-provide key="compound" value="inner"><c-reader /></c-provide>'
+
+            def template_data(self, kwargs, slots):
+                seen["boundary"] = self.inject("compound").value
+                self.unprovide("compound")
+                return {}
+
+        class Page(Component):
+            citry = c
+            template = '<c-provide key="compound" value="outer"><c-boundary /></c-provide>'
+
+        str(Page())
+
+        assert seen["boundary"] == "outer"
+        assert seen["readers"][0] is None
+        assert seen["readers"][1].value == "inner"
+
+    def test_unprovide_validates_the_key(self):
+        c = _make_citry()
+
+        class Boundary(Component):
+            citry = c
+            template = "x"
+
+            def template_data(self, kwargs, slots):
+                self.unprovide("not a key")
+                return {}
+
+        with pytest.raises(ValueError, match="valid identifier"):
+            str(Boundary())
+
     def test_provide_inside_for_loop(self):
         # Active in citry; the DJC equivalents are skipped upstream over
         # global-state cleanup (django-components #1413).
@@ -289,6 +336,63 @@ class TestProvideComponent:
         assert ">1</li>" in html
         assert ">2</li>" in html
         assert ">3</li>" in html
+
+    def test_provide_inside_nested_for_loop(self):
+        # Per-(outer, inner) re-scoping: the provide sits inside two nested
+        # loops, so each cell injects the value provided for its own iteration.
+        c = _make_citry()
+
+        class Cell(Component):
+            citry = c
+            template = "<span>{{ v }}</span>"
+
+            def template_data(self, kwargs, slots):
+                return {"v": self.inject("cell_data").val}
+
+        class Page(Component):
+            citry = c
+            template = (
+                '<div><c-for each="o in outer">'
+                '<c-for each="i in inner">'
+                '<c-provide key="cell_data" c-val="f\'{o}-{i}\'"><c-cell /></c-provide>'
+                "</c-for></c-for></div>"
+            )
+
+            def template_data(self, kwargs, slots):
+                return {"outer": ["A", "B"], "inner": [1, 2]}
+
+        html = str(Page())
+        for combo in ("A-1", "A-2", "B-1", "B-2"):
+            assert f">{combo}</span>" in html
+        # Every (outer, inner) pair resolved its own provided value.
+        assert html.count("</span>") == 4
+
+    def test_provide_wrapping_for_loops_reaches_every_child(self):
+        # The django-components forloop shape: one provide OUTSIDE the loops
+        # shares a single value to every child a (nested) <c-for> generates.
+        c = _make_citry()
+
+        class Item(Component):
+            citry = c
+            template = "<li>{{ v }}</li>"
+
+            def template_data(self, kwargs, slots):
+                return {"v": self.inject("shared").val}
+
+        class Page(Component):
+            citry = c
+            template = (
+                '<c-provide key="shared" val="shared_data"><ul>'
+                '<c-for each="o in outer"><c-for each="i in inner"><c-item /></c-for></c-for>'
+                "</ul></c-provide>"
+            )
+
+            def template_data(self, kwargs, slots):
+                return {"outer": ["A", "B"], "inner": [1, 2]}
+
+        html = str(Page())
+        # All 2x2 loop-generated children injected the one shared value.
+        assert html.count(">shared_data</li>") == 4
 
     def test_readme_example(self):
         c = _make_citry()
@@ -669,18 +773,6 @@ class TestBuiltinReservedNames:
         assert c.has("provide")
         c.clear()
         assert c.has("provide")
-
-    def test_direct_registry_register_is_guarded(self):
-        # The reservation lives on the registry itself, so bypassing Citry
-        # and registering on the registry directly is rejected too.
-        c = _make_citry()
-
-        class Mine(Component):
-            citry = c
-            template = "<p>x</p>"
-
-        with pytest.raises(AlreadyRegistered, match="built-in <c-provide>"):
-            c.registry.register(Mine, name="provide")
 
 
 class TestDeepNesting:

@@ -20,6 +20,9 @@ on:
       - "packages/py/**"
       - "crates/**"
       - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/**"
@@ -33,6 +36,9 @@ on:
       - "packages/py/**"
       - "crates/**"
       - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/**"
@@ -83,8 +89,13 @@ jobs:
       - name: Run the docs guard gate
         run: uv run --no-sync python -m docs_site build-check
 
+      # docs_site/examples holds the per-example regression tests
+      # (test_example_*.py), which live beside each example's component.py/page.py;
+      # they are collected here alongside the main docs-site suite. The e2e suite
+      # (docs_site/tests/e2e) is skipped: it importorskips pytest-playwright, which
+      # the `docs` extra does not install. The docs-e2e job below runs it instead.
       - name: Run the docs-site tests
-        run: uv run --no-sync pytest docs_site/tests
+        run: uv run --no-sync pytest docs_site/tests docs_site/examples
 
   # Browser end-to-end tests (docs_site/tests/e2e): build the real site
   # and drive it in a headless browser. Chromium only for PR-time speed.

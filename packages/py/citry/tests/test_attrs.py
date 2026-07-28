@@ -1,5 +1,5 @@
 """
-Tests for the attribute value helpers (docs/design/html_attrs.md sections 3
+Tests for the attribute value helpers (docs/design/template_html_attrs.md sections 3
 and 4): class/style normalization, merging, and formatting.
 
 Ported from django-components' tests/test_attributes.py where the semantics
@@ -44,6 +44,29 @@ class TestFormatAttrs:
     def test_number_value(self):
         assert format_attrs({"data-id": 3}) == 'data-id="3"'
 
+    def test_non_string_attribute_name_raises(self):
+        with pytest.raises(TypeError, match="must use string attribute names"):
+            format_attrs({1: "value"})
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",
+            "bad name",
+            "bad\tname",
+            "bad\nname",
+            "bad\rname",
+            "bad=name",
+            "bad/name",
+            "bad>name",
+            "bad<name",
+            "bad{#name",
+        ],
+    )
+    def test_malformed_attribute_name_raises(self, name):
+        with pytest.raises(ValueError, match="invalid HTML attribute name"):
+            format_attrs({name: "value"})
+
     def test_structured_class_value(self):
         # format_attrs normalizes structured class/style itself, so
         # merge_attrs output and hand-built dicts render the same.
@@ -77,7 +100,7 @@ class TestMergeAttrs:
     def test_overlapping_keys_last_one_wins(self):
         # Divergence from django-components, which joins repeated plain keys
         # with a space. Citry resolves every non-class/style key
-        # last-one-wins (docs/design/html_attrs.md section 4).
+        # last-one-wins (docs/design/template_html_attrs.md section 4).
         assert merge_attrs({"foo": "bar"}, {"foo": "baz"}) == {"foo": "baz"}
         assert merge_attrs({"foo": None}, {"foo": "bar"}) == {"foo": "bar"}
         assert merge_attrs({"foo": "bar"}, {"foo": None}) == {"foo": None}

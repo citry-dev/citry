@@ -2,8 +2,9 @@
 
 import pytest
 
-from citry import Citry, Component, Extension
+from citry import Citry, Component, Extension, InMemoryCache
 from citry.ext.dependencies import Script, Style
+from citry.ext.dependencies.scripts import gen_cache_key, get_component_script
 from citry.util.html import SafeString
 
 PAGE_TEMPLATE = "<html><head><title>t</title></head><body><p>hi</p></body></html>"
@@ -24,13 +25,49 @@ class TestDocumentEmission:
 
         html = str(page())
         # CSS before </head>, JS (wrapped in a self-executing function) before </body>.
-        assert "<style>.x { color: red; }</style></head>" in html
+        # The Component.css sheet carries its class marker, which is how the
+        # client-side manager's cleanup finds the sheet (dependencies.md 8.4).
+        assert f'<style data-citry-css-class="{page.class_id}">.x {{ color: red; }}</style></head>' in html
         assert "<script>(function() {\nconsole.log(1);\n})();</script></body>" in html
 
     def test_component_without_assets_renders_unchanged(self):
         c = Citry()
         page = _page(c)
         assert str(page()) == '<html data-cid-c1=""><head><title>t</title></head><body><p>hi</p></body></html>'
+
+    @pytest.mark.parametrize("asset_kind", ["js", "css"])
+    @pytest.mark.parametrize("mounted", [False, True], ids=["unmounted", "mounted"])
+    def test_whitespace_only_component_assets_are_absent(self, asset_kind, mounted):
+        c = Citry()
+        if mounted:
+            c.set_mounted_prefix("/citry")
+        blank_asset = """
+            \x20\t
+        """
+        blank = type(
+            "Blank",
+            (Component,),
+            {
+                "citry": c,
+                "template": """
+                    <p>blank</p>
+                """,
+                asset_kind: blank_asset,
+            },
+        )
+
+        rendered = blank().render()
+        assert not rendered.context.extra.get("dependencies")
+        document = rendered.serialize()
+        fragment = rendered.serialize(deps_strategy="fragment")
+
+        assert fragment == document
+        assert "<p" in document
+        for html in (document, fragment):
+            assert "<script" not in html
+            assert "<style" not in html
+            assert "/cache/" not in html
+            assert "data-citry" not in html
 
     def test_child_component_deps_bubble_to_the_page(self):
         c = Citry()
@@ -43,7 +80,7 @@ class TestDocumentEmission:
 
         page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
         html = str(page())
-        assert "<style>.w {}</style></head>" in html
+        assert f'<style data-citry-css-class="{Widget.class_id}">.w {{}}</style></head>' in html
         assert "console.log('widget');" in html
         assert html.index("console.log") < html.index("</body>")
 
@@ -138,6 +175,59 @@ class TestDocumentEmission:
         rendered = page().render()
         assert rendered.serialize(deps_strategy="simple") == rendered.serialize(deps_strategy="document")
 
+    def test_nested_url_dependencies_emit_once_in_first_seen_order(self):
+        c = Citry()
+
+        class Inner(Component):
+            citry = c
+            template = "<span>inner</span>"
+            js = "window.__innerComponent = true;"
+            css = ".inner-component {}"
+
+            class Dependencies:
+                js = ["/static/shared.js", "/static/inner.js"]
+                css = ["/static/shared.css", "/static/inner.css"]
+
+        class Other(Component):
+            citry = c
+            template = "<b>other</b>"
+            js = "window.__otherComponent = true;"
+            css = ".other-component {}"
+
+            class Dependencies:
+                js = ["/static/other.js", "/static/shared.js"]
+                css = ["/static/other.css", "/static/shared.css"]
+
+        class Outer(Component):
+            citry = c
+            template = "<main><c-inner /><c-other /></main>"
+            js = "window.__outerComponent = true;"
+            css = ".outer-component {}"
+
+            class Dependencies:
+                js = ["/static/outer.js", "/static/shared.js"]
+                css = ["/static/outer.css", "/static/shared.css"]
+
+        page = _page(c, template="<html><head></head><body><c-outer /></body></html>")
+        html = str(page())
+
+        js_urls = ["outer.js", "shared.js", "inner.js", "other.js"]
+        css_urls = ["outer.css", "shared.css", "inner.css", "other.css"]
+        assert [html.index(f"/static/{name}") for name in js_urls] == sorted(
+            html.index(f"/static/{name}") for name in js_urls
+        )
+        assert [html.index(f"/static/{name}") for name in css_urls] == sorted(
+            html.index(f"/static/{name}") for name in css_urls
+        )
+        assert all(html.count(f"/static/{name}") == 1 for name in [*js_urls, *css_urls])
+
+        # All ``Dependencies`` entries precede all Component.js/css entries;
+        # component assets then retain first-seen parent/child/sibling order.
+        assert html.index("other.js") < html.index("__outerComponent")
+        assert html.index("__outerComponent") < html.index("__innerComponent") < html.index("__otherComponent")
+        assert html.index("other.css") < html.index(".outer-component")
+        assert html.index(".outer-component") < html.index(".inner-component") < html.index(".other-component")
+
 
 class TestPlaceholders:
     def test_c_js_and_c_css_mark_the_spots(self):
@@ -150,7 +240,24 @@ class TestPlaceholders:
         )
         html = str(page())
         assert html == (
-            '<html data-cid-c1=""><head><style>.x {}</style></head>'
+            f'<html data-cid-c1=""><head><style data-citry-css-class="{page.class_id}">.x {{}}</style></head>'
+            "<body><p>hi</p><script>(function() {\nconsole.log(1);\n})();</script></body></html>"
+        )
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            "<html><head><c-css /></head><body><p>hi</p></body></html>",
+            "<html><head></head><body><p>hi</p><c-js /></body></html>",
+        ],
+        ids=["css-placeholder-only", "js-placeholder-only"],
+    )
+    def test_one_placeholder_does_not_suppress_the_other_asset_kind(self, template):
+        c = Citry()
+        page = _page(c, js="console.log(1);", css=".x {}", template=template)
+
+        assert str(page()) == (
+            f'<html data-cid-c1=""><head><style data-citry-css-class="{page.class_id}">.x {{}}</style></head>'
             "<body><p>hi</p><script>(function() {\nconsole.log(1);\n})();</script></body></html>"
         )
 
@@ -162,8 +269,9 @@ class TestPlaceholders:
             template="<html><head><c-css /></head><body><c-css /></body></html>",
         )
         html = str(page())
-        assert html.count("<style>.x {}</style>") == 1
-        assert "<style>.x {}</style></head>" in html
+        style_tag = f'<style data-citry-css-class="{page.class_id}">.x {{}}</style>'
+        assert html.count(style_tag) == 1
+        assert style_tag + "</head>" in html
         assert "<body></body>" in html
 
     def test_placeholders_removed_even_without_deps(self):
@@ -172,6 +280,33 @@ class TestPlaceholders:
         html = str(page())
         assert "template" not in html
         assert "<head></head>" in html
+
+    def test_registered_but_unrendered_components_emit_no_assets(self):
+        c = Citry()
+
+        class UnusedOne(Component):
+            citry = c
+            js = "window.__unusedOne = true;"
+            css = ".unused-one {}"
+
+            class Dependencies:
+                js = ["/static/unused-one.js"]
+                css = ["/static/unused-one.css"]
+
+        class UnusedTwo(Component):
+            citry = c
+            js = "window.__unusedTwo = true;"
+            css = ".unused-two {}"
+
+            class Dependencies:
+                js = ["/static/unused-two.js"]
+                css = ["/static/unused-two.css"]
+
+        page = _page(c, template="<html><head><c-css /></head><body><c-js /></body></html>")
+        html = str(page())
+
+        assert html == '<html data-cid-c1=""><head></head><body></body></html>'
+        assert "unused" not in html
 
     def test_c_js_rejects_attributes_and_body(self):
         c = Citry()
@@ -190,7 +325,7 @@ class TestDefaultPlacementFallbacks:
         c = Citry()
         page = _page(c, js="console.log(1);", css=".x {}", template="<main>fragmentish</main>")
         html = str(page())
-        assert html.startswith("<style>.x {}</style>")
+        assert html.startswith(f'<style data-citry-css-class="{page.class_id}">.x {{}}</style>')
         assert html.endswith("console.log(1);\n})();</script>")
 
 
@@ -295,6 +430,42 @@ class TestDependenciesEntries:
         page = _page(c, deps=Deps)
         assert '<script type="speculationrules">{}</script>' in str(page())
 
+    @pytest.mark.parametrize(
+        "tag",
+        [
+            SafeString('<link href="safe.css" rel="stylesheet">'),
+            type(
+                "HtmlTag",
+                (),
+                {"__html__": lambda _self: '<style data-source="object">.object {}</style>'},
+            )(),
+        ],
+        ids=["string-subclass", "object"],
+    )
+    def test_prerendered_css_forms_emit_verbatim(self, tag):
+        c = Citry()
+
+        class Deps:
+            css = [tag]
+
+        page = _page(c, deps=Deps)
+        assert str(tag.__html__()) in str(page())
+
+    @pytest.mark.parametrize(
+        ("attr", "entry", "match"),
+        [
+            ("js", Style(content=".wrong {}"), r"Dependencies\.js of Page contains a Style entry"),
+            ("css", Script(content="wrong();"), r"Dependencies\.css of Page contains a Script entry"),
+        ],
+    )
+    def test_cross_kind_entries_raise_with_guidance(self, attr, entry, match):
+        c = Citry()
+        deps = type("Deps", (), {attr: [entry]})
+        page = _page(c, deps=deps)
+
+        with pytest.raises(TypeError, match=match):
+            str(page())
+
     def test_dependencies_load_before_component_js(self):
         c = Citry()
 
@@ -358,7 +529,7 @@ class TestOnDependenciesHooks:
         page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
         html = str(page())
         assert "console.log('kept');" in html
-        assert "<style>.kept {}</style>" in html
+        assert f'<style data-citry-css-class="{Widget.class_id}">.kept {{}}</style>' in html
 
     def test_component_classmethod_can_add_an_extra_entry(self):
         # Returning the lists with an extra ``kind="extra"`` Script/Style adds
@@ -381,8 +552,10 @@ class TestOnDependenciesHooks:
         html = str(page())
         # The component's own assets survive.
         assert "console.log('own');" in html
-        assert "<style>.own {}</style>" in html
-        # The extras are emitted; the wrap=False script is not wrapped.
+        assert f'<style data-citry-css-class="{Widget.class_id}">.own {{}}</style>' in html
+        # The extras are emitted; the wrap=False script is not wrapped. An
+        # extra Style added by the hook is not a Component.css sheet, so it
+        # carries no class marker.
         assert "<script>console.log('hook');</script>" in html
         assert "<style>.hook {}</style>" in html
 
@@ -394,15 +567,18 @@ class TestComponentAssetEndTagGuard:
     # inlined tag early in the browser, so emission refuses it and names the
     # offending component. django-components raised RuntimeError here; citry
     # raises ValueError with a different message (divergence #5 in
-    # docs/design/citry_migration_tests.md).
+    # docs/design/migration_djc_tests.md).
 
-    def test_component_js_containing_its_end_tag_raises(self):
+    @pytest.mark.parametrize("closing_tag", ["</script>", "</ScRiPt>"])
+    def test_component_js_containing_its_end_tag_raises(self, closing_tag):
         c = Citry()
 
         class Widget(Component):
             citry = c
             template = "<span>w</span>"
-            js = 'console.log("</script>");'
+            js = f"""
+                console.log({closing_tag!r});
+            """
 
         page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
         with pytest.raises(ValueError, match=r"contains a '</script>' end tag") as excinfo:
@@ -410,13 +586,16 @@ class TestComponentAssetEndTagGuard:
         # The error names the offending component so the author can find it.
         assert Widget.class_id in str(excinfo.value)
 
-    def test_component_css_containing_its_end_tag_raises(self):
+    @pytest.mark.parametrize("closing_tag", ["</style>", "</STYLE>"])
+    def test_component_css_containing_its_end_tag_raises(self, closing_tag):
         c = Citry()
 
         class Widget(Component):
             citry = c
             template = "<span>w</span>"
-            css = "/* </style> */"
+            css = f"""
+                /* {closing_tag} */
+            """
 
         page = _page(c, template="<html><head></head><body><c-widget /></body></html>")
         with pytest.raises(ValueError, match=r"contains a '</style>' end tag") as excinfo:
@@ -439,3 +618,186 @@ class TestScriptCacheLifecycle:
         assert "console.log('one');" in str(page())
         page.reset_files()
         assert "console.log('two');" in str(page())
+
+    def test_replacement_class_with_same_id_uses_its_own_js_and_css(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = """
+            <p>old</p>
+            """
+            js = """
+            console.log("old");
+            """
+            css = """
+            .old { color: red; }
+            """
+
+        str(Card())
+        class_id = Card.class_id
+        assert get_component_script("js", Card).content == Card.js
+        assert get_component_script("css", Card).content == Card.css
+
+        c.unregister(Card)
+
+        class Card(Component):
+            citry = c
+            template = """
+            <p>new</p>
+            """
+            js = """
+            console.log("new");
+            """
+            css = """
+            .new { color: blue; }
+            """
+
+        assert Card.class_id == class_id
+        str(Card())
+        assert get_component_script("js", Card).content == Card.js
+        assert get_component_script("css", Card).content == Card.css
+
+    def test_retired_class_cannot_poison_same_id_assets_in_shared_cache(self):
+        cache = InMemoryCache()
+        old_citry = Citry(cache=cache)
+        new_citry = Citry(cache=cache)
+
+        def make_card(engine, label):
+            class Card(Component):
+                citry = engine
+                js = f'console.log("{label}");'
+                css = f".{label} {{ color: red; }}"
+
+            return Card
+
+        old_card = make_card(old_citry, "old")
+        assert get_component_script("js", old_card).content == old_card.js
+        assert get_component_script("css", old_card).content == old_card.css
+        old_citry.unregister(old_card)
+
+        # A plugin can retain its old class and use it after unregistering.
+        # That must not make a replacement with the same deterministic ID
+        # trust the old payload, including when processes share a backend.
+        assert get_component_script("js", old_card).content == old_card.js
+        assert get_component_script("css", old_card).content == old_card.css
+
+        new_card = make_card(new_citry, "new")
+        assert new_card.class_id == old_card.class_id
+        assert get_component_script("js", new_card).content == new_card.js
+        assert get_component_script("css", new_card).content == new_card.css
+
+        # Old and new workers may alternate during a rolling deployment. Each
+        # lookup must return the payload belonging to its own class version.
+        assert get_component_script("js", old_card).content == old_card.js
+        assert get_component_script("js", new_card).content == new_card.js
+        assert get_component_script("css", old_card).content == old_card.css
+        assert get_component_script("css", new_card).content == new_card.css
+
+    def test_delayed_serialization_uses_the_rendering_class_version(self):
+        c = Citry()
+
+        def make_card(label):
+            class Card(Component):
+                citry = c
+                template = f"<p>{label}</p>"
+                js = f'console.log("{label}");'
+                css = f".{label} {{ color: red; }}"
+
+            return Card
+
+        old_card = make_card("old")
+        old_render = old_card().render()
+        c.unregister(old_card)
+        new_card = make_card("new")
+        assert new_card.class_id == old_card.class_id
+
+        html = old_render.serialize()
+
+        assert ">old</p>" in html
+        assert old_card.js in html
+        assert old_card.css in html
+        assert new_card.js not in html
+        assert new_card.css not in html
+
+    def test_removing_one_alias_keeps_the_registered_class_scripts(self):
+        c = Citry()
+
+        class MyCard(Component):
+            citry = c
+            template = """
+            <p>card</p>
+            """
+            js = """
+            console.log("card");
+            """
+            css = """
+            .card { color: red; }
+            """
+
+        str(MyCard())
+        js_key = gen_cache_key(MyCard.class_id, "js")
+        css_key = gen_cache_key(MyCard.class_id, "css")
+        assert c.cache.has(js_key)
+        assert c.cache.has(css_key)
+
+        c.unregister("mycard")
+
+        assert c.get("my-card") is MyCard
+        assert c.cache.has(js_key)
+        assert c.cache.has(css_key)
+
+    def test_rejected_foreign_registration_does_not_touch_either_script_cache(self):
+        source = Citry()
+        target = Citry()
+
+        class Card(Component):
+            citry = source
+            js = "console.log('card');"
+            css = ".card {}"
+
+        assert get_component_script("js", Card).content == Card.js
+        assert get_component_script("css", Card).content == Card.css
+        js_key = gen_cache_key(Card.class_id, "js")
+        css_key = gen_cache_key(Card.class_id, "css")
+        target.cache.set(js_key, "target js")
+        target.cache.set(css_key, "target css")
+
+        with pytest.raises(ValueError, match="only be registered with its owning Citry instance"):
+            target.register(Card, "foreign-card")
+
+        assert source.cache.has(js_key)
+        assert source.cache.has(css_key)
+        assert target.cache.get(js_key) == "target js"
+        assert target.cache.get(css_key) == "target css"
+
+    def test_component_without_assets_writes_no_cache_entries(self):
+        c = Citry()
+
+        class Plain(Component):
+            citry = c
+            template = """
+            <span>plain</span>
+            """
+
+        class Styled(Component):
+            citry = c
+            template = """
+            <span>styled</span>
+            """
+            js = """
+            console.log("styled");
+            """
+            css = """
+            .styled { color: red; }
+            """
+
+        page = _page(c, template="<html><head></head><body><c-plain /><c-styled /></body></html>")
+        str(page())
+
+        # Only components that carry assets reach the cache; a markup-only
+        # component leaves no empty entries in a user's shared store.
+        assert c.cache.has(gen_cache_key(Styled.class_id, "js"))
+        assert c.cache.has(gen_cache_key(Styled.class_id, "css"))
+        assert not c.cache.has(gen_cache_key(Plain.class_id, "js"))
+        assert not c.cache.has(gen_cache_key(Plain.class_id, "css"))

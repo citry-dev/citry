@@ -10,8 +10,8 @@ This is analogous to React's RenderElement. The split between
 composition (creating the CitryElement) and rendering (calling
 ``.render()``) enables:
 
-- Caching the CitryElement instead of a finished string (solves
-  the frozen-ID and lost-variables problems from DJC #1650).
+- Reusing the CitryElement as composition data while every ``.render()`` call
+  creates fresh per-instance state.
 - Passing render objects as values to other components or slots.
 - Different render targets (HTML string, streaming, etc.).
 - The render pipeline minting fresh per-instance state (render_id,
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 
     from citry.citry_render import CitryRender
     from citry.component import Component
+    from citry.ownership import ComponentInvocationId, ComponentTagClientBindingRecord, OwnershipGraph
 
 
 class CitryElement:
@@ -68,20 +69,60 @@ class CitryElement:
             Values are raw inputs here (strings, functions, elements, Slots);
             they normalize to ``Slot`` instances when the component instance is
             created at render time.
+        morph_key: The evaluated ``#c-key`` value from the parent's template
+            tag, or ``None`` when the tag carried no key. Framework metadata,
+            not an input: the render pipeline stamps it (scoped by the child's
+            ``class_id``) onto the child's root element(s) as the
+            ``data-citry-key`` attribute, so the client can keep the child
+            instance's identity across the parent's re-renders (see
+            docs/design/events.md section 5.3). Set by ``ComponentNode``; in
+            v1 the key is template-authored only.
+        component_tag_client_bindings: The final source-ordered ``$c-props``, Alpine event,
+            and Citry event contributions captured from a component tag. They
+            are framework metadata, not Python kwargs.
+        ownership_invocation_id: The render-local component call record that
+            this element will bind to its concrete component instance.
+        ownership_graph: The render-local graph that allocated
+            ``ownership_invocation_id``. Retained explicitly so a lazy value
+            invoked during another root render cannot bind a graph-local ID
+            against the wrong graph.
+        forward_ownership_invocation: Whether this element is the transparent
+            dynamic selector and must forward the invocation to its selected
+            target instead of consuming it.
 
     """
 
-    __slots__ = ("comp_cls", "kwargs", "slots")
+    __slots__ = (
+        "comp_cls",
+        "component_tag_client_bindings",
+        "forward_ownership_invocation",
+        "kwargs",
+        "morph_key",
+        "ownership_graph",
+        "ownership_invocation_id",
+        "slots",
+    )
 
     def __init__(
         self,
         comp_cls: type[Component],
         kwargs: dict[str, Any],
         slots: dict[str, Any] | None = None,
+        morph_key: str | None = None,
+        *,
+        component_tag_client_bindings: tuple[ComponentTagClientBindingRecord, ...] = (),
+        ownership_invocation_id: ComponentInvocationId | None = None,
+        ownership_graph: OwnershipGraph | None = None,
+        forward_ownership_invocation: bool = False,
     ) -> None:
         self.comp_cls = comp_cls
         self.kwargs = kwargs
         self.slots = slots or {}
+        self.morph_key = morph_key
+        self.component_tag_client_bindings = component_tag_client_bindings
+        self.ownership_invocation_id = ownership_invocation_id
+        self.ownership_graph = ownership_graph
+        self.forward_ownership_invocation = forward_ownership_invocation
 
     def render(self, *, template_globals: Mapping[str, Any] | None = None) -> CitryRender:
         """

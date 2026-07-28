@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Monaco Citry editor proof</title>
+    <link rel="stylesheet" href="../dist/editor.css" />
+    <link rel="stylesheet" href="../dist/monaco.css" />
+  </head>
+  <body>
+    <header class="proof-header">
+      <h1 id="proof-title">Monaco Citry proof</h1>
+      <p>Equivalent single-module sample and controls</p>
+      <div class="actions">
+        <button id="undo-button" type="button">Undo</button>
+        <button id="search-button" type="button">Search</button>
+        <button id="diagnostic-button" type="button">Add error</button>
+        <button id="restore-button" type="button">Restore</button>
+      </div>
+    </header>
+    <main class="editor-proof" aria-labelledby="proof-title">
+      <div id="editor" class="editor-mount"></div>
+      <aside id="editor-diagnostic" class="diagnostic" aria-labelledby="diagnostic-title" hidden>
+        <div>
+          <strong id="diagnostic-title">Python diagnostic</strong>
+          <pre id="diagnostic-text" tabindex="0"></pre>
+        </div>
+        <button id="copy-diagnostic" type="button">Copy details</button>
+      </aside>
+    </main>
+    <script type="module" src="../dist/monaco-loader.js"></script>
+  </body>
+</html>

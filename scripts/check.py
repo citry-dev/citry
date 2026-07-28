@@ -54,10 +54,53 @@ def _phases() -> list[tuple[str, list[str]]]:
                 *uvr,
                 "mypy",
                 "packages/py/citry/citry",
+                # the typed-base contract test runs under mypy, not pytest
+                "packages/py/citry/tests/test_events_typing.py",
+                "packages/py/citry/tests/test_library_component_typing.py",
+                "packages/py/citry_ui/citry_ui",
+                "packages/py/citry_ui/tests/typing_contract.py",
                 "packages/py/citry_core/citry_core",
                 "packages/py/pygments_citry/pygments_citry",
                 "scripts",
             ],
+        ),
+        # pyright type-checks the same typed Events base contract that mypy covers
+        # above, so the two checkers sit together. It runs the LOCAL, pinned pyright
+        # (node_modules/.bin/pyright), never a global one, so the version is
+        # reproducible; this assumes `pnpm install` has run, the way the rest of
+        # the gate assumes `uv sync`. The flags reproduce the pinned
+        # invocation verified in docs/design/events_research/typing-lab-report.md
+        # (pyright 1.1.411, --pythonversion 3.13, and --pythonpath at the repo venv
+        # python so pyright resolves citry from the same environment mypy uses).
+        # Scoped to the typing contract test only; whole-package pyright is a
+        # separate decision.
+        # The paths here follow the POSIX layout (node_modules/.bin/pyright and
+        # .venv/bin/python), which matches where this gate runs: Linux CI and macOS
+        # development. A local Windows run would need the Windows Scripts directory
+        # and its .cmd launcher instead.
+        (
+            "pyright",
+            [
+                str(_REPO_ROOT / "node_modules" / ".bin" / "pyright"),
+                "--pythonversion",
+                "3.13",
+                "--pythonpath",
+                str(_REPO_ROOT / ".venv" / "bin" / "python"),
+                "packages/py/citry/tests/test_events_typing.py",
+                "packages/py/citry/tests/test_library_component_typing.py",
+                "packages/py/citry_ui/tests/typing_contract.py",
+            ],
+        ),
+        # The events client package's own gate (packages/js/citry-client):
+        # tsc --noEmit over the TypeScript runtime source, biome check (lint
+        # plus format), and the pinned-version canary (node --test). Sits by
+        # pyright as the other Node-based phase: both run pinned local tools
+        # and assume `pnpm install` has run, the way the rest of the gate
+        # assumes `uv sync`. pnpm resolves from PATH (CI sets it up before
+        # the gate; see repo--check.yml).
+        (
+            "citry-client",
+            ["pnpm", "--dir", "packages/js/citry-client", "run", "check"],
         ),
         # `--cov` (no target) uses [tool.coverage.run] source; pytest-cov enforces
         # `fail_under` from [tool.coverage.report] (docs/design/migration_djc_tests.md).

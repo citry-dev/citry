@@ -1,0 +1,7 @@
+baseline	captured_utc	head	upstream_ahead	upstream_behind	modified_unstaged	deleted_unstaged	untracked	modified_staged	added_staged	modified_staged_and_unstaged	total_paths	unstaged_diff_files	unstaged_additions	unstaged_deletions	staged_diff_files	staged_additions	staged_deletions	untracked_bytes	notes
+B0-20260723T132129Z-53aec721	2026-07-23T13:21:29Z	53aec721b7b13309880919f0ff3979f08a6b2245	0	0	173	5	514	0	0	0	692	178	29940	4863	0	0	0	349260566	initial Stage 0 snapshot
+B0I-20260723T132602Z-53aec721	2026-07-23T13:26:02Z	53aec721b7b13309880919f0ff3979f08a6b2245	0	0	174	5	515	0	0	0	694	179	29979	4898	0	0	0	349330846	intermediate refresh during concurrent work
+B0F-20260723T133646Z-53aec721	2026-07-23T13:36:46Z	53aec721b7b13309880919f0ff3979f08a6b2245	0	0	174	5	519	0	0	0	698	179	29991	4898	0	0	0	349365707	closing snapshot after artifacts and full gate
+B0V-20260723T134757Z-558b9735	2026-07-23T13:47:59Z	558b97353de7665be221a10aa522310e6d541cab	2	0	163	5	516	2	1	1	688	169	29343	4794	4	272	64	349359571	independent-review cutoff with content and index fingerprints
+B1-20260723T141813Z-cd177d74	2026-07-23T14:18:14Z	cd177d7432d9b883dcf936fe81b776672993e1af	4	0	152	5	512	0	0	0	669	157	28644	4700	0	0	0	349463852	Stage 1 opening baseline with double-pass content and index fingerprints
+B2-20260723T155146Z-cd177d74	2026-07-23T15:51:46Z	cd177d7432d9b883dcf936fe81b776672993e1af	4	0	152	5	518	0	0	0	675	157	28683	4700	0	0	0	349736255	Stage 2 pilot opening baseline after discarding a moving fingerprint pair

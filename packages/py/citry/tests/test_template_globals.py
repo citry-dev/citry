@@ -191,6 +191,23 @@ class TestTemplateGlobalsPrecedence:
         assert "Hello" in html
         assert "Acme" in html
 
+    def test_a_kwarg_shadows_a_same_named_global(self):
+        # With the default template_data returning kwargs, an input shadows a
+        # same-named global: the component's own data wins, even with no
+        # template_data override.
+        app = Citry(template_globals={"site_name": "global"})
+
+        class Card(Component):
+            citry = app
+            template = """
+            <p>{{ site_name }}</p>
+            """
+
+        html = Card(site_name="local").render().serialize()
+
+        assert "local" in html
+        assert "global" not in html
+
 
 class TestRenderTimeTemplateGlobals:
     def test_render_time_global_is_visible(self):

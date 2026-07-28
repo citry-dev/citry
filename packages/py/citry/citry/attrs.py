@@ -2,7 +2,7 @@
 HTML attribute values: class/style normalization, merging, and formatting.
 
 This module is the value layer of the attribute-rendering design
-(docs/design/html_attrs.md). It knows nothing about templates or nodes; it
+(docs/design/template_html_attrs.md). It knows nothing about templates or nodes; it
 only answers "given these attribute values, what HTML attribute string do
 they make?". The template-side ``ElementAttrsNode`` and user code in
 ``template_data()`` both call into it.
@@ -46,6 +46,27 @@ StyleDict: TypeAlias = Mapping[str, "str | int | float | bool | None"]
 
 StyleValue: TypeAlias = "str | StyleDict | Sequence[StyleValue]"
 """A ``style`` attribute value: inline CSS string, ``StyleDict``, or a list of those."""
+
+
+def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str:
+    """
+    Validate a runtime-produced HTML attribute name.
+
+    Static names already pass through the template grammar. ``c-bind`` and
+    extension hooks can introduce names only at render time, so they must use
+    the same delimiters as ``html_attribute_name`` in ``grammar.pest`` before
+    a name is interpolated into markup.
+    """
+    if not isinstance(name, str):
+        msg = f"{where} must use string attribute names, got {type(name).__name__} key {name!r}."
+        raise TypeError(msg)
+    if not name or any(char in " \t\n\r=/><" for char in name) or "{#" in name:
+        msg = (
+            f"{where} contains invalid HTML attribute name {name!r}. Attribute names must be non-empty and "
+            "cannot contain whitespace, '=', '/', '>', '<', or the template-comment opener '{#'."
+        )
+        raise ValueError(msg)
+    return name
 
 
 def _underlying(value: Any) -> Any:
@@ -271,6 +292,7 @@ def format_attrs(attrs: Mapping[str, Any]) -> SafeString:
     """
     parts: list[str] = []
     for key, value in attrs.items():
+        key = validate_html_attr_name(key)  # noqa: PLW2901
         if key == "class" and value is not None and not isinstance(value, str):
             value = normalize_class(value)  # noqa: PLW2901
             if not value:

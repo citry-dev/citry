@@ -8,9 +8,8 @@ appear *inside* documentation code examples. The fix wraps every code region in
 ``<c-raw>...</c-raw>`` so citry emits it literally; the markdown pass then turns
 it into ``<pre>``/``<code>`` (escaping the angle brackets there).
 
-Handles fenced code blocks (``` and ~~~) and inline code spans that contain
-citry-parseable syntax. Four-space indented code blocks are not handled (the
-project convention is fenced blocks).
+Handles fenced code blocks (``` and ~~~), four-space or tab-indented code, and
+inline code spans that contain citry-parseable syntax.
 
 One limitation: a code region whose text is itself ``<c-raw>`` (or a whole
 ``<c-raw>...</c-raw>``) cannot be protected by wrapping, because the wrapper's
@@ -50,6 +49,12 @@ def protect_fences(source: str) -> str:
 
     for line in lines:
         if not in_fence:
+            # Markdown treats four-space and tab indentation as code. Check it
+            # before fence discovery so an indented ``` line is not mistaken
+            # for a fenced-block opener by the template-protection pass.
+            if line.startswith(("    ", "\t")):
+                out.append(_protect_indented_code(line))
+                continue
             match = _FENCE_OPEN.match(line)
             if match:
                 fence_indent = match.group(1)
@@ -111,6 +116,13 @@ def _protect_inline_code(line: str) -> str:
             i += 1
 
     return "".join(result)
+
+
+def _protect_indented_code(line: str) -> str:
+    """Protect Citry syntax on one Markdown indented-code line."""
+    if not any(marker in line for marker in ("<c-", "{{", "{#", "@c-", ":c-")):
+        return line
+    return f"<c-raw>{_armor_preparse_bindings(line)}</c-raw>"
 
 
 def _armor_preparse_bindings(source: str) -> str:

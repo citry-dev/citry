@@ -14,7 +14,7 @@ The path frames accumulate on the exception object (its ``_components``
 attribute), and the message prefix is rewritten each time frames are added.
 Carrying the path on the exception means it survives bubbling, re-raising,
 and user ``try``/``except`` passthroughs, with no state threaded through the
-render loop. See docs/design/on_render.md section 6.
+render loop. See docs/design/component_on_render.md section 6.
 """
 
 from __future__ import annotations

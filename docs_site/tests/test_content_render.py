@@ -27,6 +27,13 @@ def test_inline_code_without_citry_syntax_untouched() -> None:
     assert protect_fences("Call `render` then `serialize`.") == "Call `render` then `serialize`."
 
 
+def test_indented_code_with_citry_syntax_renders_as_literal_code() -> None:
+    html = render_page('    <c-if cond="x">hi</c-if>\n').html
+
+    assert "&lt;c-if" in html
+    assert "hi" in html
+
+
 def test_events_bindings_in_code_are_armored_then_restored() -> None:
     source = '```html\n<button @c-click="save" :c-query="refresh">Save</button>\n```'
     protected = protect_fences(source)

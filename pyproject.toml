@@ -188,6 +188,12 @@ ignore = [
     "INP001",  # examples are imported by file path, not as a package
     "S101",    # the per-example regression tests use assert
 ]
+"docs_site/snippets/*" = [
+    "ANN",     # executable guide snippets keep the same concise style readers copy
+    "ARG001",  # stand-in side effects accept the arguments the guide demonstrates
+    "ARG002",  # template_data takes slots even when a snippet does not use them
+    "S101",    # the private verifier executes the snippets as test fixtures
+]
 "docs_site/tests/*" = [
     "ANN",     # Annotations are not needed for tests
     "ARG002",  # Unused method argument

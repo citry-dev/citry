@@ -1,5 +1,5 @@
 """
-Tests for the ``data-cid-<id>`` component markers (docs/design/deferred_rendering.md, Phase B).
+Tests for the ``data-cid-<id>`` component markers (docs/design/component_rendering_defer.md, Phase B).
 
 ``serialize()`` tags each component's root element(s) with a ``data-cid-<id>=""``
 marker. When one component's root element is itself another component, that

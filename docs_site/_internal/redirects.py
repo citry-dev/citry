@@ -13,8 +13,8 @@ as the real one and keep the stub itself out of results.
 The forwarding href is written relative to the stub, so it keeps working when
 the site is deployed under a subpath; the canonical stays absolute.
 
-Citry has not moved any URLs yet, so ``REDIRECTS`` is empty and this writes
-nothing. The first rename adds an entry here.
+The map stays empty until a published URL moves or merges. Add the old and new
+clean paths together when that happens.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 # Old clean URL path -> new clean URL path (each with a leading and trailing
-# slash). Empty until a page is renamed.
+# slash).
 REDIRECTS: dict[str, str] = {}
 
 _TEMPLATE = """<!DOCTYPE html>

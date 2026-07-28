@@ -1,5 +1,5 @@
 """
-Tests for the ``Component.on_render`` hook (docs/design/on_render.md
+Tests for the ``Component.on_render`` hook (docs/design/component_on_render.md
 sections 3-4). Plain form: returning ``None`` renders the template as usual;
 returning content (``str`` / composed element / ``CitryRender`` / ``Slot``)
 replaces the component's whole output and the template is never rendered.
@@ -284,7 +284,7 @@ class TestOnRenderPlainForm:
 
 class TestOnRenderGeneratorForm:
     """
-    The generator form (docs/design/on_render.md section 3.2): code before the
+    The generator form (docs/design/component_on_render.md section 3.2): code before the
     first yield runs before the template renders; the yield receives the
     component's settled ``(result, error)``; the generator may replace the
     output (any number of times), raise, or keep the result.
@@ -380,6 +380,40 @@ class TestOnRenderGeneratorForm:
                 _result, _error = yield
 
         assert ">kept</p>" in Comp().render().serialize()
+
+    def test_component_without_template_yield_receives_empty_render(self):
+        # A template-less component still settles: the yield receives an
+        # empty CitryRender (not None), and without a replacement the
+        # component's output stays empty.
+        received = []
+        c = Citry()
+
+        class NoTemplate(Component):
+            citry = c
+
+            def on_render(self):
+                result, error = yield
+                received.append((result, error))
+
+        assert NoTemplate().render().serialize() == ""
+
+        (result, error) = received[0]
+        assert error is None
+        assert isinstance(result, CitryRender)
+        assert result.serialize() == ""
+        assert not _has_deferred(result)
+
+    def test_component_without_template_return_replaces_empty_output(self):
+        c = Citry()
+
+        class NoTemplate(Component):
+            citry = c
+
+            def on_render(self):
+                _result, _error = yield
+                return "<p>made up</p>"
+
+        assert NoTemplate().render().serialize() == '<p data-cid-c1="">made up</p>'
 
     def test_raise_after_yield_becomes_component_error(self):
         c = Citry()
@@ -637,3 +671,36 @@ class TestOnRenderGeneratorForm:
 
         html = top().render().serialize()
         assert ">bottom</i>" in html
+
+    def test_hook_order_across_a_tree_with_siblings(self):
+        # The cross-component ordering guarantee behind djc's three-hook
+        # "order" test: a parent's pre-yield phase runs before its children's
+        # hooks, each child settles completely (post phase included) before
+        # the next sibling starts, and the parent's post phase runs last.
+        c = Citry()
+        events = []
+
+        def make(name, tpl):
+            def on_render(self):
+                events.append(f"{name}:pre")
+                yield  # the settled result is not needed, only the phase order
+                events.append(f"{name}:post")
+
+            return type(name, (Component,), {"citry": c, "template": tpl, "on_render": on_render})
+
+        make("Leaf1", "<i>1</i>")
+        make("Leaf2", "<i>2</i>")
+        make("Mid", "<div><c-leaf1 /><c-leaf2 /></div>")
+        root = make("Root", "<main><c-mid /></main>")
+
+        str(root())
+        assert events == [
+            "Root:pre",
+            "Mid:pre",
+            "Leaf1:pre",
+            "Leaf1:post",
+            "Leaf2:pre",
+            "Leaf2:post",
+            "Mid:post",
+            "Root:post",
+        ]

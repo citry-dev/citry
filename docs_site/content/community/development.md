@@ -247,6 +247,14 @@ The [Built-in tags](/reference/builtins/) page is the exception. Not all Citry `
     - `<c-slot>`, `<c-fill>`
     - `<c-raw>`
 
+The [Browser APIs](/reference/browser-apis/) page is authored too. Its public
+surface spans the `$component` source transform, the dependency manager, and
+the Events runtime, so no Python docstring owns the whole contract. Declare
+each linkable name and stable anchor in
+`docs_site/_internal/reference_pages.py`, then document that anchor in
+`docs_site/content/reference/browser-apis.md`. The `authored_reference` guard
+reports a missing, duplicated, or undeclared anchor.
+
 Write the docstrings for the reader: someone meeting the symbol for the first time, in plain language,
 not for a contributor reading the source.
 

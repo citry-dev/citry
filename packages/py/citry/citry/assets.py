@@ -9,11 +9,12 @@ through classmethods on ``Component`` (``Card.get_template()``,
 ``load_template`` / ``load_js`` / ``load_css``.
 
 Resolution is lazy and cached once per class (in the class's own ``__dict__``).
-File paths resolve relative to the directory of the component's own ``.py``
-file first, then relative to each entry of ``Citry.settings.dirs``. Content
-loading fires the ``on_template_loaded`` / ``on_js_loaded`` / ``on_css_loaded``
-extension hooks, and every resolved file is registered in the Citry instance's
-file-to-component index (the hot-reload seam).
+File paths resolve relative to the directory of the class that declared the
+file value first, then relative to each entry of the requesting component's
+``Citry.settings.dirs``. Content loading fires the ``on_template_loaded`` /
+``on_js_loaded`` / ``on_css_loaded`` extension hooks, and every resolved file
+is registered in the requesting Citry instance's file-to-component index that
+hot reload queries.
 
 Secondary assets (the nested ``Dependencies`` class) are owned by the built-in
 ``dependencies`` extension (``citry/ext/dependencies/``), which reuses
@@ -25,9 +26,11 @@ The full design, including what diverges from django-components and why, is in
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
+from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
 from citry.citry_template import CitryTemplate
 from citry.util.logger import logger
 from citry.util.misc import get_module_info
@@ -46,8 +49,25 @@ class HasHtml(Protocol):
 
 
 def dedupe(items: Iterable[Any]) -> tuple[Any, ...]:
-    """De-duplicate preserving first-seen order (never set-iteration order)."""
-    return tuple(dict.fromkeys(items))
+    """De-duplicate by equality while preserving each first-seen object."""
+    result: list[Any] = []
+    seen_hashable: set[Any] = set()
+    unhashable: list[Any] = []
+    for item in items:
+        try:
+            already_seen = item in seen_hashable or item in unhashable
+        except TypeError:
+            # Pre-rendered dependency objects only promise ``__html__``; they
+            # need not be hashable, so compare those against every prior item.
+            if item in result:
+                continue
+            unhashable.append(item)
+        else:
+            if already_seen:
+                continue
+            seen_hashable.add(item)
+        result.append(item)
+    return tuple(result)
 
 
 ################################################
@@ -103,14 +123,15 @@ def _find_pair_declaration(
 
     Returns ``(owner, inline_value, file_value)``.
     """
-    for klass in comp_cls.__mro__:
-        attrs = klass.__dict__
+    for klass in _static_class_mro(comp_cls):
+        attrs = _static_class_dict(klass)
         if inline_attr in attrs or file_attr in attrs:
             inline_val = attrs.get(inline_attr)
             file_val = attrs.get(file_attr)
             if inline_val is not None and file_val is not None:
+                class_name = _safe_class_text(klass, "__name__") or "Component"
                 msg = (
-                    f"Component {klass.__name__} has non-empty values for both {inline_attr!r}"
+                    f"Component {class_name} has non-empty values for both {inline_attr!r}"
                     f" and {file_attr!r}. Only one of the two may be set."
                 )
                 raise ValueError(msg)
@@ -123,6 +144,51 @@ def _find_pair_declaration(
 ################################################
 
 
+@dataclass(frozen=True, slots=True)
+class _AssetPathInspection:
+    """The filesystem state observed for one asset path search."""
+
+    resolution: Literal["resolved", "missing", "unavailable"]
+    resolved_path: Path | None
+    searched_paths: tuple[Path, ...]
+
+
+def _inspect_asset_path(
+    filepath: str | Path,
+    *,
+    owner_dir: Path | None,
+    search_dirs: tuple[Path, ...],
+) -> _AssetPathInspection:
+    """Check asset candidates without reading content or changing runtime state."""
+    path = Path(filepath)
+    if path.is_absolute():
+        candidates = (path,)
+    else:
+        candidates = (
+            *((owner_dir / path,) if owner_dir is not None else ()),
+            *(base_dir / path for base_dir in search_dirs),
+        )
+
+    if not candidates:
+        return _AssetPathInspection(resolution="unavailable", resolved_path=None, searched_paths=())
+
+    searched: list[Path] = []
+    for candidate in candidates:
+        if candidate.exists():
+            # Preserve the loader's existing absolute-path behavior. Relative
+            # winners are resolved because their search roots may contain a
+            # symlink or ``..`` segment.
+            resolved = candidate if path.is_absolute() else candidate.resolve()
+            searched.append(resolved)
+            return _AssetPathInspection(
+                resolution="resolved",
+                resolved_path=resolved,
+                searched_paths=tuple(searched),
+            )
+        searched.append(candidate)
+    return _AssetPathInspection(resolution="missing", resolved_path=None, searched_paths=tuple(searched))
+
+
 def module_dir(comp_cls: type[Component]) -> Path | None:
     """The directory of the ``.py`` file where the class is defined, if any."""
     _module, _module_name, module_file = get_module_info(comp_cls)
@@ -131,39 +197,35 @@ def module_dir(comp_cls: type[Component]) -> Path | None:
     return Path(module_file).parent
 
 
-def resolve_asset_file(filepath: str | Path, comp_cls: type[Component]) -> Path:
+def resolve_asset_file(
+    filepath: str | Path,
+    comp_cls: type[Component],
+    *,
+    search_dirs: tuple[Path, ...] | None = None,
+) -> Path:
     """
     Resolve an asset file path to an absolute ``Path``.
 
     Lookup order (docs/design/asset_loading.md section 5.2):
 
     1. An absolute path is used as-is (and must exist).
-    2. Relative to the directory of the component's ``.py`` file.
-    3. Relative to each entry of ``comp_cls.citry.settings.dirs``, in order.
+    2. Relative to the directory of ``comp_cls``'s ``.py`` file. For an
+       inherited declaration, callers pass the class that declared the value.
+    3. Relative to each entry of ``search_dirs`` when supplied, or
+       ``comp_cls.citry.settings.dirs`` otherwise, in order.
 
     Raises ``FileNotFoundError`` naming every location searched.
     """
-    path = Path(filepath)
-    searched: list[Path] = []
+    roots = comp_cls.citry.settings.dirs if search_dirs is None else search_dirs
+    inspection = _inspect_asset_path(filepath, owner_dir=module_dir(comp_cls), search_dirs=roots)
+    if inspection.resolved_path is not None:
+        return inspection.resolved_path
 
-    if path.is_absolute():
-        if path.exists():
-            return path
-        searched.append(path)
-    else:
-        comp_module_dir = module_dir(comp_cls)
-        if comp_module_dir is not None:
-            candidate = comp_module_dir / path
-            if candidate.exists():
-                return candidate.resolve()
-            searched.append(candidate)
-        for base_dir in comp_cls.citry.settings.dirs:
-            candidate = base_dir / path
-            if candidate.exists():
-                return candidate.resolve()
-            searched.append(candidate)
-
-    locations = ", ".join(str(loc) for loc in searched) if searched else "(no searchable locations)"
+    locations = (
+        ", ".join(str(location) for location in inspection.searched_paths)
+        if inspection.searched_paths
+        else "(no searchable locations)"
+    )
     msg = (
         f"Could not find file {str(filepath)!r} for component {comp_cls.__name__}."
         f" Searched: {locations}. Set the file next to the component's .py file,"
@@ -185,13 +247,13 @@ def _load_pair(
     (django-components #1074), and registered in the Citry file index for hot
     reload. ``(None, None)`` when the pair declares no asset.
     """
-    _owner, inline_val, file_val = _find_pair_declaration(comp_cls, inline_attr, file_attr)
+    owner, inline_val, file_val = _find_pair_declaration(comp_cls, inline_attr, file_attr)
 
     if inline_val is not None:
         return inline_val, None
 
     if file_val is not None:
-        path = resolve_asset_file(file_val, comp_cls)
+        path = resolve_asset_file(file_val, owner, search_dirs=comp_cls.citry.settings.dirs)
         comp_cls.citry._register_component_file(path, comp_cls)
         content = path.read_text(encoding="utf8")
         logger.debug("Loaded %s for component %s from %s", file_attr, comp_cls.__name__, path)
@@ -305,9 +367,11 @@ def reset_template(comp_cls: type[Component]) -> None:
     clear it too (file-driven invalidation via
     ``Citry.get_components_for_file`` reaches all of them).
     """
-    if _TEMPLATE_CACHE in comp_cls.__dict__:
-        delattr(comp_cls, _TEMPLATE_CACHE)
-    comp_cls.citry._evict_component_cache(comp_cls)
+    with comp_cls.citry.extensions._render_cache_invalidation():
+        if _TEMPLATE_CACHE in comp_cls.__dict__:
+            delattr(comp_cls, _TEMPLATE_CACHE)
+        comp_cls.citry._evict_component_cache(comp_cls)
+        comp_cls.citry.extensions.on_template_reset(comp_cls)
 
 
 def reset_files(comp_cls: type[Component]) -> None:
@@ -319,7 +383,8 @@ def reset_files(comp_cls: type[Component]) -> None:
     ``CitryDependencies`` for this class there. Users reach this through
     ``Card.reset_files()``.
     """
-    for attr in (_JS_CACHE, _CSS_CACHE):
-        if attr in comp_cls.__dict__:
-            delattr(comp_cls, attr)
-    comp_cls.citry.extensions.on_files_reset(comp_cls)
+    with comp_cls.citry.extensions._render_cache_invalidation():
+        for attr in (_JS_CACHE, _CSS_CACHE):
+            if attr in comp_cls.__dict__:
+                delattr(comp_cls, attr)
+        comp_cls.citry.extensions.on_files_reset(comp_cls)

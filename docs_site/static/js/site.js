@@ -27,6 +27,36 @@
     return localStorage.getItem(THEME_KEY) || 'auto';
   }
 
+  function applyExampleFrameTheme(frame, theme) {
+    var resolved = theme;
+    if (resolved === 'auto') {
+      resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    try {
+      if (frame.contentDocument) {
+        frame.contentDocument.documentElement.style.colorScheme = resolved;
+        if (frame.contentDocument.body) {
+          frame.contentDocument.body.style.colorScheme = resolved;
+        }
+      }
+    } catch (e) {
+      // A fork may point an example iframe at another origin. Its own document
+      // then owns the theme, and the docs page must keep working without it.
+    }
+  }
+
+  function syncExampleFrameThemes(theme) {
+    document.querySelectorAll('.example-demo-frame--theme-sync').forEach(function (frame) {
+      applyExampleFrameTheme(frame, theme);
+      if (frame.dataset.themeListener !== '1') {
+        frame.dataset.themeListener = '1';
+        frame.addEventListener('load', function () {
+          applyExampleFrameTheme(frame, getStoredTheme());
+        });
+      }
+    });
+  }
+
   function applyTheme(theme) {
     if (theme === 'auto') {
       document.documentElement.removeAttribute('data-theme');
@@ -42,6 +72,7 @@
         btn.classList.remove('is-active');
       }
     });
+    syncExampleFrameThemes(theme);
   }
 
   // Set initial active state
@@ -53,6 +84,11 @@
       localStorage.setItem(THEME_KEY, theme);
       applyTheme(theme);
     });
+  });
+
+  var exampleColorScheme = window.matchMedia('(prefers-color-scheme: dark)');
+  exampleColorScheme.addEventListener('change', function () {
+    if (getStoredTheme() === 'auto') syncExampleFrameThemes('auto');
   });
 
   // ----------------------------------------------------------------
@@ -81,7 +117,10 @@
     if (!btn || !items) return;
 
     var label = btn.querySelector('span:first-child');
-    var key = label ? label.textContent.trim() : '';
+    var section = group.closest('.djc-sidebar__section');
+    var area = section ? section.getAttribute('data-area') : '';
+    var groupLabel = label ? label.textContent.trim() : '';
+    var key = area && groupLabel ? area + '::' + groupLabel : '';
 
     // Restore from localStorage (but don't override if group has active item)
     if (key && sidebarState[key] !== undefined && group.getAttribute('data-open') !== 'true') {
@@ -114,14 +153,13 @@
   if (sidebar) {
     var SIDEBAR_SCROLL_KEY = 'djc-sidebar-scroll';
 
-    // Which top-level section the active page lives in. Stable across pages (the
-    // sidebar always renders every section), so it identifies "the same nav".
+    // The active primary area is stable across pages in the same sidebar and
+    // distinct from every other top-level area declared in _nav.yml.
     var activeSectionSig = function () {
       var active = sidebar.querySelector('.djc-sidebar__link.is-active');
       var section = active && active.closest('.djc-sidebar__section');
       if (!section) return null;
-      var sections = sidebar.querySelectorAll('.djc-sidebar__section');
-      return String(Array.prototype.indexOf.call(sections, section));
+      return section.getAttribute('data-area');
     };
 
     var loadScrollMap = function () {
@@ -232,16 +270,22 @@
     var labels = set.querySelectorAll(':scope > .tabbed-labels > label');
     var blocks = set.querySelectorAll(':scope > .tabbed-content > .tabbed-block');
 
-    function activate(index) {
+    function activate(index, moveFocus) {
       labels.forEach(function (l, i) {
-        l.classList.toggle('is-active', i === index);
+        var active = i === index;
+        l.classList.toggle('is-active', active);
+        l.setAttribute('aria-selected', active ? 'true' : 'false');
+        l.tabIndex = active ? 0 : -1;
       });
       blocks.forEach(function (b, i) {
-        b.classList.toggle('is-active', i === index);
+        var active = i === index;
+        b.classList.toggle('is-active', active);
+        b.hidden = !active;
       });
       inputs.forEach(function (inp, i) {
         inp.checked = i === index;
       });
+      if (moveFocus && labels[index]) labels[index].focus();
     }
 
     activate(0);
@@ -250,6 +294,24 @@
       label.addEventListener('click', function (e) {
         e.preventDefault();
         activate(index);
+      });
+      label.addEventListener('keydown', function (e) {
+        var nextIndex;
+        if (e.key === 'ArrowRight') {
+          nextIndex = (index + 1) % labels.length;
+        } else if (e.key === 'ArrowLeft') {
+          nextIndex = (index - 1 + labels.length) % labels.length;
+        } else if (e.key === 'Home') {
+          nextIndex = 0;
+        } else if (e.key === 'End') {
+          nextIndex = labels.length - 1;
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          nextIndex = index;
+        } else {
+          return;
+        }
+        e.preventDefault();
+        activate(nextIndex, true);
       });
     });
   });

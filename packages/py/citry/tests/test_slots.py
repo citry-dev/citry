@@ -3,16 +3,29 @@ Tests for the Slot value (citry/slots.py) and the ``{{ my_slot }}`` detection.
 
 Covers construction from every input form, escaping, standalone and repeated
 invocation, the fallback handle, ``str()`` coercion, ``normalize_slot_fills``,
-and Slots embedded in template expressions. The slot resolution at ``<c-slot>``
-sites and fill collection at the component boundary are later phases (see
-docs/design/slots.md section 14).
+Slots embedded in template expressions, and focused integration with
+``<c-slot>`` / ``<c-fill>`` (see docs/design/component_slots.md).
 """
+
+from typing import get_args, get_origin, get_type_hints
 
 import pytest
 
-from citry import Citry, CitryRender, Component, Slot, SlotContext
+from citry import Citry, CitryRender, Component, Extension, Slot, SlotContext, SlotData, SlotInput
 from citry.slots import normalize_slot_fills
 from citry.util.html import SafeString
+
+
+def test_slot_input_is_runtime_subscriptable_and_preserves_its_shape() -> None:
+    class ItemSlotData:
+        name: str
+
+    class Slots:
+        item: SlotInput[ItemSlotData]
+
+    annotation = get_type_hints(Slots)["item"]
+    assert get_origin(annotation) is SlotInput
+    assert get_args(annotation) == (ItemSlotData,)
 
 
 class TestSlotConstruction:
@@ -43,8 +56,39 @@ class TestSlotConstruction:
 
 class TestSlotCall:
     def test_function_receives_data(self):
-        slot = Slot(lambda ctx: f"Hello, {ctx.data['name']}!")
+        slot = Slot(lambda ctx: f"Hello, {ctx.data.name}!")
         assert slot({"name": "John"}) == "Hello, John!"
+
+    def test_data_supports_attributes_and_mapping_access(self):
+        seen = []
+
+        def content(ctx):
+            seen.append(ctx.data)
+            return f"{ctx.data.name}:{ctx.data['aria-label']}"
+
+        assert Slot(content)({"name": "save", "aria-label": "Save item"}) == "save:Save item"
+        assert isinstance(seen[0], SlotData)
+        assert dict(seen[0]) == {"name": "save", "aria-label": "Save item"}
+
+    def test_data_is_immutable_and_copied(self):
+        original = {"name": "first"}
+        seen = []
+        slot = Slot(lambda ctx: seen.append(ctx.data) or ctx.data.name)
+
+        assert slot(original) == "first"
+        original["name"] = "second"
+
+        assert seen[0].name == "first"
+        with pytest.raises(TypeError):
+            seen[0]["name"] = "third"
+
+    def test_mapping_member_collision_requires_mapping_access(self):
+        slot = Slot(lambda ctx: f"{ctx.data['items']}:{len(ctx.data.items())}")
+        assert slot({"items": "value"}) == "value:1"
+
+    def test_non_mapping_data_is_rejected(self):
+        with pytest.raises(TypeError, match="Slot data must be a mapping"):
+            Slot("content")([("name", "value")])
 
     def test_no_data_means_empty_mapping(self):
         slot = Slot(lambda ctx: str(len(ctx.data)))
@@ -63,7 +107,7 @@ class TestSlotCall:
         assert slot() == ""
 
     def test_repeated_calls_with_different_data(self):
-        slot = Slot(lambda ctx: f"n={ctx.data['n']}")
+        slot = Slot(lambda ctx: f"n={ctx.data.n}")
         assert slot({"n": 1}) == "n=1"
         assert slot({"n": 2}) == "n=2"
 
@@ -82,8 +126,34 @@ class TestSlotCall:
         slot = Slot(lambda ctx: "yes" if ctx.fallback is None else "no")
         assert slot() == "yes"
 
+    def test_positional_and_keyword_data_fallback_are_equivalent(self):
+        slot = Slot(lambda ctx: f"{ctx.data.name}|{ctx.fallback}")
+        data = {"name": "Jo"}
+        fallback = Slot("FB")
+
+        assert slot(data, fallback) == "Jo|FB"
+        assert slot(data=data, fallback=fallback) == "Jo|FB"
+
 
 class TestSlotFromComponents:
+    def test_python_callable_receives_slot_site_data_and_fallback(self):
+        c = Citry()
+        seen = {}
+
+        class Card(Component):
+            citry = c
+            template = '<div><c-slot name="item" kind="static">FB</c-slot></div>'
+
+        def item(ctx: SlotContext) -> SafeString:
+            seen["data"] = ctx.data
+            seen["fallback"] = ctx.fallback
+            return SafeString(f"{ctx.data.kind}:{ctx.fallback}")
+
+        assert str(Card(slots={"item": item})) == '<div data-cid-c1="">static:FB</div>'
+        assert isinstance(seen["data"], SlotData)
+        assert seen["data"].kind == "static"
+        assert isinstance(seen["fallback"], Slot)
+
     def test_element_contents_render_on_call(self):
         c = Citry()
 
@@ -130,6 +200,42 @@ class TestSlotStr:
     def test_str_escapes(self):
         assert str(Slot("<b>")) == "&lt;b&gt;"
 
+    def test_template_fill_with_component_can_render_after_page(self):
+        finalized = []
+
+        class Recorder(Extension):
+            name = "recorder"
+
+            def on_component_rendered(self, ctx):
+                finalized.append(type(ctx.component).__name__)
+
+        c = Citry(extensions=[Recorder])
+        captured = []
+
+        class Inner(Component):
+            citry = c
+            template = "<span>inner</span>"
+
+        class Capture(Component):
+            citry = c
+            template = "CAP"
+
+            def template_data(self, kwargs, slots):
+                captured.append(slots["body"])
+                return {}
+
+        class Page(Component):
+            citry = c
+            template = '<c-capture><c-fill name="body"><c-inner /></c-fill></c-capture>'
+
+        assert str(Page()) == "CAP"
+        assert finalized == ["Capture", "Page"]
+        assert str(captured[0]) == '<span data-cid-c3="">inner</span>'
+        assert finalized == ["Capture", "Page", "Inner"]
+        # The captured fill remains repeatable and renders descendants fresh.
+        assert str(captured[0]) == '<span data-cid-c4="">inner</span>'
+        assert finalized == ["Capture", "Page", "Inner", "Inner"]
+
 
 class TestSlotInExpressions:
     def test_slot_in_expression_renders(self):
@@ -165,7 +271,7 @@ class TestSlotInExpressions:
 
             def template_data(self, kwargs, slots):
                 return {
-                    "s": Slot(lambda ctx: f"Hello, {ctx.data['name']}!"),
+                    "s": Slot(lambda ctx: f"Hello, {ctx.data.name}!"),
                     "d": {"name": "Jo"},
                 }
 
@@ -202,9 +308,15 @@ class TestNormalizeSlotFills:
         assert normalize_slot_fills({"header": None}) == {}
 
     def test_function_becomes_slot(self):
-        fills = normalize_slot_fills({"footer": lambda _ctx: "made"})
-        assert fills["footer"]() == "made"
-        assert fills["footer"].slot_name == "footer"
+        def make_footer(_ctx):
+            return "made"
+
+        fills = normalize_slot_fills({"footer": make_footer})
+        slot = fills["footer"]
+        assert slot() == "made"
+        assert slot.slot_name == "footer"
+        assert slot.contents is make_footer
+        assert slot.content_func is make_footer
 
     def test_complete_slot_kept_as_is(self):
         slot = Slot("x", component_name="card", slot_name="header")
@@ -224,8 +336,21 @@ class TestNormalizeSlotFills:
         # The extra bag is copied, not shared.
         copied.extra["k2"] = "v2"
         assert "k2" not in slot.extra
-        # The content function is reused.
+        # The original content and resolved function are reused.
+        assert copied.contents is slot.contents
+        assert copied.content_func is slot.content_func
         assert copied() == "x"
+
+    def test_partially_named_slot_keeps_metadata_while_filling_missing_name(self):
+        slot = Slot("x", slot_name="custom", extra={"k": "v"})
+        fills = normalize_slot_fills({"header": slot}, component_name="card")
+        copied = fills["header"]
+
+        assert copied is not slot
+        assert copied.component_name == "card"
+        assert copied.slot_name == "custom"
+        assert copied.extra == {"k": "v"}
+        assert copied.extra is not slot.extra
 
     def test_element_becomes_slot(self):
         c = Citry()
@@ -242,7 +367,7 @@ class TestNormalizeSlotFills:
 class TestDeclaredSlotCheck:
     """
     The definition-time check comparing a component's own ``<c-slot>`` tags
-    against its ``Slots`` schema (docs/design/slots.md section 9.5). Runs at
+    against its ``Slots`` schema (docs/design/component_slots.md section 9.5). Runs at
     first render, and only when ``Slots`` is declared (a closed schema).
     """
 
@@ -258,6 +383,56 @@ class TestDeclaredSlotCheck:
 
         with pytest.raises(RuntimeError, match=r"does not declare 'ghost', so no caller can fill it"):
             str(Card())
+
+    def test_dead_slot_error_repeats_after_failed_compile(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = '<c-slot name="ghost"/>'
+
+            class Slots:
+                body: str = ""
+
+        for _attempt in range(3):
+            with pytest.raises(RuntimeError, match=r"does not declare 'ghost', so no caller can fill it"):
+                str(Card())
+            template = Card.get_template()
+            assert template is not None
+            assert template.generate is None
+
+    def test_slot_inside_template_valued_attr_belongs_to_writer_schema(self):
+        c = Citry()
+
+        class Sink(Component):
+            citry = c
+            template = "{{ body }}"
+
+        class Card(Component):
+            citry = c
+            template = "<c-sink c-body=\"<c-slot name='ghost' />\" />"
+
+            class Slots:
+                header: str = ""
+
+        with pytest.raises(RuntimeError, match=r"does not declare 'ghost', so no caller can fill it"):
+            str(Card())
+
+    def test_slot_inside_template_valued_attr_renders_from_writer_fills(self):
+        c = Citry()
+
+        class Sink(Component):
+            citry = c
+            template = "{{ body }}"
+
+        class Card(Component):
+            citry = c
+            template = "<c-sink c-body=\"<c-slot name='body'>fallback</c-slot>\" />"
+
+            class Slots:
+                body: str = ""
+
+        assert "from-writer" in str(Card(slots={"body": "from-writer"}))
 
     def test_dead_slot_suggests_a_close_name(self):
         c = Citry()
@@ -380,7 +555,7 @@ class TestDeclaredSlotCheck:
 class TestSlotFieldDefaultFill:
     """
     A non-``None`` default on a typed ``Slots`` field is used as the slot's fill
-    when the caller omits it (docs/design/slots.md section 5): it satisfies a
+    when the caller omits it (docs/design/component_slots.md section 5): it satisfies a
     ``required`` slot and renders in place. A passed fill wins over it, and a
     ``None`` default (the "optional" marker) leaves the in-template body as the
     fallback.

@@ -6,6 +6,12 @@ constant parts of a template, and the cache that stores the results.
 
 # ruff: noqa: ANN
 
+import gc
+import subprocess
+import sys
+import textwrap
+from weakref import ref
+
 import pytest
 
 from citry import Citry, Component, Const
@@ -17,8 +23,9 @@ from citry.constness import (
     extract_const_vars,
     freeze_const,
     is_const,
+    precompute_const_parts,
 )
-from citry.nodes import ComponentNode, ExprNode, IfNode, SlotNode
+from citry.nodes import ComponentNode, ExprHtmlAttr, ExprNode, FillNode, ForNode, IfNode, SlotNode, StaticHtmlAttr
 
 
 class _Unhashable:
@@ -520,7 +527,10 @@ class TestTemplateLiteralConst:
             template = '<c-Items c-items="[1, 2, 3]" c-mult="10" />'
 
         assert Page().render().serialize() == "[10][20][30]"
-        assert ["[10][20][30]"] in c._const_body_cache.values()
+        assert any(
+            len(body) == 1 and isinstance(body[0], ForNode) and body[0]._precomputed_text == "[10][20][30]"
+            for body in c._const_body_cache.values()
+        )
 
         # Repeated renders hit the same signature: the per-render marker wraps
         # a fresh equal list, and the canonical key makes it the same entry.
@@ -753,6 +763,48 @@ class TestConstPrecomputeInsideKeptNodes:
         assert loop_body[1].used_vars == ("i",)
         assert loop_body[2] == "]"
 
+    def test_kept_for_masks_target_but_empty_branch_keeps_outer_scope(self):
+        each_attr = ExprHtmlAttr(None, (0, 0), "each", "i in items", ("items",))
+        loop_expr = ExprNode(None, (0, 0), "i", ("i",))
+        empty_expr = ExprNode(None, (0, 0), "i", ("i",))
+        node = ForNode(
+            None,
+            (
+                ((0, 0), (each_attr,), [loop_expr], ("i",)),
+                ((0, 0), (), [empty_expr], ()),
+            ),
+            ("items",),
+        )
+
+        (precomputed,) = precompute_const_parts([node], {"i": Const("outer")})
+
+        assert isinstance(precomputed.branches[0][2][0], ExprNode)
+        assert precomputed.branches[1][2] == ["outer"]
+
+    def test_nested_loop_cannot_unroll_over_enclosing_loop_binding(self):
+        inner_each = ExprHtmlAttr(None, (0, 0), "each", "i in inner_items", ("inner_items",))
+        inner = ForNode(
+            None,
+            (((0, 0), (inner_each,), [ExprNode(None, (0, 0), "i", ("i",))], ("i",)),),
+            ("inner_items",),
+        )
+        outer_each = ExprHtmlAttr(None, (0, 0), "each", "i in outer_items", ("outer_items",))
+        outer = ForNode(
+            None,
+            (((0, 0), (outer_each,), [inner], ("i",)),),
+            ("outer_items", "inner_items"),
+        )
+
+        (precomputed,) = precompute_const_parts(
+            [outer],
+            {"inner_items": Const([1])},
+            visible_names={"outer_items", "inner_items"},
+        )
+
+        nested = precomputed.branches[0][2][0]
+        assert isinstance(nested, ForNode)
+        assert isinstance(nested.branches[0][2][0], ExprNode)
+
 
 class TestConstPrecomputeInsideSlotContent:
     """
@@ -824,7 +876,7 @@ class TestConstPrecomputeInsideSlotContent:
 
         class Page(Component):
             citry = c
-            template = '<c-Box><c-fill name="s" data="d">{{ d["x"] }}-{{ k }}</c-fill></c-Box>'
+            template = '<c-Box><c-fill name="s" data="d">{{ d.x }}-{{ k }}</c-fill></c-Box>'
 
             def template_data(self, kwargs, slots):
                 return dict(kwargs)
@@ -837,6 +889,52 @@ class TestConstPrecomputeInsideSlotContent:
         assert isinstance(fill.body[0], ExprNode)
         assert fill.body[0].used_vars == ("d",)
         assert fill.body[1] == "-K"
+
+    def test_dynamic_fill_binding_allows_only_variable_free_precomputation(self):
+        attrs = (
+            StaticHtmlAttr(None, (0, 0), "name", "s", ()),
+            ExprHtmlAttr(None, (0, 0), "c-bind", "props", ("props",)),
+        )
+        fill = FillNode(
+            None,
+            (0, 0),
+            attrs,
+            [
+                ExprNode(None, (0, 0), "d", ("d",)),
+                ":",
+                ExprNode(None, (0, 0), "k", ("k",)),
+                ":",
+                ExprNode(None, (0, 0), "1 + 1", ()),
+            ],
+            ("props",),
+            (),
+        )
+
+        (precomputed,) = precompute_const_parts(
+            [fill],
+            {"d": Const("outer d"), "k": Const("outer k"), "props": Const(None)},
+        )
+
+        assert isinstance(precomputed.body[0], ExprNode)
+        assert isinstance(precomputed.body[2], ExprNode)
+        assert precomputed.body[3] == ":2"
+
+    def test_static_fill_binding_masks_same_named_outer_const(self):
+        fill = FillNode(
+            None,
+            (0, 0),
+            (
+                StaticHtmlAttr(None, (0, 0), "name", "s", ()),
+                StaticHtmlAttr(None, (0, 0), "data", "d", ()),
+            ),
+            [ExprNode(None, (0, 0), "d", ("d",))],
+            (),
+            ("d",),
+        )
+
+        (precomputed,) = precompute_const_parts([fill], {"d": Const("outer")})
+
+        assert isinstance(precomputed.body[0], ExprNode)
 
     def test_default_slot_body_precomputes(self):
         c = Citry()
@@ -891,7 +989,52 @@ class TestConstPrecomputeUnroll:
 
         assert Card(items=Const([1, 2, 3])).render().serialize() == '<ul data-cid-c1="">1,2,3,</ul>'
         (body,) = c._const_body_cache.values()
-        assert body == ["<ul>1,2,3,</ul>"]
+        assert len(body) == 3
+        assert body[0] == "<ul>"
+        assert isinstance(body[1], ForNode)
+        assert body[1]._precomputed_text == "1,2,3,"
+        assert body[2] == "</ul>"
+
+    def test_unrolled_loop_cache_does_not_hide_later_context_collision(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = '<c-for each="i in items">{{ i }}</c-for>'
+
+            def template_data(self, kwargs, slots):
+                return dict(kwargs)
+
+        assert Card(items=Const([1])).render().serialize() == "1"
+        with pytest.raises(RuntimeError, match=r"Cannot define variable 'i'.*Variable shadowing is not allowed"):
+            Card(items=Const([1]), i="outer").render().serialize()
+
+        assert len(c._const_body_cache) == 2
+
+    def test_unrolled_loop_checks_context_mutated_earlier_in_same_render(self):
+        c = Citry()
+        data = {"items": Const([1, 2])}
+
+        def mutate():
+            data["i"] = "late"
+            return ""
+
+        data["mutate"] = mutate
+
+        class Card(Component):
+            citry = c
+            template = '{{ mutate() }}<c-for each="i in items">{{ i }}</c-for>'
+
+            def template_data(self, kwargs, slots):
+                return data
+
+        with pytest.raises(RuntimeError, match=r"Cannot define variable 'i'.*Variable shadowing is not allowed"):
+            Card().render().serialize()
+
+        (body,) = c._const_body_cache.values()
+        assert isinstance(body[0], ExprNode)
+        assert isinstance(body[1], ForNode)
+        assert body[1]._precomputed_text == "12"
 
     def test_unroll_precomputes_ifs_and_uses_empty_branch(self):
         c = Citry()
@@ -906,7 +1049,7 @@ class TestConstPrecomputeUnroll:
         assert Card(items=Const([1, 2, 3])).render().serialize() == "2!3!"
         assert Card(items=Const([])).render().serialize() == "none"
         bodies = c._const_body_cache.values()
-        assert sorted(map(tuple, bodies)) == [("2!3!",), ("none",)]
+        assert sorted(node._precomputed_text for (node,) in bodies) == ["2!3!", "none"]
 
     def test_unroll_backs_out_past_the_iteration_cap(self):
         c = Citry()
@@ -1022,6 +1165,12 @@ class TestConstBodyCache:
         assert cache.get_or_build(str, frozenset(), lambda: ["c"]) == ["c"]
         assert len(cache) == 3
 
+    def test_distinct_visible_name_sets_build_separately(self):
+        cache = ConstBodyCache()
+        assert cache.get_or_build(int, frozenset(), lambda: ["a"], visible_names={"items"}) == ["a"]
+        assert cache.get_or_build(int, frozenset(), lambda: ["b"], visible_names={"i", "items"}) == ["b"]
+        assert len(cache) == 2
+
     def test_lru_evicts_oldest(self):
         cache = ConstBodyCache(max_entries=2)
         cache.get_or_build(int, frozenset({("x", 1)}), lambda: ["a"])
@@ -1065,6 +1214,87 @@ class TestConstBodyCache:
         cache.get_or_build(str, frozenset(), lambda: ["c"])
         cache.evict_component(int)
         assert len(cache) == 1
+
+    def test_collected_component_removes_all_weakly_owned_entries(self):
+        cache = ConstBodyCache()
+
+        class Temporary:
+            pass
+
+        cache.get_or_build(Temporary, frozenset(), lambda: ["a"])
+        cache.get_or_build(Temporary, frozenset({("x", 1)}), lambda: ["b"])
+        temporary_ref = ref(Temporary)
+
+        del Temporary
+        gc.collect()
+
+        assert temporary_ref() is None
+        assert len(cache) == 0
+
+    def test_collected_component_is_pruned_only_during_an_ordinary_cache_operation(self):
+        cache = ConstBodyCache()
+
+        class Temporary:
+            pass
+
+        cache.get_or_build(Temporary, frozenset(), lambda: ["a"])
+        temporary_ref = ref(Temporary)
+
+        # Collection can occur while this thread already holds the cache lock.
+        # No weakref callback runs and no cache entry is mutated from GC.
+        with cache._lock:
+            del Temporary
+            gc.collect()
+            assert temporary_ref() is None
+            assert len(cache._entries) == 1
+
+        # The next ordinary cache operation prunes the dead weak entry.
+        assert len(cache) == 0
+
+    def test_component_collection_does_not_release_cached_bodies_from_gc(self):
+        # A weakref callback that popped the entry here would release Bomb
+        # while the interrupted thread holds ``blocker`` and deadlock in its
+        # destructor. Keep the reproducer in a child so regressions time out
+        # instead of wedging pytest.
+        script = textwrap.dedent(
+            """
+            import gc
+            import threading
+
+            from citry.constness import ConstBodyCache
+
+            blocker = threading.Lock()
+
+            class Bomb:
+                def __del__(self):
+                    blocker.acquire()
+
+            class Temporary:
+                pass
+
+            cache = ConstBodyCache()
+            cache.get_or_build(Temporary, frozenset(), lambda: [Bomb()])
+            blocker.acquire()
+            del Temporary
+            gc.collect()
+            blocker.release()
+            cache.clear()
+            print("CLASS-GC-DID-NOT-RELEASE-CACHED-BODY")
+            """
+        )
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", script],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except subprocess.TimeoutExpired:
+            pytest.fail("component collection released a cached body from GC and deadlocked")
+
+        assert completed.returncode == 0, completed.stderr
+        assert "CLASS-GC-DID-NOT-RELEASE-CACHED-BODY" in completed.stdout
 
     def test_clear(self):
         cache = ConstBodyCache()

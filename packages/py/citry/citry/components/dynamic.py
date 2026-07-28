@@ -2,7 +2,7 @@
 The ``<c-component>`` and ``<c-element>`` built-in components.
 
 Two sibling tags that choose their render target at render time
-(docs/design/dynamic_component.md):
+(docs/design/component_dynamic.md):
 
 - ``<c-component is="...">`` renders a *component*: ``is`` is a registered
   component name or a ``Component`` class. All other attributes become the
@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, Any
 from citry.attrs import format_attrs, merge_attrs
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender
+from citry.client_directives import CLIENT_PROPS_ATTR, apply_client_props_contribution, has_client_props_key
 from citry.component import Component
 from citry.component_registry import _VALID_NAME_RE, NotRegistered
 from citry.constness import const_value
@@ -55,7 +56,7 @@ if TYPE_CHECKING:
 def make_dynamic_component(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-component>`` component for one Citry instance."""
 
-    class DynamicComponent(Component):
+    class DynamicComponent(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
         """
         Render the component named by ``is`` in this tag's place.
 
@@ -67,19 +68,31 @@ def make_dynamic_component(citry_instance: Citry) -> type[Component]:
         citry = citry_instance
         name = "component"
         transparent = True
-        template = "{{ target }}"
+        template = """
+          {{ target }}
+        """.strip()
 
         def template_data(
             self,
             kwargs: Any,  # noqa: ARG002
-            slots: Any | None = None,  # noqa: ARG002
+            slots: Any,  # noqa: ARG002
         ) -> dict[str, Any]:
             data = dict(self.raw_kwargs)
             comp_cls = _resolve_component(self, const_value(data.pop("is", None)))
             # The target renders in this tag's place: remaining kwargs and the
             # full slots pass through, so the target's own Kwargs/Slots
             # validation speaks for unexpected inputs.
-            return {"target": CitryElement(comp_cls, data, self.raw_slots)}
+            return {
+                "target": CitryElement(
+                    comp_cls,
+                    data,
+                    self.raw_slots,
+                    component_tag_client_bindings=self._component_tag_client_bindings,
+                    ownership_invocation_id=self._ownership_invocation_id,
+                    ownership_graph=self._ownership_graph,
+                    forward_ownership_invocation=(getattr(comp_cls, "name", None) or "").lower() == "component",
+                )
+            }
 
     return DynamicComponent
 
@@ -109,7 +122,7 @@ def _resolve_component(component: Component, value: Any) -> type[Component]:
 def make_dynamic_element(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-element>`` component for one Citry instance."""
 
-    class DynamicElement(Component):
+    class DynamicElement(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
         """
         Render a plain HTML element whose tag name is the ``is`` value.
 
@@ -123,13 +136,17 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
         transparent = True
         # The open/close tags are computed values: one generic class covers
         # every tag name, instead of a synthesized class per name
-        # (docs/design/dynamic_component.md section 5.1).
-        template = "{{ open }}<c-slot />{{ close }}"
+        # (docs/design/component_dynamic.md section 5.1).
+        # Keep the three tokens adjacent: whitespace here would become content
+        # inside or beside the selected HTML element.
+        template = """\
+{{ open }}<c-slot />{{ close }}\
+"""
 
         def template_data(
             self,
             kwargs: Any,  # noqa: ARG002
-            slots: Any | None = None,  # noqa: ARG002
+            slots: Any,  # noqa: ARG002
         ) -> dict[str, Any]:
             attrs = dict(self.raw_kwargs)
             tag = const_value(attrs.pop("is", None))
@@ -164,7 +181,7 @@ def _validate_tag_name(tag: Any) -> None:
     if not tag or not isinstance(tag, str):
         msg = f"<c-element> requires an 'is' value naming the HTML tag, got {type(tag).__name__}."
         raise TypeError(msg)
-    if not _VALID_NAME_RE.match(tag):
+    if not _VALID_NAME_RE.fullmatch(tag):
         msg = (
             f"<c-element>: {tag!r} is not a valid HTML tag name. "
             f"Must start with a letter and contain only letters, digits, hyphens, underscores, or dots."
@@ -191,7 +208,7 @@ def _format_element_attrs(component: Component, tag: str, attrs: dict[str, Any])
     Format the element's attributes the way a statically written element's
     are: normalize class/style, drop ``False``/``None``, fire the
     ``on_attrs_resolved`` extension hook, escape values (``attrs.py`` is the
-    shared value layer; docs/design/html_attrs.md).
+    shared value layer; docs/design/template_html_attrs.md).
 
     Returns ``""`` or a string with a leading space (`` class="btn"``).
     """
@@ -209,11 +226,28 @@ def _format_element_attrs(component: Component, tag: str, attrs: dict[str, Any])
             raise TypeError(msg)
 
     merged = merge_attrs(contributions)
+    # Validate case variants before None/False removal. The canonical key may
+    # be removed, but a noncanonical spelling is always an authoring error.
+    has_client_props_key(merged, tag_name=tag)
     resolved = {key: value for key, value in merged.items() if value is not None and value is not False}
+    if has_client_props_key(resolved, tag_name=tag):
+        apply_client_props_contribution(
+            resolved,
+            resolved[CLIENT_PROPS_ATTR],
+            tag_name=tag,
+            component_boundary=False,
+        )
     resolved = component.citry.extensions.on_attrs_resolved(
         component=component,
         tag_name=tag,
         attrs=resolved,
     )
+    if has_client_props_key(resolved, tag_name=tag):
+        apply_client_props_contribution(
+            resolved,
+            resolved[CLIENT_PROPS_ATTR],
+            tag_name=tag,
+            component_boundary=False,
+        )
     formatted = format_attrs(resolved)
     return f" {formatted}" if formatted else ""

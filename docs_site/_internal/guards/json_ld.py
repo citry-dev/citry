@@ -26,6 +26,17 @@ if TYPE_CHECKING:
 # rich result is weaker or ineligible).
 REQUIRED_KEYS: dict[str, tuple[str, ...]] = {
     "BreadcrumbList": ("itemListElement",),
+    "BlogPosting": (
+        "headline",
+        "description",
+        "datePublished",
+        "dateModified",
+        "author",
+        "publisher",
+        "mainEntityOfPage",
+        "url",
+        "image",
+    ),
     "TechArticle": ("headline",),
 }
 
@@ -38,8 +49,30 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
     for page in index.pages:
         if not page.is_doc_page or page.is_redirect_stub:
             continue
+        types: list[str] = []
         for block in page.jsonld_blocks:
             yield from _check_block(block, source=page.label)
+            try:
+                parsed = json.loads(block)
+            except (json.JSONDecodeError, ValueError):
+                continue
+            if isinstance(parsed, dict) and isinstance(parsed.get("@type"), str):
+                types.append(parsed["@type"])
+
+        if page.url.startswith("/blog/") and page.url != "/blog/":
+            posting_count = types.count("BlogPosting")
+            if posting_count != 1:
+                yield GuardResult.error(
+                    guard="json_ld",
+                    message=f"Blog post must emit exactly one BlogPosting block (found {posting_count})",
+                    source=page.label,
+                )
+            if "TechArticle" in types:
+                yield GuardResult.error(
+                    guard="json_ld",
+                    message="Blog post must not emit TechArticle structured data",
+                    source=page.label,
+                )
 
 
 def _check_block(block: str, *, source: str) -> Iterator[GuardResult]:

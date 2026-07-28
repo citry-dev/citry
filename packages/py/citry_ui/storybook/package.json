@@ -1,0 +1,26 @@
+{
+  "name": "citry-ui-storybook-spike",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Disposable Storybook adapter comparison for Citry UI contributors.",
+  "type": "module",
+  "scripts": {
+    "generate": "uv run --project .. --group storybook python -m backend.generate",
+    "backend": "uv run --project .. --group storybook uvicorn backend.app:app --host 127.0.0.1 --port 8123",
+    "storybook:server": "node src/dev-proxy.js server",
+    "storybook:html": "node src/dev-proxy.js html",
+    "test:dev-proxy": "node --test src/dev-proxy.test.js",
+    "build:server": "storybook build --config-dir .storybook-server --output-dir storybook-static/server",
+    "build:html": "storybook build --config-dir .storybook-html --output-dir storybook-static/html",
+    "smoke": "uv run --project .. --group storybook python smoke.py"
+  },
+  "devDependencies": {
+    "@storybook/addon-a11y": "10.5.4",
+    "@storybook/addon-docs": "10.5.4",
+    "@storybook/html-vite": "10.5.4",
+    "@storybook/server-webpack5": "10.5.4",
+    "httpxy": "0.5.5",
+    "storybook": "10.5.4",
+    "vite": "8.1.5"
+  }
+}

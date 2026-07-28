@@ -17,23 +17,22 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from starlette.applications import Starlette
-from starlette.responses import HTMLResponse, PlainTextResponse
+from starlette.responses import HTMLResponse, PlainTextResponse, Response
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from citry import citry as default_citry
 from citry.contrib.asgi import asgi_app
+from docs_site._internal.blog import BLOG_FEED_PATH, BlogCatalog, BlogPost, load_blog_catalog, serialize_atom_feed
 from docs_site._internal.build import configure_docs_globals
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
-from docs_site._internal.examples import get_example_registry
-from docs_site._internal.nav import load_nav
+from docs_site._internal.examples import get_example_by_slug
 from docs_site._internal.paths import md_to_url, url_to_md
 from docs_site._internal.pipeline import render_page
 from docs_site._internal.reference_pages import (
     category,
     reference_index_markdown,
-    reference_nav_section,
     reference_page_markdown,
 )
 from docs_site._internal.release_notes import (
@@ -41,28 +40,19 @@ from docs_site._internal.release_notes import (
     parse_changelog,
     release_index_markdown,
     release_page_markdown,
-    releases_nav_section,
 )
+from docs_site._internal.site_nav import load_site_nav
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from starlette.requests import Request
 
     from citry import Citry
-    from docs_site._internal.nav import NavTree
 
 # Where citry's component-asset routes are mounted (and recorded on the instance
 # so any emitted asset URLs point at the right place).
 _CITRY_PREFIX = "/citry"
-
-
-def _load_nav(config: DocsConfig) -> NavTree:
-    """Load the content nav and append the generated reference section."""
-    nav_tree = load_nav(config.content_dir / "_nav.yml")
-    changelog_file = config.repo_root / "CHANGELOG.md"
-    if changelog_file.is_file():
-        nav_tree.sections.append(releases_nav_section(parse_changelog(changelog_file.read_text(encoding="utf-8"))))
-    nav_tree.sections.append(reference_nav_section())
-    return nav_tree
 
 
 def create_app(*, config: DocsConfig | None = None, citry_instance: Citry | None = None) -> Starlette:
@@ -74,12 +64,38 @@ def create_app(*, config: DocsConfig | None = None, citry_instance: Citry | None
     version = configure_docs_globals(config)
 
     async def serve_page(request: Request) -> HTMLResponse | PlainTextResponse:
+        catalog = load_blog_catalog(config.content_dir)
         md_path = url_to_md(config.content_dir, request.path_params.get("url_path", ""))
         if md_path is None:
             return PlainTextResponse("Not Found", status_code=404)
+        # Dated Blog filenames are authoring identities, never public aliases.
+        # The explicit slug route below is the only route that serves a post.
+        if catalog.post_for_source(md_path) is not None:
+            return PlainTextResponse("Not Found", status_code=404)
+        requested = request.path_params.get("url_path", "").strip("/")
+        if (
+            catalog.index_path is not None
+            and md_path.resolve() == catalog.index_path.resolve()
+            and requested != "blog"
+        ):
+            return PlainTextResponse("Not Found", status_code=404)
+        return _render_content_page(md_path, catalog=catalog)
+
+    def _render_content_page(
+        md_path: Path,
+        *,
+        catalog: BlogCatalog | None = None,
+        blog_post: BlogPost | None = None,
+    ) -> HTMLResponse:
+        """Render one authored Markdown page with build-equivalent metadata."""
+        catalog = catalog or load_blog_catalog(config.content_dir)
         # Canonical and current_path match what the build would write, so a
         # preview matches the deployed page.
-        page_url = md_to_url(md_path.relative_to(config.content_dir.resolve()))
+        page_url = (
+            blog_post.public_path.lstrip("/")
+            if blog_post
+            else md_to_url(md_path.relative_to(config.content_dir.resolve()))
+        )
         site_base = config.site_url.rstrip("/")
         canonical = f"{site_base}/{page_url}" if site_base else ""
         # Load the nav fresh each request so edits to _nav.yml show up live.
@@ -87,26 +103,49 @@ def create_app(*, config: DocsConfig | None = None, citry_instance: Citry | None
             md_path.read_text(encoding="utf-8"),
             config=config,
             canonical=canonical,
-            nav_tree=_load_nav(config),
+            nav_tree=load_site_nav(config, blog_catalog=catalog),
             current_path=page_url,
             version=version,
             source_path=md_path,
+            blog_catalog=catalog,
+            blog_post=blog_post,
+            is_blog_index=catalog.index_path is not None and md_path.resolve() == catalog.index_path.resolve(),
+            blog_feed_url=BLOG_FEED_PATH if catalog.posts else "",
         )
         return HTMLResponse(result.html)
 
+    async def serve_blog_post(request: Request) -> HTMLResponse | PlainTextResponse:
+        catalog = load_blog_catalog(config.content_dir)
+        post = catalog.post_for_public_path(f"/blog/{request.path_params['slug']}/")
+        if post is None:
+            return PlainTextResponse("Not Found", status_code=404)
+        return _render_content_page(post.source_path, catalog=catalog, blog_post=post)
+
+    async def serve_blog_feed(request: Request) -> Response | PlainTextResponse:
+        catalog = load_blog_catalog(config.content_dir)
+        xml = serialize_atom_feed(
+            catalog,
+            site_url=str(request.base_url).rstrip("/"),
+            base_path=config.base_path,
+        )
+        if not xml:
+            return PlainTextResponse("Not Found", status_code=404)
+        return Response(xml, media_type="application/atom+xml")
+
     async def serve_example(request: Request) -> HTMLResponse | PlainTextResponse:
         # The standalone live-demo page an example card's iframe loads.
-        info = get_example_registry().get(request.path_params["name"])
+        info = get_example_by_slug(request.path_params["slug"])
         if info is None:
             return PlainTextResponse("Not Found", status_code=404)
         return HTMLResponse(str(info.page_cls()))
 
     async def serve_example_variant(request: Request) -> HTMLResponse | PlainTextResponse:
         # A fragment example serves each variant on its own endpoint, the way the
-        # static build pre-renders it to examples/<name>/<variant>/. Rendering the
-        # fragment here also caches its script, so the /citry mount then serves the
-        # fragment's JS/CSS (the dev-server counterpart to export_fragment_deps).
-        info = get_example_registry().get(request.path_params["name"])
+        # static build pre-renders it below examples/<slug>/demo/. Rendering the
+        # fragment here also caches its script, so the /citry mount then serves
+        # the fragment's JS/CSS (the dev-server counterpart to
+        # export_fragment_deps).
+        info = get_example_by_slug(request.path_params["slug"])
         if info is None:
             return PlainTextResponse("Not Found", status_code=404)
         variant = info.fragments.get(request.path_params["variant"])
@@ -115,15 +154,18 @@ def create_app(*, config: DocsConfig | None = None, citry_instance: Citry | None
         return HTMLResponse(variant().render().serialize(deps_strategy="fragment"))
 
     def _render_reference(page_url: str, source: str) -> HTMLResponse:
+        catalog = load_blog_catalog(config.content_dir)
         site_base = config.site_url.rstrip("/")
         canonical = f"{site_base}/{page_url}" if site_base else ""
         html = render_page(
             source,
             config=config,
             canonical=canonical,
-            nav_tree=_load_nav(config),
+            nav_tree=load_site_nav(config, blog_catalog=catalog),
             current_path=page_url,
             version=version,
+            blog_catalog=catalog,
+            blog_feed_url=BLOG_FEED_PATH if catalog.posts else "",
         ).html
         return HTMLResponse(html)
 
@@ -134,6 +176,11 @@ def create_app(*, config: DocsConfig | None = None, citry_instance: Citry | None
         cat = category(request.path_params["slug"])
         if cat is None:
             return PlainTextResponse("Not Found", status_code=404)
+        if cat.authored:
+            md_path = url_to_md(config.content_dir, f"reference/{cat.slug}/")
+            if md_path is None:
+                return PlainTextResponse("Not Found", status_code=404)
+            return _render_content_page(md_path)
         return _render_reference(f"reference/{cat.slug}/", reference_page_markdown(cat))
 
     def _changelog_releases() -> list[Release]:
@@ -143,6 +190,7 @@ def create_app(*, config: DocsConfig | None = None, citry_instance: Citry | None
         return parse_changelog(changelog.read_text(encoding="utf-8"))
 
     def _render_release(page_url: str, source: str) -> HTMLResponse:
+        catalog = load_blog_catalog(config.content_dir)
         site_base = config.site_url.rstrip("/")
         canonical = f"{site_base}/{page_url}" if site_base else ""
         # run_citry_pass=False: release prose shows citry syntax as text (see build).
@@ -150,14 +198,20 @@ def create_app(*, config: DocsConfig | None = None, citry_instance: Citry | None
             source,
             config=config,
             canonical=canonical,
-            nav_tree=_load_nav(config),
+            nav_tree=load_site_nav(config, blog_catalog=catalog),
             current_path=page_url,
             version=version,
             run_citry_pass=False,
+            blog_catalog=catalog,
+            blog_feed_url=BLOG_FEED_PATH if catalog.posts else "",
         ).html
         return HTMLResponse(html)
 
-    async def serve_release_index(request: Request) -> HTMLResponse:  # noqa: ARG001
+    async def serve_release_index(
+        request: Request,  # noqa: ARG001
+    ) -> HTMLResponse | PlainTextResponse:
+        if not (config.repo_root / "CHANGELOG.md").is_file():
+            return PlainTextResponse("Not Found", status_code=404)
         return _render_release("releases/", release_index_markdown(_changelog_releases()))
 
     async def serve_release(request: Request) -> HTMLResponse | PlainTextResponse:
@@ -169,10 +223,12 @@ def create_app(*, config: DocsConfig | None = None, citry_instance: Citry | None
 
     routes: list[Route | Mount] = [
         Mount(_CITRY_PREFIX, app=asgi_app(citry_instance)),
-        # Before the catch-all: example demos and generated reference pages live
-        # outside the content tree.
-        Route("/examples/{name}/", serve_example),
-        Route("/examples/{name}/{variant}/", serve_example_variant),
+        # Before the catch-all: example demos and Reference routes need custom
+        # handling. Authored Reference categories delegate back to content.
+        Route("/examples/{slug}/demo/", serve_example),
+        Route("/examples/{slug}/demo/{variant}/", serve_example_variant),
+        Route(BLOG_FEED_PATH, serve_blog_feed),
+        Route("/blog/{slug}/", serve_blog_post),
         Route("/reference/", serve_reference_index),
         Route("/reference/{slug}/", serve_reference),
         Route("/releases/", serve_release_index),

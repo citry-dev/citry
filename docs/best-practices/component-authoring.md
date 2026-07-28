@@ -76,6 +76,45 @@ Schema class names and fields should be self-explanatory. Do not add class
 docstrings that repeat them. Add field documentation when it carries actual
 public contract information.
 
+## Order component members from inputs to output
+
+Readers should meet a component's public inputs and behavior before its
+rendering implementation. Use this order inside a component class:
+
+1. nested `Kwargs`, `Slots`, and `State` schemas;
+2. event handlers, when present;
+3. data methods such as `template_data()`, `js_data()`, and `css_data()`; and
+4. `template`, `js`, and `css`.
+
+Keep a helper or lifecycle method near the behavior it supports, but preserve
+that overall direction. In particular, do not place a data method below the
+template that reads its values.
+
+## Use each language's naming style at the browser boundary
+
+Keep Python names in `snake_case`. This includes template expressions, event
+handler names, and payload keys written by Python. Use `camelCase` for
+JavaScript variables, Alpine state, methods, and browser-side scope names.
+Translate explicitly where a value crosses between them:
+
+```citry-html
+<section
+  c-x-data="{
+    'batchesLoaded': batches_loaded,
+  }"
+  @choice-picker:loaded="
+    batchesLoaded = $event.detail.batches_loaded
+  "
+>
+  {{ batches_loaded }}
+</section>
+```
+
+Here, `batches_loaded` is a Python name and `batchesLoaded` is a browser name.
+Name a value for the side that owns it, even when both names appear in the
+same template. This makes the boundary visible and keeps code idiomatic on
+both sides.
+
 ## Separate headless behavior from styled markup
 
 A headless component owns behavior, state, relationships, and bindings. It

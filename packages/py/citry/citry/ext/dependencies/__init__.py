@@ -20,6 +20,10 @@ which returns a :class:`CitryDependencies`.
 
 Entries may also be :class:`Script`/:class:`Style` objects (see ``types.py``),
 which say exactly what tag to emit and pass through resolution unchanged.
+A ``Path`` or other ``PathLike`` entry always names a local filesystem value;
+an existing file is inlined by default, and a missing one raises
+``FileNotFoundError``. Plain strings may instead name URLs or unresolved static
+routes, including strings beginning with ``/``.
 
 What the entries *mean* in the rendered output (inline the file content, emit
 a ``<script src>`` tag, ...) is the emission half, which is in ``emission.py``;

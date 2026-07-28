@@ -1,0 +1,31 @@
+from_baseline	to_baseline	change	old_status	new_status	path
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		modified	docs/design/benchmarking.md
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	docs/design/v1_beta_research/baseline_delta.tsv
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	docs/design/v1_beta_research/baseline_history.tsv
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	docs/design/v1_beta_research/change_ledger.tsv
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	docs/design/v1_beta_research/design_artifact_inventory.tsv
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	docs/design/v1_beta_research/evidence_log.md
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	docs/design/v1_beta_research/manifest_inventory.tsv
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	docs/design/v1_beta_research/public_service_snapshot.md
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	docs/design/v1_beta_research/workflow_inventory.tsv
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	added		untracked	packages/py/citry_ui/tests/test_citry_ui_registration.py
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	removed_from_dirty_set	untracked		packages/py/citry_ui/tests/test_registration.py
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	removed_from_dirty_set	untracked		packages/py/citry/tests/_djc_tests/__init__.py
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	removed_from_dirty_set	untracked		packages/py/citry/tests/_djc_tests/test_component_cache.py
+B0-20260723T132129Z-53aec721	B0F-20260723T133646Z-53aec721	removed_from_dirty_set	untracked		packages/py/citry/tests/_djc_tests/test_django_cache_tag.py
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	modified_unstaged		.claude/skills/fable-mode/SKILL.md
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	modified_unstaged		Cargo.lock
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	modified_unstaged		CLAUDE.md
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	modified_unstaged		crates/citry_template_parser/Cargo.toml
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	modified_unstaged		crates/citry_template_parser/docs/agent/INDEX.md
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	status_changed	modified_unstaged	modified_staged_and_unstaged	crates/citry_template_parser/src/ast.rs
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	status_changed	modified_unstaged	modified_staged	crates/citry_template_parser/src/lang/python.rs
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	status_changed	untracked	added_staged	crates/citry_template_parser/tests/tag_compiler_client_directives.rs
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	status_changed	modified_unstaged	modified_staged	crates/citry_template_parser/tests/tag_compiler_dynamic.rs
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	modified_unstaged		docs/agent/INDEX.md
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	modified_unstaged		docs/agent/RATIONALE.md
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	added		untracked	docs/design/v1_beta_research/review_baseline_fingerprints.tsv
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	untracked		package.json
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	untracked		pnpm-lock.yaml
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	untracked		pnpm-workspace.yaml
+B0F-20260723T133646Z-53aec721	B0V-20260723T134757Z-558b9735	removed_from_dirty_set	modified_unstaged		uv.lock

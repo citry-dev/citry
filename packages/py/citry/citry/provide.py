@@ -14,9 +14,9 @@ inside slot content rendered below the provider, not just components written
 below it. See docs/design/component_provide.md for the full model.
 
 This module holds the building blocks: the immutable payload
-(``make_provided``), the key validation, the inject lookup, and the
-``MISSING`` sentinel that lets ``inject(key, None)`` genuinely default to
-``None``.
+(``make_provided``), key validation, inject lookup, the ``MISSING`` sentinel
+that lets ``inject(key, None)`` genuinely default to ``None``, and the private
+``BLOCKED`` marker used by ``Component.unprovide``.
 """
 
 from __future__ import annotations
@@ -39,6 +39,17 @@ Sentinel for "no default given" in ``Component.inject``.
 Distinct from ``None`` on purpose: ``inject(key, None)`` returns ``None``
 when the key was never provided, while ``inject(key)`` raises.
 """
+
+
+class _BlockedType:
+    """Mark a provide key as hidden below one component boundary."""
+
+    def __repr__(self) -> str:
+        return "BLOCKED"
+
+
+BLOCKED: Final = _BlockedType()
+"""Internal marker installed by ``Component.unprovide``."""
 
 
 def validate_provide_key(key: Any) -> str:
@@ -84,8 +95,9 @@ def inject_value(
     default was given. Otherwise raises ``KeyError`` explaining what to do,
     with a "did you mean" hint when a similarly named key exists.
     """
-    if key in provides:
-        return provides[key]
+    value = provides.get(key, MISSING)
+    if value is not MISSING and value is not BLOCKED:
+        return value
 
     if default is not MISSING:
         return default
@@ -95,7 +107,8 @@ def inject_value(
         f" Make sure a component above {component_name!r} provides {key!r},"
         f' e.g. with <c-provide key="{key}" ...> or Component.provide().'
     )
-    close = get_close_matches(key, list(provides), n=1, cutoff=0.7)
+    visible_keys = [provided_key for provided_key, value in provides.items() if value is not BLOCKED]
+    close = get_close_matches(key, visible_keys, n=1, cutoff=0.7)
     if close:
         msg += f" Did you mean {close[0]!r}?"
     raise KeyError(msg)

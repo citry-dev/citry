@@ -14,8 +14,8 @@ class Card(Component):
     class Slots:
         default: SlotInput
 
-    def css_data(self, kwargs: Kwargs, slots: Slots):
-        return { "accent": kwargs.accent }
+    def css_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, str]:
+        return {"accent": kwargs.accent}
 
     template = """
       <article class="demo-card">

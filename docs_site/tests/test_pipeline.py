@@ -74,6 +74,15 @@ def test_markdown_extensions_render() -> None:
     assert 'class="admonition note"' in html
 
 
+def test_citry_fence_styles_builtin_names_as_html_tags() -> None:
+    result = render_page('```citry\ntemplate = """<c-slot /><c-template /><c-component is="card" />"""\n```')
+
+    assert '<span class="nt">c-slot</span>' in result.html
+    assert '<span class="nt">c-template</span>' in result.html
+    assert '<span class="nt">c-component</span>' in result.html
+    assert '<span class="nb">c-slot</span>' not in result.html
+
+
 def test_markdown_body_captures_snippet_expansion_once(tmp_path: Path) -> None:
     snippet = tmp_path / "snippet.py"
     snippet.write_text(

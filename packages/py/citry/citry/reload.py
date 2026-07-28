@@ -9,10 +9,11 @@ that notices the change and calls it.
 
 The watcher is pluggable behind the :class:`FileWatcher` protocol. The default
 is :class:`WatchfilesWatcher` (Rust-backed, native OS events) when the
-``watcher-watchfiles`` extra is installed, falling back to the dependency-free
-:class:`PollingWatcher` (a periodic mtime scan) otherwise. A host that already
-runs its own watcher (Django's autoreloader, an editor) does not need any of
-this: it can feed change events straight into ``Citry.invalidate_file``.
+``watcher-watchfiles`` extra is installed, then :class:`WatchdogWatcher` when
+its extra is installed, and finally the dependency-free :class:`PollingWatcher`
+(a periodic mtime scan). A host that already runs its own watcher (Django's
+autoreloader, an editor) does not need any of this: it can feed change events
+straight into ``Citry.invalidate_file``.
 
 Typical use is through the ``citry watch`` command; the design and the host
 entry points are in ``docs/design/hot_reload.md``.
@@ -268,8 +269,9 @@ def watch(
 
     ``roots`` defaults to ``engine.settings.dirs``. ``watcher`` defaults to
     :func:`default_watcher`. ``on_reload(changed_paths, reset_classes)`` is
-    called after each batch is invalidated, with the classes that were reset
-    (the ``citry watch`` command uses it to print what reloaded).
+    called after each batch is invalidated, with resolved, de-duplicated paths
+    and the classes that were reset (the ``citry watch`` command uses it to
+    print what reloaded).
 
     The watcher runs on a background daemon thread, so this returns immediately.
     Changes to files no component has loaded yet are no-ops (there is nothing
@@ -280,11 +282,12 @@ def watch(
     impl = watcher if watcher is not None else default_watcher()
 
     def handle_change(paths: set[Path]) -> None:
+        resolved_paths = {path.resolve() for path in paths}
         reset: list[type[Component]] = []
-        for path in paths:
+        for path in resolved_paths:
             reset.extend(engine.invalidate_file(path))
         if on_reload is not None:
-            on_reload(paths, reset)
+            on_reload(resolved_paths, reset)
 
     thread = threading.Thread(
         target=impl.run,

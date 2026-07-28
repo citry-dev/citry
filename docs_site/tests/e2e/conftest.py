@@ -16,9 +16,16 @@ Playwright is not installed (the default dev env).
 from __future__ import annotations
 
 import functools
+import os
+import secrets
 import shutil
+import socket
+import subprocess
+import sys
 import tempfile
 import threading
+import time
+import urllib.request
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -57,3 +64,57 @@ def docs_site_url() -> Iterator[str]:
     finally:
         server.shutdown()
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+@pytest.fixture(scope="session")
+def getting_started_app_url() -> Iterator[str]:
+    """Run the finished FastAPI tutorial app through a real ASGI server."""
+    app_dir = Path(__file__).resolve().parents[2] / "snippets" / "getting_started"
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+
+    env = os.environ.copy()
+    env["CITRY_SECRET"] = secrets.token_urlsafe(32)
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "uvicorn",
+            "app:app",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+        ],
+        cwd=app_dir,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    url = f"http://127.0.0.1:{port}"
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline:
+        if process.poll() is not None:
+            output = process.stdout.read() if process.stdout else ""
+            pytest.fail(f"Getting started app exited during startup:\n{output}")
+        try:
+            with urllib.request.urlopen(f"{url}/", timeout=0.5) as response:  # noqa: S310
+                if response.status == 200:
+                    break
+        except OSError:
+            time.sleep(0.05)
+    else:
+        process.terminate()
+        pytest.fail("Getting started app did not start within 15 seconds")
+
+    try:
+        yield url
+    finally:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=5)

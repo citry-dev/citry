@@ -202,6 +202,10 @@ shorter:
 <c-Login c-else />
 ```
 
+`c-if` and `c-elif` take expressions, not nested template values. `c-else` is
+a bare marker and takes no value. Shortcut branches follow the same adjacency
+and ordering rules as the tag form.
+
 ### For / empty
 
 Loop with `<c-for>`, and supply an empty state with `<c-empty>`:
@@ -223,6 +227,10 @@ The tag form works too:
   <p>No items found</p>
 </c-empty>
 ```
+
+`c-for` takes a loop clause such as `item in items`; `c-empty` is a bare marker
+and takes no value. The empty branch must be the adjacent sibling after its
+loop (apart from formatting whitespace).
 
 ## Component slots
 
@@ -275,7 +283,9 @@ matching fill, the slot renders its own body as a fallback:
 ```html
 <!-- Button.html -->
 <button>
-  <c-slot>Click me</c-slot>
+  <c-slot>
+    Click me
+  </c-slot>
 </button>
 
 <!-- Usage without a fill renders the fallback: -->
@@ -328,6 +338,41 @@ attribute:
 </c-UserList>
 ```
 
+Slot data is an immutable `SlotData` record that also implements `Mapping`.
+Use attribute access for identifier keys and subscription for unusual keys
+such as `slot["aria-label"]`.
+
+A fill can destructure selected fields, rename them with `as`, and capture the
+remaining fields with a final `**rest`:
+
+```html
+<c-TableHeadless>
+  <c-fill
+    name="default"
+    data="{ root_attrs, table_attrs as inner_table_attrs, **rest }"
+  >
+    <div c-bind="root_attrs">
+      <table c-bind="inner_table_attrs"></table>
+    </div>
+  </c-fill>
+</c-TableHeadless>
+```
+
+The pattern is one level only. Fields are comma-separated valid Python
+identifiers, source and target names must be unique, and `**rest` must be last.
+Source spellings address literal slot-data mapping keys. Introduced targets use
+Python's NFKC identifier normalization, including for duplicate detection.
+Whitespace and newlines are allowed throughout, including a pattern containing
+only `**rest`. Patterns must be authored directly and cannot come from
+`c-bind`, because every introduced variable is tracked while compiling.
+
+If a statically named slot is declared as `SlotInput[Shape]`, each explicit
+source in a direct destructuring pattern must be an annotated field on `Shape`.
+Citry reports an unknown source while compiling the parent template. Aliases
+validate the source before `as`; whole-data bindings and `**rest` do not select
+an additional named source. Dynamic fill names, effective `c-bind` providers,
+and slots without a resolvable finite shape defer this check to runtime.
+
 A fill can also wrap the slot's own fallback content. Bind it with the
 `fallback` attribute:
 
@@ -361,8 +406,15 @@ Write the HTML inside the quotes, and Citry renders it as a template:
 />
 ```
 
-A nested template must have a single root tag. To pass plain text or several
-root elements, wrap them in `<>` and `</>` (React-style fragments):
+A nested template may have one or more adjacent root tags, so this is valid
+without a wrapper:
+
+```html
+<c-Card c-body="<p>First</p><p>Second</p>" />
+```
+
+Use `<>` and `</>` (React-style fragment delimiters) when the value is plain
+text or has non-tag content before its first tag or after its last tag:
 
 ```html
 <c-Card
@@ -374,9 +426,22 @@ root elements, wrap them in `<>` and `</>` (React-style fragments):
 />
 ```
 
+The fragment delimiters must enclose the entire non-whitespace value. They are
+an attribute-level envelope that Citry strips before parsing, not a root element
+that can sit beside another root. Thus `<>text</><div>body</div>` and
+`<div>body</div><>text</>` are invalid; write
+`<>text<div>body</div></>` instead. Whitespace outside the envelope is ignored,
+while whitespace inside it is preserved.
+
 Citry decides between an expression and a nested template by looking at the
-value: a value that starts with `<tag` and ends with `</tag>` (or is wrapped in
-`<>...</>`) is a template, and everything else is an expression.
+trimmed value: a value that starts with a real tag and ends with a real closing
+or self-closing tag, or with an HTML void element such as `<br>` (or is entirely
+wrapped in `<>...</>`) is a template, and everything else is an expression.
+Text, expressions, and comments may appear between adjacent root tags.
+
+The nested template renders in the context of the component that wrote the
+attribute. A `<c-slot>` inside it is consequently that writer component's slot,
+and a closed `Slots` declaration must include its static name.
 
 ## Attribute spreading
 
@@ -403,12 +468,16 @@ wins:
 <div
   id="default"
   c-bind="{ 'id': 'first', 'title': 'Hi' }"
-  c-id="'override'"
+  c-bind="{ 'id': 'second' }"
 ></div>
 
 <!-- Result (last value for each attribute wins): -->
-<div id="override" title="Hi"></div>
+<div id="second" title="Hi"></div>
 ```
+
+An explicitly written static and dynamic spelling of the same logical
+attribute is an error (`id` together with `c-id`). A spread may coexist with an
+explicit spelling because the mapping may not contain that key at render time.
 
 `class` and `style` are the exceptions: their values from every source merge,
 so a spread can add classes without wiping out the element's own (see
@@ -456,7 +525,7 @@ attribute:
 
 ## Built-in tags
 
-Beyond your own components, Citry provides 13 built-in tags. With these, Citry
+Beyond your own components, Citry provides 15 built-in tags. With these, Citry
 is as expressive as Vue or React.
 
 | Tag             | Purpose                                  |
@@ -471,6 +540,8 @@ is as expressive as Vue or React.
 | `<c-component>` | Render a component chosen at render time |
 | `<c-element>`   | Render an HTML element whose tag name is chosen at render time |
 | `<c-provide>`   | Provide a value to descendant components |
+| `<c-cache>`     | Cache and replay a named transparent template region |
+| `<c-error-fallback>` | Render fallback content when its body raises |
 | `<c-css>`       | Render the collected component CSS here  |
 | `<c-js>`        | Render the collected component JS here   |
 | `<c-raw>`       | Treat the contents as literal text       |

@@ -23,17 +23,18 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlparse
+from urllib.parse import urlsplit, urlunsplit
 
 from markupsafe import Markup
 
 from citry import Component
-from docs_site._internal.nav import NavTree
+from docs_site._internal.nav import SCOPE_VERSIONED
 
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from docs_site._internal.nav import NavSection
+    from docs_site._internal.blog import BlogPost
+    from docs_site._internal.nav import NavArea, NavTree
 
 # Site-level social-card image used when a page sets no og_image of its own.
 _DEFAULT_OG_IMAGE_PATH = "/static/img/favicon.png"
@@ -43,17 +44,6 @@ _DEFAULT_OG_IMAGE_PATH = "/static/img/favicon.png"
 _REPO_URL = "https://github.com/citry-dev/citry"
 _PYPI_URL = "https://pypi.org/project/citry/"
 _DISCORD_URL = "https://discord.gg/NaQ8QPyHtD"
-
-# The primary site areas. Docs owns every ordinary sidebar section; the other
-# three entries promote one named section out of that tree into its own tab.
-# Community has no landing page yet, so its tab opens the first existing page.
-_TOP_NAV_SPECS = (
-    ("Docs", "/getting-started/installation/", "", ""),
-    ("Examples", "/examples/", "examples", "Examples"),
-    ("Reference", "/reference/", "reference", "Reference"),
-    ("Community", "/community/people/", "community", "Community"),
-)
-_PROMOTED_SECTION_LABELS = frozenset(section_label for _, _, _, section_label in _TOP_NAV_SPECS if section_label)
 
 
 class DocPage(Component):
@@ -98,6 +88,16 @@ class DocPage(Component):
         searchable: bool = True
         boost: float = 1.0
         edit_url: str = ""
+        # Blog pages reuse the document shell but replace git-derived article
+        # metadata and generic previous/next navigation with editorial data.
+        blog_post: Any = None
+        blog_newer: Any = None
+        blog_older: Any = None
+        is_blog_index: bool = False
+        blog_feed_url: str = ""
+        # Declarative build scope and the mount prefix used by frozen snapshots.
+        page_scope: str = SCOPE_VERSIONED
+        version_prefix: str = ""
 
     class Slots:
         pass
@@ -111,13 +111,21 @@ class DocPage(Component):
         breadcrumbs: list[SimpleNamespace] = []
         prev_page = next_page = None
         nav_tree: NavTree | None = kwargs.nav_tree
-        top_nav_items = _build_top_nav_view(kwargs.current_path)
+        top_nav_items: list[SimpleNamespace] = []
         if nav_tree is not None:
             nav_tree.set_active(kwargs.current_path)
-            sidebar_sections = _sidebar_sections(nav_tree.sections, kwargs.current_path)
-            nav_sections = _build_nav_view(sidebar_sections, kwargs.current_path)
-            breadcrumbs = _build_breadcrumbs(nav_tree, kwargs.current_path)
-            prev_page, next_page = NavTree(sections=sidebar_sections).find_prev_next(kwargs.current_path)
+            active_area = nav_tree.find_area(kwargs.current_path)
+            top_nav_items = _build_top_nav_view(
+                nav_tree,
+                kwargs.current_path,
+                kwargs.version_prefix,
+            )
+            nav_sections = _build_nav_view(active_area, nav_tree, kwargs.version_prefix)
+            breadcrumbs = _build_breadcrumbs(nav_tree, kwargs.current_path, kwargs.version_prefix)
+            if not (kwargs.blog_post or kwargs.is_blog_index):
+                prev_page, next_page = nav_tree.find_prev_next(kwargs.current_path)
+                prev_page = _project_nav_item(prev_page, nav_tree, kwargs.version_prefix)
+                next_page = _project_nav_item(next_page, nav_tree, kwargs.version_prefix)
 
         toc_items = _flatten_toc(kwargs.toc_items or [])
         last_updated = kwargs.last_updated.strftime("%-d %b %Y") if kwargs.last_updated else ""
@@ -126,18 +134,40 @@ class DocPage(Component):
         # canonical URL, plus an article description on content pages (the home
         # page has no path segments, so it gets neither).
         breadcrumb_jsonld = ""
-        if kwargs.canonical and title:
-            breadcrumb_jsonld = _build_breadcrumb_jsonld(kwargs.canonical, title, kwargs.site_url)
-        article_jsonld = ""
-        if kwargs.current_path.strip("/") and kwargs.canonical and title:
-            article_jsonld = _build_article_jsonld(
-                canonical=kwargs.canonical,
-                title=title,
-                description=kwargs.description,
-                created=kwargs.created,
-                last_updated=kwargs.last_updated,
-                site_name=site_name,
+        if kwargs.current_path.strip("/") and kwargs.canonical and breadcrumbs:
+            breadcrumb_jsonld = _build_breadcrumb_jsonld(
+                kwargs.canonical,
+                breadcrumbs,
+                kwargs.site_url,
             )
+        article_jsonld = ""
+        og_image = _resolve_og_image(kwargs.og_image, kwargs.site_url)
+        blog_author_meta = (
+            _resolve_blog_author_url(
+                kwargs.blog_post.author_url,
+                kwargs.canonical,
+                kwargs.blog_post.public_path,
+            )
+            if kwargs.blog_post and kwargs.blog_post.author_url
+            else (kwargs.blog_post.author if kwargs.blog_post else "")
+        )
+        if kwargs.current_path.strip("/") and kwargs.canonical and title:
+            if kwargs.blog_post:
+                article_jsonld = _build_blog_posting_jsonld(
+                    canonical=kwargs.canonical,
+                    post=kwargs.blog_post,
+                    image=og_image,
+                    site_name=site_name,
+                )
+            else:
+                article_jsonld = _build_article_jsonld(
+                    canonical=kwargs.canonical,
+                    title=title,
+                    description=kwargs.description,
+                    created=kwargs.created,
+                    last_updated=kwargs.last_updated,
+                    site_name=site_name,
+                )
 
         # Emit data-pagefind-weight only when the page is boosted; the neutral
         # default (1.0) leaves it off so Pagefind uses its own default. None omits
@@ -156,7 +186,7 @@ class DocPage(Component):
             "robots": "noindex,follow" if kwargs.noindex else "index,follow",
             "version": kwargs.version,
             "site_name": site_name,
-            "og_image": _resolve_og_image(kwargs.og_image, kwargs.site_url),
+            "og_image": og_image,
             "breadcrumb_jsonld": Markup(breadcrumb_jsonld) if breadcrumb_jsonld else "",  # noqa: S704 - escaped for <script>
             "article_jsonld": Markup(article_jsonld) if article_jsonld else "",  # noqa: S704 - escaped for <script>
             "edit_url": kwargs.edit_url,
@@ -171,10 +201,31 @@ class DocPage(Component):
             "next_page": next_page,
             "toc_items": toc_items,
             # Add an <h1> from the title only when the content brings none.
-            "inject_title": bool(title) and not kwargs.content_has_h1,
+            "inject_title": bool(title) and not kwargs.content_has_h1 and not kwargs.blog_post,
             "content_html": Markup(kwargs.content_html),  # noqa: S704 - trusted pipeline output
             "last_updated": last_updated,
             "authors": ", ".join(kwargs.authors) if kwargs.authors else "",
+            "show_version_picker": kwargs.page_scope == SCOPE_VERSIONED,
+            "blog_feed_url": kwargs.blog_feed_url,
+            "blog_post": kwargs.blog_post,
+            "blog_author": kwargs.blog_post.author if kwargs.blog_post else "",
+            "blog_author_url": kwargs.blog_post.author_url if kwargs.blog_post else "",
+            "blog_author_meta": blog_author_meta,
+            "blog_published_iso": kwargs.blog_post.published.isoformat() if kwargs.blog_post else "",
+            "blog_published_label": _format_blog_date(kwargs.blog_post.published) if kwargs.blog_post else "",
+            "blog_updated_iso": kwargs.blog_post.updated.isoformat()
+            if kwargs.blog_post and kwargs.blog_post.updated
+            else "",
+            "blog_updated_label": _format_blog_date(kwargs.blog_post.updated)
+            if kwargs.blog_post and kwargs.blog_post.updated
+            else "",
+            "blog_reading_minutes": kwargs.blog_post.reading_minutes if kwargs.blog_post else 0,
+            "blog_tags": kwargs.blog_post.tags if kwargs.blog_post else (),
+            "blog_newer": _project_blog_neighbor(kwargs.blog_newer, nav_tree, kwargs.version_prefix),
+            "blog_older": _project_blog_neighbor(kwargs.blog_older, nav_tree, kwargs.version_prefix),
+            "blog_all_posts_path": nav_tree.project_path("/blog/", kwargs.version_prefix)
+            if nav_tree is not None
+            else "/blog/",
         }
 
     template = """
@@ -204,6 +255,14 @@ class DocPage(Component):
             href="/llms.txt"
             title="llms.txt"
           >
+          <c-if cond="blog_feed_url">
+            <link
+              rel="alternate"
+              type="application/atom+xml"
+              title="Citry blog"
+              c-href="blog_feed_url"
+            >
+          </c-if>
 
           <meta property="og:type" content="article">
           <meta property="og:site_name" c-content="site_name">
@@ -215,6 +274,27 @@ class DocPage(Component):
             <meta property="og:url" c-content="canonical">
           </c-if>
           <meta property="og:image" c-content="og_image">
+          <c-if cond="blog_post">
+            <meta
+              property="article:published_time"
+              c-content="blog_published_iso"
+            >
+            <c-if cond="blog_updated_iso">
+              <meta
+                property="article:modified_time"
+                c-content="blog_updated_iso"
+              >
+            </c-if>
+            <meta
+              property="article:author"
+              c-content="blog_author_meta"
+            >
+            <meta
+              c-for="tag in blog_tags"
+              property="article:tag"
+              c-content="tag"
+            >
+          </c-if>
           <meta name="twitter:card" content="summary_large_image">
           <meta name="twitter:title" c-content="title or site_name">
           <c-if cond="description">
@@ -347,7 +427,9 @@ class DocPage(Component):
                   <span class="djc-search-trigger__label">Search</span>
                   <kbd class="djc-search-trigger__key">/</kbd>
                 </button>
-                <c-version-picker c-current_version="version" />
+                <c-if cond="show_version_picker">
+                  <c-version-picker c-current_version="version" />
+                </c-if>
                 <div
                   class="djc-theme-picker"
                   role="radiogroup"
@@ -555,7 +637,7 @@ class DocPage(Component):
                         </button>
                       </div>
                     </div>
-                    <c-if cond="version">
+                    <c-if cond="version and show_version_picker">
                       <div class="djc-overflow__row">
                         <span class="djc-overflow__label">Version</span>
                         <c-version-picker c-current_version="version" />
@@ -607,6 +689,7 @@ class DocPage(Component):
                 <div
                   c-for="section in nav_sections"
                   c-class="['djc-sidebar__section', {'djc-sidebar__section--standalone': section.is_standalone}]"
+                  c-data-area="section.key"
                 >
                   <c-if cond="section.is_standalone">
                     <a
@@ -645,7 +728,14 @@ class DocPage(Component):
                               c-class="['djc-sidebar__link', {'is-active': item.active}]"
                               c-href="item.path"
                             >
-                              {{ item.title }}
+                              <span>{{ item.title }}</span>
+                              <time
+                                c-if="item.date_iso"
+                                class="djc-sidebar__date"
+                                c-datetime="item.date_iso"
+                              >
+                                {{ item.date_label }}
+                              </time>
                             </a>
                           </li>
                         </ul>
@@ -670,7 +760,14 @@ class DocPage(Component):
                               c-class="['djc-sidebar__link', {'is-active': item.active}]"
                               c-href="item.path"
                             >
-                              {{ item.title }}
+                              <span>{{ item.title }}</span>
+                              <time
+                                c-if="item.date_iso"
+                                class="djc-sidebar__date"
+                                c-datetime="item.date_iso"
+                              >
+                                {{ item.date_label }}
+                              </time>
                             </a>
                           </li>
                         </ul>
@@ -678,26 +775,55 @@ class DocPage(Component):
                       <c-if cond="section.child_groups">
                         <div
                           c-for="group in section.child_groups"
-                          class="djc-sidebar__group"
+                          c-class="['djc-sidebar__subsection', {'djc-sidebar__group': group.collapsible, 'djc-sidebar__group--top': group.section_style}]"
                           c-data-open="'true' if group.expanded else 'false'"
                         >
-                          <button
-                            class="djc-sidebar__group-label"
-                            c-aria-expanded="'true' if group.expanded else 'false'"
-                          >
-                            <span>{{ group.label }}</span>
-                            <span class="djc-sidebar__caret">&#9662;</span>
-                          </button>
-                          <ul class="djc-sidebar__items" c-hidden="not group.expanded">
-                            <li c-for="item in group.items">
-                              <a
-                                c-class="['djc-sidebar__link', {'is-active': item.active}]"
-                                c-href="item.path"
-                              >
-                                {{ item.title }}
-                              </a>
-                            </li>
-                          </ul>
+                          <c-if cond="group.collapsible">
+                            <button
+                              class="djc-sidebar__group-label"
+                              c-aria-expanded="'true' if group.expanded else 'false'"
+                            >
+                              <span>{{ group.label }}</span>
+                              <span class="djc-sidebar__caret">&#9662;</span>
+                            </button>
+                            <ul class="djc-sidebar__items" c-hidden="not group.expanded">
+                              <li c-for="item in group.items">
+                                <a
+                                  c-class="['djc-sidebar__link', {'is-active': item.active}]"
+                                  c-href="item.path"
+                                >
+                                  <span>{{ item.title }}</span>
+                                  <time
+                                    c-if="item.date_iso"
+                                    class="djc-sidebar__date"
+                                    c-datetime="item.date_iso"
+                                  >
+                                    {{ item.date_label }}
+                                  </time>
+                                </a>
+                              </li>
+                            </ul>
+                          </c-if>
+                          <c-else>
+                            <div class="djc-sidebar__label">{{ group.label }}</div>
+                            <ul class="djc-sidebar__items">
+                              <li c-for="item in group.items">
+                                <a
+                                  c-class="['djc-sidebar__link', {'is-active': item.active}]"
+                                  c-href="item.path"
+                                >
+                                  <span>{{ item.title }}</span>
+                                  <time
+                                    c-if="item.date_iso"
+                                    class="djc-sidebar__date"
+                                    c-datetime="item.date_iso"
+                                  >
+                                    {{ item.date_label }}
+                                  </time>
+                                </a>
+                              </li>
+                            </ul>
+                          </c-else>
                         </div>
                       </c-if>
                     </c-else>
@@ -774,13 +900,97 @@ class DocPage(Component):
                 c-data-pagefind-body="searchable"
                 c-data-pagefind-weight="pagefind_weight"
               >
-                <c-if cond="inject_title">
-                  <h1>{{ title }}</h1>
+                <c-if cond="blog_post">
+                  <header class="blog-post-header">
+                    <h1>{{ title }}</h1>
+                    <p class="blog-post-header__subtitle">{{ description }}</p>
+                    <div class="blog-post-header__meta">
+                      <span class="blog-post-header__author">
+                        By
+                        <c-if cond="blog_author_url">
+                          <a c-href="blog_author_url">{{ blog_author }}</a>
+                        </c-if>
+                        <c-else>
+                          <span>{{ blog_author }}</span>
+                        </c-else>
+                      </span>
+                      <span aria-hidden="true">&middot;</span>
+                      <time c-datetime="blog_published_iso">
+                        {{ blog_published_label }}
+                      </time>
+                      <span aria-hidden="true">&middot;</span>
+                      <span>About {{ blog_reading_minutes }} min read</span>
+                    </div>
+                    <div
+                      c-if="blog_updated_iso"
+                      class="blog-post-header__updated"
+                    >
+                      Updated
+                      <time c-datetime="blog_updated_iso">
+                        {{ blog_updated_label }}
+                      </time>
+                    </div>
+                    <ul
+                      c-if="blog_tags"
+                      class="blog-tags"
+                      aria-label="Tags"
+                    >
+                      <li c-for="tag in blog_tags">{{ tag }}</li>
+                    </ul>
+                  </header>
                 </c-if>
+                <c-else>
+                  <c-if cond="inject_title">
+                    <h1>{{ title }}</h1>
+                  </c-if>
+                </c-else>
                 {{ content_html }}
               </article>
 
-              <nav c-if="prev_page or next_page" class="djc-page-nav">
+              <nav
+                c-if="blog_post"
+                class="blog-post-nav"
+                aria-label="Blog post navigation"
+              >
+                <a class="blog-post-nav__all" c-href="blog_all_posts_path">
+                  All posts
+                </a>
+                <div c-if="blog_newer or blog_older" class="djc-page-nav">
+                  <c-if cond="blog_newer">
+                    <a
+                      class="djc-page-nav__card djc-page-nav__prev"
+                      c-href="blog_newer.public_path"
+                    >
+                      <span class="djc-page-nav__direction">
+                        &larr; Newer post
+                      </span>
+                      <strong>{{ blog_newer.title }}</strong>
+                    </a>
+                  </c-if>
+                  <c-else>
+                    <div class="djc-page-nav__card djc-page-nav__placeholder"></div>
+                  </c-else>
+                  <c-if cond="blog_older">
+                    <a
+                      class="djc-page-nav__card djc-page-nav__next"
+                      c-href="blog_older.public_path"
+                    >
+                      <span class="djc-page-nav__direction">
+                        Older post &rarr;
+                      </span>
+                      <strong>{{ blog_older.title }}</strong>
+                    </a>
+                  </c-if>
+                  <c-else>
+                    <div class="djc-page-nav__card djc-page-nav__placeholder"></div>
+                  </c-else>
+                </div>
+              </nav>
+
+              <nav
+                c-if="not blog_post and (prev_page or next_page)"
+                class="djc-page-nav"
+              >
                 <c-if cond="prev_page">
                   <a
                     class="djc-page-nav__card djc-page-nav__prev"
@@ -931,78 +1141,95 @@ class DocPage(Component):
     """
 
 
-def _active_top_nav_label(current_path: str) -> str:
-    """The primary site area containing ``current_path``."""
-    current = current_path.strip("/")
-    for label, _path, prefix, _section_label in _TOP_NAV_SPECS[1:]:
-        if current == prefix or current.startswith(f"{prefix}/"):
-            return label
-    return "Docs"
-
-
-def _build_top_nav_view(current_path: str) -> list[SimpleNamespace]:
-    """Build the shared desktop and drawer top-navigation model."""
-    active_label = _active_top_nav_label(current_path)
+def _build_top_nav_view(
+    nav_tree: NavTree,
+    current_path: str,
+    version_prefix: str = "",
+) -> list[SimpleNamespace]:
+    """Build primary navigation directly from the declared area order."""
+    active_area = nav_tree.find_area(current_path)
     return [
         SimpleNamespace(
-            label=label,
-            path=path,
-            active=label == active_label,
-            aria_current="true" if label == active_label else None,
+            key=area.label,
+            label=area.label,
+            path=nav_tree.project_path(area.entry_path, version_prefix),
+            active=area is active_area,
+            aria_current="true" if area is active_area else None,
         )
-        for label, path, _prefix, _section_label in _TOP_NAV_SPECS
+        for area in nav_tree.areas
     ]
 
 
-def _sidebar_sections(sections: list[NavSection], current_path: str) -> list[NavSection]:
-    """Show only the active primary area's sections in the sidebar."""
-    active_label = _active_top_nav_label(current_path)
-    if active_label == "Docs":
-        return [section for section in sections if section.label not in _PROMOTED_SECTION_LABELS]
-    return [section for section in sections if section.label == active_label]
-
-
-def _build_nav_view(sections: list[NavSection], current_path: str) -> list[SimpleNamespace]:
-    """
-    Build the sidebar view model: a standalone link, or a category label.
-
-    A section that is just a page becomes a standalone link. A section with
-    children becomes an inert category label; if it also has its own landing
-    page, that page is surfaced as an "Overview" child so the label stays inert.
-    """
-    current = current_path.strip("/")
-    view: list[SimpleNamespace] = []
-    for section in sections:
-        has_children = bool(section.items) or bool(section.groups)
-        is_standalone = bool(section.path) and not has_children
-        section_norm = (section.path or "").strip("/")
-        collapsible = getattr(section, "collapsible", False) and has_children
-        # A collapsible section starts open when the reader is on its index page
-        # or one of its items, and closed otherwise (the sidebar JS then remembers
-        # the reader's own toggles).
-        contains_current = section_norm == current or any(item.path.strip("/") == current for item in section.items)
-        view.append(
-            SimpleNamespace(
-                label=section.label,
-                path=section.path,
-                is_standalone=is_standalone,
-                active=is_standalone and section_norm == current,
-                collapsible=collapsible,
-                expanded=collapsible and contains_current,
-                index_path=section.path if (section.path and has_children) else "",
-                index_active=bool(section.path) and has_children and section_norm == current,
-                child_items=section.items,
-                child_groups=section.groups,
-            )
+def _build_nav_view(
+    area: NavArea | None,
+    nav_tree: NavTree,
+    version_prefix: str = "",
+) -> list[SimpleNamespace]:
+    """Build the active area's sidebar model."""
+    if area is None:
+        return []
+    return [
+        SimpleNamespace(
+            key=area.label,
+            label=area.label,
+            path="",
+            is_standalone=False,
+            active=False,
+            collapsible=False,
+            expanded=True,
+            index_path="",
+            index_active=False,
+            child_items=[_project_nav_item(item, nav_tree, version_prefix) for item in area.items],
+            child_groups=[_project_nav_group(group, nav_tree, version_prefix) for group in area.groups],
         )
-    return view
+    ]
 
 
-def _build_breadcrumbs(nav_tree: NavTree, current_path: str) -> list[SimpleNamespace]:
+def _build_breadcrumbs(
+    nav_tree: NavTree,
+    current_path: str,
+    version_prefix: str = "",
+) -> list[SimpleNamespace]:
     """The breadcrumb trail with an ``is_last`` flag on the final (current) crumb."""
     crumbs = nav_tree.find_breadcrumbs(current_path)
     last = len(crumbs) - 1
-    return [SimpleNamespace(label=label, path=path, is_last=i == last) for i, (label, path) in enumerate(crumbs)]
+    return [
+        SimpleNamespace(
+            label=label,
+            path=nav_tree.project_path(path, version_prefix),
+            is_last=i == last,
+        )
+        for i, (label, path) in enumerate(crumbs)
+    ]
+
+
+def _project_nav_item(item: Any, nav_tree: NavTree, version_prefix: str) -> SimpleNamespace | None:
+    if item is None:
+        return None
+    return SimpleNamespace(
+        title=item.title,
+        path=nav_tree.project_path(item.path, version_prefix),
+        active=item.active,
+        date_iso=item.date_iso,
+        date_label=item.date_label,
+    )
+
+
+def _project_nav_group(group: Any, nav_tree: NavTree, version_prefix: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        label=group.label,
+        items=[_project_nav_item(item, nav_tree, version_prefix) for item in group.items],
+        collapsible=group.collapsible,
+        section_style=group.section_style,
+        expanded=group.expanded,
+    )
+
+
+def _project_blog_neighbor(post: Any, nav_tree: NavTree | None, version_prefix: str) -> SimpleNamespace | None:
+    if post is None:
+        return None
+    path = nav_tree.project_path(post.public_path, version_prefix) if nav_tree is not None else post.public_path
+    return SimpleNamespace(title=post.title, public_path=path)
 
 
 def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
@@ -1102,27 +1329,94 @@ def _build_article_jsonld(
     return _jsonld_dumps(data)
 
 
-def _build_breadcrumb_jsonld(canonical: str, title: str, site_url: str) -> str:
-    """A ``BreadcrumbList`` structured-data object built from the page's URL path."""
-    parsed = urlparse(canonical)
-    segments = [s for s in parsed.path.strip("/").split("/") if s]
+def _build_blog_posting_jsonld(
+    *,
+    canonical: str,
+    post: BlogPost,
+    image: str,
+    site_name: str,
+) -> str:
+    """A ``BlogPosting`` object sourced from explicit editorial metadata."""
+    # Collective project bylines are organizations; named authors remain
+    # people. This keeps the simple one-author front matter readable while
+    # emitting the structured identity search engines expect.
+    author_type = "Organization" if post.author.casefold() == "citry maintainers" else "Person"
+    author: dict[str, Any] = {
+        "@type": author_type,
+        "name": post.author,
+    }
+    if post.author_url:
+        author["url"] = _resolve_blog_author_url(post.author_url, canonical, post.public_path)
 
-    # Drop the site's own base-path prefix (e.g. a project-pages "/citry/") so the
-    # trail starts at the first content segment.
-    prefix: list[str] = []
-    base_segs = [s for s in urlparse(site_url).path.strip("/").split("/") if s]
-    if base_segs and segments[: len(base_segs)] == base_segs:
-        prefix += base_segs
-        segments = segments[len(base_segs) :]
+    data: dict[str, Any] = {
+        "@context": "https://schema.org",
+        "@type": "BlogPosting",
+        "headline": post.title,
+        "description": post.description,
+        "mainEntityOfPage": canonical,
+        "url": canonical,
+        "datePublished": post.published.isoformat(),
+        "dateModified": post.effective_updated.isoformat(),
+        "author": author,
+        "publisher": {"@type": "Organization", "name": site_name},
+        "image": image,
+    }
+    return _jsonld_dumps(data)
 
-    if not segments:
-        return ""
 
-    base_url = f"{parsed.scheme}://{parsed.netloc}/{'/'.join(prefix)}".rstrip("/")
-    items = []
-    for i, seg in enumerate(segments):
-        item_url = f"{base_url}/{'/'.join(segments[: i + 1])}/"
-        name = title if i == len(segments) - 1 else seg.replace("-", " ").replace("_", " ").title()
-        items.append({"@type": "ListItem", "position": i + 1, "name": name, "item": item_url})
+def _resolve_blog_author_url(author_url: str, canonical: str, public_path: str) -> str:
+    """Resolve a root-relative byline URL beneath the canonical site's base path."""
+    if author_url.startswith("https://"):
+        return author_url
 
-    return _jsonld_dumps({"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": items})
+    canonical_parts = urlsplit(canonical)
+    base_path = ""
+    if canonical_parts.path.endswith(public_path):
+        base_path = canonical_parts.path[: -len(public_path)]
+    author_parts = urlsplit(author_url)
+    resolved_path = f"{base_path.rstrip('/')}{author_parts.path}"
+    return urlunsplit(
+        (
+            canonical_parts.scheme,
+            canonical_parts.netloc,
+            resolved_path,
+            author_parts.query,
+            author_parts.fragment,
+        )
+    )
+
+
+def _format_blog_date(value: datetime) -> str:
+    """Format an authored Blog timestamp for visible page metadata."""
+    return value.strftime("%-d %B %Y")
+
+
+def _build_breadcrumb_jsonld(
+    canonical: str,
+    breadcrumbs: list[SimpleNamespace],
+    site_url: str,
+) -> str:
+    """Build structured breadcrumbs from the same YAML hierarchy as the UI."""
+    site_root = site_url.rstrip("/")
+    items: list[dict[str, Any]] = []
+    last = len(breadcrumbs) - 1
+    for index, crumb in enumerate(breadcrumbs):
+        item: dict[str, Any] = {
+            "@type": "ListItem",
+            "position": index + 1,
+            "name": crumb.label,
+        }
+        if index == last:
+            item["item"] = canonical
+        elif crumb.path:
+            path = crumb.path.strip("/")
+            item["item"] = f"{site_root}/{path}/" if path else f"{site_root}/"
+        items.append(item)
+
+    return _jsonld_dumps(
+        {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": items,
+        }
+    )

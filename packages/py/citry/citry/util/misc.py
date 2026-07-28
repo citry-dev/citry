@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import re
 import sys
-from dataclasses import MISSING, fields, is_dataclass
+from dataclasses import fields, is_dataclass
 from importlib import import_module
 from typing import TYPE_CHECKING, Any, NamedTuple
 from urllib import parse
 
 from typing_extensions import TypeIs
+
+from citry._schema_introspection import _inspect_schema_class
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -83,29 +85,10 @@ def get_fields(cls: Any) -> list[FieldSpec] | None:
     so it stays out of citry's dependencies; any class following the same
     protocol works.
     """
-    if not isinstance(cls, type):
+    rich_fields = _inspect_schema_class(cls)
+    if rich_fields is None:
         return None
-
-    if is_dataclass(cls):
-        return [FieldSpec(f.name, f.default is MISSING and f.default_factory is MISSING) for f in fields(cls)]
-
-    # Pydantic v2. Checked before v1: v2 classes also expose a deprecated
-    # `__fields__` alias, and reading it would warn.
-    model_fields = getattr(cls, "model_fields", None)
-    if isinstance(model_fields, dict):
-        return [FieldSpec(name, bool(info.is_required())) for name, info in model_fields.items()]
-
-    # Pydantic v1.
-    v1_fields = getattr(cls, "__fields__", None)
-    if isinstance(v1_fields, dict):
-        return [FieldSpec(name, bool(getattr(info, "required", False))) for name, info in v1_fields.items()]
-
-    # NamedTuple.
-    if issubclass(cls, tuple) and hasattr(cls, "_fields"):
-        defaults: dict[str, Any] = getattr(cls, "_field_defaults", {})
-        return [FieldSpec(name, name not in defaults) for name in cls._fields]
-
-    return None
+    return [FieldSpec(field.name, field.required) for field in rich_fields]
 
 
 def get_import_path(cls_or_fn: type | Any) -> str:

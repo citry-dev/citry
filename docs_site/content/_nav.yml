@@ -1,34 +1,127 @@
-# Navigation tree for the docs sidebar.
-# A section has EITHER a `path` (a standalone link), `items` (one level), or
-# `groups` (two levels), never more than one. Paths are clean URLs.
+# Primary site navigation. Every top-level area appears in the header, in this
+# order. Its direct items and groups make up that area's sidebar. Generated
+# navigation is declared in place with `source`.
 
-sections:
+areas:
 
-  - label: Home
-    path: /
-
-  - label: Getting started
+  - label: Docs
+    scope: versioned
     items:
-      - { title: Install Citry, path: /getting-started/installation/ }
-      - { title: Your first component, path: /getting-started/your-first-component/ }
-      - { title: Use data in components, path: /getting-started/parametrising-components/ }
-      - { title: Build a page from components, path: /getting-started/components-in-templates/ }
-      - { title: Add flexible content, path: /getting-started/adding-slots/ }
-      - { title: Add browser behavior, path: /getting-started/browser-interactivity/ }
-      - { title: Connect components in the browser, path: /getting-started/client-props-and-handlers/ }
-      - { title: Serve the page with FastAPI, path: /getting-started/fastapi/ }
-      - { title: Call Python from a click, path: /getting-started/call-python/ }
-      - { title: Keep a value between calls, path: /getting-started/state/ }
-      - { title: Handle and validate a form, path: /getting-started/forms/ }
-      - { title: Replace part of the page from Python, path: /getting-started/server-rendered-updates/ }
+      - { title: Home, path: / }
+    groups:
+      - label: Getting started
+        items:
+          - { title: Install Citry, path: /getting-started/installation/ }
+          - { title: Your first component, path: /getting-started/your-first-component/ }
+          - { title: Use data in components, path: /getting-started/data-in-components/ }
+          - { title: Build a page from components, path: /getting-started/build-page/ }
+          - { title: Add flexible content, path: /getting-started/add-slots/ }
+          - { title: Add browser behavior, path: /getting-started/browser-interactivity/ }
+          - { title: Connect components in the browser, path: /getting-started/client-props-and-handlers/ }
+          - { title: Serve a page with FastAPI, path: /getting-started/fastapi/ }
+          - { title: Call Python from a click, path: /getting-started/call-python/ }
+          - { title: Events state, path: /getting-started/state/ }
+          - { title: Handle and validate a form, path: /getting-started/forms/ }
+          - { title: Replace part of the page from Python, path: /getting-started/server-rendered-updates/ }
 
-  - label: About
+      - label: Template syntax
+        items:
+          - { title: Expressions, path: /syntax/expressions/ }
+          - { title: Dynamic attributes, path: /syntax/dynamic-attributes/ }
+          - { title: Control flow, path: /syntax/control-flow/ }
+          - { title: Comments, path: /syntax/comments/ }
+          - { title: Nested templates, path: /syntax/nested-templates/ }
+
+      - label: Concepts
+        items:
+          - { title: Components, path: /concepts/components/ }
+          - { title: Client interactivity, path: /concepts/client-interactivity/ }
+          - { title: Registration and autodiscovery, path: /concepts/registration/ }
+          - { title: Subclassing components, path: /concepts/subclassing/ }
+          - { title: Slots, path: /concepts/slots/ }
+          - { title: Typing and validation, path: /concepts/typing-and-validation/ }
+          - { title: Rendering, path: /concepts/rendering/ }
+          - { title: HTML attributes, path: /concepts/html-attributes/ }
+          - { title: Provide and inject, path: /concepts/provide-and-inject/ }
+          - { title: Error boundaries, path: /concepts/error-boundaries/ }
+
+      - label: Events
+        items:
+          - { title: Server events, path: /events/ }
+          - { title: Keep state between calls, path: /events/state/ }
+          - { title: Handle and validate forms, path: /events/forms/ }
+          - { title: Bind events in templates, path: /events/bindings/ }
+          - { title: Update the page from a handler, path: /events/actions/ }
+          - { title: Use event routes directly, path: /events/http/ }
+
+      - label: Advanced
+        items:
+          - { title: Dynamic components, path: /advanced/dynamic-components/ }
+          - { title: JS and CSS dependencies, path: /advanced/js-and-css-dependencies/ }
+          - { title: Alpine runtime, path: /advanced/alpine-runtime/ }
+          - { title: HTML fragments, path: /advanced/html-fragments/ }
+          - { title: Performance, path: /advanced/performance/ }
+          - { title: Caching, path: /advanced/caching/ }
+          - { title: Extensions, path: /advanced/extensions/ }
+          - { title: Component hooks, path: /advanced/hooks/ }
+          - { title: Sharing components, path: /advanced/share-components/ }
+          - { title: Testing components, path: /advanced/testing/ }
+          - { title: Command line, path: /cli/ }
+
+      - label: Guides
+        items:
+          - { title: Web frameworks, path: /web-frameworks/ }
+          - { title: Troubleshooting, path: /guides/troubleshooting/ }
+          - { title: Hot reload, path: /guides/dev-server/ }
+          - { title: Migrate from Component.View, path: /guides/migrate-from-component-view/ }
+          - { title: Migrate from django-unicorn, path: /guides/migrate-from-django-unicorn/ }
+          - { title: Migrate from Tetra, path: /guides/migrate-from-tetra/ }
+          - { title: Migrate from livecomponents, path: /guides/migrate-from-livecomponents/ }
+          - { title: Events migration parity, path: /guides/events-migration-parity/ }
+
+      - label: About
+        items:
+          - { title: Compatibility, path: /about/compatibility/ }
+          - { title: Benchmarks, path: /about/benchmarks/ }
+          - { title: Security, path: /security/ }
+
+      - label: Release notes
+        source: releases
+        collapsible: true
+        section_style: true
+
+  - label: Examples
+    scope: versioned
     items:
-      - { title: Compatibility, path: /about/compatibility/ }
-      - { title: Benchmarks, path: /about/benchmarks/ }
-      - { title: Security, path: /security/ }
+      - { title: Overview, path: /examples/ }
+    groups:
+      - label: Components
+        collapsible: true
+        items:
+          - { title: Card, path: /examples/card/ }
+          - { title: Slots, path: /examples/slots/ }
+          - { title: Provide and inject, path: /examples/provide-inject/ }
+          - { title: Error boundary, path: /examples/error-fallback/ }
+          - { title: Recursion, path: /examples/recursion/ }
+
+      - label: Template syntax
+        collapsible: true
+        items:
+          - { title: Control flow, path: /examples/control-flow/ }
+
+      - label: Browser and server
+        collapsible: true
+        items:
+          - { title: Tabs, path: /examples/tabs/ }
+          - { title: Form submission, path: /examples/form-submission/ }
+          - { title: Fragments, path: /examples/fragments/ }
+
+  - label: Reference
+    source: reference
+    scope: versioned
 
   - label: Community
+    scope: site
     items:
       - { title: People, path: /community/people/ }
       - { title: Getting help, path: /community/help/ }
@@ -38,5 +131,7 @@ sections:
       - { title: AI bot policy, path: /community/ai-bot-policy/ }
       - { title: License, path: /community/license/ }
 
-  - label: Examples
-    path: /examples/
+  - label: Blog
+    source: blog
+    scope: site
+    entry: { title: All posts, path: /blog/ }

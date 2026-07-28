@@ -1,6 +1,6 @@
 """
 Tests for the ``<c-error-fallback>`` built-in component
-(docs/design/on_render.md section 7): an error boundary that catches render
+(docs/design/component_on_render.md section 7): an error boundary that catches render
 errors in its guarded content (the default slot) and shows the ``fallback``
 attribute or the ``fallback`` fill instead.
 """
@@ -32,6 +32,20 @@ class TestErrorFallback:
         html = Page().render().serialize()
         assert ">all good</b>" in html
         assert "Oops" not in html
+
+    def test_fallback_fill_suppressed_when_content_is_safe(self):
+        # The fill form of the fallback also stays unrendered when the guarded
+        # content renders fine (the attribute form is locked above).
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = (
+                '<main><c-error-fallback><c-fill name="default">SAFE</c-fill>'
+                '<c-fill name="fallback">FB</c-fill></c-error-fallback></main>'
+            )
+
+        assert Page().render().serialize() == '<main data-cid-c1="">SAFE</main>'
 
     def test_fallback_attribute_on_child_component_error(self):
         c = Citry()
@@ -72,7 +86,7 @@ class TestErrorFallback:
             template = (
                 "<main><c-error-fallback>"
                 '<c-fill name="default"><c-failing /></c-fill>'
-                '<c-fill name="fallback" data="d"><p>Caught: {{ d["error"] }}</p></c-fill>'
+                '<c-fill name="fallback" data="d"><p>Caught: {{ d.error }}</p></c-fill>'
                 "</c-error-fallback></main>"
             )
 
@@ -84,10 +98,10 @@ class TestErrorFallback:
         caught = []
         c = Citry()
         failing = _make_failing(c)
-        error_fallback = c.registry.get("error-fallback")
+        error_fallback = c.get("error-fallback")
 
         def fallback(ctx):
-            caught.append(ctx.data["error"])
+            caught.append(ctx.data.error)
             return "recovered"
 
         html = (
@@ -100,6 +114,43 @@ class TestErrorFallback:
 
         assert "recovered" in html
         assert isinstance(caught[0], ValueError)
+
+    def test_fallback_kwarg_from_python(self):
+        # Same contract as the template's fallback attribute, entered from
+        # Python: content when the default slot renders, fallback when it raises.
+        c = Citry()
+        failing = _make_failing(c)
+        error_fallback = c.get("error-fallback")
+
+        ok = error_fallback(fallback="FB", slots={"default": lambda _ctx: "SAFE"}).render().serialize()
+        assert ok == "SAFE"
+
+        caught = error_fallback(fallback="FB", slots={"default": lambda _ctx: failing()}).render().serialize()
+        assert caught == "FB"
+
+    def test_fallback_slot_suppressed_from_python_when_content_is_safe(self):
+        # The slot form of the fallback stays unrendered on the Python path
+        # when the default slot renders fine.
+        c = Citry()
+        error_fallback = c.get("error-fallback")
+
+        slots = {"default": lambda _ctx: "SAFE", "fallback": lambda _ctx: "FB"}
+        assert error_fallback(slots=slots).render().serialize() == "SAFE"
+
+    def test_no_fallback_from_python_renders_empty_on_error(self):
+        c = Citry()
+        failing = _make_failing(c)
+        error_fallback = c.get("error-fallback")
+
+        html = error_fallback(slots={"default": lambda _ctx: failing()}).render().serialize()
+        assert html == ""
+
+    def test_fallback_slot_only_from_python_renders_empty(self):
+        c = Citry()
+        error_fallback = c.get("error-fallback")
+
+        html = error_fallback(slots={"fallback": lambda _ctx: "FB"}).render().serialize()
+        assert html == ""
 
     def test_attribute_and_slot_together_raise(self):
         c = Citry()
@@ -129,6 +180,28 @@ class TestErrorFallback:
         assert "after" in html
         assert "<i>" not in html
 
+    def test_fallback_attribute_without_content_renders_nothing(self):
+        # A fallback with no guarded content has nothing to fail, so nothing
+        # shows.
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<main><c-error-fallback fallback="FB"></c-error-fallback></main>'
+
+        html = Page().render().serialize()
+        assert html == '<main data-cid-c1=""></main>'
+
+    def test_fallback_fill_without_content_renders_nothing(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<main><c-error-fallback><c-fill name="fallback">FB</c-fill></c-error-fallback></main>'
+
+        html = Page().render().serialize()
+        assert html == '<main data-cid-c1=""></main>'
+
     def test_rest_of_page_renders_around_caught_error(self):
         c = Citry()
         _make_failing(c)
@@ -144,6 +217,45 @@ class TestErrorFallback:
         html = Page().render().serialize()
         assert "Oops" in html
         assert ">untouched</aside>" in html
+
+    def test_boundaries_inside_loop_catch_independently(self):
+        # One boundary per <c-for> iteration: failing iterations show their
+        # fallback (which can read the loop variable), succeeding ones render
+        # normally, in source order.
+        c = Citry()
+
+        class Sometimes(Component):
+            citry = c
+            template = "Item: {{ name }}"
+
+            def template_data(self, kwargs, slots):
+                if kwargs["broken"]:
+                    raise ValueError("loop boom")
+                return {"name": kwargs["name"]}
+
+        class Page(Component):
+            citry = c
+            template = (
+                '<div><c-for each="item in items">'
+                "<c-error-fallback>"
+                '<c-fill name="default"><c-sometimes c-name="item[\'name\']" c-broken="item[\'broken\']" /></c-fill>'
+                "<c-fill name=\"fallback\">ERROR: {{ item['name'] }}</c-fill>"
+                "</c-error-fallback> "
+                "</c-for></div>"
+            )
+
+            def template_data(self, kwargs, slots):
+                return {
+                    "items": [
+                        {"name": "i1", "broken": False},
+                        {"name": "i2", "broken": True},
+                        {"name": "i3", "broken": False},
+                        {"name": "i4", "broken": True},
+                    ],
+                }
+
+        html = Page().render().serialize()
+        assert html == '<div data-cid-c1="">Item: i1 ERROR: i2 Item: i3 ERROR: i4 </div>'
 
     def test_nested_boundaries_inner_wins(self):
         c = Citry()
@@ -188,8 +300,9 @@ class TestErrorFallback:
         assert "outer caught" in html
 
     def test_escaped_error_names_guarded_child(self):
-        # With no boundary handling it, the error's path names the failing
-        # component inside the boundary.
+        # The same failing child in both shapes: guarded, the boundary
+        # swallows the error and the page renders; bare, the error escapes
+        # with a path naming the failing component.
         c = Citry()
         _make_failing(c)
 
@@ -200,6 +313,8 @@ class TestErrorFallback:
         class Bare(Component):
             citry = c
             template = "<main><c-failing /></main>"
+
+        assert Page().render().serialize() == '<main data-cid-c1=""></main>'
 
         with pytest.raises(ValueError, match="boom") as exc_info:
             Bare().render()

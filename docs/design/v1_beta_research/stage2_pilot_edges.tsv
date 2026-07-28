@@ -1,0 +1,57 @@
+edge	from_node	to_node	relationship	evidence_state
+E01	N02	N01	public Events package exposes its actions vocabulary	observed
+E02	N01	N03	ReplaceUrl constructor is consumed by the result encoder	observed
+E03	N03	N04	encoded action enters dispatcher result completion	observed
+E04	N04	N05	dispatcher output must satisfy the normative result schema	verified_by_N11
+E05	N05	N06	schema shape implements the normative action vocabulary	observed
+E06	N06	N07	canonical specification history handler defines the fixture call	observed
+E07	N06	N08	canonical specification history handler defines the fixture result	observed
+E08	N07	N11	fixture call is replayed through the Python dispatcher	verified
+E09	N08	N11	dispatch result is schema-validated and compared with exact fixture JSON	verified
+E10	N09	N11	fixture index selects the history pair for parametrized replay	verified
+E11	N10	N07	fixture documentation identifies the history call case	observed
+E12	N10	N08	fixture documentation identifies the history result case	observed
+E13	N05	N12	browser runtime implements the schema's url and mode fields	observed
+E14	N12	N13	package build command bundles the TypeScript source	verified
+E15	N13	N14	build output is the working-tree Python-package runtime	verified
+E16	N15	N14	canary compares a fresh esbuild output byte-for-byte with the working-tree generated bundle	verified
+E17	N16	N13	client README documents the source/build ownership rule	observed
+E18	N14	N17	route reads and serves the generated bundle	verified_by_N20
+E19	N14	N18	emission reads the same bundle for inline delivery	observed
+E20	N17	N20	route test requests ext/events/runtime.js	verified
+E21	N18	N20	route test proves the emitted and served paths agree	verified
+E22	N01	N19	unit test covers ReplaceUrl construction and invalid values	verified
+E23	N03	N19	unit test covers exact url/replace wire encoding	verified
+E24	N04	N21	dispatch test treats history output as visible behavior	verified
+E25	N01	N22	browser test obtains ReplaceUrl from a real Python handler	verified
+E26	N04	N22	browser test exercises a server result envelope	verified
+E27	N12	N22	browser test exercises url validation and History API application	verified
+E28	N14	N22	browser test loads the source-checkout generated runtime	verified
+E29	N12	N23	transport test proves late URL actions are dropped with the timed-out response	verified
+E30	N14	N24	generated Events runtime depends on citry package-data inclusion	failed_artifact_check
+E31	N24	N25	publish workflow builds the package described by pyproject.toml	observed
+E32	N25	N14	publish smoke should verify the Events runtime but currently verifies only ext/dependencies/client/citry.js	missing_check
+E33	N26	N01	governing design defines the sibling public constructors	observed
+E34	N26	N05	governing design defines the url wire action	observed
+E35	N26	N12	governing design defines browser validation, state preservation, and failure behavior	observed
+E36	N27	N01	implementation plan records initial reservation followed by delivery	observed
+E37	N28	N01	research evidence recommends the sibling-constructor shape	observed
+E38	N01	N29	public guide documents both history actions	observed
+E39	N01	N30	API reference roster includes both history action classes	observed
+E40	N01	N31	migration parity page claims the actions are shipped	observed
+E41	N01	N32	Tetra migration guide directs users to the actions	observed
+E42	N01	N33	livecomponents migration guide maps its actions to Citry	observed
+E43	N01	N34	unreleased changelog announces both constructors	observed
+E44	N35	N04	call schema constrains the capability input consumed by the dispatcher	observed
+E45	N12	N35	browser runtime advertises the schema's url capability	observed
+E46	N36	N05	protocol validator loads and checks the result schema	observed
+E47	N36	N07	protocol validator checks the history call fixture and index alignment	observed
+E48	N36	N08	protocol validator checks the history result fixture and result alignment	observed
+E49	N37	N36	pytest package test invokes the protocol self-check	observed
+E50	N14	N38	emission tests load the generated runtime in inline and mounted modes	observed
+E51	N18	N38	emission tests verify runtime injection behavior	observed
+E52	N39	N15	repository gate invokes the client package check containing the exact-bundle canary	configured
+E53	N40	N22	change-time CI runs the full browser suite in Chromium	configured
+E54	N41	N11	protocol README claims the Python conformance state	claim_needs_version_reconciliation
+E55	N40	N12	change-time CI adds compact Firefox and WebKit coverage for shared Alpine behavior	configured_partial
+E56	N42	N22	weekly CI runs the full browser suite on Chromium, Firefox, and WebKit	configured

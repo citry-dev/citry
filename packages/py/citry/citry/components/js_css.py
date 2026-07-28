@@ -56,7 +56,7 @@ def _placeholder_render(component: Component, tag_name: str, key: str) -> CitryR
 def make_js_component(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-js>`` component for one Citry instance."""
 
-    class Js(Component):
+    class Js(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
         """Marks where the collected ``<script>`` dependency tags are placed."""
 
         citry = citry_instance
@@ -71,7 +71,7 @@ def make_js_component(citry_instance: Citry) -> type[Component]:
 def make_css_component(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-css>`` component for one Citry instance."""
 
-    class Css(Component):
+    class Css(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
         """Marks where the collected stylesheet dependency tags are placed."""
 
         citry = citry_instance
