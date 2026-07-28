@@ -1,0 +1,49 @@
+<!--citry:g1:8117d606753a65bf5196956412183dc8373b2948f1d7f7d6f236c6c39a26175f:0:i:1:s--><!doctype html><html data-cid-cfox85o3m lang=en><head><meta charset=utf-8><title>Tabs example</title><style data-citry-css-class=Tabs_118635>.demo-tabs{border:1px solid #d0d7de;border-radius:8px;max-width:30rem;font-family:system-ui,sans-serif;overflow:hidden}.demo-tabs__bar{background:#f6f8fa;border-bottom:1px solid #d0d7de;display:flex}.demo-tabs__tab{font:inherit;color:#57606a;cursor:pointer;background:0 0;border:none;border-bottom:2px solid #0000;flex:1;padding:.6rem 1rem}.demo-tabs__tab:hover{background:#eef1f4}.demo-tabs__tab[data-active=true]{color:#0969da;border-bottom-color:#0969da;font-weight:600}.demo-tabs__panel{color:#24292f;padding:1rem 1.25rem;line-height:1.5}.demo-tabs__panel[hidden]{display:none}</style></head><body style=margin:0;padding:1.5rem;font-family:system-ui,sans-serif><!--citry:g1:8117d606753a65bf5196956412183dc8373b2948f1d7f7d6f236c6c39a26175f:0:i:2:s--><div class=demo-tabs data-cid=cfox85o3o data-cid-cfox85o3o data-citry-root><div aria-label="Example sections" class=demo-tabs__bar role=tablist><button aria-controls=demo-tabs-cfox85o3o-panel-0 aria-selected=true class=demo-tabs__tab data-active=true data-index=0 id=demo-tabs-cfox85o3o-tab-0 role=tab tabindex=0 type=button>Overview</button><button aria-controls=demo-tabs-cfox85o3o-panel-1 aria-selected=false class=demo-tabs__tab data-active=false data-index=1 id=demo-tabs-cfox85o3o-tab-1 role=tab tabindex=-1 type=button>Details</button><button aria-controls=demo-tabs-cfox85o3o-panel-2 aria-selected=false class=demo-tabs__tab data-active=false data-index=2 id=demo-tabs-cfox85o3o-tab-2 role=tab tabindex=-1 type=button>Notes</button></div><div class=demo-tabs__panels><div aria-labelledby=demo-tabs-cfox85o3o-tab-0 class=demo-tabs__panel data-index=0 id=demo-tabs-cfox85o3o-panel-0 role=tabpanel tabindex=0>Citry ships a tiny bit of JS with each component. No framework, no CDN.</div><div aria-labelledby=demo-tabs-cfox85o3o-tab-1 class=demo-tabs__panel data-index=1 hidden id=demo-tabs-cfox85o3o-panel-1 role=tabpanel tabindex=0>Clicking a tab toggles the hidden attribute on its panel, all client-side.</div><div aria-labelledby=demo-tabs-cfox85o3o-tab-2 class=demo-tabs__panel data-index=2 hidden id=demo-tabs-cfox85o3o-panel-2 role=tabpanel tabindex=0>The active tab is styled with the component's own CSS via a data attribute.</div></div></div><!--citry:g1:8117d606753a65bf5196956412183dc8373b2948f1d7f7d6f236c6c39a26175f:0:i:2:e--><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"TabsPage_03a3df","className":"TabsPage"},{"classId":"Tabs_118635","className":"Tabs"}],"componentExecutionOrderConstraints":[{"childRenderId":"cfox85o3o","invocationId":2,"parentRenderId":"cfox85o3m"}],"componentInstances":[{"classId":"TabsPage_03a3df","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cfox85o3m","transparent":false},{"classId":"Tabs_118635","instanceId":2,"invocationId":2,"parentRenderId":"cfox85o3m","renderId":"cfox85o3o","transparent":false}],"fills":[],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"parentRegionId":null,"sourceClassId":"TabsPage_03a3df","sourceRenderId":"cfox85o3m","tagName":"tabs","targetClassId":"Tabs_118635","targetRenderId":"cfox85o3o"}],"slotRegions":[],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"8117d606753a65bf5196956412183dc8373b2948f1d7f7d6f236c6c39a26175f"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1RhYnNfMTE4NjM1LjljZGFjZGQ1YWJjMS5qcw=="], "css": ["L2NpdHJ5L2NhY2hlL1RhYnNfMTE4NjM1LmI5NzU0ZWFlNzkwMC5jc3M="]}, "fetch": {"js": [], "css": []}, "calls": [["VGFic18xMTg2MzU=", "Y2ZveDg1bzNv", null]], "cssInstances": [], "graph": "8117d606753a65bf5196956412183dc8373b2948f1d7f7d6f236c6c39a26175f"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      Citry.manager.registerComponent("Tabs_118635", ({ els }) => {
+        const root = els[0];
+        const tabs = root.querySelectorAll(".demo-tabs__tab");
+        const panels = root.querySelectorAll(".demo-tabs__panel");
+
+        const activate = (nextTab, moveFocus = false) => {
+          const nextIndex = nextTab.getAttribute("data-index");
+          tabs.forEach((tab) => {
+            const selected = tab === nextTab;
+            tab.setAttribute("aria-selected", selected ? "true" : "false");
+            tab.setAttribute("data-active", selected ? "true" : "false");
+            tab.tabIndex = selected ? 0 : -1;
+          });
+          panels.forEach((panel) => {
+            if (panel.getAttribute("data-index") === nextIndex) {
+              panel.removeAttribute("hidden");
+            } else {
+              panel.setAttribute("hidden", "");
+            }
+          });
+          if (moveFocus) {
+            nextTab.focus();
+          }
+        };
+
+        tabs.forEach((tab, index) => {
+          tab.addEventListener("click", () => activate(tab));
+          tab.addEventListener("keydown", (event) => {
+            let nextIndex;
+            if (event.key === "ArrowRight") {
+              nextIndex = (index + 1) % tabs.length;
+            } else if (event.key === "ArrowLeft") {
+              nextIndex = (index - 1 + tabs.length) % tabs.length;
+            } else if (event.key === "Home") {
+              nextIndex = 0;
+            } else if (event.key === "End") {
+              nextIndex = tabs.length - 1;
+            } else {
+              return;
+            }
+            event.preventDefault();
+            activate(tabs[nextIndex], true);
+          });
+        });
+      });
+    
+})();</script></body></html><!--citry:g1:8117d606753a65bf5196956412183dc8373b2948f1d7f7d6f236c6c39a26175f:0:i:1:e-->
