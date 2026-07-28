@@ -12,7 +12,7 @@ inside.
 The finished card runs with plain Python. You do not need to set up Django,
 FastAPI, or another web framework.
 
-<a href="/examples/card/" target="_blank">See the finished result</a>
+<a href="/examples/card/demo/" target="_blank">See the finished result</a>
 before you start.
 
 ## Before you start
@@ -42,7 +42,8 @@ The [`template`][citry.Component.template] is ordinary HTML with one Citry tag:
 </article>
 ```
 
-`<c-slot />` marks the place where the card's content will appear. When you
+[`<c-slot />`](/reference/builtins/#c-slot) marks the place where the card's
+content will appear. When you
 write this:
 
 ```html
@@ -211,6 +212,6 @@ You now have a Card that:
 - lets several Cards use different colors; and
 - reports an error when required information is missing.
 
-You can [open the Card recipe](/examples/#card) to compare the component,
+You can [open the Card recipe](/examples/card/) to compare the component,
 complete page, and live result. To continue the guided journey, [use Python
-data in components](/getting-started/parametrising-components/).
+data in components](/getting-started/data-in-components/).

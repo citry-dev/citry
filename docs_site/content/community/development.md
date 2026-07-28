@@ -17,7 +17,7 @@ shorter contributor overview, see the [contributing guide](/community/contributi
 
 ## Getting set up
 
-You need three things on your machine:
+You need four things on your machine:
 
 - [uv](https://docs.astral.sh/uv/){: target="_blank" rel="noopener"} -
   Python dependency manager.
@@ -227,11 +227,25 @@ python -m docs_site serve-built
 
 ## Writing docstrings
 
-The API reference under `/reference/` is generated from the docstrings on
-citry's public API. The build introspects the `citry` package with
+Most API Reference pages under `/reference/` are generated from the docstrings
+on Citry's public Python API. The build introspects the `citry` package with
 [griffe](https://mkdocstrings.github.io/griffe/){: target="_blank" rel="noopener"} and renders one entry per public symbol (the names exported
 from `citry`), so the docstring you put on a public class, function, or
 attribute is exactly what a reader sees on its reference page.
+
+The [Built-in tags](/reference/builtins/) page is the exception. Not all Citry `<c-*` tags have a Python equivalent. That's why their reference has to be managed manually in `docs_site/content/reference/builtins.md`:
+
+- Tags that are Python components (inherit `Component`) - their source of truth is their `Component` subclass:
+    - `<c-component>`, `<c-element>`
+    - `<c-provide>`
+    - `<c-cache>`
+    - `<c-error-fallback>`
+    - `<c-css>`, `<c-js>`
+- Tags with no Python equivalent - source of truth is in `builtins.md`:
+    - `<c-if>`, `<c-elif>`, `<c-else>`
+    - `<c-for>`, `<c-empty>`
+    - `<c-slot>`, `<c-fill>`
+    - `<c-raw>`
 
 Write the docstrings for the reader: someone meeting the symbol for the first time, in plain language,
 not for a contributor reading the source.
