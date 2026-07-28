@@ -28,6 +28,7 @@ from urllib.parse import urlsplit, urlunsplit
 from markupsafe import Markup
 
 from citry import Component
+from docs_site._internal.components.search_modal import DEFAULT_QUICK_LINKS
 from docs_site._internal.nav import SCOPE_VERSIONED
 
 if TYPE_CHECKING:
@@ -226,6 +227,17 @@ class DocPage(Component):
             "blog_all_posts_path": nav_tree.project_path("/blog/", kwargs.version_prefix)
             if nav_tree is not None
             else "/blog/",
+            # The header logo and the search overlay's popular-page links are
+            # chrome, so DocPage projects them the same way it projects the nav:
+            # inside a version snapshot they must stay in that snapshot instead
+            # of jumping to the current docs.
+            "home_path": nav_tree.project_path("/", kwargs.version_prefix) if nav_tree is not None else "/",
+            "search_quick_links": [
+                SimpleNamespace(label=link.label, path=nav_tree.project_path(link.path, kwargs.version_prefix))
+                for link in DEFAULT_QUICK_LINKS
+            ]
+            if nav_tree is not None
+            else DEFAULT_QUICK_LINKS,
         }
 
     template = """
@@ -381,7 +393,7 @@ class DocPage(Component):
                   />
                 </svg>
               </button>
-              <a class="djc-logo" href="/">
+              <a class="djc-logo" c-href="home_path">
                 <span class="djc-logo__wordmark">Citry</span>
               </a>
               <nav class="djc-header__nav" aria-label="Primary navigation">
@@ -1131,7 +1143,7 @@ class DocPage(Component):
             </svg>
           </button>
 
-          <c-search-modal />
+          <c-search-modal c-quick_links="search_quick_links" />
 
           <c-js />
           <script src="/static/js/site.js"></script>
