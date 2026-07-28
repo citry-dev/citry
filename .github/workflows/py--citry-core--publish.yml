@@ -26,6 +26,7 @@ jobs:
   # version (the release job needs this, so a mismatch blocks the publish).
   # Skipped cleanly on manual workflow_dispatch, which has no version tag.
   verify-version:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -41,6 +42,7 @@ jobs:
           fi
 
   linux:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -80,6 +82,7 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/dist
 
   musllinux:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -115,6 +118,7 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/dist
 
   windows:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -172,6 +176,7 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/dist
 
   macos:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -224,6 +229,7 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/dist
 
   sdist:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -242,10 +248,176 @@ jobs:
           name: wheels-sdist
           path: ${{ env.PROJECT_DIR }}/dist
 
+  # One-time addition for citry-core 1.4.0. The exact wheel was built twice
+  # from the release tag, passed the three-browser Pyodide matrix, and is
+  # staged on the matching GitHub Release. Keep this on its dedicated release
+  # branch; future tags must build the PyEmscripten wheel with the full
+  # inventory before their regular release job.
+  publish-pyemscripten-1-4-0:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: write
+      id-token: write
+    env:
+      RELEASE_TAG: citry-core@1.4.0
+      WHEEL_FILE: citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl
+      WHEEL_BYTES: "7011715"
+      WHEEL_SHA256: 765e4211b1d333800d9d620c6f310f0a06ddac1574fbfac4af1bd53c9c31c964
+      PYODIDE_VERSION: 314.0.3
+    steps:
+      - name: Download the staged release wheel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir dist
+          gh release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$WHEEL_FILE" \
+            --dir dist
+
+      - name: Verify wheel identity, metadata, and RECORD
+        run: |
+          wheel="dist/$WHEEL_FILE"
+          test "$(wc -c < "$wheel" | tr -d ' ')" = "$WHEEL_BYTES"
+          printf '%s  %s\n' "$WHEEL_SHA256" "$wheel" | sha256sum --check --strict
+          unzip -t "$wheel" >/dev/null
+          python - <<'PY'
+          import base64
+          import csv
+          import hashlib
+          import io
+          import os
+          import zipfile
+
+          wheel = f"dist/{os.environ['WHEEL_FILE']}"
+          with zipfile.ZipFile(wheel) as archive:
+              names = set(archive.namelist())
+              metadata_names = [name for name in names if name.endswith(".dist-info/METADATA")]
+              wheel_names = [name for name in names if name.endswith(".dist-info/WHEEL")]
+              record_names = [name for name in names if name.endswith(".dist-info/RECORD")]
+              assert len(metadata_names) == len(wheel_names) == len(record_names) == 1
+              metadata = archive.read(metadata_names[0]).decode("utf-8")
+              wheel_metadata = archive.read(wheel_names[0]).decode("utf-8")
+              assert "Name: citry_core\n" in metadata
+              assert "Version: 1.4.0\n" in metadata
+              assert "Tag: cp314-cp314-pyemscripten_2026_0_wasm32\n" in wheel_metadata
+              rows = list(csv.reader(io.TextIOWrapper(
+                  archive.open(record_names[0]), encoding="utf-8", newline=""
+              )))
+              assert {row[0] for row in rows} == names
+              for name, digest, size in rows:
+                  data = archive.read(name)
+                  if name == record_names[0]:
+                      assert digest == size == ""
+                      continue
+                  algorithm, encoded = digest.split("=", 1)
+                  assert algorithm == "sha256"
+                  actual = base64.urlsafe_b64encode(
+                      hashlib.sha256(data).digest()
+                  ).rstrip(b"=").decode()
+                  assert encoded == actual, name
+                  assert int(size) == len(data), name
+          PY
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.10.12"
+
+      - name: Check distribution metadata
+        run: uvx --from twine==6.2.0 twine check "dist/$WHEEL_FILE"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Smoke-test in pinned Pyodide
+        run: |
+          npm install \
+            --prefix "$RUNNER_TEMP/pyodide-smoke" \
+            --no-audit \
+            --no-fund \
+            --ignore-scripts \
+            "pyodide@$PYODIDE_VERSION"
+          PYODIDE_DIR="$RUNNER_TEMP/pyodide-smoke/node_modules/pyodide" \
+          WHEEL="$PWD/dist/$WHEEL_FILE" \
+          node --input-type=module <<'JS'
+          import path from "node:path";
+          import process from "node:process";
+          import { pathToFileURL } from "node:url";
+
+          const pyodideDirectory = path.resolve(process.env.PYODIDE_DIR);
+          const wheel = path.resolve(process.env.WHEEL);
+          const { loadPyodide } = await import(
+            pathToFileURL(path.join(pyodideDirectory, "pyodide.mjs"))
+          );
+          const pyodide = await loadPyodide({ indexURL: `${pyodideDirectory}/` });
+          await pyodide.loadPackage([wheel]);
+          const result = pyodide.runPython(`
+          from importlib.metadata import version
+          from citry_core.html_transform import mark_html
+          from citry_core.safe_eval import safe_eval
+          from citry_core.template_parser import compile_template, parse_template
+
+          parsed = parse_template("<h1>{{ title }}</h1>")
+          compiled = compile_template(parsed)
+          segments, placeholders = mark_html(
+              "<main><p>Hello</p></main>", ["data-citry"], "c-render-id"
+          )
+          assert version("citry-core") == "1.4.0"
+          assert [token.content for token in parsed.used_variables] == ["title"]
+          assert "def generate_template" in compiled
+          assert safe_eval("value * 2")({"value": 21}) == 42
+          assert segments[0] == '<main data-citry=""><p>Hello</p></main>'
+          assert placeholders == []
+          "citry-core 1.4.0 Pyodide smoke passed"
+          `);
+          console.log(result);
+          JS
+
+      - name: Publish the single wheel to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+
+      - name: Verify the public PyPI artifact
+        run: |
+          for attempt in $(seq 1 12); do
+            result=$(curl --fail --silent --show-error \
+              https://pypi.org/pypi/citry-core/1.4.0/json | \
+              jq --arg filename "$WHEEL_FILE" \
+                 --arg sha "$WHEEL_SHA256" \
+                 --argjson bytes "$WHEEL_BYTES" \
+                 '[.urls[] | select(
+                   .filename == $filename and
+                   .digests.sha256 == $sha and
+                   .size == $bytes
+                 )] | length')
+            if [ "$result" = "1" ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "PyPI did not report the expected wheel, size, and hash" >&2
+          exit 1
+
+      - name: Attach the publish attestation to the GitHub Release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          attest="dist/$WHEEL_FILE.publish.attestation"
+          if [ -f "$attest" ]; then
+            gh release upload "$RELEASE_TAG" "$attest" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          fi
+
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
+    if: ${{ startsWith(github.ref, 'refs/tags/') && github.event_name != 'workflow_dispatch' }}
     needs: [verify-version, linux, musllinux, windows, macos, sdist]
     # Trusted Publishing target. Configure a PyPI publisher for this repo, the
     # workflow file py--citry-core--publish.yml, and the environment 'pypi'.
