@@ -27,9 +27,7 @@ classifiers = [
 ]
 license = "MIT"
 license-files = ["LICENSE"]
-# Workspace placeholder only. Before publishing citry-ui, replace this with
-# the first released Citry range that contains ComponentLibrary.
-dependencies = ["citry>=0.3.0,<0.4.0"]
+dependencies = ["citry>=0.3.1,<0.4.0"]
 
 [dependency-groups]
 dev = ["pytest>=8.3.5"]

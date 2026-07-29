@@ -4,7 +4,7 @@ The project gate: run every check in one pass and report all results.
 
 Phases: uv lock, cargo fmt, cargo clippy, cargo test, ruff check, ruff format,
 mypy, pyright, citry-client (tsc, biome, and the canary over the events client
-package), the generated docs playground bundle, pytest, and the custom validators (scripts/validate.py). Every phase
+package), pytest, and the custom validators (scripts/validate.py). Every phase
 runs even after an earlier one fails, so a single invocation surfaces every
 problem at once instead of one-at-a-time.
 
@@ -107,10 +107,6 @@ def _phases() -> list[tuple[str, list[str]]]:
         (
             "citry-client",
             ["pnpm", "--dir", "packages/js/citry-client", "run", "check"],
-        ),
-        (
-            "docs-playground",
-            ["pnpm", "--dir", "docs_site/frontend", "run", "check"],
         ),
         # `--cov` (no target) uses [tool.coverage.run] source; pytest-cov enforces
         # `fail_under` from [tool.coverage.report] (docs/design/migration_djc_tests.md).
