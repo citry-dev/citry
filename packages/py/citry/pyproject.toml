@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry"
-version = "0.3.0"
+version = "0.3.1"
 requires-python = ">=3.10, <4.0"
 description = "Fast, simple, and smart frontend framework for Python that brings the best of Vue, React, Django, and Jinja"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
@@ -94,6 +94,6 @@ Issues = "https://github.com/citry-dev/citry/issues"
 
 [tool.setuptools.package-data]
 # Non-Python files shipped inside the package: the type-checking marker and
-# the client-side dependency manager (inlined into rendered pages, later also
-# served over HTTP by the web integrations).
-citry = ["py.typed", "ext/dependencies/client/*.js"]
+# the client-side dependency manager and Events runtime (inlined into rendered
+# pages, later also served over HTTP by the web integrations).
+citry = ["py.typed", "ext/dependencies/client/*.js", "ext/events/client/*.js"]

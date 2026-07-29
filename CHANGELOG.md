@@ -1,5 +1,17 @@
 # Release notes
 
+## v0.3.1
+
+_29 Jul 2026_
+
+### Fix
+
+- Event handlers now work when Citry is installed from PyPI. In 0.3.0 the
+  browser runtime that Citry serves for `Events` was left out of the published
+  package, so a page with an event handler loaded a script the server could not
+  produce, and the call never reached Python. Upgrade to use `Events`; no code
+  change is needed.
+
 ## v0.3.0
 
 _28 Jul 2026_

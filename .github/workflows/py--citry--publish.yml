@@ -85,10 +85,24 @@ jobs:
           import importlib.util
           from pathlib import Path
 
-          origin = importlib.util.find_spec("citry").origin
-          js = Path(origin).parent / "ext/dependencies/client/citry.js"
-          assert js.exists(), f"client JS missing from the wheel: {js}"
-          print("client JS present:", js)
+          # Every non-Python file the package must ship. setuptools copies one
+          # of these in only when a glob in [tool.setuptools.package-data]
+          # matches it, and a miss is silent: the package imports fine and the
+          # feature fails later, when something reads the file at run time. So
+          # assert each one is really in the installed wheel. Add a line here
+          # whenever the package starts shipping another data file.
+          REQUIRED = (
+              "py.typed",
+              "ext/dependencies/client/citry.js",
+              "ext/events/client/citry-events.js",
+          )
+
+          root = Path(importlib.util.find_spec("citry").origin).parent
+          missing = [name for name in REQUIRED if not (root / name).is_file()]
+          if missing:
+              raise SystemExit("missing from the wheel: " + ", ".join(missing))
+          for name in REQUIRED:
+              print("present:", name)
           PY
 
   release:
