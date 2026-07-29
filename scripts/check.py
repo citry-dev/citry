@@ -2,9 +2,9 @@
 """
 The project gate: run every check in one pass and report all results.
 
-Phases: cargo fmt, cargo clippy, cargo test, ruff check, ruff format, mypy,
-pyright, citry-client (tsc, biome, and the canary over the events client
-package), pytest, and the custom validators (scripts/validate.py). Every phase
+Phases: uv lock, cargo fmt, cargo clippy, cargo test, ruff check, ruff format,
+mypy, pyright, citry-client (tsc, biome, and the canary over the events client
+package), the generated docs playground bundle, pytest, and the custom validators (scripts/validate.py). Every phase
 runs even after an earlier one fails, so a single invocation surfaces every
 problem at once instead of one-at-a-time.
 
@@ -43,6 +43,12 @@ def _phases() -> list[tuple[str, list[str]]]:
     crates = _crate_flags()
     uvr = ["uv", "run", "--no-sync"]
     return [
+        # Runs first because it is instant and because a stale lockfile stops CI
+        # before any other check gets to run: the workflows install with
+        # `uv sync --locked`, which refuses a lockfile that no longer matches the
+        # pyproject files. Raising a package's version without re-locking is the
+        # easy way to hit that, so catch it here rather than after a push.
+        ("uv lock", ["uv", "lock", "--check"]),
         ("cargo fmt", ["cargo", "fmt", "--check", *crates]),
         ("cargo clippy", ["cargo", "clippy", "--no-deps", *crates, "--all-targets", "--", "-D", "warnings"]),
         ("cargo test", ["cargo", "test", *crates]),
@@ -101,6 +107,10 @@ def _phases() -> list[tuple[str, list[str]]]:
         (
             "citry-client",
             ["pnpm", "--dir", "packages/js/citry-client", "run", "check"],
+        ),
+        (
+            "docs-playground",
+            ["pnpm", "--dir", "docs_site/frontend", "run", "check"],
         ),
         # `--cov` (no target) uses [tool.coverage.run] source; pytest-cov enforces
         # `fail_under` from [tool.coverage.report] (docs/design/migration_djc_tests.md).
