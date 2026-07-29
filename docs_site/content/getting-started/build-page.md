@@ -84,8 +84,11 @@ Importing the module creates the component class and tells Citry that the
 tag when it renders the page.
 
 Larger projects can discover component modules automatically. For now, an
-ordinary import keeps the setup visible. [Registration and
-autodiscovery](/concepts/registration/) covers the project-wide choices.
+ordinary import keeps the setup visible. Read
+[Registration](/concepts/registration/) for tag names and engine ownership,
+then
+[Component discovery](/advanced/component-discovery/) for automatic imports
+and startup.
 
 ## Pass fixed text and live Python values
 

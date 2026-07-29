@@ -121,10 +121,28 @@ Its listener calls that method when the matching event arrives:
 @choice-picker:loaded="loadChoices($event.detail.choices)"
 ```
 
-When the event arrives, Alpine stores the whole list and selects its first
-item. Citry fires the event on the calling picker's root, where this listener
-can receive it. The existing `$c-props` connection then passes that selected
+The existing `$c-props` connection then passes that selected
 label to `ChoiceButton`. No HTML needs to be replaced.
+
+!!! note
+
+    When the server returns `Dispatch` action, the browser
+    fires a bubbling DOM event from that component's first live root.
+
+    Here, the first root is the same element that carries
+    `@choice-picker:loaded`, so the listener receives the event.
+
+    Placement matters for an ordinary `@event` listener. The first root or one of
+    its ancestors can hear the bubbling event. A descendant **CANNOT**, because DOM
+    events do not bubble downward. If a component has several roots, a listener on
+    another root will not hear it either.
+
+    For a multi-root component, prefer [`$onEvent`][$onEvent] in an
+    Alpine expression or the `onEvent` function in [`$component`][$component].
+    Both listen for server events targeting the current component instance. Their callbacks
+    receive `detail` directly, without `$event.detail`. See [event
+    actions](/events/actions/#choose-where-to-listen-for-dispatch) for the complete
+    delivery rules.
 
 ## Show when Python is working
 

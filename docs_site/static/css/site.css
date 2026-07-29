@@ -759,6 +759,21 @@ body {
   letter-spacing: -0.01em;
 }
 
+/* Release stage, next to the wordmark so it is on every page rather than
+   only where someone thought to write it. */
+.djc-badge {
+  padding: 0.1em 0.45em;
+  color: var(--c-accent);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  margin-left: -12px;
+}
+
 .djc-header__nav {
   display: flex;
   gap: 1.25rem;
@@ -1065,6 +1080,14 @@ a.djc-sidebar__label:hover {
   color: var(--c-accent);
   background: var(--c-accent-dim);
   font-weight: 500;
+}
+
+.djc-sidebar__date {
+  display: block;
+  margin-top: 0.1rem;
+  color: var(--c-fg-subtle);
+  font-size: 0.7rem;
+  font-weight: 400;
 }
 
 /* Standalone top-level page link: a section that is just a page (no children).

@@ -30,6 +30,8 @@
 /* Light theme (default)                                               */
 /* ------------------------------------------------------------------ */
 :root {
+  color-scheme: light;
+
   /* Surfaces - pulled away from pure white for softer feel */
   --c-bg:        oklch(96.5% 0.005 250);  /* ~#f2f4f7 warm off-white */
   --c-surface:   oklch(94.5% 0.006 250);  /* ~#ebeef3 */
@@ -71,6 +73,8 @@
 /* Dark theme                                                          */
 /* ------------------------------------------------------------------ */
 [data-theme="dark"] {
+  color-scheme: dark;
+
   --c-bg:        oklch(18% 0.008 250);   /* ~#151825 soft dark */
   --c-surface:   oklch(21% 0.01 250);    /* ~#1c1f2b */
   --c-surface-2: oklch(24% 0.01 250);    /* ~#222536 */
@@ -103,6 +107,8 @@
 /* Auto dark theme: respects OS preference when no explicit choice is stored */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
     --c-bg:        oklch(18% 0.008 250);
     --c-surface:   oklch(21% 0.01 250);
     --c-surface-2: oklch(24% 0.01 250);

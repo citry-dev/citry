@@ -6,11 +6,7 @@ description: Add signed Citry State so Python can load the next set of choices o
 # Events state
 
 The last handler ran the same database query on every click. This time Python
-will remember how many sets the current page has loaded and choose the next
-set.
-
-The choices will still appear in Alpine, but Python will decide which set comes
-next.
+will remember server-side state across calls, so we can count how many times we called the endpoint.
 
 Continue from [Call Python from a
 click](/getting-started/call-python/). Keep `citry_setup.py` and `app.py`
@@ -66,7 +62,7 @@ How Citry builds the initial State:
 With `<c-ChoicePicker />`, both declarations use their own `0` default. If a caller
 passes `batches_loaded=3`, that value starts both the render and its State.
 
-The following fails, because `other_field` has no default
+The following would fail, because `other_field` has no default
 and is not on `Kwargs`:
 
 ```python
@@ -207,7 +203,7 @@ The new list and selected choice stay in Alpine. The counter is named
 `batches_loaded` in Python and `batchesLoaded` in Alpine, following each
 language's usual style:
 
-```
+```text
 batchesLoaded = $event.detail.batches_loaded;
 ^^^^^^^^^^^^^                 ^^^^^^^^^^^^^^^
   Alpine var                  data from Python
@@ -233,5 +229,5 @@ person may do.
 ## Send structured input
 
 State is useful for values a component carries from one call to the next.
-Next, [handle and validate a form](/getting-started/forms/) whose values come
+Next, [handle and validate forms](/getting-started/forms/) whose values come
 from named browser controls.

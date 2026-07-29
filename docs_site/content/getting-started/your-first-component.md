@@ -27,7 +27,11 @@ wherever you need the same structure.
 
 Save this as `component.py`:
 
-<c-include-file path="docs_site/examples/card/component.py" language="citry" />
+<c-live-code
+  path="docs_site/examples/card/component.py"
+  title="component.py"
+  full_height
+/>
 
 It may look like a lot for a first component, so we'll unpack it one piece at
 a time.
@@ -200,7 +204,7 @@ values when it turns the Card into HTML, so the error appears at `str()` or
     `accent: str` helps your editor and type checker, but it
     does not reject `accent=123` while your program runs. If values come from a
     form, an API, or another source you do not control, read
-    [Typing and validation](/concepts/typing-and-validation/) to add runtime
+    [Inputs and validation](/concepts/inputs-and-validation/) to add runtime
     checks.
 
 ## What to try next
