@@ -66,14 +66,27 @@ inside the `template` / `js` / `css` attributes are highlighted in their own
 language:
 
 - The HTML in `template`, including the `<c-*>` component and control-flow tags
-  (the built-ins `c-if`, `c-for`, `c-slot`, `<c-raw>`, and so on) and `c-*`
-  dynamic attributes.
+  (the built-ins `c-if`, `c-for`, `c-slot`, `<c-raw>`, and so on).
+- Server-side Python in `c-*` dynamic attributes and `#c-key`, including a
+  nested Citry template used as a dynamic attribute value.
+- Browser-side JavaScript in `$c-props` and Alpine attributes such as `x-data`,
+  `x-show`, `@click`, and `:class`. The server-dynamic forms such as
+  `c-$c-props` and `c-@click` remain Python.
+- Server handler references in Events attributes such as `@c-click="save"`
+  and `:c-query.debounce.300ms="refresh"`. An optional parenthesized argument
+  on an `@c-*` handler is highlighted as an Alpine/JavaScript expression.
+- The bare `#c-ignore` framework marker.
 - `{{ ... }}` interpolation, whose body is a Python expression.
 - `{# ... #}` template comments.
 - The JavaScript in `js` and the CSS in `css`.
 
 The `<c-raw>...</c-raw>` element is treated as verbatim text, matching the
 engine: `{{ }}` and tags inside it are not interpreted.
+
+The lexer also keeps useful language coloring for common unfinished forms,
+including an interpolation or quoted dynamic attribute that is still being
+typed. It highlights source but does not validate whether a directive is
+allowed on a particular element or component.
 
 ## Template-only blocks: `citry-html`
 

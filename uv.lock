@@ -1478,7 +1478,7 @@ wheels = [
 
 [[package]]
 name = "pygments-citry"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/py/pygments_citry" }
 dependencies = [
     { name = "pygments" },

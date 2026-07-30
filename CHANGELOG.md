@@ -1,5 +1,21 @@
 # Release notes
 
+## pygments-citry v0.1.1
+
+_30 Jul 2026_
+
+### New syntax coverage and fixes
+
+- Updated the Citry Pygments lexers for the current template directive
+  channels: client-side `$c-props` and Alpine expressions, server-side `c-*`
+  and `#c-key` expressions, bare `#c-ignore`, and Citry Events handler
+  references with optional Alpine arguments.
+- Added nested-template and fragment highlighting, stronger unfinished-input
+  recovery, and a shared syntax corpus used by Pygments and editor grammars.
+- Fixed dotted Events modifiers, permissive attribute names, interpolation
+  strings containing braces, and stray error tokens on ordinary
+  `$`-prefixed attributes.
+
 ## v0.3.1
 
 _29 Jul 2026_

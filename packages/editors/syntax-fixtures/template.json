@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "structural and runtime tags",
+      "language": "citry-html",
+      "source": "<c-if cond=\"ready\"><c-slot /></c-if>\n<c-elif cond=\"waiting\">wait</c-elif>\n<c-else>stop</c-else>\n<c-for each=\"item in items\"><span>{{ item }}</span></c-for>\n<c-empty>none</c-empty>\n<c-Panel><c-fill name=\"body\" data=\"{ item, **rest }\">body</c-fill></c-Panel>\n<c-component is=\"Panel\" />\n<c-element is=\"section\" />\n<c-provide />\n<c-cache />\n<c-error-fallback />\n<c-css />\n<c-js />\n<c-raw>{{ untouched }}</c-raw>",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "c-if", "role": "tag"},
+        {"text": "c-elif", "role": "tag"},
+        {"text": "c-else", "role": "tag"},
+        {"text": "c-for", "role": "tag"},
+        {"text": "c-empty", "role": "tag"},
+        {"text": "c-slot", "role": "tag"},
+        {"text": "c-fill", "role": "tag"},
+        {"text": "c-component", "role": "tag"},
+        {"text": "c-element", "role": "tag"},
+        {"text": "c-provide", "role": "tag"},
+        {"text": "c-cache", "role": "tag"},
+        {"text": "c-error-fallback", "role": "tag"},
+        {"text": "c-css", "role": "tag"},
+        {"text": "c-js", "role": "tag"},
+        {"text": "c-raw", "role": "tag"},
+        {"text": "ready", "role": "python"},
+        {"text": "items", "role": "python"},
+        {"text": "{{ untouched }}", "role": "text"}
+      ]
+    },
+    {
+      "name": "server and client directive channels",
+      "language": "citry-html",
+      "source": "<c-Card\n  $c-props=\"{ open: true, count: localCount }\"\n  c-$c-props=\"props_for(card)\"\n  c-@click=\"handler_expr\"\n  c-class=\"'active' if selected else ''\"\n  #c-key=\"card.id\"\n/>\n<div #c-ignore></div>",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "$c-props", "role": "attribute"},
+        {"text": "localCount", "role": "javascript"},
+        {"text": "c-$c-props", "role": "attribute"},
+        {"text": "props_for", "role": "python"},
+        {"text": "c-@click", "role": "attribute"},
+        {"text": "handler_expr", "role": "python"},
+        {"text": "c-class", "role": "attribute"},
+        {"text": "selected", "role": "python"},
+        {"text": "#c-key", "role": "attribute"},
+        {"text": "card", "occurrence": 2, "role": "python"},
+        {"text": "#c-ignore", "role": "attribute"}
+      ]
+    },
+    {
+      "name": "events and Alpine expressions",
+      "language": "citry-html",
+      "source": "<form\n  x-data=\"{ open: true }\"\n  x-show=\"open\"\n  :class=\"{ active: open }\"\n  @click=\"open = !open\"\n  @c-submit.prevent=\"save({ draft: open })\"\n>\n  <input :c-query.debounce.300ms=\"refresh\" />\n  <output :c-status></output>\n</form>",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "x-data", "role": "attribute"},
+        {"text": "true", "role": "javascript"},
+        {"text": "x-show", "role": "attribute"},
+        {"text": ":class", "role": "attribute"},
+        {"text": "@click", "role": "attribute"},
+        {"text": "@c-submit.prevent", "role": "attribute"},
+        {"text": "save", "role": "handler"},
+        {"text": "draft", "role": "javascript"},
+        {"text": ":c-query.debounce.300ms", "role": "attribute"},
+        {"text": "refresh", "role": "handler"},
+        {"text": ":c-status", "role": "attribute"}
+      ]
+    },
+    {
+      "name": "nested template attribute",
+      "language": "citry-html",
+      "source": "<c-Card c-body='<section c-if=\"visible\">{{ title }}</section>' />",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "c-body", "role": "attribute"},
+        {"text": "section", "role": "tag"},
+        {"text": "c-if", "role": "attribute"},
+        {"text": "visible", "role": "python"},
+        {"text": "title", "role": "python"}
+      ]
+    },
+    {
+      "name": "nested template fragment attribute",
+      "language": "citry-html",
+      "source": "<c-Card c-body='<>Před <strong>{{ title }}</strong></>' />",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "c-body", "role": "attribute"},
+        {"text": "Před", "role": "text"},
+        {"text": "strong", "role": "tag"},
+        {"text": "title", "role": "python"}
+      ]
+    },
+    {
+      "name": "expressions comments and raw text",
+      "language": "citry-html",
+      "source": "<!-- html note -->\n{# template note #}\n<div disabled{# attribute\n comment #}></div>\n<p>{{ {\"key\": {1: value}} }}</p>\n<p>{{ \"}}\" if ready else \"wait\" }}</p>\n<c-raw><b>{# raw #} {{ raw_value }}</b></c-raw>",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "<!-- html note -->", "role": "comment"},
+        {"text": "{# template note #}", "role": "comment"},
+        {"text": "disabled", "role": "attribute"},
+        {"text": "{# attribute\n comment #}", "role": "comment"},
+        {"text": "value", "role": "python"},
+        {"text": "ready", "role": "python"},
+        {"text": "<b>{# raw #} {{ raw_value }}</b>", "role": "text"}
+      ]
+    },
+    {
+      "name": "unicode before and inside embedded languages",
+      "language": "citry-html",
+      "source": "<p title=\"Příliš žluťoučký\">Úvod {{ uživatel.jméno }}</p>\n<button @click=\"výběr = '✓'\">Vybrat</button>",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "Úvod", "role": "text"},
+        {"text": "uživatel", "role": "python"},
+        {"text": "jméno", "role": "python"},
+        {"text": "výběr", "role": "javascript"}
+      ]
+    },
+    {
+      "name": "complete component embeds",
+      "language": "citry",
+      "source": "class Card(Component):\n    template = \"\"\"\n      <article>{{ title }}</article>\n    \"\"\"\n    js = \"\"\"\n      const ready = true;\n    \"\"\"\n    css = \"\"\"\n      article { border-color: rebeccapurple; }\n    \"\"\"\n",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "article", "role": "tag"},
+        {"text": "title", "role": "python"},
+        {"text": "true", "role": "javascript"},
+        {"text": "rebeccapurple", "role": "css"}
+      ]
+    },
+    {
+      "name": "double quoted embeds retain triple single text",
+      "language": "citry",
+      "source": "class DoubleQuoted(Component):\n    template = \"\"\"<p>''' {{ double_template }}</p>\"\"\"\n    js = \"\"\"const doubleJs = 1; /* ''' */\"\"\"\n    css = \"\"\"a { /* ''' */ border-color: rebeccapurple; }\"\"\"\n",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "double_template", "role": "python"},
+        {"text": "doubleJs", "role": "javascript"},
+        {"text": "rebeccapurple", "role": "css"}
+      ]
+    },
+    {
+      "name": "single quoted embeds retain triple double text",
+      "language": "citry",
+      "source": "class SingleQuoted(Component):\n    template = '''<p>\"\"\" {{ single_template }}</p>'''\n    js = '''const singleJs = 1; /* \"\"\" */'''\n    css = '''a { /* \"\"\" */ border-color: rebeccapurple; }'''\n",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "single_template", "role": "python"},
+        {"text": "singleJs", "role": "javascript"},
+        {"text": "rebeccapurple", "role": "css"}
+      ]
+    },
+    {
+      "name": "unfinished interpolation",
+      "language": "citry-html",
+      "source": "<div>{{ user.profile",
+      "allow_errors": true,
+      "assertions": [
+        {"text": "div", "role": "tag"},
+        {"text": "user", "role": "python"}
+      ]
+    },
+    {
+      "name": "unfinished dynamic attribute",
+      "language": "citry-html",
+      "source": "<div c-if=\"ready and",
+      "allow_errors": true,
+      "assertions": [
+        {"text": "div", "role": "tag"},
+        {"text": "c-if", "role": "attribute"},
+        {"text": "ready", "role": "python"}
+      ]
+    },
+    {
+      "name": "unfinished component template string",
+      "language": "citry",
+      "source": "class Card(Component):\n    template = \"\"\"<c-Card>{{ title }}",
+      "allow_errors": true,
+      "assertions": [
+        {"text": "c-Card", "role": "tag"},
+        {"text": "title", "role": "python"}
+      ]
+    }
+  ]
+}

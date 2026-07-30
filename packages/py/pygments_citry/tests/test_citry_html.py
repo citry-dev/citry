@@ -37,6 +37,13 @@ def test_template_comment():
     assert (Comment, "{# note #}") in toks
 
 
+def test_multiline_template_comment_starts_at_attribute_boundary():
+    toks = lex_html("<div disabled{# inline\n note #}></div>")
+    assert (Name.Attribute, "disabled") in toks
+    assert (Comment, "{# inline\n note #}") in toks
+    assert not any(token is Error for token, _ in toks)
+
+
 def test_lone_brace_is_text_not_interpolation():
     toks = lex_template("a { b")
     assert (Text, "{") in toks
@@ -63,6 +70,17 @@ def test_dynamic_attribute_single_quoted_and_bare():
     assert (Name, "y") in toks
 
 
+def test_fragment_delimiters_are_special_only_inside_nested_values():
+    nested = lex_html("<c-Card c-body='<>before <strong>{{ title }}</strong></>' />")
+    standalone = lex_html("<>")
+
+    assert (Punctuation, "<>") in nested
+    assert (Punctuation, "</>") in nested
+    assert (Name.Tag, "strong") in nested
+    assert (Name, "title") in nested
+    assert standalone == [(Text, "<>")]
+
+
 def test_direct_client_props_value_is_javascript():
     toks = lex_template('<c-child $c-props="{ enabled: true, count: localCount }" />')
     assert (Name.Attribute, "$c-props") in toks
@@ -82,8 +100,10 @@ def test_server_dynamic_client_props_value_is_python():
 
 def test_only_exact_client_props_name_gets_special_highlighting():
     toks = lex_html('<div $other="true" $c-props-extra="true"></div>')
-    assert (Error, "$") in toks
+    assert (Name.Attribute, "$other") in toks
+    assert (Name.Attribute, "$c-props-extra") in toks
     assert (Name.Attribute, "$c-props") not in toks
+    assert toks.count((String, '"true"')) == 2
 
 
 def test_c_raw_body_is_verbatim():
@@ -99,6 +119,21 @@ def test_framework_attributes_are_accepted():
     assert (Name.Attribute, "@click") in toks
     assert (Name.Attribute, "[style]") in toks
     assert (Name.Attribute, "(tap)") in toks
+
+
+def test_event_value_separates_handler_from_alpine_arguments():
+    toks = lex_html('<button @c-click.prevent="save({ draft: open })"></button>')
+    assert (Name.Attribute, "@c-click.prevent") in toks
+    assert (Name.Function, "save") in toks
+    assert (Name.Other, "draft") in toks
+    assert (Name.Other, "open") in toks
+
+
+def test_state_binding_value_is_a_handler_reference():
+    toks = lex_html('<input :c-query.debounce.300ms="refresh" />')
+    assert (Name.Attribute, ":c-query.debounce.300ms") in toks
+    assert (Name.Function, "refresh") in toks
+    assert (Name.Other, "refresh") not in toks
 
 
 def test_boolean_attributes():
@@ -152,6 +187,13 @@ def test_interpolation_skips_escaped_quote_in_string():
     toks = lex_template(r'{{ "a\"}}b" + c }}')
     assert [v for tok, v in toks if (tok, v) == (Punctuation, "}}")] == ["}}"]
     assert (Name, "c") in toks
+
+
+def test_interpolation_boundary_skips_triple_quoted_string():
+    toks = lex_html('{{ """}}""" if ok else fallback }}')
+    assert [value for token, value in toks if (token, value) == (Punctuation, "}}")] == ["}}"]
+    assert (String.Doc, '"""}}"""') in toks
+    assert (Name, "fallback") in toks
 
 
 def test_interpolation_without_surrounding_whitespace():
