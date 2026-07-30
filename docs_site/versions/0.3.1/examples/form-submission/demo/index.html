@@ -1,0 +1,21 @@
+<!--citry:g1:53f497baf743d46374ed1d2deceb8b75c62cf942b1357b2d202739b108033e03:0:i:1:s--><!doctype html><html data-cid-c333j4vyl lang=en><head><meta charset=utf-8><title>Form submission example</title><style data-citry-css-class=ContactForm_dbfa6e>.contact-form{gap:.75rem;max-width:22rem;font-family:system-ui,sans-serif;display:grid}.contact-form__label{color:#24292f;gap:.35rem;font-size:.9rem;display:grid}.contact-form__input{font:inherit;border:1px solid #d0d7de;border-radius:6px;padding:.5rem .65rem}.contact-form__button{color:#fff;font:inherit;cursor:pointer;background:#4f46e5;border:none;border-radius:6px;padding:.5rem 1rem}.contact-form__button:hover{background:#4338ca}.contact-form__thanks{color:#1a7f37;background:#effef1;border:1px solid #2da44e;border-radius:6px;padding:.65rem .85rem}</style></head><body style=margin:0;padding:1.5rem;font-family:system-ui,sans-serif><!--citry:g1:53f497baf743d46374ed1d2deceb8b75c62cf942b1357b2d202739b108033e03:0:i:2:s--><form class=contact-form data-cid=c333j4vyn data-cid-c333j4vyn data-citry-root><label class=contact-form__label>Name <input placeholder="Ada Lovelace" class=contact-form__input name=name></label><button class=contact-form__button>Submit</button><div aria-live=polite class=contact-form__result role=status></div></form><!--citry:g1:53f497baf743d46374ed1d2deceb8b75c62cf942b1357b2d202739b108033e03:0:i:2:e--><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"FormSubmissionPage_ddc99e","className":"FormSubmissionPage"},{"classId":"ContactForm_dbfa6e","className":"ContactForm"}],"componentExecutionOrderConstraints":[{"childRenderId":"c333j4vyn","invocationId":2,"parentRenderId":"c333j4vyl"}],"componentInstances":[{"classId":"FormSubmissionPage_ddc99e","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"c333j4vyl","transparent":false},{"classId":"ContactForm_dbfa6e","instanceId":2,"invocationId":2,"parentRenderId":"c333j4vyl","renderId":"c333j4vyn","transparent":false}],"fills":[],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"parentRegionId":null,"sourceClassId":"FormSubmissionPage_ddc99e","sourceRenderId":"c333j4vyl","tagName":"contactform","targetClassId":"ContactForm_dbfa6e","targetRenderId":"c333j4vyn"}],"slotRegions":[],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"53f497baf743d46374ed1d2deceb8b75c62cf942b1357b2d202739b108033e03"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL0NvbnRhY3RGb3JtX2RiZmE2ZS5mZDBmZmNkN2JhYjAuanM="], "css": ["L2NpdHJ5L2NhY2hlL0NvbnRhY3RGb3JtX2RiZmE2ZS5kYWFkZTE3M2VlMzUuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q29udGFjdEZvcm1fZGJmYTZl", "YzMzM2o0dnlu", null]], "cssInstances": [], "graph": "53f497baf743d46374ed1d2deceb8b75c62cf942b1357b2d202739b108033e03"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      Citry.manager.registerComponent("ContactForm_dbfa6e", ({ els }) => {
+        const root = els[0];
+        const form = root.matches("form") ? root : root.querySelector("form");
+        const result = root.querySelector(".contact-form__result");
+        form.addEventListener("submit", (event) => {
+          // No server on a static site: intercept the submit and show the
+          // response in the browser, built from the entered name.
+          event.preventDefault();
+          const entered = (new FormData(form).get("name") || "").toString().trim();
+          const name = entered || "stranger";
+          result.textContent = "";
+          const box = document.createElement("div");
+          box.className = "contact-form__thanks";
+          box.textContent = `Thank you for your submission, ${name}!`;
+          result.appendChild(box);
+        });
+      });
+    
+})();</script></body></html><!--citry:g1:53f497baf743d46374ed1d2deceb8b75c62cf942b1357b2d202739b108033e03:0:i:1:e-->

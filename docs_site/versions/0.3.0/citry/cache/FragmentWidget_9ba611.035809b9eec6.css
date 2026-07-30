@@ -1,0 +1,12 @@
+
+      .frag-widget {
+        padding: 1rem 1.25rem;
+        border: 2px solid #8250df;
+        border-radius: 8px;
+        background: #faf5ff;
+        font-family: system-ui, sans-serif;
+      }
+      .frag-widget__title {
+        color: #8250df;
+      }
+    
