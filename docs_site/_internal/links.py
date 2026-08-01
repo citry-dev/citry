@@ -38,6 +38,16 @@ _HREF_RE = re.compile(r'href="([^"]*)"')
 # The src attribute of images in the rendered HTML.
 _SRC_RE = re.compile(r'src="([^"]*)"')
 
+# Inline Markdown links and images. The destination is kept separate from an
+# optional title so source companions can reuse the same clean-route resolver
+# as rendered HTML without touching prose or fenced code.
+_MD_LINK_RE = re.compile(
+    r"(?P<prefix>!?\[[^\]\n]*\]\()"
+    r"(?P<destination><[^>\n]+>|[^)\s\n]+)"
+    r'(?P<suffix>(?:\s+["\'][^)\n]*["\'])?\))'
+)
+_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+
 # Any heading that carries an id. Markdown headings and the raw-HTML
 # API-reference symbol headings both emit the id first (the minifier reorders
 # attributes later, but this runs before it). `.*?` captures just that heading's
@@ -74,7 +84,16 @@ def linkify_headings(html: str) -> str:
     return _HEADING_RE.sub(replace, html)
 
 
-def rewrite_internal_md_links(html: str, *, source_path: Path, content_dir: Path) -> str:
+def rewrite_internal_md_links(
+    html: str,
+    *,
+    source_path: Path,
+    content_dir: Path,
+    current_public_path: str = "",
+    source_to_public_path: Mapping[Path, str] | None = None,
+    nav_tree: NavTree | None = None,
+    version_prefix: str = "",
+) -> str:
     """
     Rewrite internal ``.md`` links in rendered HTML to clean relative URLs.
 
@@ -87,24 +106,206 @@ def rewrite_internal_md_links(html: str, *, source_path: Path, content_dir: Path
     except ValueError:
         return html
 
-    page_url = "/" + md_to_url(page_rel)  # e.g. "/test/pipeline_test/"
+    page_url = current_public_path or _public_url_for_source(
+        source_path,
+        source_to_public_path=source_to_public_path,
+    )
+    if not page_url:
+        page_url = "/" + md_to_url(page_rel)  # e.g. "/test/pipeline_test/"
+    elif not page_url.startswith("/"):
+        page_url = "/" + page_url
     source_dir = source_path.resolve().parent
 
     def replace_href(match: re.Match[str]) -> str:
         href = match.group(1)
-        rewritten = _rewrite_one(href, page_url=page_url, source_dir=source_dir, content_root=content_root)
+        rewritten = _rewrite_one(
+            href,
+            page_url=page_url,
+            source_dir=source_dir,
+            content_root=content_root,
+            source_to_public_path=source_to_public_path,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
         return f'href="{rewritten}"'
 
     def replace_src(match: re.Match[str]) -> str:
         src = match.group(1)
-        rewritten = _rewrite_asset(src, page_url=page_url, source_dir=source_dir, content_root=content_root)
+        rewritten = _rewrite_asset(
+            src,
+            page_url=page_url,
+            source_dir=source_dir,
+            content_root=content_root,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
+        if rewritten == src:
+            rewritten = _project_clean_route(
+                src,
+                page_url=page_url,
+                nav_tree=nav_tree,
+                version_prefix=version_prefix,
+            )
         return f'src="{rewritten}"'
 
     html = _HREF_RE.sub(replace_href, html)
     return _SRC_RE.sub(replace_src, html)
 
 
-def _rewrite_one(href: str, *, page_url: str, source_dir: Path, content_root: Path) -> str:
+def rewrite_internal_md_links_in_markdown(
+    source: str,
+    *,
+    source_path: Path,
+    content_dir: Path,
+    current_public_path: str = "",
+    source_to_public_path: Mapping[Path, str] | None = None,
+    nav_tree: NavTree | None = None,
+    version_prefix: str = "",
+) -> str:
+    """Rewrite Markdown destinations while leaving fenced examples untouched."""
+    content_root = content_dir.resolve()
+    try:
+        page_rel = source_path.resolve().relative_to(content_root)
+    except ValueError:
+        return source
+
+    page_url = current_public_path or _public_url_for_source(
+        source_path,
+        source_to_public_path=source_to_public_path,
+    )
+    if not page_url:
+        page_url = "/" + md_to_url(page_rel)
+    elif not page_url.startswith("/"):
+        page_url = "/" + page_url
+    source_dir = source_path.resolve().parent
+
+    in_fence = False
+    fence_marker = ""
+    lines: list[str] = []
+    for line in source.splitlines(keepends=True):
+        fence = _FENCE_RE.match(line)
+        if fence:
+            marker = fence.group(1)
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker[0]
+            elif marker[0] == fence_marker:
+                in_fence = False
+                fence_marker = ""
+            lines.append(line)
+            continue
+        if in_fence:
+            lines.append(line)
+            continue
+
+        def replace(match: re.Match[str]) -> str:
+            destination = match.group("destination")
+            wrapped = destination.startswith("<") and destination.endswith(">")
+            raw = destination[1:-1] if wrapped else destination
+            rewritten = _rewrite_one(
+                raw,
+                page_url=page_url,
+                source_dir=source_dir,
+                content_root=content_root,
+                source_to_public_path=source_to_public_path,
+                nav_tree=nav_tree,
+                version_prefix=version_prefix,
+            )
+            if wrapped:
+                rewritten = f"<{rewritten}>"
+            return f"{match.group('prefix')}{rewritten}{match.group('suffix')}"
+
+        lines.append(_MD_LINK_RE.sub(replace, line))
+    return "".join(lines)
+
+
+def project_internal_html_urls(
+    html: str,
+    *,
+    current_public_path: str,
+    nav_tree: NavTree | None,
+    version_prefix: str,
+) -> str:
+    """Project clean links in generated HTML that has no authored source path."""
+    if not version_prefix or nav_tree is None:
+        return html
+    page_url = current_public_path if current_public_path.startswith("/") else f"/{current_public_path}"
+
+    def project(value: str) -> str:
+        return _project_clean_route(
+            value,
+            page_url=page_url,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
+
+    def replace_href(match: re.Match[str]) -> str:
+        return f'href="{project(match.group(1))}"'
+
+    def replace_src(match: re.Match[str]) -> str:
+        return f'src="{project(match.group(1))}"'
+
+    return _SRC_RE.sub(replace_src, _HREF_RE.sub(replace_href, html))
+
+
+def project_internal_markdown_urls(
+    source: str,
+    *,
+    current_public_path: str,
+    nav_tree: NavTree | None,
+    version_prefix: str,
+) -> str:
+    """Project clean destinations in generated Markdown without a source path."""
+    if not version_prefix or nav_tree is None:
+        return source
+    page_url = current_public_path if current_public_path.startswith("/") else f"/{current_public_path}"
+    in_fence = False
+    fence_marker = ""
+    lines: list[str] = []
+    for line in source.splitlines(keepends=True):
+        fence = _FENCE_RE.match(line)
+        if fence:
+            marker = fence.group(1)
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker[0]
+            elif marker[0] == fence_marker:
+                in_fence = False
+                fence_marker = ""
+            lines.append(line)
+            continue
+        if in_fence:
+            lines.append(line)
+            continue
+
+        def replace(match: re.Match[str]) -> str:
+            destination = match.group("destination")
+            wrapped = destination.startswith("<") and destination.endswith(">")
+            raw = destination[1:-1] if wrapped else destination
+            projected = _project_clean_route(
+                raw,
+                page_url=page_url,
+                nav_tree=nav_tree,
+                version_prefix=version_prefix,
+            )
+            if wrapped:
+                projected = f"<{projected}>"
+            return f"{match.group('prefix')}{projected}{match.group('suffix')}"
+
+        lines.append(_MD_LINK_RE.sub(replace, line))
+    return "".join(lines)
+
+
+def _rewrite_one(
+    href: str,
+    *,
+    page_url: str,
+    source_dir: Path,
+    content_root: Path,
+    source_to_public_path: Mapping[Path, str] | None = None,
+    nav_tree: NavTree | None = None,
+    version_prefix: str = "",
+) -> str:
     parsed = urlparse(href)
 
     # Leave external links, schemes, protocol-relative, and anchor-only links alone.
@@ -115,7 +316,22 @@ def _rewrite_one(href: str, *, page_url: str, source_dir: Path, content_root: Pa
     # asset file (e.g. a clickable screenshot) needs the same depth correction
     # as an image src.
     if not parsed.path.endswith(".md"):
-        return _rewrite_asset(href, page_url=page_url, source_dir=source_dir, content_root=content_root)
+        rewritten_asset = _rewrite_asset(
+            href,
+            page_url=page_url,
+            source_dir=source_dir,
+            content_root=content_root,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
+        if rewritten_asset != href:
+            return rewritten_asset
+        return _project_clean_route(
+            href,
+            page_url=page_url,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
 
     # Resolve the target's source path (absolute links are content-root-relative).
     if parsed.path.startswith("/"):
@@ -129,20 +345,60 @@ def _rewrite_one(href: str, *, page_url: str, source_dir: Path, content_root: Pa
     except ValueError:
         return href
 
-    target_url = "/" + md_to_url(target_rel)  # e.g. "/test/other/"
+    target_url = _public_url_for_source(
+        target_abs,
+        source_to_public_path=source_to_public_path,
+    )
+    if not target_url:
+        target_url = "/" + md_to_url(target_rel)  # e.g. "/test/other/"
+
+    # A cross-scope link from a snapshot must escape to the site root. Links to
+    # another versioned page stay relative so they remain in the same snapshot.
+    if version_prefix and nav_tree is not None and nav_tree.scope_for_url(target_url) == "site":
+        return _join_url_parts(target_url, parsed.query, parsed.fragment)
 
     # Relative href from the current page's URL directory to the target.
     rel = posixpath.relpath(target_url, page_url)
     if target_url.endswith("/") and not rel.endswith("/"):
         rel += "/"
 
+    if parsed.query:
+        rel += "?" + parsed.query
     if parsed.fragment:
         rel += "#" + parsed.fragment
 
     return rel
 
 
-def _rewrite_asset(ref: str, *, page_url: str, source_dir: Path, content_root: Path) -> str:
+def _public_url_for_source(
+    source_path: Path,
+    *,
+    source_to_public_path: Mapping[Path, str] | None,
+) -> str:
+    """Return a catalog override for ``source_path``, or an empty string."""
+    if not source_to_public_path:
+        return ""
+    resolved = source_path.resolve()
+    mapped = source_to_public_path.get(resolved)
+    if mapped is None:
+        # Accept callers that built the mapping from unresolved content paths,
+        # while keeping resolved keys as the preferred catalog contract.
+        mapped = source_to_public_path.get(source_path)
+    if not mapped:
+        return ""
+    clean = mapped.strip("/")
+    return f"/{clean}/" if clean else "/"
+
+
+def _rewrite_asset(
+    ref: str,
+    *,
+    page_url: str,
+    source_dir: Path,
+    content_root: Path,
+    nav_tree: NavTree | None = None,
+    version_prefix: str = "",
+) -> str:
     """
     Rewrite a relative asset reference (image etc.) authored against the source
     tree into a URL relative to the page's clean URL.
@@ -166,7 +422,51 @@ def _rewrite_asset(ref: str, *, page_url: str, source_dir: Path, content_root: P
         return ref
 
     target_url = "/" + target_rel.as_posix()
+    if version_prefix and nav_tree is not None and nav_tree.scope_for_url(target_url) == "site":
+        return _join_url_parts(target_url, parsed.query, parsed.fragment)
     rel = posixpath.relpath(target_url, page_url)
+    if parsed.query:
+        rel += "?" + parsed.query
     if parsed.fragment:
         rel += "#" + parsed.fragment
     return rel
+
+
+def _project_clean_route(
+    href: str,
+    *,
+    page_url: str,
+    nav_tree: NavTree | None,
+    version_prefix: str,
+) -> str:
+    """Project a clean page/asset URL according to its declared scope."""
+    if not version_prefix or nav_tree is None:
+        return href
+    parsed = urlparse(href)
+    if parsed.scheme or parsed.netloc or not parsed.path:
+        return href
+    if parsed.path in _ROOT_OWNED_PATHS or parsed.path.startswith(_ROOT_OWNED_PREFIXES):
+        return href
+
+    if parsed.path.startswith("/"):
+        target_url = parsed.path
+        projected = nav_tree.project_path(target_url, version_prefix)
+        return _join_url_parts(projected, parsed.query, parsed.fragment)
+
+    target_url = posixpath.normpath(posixpath.join(page_url, parsed.path))
+    if not target_url.startswith("/"):
+        target_url = "/" + target_url
+    if parsed.path.endswith("/") and not target_url.endswith("/"):
+        target_url += "/"
+    if nav_tree.scope_for_url(target_url) == "site":
+        return _join_url_parts(target_url, parsed.query, parsed.fragment)
+    return href
+
+
+def _join_url_parts(path: str, query: str, fragment: str) -> str:
+    result = path
+    if query:
+        result += "?" + query
+    if fragment:
+        result += "#" + fragment
+    return result

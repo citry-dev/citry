@@ -8,16 +8,17 @@ working.
 
 A content page that fails to render is recorded on the outcome rather than
 aborting the whole build, so one broken page does not hide the others. The
-generated pages (the API reference and the 404 page) are not guarded that way: a
-failure there is a bug in this builder, not bad page content, so it stops the
-build loudly.
+generated Reference pages and the 404 page are not guarded that way: a failure
+there is a bug in this builder, not bad page content, so it stops the build
+loudly. Authored non-Python Reference pages follow the content path.
 
 After the pages are written the build runs its finishing steps in a fixed
-order: the API reference and example demos, the ``objects.inv`` index, the
-custom 404 page, Citry's client runtime (so component JavaScript works from
-flat files), and finally an HTML-shrinking pass. Each page that the layout
-produces is also recorded in ``BuildOutcome.records`` so later steps (sitemap,
-robots, llms files) can be built from that list without re-reading the output.
+order: generated API Reference pages and example demos, the ``objects.inv``
+index, the custom 404 page, Citry's client runtime (so component JavaScript
+works from flat files), and finally an HTML-shrinking pass. Each page that the
+layout produces is also recorded in ``BuildOutcome.records`` so later steps
+(sitemap, robots, llms files) can be built from that list without re-reading
+the output.
 """
 
 from __future__ import annotations
@@ -33,30 +34,43 @@ from typing import TYPE_CHECKING
 
 from citry import citry as default_citry
 from docs_site._internal.base_path import apply_base_path
+from docs_site._internal.blog import (
+    BLOG_FEED_PATH,
+    BlogCatalog,
+    BlogPost,
+    blog_source_routes,
+    load_blog_catalog,
+    serialize_atom_feed,
+)
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
 from docs_site._internal.crossrefs import build_objects_inv
 from docs_site._internal.examples import get_example_registry
 from docs_site._internal.llms import generate_llms_files
 from docs_site._internal.minify import minify_site
-from docs_site._internal.nav import load_nav
+from docs_site._internal.nav import SCOPE_SITE, load_nav
 from docs_site._internal.pagefind import run_pagefind
-from docs_site._internal.paths import md_companion_path, md_to_html_path, md_to_url
+from docs_site._internal.paths import (
+    clean_url_to_companion_path,
+    clean_url_to_html_path,
+    md_companion_path,
+    md_to_html_path,
+    md_to_url,
+)
 from docs_site._internal.pipeline import RenderResult, render_page
 from docs_site._internal.redirects import emit_redirects
 from docs_site._internal.reference_pages import (
     CATEGORIES,
     reference_index_markdown,
-    reference_nav_section,
     reference_page_markdown,
 )
 from docs_site._internal.release_notes import (
     parse_changelog,
     release_index_markdown,
     release_page_markdown,
-    releases_nav_section,
 )
 from docs_site._internal.seo import generate_seo_files
+from docs_site._internal.site_nav import load_site_nav
 from docs_site._internal.social_cards import generate_social_cards
 from docs_site._internal.static_deps import CITRY_MOUNT_PREFIX, export_fragment_deps, export_runtime
 from docs_site._internal.versioning import git_head_sha, materialize_alias, update_manifest, write_build_info
@@ -82,6 +96,9 @@ class PageRecord:
     source_md: Path | None
     # The page body as expanded markdown, for the llms full-text export.
     markdown_body: str
+    # Authored editorial timestamp for dated content. Sitemap generation uses
+    # this instead of git history when present.
+    editorial_updated: datetime | None = None
 
 
 @dataclass
@@ -97,6 +114,8 @@ class BuildOutcome:
     examples: int = 0
     reference: int = 0
     releases: int = 0
+    blog_posts: int = 0
+    blog_feed: bool = False
     elapsed: float = 0.0
     # (page path relative to content dir, error message) for pages that raised.
     errors: list[tuple[str, str]] = field(default_factory=list)
@@ -163,22 +182,36 @@ def build_site(
     site_base = config.site_url.rstrip("/")
     # A version snapshot canonicals to its own /v/<version>/ tree.
     canonical_base = f"{site_base}/v/{docs_version}" if docs_version else site_base
-    md_files = sorted(p for p in content_dir.rglob("*.md") if p.name != "_nav.yml")
-    nav_tree = load_nav(content_dir / "_nav.yml")
-    # The "Release notes" section lists one item per version, so it needs the
-    # parsed changelog; skip it entirely when there is no CHANGELOG (the pages
-    # are skipped in _build_releases on the same check, so the link is never dead).
-    changelog_file = config.repo_root / "CHANGELOG.md"
-    if changelog_file.is_file():
-        nav_tree.sections.append(releases_nav_section(parse_changelog(changelog_file.read_text(encoding="utf-8"))))
-    nav_tree.sections.append(reference_nav_section())
+    authored_nav = load_nav(content_dir / "_nav.yml")
+    include_site_content = not bool(docs_version)
+    include_blog_source = include_site_content or authored_nav.scope_for_source("blog") != SCOPE_SITE
+    # Validate generated content before clearing the output directory whenever
+    # it belongs to this build. Snapshot builds never inspect site-scoped input.
+    blog_catalog = load_blog_catalog(content_dir) if authored_nav.has_source("blog") and include_blog_source else None
+    nav_tree = load_site_nav(
+        config,
+        blog_catalog=blog_catalog,
+        include_site_content=include_site_content,
+    )
+    md_files = sorted(
+        path
+        for path in content_dir.rglob("*.md")
+        if path.name != "_nav.yml"
+        and _generic_loop_owns_authored_page(path, content_dir)
+        and (include_site_content or nav_tree.scope_for_url(md_to_url(path.relative_to(content_dir))) != SCOPE_SITE)
+    )
     version = configure_docs_globals(config)
+    version_prefix = f"/v/{docs_version}" if docs_version else ""
+    source_routes = blog_catalog.source_to_public_path if blog_catalog is not None else blog_source_routes(content_dir)
 
     if output_dir.exists():
         shutil.rmtree(output_dir)
 
     outcome = BuildOutcome(output_dir=output_dir, docs_version=docs_version)
     start = time.monotonic()
+    blog_feed_url = (
+        nav_tree.project_path(BLOG_FEED_PATH, version_prefix) if blog_catalog and blog_catalog.posts else ""
+    )
 
     for md_path in md_files:
         rel = md_path.relative_to(content_dir)
@@ -196,6 +229,11 @@ def build_site(
                 current_path=page_url,
                 version=version,
                 source_path=md_path,
+                blog_catalog=blog_catalog,
+                is_blog_index=rel == Path("blog/index.md"),
+                blog_feed_url=blog_feed_url,
+                version_prefix=version_prefix,
+                source_to_public_path=source_routes,
             )
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(result.html, encoding="utf-8")
@@ -211,23 +249,90 @@ def build_site(
             outcome.failed += 1
             outcome.errors.append((str(rel), f"{type(exc).__name__}: {exc}"))
 
-    _copy_non_markdown_assets(content_dir, output_dir)
+    if blog_catalog is not None:
+        blog_records, blog_errors = _build_blog_posts(
+            output_dir,
+            config,
+            nav_tree,
+            version,
+            canonical_base,
+            blog_catalog,
+            blog_feed_url,
+            version_prefix,
+        )
+        outcome.blog_posts = len(blog_records)
+        outcome.built += len(blog_records)
+        outcome.companions += len(blog_records)
+        outcome.records.extend(blog_records)
+        outcome.failed += len(blog_errors)
+        outcome.errors.extend(blog_errors)
+        outcome.blog_feed = _write_blog_feed(output_dir, config, blog_catalog)
+
+    _copy_non_markdown_assets(
+        content_dir,
+        output_dir,
+        nav_tree=nav_tree,
+        include_site_content=include_site_content,
+    )
     # A version snapshot is mounted under /v/ and its pages emit root-absolute
     # /static URLs, so it shares the root build's /static rather than copying it.
     if not docs_version:
         _copy_static_assets(config, output_dir)
-    outcome.examples = _pre_render_examples(output_dir)
-    ref_records = _build_reference(output_dir, config, nav_tree, version, canonical_base)
+    outcome.examples = _pre_render_examples(
+        output_dir,
+        nav_tree=nav_tree,
+        include_site_content=include_site_content,
+    )
+    ref_records = []
+    build_reference = include_site_content or (
+        nav_tree.has_source("reference") and nav_tree.scope_for_source("reference") != SCOPE_SITE
+    )
+    if build_reference:
+        ref_records = _build_reference(
+            output_dir,
+            config,
+            nav_tree,
+            version,
+            canonical_base,
+            blog_catalog=blog_catalog,
+            blog_feed_url=blog_feed_url,
+            version_prefix=version_prefix,
+        )
     outcome.reference = len(ref_records)
     outcome.records.extend(ref_records)
-    rel_records = _build_releases(output_dir, config, nav_tree, version, canonical_base)
+    rel_records = []
+    build_releases = include_site_content or (
+        nav_tree.has_source("releases") and nav_tree.scope_for_source("releases") != SCOPE_SITE
+    )
+    if build_releases:
+        rel_records = _build_releases(
+            output_dir,
+            config,
+            nav_tree,
+            version,
+            canonical_base,
+            blog_catalog=blog_catalog,
+            blog_feed_url=blog_feed_url,
+            version_prefix=version_prefix,
+        )
     outcome.releases = len(rel_records)
     outcome.records.extend(rel_records)
+    if docs_version and not (output_dir / "index.html").is_file():
+        _write_snapshot_home_redirect(output_dir, nav_tree, canonical_base)
     # objects.inv lets other docs sites cross-link into citry's reference.
-    (output_dir / "objects.inv").write_bytes(build_objects_inv(version))
+    if build_reference:
+        (output_dir / "objects.inv").write_bytes(build_objects_inv(version))
 
     # The custom 404 GitHub Pages serves on any unmatched path.
-    outcome.not_found = _build_not_found(output_dir, config, nav_tree, version)
+    outcome.not_found = _build_not_found(
+        output_dir,
+        config,
+        nav_tree,
+        version,
+        blog_catalog=blog_catalog,
+        blog_feed_url=blog_feed_url,
+        version_prefix=version_prefix,
+    )
 
     # The site-wide crawl / index / card files belong to the root build only; a
     # version snapshot is mounted under /v/ and shares the root's robots+sitemap.
@@ -285,7 +390,12 @@ def build_site(
     # Version mode: stamp the snapshot, record it in the manifest, and write any
     # alias redirects, so the committed versions tree stays consistent.
     if docs_version:
-        write_build_info(output_dir, version=docs_version, source_sha=git_head_sha(config.repo_root))
+        write_build_info(
+            output_dir,
+            version=docs_version,
+            source_sha=git_head_sha(config.repo_root),
+            site_routes=nav_tree.site_route_patterns(),
+        )
         if update_versions_manifest:
             update_manifest(config.versions_dir, docs_version, aliases=(alias,) if alias else ())
         if alias:
@@ -295,7 +405,14 @@ def build_site(
     return outcome
 
 
-def _record_for(page_url: str, canonical: str, result: RenderResult, *, source_md: Path | None) -> PageRecord:
+def _record_for(
+    page_url: str,
+    canonical: str,
+    result: RenderResult,
+    *,
+    source_md: Path | None,
+    blog_post: BlogPost | None = None,
+) -> PageRecord:
     """Build a ``PageRecord`` from a render result (front matter wins for canonical)."""
     meta = result.meta
     return PageRecord(
@@ -307,10 +424,18 @@ def _record_for(page_url: str, canonical: str, result: RenderResult, *, source_m
         is_doc_page=True,
         source_md=source_md,
         markdown_body=result.markdown_body,
+        editorial_updated=blog_post.effective_updated if blog_post else None,
     )
 
 
-def _write_companion(path: Path, meta: PageMeta | None, markdown_body: str, canonical: str) -> None:
+def _write_companion(
+    path: Path,
+    meta: PageMeta | None,
+    markdown_body: str,
+    canonical: str,
+    *,
+    blog_post: BlogPost | None = None,
+) -> None:
     """
     Write a ``.md`` companion (front matter + expanded markdown) beside a page.
 
@@ -324,18 +449,114 @@ def _write_companion(path: Path, meta: PageMeta | None, markdown_body: str, cano
     title = meta.title if meta else ""
     description = meta.description if meta else ""
     if title:
-        header_lines.append(f"title: {title}")
+        if blog_post is not None:
+            header_lines.append(f'title: "{_escape_yaml_double_quoted(title)}"')
+        else:
+            header_lines.append(f"title: {title}")
     if canonical:
         header_lines.append(f"url: {canonical}")
     if description:
         # Quote the description so a colon or a leading special char stays valid YAML.
-        desc = description.replace('"', '\\"')
+        desc = _escape_yaml_double_quoted(description)
         header_lines.append(f'description: "{desc}"')
+    if blog_post is not None:
+        header_lines.extend(
+            [
+                f'date: "{blog_post.published.isoformat()}"',
+                f'author: "{_escape_yaml_double_quoted(blog_post.author)}"',
+            ]
+        )
+        if blog_post.updated is not None:
+            header_lines.append(f'updated: "{blog_post.updated.isoformat()}"')
+        if blog_post.author_url:
+            header_lines.append(f'author_url: "{_escape_yaml_double_quoted(blog_post.author_url)}"')
+        if blog_post.tags:
+            header_lines.append("tags:")
+            header_lines.extend(f'  - "{_escape_yaml_double_quoted(tag)}"' for tag in blog_post.tags)
     header_lines.append("---")
     header_lines.append("")
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("\n".join(header_lines) + markdown_body, encoding="utf-8")
+
+
+def _escape_yaml_double_quoted(value: str) -> str:
+    """Escape a scalar embedded in a YAML double-quoted string."""
+    return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+def _generic_loop_owns_authored_page(path: Path, content_dir: Path) -> bool:
+    """Return whether the generic authored-page loop owns ``path``."""
+    rel = path.relative_to(content_dir)
+    if not rel.parts or rel.parts[0] != "blog":
+        return True
+    # The Blog index follows the ordinary clean-URL path. Dated posts are built
+    # separately from the catalog so their filenames never leak into URLs.
+    return rel == Path("blog/index.md")
+
+
+def _build_blog_posts(
+    output_dir: Path,
+    config: DocsConfig,
+    nav_tree: NavTree,
+    version: str,
+    canonical_base: str,
+    catalog: BlogCatalog,
+    blog_feed_url: str,
+    version_prefix: str,
+) -> tuple[list[PageRecord], list[tuple[str, str]]]:
+    """Render catalog posts to stable slug routes and Markdown companions."""
+    records: list[PageRecord] = []
+    errors: list[tuple[str, str]] = []
+    for post in catalog.posts:
+        page_url = post.public_path.lstrip("/")
+        canonical = f"{canonical_base}{post.public_path}" if canonical_base else ""
+        try:
+            result = render_page(
+                post.source,
+                config=config,
+                canonical=canonical,
+                nav_tree=nav_tree,
+                current_path=page_url,
+                version=version,
+                source_path=post.source_path,
+                blog_catalog=catalog,
+                blog_post=post,
+                blog_feed_url=blog_feed_url,
+                version_prefix=version_prefix,
+            )
+            html_path = clean_url_to_html_path(output_dir, post.public_path)
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            html_path.write_text(result.html, encoding="utf-8")
+            record = _record_for(
+                page_url,
+                canonical,
+                result,
+                source_md=post.source_path,
+                blog_post=post,
+            )
+            _write_companion(
+                clean_url_to_companion_path(output_dir, post.public_path),
+                result.meta,
+                result.markdown_body,
+                record.canonical,
+                blog_post=post,
+            )
+            records.append(record)
+        except Exception as exc:  # noqa: BLE001 - match ordinary authored-page failure isolation
+            errors.append((post.source_rel.as_posix(), f"{type(exc).__name__}: {exc}"))
+    return records, errors
+
+
+def _write_blog_feed(output_dir: Path, config: DocsConfig, catalog: BlogCatalog) -> bool:
+    """Write the Atom feed when at least one published post exists."""
+    xml = serialize_atom_feed(catalog, site_url=config.site_url, base_path=config.base_path)
+    if not xml:
+        return False
+    feed_path = output_dir / BLOG_FEED_PATH.lstrip("/")
+    feed_path.parent.mkdir(parents=True, exist_ok=True)
+    feed_path.write_text(xml, encoding="utf-8")
+    return True
 
 
 def _citry_version() -> str:
@@ -355,10 +576,12 @@ def configure_docs_globals(config: DocsConfig) -> str:
     dogfoods Citry's global-variables feature instead of a dedicated tag).
     """
     version = _citry_version()
-    default_citry.template_globals.update({
-        "version": version,
-        "site_name": config.site_name,
-    })
+    default_citry.template_globals.update(
+        {
+            "version": version,
+            "site_name": config.site_name,
+        }
+    )
     return version
 
 
@@ -369,12 +592,21 @@ def _is_unsafe_output(output_dir: Path, content_dir: Path, config: DocsConfig) -
     return resolved in unsafe
 
 
-def _copy_non_markdown_assets(content_dir: Path, output_dir: Path) -> None:
+def _copy_non_markdown_assets(
+    content_dir: Path,
+    output_dir: Path,
+    *,
+    nav_tree: NavTree,
+    include_site_content: bool,
+) -> None:
     """Copy images and other non-``.md`` content files into the output tree verbatim."""
     for asset in content_dir.rglob("*"):
         if asset.is_dir() or asset.suffix == ".md" or asset.name == "_nav.yml":
             continue
-        dest = output_dir / asset.relative_to(content_dir)
+        rel = asset.relative_to(content_dir)
+        if not include_site_content and nav_tree.scope_for_content_asset(rel) == SCOPE_SITE:
+            continue
+        dest = output_dir / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(asset, dest)
 
@@ -386,16 +618,49 @@ def _copy_static_assets(config: DocsConfig, output_dir: Path) -> None:
         shutil.copytree(static_dir, output_dir / "static", dirs_exist_ok=True)
 
 
+def _write_snapshot_home_redirect(output_dir: Path, nav_tree: NavTree, canonical_base: str) -> None:
+    """Give a snapshot a stable home when the root landing page is site-scoped."""
+    for item in nav_tree.flat_pages():
+        if item.scope == SCOPE_SITE or item.path == "/":
+            continue
+        target = output_dir / item.path.strip("/") / "index.html"
+        if not target.is_file():
+            continue
+        emit_redirects(
+            output_dir,
+            site_url=canonical_base,
+            redirects={"/": item.path},
+        )
+        return
+    raise RuntimeError("Version snapshot has no built versioned page for its homepage")
+
+
 def _build_reference(
-    output_dir: Path, config: DocsConfig, nav_tree: NavTree, version: str, canonical_base: str
+    output_dir: Path,
+    config: DocsConfig,
+    nav_tree: NavTree,
+    version: str,
+    canonical_base: str,
+    *,
+    blog_catalog: BlogCatalog | None = None,
+    blog_feed_url: str = "",
+    version_prefix: str = "",
 ) -> list[PageRecord]:
-    """Generate and render the API-reference pages (the index plus one per category)."""
+    """Render the generated API-reference index and category pages."""
     records: list[PageRecord] = []
 
     def write(page_url: str, source: str) -> None:
         canonical = f"{canonical_base}/{page_url}" if canonical_base else ""
         result = render_page(
-            source, config=config, canonical=canonical, nav_tree=nav_tree, current_path=page_url, version=version
+            source,
+            config=config,
+            canonical=canonical,
+            nav_tree=nav_tree,
+            current_path=page_url,
+            version=version,
+            blog_catalog=blog_catalog,
+            blog_feed_url=blog_feed_url,
+            version_prefix=version_prefix,
         )
         out_path = output_dir / page_url / "index.html"
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -404,12 +669,24 @@ def _build_reference(
 
     write("reference/", reference_index_markdown())
     for cat in CATEGORIES:
+        # Authored categories were rendered with the normal content pages. Do
+        # not overwrite their HTML or create a duplicate PageRecord here.
+        if cat.authored:
+            continue
         write(f"reference/{cat.slug}/", reference_page_markdown(cat))
     return records
 
 
 def _build_releases(
-    output_dir: Path, config: DocsConfig, nav_tree: NavTree, version: str, canonical_base: str
+    output_dir: Path,
+    config: DocsConfig,
+    nav_tree: NavTree,
+    version: str,
+    canonical_base: str,
+    *,
+    blog_catalog: BlogCatalog | None = None,
+    blog_feed_url: str = "",
+    version_prefix: str = "",
 ) -> list[PageRecord]:
     """Generate and render the release-notes pages (the index plus one per version)."""
     records: list[PageRecord] = []
@@ -426,6 +703,9 @@ def _build_releases(
             current_path=page_url,
             version=version,
             run_citry_pass=False,
+            blog_catalog=blog_catalog,
+            blog_feed_url=blog_feed_url,
+            version_prefix=version_prefix,
         )
         out_path = output_dir / page_url / "index.html"
         out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -445,7 +725,16 @@ def _build_releases(
     return records
 
 
-def _build_not_found(output_dir: Path, config: DocsConfig, nav_tree: NavTree, version: str) -> bool:
+def _build_not_found(
+    output_dir: Path,
+    config: DocsConfig,
+    nav_tree: NavTree,
+    version: str,
+    *,
+    blog_catalog: BlogCatalog | None = None,
+    blog_feed_url: str = "",
+    version_prefix: str = "",
+) -> bool:
     """
     Write ``404.html`` - the page GitHub Pages serves for any path that does not exist.
 
@@ -481,17 +770,33 @@ def _build_not_found(output_dir: Path, config: DocsConfig, nav_tree: NavTree, ve
         "open an issue</a> and we will fix the link.\n"
     )
     html = render_page(
-        source, config=config, canonical="", nav_tree=nav_tree, current_path="404", version=version
+        source,
+        config=config,
+        canonical="",
+        nav_tree=nav_tree,
+        current_path="404",
+        version=version,
+        blog_catalog=blog_catalog,
+        blog_feed_url=blog_feed_url,
+        version_prefix=version_prefix,
     ).html
     (output_dir / "404.html").write_text(html, encoding="utf-8")
     return True
 
 
-def _pre_render_examples(output_dir: Path) -> int:
+def _pre_render_examples(
+    output_dir: Path,
+    *,
+    nav_tree: NavTree,
+    include_site_content: bool,
+) -> int:
     """Render each example's standalone page (and any fragment variants) to static files."""
     count = 0
-    for name, info in get_example_registry().items():
-        out_path = output_dir / "examples" / name / "index.html"
+    for info in get_example_registry().values():
+        route = f"/examples/{info.public_slug}/"
+        if not include_site_content and nav_tree.scope_for_url(route) == SCOPE_SITE:
+            continue
+        out_path = output_dir / "examples" / info.public_slug / "demo" / "index.html"
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(str(info.page_cls()), encoding="utf-8")
         count += 1
@@ -499,7 +804,7 @@ def _pre_render_examples(output_dir: Path) -> int:
         # endpoint, and write the fragment component's dep files so the client
         # runtime can load its JS/CSS on the static site (see export_fragment_deps).
         for variant, comp_cls in info.fragments.items():
-            variant_path = output_dir / "examples" / name / variant / "index.html"
+            variant_path = output_dir / "examples" / info.public_slug / "demo" / variant / "index.html"
             variant_path.parent.mkdir(parents=True, exist_ok=True)
             variant_path.write_text(comp_cls().render().serialize(deps_strategy="fragment"), encoding="utf-8")
             export_fragment_deps(output_dir, comp_cls)

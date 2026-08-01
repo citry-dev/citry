@@ -53,6 +53,9 @@ def _type_error(key: str, value: str, declared: type) -> str | None:
     if declared is bool and value.lower() not in _BOOL_TOKENS:
         expected = ", ".join(sorted(_BOOL_TOKENS))
         return f"{key}: {value!r} is not a boolean (expected one of: {expected})"
+    if key == "layout" and value not in frontmatter._LAYOUTS:
+        expected = ", ".join(sorted(frontmatter._LAYOUTS))
+        return f"{key}: {value!r} is not a known layout (expected one of: {expected})"
     if declared is float:
         try:
             float(value)
@@ -67,8 +70,14 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         return
 
     for md in sorted(content_dir.rglob("*.md")):
+        rel = md.relative_to(content_dir)
+        if len(rel.parts) == 2 and rel.parts[0] == "blog" and md.name != "index.md":
+            # Dated posts use the stricter Blog schema and are checked by the
+            # Blog catalog guard. The ordinary PageMeta parser intentionally
+            # does not know about editorial keys such as date and author.
+            continue
         front, _body = frontmatter._split_front_matter(md.read_text(encoding="utf-8"))
-        source = md.relative_to(content_dir).as_posix()
+        source = rel.as_posix()
         # Iterating the dict walks the keys in the order they appear in the
         # file (dicts keep insertion order), so the report is deterministic.
         for key, value in front.items():

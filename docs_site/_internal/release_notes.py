@@ -29,7 +29,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from docs_site._internal.nav import NavItem, NavSection
+from docs_site._internal.nav import NavItem
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -239,14 +239,14 @@ def release_index_markdown(releases: list[Release]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def releases_nav_section(releases: list[Release]) -> NavSection:
-    """
-    The sidebar "Release notes" section: a collapsible group, one item per version.
-
-    ``path`` points at the index, so the section's breadcrumb links back to "all
-    releases" and an "Overview" link is surfaced; ``collapsible`` keeps the (long,
-    ever-growing) version list closed by default until the reader opens it or is
-    on a release page.
-    """
-    items = [NavItem(title=release.title, path=f"/releases/{release.slug}/") for release in releases]
-    return NavSection(label="Release notes", path="/releases/", items=items, collapsible=True)
+def releases_nav_items(releases: list[Release]) -> list[NavItem]:
+    """The pages supplied by ``source: releases`` in navigation."""
+    items = [NavItem(title="Overview", path="/releases/")]
+    items.extend(
+        NavItem(
+            title=release.title,
+            path=f"/releases/{release.slug}/",
+        )
+        for release in releases
+    )
+    return items

@@ -28,8 +28,9 @@ REPO_URL = "https://github.com/citry-dev/citry"
 EDIT_BRANCH = "main"
 
 # Content pages where a "last updated" date is misleading rather than useful.
-# Patterns match the content-relative posix path. (The generated reference and
-# example pages have no source file, so they never reach this anyway.)
+# Patterns match the content-relative posix path. Generated Reference pages and
+# standalone example demos have no source file, so they never reach this. The
+# authored non-Python Reference pages and example recipes do.
 EXCLUDE_PATTERNS = (
     "community/code-of-conduct.md",
     "community/license.md",
@@ -99,9 +100,9 @@ def edit_url_for(repo_root: Path, page_path: Path) -> str:
     """
     GitHub "edit this page" URL for a content source file, or "" if it has none.
 
-    Only files under the repo get a link; generated pages (reference, examples,
-    404) are rendered from strings or temp dirs outside it, so ``relative_to``
-    raises and they correctly get no link.
+    Only files under the repo get a link. Generated Reference pages, standalone
+    example demos, and the 404 are rendered from strings or temp dirs outside
+    it, so ``relative_to`` raises and they correctly get no link.
     """
     try:
         rel = page_path.relative_to(repo_root)

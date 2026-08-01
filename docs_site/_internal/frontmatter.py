@@ -21,6 +21,7 @@ from dataclasses import dataclass
 _H1_RE = re.compile(r"^#\s+(.+?)\s*$", re.MULTILINE)
 _TRUTHY = {"true", "1", "yes", "on"}
 _FALSY = {"false", "0", "no", "off"}
+_LAYOUTS = {"docs", "landing", "playground"}
 
 # The first "real" paragraph of a body, used to derive a meta description when
 # front matter sets none. It is the first block that is not a heading, image,
@@ -59,12 +60,19 @@ class PageMeta:
     # boost (1.0 is neutral; higher ranks the page above its peers).
     searchable: bool = True
     boost: float = 1.0
+    # The document shell. Most pages use the narrative docs layout; the landing
+    # page and playground keep the shared header but own the remaining viewport.
+    layout: str = "docs"
     body: str = ""
 
 
 def parse_page(source: str) -> PageMeta:
     """Split front matter from ``source`` and return the parsed metadata + body."""
     front, body = _split_front_matter(source)
+    layout = front.get("layout", "docs")
+    if layout not in _LAYOUTS:
+        choices = ", ".join(sorted(_LAYOUTS))
+        raise ValueError(f"Unknown page layout {layout!r}; expected one of: {choices}")
     title = front.get("title", "") or _first_h1(body)
     # Description: front matter, else the first real paragraph of the body. The
     # site-level default (the third tier) is applied at render time, where the
@@ -79,6 +87,7 @@ def parse_page(source: str) -> PageMeta:
         # Indexed by default; only an explicit falsy value opts a page out.
         searchable=front.get("searchable", "").lower() not in _FALSY,
         boost=_parse_float(front.get("boost", ""), default=1.0),
+        layout=layout,
         body=body,
     )
 

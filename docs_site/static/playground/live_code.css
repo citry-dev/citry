@@ -1,0 +1,344 @@
+.citry-live-code {
+  --citry-playground-function: oklch(44% 0.13 145);
+  --citry-playground-accent-text: oklch(46% 0.13 195);
+  --citry-playground-warning-text: oklch(48% 0.14 70);
+  --citry-playground-danger-text: oklch(44% 0.18 25);
+  --citry-playground-muted-text: var(--c-fg-subtle);
+  margin: 1.5rem 0;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 0.5rem;
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font-size: 0.9rem;
+}
+
+.citry-live-code__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+[data-theme="dark"] .citry-live-code {
+  --citry-playground-function: oklch(80% 0.16 125);
+  --citry-playground-accent-text: var(--c-accent);
+  --citry-playground-warning-text: var(--c-warning);
+  --citry-playground-danger-text: var(--c-danger);
+  --citry-playground-muted-text: var(--c-fg-muted);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .citry-live-code {
+    --citry-playground-function: oklch(80% 0.16 125);
+    --citry-playground-accent-text: var(--c-accent);
+    --citry-playground-warning-text: var(--c-warning);
+    --citry-playground-danger-text: var(--c-danger);
+    --citry-playground-muted-text: var(--c-fg-muted);
+  }
+}
+
+.citry-live-code__caption,
+.citry-live-code__toolbar,
+.citry-live-code__tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.65rem;
+  border-bottom: 1px solid var(--c-border);
+  background: var(--c-surface);
+}
+
+.citry-live-code__caption {
+  min-height: 2.7rem;
+  justify-content: space-between;
+  color: var(--c-fg-muted);
+  font-weight: 650;
+}
+
+.citry-live-code__caption-actions,
+.citry-live-code__button-group {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.citry-live-code__activate,
+.citry-live-code__tabs button {
+  border: 1px solid var(--c-border);
+  border-radius: 0.35rem;
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.citry-live-code__activate:hover,
+.citry-live-code__tabs button:hover,
+.citry-live-code__tabs button.is-active {
+  border-color: var(--c-accent);
+  color: var(--c-link);
+}
+
+.citry-live-code__draft {
+  color: var(--citry-playground-warning-text);
+  font-size: 0.78rem;
+}
+
+.citry-live-code__static > .highlight {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.citry-live-code__static pre {
+  max-height: 32rem;
+  margin: 0;
+  overflow: auto;
+}
+
+.citry-live-code--full-height .citry-live-code__static pre {
+  max-height: none;
+}
+
+.citry-live-code__workspace {
+  min-height: min(32rem, 70dvh);
+}
+
+.citry-live-code__tabs {
+  padding-bottom: 0;
+}
+
+.citry-live-code__tabs button {
+  border-bottom-right-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.citry-live-code__panel {
+  position: relative;
+  min-height: min(28rem, 65dvh);
+}
+
+.citry-live-code__toolbar {
+  min-height: 2.65rem;
+  overflow-x: auto;
+  color: var(--c-fg-muted);
+  white-space: nowrap;
+}
+
+.citry-live-code__toolbar-end {
+  margin-inline-start: auto;
+}
+
+.citry-live-code__status {
+  overflow: hidden;
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+}
+
+.citry-live-code__stale {
+  color: var(--citry-playground-warning-text);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.citry-live-code__icon {
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0.4rem;
+  border: 0;
+  border-radius: 0.25rem;
+  background: none;
+  color: var(--c-fg-subtle);
+  cursor: pointer;
+}
+
+.citry-live-code__icon:hover:not(:disabled),
+.citry-live-code__icon--primary:not(:disabled) {
+  background: var(--c-bg);
+  color: var(--c-accent);
+}
+
+.citry-live-code__icon:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.citry-live-code__icon svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.citry-live-code__icon--primary svg {
+  fill: currentColor;
+  stroke: none;
+}
+
+.citry-live-code__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--c-fg);
+  font-size: 0.78rem;
+}
+
+.citry-live-code__editor-shell {
+  height: calc(min(28rem, 65dvh) - 2.65rem);
+  overflow: hidden;
+}
+
+.citry-live-code__editor,
+.citry-live-code__fallback,
+.citry-live-code__editor .cm-editor {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--c-bg);
+  color: var(--c-fg);
+}
+
+.citry-live-code__fallback {
+  padding: 0.75rem;
+  resize: none;
+  border: 0;
+  outline: 0;
+  font: 0.875rem/1.5 var(--font-mono);
+  tab-size: 4;
+}
+
+.citry-live-code__editor .cm-scroller {
+  overflow: auto;
+  font: 0.875rem/1.5 var(--font-mono);
+}
+
+.citry-live-code__editor .cm-editor.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground,
+.citry-live-code__editor .cm-selectionBackground {
+  background: color-mix(in oklch, var(--c-link) 8%, transparent) !important;
+}
+
+.citry-live-code__editor .cm-gutters {
+  color: var(--c-fg-subtle);
+  background: var(--c-surface);
+  border-color: var(--c-border);
+}
+
+.citry-live-code__editor .cm-activeLine,
+.citry-live-code__editor .cm-activeLineGutter {
+  background: var(--c-accent-dim);
+}
+
+.citry-live-code__editor .cm-citry-keyword { color: var(--c-link); font-weight: 650; }
+.citry-live-code__editor .cm-citry-meta,
+.citry-live-code__editor .cm-citry-comment { color: var(--citry-playground-muted-text); }
+.citry-live-code__editor .cm-citry-constant,
+.citry-live-code__editor .cm-citry-definition,
+.citry-live-code__editor .cm-citry-local,
+.citry-live-code__editor .cm-citry-attribute { color: var(--c-link-hover); }
+.citry-live-code__editor .cm-citry-literal,
+.citry-live-code__editor .cm-citry-interpolation { color: var(--citry-playground-warning-text); }
+.citry-live-code__editor .cm-citry-function { color: var(--citry-playground-function); font-weight: 650; }
+.citry-live-code__editor .cm-citry-string { color: var(--c-code-text); }
+.citry-live-code__editor .cm-citry-special-string,
+.citry-live-code__editor .cm-citry-invalid { color: var(--citry-playground-danger-text); }
+.citry-live-code__editor .cm-citry-type,
+.citry-live-code__editor .cm-citry-special-name,
+.citry-live-code__editor .cm-citry-tag,
+.citry-live-code__editor .cm-citry-name { color: var(--citry-playground-accent-text); font-weight: 650; }
+.citry-live-code__editor .cm-citry-comment { font-style: italic; }
+
+.citry-live-code__preview-shell {
+  position: relative;
+  display: flex;
+  min-height: min(28rem, 65dvh);
+  background: #fff;
+}
+
+.citry-live-code__preview {
+  width: 100%;
+  min-height: min(28rem, 65dvh);
+  border: 0;
+  background: #fff;
+}
+
+.citry-live-code__preview.citry-playground__preview--candidate {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.citry-live-code__empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  color: #525b6e;
+  pointer-events: none;
+}
+
+.citry-live-code__empty[hidden] { display: none; }
+
+.citry-live-code__diagnostic {
+  position: absolute;
+  z-index: 5;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  max-height: 45%;
+  padding: 0.65rem 0.8rem;
+  overflow: auto;
+  border: 1px solid var(--c-danger);
+  border-left-width: 0.3rem;
+  border-radius: 0.4rem;
+  background: color-mix(in oklch, var(--c-danger) 12%, var(--c-bg));
+  color: var(--c-fg);
+  box-shadow: var(--shadow-modal);
+}
+
+.citry-live-code__diagnostic-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.citry-live-code__diagnostic pre {
+  margin: 0.5rem 0 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  font: 0.78rem/1.45 var(--font-mono);
+}
+
+.citry-live-code button:focus-visible,
+.citry-live-code input:focus-visible {
+  outline: 3px solid var(--c-link);
+  outline-offset: 2px;
+}
+
+@media (forced-colors: active) {
+  .citry-live-code,
+  .citry-live-code__diagnostic {
+    border-color: CanvasText;
+  }
+}
+
+@media (max-width: 30rem) {
+  .citry-live-code__status { display: none; }
+  .citry-live-code__workspace,
+  .citry-live-code__panel,
+  .citry-live-code__preview-shell,
+  .citry-live-code__preview { min-height: min(24rem, 70dvh); }
+}

@@ -142,6 +142,39 @@ class _CaptureExpandedMarkdownExtension(Extension):
         md.preprocessors.register(_CaptureExpandedMarkdown(self._captured), "capture_expanded_markdown", 31)
 
 
+class _WrapTables(Treeprocessor):
+    """Give Markdown tables a bounded horizontal-scroll container."""
+
+    def run(self, root: ET.Element) -> ET.Element:
+        self._wrap_children(root)
+        return root
+
+    def _wrap_children(self, parent: ET.Element) -> None:
+        for index, child in enumerate(list(parent)):
+            if child.tag == "table":
+                wrapper = ET.Element(
+                    "div",
+                    {
+                        "class": "table-wrapper",
+                        "tabindex": "0",
+                    },
+                )
+                parent.remove(child)
+                wrapper.append(child)
+                parent.insert(index, wrapper)
+                continue
+
+            self._wrap_children(child)
+
+
+class _WrapTablesExtension(Extension):
+    """Install the table wrapper after Markdown has built its element tree."""
+
+    def extendMarkdown(self, md: markdown.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        md.registerExtension(self)
+        md.treeprocessors.register(_WrapTables(md), "wrap_tables", 1)
+
+
 # A fresh content-component class per render gets a unique registered name, so
 # concurrent or repeated renders never collide; it is unregistered right after.
 _content_counter = itertools.count()
@@ -209,6 +242,13 @@ def render_page(
     wrap_in_layout: bool = True,
     source_path: Path | None = None,
     run_citry_pass: bool = True,
+    blog_catalog: BlogCatalog | None = None,
+    blog_post: BlogPost | None = None,
+    is_blog_index: bool = False,
+    blog_feed_url: str = "",
+    version_prefix: str = "",
+    source_to_public_path: Mapping[Path, str] | None = None,
+    allow_citry_ui: bool = False,
 ) -> RenderResult:
     """
     Render markdown ``source`` to a full HTML page (front matter + passes 2-3).
@@ -227,13 +267,41 @@ def render_page(
     a bare, unbackticked ``<tag>`` would reach the markdown pass as raw HTML.
     """
     config = config or default_config
+    has_live_code = False
+    has_interactive_live_code = False
 
     meta = parse_page(source)
+    if blog_post is not None:
+        # Blog metadata has already passed the catalog's strict YAML-scalar
+        # parser. Keep that canonical model authoritative through rendering and
+        # output records; the generic docs parser intentionally supports a much
+        # smaller front-matter dialect and would otherwise preserve YAML escape
+        # characters in quoted titles and descriptions.
+        meta = PageMeta(
+            title=blog_post.title,
+            description=blog_post.description,
+            noindex=blog_post.noindex,
+            og_image=blog_post.og_image,
+            searchable=blog_post.searchable,
+            boost=blog_post.boost,
+            body=blog_post.body,
+        )
     if run_citry_pass:
         # Pass 0: protect code so the citry render leaves it literal.
         protected = protect_fences(meta.body)
         # Pass 1: render the body as a citry template, expanding the custom <c-*> tags.
-        expanded = restore_protected_code(render_content(protected, context={"current_path": current_path}))
+        catalog_context = use_blog_catalog(blog_catalog) if blog_catalog is not None else nullcontext()
+        live_state = LiveCodeContext(
+            config=config,
+            source_path=source_path,
+            interactive=not bool(version_prefix),
+            allow_citry_ui=allow_citry_ui,
+        )
+        live_context = use_live_code_context(live_state)
+        with catalog_context, live_context:
+            expanded = restore_protected_code(render_content(protected, context={"current_path": current_path}))
+        has_live_code = live_state.has_live_code
+        has_interactive_live_code = live_state.has_interactive
     else:
         # A page that shows citry syntax as text (release notes) skips the citry
         # pass; its `<c-raw>`/`{{ ... }}` are then rendered as literal code by the
@@ -245,12 +313,55 @@ def render_page(
     # the post-snippet Markdown from that same preprocessor run for companions
     # and llms-full.txt; running snippets twice would break escaped markers.
     content_html, toc_tokens, expanded = _pass2_markdown_with_expanded_source(expanded, config=config)
+    # Keep the interactive card in browser HTML, but give Markdown companions
+    # and llms-full a concise source-first view derived from the same files.
+    expanded = project_examples_for_text(expanded)
+    expanded = project_live_code_for_text(
+        expanded,
+        repo_root=config.repo_root,
+        allow_citry_ui=allow_citry_ui,
+    )
+    if blog_catalog is not None:
+        expanded = project_blog_list_for_text(expanded, blog_catalog)
     # Rewrite internal `.md` links (e.g. ./other.md -> ../other/) so they resolve
     # under the clean-URL scheme. Generated pages (source_path=None) have no source
     # file to resolve against and pass through untouched. Runs before the branch
     # below so both the wrapped and the content-only return are rewritten.
     if source_path is not None:
-        content_html = rewrite_internal_md_links(content_html, source_path=source_path, content_dir=config.content_dir)
+        routes = source_to_public_path
+        if routes is None and blog_catalog is not None:
+            routes = blog_catalog.source_to_public_path
+        content_html = rewrite_internal_md_links(
+            content_html,
+            source_path=source_path,
+            content_dir=config.content_dir,
+            current_public_path=current_path,
+            source_to_public_path=routes,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
+        expanded = rewrite_internal_md_links_in_markdown(
+            expanded,
+            source_path=source_path,
+            content_dir=config.content_dir,
+            current_public_path=current_path,
+            source_to_public_path=routes,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
+    elif version_prefix:
+        content_html = project_internal_html_urls(
+            content_html,
+            current_public_path=current_path,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
+        expanded = project_internal_markdown_urls(
+            expanded,
+            current_public_path=current_path,
+            nav_tree=nav_tree,
+            version_prefix=version_prefix,
+        )
     # The API-reference symbol headings are injected as raw HTML, so the markdown
     # TOC pass never saw them; fold them in from the rendered HTML.
     toc_tokens = merge_html_headings_into_toc(content_html, toc_tokens)
@@ -272,9 +383,13 @@ def render_page(
     if source_path is not None:
         edit_url = edit_url_for(config.repo_root, source_path)
         content_rel = _content_rel(source_path, config)
-        if content_rel is None or not is_excluded(content_rel):
+        if blog_post is None and (content_rel is None or not is_excluded(content_rel)):
             git_meta = get_page_git_meta(config.repo_root, source_path)
             created, last_updated, authors = git_meta.created, git_meta.last_updated, list(git_meta.authors)
+
+    blog_newer = blog_older = None
+    if blog_catalog is not None and blog_post is not None:
+        blog_newer, blog_older = blog_catalog.neighbors(blog_post)
 
     page_html = str(
         DocPage(
@@ -302,6 +417,16 @@ def render_page(
             last_updated=last_updated,
             authors=authors,
             edit_url=edit_url,
+            blog_post=blog_post,
+            blog_newer=blog_newer,
+            blog_older=blog_older,
+            is_blog_index=is_blog_index,
+            blog_feed_url=blog_feed_url,
+            page_scope=nav_tree.scope_for_url(current_path) if nav_tree is not None else "versioned",
+            version_prefix=version_prefix,
+            layout=meta.layout,
+            has_live_code=has_live_code,
+            has_interactive_live_code=has_interactive_live_code,
         )
     )
     return RenderResult(html=page_html, toc_tokens=toc_tokens, meta=meta, markdown_body=expanded)
@@ -325,9 +450,17 @@ def _pass2_markdown_with_expanded_source(source: str, *, config: DocsConfig) -> 
     }
     captured: list[str] = []
     md = markdown.Markdown(
-        extensions=[*MD_EXTENSIONS, _CaptureExpandedMarkdownExtension(captured)],
+        extensions=[
+            *MD_EXTENSIONS,
+            _CaptureExpandedMarkdownExtension(captured),
+            _WrapTablesExtension(),
+        ],
         extension_configs=configs,
     )
+    # A component can render a <button> that wraps block content, which is valid
+    # HTML. Markdown otherwise treats the tag as span-level, ends the raw HTML
+    # block there, and wraps everything after it in stray paragraph tags.
+    md.block_level_elements.append("button")
     html = md.convert(source)
     toc_tokens = getattr(md, "toc_tokens", [])
     # Markdown.convert returns early for blank input, before preprocessors run.

@@ -30,11 +30,16 @@ if TYPE_CHECKING:
 # Options passed to minify_html.minify (v0.18+). The cautious defaults we want
 # (doctype kept, attribute values left spec-compliant, spaces between attributes
 # preserved, <pre> whitespace untouched) are the library's own defaults; we only
-# opt into keeping comments and the closing / html+head opening tags, and
-# shrinking inline CSS. Inline-JS minification stays off so the JSON-LD
-# <script> blocks are not touched.
+# opt into keeping comments and the closing / html+head opening tags. Inline-JS
+# minification stays off so the JSON-LD <script> blocks are not touched.
+#
+# Inline CSS is left alone as well. The library's CSS pass drops the space after
+# a custom property, turning `var(--bg) 0%` into `var(--bg)0%`, which is invalid
+# and takes the whole declaration with it: gradients and grid track lists
+# silently stop applying. The `rendered_css` guard fails a build that contains
+# the pattern, so this cannot come back unnoticed.
 _MINIFY_CONFIG = {
-    "minify_css": True,
+    "minify_css": False,
     "keep_comments": True,
     "keep_closing_tags": True,
     "keep_html_and_head_opening_tags": True,

@@ -112,7 +112,9 @@ def _priority_for(url: str) -> float:
 
 
 def _git_lastmod(page: PageRecord, repo_root: Path) -> str:
-    """The page's last-commit date (YYYY-MM-DD) from git, or "" when unknown."""
+    """The page's editorial or git date (YYYY-MM-DD), or "" when unknown."""
+    if page.editorial_updated is not None:
+        return page.editorial_updated.date().isoformat()
     if page.source_md is None:
         return ""
     meta = get_page_git_meta(repo_root, page.source_md)

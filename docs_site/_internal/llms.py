@@ -21,10 +21,6 @@ if TYPE_CHECKING:
     from docs_site._internal.build import PageRecord
     from docs_site._internal.nav import NavTree
 
-# The nav section that names the site (its landing page). It supplies the
-# llms.txt title and summary and is not repeated in the body.
-_TITLE_SECTION = "Home"
-
 
 def generate_llms_files(
     records: list[PageRecord],
@@ -72,33 +68,27 @@ def write_llms_txt(
     if summary:
         lines += [f"> {summary}", ""]
 
-    optional: list[tuple[str, str]] = []
     count = 0
-    for section in nav_tree.sections:
-        if section.label == _TITLE_SECTION:
-            continue
-        # A section that is only a landing page (no children) is an "Optional" link.
-        if section.path and not section.items and not section.groups:
-            optional.append((section.label, section.path))
-            continue
+    for area in nav_tree.areas:
+        area_lines: list[str] = []
+        for item in area.items:
+            # The root page already supplies the file title and summary.
+            if not item.path.strip("/"):
+                continue
+            area_lines.append(_bullet(item.title, item.path, by_url, site_url))
+            count += 1
 
-        lines += [f"## {section.label}", ""]
-        if section.path:
-            lines.append(_bullet(f"{section.label} overview", section.path, by_url, site_url))
-            count += 1
-        # A section holds either items or groups; flatten group items into the list.
-        items = list(section.items) + [it for group in section.groups for it in group.items]
-        for item in items:
-            lines.append(_bullet(item.title, item.path, by_url, site_url))
-            count += 1
-        lines.append("")
+        for group in area.groups:
+            group_lines = [_bullet(item.title, item.path, by_url, site_url) for item in group.items]
+            if not group_lines:
+                continue
+            if area_lines:
+                area_lines.append("")
+            area_lines += [f"### {group.label}", "", *group_lines]
+            count += len(group_lines)
 
-    if optional:
-        lines += ["## Optional", ""]
-        for label, path in optional:
-            lines.append(_bullet(label, path, by_url, site_url))
-            count += 1
-        lines.append("")
+        if area_lines:
+            lines += [f"## {area.label}", "", *area_lines, ""]
 
     (output_dir / "llms.txt").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     return count

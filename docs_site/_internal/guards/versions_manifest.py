@@ -133,6 +133,22 @@ def _check_stamp(stamp: Path, version: str) -> Iterator[GuardResult]:
             message=f"{version}/{BUILD_INFO_NAME} records version {stamped!r} but the directory is {version!r}",
             source=version,
         )
+    site_routes = data.get("site_routes")
+    if site_routes is not None and not _valid_site_routes(site_routes):
+        yield GuardResult.error(
+            guard="versions_manifest",
+            message=(
+                f"{version}/{BUILD_INFO_NAME} field 'site_routes' must be a list of root-absolute "
+                "directory routes or /* patterns"
+            ),
+            source=version,
+        )
+
+
+def _valid_site_routes(value: object) -> bool:
+    if not isinstance(value, list):
+        return False
+    return all(isinstance(route, str) and route.startswith("/") and route.endswith(("/", "/*")) for route in value)
 
 
 def _check_alias(root: Path, alias: str, target: str) -> Iterator[GuardResult]:

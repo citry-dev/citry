@@ -24,6 +24,10 @@ from docs_site._internal.guards import (
     anchor,
     api_symbols,
     asset,
+    authored_reference,
+    blog,
+    blog_feed,
+    builtin_tags,
     code_lang,
     component_fence,
     cross_version_link,
@@ -35,10 +39,14 @@ from docs_site._internal.guards import (
     internal_link,
     json_ld,
     lexer_alias,
+    live_code,
     nav,
     redirect_target,
+    rendered_css,
+    rendered_markdown,
     single_h1,
     snippet_path,
+    ui_library_projection,
     versions_manifest,
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
@@ -52,6 +60,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "GUARDS",
+    "POST_BUILD_GUARDS",
+    "SOURCE_GUARDS",
     "VERSION_GUARDS",
     "GuardContext",
     "GuardResult",
@@ -59,34 +69,46 @@ __all__ = [
     "SiteIndex",
     "format_report",
     "make_context",
+    "make_source_context",
     "make_versions_context",
     "run_guards",
 ]
 
 # Guards in run order: source scans first (cheapest, no build needed), then the
 # post-build checks that read the SiteIndex.
-GUARDS: list[Guard] = [
-    # --- source / pre-build scans ---
+SOURCE_GUARDS: list[Guard] = [
     fence_validator.check,
     lexer_alias.check,
+    live_code.check,
     code_lang.check,
     component_fence.check,
     snippet_path.check,
+    ui_library_projection.check,
+    blog.check,
     nav.check,
     frontmatter.check,
     example_contract.check,
+    builtin_tags.check,
+    authored_reference.check,
     api_symbols.check,
-    # --- post-build (SiteIndex) ---
+]
+
+POST_BUILD_GUARDS: list[Guard] = [
     internal_link.check,
+    blog_feed.check,
     anchor.check,
     asset.check,
     html_wellformed.check,
+    rendered_css.check,
+    rendered_markdown.check,
     single_h1.check,
     alt_text.check,
     headings.check,
     json_ld.check,
     redirect_target.check,
 ]
+
+GUARDS: list[Guard] = [*SOURCE_GUARDS, *POST_BUILD_GUARDS]
 
 # Guards for the committed docs_site/versions/ tree. They run separately (via
 # make_versions_context + run_guards(..., guards=VERSION_GUARDS)), not as part of
@@ -106,7 +128,21 @@ def make_context(build_dir: Path, *, config: DocsConfig) -> GuardContext:
         nav_path=config.content_dir / "_nav.yml",
         static_dir=config.base_dir / "static",
         repo_root=config.repo_root,
+        base_path=config.base_path,
         site_index=SiteIndex(build_dir),
+        example_registry=get_example_registry(),
+    )
+
+
+def make_source_context(*, config: DocsConfig) -> GuardContext:
+    """Assemble a guard context that is safe to use before rendering starts."""
+    return GuardContext(
+        content_dir=config.content_dir,
+        examples_dir=config.examples_dir,
+        nav_path=config.content_dir / "_nav.yml",
+        static_dir=config.base_dir / "static",
+        repo_root=config.repo_root,
+        base_path=config.base_path,
         example_registry=get_example_registry(),
     )
 
@@ -126,6 +162,7 @@ def make_versions_context(versions_root: Path | None = None) -> GuardContext:
         nav_path=default_config.content_dir / "_nav.yml",
         static_dir=default_config.base_dir / "static",
         repo_root=default_config.repo_root,
+        base_path=default_config.base_path,
         versions_dir=root,
     )
 

@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 import citry
 from docs_site._internal.guards.base import GuardResult
-from docs_site._internal.reference import extract_builtin, extract_symbol
+from docs_site._internal.reference import extract_symbol
 from docs_site._internal.reference_pages import CATEGORIES
 
 if TYPE_CHECKING:
@@ -31,14 +31,9 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:  # noqa: ARG001 - reads t
     # Forward: every documented symbol resolves.
     documented_leaves: set[str] = set()
     for cat in CATEGORIES:
-        if cat.source == "builtin":
-            for tag in cat.symbols:
-                if extract_builtin(tag) is None:
-                    yield GuardResult.error(
-                        guard="api_symbols",
-                        message=f"Documented built-in <c-{tag}> does not resolve in the registry.",
-                        source=f"reference/{cat.slug}",
-                    )
+        if cat.source != "griffe":
+            # Authored public surfaces have dedicated source guards. They do
+            # not resolve through Python docstrings.
             continue
         for path in cat.symbols:
             if extract_symbol(path) is None:

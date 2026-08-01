@@ -19,6 +19,7 @@ class Builtin(Component):
 
     class Kwargs:
         tag: str
+        level: int = 2
 
     class Slots:
         pass
@@ -33,7 +34,7 @@ class Builtin(Component):
                 f'<p class="docs-error">Unknown built-in: {escape(tag)}</p>'
             )
         else:
-            rendered = lstrip_outside_pre(str(ReferenceSymbol(data=data)))
+            rendered = lstrip_outside_pre(str(ReferenceSymbol(data=data, level=kwargs.level)))
             rendered = Markup(f"\n\n{rendered}\n\n")  # noqa: S704
 
         return {

@@ -112,7 +112,13 @@ def _publish_versions(versions_root: Path, dest_v: Path, window: int) -> list[st
 
 
 def _enable_root_version_picker(site_dir: Path, base: str) -> int:
-    """Add ``data-versions-root`` to the root pages' picker so site.js fetches the manifest there."""
+    """
+    Add ``data-versions-root`` to the root pages' picker so site.js fetches the manifest there.
+
+    A page without a picker is skipped rather than treated as a problem: the
+    project home uses the landing layout, which carries no docs chrome, so
+    versions are switched from the documentation pages instead.
+    """
     needle = "data-version-picker"
     replacement = f'data-version-picker data-versions-root="{base}/v/"'
     v_dir = site_dir / "v"

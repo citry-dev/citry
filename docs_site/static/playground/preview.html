@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Citry playground preview</title>
+    <style data-citry-preview-shell>
+      html { min-height: 100%; font-size: 90%; }
+      body { min-height: 100%; }
+      body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <script data-citry-preview-shell>
+      (() => {
+        "use strict";
+        // This sandbox receives rendered HTML over a private MessagePort,
+        // activates it, and forwards diagnostics and Citry Events to its parent.
+        const VERSION = 1;
+        const MAX_HTML_BYTES = 2 * 1024 * 1024;
+        const MAX_EVENT_ENVELOPE_BYTES = 1024 * 1024;
+        const MAX_PENDING_EVENTS = 16;
+        const MAX_MESSAGES_PER_SECOND = 10;
+        // Session, run, and nonce identify the one parent and render allowed to
+        // control this document after the initial window-message handshake.
+        let session = "";
+        let hostPort;
+        let runId = 0;
+        let nonce = "";
+        let messageTimes = [];
+        let eventMessageTimes = [];
+        let nextEventId = 0;
+        let eventsEnabled = false;
+        let eventsDisabledMessage = "";
+        let transportInstalled = false;
+        const pendingEvents = new Map();
+        const queuedEvents = [];
+        // DOMParser makes scripts inert. These MIME types identify the scripts
+        // that must be recreated after their nodes enter this live document.
+        const JAVASCRIPT_MIME_TYPES = new Set([
+          "application/ecmascript",
+          "application/javascript",
+          "application/x-ecmascript",
+          "application/x-javascript",
+          "text/ecmascript",
+          "text/javascript",
+          "text/javascript1.0",
+          "text/javascript1.1",
+          "text/javascript1.2",
+          "text/javascript1.3",
+          "text/javascript1.4",
+          "text/javascript1.5",
+          "text/jscript",
+          "text/livescript",
+          "text/x-ecmascript",
+          "text/x-javascript",
+        ]);
+        const CITRY_MANIFEST_SELECTOR = [
+          'script[type="application/json"][data-citry-graph]',
+          'script[type="application/json"][data-citry-events]',
+          'script[type="application/json"][data-citry]',
+        ].join(", ");
+
+        const byteLength = (value) => new TextEncoder().encode(value).byteLength;
+        const ready = () => parent.postMessage({ type: "preview-ready", version: VERSION }, "*");
+
+        function needsScriptActivation(script) {
+          let type = script.getAttribute("type");
+          if (type === null) {
+            const language = script.getAttribute("language");
+            if (language === null || language === "") return true;
+            type = `text/${language}`;
+          } else if (type === "") {
+            return true;
+          } else {
+            type = type.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, "");
+          }
+          type = type.toLowerCase();
+          return type === "module"
+            || type === "importmap"
+            || type === "speculationrules"
+            || JAVASCRIPT_MIME_TYPES.has(type);
+        }
+
+        function send(kind, value) {
+          if (!hostPort) return;
+          const now = performance.now();
+          messageTimes = messageTimes.filter((time) => now - time < 1_000);
+          if (messageTimes.length >= MAX_MESSAGES_PER_SECOND) return;
+          messageTimes.push(now);
+          let message;
+          try {
+            message = typeof value === "string" ? value : String(value?.message ?? value);
+          } catch {
+            message = "Unprintable client error";
+          }
+          hostPort.postMessage({
+            type: "citry-preview-diagnostic",
+            version: VERSION,
+            session,
+            runId,
+            nonce,
+            kind,
+            message: message.slice(0, 4_096),
+          });
+        }
+
+        function transportError(message, code = "playground_transport") {
+          const error = new Error(message);
+          error.status = 0;
+          error.code = code;
+          return error;
+        }
+
+        function rejectEvents(message) {
+          const error = transportError(message, "stale_preview");
+          eventsDisabledMessage = message;
+          eventsEnabled = false;
+          for (const queued of queuedEvents.splice(0)) queued.reject(error);
+          for (const pending of pendingEvents.values()) {
+            clearTimeout(pending.timeout);
+            pending.reject(error);
+          }
+          pendingEvents.clear();
+        }
+
+        function sendEventEnvelope(envelope) {
+          let envelopeBytes;
+          try {
+            envelopeBytes = byteLength(JSON.stringify(envelope));
+          } catch {
+            return Promise.reject(transportError("The event envelope is not serializable."));
+          }
+          if (envelopeBytes > MAX_EVENT_ENVELOPE_BYTES) {
+            return Promise.reject(transportError("The event envelope exceeds the 1 MiB playground limit."));
+          }
+          if (pendingEvents.size >= MAX_PENDING_EVENTS) {
+            return Promise.reject(
+              transportError(`The playground allows at most ${MAX_PENDING_EVENTS} pending event requests.`),
+            );
+          }
+          const now = performance.now();
+          eventMessageTimes = eventMessageTimes.filter((time) => now - time < 1_000);
+          if (eventMessageTimes.length >= 32) {
+            return Promise.reject(transportError("The preview is sending event requests too quickly."));
+          }
+          eventMessageTimes.push(now);
+          nextEventId += 1;
+          const eventId = `event-${nextEventId}`;
+          return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              pendingEvents.delete(eventId);
+              const error = transportError("The Python event handler did not answer in time.", "timeout");
+              send("event_error", error);
+              reject(error);
+            }, 7_000);
+            pendingEvents.set(eventId, { resolve, reject, timeout });
+            hostPort.postMessage({
+              type: "citry-event-call",
+              version: VERSION,
+              session,
+              runId,
+              nonce,
+              eventId,
+              envelope,
+            });
+          });
+        }
+
+        function playgroundTransportSend(envelope) {
+          if (eventsDisabledMessage) return Promise.reject(transportError(eventsDisabledMessage, "stale_preview"));
+          if (eventsEnabled) return sendEventEnvelope(envelope);
+          if (queuedEvents.length >= MAX_PENDING_EVENTS) {
+            return Promise.reject(transportError("Too many event requests were queued while Result was loading."));
+          }
+          return new Promise((resolve, reject) => queuedEvents.push({ envelope, resolve, reject }));
+        }
+
+        function enableEvents() {
+          if (eventsDisabledMessage) return;
+          eventsEnabled = true;
+          for (const queued of queuedEvents.splice(0)) {
+            sendEventEnvelope(queued.envelope).then(queued.resolve, queued.reject);
+          }
+        }
+
+        function ensurePlaygroundTransport() {
+          if (transportInstalled || !globalThis.Citry?.events?.registerTransport) return;
+          globalThis.Citry.events.registerTransport("playground", { send: playgroundTransportSend });
+          globalThis.Citry.events.configure({ transport: "playground", timeout: 6_000 });
+          transportInstalled = true;
+        }
+
+        // Surface visitor-code failures without giving the iframe direct access
+        // to the parent document.
+        addEventListener("error", (event) => {
+          if (event.target && event.target !== window) {
+            send("resource_error", event.target.currentSrc || event.target.src || event.target.href || event.target.tagName);
+          } else {
+            send("error", event.error || event.message);
+          }
+        }, true);
+        addEventListener("unhandledrejection", (event) => send("unhandled_rejection", event.reason));
+        const originalConsoleError = console.error.bind(console);
+        console.error = (...values) => {
+          originalConsoleError(...values);
+          send("console_error", values.join(" "));
+        };
+
+        async function activateScripts(scripts, afterActivation) {
+          for (const oldScript of scripts) {
+            // Data blocks retain their original node identity. Citry
+            // manifests are staged separately; the rest are already live.
+            if (!needsScriptActivation(oldScript)) continue;
+            const script = document.createElement("script");
+            for (const attribute of oldScript.attributes) script.setAttribute(attribute.name, attribute.value);
+            script.textContent = oldScript.textContent;
+            let externalCompletion = null;
+            if (script.hasAttribute("src") && !oldScript.hasAttribute("async")) {
+              // Dynamically created scripts default to force-async. Restore
+              // parser-style ordering for authored non-async external code.
+              script.async = false;
+              externalCompletion = new Promise((resolve) => {
+                script.addEventListener("load", resolve, { once: true });
+                script.addEventListener("error", resolve, { once: true });
+              });
+            }
+            oldScript.replaceWith(script);
+            afterActivation();
+            ensurePlaygroundTransport();
+            if (externalCompletion) {
+              await externalCompletion;
+              afterActivation();
+              ensurePlaygroundTransport();
+            }
+          }
+        }
+
+        function stageCitryManifests(scripts) {
+          return scripts
+            .filter((script) => script.matches(CITRY_MANIFEST_SELECTOR))
+            .map((manifest) => {
+              const placeholder = manifest.ownerDocument.createComment("citry-manifest");
+              manifest.replaceWith(placeholder);
+              return { manifest, placeholder };
+            });
+        }
+
+        async function restoreCitryManifests(stagedManifests) {
+          for (const { manifest, placeholder } of stagedManifests) placeholder.replaceWith(manifest);
+          // One observer batch preserves graph/Events adjacency. Citry's
+          // manager processes graphs, extension consumers, then dependencies.
+          if (stagedManifests.length) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            // Graph-linked dependency callbacks run in the following task.
+            // They must attach component and Events scopes before Alpine starts.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+        }
+
+        async function render(message) {
+          if (
+            !Number.isSafeInteger(message.runId)
+            || typeof message.nonce !== "string"
+            || typeof message.html !== "string"
+            || byteLength(message.html) > MAX_HTML_BYTES
+          ) return;
+          runId = message.runId;
+          nonce = message.nonce;
+          messageTimes = [];
+          try {
+            // Full documents contribute head and body attributes. Fragments are
+            // inserted into the shell body while preserving the shell head.
+            const isDocument = /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(message.html);
+            let bodyAttributes = [];
+            let bodyNodes;
+            let headNodes = [];
+            let visitorScripts;
+            let stagedManifests;
+            if (isDocument) {
+              const parsed = new DOMParser().parseFromString(message.html, "text/html");
+              visitorScripts = [...parsed.querySelectorAll("script")];
+              stagedManifests = stageCitryManifests(visitorScripts);
+              headNodes = [...parsed.head.childNodes];
+              bodyAttributes = [...parsed.body.attributes];
+              bodyNodes = [...parsed.body.childNodes];
+            } else {
+              const template = document.createElement("template");
+              template.innerHTML = message.html;
+              visitorScripts = [...template.content.querySelectorAll("script")];
+              stagedManifests = stageCitryManifests(visitorScripts);
+              bodyNodes = [...template.content.childNodes];
+            }
+            // The preview document has already loaded. If Citry manifests are
+            // inserted with the rest of the DOM, the dependency manager drains
+            // the ownership graph before the later Events runtime installs
+            // Alpine. Keep the original nodes and positions, but expose them
+            // only after executable scripts have run.
+            for (const node of document.head.querySelectorAll("[data-citry-preview-content]")) node.remove();
+            for (const node of headNodes) {
+              if (node.nodeType === Node.ELEMENT_NODE) node.setAttribute("data-citry-preview-content", "");
+              document.head.append(node);
+            }
+            for (const attribute of [...document.body.attributes]) document.body.removeAttribute(attribute.name);
+            for (const attribute of bodyAttributes) document.body.setAttribute(attribute.name, attribute.value);
+            document.body.replaceChildren(...bodyNodes);
+            let releaseAlpineStart = null;
+            const holdAlpineStart = () => {
+              if (releaseAlpineStart || !stagedManifests.length) return;
+              const hold = globalThis.Citry?.alpine?._holdStart;
+              if (typeof hold === "function") releaseAlpineStart = hold();
+            };
+            try {
+              await activateScripts(visitorScripts, holdAlpineStart);
+              await restoreCitryManifests(stagedManifests);
+            } finally {
+              releaseAlpineStart?.();
+            }
+            ensurePlaygroundTransport();
+          } catch (error) {
+            send("render_error", error);
+          }
+          // Activation errors still acknowledge delivery. The parent commits
+          // this candidate and shows its diagnostic beside the partial result.
+          hostPort.postMessage({ type: "preview-rendered", version: VERSION, session, runId, nonce });
+        }
+
+        // Window messages establish the channel only. The transferred port owns
+        // rendering, lifecycle commands, event calls, and their responses.
+        addEventListener("message", (event) => {
+          if (event.source !== parent) return;
+          if (event.data?.type === "preview-probe" && event.data?.version === VERSION) {
+            ready();
+            return;
+          }
+          if (
+            hostPort
+            || event.data?.type !== "preview-connect"
+            || event.data?.version !== VERSION
+            || typeof event.data?.session !== "string"
+            || !event.data.session
+            || event.ports.length !== 1
+          ) return;
+          session = event.data.session;
+          hostPort = event.ports[0];
+          hostPort.onmessage = ({ data }) => {
+            if (data?.type === "render" && data?.version === VERSION && data?.session === session) {
+              void render(data);
+              return;
+            }
+            if (
+              data?.version !== VERSION
+              || data?.session !== session
+              || data?.runId !== runId
+              || data?.nonce !== nonce
+            ) return;
+            if (data.type === "citry-events-enabled") {
+              enableEvents();
+              return;
+            }
+            if (data.type === "citry-events-disabled") {
+              rejectEvents(String(data.message || "This preview is no longer active."));
+              return;
+            }
+            if (data.type !== "citry-event-result" && data.type !== "citry-event-failure") return;
+            const pending = pendingEvents.get(data.eventId);
+            if (!pending) return;
+            clearTimeout(pending.timeout);
+            pendingEvents.delete(data.eventId);
+            if (data.type === "citry-event-failure") {
+              const error = transportError(String(data.message || "The Python event handler failed."));
+              send("event_error", error);
+              pending.reject(error);
+              return;
+            }
+            const failed = data.result?.results?.find((result) => result?.ok === false);
+            if (failed) send("event_error", failed.error?.message || "The Python event handler failed.");
+            pending.resolve(data.result);
+          };
+          hostPort.start();
+          hostPort.postMessage({ type: "preview-connected", version: VERSION, session });
+          if (document.readyState === "complete") {
+            hostPort.postMessage({ type: "preview-loaded", version: VERSION, session });
+          }
+        });
+
+        addEventListener("load", () => {
+          hostPort?.postMessage({ type: "preview-loaded", version: VERSION, session });
+        });
+        ready();
+      })();
+    </script>
+  </body>
+</html>
