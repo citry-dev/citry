@@ -306,6 +306,18 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   are harder to read than direct positives.
 - **New or changed behavior comes with tests.** Tests are the primary
   evidence the change works and the guard against regressions.
+- **Avoid verification and benchmarking rabbit holes.** Match the evidence
+  budget to the risk and reversibility of the decision. For UI, content,
+  prototypes, and other work that can be inspected and adjusted quickly,
+  prefer a focused correctness check followed by implementation and live
+  iteration. Before starting a benchmark matrix, state the decision it will
+  change, its acceptance threshold, and a time or sample budget. Do not expand
+  the matrix merely because more combinations can be measured, and do not run
+  an extended sweep expected to take more than five minutes without explaining
+  why targeted checks are insufficient and confirming the extra cost with the
+  user. Stop once the next reversible decision has enough evidence. This does
+  not waive required final gates; it prevents exploratory measurement from
+  delaying the implementation those gates are meant to protect.
 - **Docs tests cover machinery, not page content.** Tests under
   `docs_site/tests/` use synthetic inputs to verify the renderer, builder,
   components, and guard implementations. Do not lock a user-facing Markdown
@@ -352,9 +364,13 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   when a tag carries more than two attributes (or any long attribute), break
   the tag so each attribute sits on its own line, with the closing `>` on its
   own line at the tag's indent.
+- **Order component members from inputs to output.** Put nested `Kwargs`,
+  `Slots`, and `State` schemas first, event handlers next, data methods such as
+  `template_data()` next, and `template`, `js`, and `css` last. Keep helpers
+  beside the behavior they support without reversing that overall direction.
 - **Follow the component authoring guide.** Component source layout, nested
-  schemas, headless/styled separation, template attribute order, CSS formatting,
-  and the specification gate live in
+  schemas, Python-to-browser naming, headless/styled separation, template
+  attribute order, CSS formatting, and the specification gate live in
   [`docs/best-practices/component-authoring.md`](docs/best-practices/component-authoring.md).
 - **Public docstrings become the API reference.** The docs build renders every
   public `citry.*` symbol's docstring into its reference page (via griffe), so
@@ -422,6 +438,10 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   - Keep lines in code blocks at 70 characters or fewer when practical. The
     rendered documentation column is narrower than a terminal. This applies
     to fenced code in Markdown and code examples inside docstrings.
+  - Use `citry` for complete Python component examples and `citry-html` for
+    template-only examples. Use `html` only for plain HTML without Citry or
+    Alpine syntax. The ordinary HTML lexer marks valid attributes such as
+    `$c-props` as errors.
   - Lead with the symptom, not the mechanism. Frame a gotcha around what
     the reader will see ("the second render shows stale text"), not the
     internal cause; mention the mechanism only when the reader needs it to
@@ -479,10 +499,18 @@ abstract framing of the failure mode.)
 
 ## What belongs in the CHANGELOG
 
-`CHANGELOG.md` is read by **end users deciding whether to upgrade**, not by
-contributors auditing the diff. The test: *"does a user of the package need
-to know this, or do anything differently?"* If not, leave it out; the commit
-history already records it.
+Each published package owns its release notes. The root `CHANGELOG.md` belongs
+only to the Python `citry` package. Auxiliary distributions keep a
+`CHANGELOG.md` in their own package directory, for example
+`packages/py/citry_core/CHANGELOG.md`,
+`packages/py/pygments_citry/CHANGELOG.md`, and
+`packages/editors/vscode/CHANGELOG.md`. Record a release entry exactly once,
+in the changelog owned by that package.
+
+The owning changelog is read by **end users deciding whether to upgrade**, not
+by contributors auditing the diff. The test: *"does a user of the package
+need to know this, or do anything differently?"* If not, leave it out; the
+commit history already records it.
 
 - **Add an entry** when the change is observable from outside the package: a
   fix to documented or relied-on behavior, a new or changed public API, a
@@ -503,4 +531,5 @@ history already records it.
 - Why the rules exist -> [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md)
 - Monorepo dev / build / release -> [`docs/codebase.md`](docs/codebase.md)
 - Current status snapshot -> [`TODO/project_status_june_2026.md`](TODO/project_status_june_2026.md)
-- Changelog -> [`CHANGELOG.md`](CHANGELOG.md)
+- Python `citry` changelog -> [`CHANGELOG.md`](CHANGELOG.md); auxiliary package
+  changelogs live with their packages
