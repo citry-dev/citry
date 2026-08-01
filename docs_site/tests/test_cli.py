@@ -247,6 +247,6 @@ def test_serve_targets_the_internal_asgi_app(monkeypatch: pytest.MonkeyPatch) ->
 
     assert cli._run_serve("127.0.0.1", 8123, reload=False) == 0
     assert called == {
-        "app": "docs_site._internal.serve:app",
-        "kwargs": {"host": "127.0.0.1", "port": 8123, "reload": False},
+        "app": "docs_site._internal.serve:create_local_app",
+        "kwargs": {"host": "127.0.0.1", "port": 8123, "reload": False, "factory": True},
     }

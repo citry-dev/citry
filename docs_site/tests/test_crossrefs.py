@@ -18,8 +18,19 @@ def test_index_has_symbols_and_members() -> None:
     index = symbol_url_index()
     assert index["citry.Component"] == "/reference/component/#citry-component"
     assert index["Component"] == index["citry.Component"]  # short-name alias
+    assert index["citry.Component.State"] == ("/reference/component/#citry-component-state")
+    assert index["citry.Component.Events"] == ("/reference/component/#citry-component-events")
     assert index["Component.template_data"] == "/reference/component/#citry-component-template-data"
     assert index["citry.Component.template_data"] == index["Component.template_data"]
+    assert index["citry.Markup"] == "/reference/rendering/#citry-markup"
+    assert index["citry.SecurityError"] == "/reference/rendering/#citry-securityerror"
+    assert "citry.Markup.format" not in index
+    assert "Markup.format" not in index
+    assert index["c-slot"] == "/reference/builtins/#c-slot"
+    assert index["c-component"] == "/reference/builtins/#c-component"
+    assert index["$component"] == "/reference/browser-apis/#component"
+    assert index["$state"] == "/reference/browser-apis/#state"
+    assert index["Citry.events.send"] == ("/reference/browser-apis/#citry-events-send")
 
 
 def test_case_colliding_symbols_get_distinct_consistent_anchors() -> None:
@@ -78,4 +89,13 @@ def test_objects_inv_is_a_valid_sphinx_v2_inventory() -> None:
     lines = zlib.decompress(payload).decode().splitlines()
     assert any(line.startswith("citry.Component ") for line in lines)
     assert any(".template_data " in line for line in lines)  # a member entry
-    assert all(line.split()[1] == "py:obj" for line in lines)
+    roles = {line.split()[0]: line.split()[1] for line in lines}
+    assert roles["citry.Component"] == "py:obj"
+    assert roles["citry.Component.State"] == "py:obj"
+    assert roles["citry.Component.Events"] == "py:obj"
+    assert roles["citry.Markup"] == "py:obj"
+    assert roles["citry.SecurityError"] == "py:obj"
+    assert "citry.Markup.format" not in roles
+    assert roles["c-slot"] == "py:obj"
+    assert roles["$component"] == "js:function"
+    assert roles["$state"] == "js:data"

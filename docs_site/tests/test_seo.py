@@ -11,7 +11,14 @@ from docs_site._internal.seo import AI_BOTS, generate_seo_files, write_robots, w
 from docs_site._internal.versioning import update_manifest
 
 
-def _rec(url: str, *, noindex: bool = False, is_doc_page: bool = True, source_md: Path | None = None) -> PageRecord:
+def _rec(
+    url: str,
+    *,
+    noindex: bool = False,
+    is_doc_page: bool = True,
+    source_md: Path | None = None,
+    editorial_updated: datetime | None = None,
+) -> PageRecord:
     return PageRecord(
         url=url,
         canonical=f"https://x.test/{url}",
@@ -21,6 +28,7 @@ def _rec(url: str, *, noindex: bool = False, is_doc_page: bool = True, source_md
         is_doc_page=is_doc_page,
         source_md=source_md,
         markdown_body="",
+        editorial_updated=editorial_updated,
     )
 
 
@@ -55,6 +63,25 @@ def test_sitemap_includes_git_lastmod_for_pages_with_a_source(tmp_path: Path, mo
     assert "<lastmod>2026-07-01</lastmod>" in xml  # the git date, day-precision
     # The page without a source file has a <loc> but no <lastmod>.
     assert xml.count("<lastmod>") == 1
+
+
+def test_sitemap_prefers_blog_editorial_date_over_git(tmp_path: Path, monkeypatch) -> None:
+    import docs_site._internal.seo as seo_mod
+
+    def fail_if_called(_root, _path):
+        raise AssertionError("git metadata must not define a Blog editorial date")
+
+    monkeypatch.setattr(seo_mod, "get_page_git_meta", fail_if_called)
+    record = _rec(
+        "blog/post/",
+        source_md=tmp_path / "post.md",
+        editorial_updated=datetime(2026, 7, 27, 10, 0, tzinfo=UTC),
+    )
+
+    write_sitemap([record], tmp_path, site_url="https://x.test", repo_root=tmp_path)
+
+    xml = (tmp_path / "sitemap.xml").read_text(encoding="utf-8")
+    assert "<lastmod>2026-07-27</lastmod>" in xml
 
 
 def test_generate_seo_writes_robots_and_indexing(tmp_path: Path) -> None:

@@ -43,8 +43,8 @@ def symbol(dotted_path):
 def test_expr_name_becomes_a_link():
     # A bare type name (griffe ExprName) that the resolver knows becomes a link.
     annotation = symbol("citry.format_attrs").returns
-    html = render_annotation(annotation, resolve_only("SafeString"))
-    assert html == '<a class="doc-type-link" href="/reference/fake/#target">SafeString</a>'
+    html = render_annotation(annotation, resolve_only("Markup"))
+    assert html == '<a class="doc-type-link" href="/reference/fake/#target">Markup</a>'
 
 
 def test_subscript_links_known_leaf_and_leaves_others_plain():

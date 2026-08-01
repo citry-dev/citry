@@ -6,11 +6,19 @@ import tempfile
 from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
+
+from citry.component_registry import BUILTIN_COMPONENT_NAMES, STRUCTURAL_TAG_NAMES
 from docs_site._internal.build import build_site
+from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
 from docs_site._internal.examples import ExampleInfo, get_example_registry
 from docs_site._internal.guards import (
     api_symbols,
+    authored_reference,
+    blog,
+    blog_feed,
+    builtin_tags,
     component_fence,
     example_contract,
     fence_validator,
@@ -19,13 +27,17 @@ from docs_site._internal.guards import (
     internal_link,
     json_ld,
     make_context,
+    nav,
     redirect_target,
+    rendered_css,
+    rendered_markdown,
     run_guards,
     single_h1,
     snippet_path,
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
 from docs_site._internal.guards.site_index import SiteIndex
+from docs_site._internal.reference_pages import CATEGORIES
 
 # A page that carries the generator marker is treated as a real doc page.
 _DOC = (
@@ -67,6 +79,30 @@ def _example_contract_ctx(tmp_path: Path, registry: dict[str, ExampleInfo]) -> G
     )
 
 
+def _write_builtin_tags_page(root: Path, *, omit: str = "") -> None:
+    reference = root / "reference"
+    reference.mkdir(exist_ok=True)
+    lines = [
+        *(f'<c-builtin tag="{tag}" />' for tag in sorted(BUILTIN_COMPONENT_NAMES)),
+        *(f'<h3 id="c-{tag}">tag</h3>' for tag in sorted(STRUCTURAL_TAG_NAMES)),
+    ]
+    (reference / "builtins.md").write_text(
+        "\n".join(line for line in lines if not omit or omit not in line),
+        encoding="utf-8",
+    )
+
+
+def _write_browser_api_page(root: Path, *, omit: str = "") -> None:
+    reference = root / "reference"
+    reference.mkdir(exist_ok=True)
+    cat = next(cat for cat in CATEGORIES if cat.slug == "browser-apis")
+    lines = [f'<h3 id="{entry.anchor}"><code>{entry.key}</code></h3>' for entry in cat.entries]
+    (reference / "browser-apis.md").write_text(
+        "\n".join(line for line in lines if not omit or omit not in line),
+        encoding="utf-8",
+    )
+
+
 def test_full_suite_passes_on_the_real_build() -> None:
     # The strongest check: build the actual docs site and run every guard. The
     # suite must produce no errors (warnings are allowed).
@@ -78,6 +114,73 @@ def test_full_suite_passes_on_the_real_build() -> None:
 
     errors = [r for r in results if r.severity is Severity.ERROR]
     assert errors == [], format_report(results)
+
+
+def test_nav_guard_checks_resolved_pages_against_the_build(
+    tmp_path: Path,
+) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "page.md").write_text("# Page\n", encoding="utf-8")
+    nav_path = content / "_nav.yml"
+    nav_path.write_text(
+        "areas:\n  - label: Docs\n    items:\n      - { title: Page, path: /page/ }\n",
+        encoding="utf-8",
+    )
+    build = tmp_path / "build"
+    build.mkdir()
+    ctx = GuardContext(
+        content_dir=content,
+        examples_dir=tmp_path,
+        nav_path=nav_path,
+        static_dir=tmp_path,
+        repo_root=tmp_path,
+        site_index=SiteIndex(build),
+    )
+
+    results = list(nav.check(ctx))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "/page/" in results[0].message
+
+
+@pytest.mark.parametrize("source", ["reference", "releases"])
+def test_nav_guard_requires_sources_for_generated_pages(
+    tmp_path: Path,
+    source: str,
+) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    nav_path = content / "_nav.yml"
+    nav_path.write_text(
+        "areas:\n  - label: Docs\n    items:\n      - { title: Home, path: / }\n",
+        encoding="utf-8",
+    )
+    build = tmp_path / "build"
+    build.mkdir()
+    (build / "index.html").write_text("<h1>Home</h1>", encoding="utf-8")
+    generated = build / source
+    generated.mkdir()
+    (generated / "index.html").write_text(
+        f"<h1>{source}</h1>",
+        encoding="utf-8",
+    )
+    ctx = GuardContext(
+        content_dir=content,
+        examples_dir=tmp_path,
+        nav_path=nav_path,
+        static_dir=tmp_path,
+        repo_root=tmp_path,
+        site_index=SiteIndex(build),
+    )
+
+    results = list(nav.check(ctx))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert source in results[0].message
 
 
 def test_fence_validator_flags_unclosed_fence(tmp_path: Path) -> None:
@@ -180,6 +283,97 @@ def test_frontmatter_accepts_a_clean_page(tmp_path: Path) -> None:
     assert list(frontmatter.check(_content_ctx(tmp_path))) == []
 
 
+def test_frontmatter_flags_unknown_layout(tmp_path: Path) -> None:
+    (tmp_path / "page.md").write_text(
+        "---\ntitle: Hi\nlayout: dashboard\n---\n# Hi\n",
+        encoding="utf-8",
+    )
+
+    results = list(frontmatter.check(_content_ctx(tmp_path)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "not a known layout" in results[0].message
+
+
+def test_frontmatter_defers_dated_blog_posts_to_blog_guard(tmp_path: Path) -> None:
+    post_dir = tmp_path / "blog"
+    post_dir.mkdir()
+    (post_dir / "2026-07-27-post.md").write_text(
+        "---\ntitle: Post\ndate: 2026-07-27T09:00:00+02:00\nauthor: Maintainers\n---\nBody.\n",
+        encoding="utf-8",
+    )
+
+    assert list(frontmatter.check(_content_ctx(tmp_path))) == []
+
+
+def test_blog_guard_reports_source_and_line(tmp_path: Path) -> None:
+    post_dir = tmp_path / "blog"
+    post_dir.mkdir()
+    (post_dir / "index.md").write_text("# Blog\n\n<c-blog-list />\n", encoding="utf-8")
+    (post_dir / "2026-07-27-post.md").write_text(
+        "---\ntitle: Post\ndescription: Summary.\ndate: tomorrow\nauthor: Maintainers\n---\nBody.\n",
+        encoding="utf-8",
+    )
+
+    results = list(blog.check(_content_ctx(tmp_path)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert results[0].source == "blog/2026-07-27-post.md"
+    assert results[0].line == 4
+
+
+def test_blog_feed_guard_requires_feed_for_published_posts(tmp_path: Path) -> None:
+    post_dir = tmp_path / "blog"
+    post_dir.mkdir()
+    (post_dir / "index.md").write_text("# Blog\n\n<c-blog-list />\n", encoding="utf-8")
+    (post_dir / "2026-07-27-post.md").write_text(
+        "---\ntitle: Post\ndescription: Summary.\ndate: 2026-07-27T09:00:00+02:00\nauthor: Maintainers\n---\nBody.\n",
+        encoding="utf-8",
+    )
+    build_dir = tmp_path / "site"
+    build_dir.mkdir()
+
+    results = list(blog_feed.check(_index_ctx(tmp_path, build_dir)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "missing" in results[0].message
+
+
+def test_builtin_tags_guard_accepts_complete_authored_page(tmp_path: Path) -> None:
+    _write_builtin_tags_page(tmp_path)
+
+    assert list(builtin_tags.check(_content_ctx(tmp_path))) == []
+
+
+def test_builtin_tags_guard_reports_a_missing_tag(tmp_path: Path) -> None:
+    _write_builtin_tags_page(tmp_path, omit='id="c-slot"')
+
+    results = list(builtin_tags.check(_content_ctx(tmp_path)))
+
+    assert any("#c-slot" in result.message for result in results)
+
+
+def test_authored_reference_guard_accepts_declared_anchors(
+    tmp_path: Path,
+) -> None:
+    _write_browser_api_page(tmp_path)
+
+    assert list(authored_reference.check(_content_ctx(tmp_path))) == []
+
+
+def test_authored_reference_guard_reports_a_missing_entry(
+    tmp_path: Path,
+) -> None:
+    _write_browser_api_page(tmp_path, omit='id="state"')
+
+    results = list(authored_reference.check(_content_ctx(tmp_path)))
+
+    assert any("#state" in result.message for result in results)
+
+
 def test_internal_link_flags_broken_and_accepts_valid(tmp_path: Path) -> None:
     build = tmp_path / "site"
     build.mkdir()
@@ -208,6 +402,43 @@ def test_single_h1_flags_pages_without_exactly_one(tmp_path: Path) -> None:
     assert "two/index.html" in (warnings[0].source or "")
 
 
+def test_single_h1_flags_a_blog_post_heading_expanded_from_a_snippet(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    blog_dir = content / "blog"
+    blog_dir.mkdir(parents=True)
+    (content / "_nav.yml").write_text(
+        "areas:\n  - label: Blog\n    source: blog\n    scope: site\n    entry: { title: All posts, path: /blog/ }\n",
+        encoding="utf-8",
+    )
+    (blog_dir / "index.md").write_text("# Blog\n\n<c-blog-list />\n", encoding="utf-8")
+    (blog_dir / "2026-07-27-snippet-heading.md").write_text(
+        "---\n"
+        "title: Snippet heading\n"
+        "description: A rendered-heading guard regression.\n"
+        "date: 2026-07-27T09:00:00+02:00\n"
+        "author: Citry maintainers\n"
+        "---\n\n"
+        '--8<-- "included-heading.md"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "included-heading.md").write_text("# Included heading\n", encoding="utf-8")
+    output = tmp_path / "site"
+    config = DocsConfig(
+        base_dir=tmp_path,
+        content_dir=content,
+        site_dir=output,
+        repo_root=tmp_path,
+    )
+
+    outcome = build_site(config=config, minify=False, search=False, social_cards=False)
+    warnings = list(single_h1.check(make_context(output, config=config)))
+
+    assert outcome.failed == 0
+    assert len(warnings) == 1
+    assert "blog/snippet-heading/index.html" in (warnings[0].source or "")
+    assert "2 <h1>" in warnings[0].message
+
+
 def test_json_ld_flags_malformed_block(tmp_path: Path) -> None:
     build = tmp_path / "site"
     build.mkdir()
@@ -218,6 +449,26 @@ def test_json_ld_flags_malformed_block(tmp_path: Path) -> None:
 
     assert len(errors) == 1
     assert "Malformed JSON-LD" in errors[0].message
+
+
+def test_json_ld_requires_blogposting_on_blog_post_pages(tmp_path: Path) -> None:
+    build = tmp_path / "site" / "blog" / "post"
+    build.mkdir(parents=True)
+    (build / "index.html").write_text(
+        _DOC.format(
+            body='<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"Post"}</script>'
+        ),
+        encoding="utf-8",
+    )
+
+    errors = [
+        result
+        for result in json_ld.check(_index_ctx(tmp_path, tmp_path / "site"))
+        if result.severity is Severity.ERROR
+    ]
+
+    assert any("exactly one BlogPosting" in result.message for result in errors)
+    assert any("must not emit TechArticle" in result.message for result in errors)
 
 
 def test_redirect_target_flags_dead_stub(tmp_path: Path) -> None:
@@ -276,6 +527,12 @@ def test_example_contract_flags_missing_test_file(tmp_path: Path) -> None:
     example.mkdir()
     (example / "component.py").write_text("", encoding="utf-8")
     (example / "page.py").write_text("", encoding="utf-8")
+    recipes = tmp_path / "examples"
+    recipes.mkdir()
+    (recipes / "widget.md").write_text(
+        '<c-example name="widget" />\n',
+        encoding="utf-8",
+    )
     # Any registered example's page class satisfies the "has a *Page" check, so
     # only the missing-test-file check can fire here.
     page_cls = get_example_registry()["card"].page_cls
@@ -295,7 +552,137 @@ def test_example_contract_accepts_an_example_with_a_test_file(tmp_path: Path) ->
     (example / "component.py").write_text("", encoding="utf-8")
     (example / "page.py").write_text("", encoding="utf-8")
     (example / "test_example_widget.py").write_text("", encoding="utf-8")
+    recipes = tmp_path / "examples"
+    recipes.mkdir()
+    (recipes / "widget.md").write_text(
+        '<c-example name="widget" />\n',
+        encoding="utf-8",
+    )
     page_cls = get_example_registry()["card"].page_cls
     registry = {"widget": ExampleInfo(name="widget", page_cls=page_cls, example_dir=example)}
 
     assert list(example_contract.check(_example_contract_ctx(tmp_path, registry))) == []
+
+
+def test_example_contract_rejects_a_second_recipe_embedding(tmp_path: Path) -> None:
+    example = tmp_path / "widget"
+    example.mkdir()
+    (example / "component.py").write_text("", encoding="utf-8")
+    (example / "page.py").write_text("", encoding="utf-8")
+    (example / "test_example_widget.py").write_text("", encoding="utf-8")
+    recipes = tmp_path / "examples"
+    recipes.mkdir()
+    directive = '<c-example name="widget" />\n'
+    (recipes / "widget.md").write_text(directive, encoding="utf-8")
+    (recipes / "duplicate.md").write_text(directive, encoding="utf-8")
+    page_cls = get_example_registry()["card"].page_cls
+    registry = {
+        "widget": ExampleInfo(
+            name="widget",
+            page_cls=page_cls,
+            example_dir=example,
+        )
+    }
+
+    results = list(example_contract.check(_example_contract_ctx(tmp_path, registry)))
+
+    assert any("canonical recipe" in result.message for result in results)
+
+
+def test_example_contract_flags_colliding_public_slugs(tmp_path: Path) -> None:
+    page_cls = get_example_registry()["card"].page_cls
+    registry: dict[str, ExampleInfo] = {}
+    for name in ("foo_bar", "foo-bar"):
+        example = tmp_path / name
+        example.mkdir()
+        (example / "component.py").write_text("", encoding="utf-8")
+        (example / "page.py").write_text("", encoding="utf-8")
+        (example / f"test_example_{name}.py").write_text("", encoding="utf-8")
+        registry[name] = ExampleInfo(
+            name=name,
+            page_cls=page_cls,
+            example_dir=example,
+        )
+
+    recipes = tmp_path / "examples"
+    recipes.mkdir()
+    (recipes / "foo-bar.md").write_text(
+        '<c-example name="foo_bar" />\n',
+        encoding="utf-8",
+    )
+
+    results = list(example_contract.check(_example_contract_ctx(tmp_path, registry)))
+
+    assert any("share public slug" in result.message for result in results)
+
+
+def test_rendered_markdown_guard_catches_a_wrapper_missing_markdown_attribute(tmp_path: Path) -> None:
+    """A block the markdown pass skipped shows source to the reader; the build must fail."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><article>"
+        "<div><h3>Real heading</h3><p>Rendered fine.</p></div>"
+        "<div>### Choose Citry when</div>"
+        "<div>[Compatibility](/about/compatibility/)</div>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+
+    results = list(rendered_markdown.check(_index_ctx(tmp_path, build)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "### Choose Citry when" in results[0].message
+    assert "[Compatibility](/about/compatibility/)" in results[0].message
+
+
+def test_rendered_markdown_guard_ignores_markdown_shown_on_purpose(tmp_path: Path) -> None:
+    """Documenting Markdown inside code or a heading element is not a leak."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><article>"
+        "<pre><code>### A heading example\n[a link](/x/)</code></pre>"
+        "<p>Write <code>[text](url)</code> to make a link.</p>"
+        "<h3>An ordinary rendered heading</h3>"
+        "<p>A sentence mentioning C# and a #hashtag.</p>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+
+    assert list(rendered_markdown.check(_index_ctx(tmp_path, build))) == []
+
+
+def test_rendered_css_guard_catches_a_custom_property_glued_to_its_value(tmp_path: Path) -> None:
+    """`var(--x)0%` is invalid, and the browser drops the whole declaration."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><style>"
+        ".a{background:linear-gradient(90deg,var(--bg)0%,transparent)}"
+        ".b{grid-template-columns:var(--rail)minmax(0,1fr)}"
+        "</style></body></html>",
+        encoding="utf-8",
+    )
+
+    results = list(rendered_css.check(_index_ctx(tmp_path, build)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "var(--bg)0%" in results[0].message
+
+
+def test_rendered_css_guard_accepts_correctly_spaced_values(tmp_path: Path) -> None:
+    """A space after the custom property is all that is required."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><style>"
+        ".a{background:linear-gradient(90deg, var(--bg) 0%, transparent)}"
+        ".b{color:var(--fg);margin:var(--gap)}"
+        "</style></body></html>",
+        encoding="utf-8",
+    )
+
+    assert list(rendered_css.check(_index_ctx(tmp_path, build))) == []

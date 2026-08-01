@@ -1,4 +1,4 @@
-"""Tests for the navigation tree (``_nav.yml`` loading and nav queries)."""
+"""Tests for the primary-area navigation tree."""
 
 from __future__ import annotations
 
@@ -6,133 +6,481 @@ from pathlib import Path
 
 import pytest
 
-from docs_site._internal.nav import load_nav
-
-CONTENT_NAV = Path(__file__).resolve().parents[1] / "content" / "_nav.yml"
+from docs_site._internal.nav import SCOPE_SITE, SCOPE_VERSIONED, NavItem, load_nav, resolve_nav_sources
 
 NAV_YAML = """\
-sections:
-  - label: Home
-    path: /
-  - label: Getting started
-    path: /getting-started/
-  - label: Concepts
+areas:
+  - label: Docs
     items:
-      - { title: Components, path: /concepts/components/ }
-      - { title: Slots, path: /concepts/slots/ }
-  - label: Guides
+      - { title: Home, path: / }
     groups:
-      - label: Advanced
+      - label: Concepts
         items:
-          - { title: Caching, path: /guides/caching/ }
+          - { title: Components, path: /concepts/components/ }
+          - { title: Slots, path: /concepts/slots/ }
+      - label: Release notes
+        source: releases
+        collapsible: true
+        section_style: true
+  - label: Examples
+    items:
+      - { title: Overview, path: /examples/ }
+    groups:
+      - label: Components
+        collapsible: true
+        items:
+          - { title: Card, path: /examples/card/ }
+  - label: Reference
+    source: reference
 """
 
 
 def _tree(tmp_path: Path):
     nav = tmp_path / "_nav.yml"
     nav.write_text(NAV_YAML, encoding="utf-8")
-    return load_nav(nav)
+    return resolve_nav_sources(
+        load_nav(nav),
+        {
+            "reference": [
+                NavItem(title="Overview", path="/reference/"),
+            ],
+            "releases": [
+                NavItem(title="Overview", path="/releases/"),
+                NavItem(title="v1", path="/releases/v1/"),
+            ],
+        },
+    )
 
 
-def test_load_sections(tmp_path: Path) -> None:
+def test_loads_areas_with_direct_items_groups_and_sources(
+    tmp_path: Path,
+) -> None:
     tree = _tree(tmp_path)
-    assert [s.label for s in tree.sections] == ["Home", "Getting started", "Concepts", "Guides"]
-    assert tree.sections[0].path == "/"
-    assert [i.title for i in tree.sections[2].items] == ["Components", "Slots"]
-    assert tree.sections[3].groups[0].label == "Advanced"
+    assert [area.label for area in tree.areas] == [
+        "Docs",
+        "Examples",
+        "Reference",
+    ]
+    assert tree.areas[0].items[0].title == "Home"
+    assert [group.label for group in tree.areas[0].groups] == [
+        "Concepts",
+        "Release notes",
+    ]
+    assert not tree.areas[0].groups[0].collapsible
+    assert tree.areas[0].groups[1].collapsible
+    assert tree.areas[0].groups[1].section_style
+    assert tree.areas[1].groups[0].collapsible
+    assert tree.areas[2].entry_path == "/reference/"
 
 
-def test_flat_pages_in_document_order(tmp_path: Path) -> None:
-    paths = [p.path for p in _tree(tmp_path).flat_pages()]
+def test_review_state_and_area_badge_are_structured_metadata(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        "areas:\n"
+        "  - label: Citry UI\n"
+        "    badge: alpha\n"
+        "    items:\n"
+        "      - { title: Overview, path: /ui-library/, needs_review: true }\n",
+        encoding="utf-8",
+    )
+
+    area = load_nav(nav).areas[0]
+
+    assert area.badge == "alpha"
+    assert area.items[0].title == "Overview"
+    assert area.items[0].needs_review
+    assert area.entry_path == "/ui-library/"
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("badge: ''", "badge must be a non-empty string"),
+        ("items: [{ title: Overview, path: /x/, needs_review: later }]", "needs_review must be true or false"),
+        ("items: [{ title: 🚧 Overview, path: /x/ }]", "use needs_review: true"),
+    ],
+)
+def test_invalid_navigation_status_is_rejected(tmp_path: Path, line: str, message: str) -> None:
+    nav = tmp_path / "_nav.yml"
+    body = "areas:\n  - label: Docs\n"
+    if line.startswith("badge"):
+        body += f"    {line}\n    items: [{{ title: Overview, path: /x/ }}]\n"
+    else:
+        body += f"    {line}\n"
+    nav.write_text(body, encoding="utf-8")
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        load_nav(nav)
+
+
+def test_flat_pages_follow_area_and_sidebar_order(tmp_path: Path) -> None:
+    paths = [page.path for page in _tree(tmp_path).flat_pages()]
     assert paths == [
         "/",
-        "/getting-started/",
         "/concepts/components/",
         "/concepts/slots/",
-        "/guides/caching/",
+        "/releases/",
+        "/releases/v1/",
+        "/examples/",
+        "/examples/card/",
+        "/reference/",
     ]
 
 
-def test_prev_next(tmp_path: Path) -> None:
+def test_site_home_owns_root_without_becoming_a_primary_area(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        "home:\n"
+        "  title: Citry\n"
+        "  path: /\n"
+        "  scope: site\n"
+        "areas:\n"
+        "  - label: Docs\n"
+        "    items: [{ title: Overview, path: /docs/ }]\n",
+        encoding="utf-8",
+    )
+
+    tree = load_nav(nav)
+
+    assert tree.home == NavItem(title="Citry", path="/", scope=SCOPE_SITE)
+    assert [item.path for item in tree.flat_pages()] == ["/docs/"]
+    assert tree.scope_for_url("/") == SCOPE_SITE
+    assert tree.find_title("/") == "Citry"
+    assert tree.find_area("/") is None
+    assert tree.areas[0].entry_path == "/docs/"
+
+
+@pytest.mark.parametrize(
+    ("home", "message"),
+    [
+        ("{ title: Citry, path: / }", "missing required key"),
+        ("{ title: Citry, path: /home/, scope: site }", "path must be '/'"),
+        ("{ title: Citry, path: /, scope: versioned }", "must use scope 'site'"),
+    ],
+)
+def test_invalid_site_home_is_rejected(tmp_path: Path, home: str, message: str) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        f"home: {home}\nareas:\n  - label: Docs\n    items: [{{ title: Overview, path: /docs/ }}]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=message):
+        load_nav(nav)
+
+
+def test_prev_next_is_scoped_to_the_current_area(tmp_path: Path) -> None:
     tree = _tree(tmp_path)
-    prev, nxt = tree.find_prev_next("/concepts/components/")
-    assert prev.path == "/getting-started/"
-    assert nxt.path == "/concepts/slots/"
+    previous, following = tree.find_prev_next(
+        "/concepts/components/",
+    )
+    assert previous is not None
+    assert previous.path == "/"
+    assert following is not None
+    assert following.path == "/concepts/slots/"
 
-    prev, nxt = tree.find_prev_next("/")
-    assert prev is None
-    assert nxt.path == "/getting-started/"
+    previous, following = tree.find_prev_next("/reference/")
+    assert previous is None
+    assert following is None
 
 
-def test_breadcrumbs(tmp_path: Path) -> None:
+def test_breadcrumbs_follow_area_group_and_page(tmp_path: Path) -> None:
     tree = _tree(tmp_path)
-    assert tree.find_breadcrumbs("/concepts/components/") == [("Concepts", ""), ("Components", "")]
-    assert tree.find_breadcrumbs("/guides/caching/") == [("Guides", ""), ("Advanced", ""), ("Caching", "")]
-    assert tree.find_breadcrumbs("/getting-started/") == [("Getting started", "")]
+    assert tree.find_breadcrumbs("/concepts/components/") == [
+        ("Docs", "/"),
+        ("Concepts", ""),
+        ("Components", ""),
+    ]
+    assert tree.find_breadcrumbs("/releases/v1/") == [
+        ("Docs", "/"),
+        ("Release notes", "/releases/"),
+        ("v1", ""),
+    ]
+    assert tree.find_breadcrumbs("/releases/") == [
+        ("Docs", "/"),
+        ("Release notes", ""),
+    ]
+    assert tree.find_breadcrumbs("/examples/") == [
+        ("Examples", ""),
+    ]
+    assert tree.find_breadcrumbs("/") == [("Home", "")]
 
 
-def test_find_title(tmp_path: Path) -> None:
+def test_find_title_and_area(tmp_path: Path) -> None:
     tree = _tree(tmp_path)
     assert tree.find_title("/concepts/slots/") == "Slots"
+    assert tree.find_area("/examples/card/") is tree.areas[1]
     assert tree.find_title("/nope/") == ""
+    assert tree.find_area("/nope/") is None
 
 
-def test_set_active_expands_containing_group(tmp_path: Path) -> None:
+def test_set_active_expands_only_the_containing_group(
+    tmp_path: Path,
+) -> None:
     tree = _tree(tmp_path)
-    tree.set_active("/guides/caching/")
-    assert tree.sections[3].groups[0].expanded
-    assert tree.sections[3].groups[0].items[0].active
-
-    tree.set_active("/concepts/components/")
-    assert tree.sections[2].items[0].active
-    assert not tree.sections[2].items[1].active
+    tree.set_active("/examples/card/")
+    assert tree.areas[1].groups[0].expanded
+    assert tree.areas[1].groups[0].items[0].active
+    assert not tree.areas[0].groups[0].expanded
 
 
 def test_missing_nav_file_is_empty(tmp_path: Path) -> None:
-    assert load_nav(tmp_path / "nope.yml").sections == []
+    assert load_nav(tmp_path / "nope.yml").areas == []
 
 
-def test_both_items_and_groups_rejected(tmp_path: Path) -> None:
-    bad = tmp_path / "_nav.yml"
-    bad.write_text(
-        "sections:\n  - label: X\n    items: [{title: A, path: /a/}]\n    groups: [{label: G, items: []}]\n",
+def test_present_nav_requires_areas_root(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text("sections: []\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="top-level 'areas'"):
+        load_nav(nav)
+
+
+def test_present_nav_requires_at_least_one_area(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text("areas: []\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="at least one area"):
+        load_nav(nav)
+
+
+def test_present_nav_rejects_unknown_top_level_keys(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        "areas:\n  - label: Docs\n    items: [{ title: Home, path: / }]\nscpoes: {}\n",
         encoding="utf-8",
     )
-    with pytest.raises(ValueError, match="both 'items' and 'groups'"):
-        load_nav(bad)
+    with pytest.raises(ValueError, match="unknown top-level key"):
+        load_nav(nav)
 
 
-def test_real_nav_places_cli_in_advanced_and_security_in_about() -> None:
-    tree = load_nav(CONTENT_NAV)
-    by_label = {section.label: section for section in tree.sections}
+@pytest.mark.parametrize(
+    ("body", "message"),
+    [
+        (
+            """\
+areas:
+  - label: Reference
+    source: reference
+    items: [{ title: X, path: /x/ }]
+""",
+            "source and authored children",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: X, path: /x/ }]
+  - label: Docs
+    items: [{ title: Y, path: /y/ }]
+""",
+            "Duplicate navigation area label",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    groups:
+      - label: Same
+        items: [{ title: X, path: /x/ }]
+      - label: Same
+        items: [{ title: Y, path: /y/ }]
+""",
+            "Duplicate navigation group label",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: X, path: /same/ }]
+  - label: Examples
+    items: [{ title: Y, path: /same/ }]
+""",
+            "belongs to both",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: '', path: /x/ }]
+""",
+            "titles may not be empty",
+        ),
+    ],
+)
+def test_invalid_navigation_is_rejected(
+    tmp_path: Path,
+    body: str,
+    message: str,
+) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(body, encoding="utf-8")
+    with pytest.raises(ValueError, match=message):
+        load_nav(nav)
 
-    assert [(item.title, item.path) for item in by_label["Advanced"].items][-1] == ("Command line", "/cli/")
-    assert [(item.title, item.path) for item in by_label["About"].items][-1] == ("Security", "/security/")
-    assert "Command line" not in {section.label for section in tree.sections}
-    assert "Security" not in {section.label for section in tree.sections}
-    assert tree.find_breadcrumbs("/cli/") == [("Advanced", ""), ("Command line", "")]
-    assert tree.find_breadcrumbs("/security/") == [("About", ""), ("Security", "")]
 
-
-def test_real_nav_splits_events_before_guides() -> None:
-    tree = load_nav(CONTENT_NAV)
-    by_label = {section.label: section for section in tree.sections}
-    labels = [section.label for section in tree.sections]
-
-    assert labels.index("Events") + 1 == labels.index("Guides")
-    assert [(item.title, item.path) for item in by_label["Events"].items] == [
-        ("Server events", "/guides/server-events/"),
-        ("Migrate from Component.View", "/guides/migrate-from-component-view/"),
-        ("Migrate from django-unicorn", "/guides/migrate-from-django-unicorn/"),
-        ("Migrate from Tetra", "/guides/migrate-from-tetra/"),
-        ("Migrate from livecomponents", "/guides/migrate-from-livecomponents/"),
-        ("Events migration parity", "/guides/events-migration-parity/"),
+def test_missing_release_source_omits_only_that_group(
+    tmp_path: Path,
+) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(NAV_YAML, encoding="utf-8")
+    tree = resolve_nav_sources(
+        load_nav(nav),
+        {
+            "reference": [
+                NavItem(title="Overview", path="/reference/"),
+            ],
+            "releases": None,
+        },
+    )
+    assert [group.label for group in tree.areas[0].groups] == [
+        "Concepts",
     ]
-    assert [(item.title, item.path) for item in by_label["Guides"].items] == [
-        ("Web frameworks", "/web-frameworks/"),
-        ("Troubleshooting", "/guides/troubleshooting/"),
-        ("Hot reload", "/guides/dev-server/"),
+
+
+def test_blog_area_source_hydrates_in_declared_order(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        """\
+areas:
+  - label: Docs
+    items: [{ title: Home, path: / }]
+  - label: Blog
+    source: blog
+    scope: site
+    entry: { title: All posts, path: /blog/ }
+""",
+        encoding="utf-8",
+    )
+
+    tree = resolve_nav_sources(
+        load_nav(nav),
+        {
+            "blog": [
+                NavItem(title="All posts", path="/blog/"),
+                NavItem(
+                    title="New post",
+                    path="/blog/new-post/",
+                    date_iso="2026-07-28",
+                    date_label="28 Jul 2026",
+                ),
+            ],
+        },
+    )
+
+    assert [area.label for area in tree.areas] == ["Docs", "Blog"]
+    assert tree.areas[-1].entry_path == "/blog/"
+    assert tree.find_breadcrumbs("/blog/") == [("Blog", "")]
+    assert tree.find_breadcrumbs("/blog/new-post/") == [
+        ("Blog", "/blog/"),
+        ("New post", ""),
     ]
-    assert "Web frameworks" not in {section.label for section in tree.sections}
-    assert tree.find_breadcrumbs("/guides/server-events/") == [("Events", ""), ("Server events", "")]
-    assert tree.find_breadcrumbs("/web-frameworks/") == [("Guides", ""), ("Web frameworks", "")]
+    assert tree.areas[-1].items[-1].date_label == "28 Jul 2026"
+
+
+def test_content_scope_inherits_and_allows_narrow_overrides(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        """\
+areas:
+  - label: Docs
+    scope: versioned
+    items:
+      - { title: Home, path: /, scope: site }
+    groups:
+      - label: Guides
+        scope: site
+        items:
+          - { title: News, path: /news/ }
+          - { title: Frozen guide, path: /guide/, scope: versioned }
+  - label: Blog
+    source: blog
+    scope: site
+    entry: { title: All posts, path: /blog/ }
+""",
+        encoding="utf-8",
+    )
+
+    tree = resolve_nav_sources(
+        load_nav(nav),
+        {"blog": [NavItem(title="All posts", path="/blog/")]},
+    )
+
+    assert tree.areas[0].scope == SCOPE_VERSIONED
+    assert tree.areas[0].groups[0].scope == SCOPE_SITE
+    assert tree.scope_for_path("/") == SCOPE_SITE
+    assert tree.scope_for_path("/news/") == SCOPE_SITE
+    assert tree.scope_for_path("/guide/") == SCOPE_VERSIONED
+    assert tree.scope_for_path("/not-in-nav/") == SCOPE_VERSIONED
+    assert tree.scope_for_source("blog") == SCOPE_SITE
+    assert all(item.scope == SCOPE_SITE for item in tree.areas[1].items)
+
+
+def test_content_asset_scope_uses_unanimous_route_namespace(tmp_path: Path) -> None:
+    tree = _tree(tmp_path)
+    tree.areas[1].scope = SCOPE_SITE
+    for item in tree.areas[1].flat_pages():
+        item.scope = SCOPE_SITE
+
+    assert tree.scope_for_content_asset(Path("examples/card.png")) == SCOPE_SITE
+    assert tree.scope_for_content_asset(Path("concepts/diagram.svg")) == SCOPE_VERSIONED
+    assert tree.scope_for_content_asset(Path("unowned/file.txt")) == SCOPE_VERSIONED
+
+
+@pytest.mark.parametrize("scope", ["global", "", 3, True])
+def test_invalid_content_scope_is_rejected(tmp_path: Path, scope: object) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        f"areas:\n  - label: Docs\n    scope: {scope!r}\n    items: [{{ title: Home, path: / }}]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="invalid scope"):
+        load_nav(nav)
+
+
+def test_unknown_navigation_key_is_rejected(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        "areas:\n  - label: Docs\n    scpoe: site\n    items: [{ title: Home, path: / }]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"unknown key\(s\): scpoe"):
+        load_nav(nav)
+
+
+def test_generated_source_must_match_its_declared_entry(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        "areas:\n  - label: News\n    source: blog\n    scope: site\n    entry: { title: All news, path: /news/ }\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="not its declared entry"):
+        resolve_nav_sources(
+            load_nav(nav),
+            {"blog": [NavItem(title="All posts", path="/blog/")]},
+        )
+
+
+def test_site_scoped_generated_group_declares_and_hydrates_its_entry(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        "areas:\n"
+        "  - label: Docs\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "    groups:\n"
+        "      - label: Updates\n"
+        "        source: releases\n"
+        "        scope: site\n"
+        "        entry: { title: All updates, path: /updates/ }\n",
+        encoding="utf-8",
+    )
+    tree = load_nav(nav)
+    fallback = tree.fallback_items_for_source("releases")
+
+    assert fallback is not None
+    resolved = resolve_nav_sources(tree, {"releases": fallback})
+    group = resolved.areas[0].groups[0]
+    assert group.items[0].path == "/updates/"
+    assert group.items[0].scope == SCOPE_SITE
+    assert resolved.scope_for_url("/updates/post/") == SCOPE_SITE

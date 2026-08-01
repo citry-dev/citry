@@ -78,6 +78,21 @@ def test_clean_two_version_tree_passes(tmp_path: Path) -> None:
     assert list(versions_manifest.check(_versions_ctx(root))) == []
 
 
+def test_malformed_snapshot_site_routes_errors(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    vdir = _make_version(root, "0.1.0")
+    stamp = vdir / BUILD_INFO_NAME
+    data = json.loads(stamp.read_text(encoding="utf-8"))
+    data["site_routes"] = ["blog/*"]
+    stamp.write_text(json.dumps(data), encoding="utf-8")
+    _write_versions(root, [("0.1.0", ())])
+
+    errors = _errors(list(versions_manifest.check(_versions_ctx(root))))
+
+    assert len(errors) == 1
+    assert "site_routes" in errors[0].message
+
+
 def test_orphan_dir_without_manifest_entry_errors(tmp_path: Path) -> None:
     # A stamped version dir that the manifest does not list is an orphan.
     root = tmp_path / "versions"
@@ -220,9 +235,7 @@ def test_cross_version_link_broken_errors(tmp_path: Path) -> None:
     assert "target not found on disk" in errors[0].message
 
 
-def test_cross_version_absolute_link_is_skipped(tmp_path: Path) -> None:
-    # Absolute (/v/...) links resolve against the deploy site root, not a single
-    # version subtree, so the guard skips them even when they point nowhere on disk.
+def test_cross_version_absolute_version_link_is_checked(tmp_path: Path) -> None:
     root = tmp_path / "versions"
     _make_version(root, "0.1.0")
     _make_version(root, "0.2.0")
@@ -231,7 +244,111 @@ def test_cross_version_absolute_link_is_skipped(tmp_path: Path) -> None:
     )
     _write_versions(root, [("0.1.0", ()), ("0.2.0", ())])
 
+    errors = _errors(list(cross_version_link.check(_versions_ctx(root))))
+
+    assert len(errors) == 1
+    assert "/v/0.1.0/missing/" in errors[0].message
+
+
+def test_cross_version_absolute_version_link_can_resolve(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    _make_version(root, "0.1.0", pages=("index.html", "concepts/index.html"))
+    _make_version(root, "0.2.0")
+    (root / "0.2.0" / "index.html").write_text(
+        '<html><body><a href="/v/0.1.0/concepts/">abs</a></body></html>', encoding="utf-8"
+    )
+    _write_versions(root, [("0.1.0", ()), ("0.2.0", ())])
+
     assert list(cross_version_link.check(_versions_ctx(root))) == []
+
+
+def test_cross_version_root_link_requires_site_scope(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    _make_version(root, "0.2.0")
+    (root / "0.2.0" / "index.html").write_text(
+        '<html><body><a href="/guide/">escaped</a></body></html>', encoding="utf-8"
+    )
+    (root / "_nav.yml").write_text(
+        "areas:\n  - label: Docs\n    items: [{ title: Guide, path: /guide/ }]\n",
+        encoding="utf-8",
+    )
+    _write_versions(root, [("0.2.0", ())])
+
+    errors = _errors(list(cross_version_link.check(_versions_ctx(root))))
+
+    assert len(errors) == 1
+    assert "escapes its snapshot" in errors[0].message
+
+
+def test_cross_version_root_link_allows_declared_site_scope(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    _make_version(root, "0.2.0")
+    (root / "0.2.0" / "index.html").write_text(
+        '<html><body><a href="/blog/a-post/">site</a></body></html>', encoding="utf-8"
+    )
+    (root / "_nav.yml").write_text(
+        "areas:\n  - label: Blog\n    source: blog\n    scope: site\n    entry: { title: All posts, path: /blog/ }\n",
+        encoding="utf-8",
+    )
+    _write_versions(root, [("0.2.0", ())])
+
+    assert list(cross_version_link.check(_versions_ctx(root))) == []
+
+
+def test_cross_version_links_strip_the_deployment_base_path(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    _make_version(root, "0.2.0", pages=("index.html", "guide/index.html"))
+    (root / "0.2.0" / "index.html").write_text(
+        '<html><body><a href="/citry/v/0.2.0/guide/">guide</a><a href="/citry/blog/a-post/">site</a></body></html>',
+        encoding="utf-8",
+    )
+    (root / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: Docs\n"
+        "    items: [{ title: Guide, path: /guide/ }]\n"
+        "  - label: Blog\n"
+        "    source: blog\n"
+        "    scope: site\n"
+        "    entry: { title: All posts, path: /blog/ }\n",
+        encoding="utf-8",
+    )
+    _write_versions(root, [("0.2.0", ())])
+    context = _versions_ctx(root)
+    context.base_path = "/citry"
+
+    assert list(cross_version_link.check(context)) == []
+
+
+def test_cross_version_uses_the_snapshot_scope_manifest(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    _make_version(root, "0.2.0")
+    write_build_info(
+        root / "0.2.0",
+        version="0.2.0",
+        source_sha="deadbeef",
+        site_routes=("/old-site/*",),
+    )
+    (root / "0.2.0" / "index.html").write_text(
+        '<html><body><a href="/old-site/post/">historical site</a>'
+        '<a href="/blog/post/">new site only</a></body></html>',
+        encoding="utf-8",
+    )
+    (root / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: Old\n"
+        "    items: [{ title: Old, path: /old-site/ }]\n"
+        "  - label: Blog\n"
+        "    source: blog\n"
+        "    scope: site\n"
+        "    entry: { title: All posts, path: /blog/ }\n",
+        encoding="utf-8",
+    )
+    _write_versions(root, [("0.2.0", ())])
+
+    errors = _errors(list(cross_version_link.check(_versions_ctx(root))))
+
+    assert len(errors) == 1
+    assert "/blog/post/" in errors[0].message
 
 
 def test_frozen_import_skips_link_and_homepage_checks(tmp_path: Path) -> None:

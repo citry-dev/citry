@@ -6,7 +6,7 @@ from pathlib import Path
 
 from docs_site._internal.build import PageRecord
 from docs_site._internal.llms import generate_llms_files
-from docs_site._internal.nav import NavItem, NavSection, NavTree
+from docs_site._internal.nav import NavArea, NavGroup, NavItem, NavTree
 
 
 def _rec(url: str, *, title: str = "", description: str = "", body: str = "") -> PageRecord:
@@ -24,9 +24,22 @@ def _rec(url: str, *, title: str = "", description: str = "", body: str = "") ->
 
 def _nav() -> NavTree:
     return NavTree(
-        sections=[
-            NavSection(label="Home", path="/"),
-            NavSection(label="Concepts", items=[NavItem(title="Components", path="/concepts/components/")]),
+        areas=[
+            NavArea(
+                label="Docs",
+                items=[NavItem(title="Home", path="/")],
+                groups=[
+                    NavGroup(
+                        label="Concepts",
+                        items=[
+                            NavItem(
+                                title="Components",
+                                path="/concepts/components/",
+                            ),
+                        ],
+                    ),
+                ],
+            ),
         ]
     )
 
@@ -43,7 +56,8 @@ def test_llms_txt_is_nav_ordered_with_descriptions(tmp_path: Path) -> None:
     assert links == 1
     assert text.startswith("# Citry")
     assert "> A templating engine." in text  # the home description is the summary
-    assert "## Concepts" in text
+    assert "## Docs" in text
+    assert "### Concepts" in text
     assert "- [Components](https://x.test/concepts/components/): A component renders a template." in text
 
 

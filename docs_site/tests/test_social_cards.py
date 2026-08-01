@@ -10,7 +10,7 @@ from docs_site._internal import social_cards
 from docs_site._internal.build import PageRecord
 from docs_site._internal.components.doc_page import default_og_image_url
 from docs_site._internal.components.og_card import OgCard
-from docs_site._internal.nav import NavTree
+from docs_site._internal.nav import NavArea, NavGroup, NavItem, NavTree
 from docs_site._internal.social_cards import generate_social_cards, og_image_rel
 
 _SITE = "https://x.test"
@@ -57,6 +57,67 @@ def test_og_card_renders_standalone() -> None:
 def test_og_image_rel_maps_url_to_png() -> None:
     assert og_image_rel("") == "og/index.png"
     assert og_image_rel("concepts/components/") == "og/concepts/components.png"
+
+
+def test_social_card_section_prefers_group_over_primary_area() -> None:
+    tree = NavTree(
+        areas=[
+            NavArea(
+                label="Docs",
+                items=[NavItem(title="Home", path="/")],
+                groups=[
+                    NavGroup(
+                        label="Concepts",
+                        items=[
+                            NavItem(
+                                title="Components",
+                                path="/concepts/components/",
+                            ),
+                        ],
+                    ),
+                    NavGroup(
+                        label="Release notes",
+                        items=[
+                            NavItem(
+                                title="Overview",
+                                path="/releases/",
+                            ),
+                            NavItem(
+                                title="v1",
+                                path="/releases/v1/",
+                            ),
+                        ],
+                    ),
+                ],
+            ),
+            NavArea(
+                label="Reference",
+                items=[
+                    NavItem(title="Overview", path="/reference/"),
+                    NavItem(
+                        title="Components",
+                        path="/reference/component/",
+                    ),
+                ],
+            ),
+        ],
+    )
+    assert (
+        social_cards._section_label(
+            tree,
+            "/concepts/components/",
+        )
+        == "Concepts"
+    )
+    assert (
+        social_cards._section_label(
+            tree,
+            "/reference/component/",
+        )
+        == "Reference"
+    )
+    assert social_cards._section_label(tree, "/releases/") == "Release notes"
+    assert social_cards._section_label(tree, "/releases/v1/") == "Release notes"
 
 
 def test_skips_cleanly_without_a_browser(tmp_path: Path, monkeypatch: Any) -> None:

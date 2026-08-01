@@ -19,6 +19,7 @@ def test_rewrites_root_absolute_urls_and_injects_meta(tmp_path: Path) -> None:
         tmp_path,
         '<head></head><body><link href="/static/x.css">'
         '<a href="/reference/">R</a><img src="/img.png">'
+        '<button data-fragment-url="/examples/x/demo/y/"></button>'
         '<a href="https://ext.test/">ext</a></body>',
     )
 
@@ -29,6 +30,7 @@ def test_rewrites_root_absolute_urls_and_injects_meta(tmp_path: Path) -> None:
     assert 'href="/citry/static/x.css"' in out
     assert 'href="/citry/reference/"' in out
     assert 'src="/citry/img.png"' in out
+    assert 'data-fragment-url="/citry/examples/x/demo/y/"' in out
     assert 'href="https://ext.test/"' in out  # external URLs untouched
     assert '<meta name="djc-base-path" content="/citry">' in out
 

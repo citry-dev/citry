@@ -74,6 +74,22 @@ def test_markdown_extensions_render() -> None:
     assert 'class="admonition note"' in html
 
 
+def test_markdown_tables_have_a_bounded_scroll_container() -> None:
+    result = render_page("| Name | Description |\n|---|---|\n| value | A long contract |")
+
+    assert '<div class="table-wrapper" tabindex="0">' in result.html
+    assert "<table>" in result.html
+
+
+def test_citry_fence_styles_builtin_names_as_html_tags() -> None:
+    result = render_page('```citry\ntemplate = """<c-slot /><c-template /><c-component is="card" />"""\n```')
+
+    assert '<span class="nt">c-slot</span>' in result.html
+    assert '<span class="nt">c-template</span>' in result.html
+    assert '<span class="nt">c-component</span>' in result.html
+    assert '<span class="nb">c-slot</span>' not in result.html
+
+
 def test_markdown_body_captures_snippet_expansion_once(tmp_path: Path) -> None:
     snippet = tmp_path / "snippet.py"
     snippet.write_text(
@@ -125,20 +141,17 @@ def test_markdown_body_expands_nested_block_and_empty_snippets(tmp_path: Path) -
 
 
 def test_content_index_renders() -> None:
-    # The home page reads the {{ version }} template global, which build and serve
-    # configure at startup; do the same here so rendering the real page matches
-    # production instead of relying on another test having set the global.
+    # Configure globals exactly as build and serve do before exercising the real
+    # page through all three rendering passes.
     configure_docs_globals(config)
     source = (config.content_dir / "index.md").read_text(encoding="utf-8")
     result = render_page(source)
     html = result.html
 
     assert "<!DOCTYPE html>" in html
-    assert "<title>Citry</title>" in html  # title == site_name, so no suffix
-    # The home page's sections and its "where to go next" links rendered.
-    assert "Two simple rules" in html
-    assert 'href="/getting-started/installation/"' in html
-    # toc tokens were captured.
+    assert result.meta.layout == "landing"
+    assert 'class="landing-shell"' in html
+    assert 'class="djc-layout"' not in html
     assert isinstance(result.toc_tokens, list)
 
 

@@ -5,11 +5,48 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
+import yaml
 
 from docs_site._internal.build import BuildOutcome, build_site
 from docs_site._internal.config import DocsConfig
+
+
+def _write_blog(content: Path) -> Path:
+    """Write a small valid Blog and return its dated post source."""
+    nav = content / "_nav.yml"
+    if not nav.exists():
+        nav.write_text(
+            "areas:\n"
+            "  - label: Blog\n"
+            "    source: blog\n"
+            "    scope: site\n"
+            "    entry: { title: All posts, path: /blog/ }\n",
+            encoding="utf-8",
+        )
+    blog = content / "blog"
+    blog.mkdir()
+    (blog / "index.md").write_text(
+        "---\ntitle: Blog\ndescription: News from Citry.\n---\n\n<c-blog-list />\n",
+        encoding="utf-8",
+    )
+    post = blog / "2026-07-27-first-post.md"
+    post.write_text(
+        "---\n"
+        "title: First post\n"
+        "description: The first Blog post.\n"
+        "date: 2026-07-27T09:00:00+02:00\n"
+        "updated: 2026-07-27T10:00:00+02:00\n"
+        "author: Citry maintainers\n"
+        "author_url: https://github.com/citry-dev\n"
+        "tags: Citry, project news\n"
+        "---\n\n"
+        "Opening paragraph.\n\n## Details\n\nDurable guidance lives in [the guide](../guide.md).\n",
+        encoding="utf-8",
+    )
+    return post
 
 
 def _config(tmp_path: Path) -> tuple[DocsConfig, Path, Path]:
@@ -248,7 +285,10 @@ def test_build_expands_snippets_in_markdown_outputs(tmp_path: Path) -> None:
         repo_root=tmp_path,
         site_url="https://citry.dev/",
     )
-    (content / "_nav.yml").write_text("sections:\n- label: Home\n  path: /\n", encoding="utf-8")
+    (content / "_nav.yml").write_text(
+        "areas:\n  - label: Docs\n    items:\n      - { title: Home, path: / }\n",
+        encoding="utf-8",
+    )
     (tmp_path / "snippet.py").write_text(
         "# --8<-- [start:example]\nclass IncludedFromSnippet:\n    pass\n# --8<-- [end:example]\n",
         encoding="utf-8",
@@ -265,6 +305,328 @@ def test_build_expands_snippets_in_markdown_outputs(tmp_path: Path) -> None:
         text = output.read_text(encoding="utf-8")
         assert "class IncludedFromSnippet:" in text
         assert '--8<-- "snippet.py:example"' not in text
+
+
+def test_build_publishes_blog_at_stable_routes_with_feed_and_companions(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    config.site_url = "https://citry.dev/"
+    (content / "guide.md").write_text("# Guide\n", encoding="utf-8")
+    source = _write_blog(content)
+
+    outcome = build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert outcome.failed == 0
+    assert outcome.blog_posts == 1
+    assert outcome.blog_feed
+    assert (out / "blog" / "index.html").is_file()
+    post_html = out / "blog" / "first-post" / "index.html"
+    assert post_html.is_file()
+    assert not (out / "blog" / "2026-07-27-first-post").exists()
+    html = post_html.read_text(encoding="utf-8")
+    assert "First post" in html
+    assert 'href="../../guide/"' in html
+    assert 'type="application/atom+xml"' in html
+
+    companion = (out / "blog" / "first-post" / "index.md").read_text(encoding="utf-8")
+    assert "url: https://citry.dev/blog/first-post/" in companion
+    assert 'date: "2026-07-27T09:00:00+02:00"' in companion
+    assert 'updated: "2026-07-27T10:00:00+02:00"' in companion
+    assert 'author: "Citry maintainers"' in companion
+    assert '  - "project news"' in companion
+
+    record = next(record for record in outcome.records if record.url == "blog/first-post/")
+    assert record.source_md == source
+    assert record.editorial_updated is not None
+    assert record.editorial_updated.isoformat() == "2026-07-27T10:00:00+02:00"
+
+    feed = ET.parse(out / "blog" / "feed.xml").getroot()  # noqa: S314 - parses our serializer output
+    ns = {"atom": "http://www.w3.org/2005/Atom"}
+    entry = feed.find("atom:entry", ns)
+    assert entry is not None
+    assert entry.findtext("atom:title", namespaces=ns) == "First post"
+    assert entry.find("atom:link", ns).attrib["href"] == "https://citry.dev/blog/first-post/"
+
+
+def test_blog_companion_quotes_catalog_metadata_as_valid_yaml(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    config.site_url = "https://citry.dev/"
+    source = _write_blog(content)
+    authored = source.read_text(encoding="utf-8")
+    authored = authored.replace("title: First post", 'title: "Migration: lessons learned"')
+    authored = authored.replace(
+        "description: The first Blog post.",
+        r"""description: 'A path C:\tmp and a "quote".' """,
+    )
+    source.write_text(authored, encoding="utf-8")
+
+    outcome = build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert outcome.failed == 0
+    companion = (out / "blog" / "first-post" / "index.md").read_text(encoding="utf-8")
+    metadata = yaml.safe_load(companion.split("---", 2)[1])
+    assert metadata["title"] == "Migration: lessons learned"
+    assert metadata["description"] == 'A path C:\\tmp and a "quote".'
+
+
+def test_version_build_excludes_blog_without_validating_current_posts(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: Docs\n"
+        "    items:\n"
+        "      - { title: Home, path: / }\n"
+        "  - label: Blog\n"
+        "    source: blog\n"
+        "    scope: site\n"
+        "    entry: { title: All posts, path: /blog/ }\n",
+        encoding="utf-8",
+    )
+    _write_blog(content).write_text("invalid current Blog source", encoding="utf-8")
+
+    outcome = build_site(
+        config=config,
+        output_dir=out,
+        docs_version="1.0.0",
+        minify=False,
+        search=False,
+        social_cards=False,
+        update_versions_manifest=False,
+    )
+
+    assert outcome.failed == 0
+    assert outcome.blog_posts == 0
+    assert not outcome.blog_feed
+    assert outcome.reference == 0
+    assert outcome.releases == 0
+    assert not (out / "objects.inv").exists()
+    assert not (out / "blog").exists()
+    home = (out / "index.html").read_text(encoding="utf-8")
+    assert 'href="/blog/"' in home
+
+
+def test_omitted_scope_rejects_a_site_only_generated_source(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (content / "_nav.yml").write_text(
+        "areas:\n  - label: Docs\n    items: [{ title: Home, path: / }]\n  - label: Blog\n    source: blog\n",
+        encoding="utf-8",
+    )
+    _write_blog(content).write_text("invalid current Blog source", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must use scope 'site'"):
+        build_site(
+            config=config,
+            output_dir=out,
+            docs_version="1.0.0",
+            minify=False,
+            search=False,
+            social_cards=False,
+            update_versions_manifest=False,
+        )
+
+
+def test_scope_drives_snapshot_pages_assets_links_and_picker(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    config.base_path = "/citry"
+    config.versions_dir = tmp_path / "versions"
+    guide = content / "guide"
+    news = content / "news"
+    blog = content / "blog"
+    guide.mkdir()
+    news.mkdir()
+    blog.mkdir()
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (guide / "a.md").write_text(
+        "# A\n\n"
+        "[B](/guide/b/)\n\n"
+        "[News clean](/news/)\n\n"
+        "[News source](../news/index.md)\n\n"
+        "[Blog source](../blog/2026-07-27-first-post.md)\n\n"
+        "![Versioned asset](diagram.svg)\n\n"
+        "![Site asset](../news/logo.svg)\n",
+        encoding="utf-8",
+    )
+    (guide / "b.md").write_text("# B\n", encoding="utf-8")
+    (guide / "diagram.svg").write_text("<svg>guide</svg>", encoding="utf-8")
+    (news / "index.md").write_text("# News\n", encoding="utf-8")
+    (news / "draft.md").write_text("<c-this-must-not-render />\n", encoding="utf-8")
+    (news / "logo.svg").write_text("<svg>news</svg>", encoding="utf-8")
+    (blog / "index.md").write_text("invalid current Blog index", encoding="utf-8")
+    (blog / "2026-07-27-first-post.md").write_text("invalid current Blog post", encoding="utf-8")
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: Docs\n"
+        "    scope: versioned\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "    groups:\n"
+        "      - label: Guides\n"
+        "        items:\n"
+        "          - { title: A, path: /guide/a/ }\n"
+        "          - { title: B, path: /guide/b/ }\n"
+        "  - label: News\n"
+        "    scope: site\n"
+        "    items: [{ title: News, path: /news/ }]\n"
+        "  - label: Blog\n"
+        "    source: blog\n"
+        "    scope: site\n"
+        "    entry: { title: All posts, path: /blog/ }\n",
+        encoding="utf-8",
+    )
+
+    outcome = build_site(
+        config=config,
+        output_dir=out,
+        docs_version="1.2.3",
+        minify=False,
+        search=False,
+        social_cards=False,
+        update_versions_manifest=False,
+    )
+
+    assert outcome.failed == 0
+    assert (out / "guide" / "a" / "index.html").is_file()
+    assert (out / "guide" / "diagram.svg").is_file()
+    assert not (out / "news").exists()
+    html = (out / "guide" / "a" / "index.html").read_text(encoding="utf-8")
+    assert 'href="/citry/v/1.2.3/"' in html
+    assert 'href="/citry/v/1.2.3/guide/b/"' in html
+    assert 'href="/citry/news/"' in html
+    assert 'href="/citry/blog/first-post/"' in html
+    assert 'href="/news/"' not in html
+    assert 'src="../diagram.svg"' in html
+    assert 'src="/citry/news/logo.svg"' in html
+    assert "djc-version-picker" in html
+    not_found = (out / "404.html").read_text(encoding="utf-8")
+    assert 'href="/citry/v/1.2.3/getting-started/installation/"' in not_found
+
+    (blog / "index.md").write_text("# Blog\n\n<c-blog-list />\n", encoding="utf-8")
+    (blog / "2026-07-27-first-post.md").write_text(
+        "---\n"
+        "title: First post\n"
+        "description: A post.\n"
+        "date: 2026-07-27T09:00:00+02:00\n"
+        "author: Citry maintainers\n"
+        "---\n\nBody.\n",
+        encoding="utf-8",
+    )
+    root_out = tmp_path / "root-site"
+    root = build_site(
+        config=config,
+        output_dir=root_out,
+        minify=False,
+        search=False,
+        social_cards=False,
+    )
+    assert root.failed == 1  # the deliberately invalid unnaved News draft is read at the root
+    news_html = (root_out / "news" / "index.html").read_text(encoding="utf-8")
+    assert "djc-version-picker" not in news_html
+
+
+def test_site_scoped_playground_is_built_only_at_the_root(tmp_path: Path) -> None:
+    config, content, root_out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (content / "playground.md").write_text(
+        "---\ntitle: Try Citry\nlayout: playground\n---\n\nHelp.\n",
+        encoding="utf-8",
+    )
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: Docs\n"
+        "    scope: versioned\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "  - label: Try it\n"
+        "    scope: site\n"
+        "    items: [{ title: Playground, path: /playground/ }]\n",
+        encoding="utf-8",
+    )
+
+    root = build_site(
+        config=config,
+        output_dir=root_out,
+        minify=False,
+        search=False,
+        social_cards=False,
+    )
+    snapshot_out = config.versions_dir / "1.2.3"
+    snapshot = build_site(
+        config=config,
+        output_dir=snapshot_out,
+        docs_version="1.2.3",
+        minify=False,
+        search=False,
+        social_cards=False,
+        update_versions_manifest=False,
+    )
+
+    assert root.failed == 0
+    assert snapshot.failed == 0
+    assert (root_out / "playground" / "index.html").is_file()
+    assert not (snapshot_out / "playground").exists()
+    snapshot_home = (snapshot_out / "index.html").read_text(encoding="utf-8")
+    assert 'href="/playground/"' in snapshot_home
+    assert 'href="/v/1.2.3/playground/"' not in snapshot_home
+
+
+def test_site_scoped_landing_gets_a_version_snapshot_home_redirect(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "index.md").write_text("# Project landing\n", encoding="utf-8")
+    (content / "guide.md").write_text("# Versioned guide\n", encoding="utf-8")
+    (content / "_nav.yml").write_text(
+        "home:\n"
+        "  title: Project\n"
+        "  path: /\n"
+        "  scope: site\n"
+        "areas:\n"
+        "  - label: Docs\n"
+        "    items:\n"
+        "      - { title: Guide, path: /guide/ }\n",
+        encoding="utf-8",
+    )
+
+    outcome = build_site(
+        config=config,
+        output_dir=out,
+        docs_version="1.2.3",
+        minify=False,
+        search=False,
+        social_cards=False,
+        update_versions_manifest=False,
+    )
+
+    assert outcome.failed == 0
+    assert (out / "guide" / "index.html").is_file()
+    home = (out / "index.html").read_text(encoding="utf-8")
+    assert 'content="0; url=guide/"' in home
+    assert 'href="guide/"' in home
+    assert "https://citry.dev/v/1.2.3/guide/" in home
+
+
+def test_build_records_a_blog_post_render_failure(tmp_path: Path, monkeypatch) -> None:
+    config, content, out = _config(tmp_path)
+    post = _write_blog(content)
+    post.write_text(post.read_text(encoding="utf-8").replace("Opening paragraph.", "BOOM"), encoding="utf-8")
+
+    import docs_site._internal.build as build_mod
+
+    real_render = build_mod.render_page
+
+    def fake_render(source, **kwargs):
+        if "BOOM" in source:
+            raise RuntimeError("post failed")
+        return real_render(source, **kwargs)
+
+    monkeypatch.setattr(build_mod, "render_page", fake_render)
+
+    outcome = build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert outcome.failed == 1
+    assert outcome.blog_posts == 0
+    assert outcome.errors == [("blog/2026-07-27-first-post.md", "RuntimeError: post failed")]
+    assert not (out / "blog" / "first-post" / "index.html").exists()
 
 
 def test_build_refuses_unsafe_output(tmp_path: Path) -> None:
