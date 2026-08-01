@@ -482,8 +482,23 @@ uv run --no-sync python -m docs_site build \
 uv run --no-sync python -m docs_site versions-check --strict
 ```
 
-Snapshots omit root-owned search, crawl, runtime, static, and social-card
-outputs. They share those files from the assembled root site.
+Snapshots contain only `scope: versioned` pages and their content assets. They
+omit site-scoped pages and root-owned search, crawl, runtime, static, feed, and
+social-card outputs. A site-scoped root landing page is replaced in the
+snapshot by a redirect to the first built versioned page, so `/v/<version>/`
+remains a valid version-picker destination.
+
+Snapshots share the current root Pagefind index, CSS, JavaScript, and Citry
+runtime. Search from an old version can therefore return current Docs,
+Community, or Blog pages, and shared asset changes must remain compatible with
+published snapshot markup. Snapshots keep their baked page metadata; they do
+not receive a per-version generated social-card set. Per-version search and
+version-pinned shared assets remain deliberate deferrals.
+
+Each new snapshot stores its accepted site-route patterns in
+`_build_info.json`, so later scope changes do not reinterpret its intentional
+root links. Reclassifying a published route is nevertheless a migration that
+requires review of redirects, canonicals, content assets, and picker behavior.
 
 Pushing a `citry@X.Y.Z` tag triggers
 [`repo--docs-release.yml`](../.github/workflows/repo--docs-release.yml). Review
