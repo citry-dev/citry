@@ -36,11 +36,11 @@ Save this as `component.py`:
 It may look like a lot for a first component, so we'll unpack it one piece at
 a time.
 
-## Start with the HTML
+## Template
 
 The [`template`][citry.Component.template] is ordinary HTML with one Citry tag:
 
-```html
+```citry-html
 <article class="demo-card">
   <c-slot />
 </article>
@@ -50,7 +50,7 @@ The [`template`][citry.Component.template] is ordinary HTML with one Citry tag:
 content will appear. When you
 write this:
 
-```html
+```citry-html
 <c-Card accent="#8250df">
   <p>Hello from inside the card.</p>
 </c-Card>
@@ -59,7 +59,7 @@ write this:
 Citry puts the paragraph where `<c-slot />` appears. This unnamed space is
 called the **default slot**.
 
-## Choose what can change
+## Component inputs
 
 The two short classes near the top of `Card` describe the parts you can
 change each time you use it:
@@ -77,7 +77,7 @@ CSS as `--accent`.
 Neither `accent` nor `default` has a fallback value, so you need to provide
 both when you use the card.
 
-## Add the styles
+## Styling
 
 The [`css`][citry.Component.css] block travels with the Card. Citry adds it to
 any page that renders the component, and `var(--accent)` picks up the color you
@@ -91,7 +91,7 @@ accidentally style something else.
 
 Here is the important part of the complete example page:
 
-```html
+```citry-html
 <c-Card accent="#8250df">
   <h2 class="demo-card__title">Welcome</h2>
   <p class="demo-card__body">
@@ -103,7 +103,7 @@ Here is the important part of the complete example page:
 The `accent` option makes the top border purple. The heading and paragraph go
 inside the card because they sit between its opening and closing tags.
 
-## Render it from Python
+## Use the card in Python
 
 You can create the same Card directly from Python. Save this as `render.py`
 next to `component.py`:
@@ -142,7 +142,7 @@ Citry prints the card's HTML and the styles it needs. The result looks like this
 The real HTML contains a few extra attributes that Citry uses. You do not need
 to write or remember them.
 
-## Use a different color for each card
+## Multiple instances
 
 The rules in `Card.css` are shared by every Card on the page. The value from
 `css_data()` stays with the Card it came from, so one Card can be blue while
@@ -174,7 +174,7 @@ keeps the color and text given to it.
 This is useful whenever several copies of a component should share the same
 layout but keep their own colors, sizes, or other CSS values.
 
-## If you leave something out
+## Input validation
 
 Both the accent color and the content are required. If you forget the color,
 Citry cannot finish the Card:
@@ -207,7 +207,7 @@ values when it turns the Card into HTML, so the error appears at `str()` or
     [Inputs and validation](/concepts/inputs-and-validation/) to add runtime
     checks.
 
-## What to try next
+## Next steps
 
 You now have a Card that:
 

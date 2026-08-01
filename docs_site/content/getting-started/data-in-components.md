@@ -45,7 +45,7 @@ The result contains this list:
 Citry adds some attributes of its own, so the complete HTML will be a little
 longer.
 
-## Choose the options your component accepts
+## Component inputs
 
 `Kwargs` lists the named options people can give your component:
 
@@ -74,7 +74,7 @@ ReadingList(
 )
 ```
 
-## Read those options in the template
+## Template variables
 
 A `Kwargs` field is available to the template under the same name. That is why
 `{{ heading }}` inserts the heading and `books` is ready for the loop.
@@ -103,7 +103,7 @@ The method returns every name this template uses.
 
     For a component that only needs its `Kwargs` fields, leave the `template_data()` out and Citry supplies those fields automatically. Like we did in [Your first component](/getting-started/your-first-component#create-the-card).
 
-## Show, repeat, and set an attribute
+## Template syntax
 
 The template uses four small tools:
 
@@ -126,7 +126,7 @@ The [Control flow](/syntax/control-flow/) and [Dynamic
 attributes](/syntax/dynamic-attributes/) pages cover the other forms once you
 need them.
 
-## Fix missing or misspelled options
+## Input validation
 
 If you leave out `books`, Citry tells you that the required option is missing
 when the component renders:
@@ -148,7 +148,7 @@ value's type while the program runs. Validate values from forms, APIs, or other
 untrusted sources before passing them to the component. [Typing and
 validation](/concepts/inputs-and-validation/) explains the available choices.
 
-## Build a page with it
+## Next steps
 
 You now have a component that turns Python data into useful HTML. Next,
 [build a complete page from components](/getting-started/build-page/)

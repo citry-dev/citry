@@ -47,7 +47,7 @@ Citry injects a pinned version of [Alpine.js](http://alpinejs.dev/){: target="_b
 
 - Do **NOT** inject your own Alpine runtime.
 - To load custom Alpine plugins, use
-[the pre-start API](/advanced/alpine-runtime/#register-a-plugin-before-startup).
+[the pre-start API](/advanced/alpine-runtime/#add-an-alpine-plugin).
 
 ## See also
 

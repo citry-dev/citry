@@ -1,9 +1,9 @@
 ---
-title: Serve a page with FastAPI
+title: Serve pages with FastAPI
 description: Put a Citry component behind a FastAPI route and connect the browser to Citry's own routes.
 ---
 
-# Serve a page with FastAPI
+# Serve pages with FastAPI
 
 The components you have built so far can render without a web server. Now you
 will put the choice picker from the last step behind [FastAPI](https://fastapi.tiangolo.com/){: target="_blank" rel="noopener"}. Its browser
@@ -20,7 +20,7 @@ Citry comes with integrations for:
 
 You can switch to your framework after you finish this journey.
 
-## Install the server packages
+## Install the packages
 
 Inside an existing `uv` project, add
 [FastAPI](https://fastapi.tiangolo.com/){: target="_blank" rel="noopener"}
@@ -40,7 +40,7 @@ python -m pip install fastapi uvicorn
 FastAPI provides the application and its routes. Uvicorn runs that application
 as a local web server.
 
-## Create the Citry instance
+## Create Citry instance
 
 Create a new folder for this small app. Inside it, save the following as
 `citry_setup.py`:
@@ -88,7 +88,7 @@ version, this file now:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step8.py" language="citry" />
 
-## Put the components on that instance
+## Connect components with Citry
 
 The complete file above repeats one new line on every component. Here is the
 same change with the unchanged parts folded away:
@@ -121,7 +121,7 @@ connections between FastAPI and Citry.
 
 <c-include-file path="docs_site/snippets/getting_started/app.py" language="citry" />
 
-## Load the components before startup
+## Load the components
 
 The two local imports in the file above connect the page to the same Citry instance:
 
@@ -144,7 +144,6 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     citry_app.initialize()
     yield
 
-
 app = FastAPI(lifespan=lifespan)
 ```
 
@@ -152,7 +151,7 @@ app = FastAPI(lifespan=lifespan)
 components before requests can arrive. The `yield` hands control back to
 FastAPI so it can run the application.
 
-## Return Citry HTML from a normal route
+## Define FastAPI endpoint
 
 `home` is a regular FastAPI route. Inside it, we build `TutorialPage`, render it to a string, and returns that
 string as HTML:
@@ -211,7 +210,7 @@ that address confirms that the Citry routes are mounted.
 The [Web frameworks](/web-frameworks/) guide shows the matching setup for
 Django, Flask, Starlette, and bare ASGI or WSGI apps.
 
-## Make the first server call
+## Next steps
 
 The page and Citry now share one running server. Next, [call
 Python from a click](/getting-started/call-python/).

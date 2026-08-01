@@ -72,7 +72,7 @@ class DocsConfig:
     # og:description, and twitter:description stay non-empty.
     default_description: str = (
         "Citry is a fast, simple, and smart frontend framework for Python "
-        "that brings the best of Vue, React, Django, and Jinja."
+        "that brings the best of Vue, React, Django, Jinja, and LiveWire."
     )
 
 

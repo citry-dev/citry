@@ -33,7 +33,7 @@ python connected_components.py > connected_components.html
 The parent and button both start with “Ocean.” Click the button and they both
 change to “Forest.” Click again and they return to “Ocean.”
 
-## Let the child name the values it needs
+## Child client inputs
 
 [`ChoiceButton.js`][citry.Component.js] declares one browser prop called
 `label`:
@@ -73,7 +73,7 @@ Use `$c-props` for values that must remain reactive in the browser. Use an
 ordinary option such as `label="Ocean"` or a dynamic Python option such as
 `c-label="python_choice"` when the value belongs to the server render.
 
-## Handle the child's click in the parent
+## Handle the child's click
 
 The click handler also sits on the child component tag:
 
@@ -91,7 +91,7 @@ announce an interaction without needing to know what its parent will do next.
 The [Client interactivity](/concepts/client-interactivity/) guide covers
 multiple roots, slots, handler modifiers, and the complete browser-scope rules.
 
-## Let the browser reach Python
+## Next steps
 
 So far every interaction has stayed in the browser. Next, [serve the page with
 FastAPI](/getting-started/fastapi/) so a later click can reach a Python handler.

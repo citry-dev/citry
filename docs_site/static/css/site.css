@@ -347,7 +347,10 @@ body {
 
 /* Overflow wrapper for wide tables on narrow viewports */
 .prose .table-wrapper {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
   margin: 1rem 0;
 }
 
@@ -781,6 +784,9 @@ body {
 }
 
 .djc-header__nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--c-fg-muted);
   text-decoration: none;
   font-size: 0.9rem;
@@ -791,6 +797,21 @@ body {
 .djc-header__nav a:hover,
 .djc-header__nav a.is-active {
   color: var(--c-fg);
+}
+
+.djc-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.3rem;
+  color: var(--c-fg-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  margin-left: -12px;
 }
 
 .djc-header__nav a.is-active {
@@ -1009,6 +1030,9 @@ body {
 }
 
 .djc-sidebar__topnav a {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--c-fg);
   text-decoration: none;
   font-size: 0.95rem;
@@ -1035,6 +1059,9 @@ body {
 }
 
 .djc-sidebar__label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 0.7rem;
   font-family: var(--font-mono);
   text-transform: uppercase;
@@ -1063,12 +1090,45 @@ a.djc-sidebar__label:hover {
 
 .djc-sidebar__link {
   display: block;
+  position: relative;
   padding: 0.25rem 0.75rem;
   font-size: 0.85rem;
   color: var(--c-fg-muted);
   text-decoration: none;
   border-radius: 0.25rem;
   transition: color 0.15s, background 0.15s;
+}
+
+.djc-sidebar__review-icon {
+  margin-right: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.djc-sidebar__review-hint {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.25rem);
+  left: 0.75rem;
+  width: min(15rem, calc(100% - 0.75rem));
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.35rem;
+  background: var(--c-surface-2);
+  box-shadow: 0 0.4rem 1.2rem oklch(0% 0 0 / 18%);
+  color: var(--c-fg);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.15rem);
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.djc-sidebar__link:hover .djc-sidebar__review-hint,
+.djc-sidebar__link:focus-visible .djc-sidebar__review-hint {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .djc-sidebar__link:hover {
@@ -1382,8 +1442,20 @@ a.djc-sidebar__label:hover {
   margin-bottom: 0.2rem;
 }
 
-.djc-toc__item--3 {
-  padding-left: 1rem;
+.djc-toc__level-3 {
+  padding-inline-start: 0.75rem;
+}
+
+.djc-toc__level-4 {
+  padding-inline-start: 1.5rem;
+}
+
+.djc-toc__level-5 {
+  padding-inline-start: 2.25rem;
+}
+
+.djc-toc__level-6 {
+  padding-inline-start: 3rem;
 }
 
 .djc-toc__link {
@@ -1408,22 +1480,19 @@ a.djc-sidebar__label:hover {
 /* ------------------------------------------------------------------ */
 /* Reference TOC: collapsible class -> members, with symbol badges     */
 /* ------------------------------------------------------------------ */
-.djc-toc__row,
-.djc-toc__subitem {
+.djc-toc__row {
   display: flex;
   align-items: center;
   gap: 0.3rem;
 }
 
-/* Reserve a left gutter on every top-level row so labels align whether or not
-   the row has a caret (the caret sits in the gutter, absolutely positioned). */
+/* A collapsible row's caret sits in the aside's existing left gutter, so the
+   heading label remains aligned with other entries at the same level. */
 .djc-toc__row {
   position: relative;
-  padding-left: 1.1rem;
 }
 
-.djc-toc__row .djc-toc__link,
-.djc-toc__subitem .djc-toc__link {
+.djc-toc__row .djc-toc__link {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1433,7 +1502,7 @@ a.djc-sidebar__label:hover {
 
 .djc-toc__toggle {
   position: absolute;
-  left: 0;
+  inset-inline-start: -1.1rem;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -1469,16 +1538,16 @@ a.djc-sidebar__label:hover {
 .djc-toc__sublist {
   list-style: none;
   margin: 0.1rem 0 0.3rem;
-  padding-left: 1.2rem;
+  padding-inline-start: 0;
 }
 
 /* Members fold away by default; the active class (scroll-spy) or a manual toggle
    opens them. Plain content subsections are not collapsible, so they stay shown. */
-.djc-toc__item--collapsible .djc-toc__sublist {
+.djc-toc__item--collapsible > .djc-toc__sublist {
   display: none;
 }
 
-.djc-toc__item--collapsible.djc-toc__item--expanded .djc-toc__sublist {
+.djc-toc__item--collapsible.djc-toc__item--expanded > .djc-toc__sublist {
   display: block;
 }
 

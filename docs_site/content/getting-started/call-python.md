@@ -12,7 +12,7 @@ picker's options without reloading the page.
 Start with [Serve the page with FastAPI](/getting-started/fastapi/) if the app
 is not already running.
 
-## Load the choices from Python
+## Build the page
 
 Replace `components.py` with this version:
 
@@ -50,7 +50,7 @@ When you click on the button with `@c-click`:
 1. Alpine detects the `click` event and hands it over to Citry JS client.
 2. Citry JS client sends request to the server (the FastAPI app). The payload includes which component (`ChoicePicker`) and which event was triggered (`load_choices`).
 3. On the server, the routes that were installed when we mounted Citry onto FastAPI will pick up this request (`/citry/...`).
-3. Citry's routing passes the request and event data to `load_choices()` event handler on the `ChoicePicker` component.
+4. Citry's routing passes the request and event data to `load_choices()` event handler on the `ChoicePicker` component.
 
 Because the page and Citry routes share the application, this request stays on the same origin.
 
@@ -60,9 +60,9 @@ Because the page and Citry routes share the application, this request stays on t
     needs to authenticate people and check their permissions inside handlers. See
     [Security](/security/) for the complete trust boundaries.
 
-## Run the matching Python method
+## Server event handlers
 
-The handler lives in the component's nested [`Events`][citry.Events] class:
+The handler lives in the component's nested [`Events`][citry.Component.Events] class:
 
 ```python
 class Events:
@@ -89,7 +89,7 @@ The page starts without those choices. This function runs only after the
 button calls the handler. In a real application, this is where you might query
 a database or call another Python service.
 
-## Return the answer into Alpine
+## Handler response
 
 The handler returns an
 [`actions.Dispatch(...)`][citry.ext.events.actions.Dispatch] action:
@@ -101,10 +101,22 @@ return actions.Dispatch(
 )
 ```
 
-This tells the browser to fire an event named `choice-picker:loaded`. The
-second argument becomes that event's `detail`, so the returned list is
+This tells the browser to [fire an event](https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Events){: target="_blank" rel="noopener"} named `choice-picker:loaded`. The
+second argument becomes that event's [`detail`](https://developer.mozilla.org/en-US/docs/Web/API/CustomEvent/detail){: target="_blank" rel="noopener"}, so the returned list is
 available as `$event.detail.choices`. Values in `detail` must be
 JSON-serializable because they travel from Python to browser code.
+
+!!! note
+
+    `@c-click` is a convenience over [`sendEvent()`][$sendEvent]: as such, it starts the handler but does not expose the
+    handler's Promise result.
+
+    That is why this example returns [`Dispatch`][citry.ext.events.actions.Dispatch] (to trigger a browser event) rather
+    than [`actions.Data`][citry.ext.events.actions.Data] which would have returned data from a Promise.
+
+    Component JavaScript can
+    use `sendEvent()` when it owns the call and needs Data as a one-off return
+    value.
 
 The picker defines a small Alpine method for storing the result:
 
@@ -144,7 +156,7 @@ label to `ChoiceButton`. No HTML needs to be replaced.
     actions](/events/actions/#choose-where-to-listen-for-dispatch) for the complete
     delivery rules.
 
-## Show when Python is working
+## Loading state
 
 The full button also uses the Citry-specific Alpine magic [`$loading('load_choices')`][$loading]:
 
@@ -165,7 +177,7 @@ The full button also uses the Citry-specific Alpine magic [`$loading('load_choic
 During a slower real query, the button becomes disabled and the loading message
 appears. Both return to normal when the call finishes.
 
-## Keep later choices in the browser
+## Process response
 
 After Python supplies the list, another Alpine method finds the next choice:
 
@@ -211,7 +223,7 @@ Continue with [event bindings](/events/bindings/) for loading and errors, or
 [event actions](/events/actions/) for the other ways a handler can update the
 page.
 
-## Remember the next call
+## Next steps
 
 The browser can now reach Python and receive a result. Next, [keep a value
 between calls](/getting-started/state/).

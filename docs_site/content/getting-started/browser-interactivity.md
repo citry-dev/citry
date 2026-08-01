@@ -37,11 +37,13 @@ Save this example as `click_counters.py`:
   title="Independent click counters"
 />
 
-Create and open the page:
+Create the page:
 
 ```sh
 python click_counters.py > click_counters.html
 ```
+
+Open `click_counters.html` in your browser.
 
 Both buttons begin at zero. Click Ada's button: Ada changes to one while Grace
 stays at zero.
@@ -59,7 +61,7 @@ The component's `$component` callback tells Citry that this page needs its
 owned browser runtime. You do not need a separate JavaScript entry file or
 Alpine setup.
 
-## Keep each component's data separate
+## Access JS data in browser
 
 Python sends the browser value through `js_data()`:
 
@@ -89,7 +91,7 @@ interactivity](/concepts/client-interactivity/) page covers everything
 available inside `$component`. Keep
 [Alpine in templates](/syntax/alpine/) nearby as a concise syntax guide.
 
-## Pass browser data to a child
+## Next steps
 
 You can now combine Alpine attributes with Python-provided browser data. Next,
 [connect a parent and child component in the
