@@ -1,3 +1,7 @@
+<!-- Absolute URL so the logo also renders on PyPI, which serves this README from
+     outside the repository and cannot resolve a repo-relative path. -->
+<img src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/citry-wordmark.png" alt="Citry" width="170">
+
 # Citry - Refreshingly simple UI
 
 [![PyPI - Version](https://img.shields.io/pypi/v/citry)](https://pypi.org/project/citry/)

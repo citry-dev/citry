@@ -1,0 +1,18 @@
+<!-- Citry icon: the same two paths as the mark, framed square for favicons and
+     app icons. A favicon loads as its own document, so the colour is set here
+     and flips with the viewer's theme. The selector is scoped to the class in
+     case this ever gets inlined next to another one of these. The frame carries
+     one unit of air past the artwork so no edge loses a sliver to antialiasing. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0.5 8.5 83 83" class="c3-icon"
+     role="img" aria-label="Citry">
+  <style>
+    .c3-icon path { stroke: #0d8a8a; }
+    @media (prefers-color-scheme: dark) { .c3-icon path { stroke: #3eb4b4; } }
+  </style>
+  <g fill="none" stroke-linecap="round">
+    <path d="M 47.2 32.4 A 15 15 0 1 1 62 50 A 15 15 0 1 1 47.2 67.6" stroke-width="11"/>
+  </g>
+  <g fill="none">
+    <path d="M 48.9 28.7 A 26 26 0 1 0 48.9 71.3" stroke-width="13"/>
+  </g>
+</svg>
