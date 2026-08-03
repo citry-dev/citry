@@ -62,8 +62,10 @@ Citry also has attributes for browser and server interaction:
 
 - `$c-props`, `@c-*`, and `:c-*` are covered in
 [Client interactivity](/concepts/client-interactivity/) and [Events](/events/)
-- `#c-key` and `#c-ignore` guide how an event response
-updates existing HTML. See [Event actions](/events/actions/).
+- `#c-key` and `#c-ignore` are the template's
+[template flags](/syntax/dynamic-attributes/#template-flags). They guide how
+an event response updates existing HTML. See also
+[Event actions](/events/actions/).
 
 ## Self-closing tags
 
@@ -132,8 +134,8 @@ becomes:
 !!! note
 
     Attribute values may use double quotes, single quotes, or HTML's unquoted
-    form. We recomment to **always** quote dynamic `c-*` expressions so spaces and operators stay inside the
-    value.
+    form. Always quote dynamic `c-*` expressions so spaces and operators stay
+    inside the value.
 
 ## Boolean attributes
 
