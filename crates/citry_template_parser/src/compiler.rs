@@ -20,6 +20,7 @@
 //! | `ExprNode` | `{{ expr }}` | `ExprNode(source, (start, end,), """expr""", ("var1",))` |
 //! | `TemplateNode` | Nested template on an HTML tag's dynamic attr | `TemplateNode(source, (start, end,), """expr""", ("var1",))` |
 //! | `ElementAttrsNode` | An HTML tag's attribute region when any attr is dynamic | `ElementAttrsNode(source, (start, end,), (attrs,), (used_vars,))` |
+//! | `ElementKeyNode` | `#c-key="expr"` on a plain element | `ElementKeyNode(ExprHtmlAttr(source, (start, end,), """#c-key""", """expr""", ("var1",)))` |
 //! | `ComponentNode` | `<c-Card>`, `<c-component>`, any `<c-*>` | `ComponentNode(source, (start, end,), (attrs,), [body], (used_vars,), """name""", contains_fills)` - a tag carrying `#c-key` appends one trailing argument, the key expression as an `ExprHtmlAttr` |
 //! | `IfNode` | `<c-if>/<c-elif>/<c-else>` | `IfNode(source, (branch, ...,), (used_vars,))` |
 //! | `ForNode` | `<c-for>/<c-empty>` | `ForNode(source, (branch, ...,), (used_vars,))` |
@@ -63,11 +64,12 @@
 //! - `<c-raw>` compiles its body to a single literal text part; the inner
 //!   content is emitted verbatim, with no template processing.
 //! - `#c-*` framework metadata never joins the attribute set. On a plain
-//!   element, `#c-key="expr"` emits ` data-citry-key=":` + `ExprNode(expr)` +
-//!   `"` (an empty scope segment before the colon) and `#c-ignore` emits the
-//!   literal ` data-citry-morph="ignore"`, both after the ordinary
-//!   attributes. On a component tag, `#c-key` rides as the `ComponentNode`'s
-//!   trailing key argument (see the table above), never as a kwarg.
+//!   element, `#c-key="expr"` emits an `ElementKeyNode` after the ordinary
+//!   attributes. That node emits ` data-citry-key=":<key>"` (an empty scope
+//!   segment before the colon), or nothing when the expression evaluates to
+//!   `None`. `#c-ignore` emits the literal ` data-citry-morph="ignore"`. On a
+//!   component tag, `#c-key` rides as the `ComponentNode`'s trailing key
+//!   argument (see the table above), never as a kwarg.
 //!
 //! ## Determinism
 //!
@@ -88,10 +90,9 @@ use crate::ast::{
 use crate::constants::{
     COMPONENT_NODE, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELEMENT_TAG,
     C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG,
-    ELEMENT_ATTRS_NODE, EXPR_ATTR_NODE, EXPR_NODE, FILL_DATA_BINDING, FILL_NODE, FOR_NODE,
-    HTML_VOID_ELEMENTS, IF_NODE, KEY_OUTPUT_ATTR, META_ATTR_IGNORE, META_ATTR_KEY,
-    MORPH_OUTPUT_ATTR, MORPH_OUTPUT_IGNORE_VALUE, SLOT_NODE, STATIC_ATTR_NODE, TAG_ATTR_RULES,
-    TEMPLATE_ATTR_NODE,
+    ELEMENT_ATTRS_NODE, ELEMENT_KEY_NODE, EXPR_ATTR_NODE, EXPR_NODE, FILL_DATA_BINDING, FILL_NODE,
+    FOR_NODE, HTML_VOID_ELEMENTS, IF_NODE, META_ATTR_IGNORE, META_ATTR_KEY, MORPH_OUTPUT_ATTR,
+    MORPH_OUTPUT_IGNORE_VALUE, SLOT_NODE, STATIC_ATTR_NODE, TAG_ATTR_RULES, TEMPLATE_ATTR_NODE,
 };
 use crate::error::CompileError;
 use crate::lang::lang::{Lang, LangImpl, LangSpecArgument, LangSpecStruct};
@@ -592,13 +593,13 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
 /// Emit the rendered form of one `#c-*` attribute on a plain HTML element,
 /// appending output fragments to the element's start-tag items.
 ///
-/// - `#c-key="expr"` emits ` data-citry-key=":` + `ExprNode(expr)` + `"`.
-///   The attribute value is composite: a scope segment, a colon, then the
-///   evaluated key. On a plain element the scope segment is empty, which
-///   keeps element keys and component instance keys (whose scope is the
-///   child's class id) from ever pairing with each other during a morph.
-///   The expression evaluates at render time (per loop iteration inside
-///   `<c-for>`), and the runtime escapes its result like any expression.
+/// - `#c-key="expr"` emits an `ElementKeyNode` that evaluates the expression
+///   and owns the complete ` data-citry-key=":<key>"` attribute. The attribute
+///   value is composite: a scope segment, a colon, then the evaluated key. On
+///   a plain element the scope segment is empty, which keeps element keys and
+///   component instance keys (whose scope is the child's class id) from ever
+///   pairing during a morph. The node emits nothing when the expression
+///   evaluates to `None`; every other value is escaped and kept as a key.
 /// - `#c-ignore` emits the literal ` data-citry-morph="ignore"` marker the
 ///   client's morph hook reads to leave the subtree untouched.
 fn compile_meta_attr_on_element(
@@ -608,23 +609,20 @@ fn compile_meta_attr_on_element(
     match attr.key.content.as_str() {
         META_ATTR_KEY => {
             // The parser guarantees the key carries a non-empty expression.
-            let inner_value = attr.inner_value.as_ref().ok_or_else(|| {
-                CompileError::Generic(format!(
+            if !attr
+                .inner_value
+                .as_ref()
+                .is_some_and(|value| !value.content.trim().is_empty())
+            {
+                return Err(CompileError::Generic(format!(
                     "Internal error: '{}' reached the compiler without its expression value",
                     META_ATTR_KEY
-                ))
-            })?;
-            items.push(LangSpecArgument::UnsafeString(format!(
-                " {}=\":",
-                KEY_OUTPUT_ATTR
-            )));
-            items.push(format_expr_node(
-                EXPR_NODE,
-                &attr.token,
-                &inner_value.content,
-                &attr.used_variables,
-            ));
-            items.push(LangSpecArgument::UnsafeString("\"".to_string()));
+                )));
+            }
+            items.push(LangSpecArgument::Struct(LangSpecStruct {
+                name: ELEMENT_KEY_NODE.to_string(),
+                arguments: vec![build_attr_struct(EXPR_ATTR_NODE, attr)],
+            }));
         }
         META_ATTR_IGNORE => {
             items.push(LangSpecArgument::UnsafeString(format!(

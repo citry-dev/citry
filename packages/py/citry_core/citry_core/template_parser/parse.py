@@ -1,6 +1,30 @@
 from citry_core import _rust
 
 
+def parse_diagnostic(error: BaseException) -> _rust.template_parser.ParseDiagnostic | None:
+    """
+    Return the structured details attached to a template parse failure.
+
+    Parser failures remain ordinary ``SyntaxError`` or ``ValueError``
+    instances. This helper provides typed access to their stable diagnostic
+    code and root-template UTF-8 byte range. Errors raised before template
+    parsing, such as an unsupported language value, return ``None``.
+
+    Args:
+        error: An exception raised while calling [`parse_template`]
+            [citry_core.template_parser.parse_template].
+
+    Returns:
+        The attached parse diagnostic, or ``None`` when the exception did not
+        come from the template parser.
+
+    """
+    diagnostic = getattr(error, "diagnostic", None)
+    if isinstance(diagnostic, _rust.template_parser.ParseDiagnostic):
+        return diagnostic
+    return None
+
+
 def parse_template(
     input: str,
     lang: str | None = None,
@@ -22,7 +46,9 @@ def parse_template(
         The parsed Template AST.
 
     Raises:
-        SyntaxError: If the template has invalid syntax.
+        SyntaxError: If the template has invalid syntax. Pass the exception to
+            [`parse_diagnostic`][citry_core.template_parser.parse_diagnostic]
+            for its stable code and UTF-8 byte range.
         ValueError: If an unknown language is specified.
 
     Examples:

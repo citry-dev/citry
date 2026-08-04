@@ -36,7 +36,7 @@ pub use crate::ast::{
     Comment, Expr, FillDataField, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlEndTag,
     HtmlStartTag, Node, StaticNamedSlot, Template, TemplateElement, Text, Token,
 };
-pub use crate::error::ParseError;
+pub use crate::error::{ParseDiagnostic, ParseError};
 pub use crate::lang::lang::{Lang, LangImpl, ParseExprResult};
 pub use crate::parser::{parse_template, parse_template_with_custom_lang};
 pub use crate::parser_context::{ParserContext, TagRules};

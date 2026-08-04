@@ -1,9 +1,9 @@
 // Tests for the `#c-*` framework-metadata channel (compiler half).
 //
-// On a plain HTML element, `#c-key="expr"` compiles to the composite key
-// attribute ` data-citry-key=":` + ExprNode(expr) + `"` (empty scope segment
-// before the colon; the component scope is added by the runtime for
-// component-tag keys), and `#c-ignore` compiles to the literal
+// On a plain HTML element, `#c-key="expr"` compiles to an ElementKeyNode
+// wrapping the expression attribute. That runtime node owns the complete
+// composite output attribute, so `None` can omit it without leaving an empty
+// scope prefix. `#c-ignore` compiles to the literal
 // ` data-citry-morph="ignore"` marker. On a component tag, `#c-key` rides as
 // the ComponentNode's trailing key argument (an ExprHtmlAttr), never as one
 // of the kwargs attributes. See docs/design/events.md sections 5.1 and 5.3.
@@ -44,7 +44,7 @@ mod tests {
     fn test_key_on_element() {
         assert_compile(
             r#"<li #c-key="item.id">x</li>"#,
-            r#"["""<li data-citry-key=\":""", ExprNode(source, (4, 20,), """item.id""", ("item",)), """\">x</li>""",]"#,
+            r##"["""<li""", ElementKeyNode(ExprHtmlAttr(source, (4, 20,), """#c-key""", """item.id""", ("item",))), """>x</li>""",]"##,
         );
     }
 
@@ -52,7 +52,7 @@ mod tests {
     fn test_key_emits_after_static_attrs() {
         assert_compile(
             r#"<li class="a" #c-key="item.id">x</li>"#,
-            r#"["""<li class=\"a\" data-citry-key=\":""", ExprNode(source, (14, 30,), """item.id""", ("item",)), """\">x</li>""",]"#,
+            r##"["""<li class=\"a\"""", ElementKeyNode(ExprHtmlAttr(source, (14, 30,), """#c-key""", """item.id""", ("item",))), """>x</li>""",]"##,
         );
     }
 
@@ -62,7 +62,7 @@ mod tests {
         // its own fragment after it, invisible to the attrs machinery.
         assert_compile(
             r#"<li c-class="cls" #c-key="item.id">x</li>"#,
-            r#"["""<li""", ElementAttrsNode(source, (0, 35,), (ExprHtmlAttr(source, (4, 17,), """c-class""", """cls""", ("cls",)),), ("cls",)), """ data-citry-key=\":""", ExprNode(source, (18, 34,), """item.id""", ("item",)), """\">x</li>""",]"#,
+            r##"["""<li""", ElementAttrsNode(source, (0, 35,), (ExprHtmlAttr(source, (4, 17,), """c-class""", """cls""", ("cls",)),), ("cls",)), ElementKeyNode(ExprHtmlAttr(source, (18, 34,), """#c-key""", """item.id""", ("item",))), """>x</li>""",]"##,
         );
     }
 
@@ -70,7 +70,7 @@ mod tests {
     fn test_key_on_void_element() {
         assert_compile(
             r#"<input #c-key="'draft'" />"#,
-            r#"["""<input data-citry-key=\":""", ExprNode(source, (7, 23,), """'draft'""", ()), """\"/>""",]"#,
+            r##"["""<input""", ElementKeyNode(ExprHtmlAttr(source, (7, 23,), """#c-key""", """'draft'""", ())), """/>""",]"##,
         );
     }
 
@@ -80,7 +80,7 @@ mod tests {
         // expression re-evaluates per iteration.
         assert_compile(
             r#"<c-for each="item in items"><li #c-key="item.id">{{ item.name }}</li></c-for>"#,
-            r#"[ForNode(source, (((0, 77,), (ExprHtmlAttr(source, (7, 27,), """each""", """item in items""", ("items",)),), ["""<li data-citry-key=\":""", ExprNode(source, (32, 48,), """item.id""", ("item",)), """\">""", ExprNode(source, (49, 64,), """item.name """, ("item",)), """</li>""",], ("item",),),), ("items",)),]"#,
+            r##"[ForNode(source, (((0, 77,), (ExprHtmlAttr(source, (7, 27,), """each""", """item in items""", ("items",)),), ["""<li""", ElementKeyNode(ExprHtmlAttr(source, (32, 48,), """#c-key""", """item.id""", ("item",))), """>""", ExprNode(source, (49, 64,), """item.name """, ("item",)), """</li>""",], ("item",),),), ("items",)),]"##,
         );
     }
 
@@ -90,7 +90,7 @@ mod tests {
         // on the element, inside the loop body.
         assert_compile(
             r#"<li c-for="item in items" #c-key="item.id">x</li>"#,
-            r#"[ForNode(source, (((0, 49,), (ExprHtmlAttr(source, (4, 25,), """each""", """item in items""", ("items",)),), ["""<li data-citry-key=\":""", ExprNode(source, (26, 42,), """item.id""", ("item",)), """\">x</li>""",], ("item",),),), ("items",)),]"#,
+            r##"[ForNode(source, (((0, 49,), (ExprHtmlAttr(source, (4, 25,), """each""", """item in items""", ("items",)),), ["""<li""", ElementKeyNode(ExprHtmlAttr(source, (26, 42,), """#c-key""", """item.id""", ("item",))), """>x</li>""",], ("item",),),), ("items",)),]"##,
         );
     }
 
@@ -110,7 +110,7 @@ mod tests {
     fn test_key_and_ignore_together() {
         assert_compile(
             r#"<div #c-key="k" #c-ignore>x</div>"#,
-            r#"["""<div data-citry-key=\":""", ExprNode(source, (5, 15,), """k""", ("k",)), """\" data-citry-morph=\"ignore\">x</div>""",]"#,
+            r##"["""<div""", ElementKeyNode(ExprHtmlAttr(source, (5, 15,), """#c-key""", """k""", ("k",))), """ data-citry-morph=\"ignore\">x</div>""",]"##,
         );
     }
 
@@ -153,7 +153,7 @@ mod tests {
         // so the key takes the plain-element form (empty scope segment).
         assert_compile(
             r#"<c-element is="div" #c-key="k">x</c-element>"#,
-            r#"["""<div data-citry-key=\":""", ExprNode(source, (20, 30,), """k""", ("k",)), """\">x</div>""",]"#,
+            r##"["""<div""", ElementKeyNode(ExprHtmlAttr(source, (20, 30,), """#c-key""", """k""", ("k",))), """>x</div>""",]"##,
         );
     }
 

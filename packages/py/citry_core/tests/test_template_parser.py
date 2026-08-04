@@ -16,10 +16,12 @@ from citry_core.template_parser import (
     FillDataPattern,
     HtmlAttr,
     HtmlAttrKind,
+    ParseDiagnostic,
     TagRules,
     Template,
     Token,
     compile_template,
+    parse_diagnostic,
     parse_template,
 )
 
@@ -83,6 +85,11 @@ class ExprHtmlAttr:
         self.key = key
         self.expr = expr
         self.used_vars = used_vars
+
+
+class ElementKeyNode:
+    def __init__(self, attr):
+        self.attr = attr
 
 
 class TemplateHtmlAttr:
@@ -226,11 +233,18 @@ class TestParseTemplate:
         t = parse_template('<li #c-key="item.id">x</li>')
         assert len(t.elements) == 1
         assert t.used_variables[0].content == "item"
+        assert t.elements[0]._0.start_tag.attrs[0].kind == HtmlAttrKind.Meta
 
     def test_comment_tracked(self):
         t = parse_template("Hello {# comment #} world")
         assert len(t.comments) == 1
         assert t.comments[0].value.content == " comment "
+
+    def test_python_comment_text_does_not_change_interpolation_boundary(self):
+        t = parse_template('{{ x # say "}}" then stop }}')
+
+        assert t.comments[0].token.content == '# say "'
+        assert t.elements[1]._0.token.content == '" then stop }}'
 
     def test_empty_template(self):
         t = parse_template("")
@@ -284,7 +298,7 @@ class TestCompileTemplate:
     def test_meta_key_on_element(self):
         t = parse_template('<li #c-key="item.id">x</li>')
         code = compile_template(t)
-        assert 'data-citry-key=\\":' in code
+        assert "ElementKeyNode(ExprHtmlAttr(" in code
         assert '"""item.id"""' in code
 
     def test_meta_ignore_on_element(self):
@@ -316,6 +330,7 @@ class TestRoundTrip:
             "FillDataBinding": FillDataBinding,
             "StaticHtmlAttr": StaticHtmlAttr,
             "ExprHtmlAttr": ExprHtmlAttr,
+            "ElementKeyNode": ElementKeyNode,
             "TemplateHtmlAttr": TemplateHtmlAttr,
         }
         exec(code, ns)
@@ -370,10 +385,13 @@ class TestRoundTrip:
 
     def test_element_meta_key(self):
         body = self._exec_template('<li #c-key="item.id">x</li>')
-        assert body[0] == '<li data-citry-key=":'
-        assert isinstance(body[1], ExprNode)
-        assert body[1].expr == "item.id"
-        assert body[2] == '">x</li>'
+        assert body[0] == "<li"
+        assert isinstance(body[1], ElementKeyNode)
+        assert isinstance(body[1].attr, ExprHtmlAttr)
+        assert body[1].attr.key == "#c-key"
+        assert body[1].attr.expr == "item.id"
+        assert body[1].attr.used_vars == ("item",)
+        assert body[2] == ">x</li>"
 
     def test_element_meta_ignore(self):
         body = self._exec_template("<div #c-ignore>x</div>")
@@ -437,6 +455,28 @@ class TestRoundTrip:
 
 
 class TestErrors:
+    def test_parse_error_keeps_builtin_class_and_exposes_diagnostic(self):
+        source = "<div></span>"
+
+        with pytest.raises(SyntaxError) as exc_info:
+            parse_template(source)
+
+        error = exc_info.value
+        diagnostic = parse_diagnostic(error)
+        assert type(error) is SyntaxError
+        assert isinstance(diagnostic, ParseDiagnostic)
+        assert diagnostic.code == "citry.parse.syntax"
+        assert diagnostic.message == str(error)
+        assert source.encode("utf-8")[diagnostic.start_index : diagnostic.end_index] == b"</span>"
+        assert (diagnostic.start_line, diagnostic.start_column) == (1, 6)
+        assert (diagnostic.end_line, diagnostic.end_column) == (1, 13)
+
+    def test_non_parser_value_error_has_no_parse_diagnostic(self):
+        with pytest.raises(ValueError, match="Unknown language") as exc_info:
+            parse_template("hello", lang="cobol")
+
+        assert parse_diagnostic(exc_info.value) is None
+
     def test_unknown_meta_attr_raises_naming_members(self):
         # The `#c-*` channel has exactly two members; the parse error names
         # them so the author knows what exists.

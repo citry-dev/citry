@@ -15,7 +15,8 @@ use pyo3::types::PyFrozenSet;
 use citry_template_parser::constants::{HTML_VOID_ELEMENTS, RESERVED_TAG_NAMES};
 use citry_template_parser::{
     Comment, Expr, FillDataField, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlEndTag,
-    HtmlStartTag, Node, StaticNamedSlot, TagRules, Template, TemplateElement, Text, Token,
+    HtmlStartTag, Node, ParseDiagnostic, StaticNamedSlot, TagRules, Template, TemplateElement,
+    Text, Token,
 };
 
 use crate::html_transform::{mark_html, transform_html};
@@ -49,6 +50,7 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     template_parser_mod.add_function(wrap_pyfunction!(parse_template, &template_parser_mod)?)?;
     template_parser_mod.add_function(wrap_pyfunction!(compile_template, &template_parser_mod)?)?;
     // AST classes
+    template_parser_mod.add_class::<ParseDiagnostic>()?;
     template_parser_mod.add_class::<Token>()?;
     template_parser_mod.add_class::<Comment>()?;
     template_parser_mod.add_class::<HtmlAttrKind>()?;

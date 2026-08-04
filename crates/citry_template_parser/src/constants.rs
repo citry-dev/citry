@@ -76,6 +76,9 @@ pub const FILL_DATA_BINDING: &str = "FillDataBinding";
 // Renders the whole attribute region of an HTML start tag that has at least
 // one dynamic attribute (c-* value or c-bind spread). See compile_html_node.
 pub const ELEMENT_ATTRS_NODE: &str = "ElementAttrsNode";
+// Evaluates an explicit element `#c-key` and emits the complete composite
+// attribute only when the expression produces a key. See compile_meta_attr_on_element.
+pub const ELEMENT_KEY_NODE: &str = "ElementKeyNode";
 
 // Attribute class name constants
 // These are the class/struct names that need to be defined in each language implementation.

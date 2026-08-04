@@ -347,15 +347,17 @@ text = @{
 
 // Python expressions
 //
-// When considering the Python expression, we recognize string literals and nested curly braces.
+// When considering the Python expression, we recognize comments, string literals, and nested curly braces.
 // We do this so that we can identify when the expression REALLY ends.
 //
 // Without this, we wouldn't be able to tell if `}}` is the end of expression
 // or just an end of 2 dicts.
 //
-// And naturally, we want to ignore `}}` inside string literals.
+// And naturally, we want to ignore `}}` inside string literals, while a
+// top-level `}}` still ends a line comment and the surrounding interpolation.
 python_expr = ${
     (
+        python_comment |
         python_str_triple_double |
         python_str_triple_single |
         python_str_double |
@@ -364,6 +366,11 @@ python_expr = ${
         python_other_char
     )*
 }
+
+// Quotes and braces have no structural meaning after `#`. Stop before a
+// newline so expression parsing can resume there, or before the host `}}`
+// delimiter so the comment cannot swallow the interpolation boundary.
+python_comment = @{ "#" ~ (!("\r" | "\n" | "}}") ~ ANY)* }
 
 // When we encounter a string literal, ignore everything inside it.
 python_str_triple_double = @{ "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" }

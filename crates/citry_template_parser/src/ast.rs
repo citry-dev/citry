@@ -337,6 +337,10 @@ pub enum HtmlAttrKind {
 
 #[pymethods]
 impl HtmlAttrKind {
+    fn __eq__(&self, other: &HtmlAttrKind) -> bool {
+        self == other
+    }
+
     fn __repr__(&self) -> String {
         match self {
             HtmlAttrKind::Static => "HtmlAttrKind::Static".to_string(),
@@ -371,6 +375,7 @@ pub struct HtmlAttr {
     #[pyo3(get)]
     pub quote_char: Option<char>,
     /// The kind of attribute, determining how it should be processed
+    #[pyo3(get)]
     pub kind: HtmlAttrKind,
     /// All comments found in the attribute
     #[pyo3(get)]
@@ -939,8 +944,7 @@ pub struct Template {
     #[pyo3(get)]
     pub elements: Vec<TemplateElement>,
 
-    /// All comments found in the template (at any nesting level)
-    /// This is populated only if comment collection is enabled during parsing
+    /// All comments found in the template at any nesting level.
     #[pyo3(get)]
     pub comments: Vec<Comment>,
 

@@ -13,7 +13,12 @@ from citry_core.safe_eval.sandbox import (
 
 
 class SecurityError(Exception):
-    """An error raised when a security violation occurs."""
+    """
+    An expression attempted an operation blocked by the evaluator's sandbox.
+
+    The evaluator raises this at evaluation time when a checked variable,
+    attribute, key, callable, or assignment is unsafe.
+    """
 
 
 def safe_eval(

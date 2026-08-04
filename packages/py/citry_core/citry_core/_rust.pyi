@@ -218,6 +218,18 @@ class template_parser:
 
     # AST types
 
+    class ParseDiagnostic:
+        """Machine-readable details attached to a template parse exception."""
+
+        code: str
+        message: str
+        start_index: int | None
+        end_index: int | None
+        start_line: int | None
+        start_column: int | None
+        end_line: int | None
+        end_column: int | None
+
     class Token:
         """A span in the template source with position information."""
 
@@ -290,6 +302,7 @@ class template_parser:
         value: template_parser.Token | None
         inner_value: template_parser.Token | None
         quote_char: str | None
+        kind: template_parser.HtmlAttrKind
         used_variables: list[template_parser.Token]
         comments: list[template_parser.Comment]
         fill_data_pattern: template_parser.FillDataPattern | None

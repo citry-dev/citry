@@ -1,10 +1,10 @@
 # citry_core
 
-Python package that exposes Rust functionality from the twin [`citry_core_py`](../../../crates/citry_core_py/) Rust crate.
+Python package that exposes Rust functionality from the twin [`citry_core_py`](https://github.com/citry-dev/citry/tree/main/crates/citry_core_py/) Rust crate.
 
 ## Overview
 
-This package is the **Python-side twin** to the [`citry_core_py`](../../../crates/citry_core_py/) Rust crate. The connection between them is defined in [`pyproject.toml`](pyproject.toml) via the `[tool.maturin]` section:
+This package is the **Python-side twin** to the [`citry_core_py`](https://github.com/citry-dev/citry/tree/main/crates/citry_core_py/) Rust crate. The connection between them is defined in [`pyproject.toml`](https://github.com/citry-dev/citry/blob/main/packages/py/citry_core/pyproject.toml) via the `[tool.maturin]` section:
 
 ```toml
 [tool.maturin]
@@ -35,7 +35,7 @@ The `module-name` format is `<python_package_name>.<rust_module_name>`, where:
 - `python_package_name` must match the directory name in `src/` (e.g., `src/citry_core/`)
 - `rust_module_name` must match the `#[pymodule]` function name in the Rust crate's `lib.rs` (e.g., `fn _rust`)
 
-See the detailed comments in [`pyproject.toml`](pyproject.toml) for more information about this configuration.
+See the detailed comments in [`pyproject.toml`](https://github.com/citry-dev/citry/blob/main/packages/py/citry_core/pyproject.toml) for more information about this configuration.
 
 ## Package structure
 
@@ -102,7 +102,7 @@ The **`_rust.pyi`**:
 - Re-defines function signatures and docstrings
 - Enables type checking, IDE autocomplete, hover tooltips, etc
 - **Important**: The filename `_rust.pyi` MUST match the second
-  part of the `module-name` setting in [`pyproject.toml`](./pyproject.toml)<br/>
+  part of the `module-name` setting in [`pyproject.toml`](https://github.com/citry-dev/citry/blob/main/packages/py/citry_core/pyproject.toml)<br/>
   (`tool.maturin.module-name = "citry_core._rust"`).<br/>
   This ensures type checkers can find the type stubs for the Rust extension module.
 
@@ -175,7 +175,7 @@ uv run pytest
 
 ### Adding a new Rust crate
 
-When a new Rust crate / submodule is added to the twin Rust crate [`citry_core_py`](../../../crates/citry_core_py/):
+When a new Rust crate / submodule is added to the twin Rust crate [`citry_core_py`](https://github.com/citry-dev/citry/tree/main/crates/citry_core_py/):
 
 1. **Add to `_rust.pyi`**: Define the type stubs
 
@@ -189,7 +189,7 @@ When a new Rust crate / submodule is added to the twin Rust crate [`citry_core_p
 2. **Create Python wrapper**: Add `citry_core/new_module/__init__.py` if needed
 
 NOTE: A validator
-[`bindings`](../../../scripts/validators/bindings.py) (run by `python scripts/check.py`)
+[`bindings`](https://github.com/citry-dev/citry/blob/main/scripts/validators/bindings.py) (run by `python scripts/check.py`)
 checks that we've added entries to `_rust.pyi` and that the `new_module` subdirectory exists.
 
 ### Type stub maintenance

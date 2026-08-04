@@ -88,6 +88,14 @@ mod tests {
     }
 
     #[test]
+    fn test_expr_comment_text_cannot_hide_host_delimiter() {
+        assert_compile(
+            r#"{{ x # say "}}" then stop }}"#,
+            r#"[ExprNode(source, (0, 14,), """x # say \"""", ("x",)), """\" then stop }}""",]"#,
+        );
+    }
+
+    #[test]
     fn test_expr_arithmetic_multiple_vars() {
         assert_compile(
             "{{ a + b }}",

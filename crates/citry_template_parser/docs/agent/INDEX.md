@@ -143,10 +143,12 @@ contract):
   merging resolve as one unit at render time (`compile_html_node`). A purely
   static tag flattens to literal strings instead.
 - `#c-*` framework metadata never joins that attribute set: on an element it
-  compiles to its own output fragments after the ordinary attributes
-  (`#c-key` as ` data-citry-key=":` + `ExprNode` + `"`, `#c-ignore` as the
-  literal morph marker), and on a component tag `#c-key` rides as the
-  `ComponentNode`'s trailing key argument, emitted only when present.
+  compiles after the ordinary attributes (`#c-key` as an `ElementKeyNode`
+  wrapping its `ExprHtmlAttr`, `#c-ignore` as the literal morph marker). The
+  key node emits the complete `data-citry-key` attribute for every evaluated
+  value except `None`, which emits nothing. On a component tag `#c-key` rides
+  as the `ComponentNode`'s trailing key argument, emitted only when authored;
+  the Python runtime likewise treats an evaluated `None` as no key.
 - Expression content retains its trailing whitespace from `{{ expr }}`.
 - `<c-raw>` compiles its body to a single literal text part (an `UnsafeString`
   that `coalesce_strings` may merge with adjacent static text); the inner
