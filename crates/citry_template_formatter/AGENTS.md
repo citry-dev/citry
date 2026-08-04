@@ -6,11 +6,13 @@ rules in [`/CLAUDE.md`](../../CLAUDE.md) and the accepted formatter design in
 before changing this crate. Parser contracts and gotchas are documented in
 [`../citry_template_parser/AGENTS.md`](../citry_template_parser/AGENTS.md).
 
-The crate has the formatter
-contracts, classifiers, invariant projections, shared golden corpus,
-source-preserving opening-tag printer, suppression handling, and public
-`format_template()` API. The opening-tag capability is exposed through Python.
-Keep formatter-owned display classification here rather than adding it to the parser.
+The crate has the formatter contracts, shared rendered-edge analysis,
+classifiers, invariant projections, shared golden corpus, source-preserving
+structural printer, suppression and verbatim protection, recursive nested
+template formatting, and public `format_template()` API. The M1 structural
+capability is exposed through Python, CLI, LSP, and VS Code. Keep
+formatter-owned display classification here rather than adding it to the
+parser.
 
 Verify changes with:
 

@@ -56,9 +56,9 @@ fn generated_valid_tags_preserve_contract_and_converge() {
 #[test]
 fn earlier_same_line_edits_do_not_stale_later_tag_layout() {
     let nested = r#"<main  id = "x" ><div {# note #}></div></main>"#;
-    let nested_expected = r#"<main id="x"><div {# note #}></div></main>"#;
+    let nested_expected = "<main id=\"x\">\n  <div {# note #}></div>\n</main>";
     let siblings = r#"<div  id = "x" ></div><div {# note #}></div>"#;
-    let siblings_expected = r#"<div id="x"></div><div {# note #}></div>"#;
+    let siblings_expected = "<div id=\"x\"></div>\n<div {# note #}></div>";
 
     assert_eq!(format_template(nested).unwrap(), nested_expected);
     assert_eq!(format_template(siblings).unwrap(), siblings_expected);
@@ -137,7 +137,8 @@ fn structural_target_column_prevents_wrap_then_unwrap_residue() {
     let title = "x".repeat(75);
     let source = format!(r#"<main><div title="{title}"></div></main>"#);
 
-    assert_eq!(format_template(&source).unwrap(), source);
+    let expected = format!("<main>\n  <div title=\"{title}\"></div>\n</main>",);
+    assert_eq!(format_template(&source).unwrap(), expected);
 }
 
 #[test]
@@ -145,7 +146,7 @@ fn trailing_only_placement_uses_the_actual_tag_column() {
     let title = "x".repeat(69);
     let source = format!(r#"<main>prefix<div title="{title}"></div></main>"#);
     let expected = format!(
-        "<main>prefix<div\n{}title=\"{title}\"\n{}></div>\n</main>",
+        "<main>prefix<div\n{}title=\"{title}\"\n{}></div></main>",
         " ".repeat(14),
         " ".repeat(12),
     );

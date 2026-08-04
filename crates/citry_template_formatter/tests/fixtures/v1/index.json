@@ -306,6 +306,19 @@
       "features": ["control-optional", "possibly-empty-edge"]
     },
     {
+      "id": "structural-layout.control.disagreeing-if",
+      "capability": "structural-layout",
+      "category": "control",
+      "input": "m1/control/disagreeing-if.input.citry-html",
+      "expected": "m1/control/disagreeing-if.expected.citry-html",
+      "features": [
+        "control-flow",
+        "transparent-edge",
+        "disagreeing-branches",
+        "sensitive-boundary"
+      ]
+    },
+    {
       "id": "structural-layout.control.shorthand-nested-loop",
       "capability": "structural-layout",
       "category": "control",
@@ -462,6 +475,51 @@
       "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton class=\\\"primary\\\" c-disabled=\\\"not enabled\\\" aria-label=\\\"Save changes to the current profile and return to the account overview\\\"></c-CButton>\"\"\"\r\n",
       "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton\r\n  class=\\\"primary\\\"\r\n  c-disabled=\\\"not enabled\\\"\r\n  aria-label=\\\"Save changes to the current profile and return to the account overview\\\"\r\n></c-CButton>\"\"\"\r\n",
       "features": ["python-host-crlf", "python-host-framing", "preferred-width"]
+    },
+    {
+      "id": "python-hosts.framing.inline-structural-triple-double",
+      "category": "framing",
+      "input": "m1/python-hosts/framing/inline-triple-double.input.py",
+      "expected": "m1/python-hosts/framing/inline-triple-double.expected.py",
+      "features": ["python-host-framing", "triple-double-quote", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.framing.newline-structural-triple-single",
+      "category": "framing",
+      "input": "m1/python-hosts/framing/newline-triple-single.input.py",
+      "expected": "m1/python-hosts/framing/newline-triple-single.expected.py",
+      "features": ["python-host-framing", "triple-single-quote", "base-indentation", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.framing.raw-and-unicode-structural",
+      "category": "framing",
+      "input": "m1/python-hosts/framing/raw-and-unicode.input.py",
+      "expected": "m1/python-hosts/framing/raw-and-unicode.expected.py",
+      "features": ["python-host-framing", "raw-prefix", "unicode-prefix", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.framing.indented-own-line-close",
+      "category": "framing",
+      "input": "m1/python-hosts/framing/indented-own-line-close.input.py",
+      "expected": "m1/python-hosts/framing/indented-own-line-close.expected.py",
+      "features": ["python-host-framing", "closing-delimiter-indentation", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.framing.crlf-structural",
+      "category": "framing",
+      "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<main><section></section></main>\"\"\"\r\n",
+      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<main>\r\n  <section></section>\r\n</main>\"\"\"\r\n",
+      "features": ["python-host-crlf", "python-host-framing", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.eligibility.single-quoted-structural",
+      "category": "eligibility",
+      "input": "m1/python-hosts/eligibility/single-quoted-structural.input.py",
+      "expected_error": {
+        "code": "citry.format.ineligible",
+        "contains": "framing"
+      },
+      "features": ["python-host-framing", "single-quote", "atomic-rewrite", "structural-layout"]
     },
     {
       "id": "python-hosts.eligibility.implicit-concatenation",
