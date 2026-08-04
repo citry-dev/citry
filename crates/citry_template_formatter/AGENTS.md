@@ -9,8 +9,10 @@ before changing this crate. Parser contracts and gotchas are documented in
 The crate has the formatter contracts, shared rendered-edge analysis,
 classifiers, invariant projections, shared golden corpus, source-preserving
 structural printer, suppression and verbatim protection, recursive nested
-template formatting, and public `format_template()` API. The M1 structural
-capability is exposed through Python, CLI, LSP, and VS Code. Keep
+template formatting, and public `format_template()` API. Structural formatting
+and the vendored-Ruff Python expression adapters are exposed through Python,
+CLI, LSP, and VS Code. `c-fill data` remains a Citry-owned binding
+grammar and must not be sent to Ruff. Keep
 formatter-owned display classification here rather than adding it to the
 parser.
 

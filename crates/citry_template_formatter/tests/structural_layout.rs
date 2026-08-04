@@ -126,7 +126,10 @@ fn expression_trivia_has_a_deterministic_width_boundary() {
 
     let long_value = "x".repeat(95);
     let long = format!("{{{{  {long_value}  }}}}");
-    assert_eq!(format_template(&long).unwrap(), long);
+    assert_eq!(
+        format_template(&long).unwrap(),
+        format!("{{{{ {long_value} }}}}"),
+    );
 }
 
 #[test]

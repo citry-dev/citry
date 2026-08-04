@@ -399,6 +399,108 @@
       "features": ["python-comment", "expression-attribute", "python-expression-formatting"]
     },
     {
+      "id": "python-expressions.expressions.ordinary",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "m2/expressions/ordinary.input.citry-html",
+      "expected": "m2/expressions/ordinary.expected.citry-html",
+      "features": ["python-expression-formatting", "template-expression", "calls", "collections"]
+    },
+    {
+      "id": "python-expressions.expressions.python-shapes",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "m2/expressions/python-shapes.input.citry-html",
+      "expected": "m2/expressions/python-shapes.expected.citry-html",
+      "features": [
+        "python-expression-formatting",
+        "strings",
+        "nested-containers",
+        "comprehension",
+        "python-comment",
+        "trailing-comma"
+      ]
+    },
+    {
+      "id": "python-expressions.expressions.attributes",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "m2/expressions/attributes.input.citry-html",
+      "expected": "m2/expressions/attributes.expected.citry-html",
+      "features": ["python-expression-formatting", "expression-attribute", "meta-key", "browser-expression-preservation"]
+    },
+    {
+      "id": "python-expressions.expressions.long-attribute",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "m2/expressions/long-attribute.input.citry-html",
+      "expected": "m2/expressions/long-attribute.expected.citry-html",
+      "features": ["python-expression-formatting", "line-width", "multiline-attribute"]
+    },
+    {
+      "id": "python-expressions.expressions.long-interpolation",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "m2/expressions/long-interpolation.input.citry-html",
+      "expected": "m2/expressions/long-interpolation.expected.citry-html",
+      "features": ["python-expression-formatting", "line-width", "multiline-interpolation"]
+    },
+    {
+      "id": "python-expressions.control.for-forms",
+      "capability": "python-expressions",
+      "category": "control",
+      "input": "m2/control/for-forms.input.citry-html",
+      "expected": "m2/control/for-forms.expected.citry-html",
+      "features": ["python-expression-formatting", "c-for-clause", "physical-control", "shorthand-control"]
+    },
+    {
+      "id": "python-expressions.control.for-comment",
+      "capability": "python-expressions",
+      "category": "control",
+      "input": "m2/control/for-comment.input.citry-html",
+      "expected": "m2/control/for-comment.expected.citry-html",
+      "features": [
+        "python-expression-formatting",
+        "c-for-clause",
+        "physical-control",
+        "shorthand-control",
+        "python-comment",
+        "comment-attachment"
+      ]
+    },
+    {
+      "id": "python-expressions.fills.data-pattern",
+      "capability": "python-expressions",
+      "category": "fills",
+      "input": "m2/fills/data-pattern.input.citry-html",
+      "expected": "m2/fills/data-pattern.expected.citry-html",
+      "features": ["python-expression-formatting", "fill-data-pattern", "alias", "mapping-rest"]
+    },
+    {
+      "id": "python-expressions.nesting.nested-template",
+      "capability": "python-expressions",
+      "category": "nesting",
+      "input": "m2/nesting/nested-template.input.citry-html",
+      "expected": "m2/nesting/nested-template.expected.citry-html",
+      "features": ["python-expression-formatting", "nested-template", "recursive-formatting"]
+    },
+    {
+      "id": "python-expressions.preservation.mixed-control",
+      "capability": "python-expressions",
+      "category": "preservation",
+      "input": "m2/preservation/mixed-control.input.citry-html",
+      "expected": "m2/preservation/mixed-control.expected.citry-html",
+      "features": ["python-expression-formatting", "mixed-content", "optional-control", "sensitive-boundary"]
+    },
+    {
+      "id": "python-expressions.preservation.suppressed-and-verbatim",
+      "capability": "python-expressions",
+      "category": "preservation",
+      "input": "m2/preservation/suppressed-and-verbatim.input.citry-html",
+      "expected": "m2/preservation/suppressed-and-verbatim.expected.citry-html",
+      "features": ["python-expression-formatting", "suppression", "verbatim-body"]
+    },
+    {
       "id": "structural-layout.components.slots-and-fills",
       "capability": "structural-layout",
       "category": "components",
@@ -452,6 +554,18 @@
         "contains": "c-raw"
       },
       "features": ["invalid-citry", "parse-error"]
+    },
+    {
+      "id": "python-expressions.errors.invalid-expression",
+      "capability": "python-expressions",
+      "category": "errors",
+      "input": "m2/errors/invalid-expression.input.citry-html",
+      "expected_error": {
+        "phase": "parse",
+        "code": "citry.format.syntax",
+        "contains": "Failed to parse expression"
+      },
+      "features": ["python-expression-formatting", "invalid-python-expression", "parse-error"]
     }
   ],
   "python_hosts": [
@@ -473,7 +587,7 @@
       "id": "python-hosts.framing.crlf-wrapped-tag",
       "category": "framing",
       "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton class=\\\"primary\\\" c-disabled=\\\"not enabled\\\" aria-label=\\\"Save changes to the current profile and return to the account overview\\\"></c-CButton>\"\"\"\r\n",
-      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton\r\n  class=\\\"primary\\\"\r\n  c-disabled=\\\"not enabled\\\"\r\n  aria-label=\\\"Save changes to the current profile and return to the account overview\\\"\r\n></c-CButton>\"\"\"\r\n",
+      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n      <c-CButton\r\n        class=\\\"primary\\\"\r\n        c-disabled=\\\"not enabled\\\"\r\n        aria-label=\\\"Save changes to the current profile and return to the account overview\\\"\r\n      ></c-CButton>\r\n    \"\"\"\r\n",
       "features": ["python-host-crlf", "python-host-framing", "preferred-width"]
     },
     {
@@ -508,8 +622,15 @@
       "id": "python-hosts.framing.crlf-structural",
       "category": "framing",
       "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<main><section></section></main>\"\"\"\r\n",
-      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<main>\r\n  <section></section>\r\n</main>\"\"\"\r\n",
+      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n      <main>\r\n        <section></section>\r\n      </main>\r\n    \"\"\"\r\n",
       "features": ["python-host-crlf", "python-host-framing", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.expressions.structural",
+      "category": "expressions",
+      "input": "m2/python-hosts/expressions/structural.input.py",
+      "expected": "m2/python-hosts/expressions/structural.expected.py",
+      "features": ["python-host-framing", "python-expression-formatting", "structural-layout"]
     },
     {
       "id": "python-hosts.eligibility.single-quoted-structural",

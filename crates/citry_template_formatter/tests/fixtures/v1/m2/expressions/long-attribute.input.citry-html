@@ -1,0 +1,1 @@
+<c-card c-data="build_payload(first_argument, second_argument, third_argument, fourth_argument, fifth_argument, sixth_argument, seventh_argument)" />

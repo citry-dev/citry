@@ -7,6 +7,11 @@ publish = false
 
 [dependencies]
 citry_template_parser = { path = "../citry_template_parser" }
+ruff_formatter = { workspace = true }
+ruff_python_ast = { workspace = true }
+ruff_python_formatter = { workspace = true }
+ruff_python_parser = { workspace = true }
+ruff_python_trivia = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

@@ -22,7 +22,12 @@ Run every command in this README from the repository root.
 | `versions/` | Committed, generated snapshots of released documentation |
 | `tests/` | Build, render, guard, and browser tests |
 | `_internal/` | The site builder and its private components |
-| `docs_versions.toml` | Version selection and publication policy |
+| `settings.yml` | Site identity, links, Markdown profiles, and product policy |
+| `reference.yml` | Ordered Reference pages, Python symbols, and authored API anchors |
+| `ui_library.yml` | Ordered Citry UI source-page projections |
+| `redirects.yml` | Published clean-URL redirects |
+| `people_sources.yml` | People-generator repositories, featured people, and ignored bots |
+| `docs_versions.yml` | Version selection and publication policy |
 
 Most content work belongs in `content/`, `examples/`, `snippets/`, `static/`,
 or `data/`. Changes under `_internal/` change the documentation product or
@@ -77,7 +82,10 @@ areas:
 ```
 
 `source: releases` fills its group from `CHANGELOG.md`.
-`source: reference` fills its area from the public API category registry.
+`source: reference` fills its area from `reference.yml`.
+`source: ui_library` fills the Citry UI Components group from
+`ui_library.yml`; each component page's front matter supplies its title and
+description.
 `source: blog` fills its area from the dated Markdown posts under
 `content/blog/`, newest first, with **All posts** at the top.
 Ordinary groups use the always-open section styling. Set `collapsible: true`
@@ -285,9 +293,10 @@ uv run --no-sync python -m docs_site serve
 
 Open <http://127.0.0.1:8000/>. The server reads content and navigation on each
 request, renders through Citry, and serves component assets and examples.
-Refresh the browser after changing Markdown. Uvicorn reloads when Python source
-changes. Each server start or Python reload builds universal wheels from the
-workspace `citry` and `citry-ui` packages for the browser playground. This
+Refresh the browser after changing Markdown. Uvicorn reloads when Python or
+YAML docs configuration changes. Each server start or reload builds universal
+wheels from the workspace `citry` and `citry-ui` packages for the browser
+playground. This
 local-only runtime lets interactive snippets import `citry_ui` before the
 package is published. `serve-built`, static builds, CI, and deployed docs keep
 using the committed pinned runtime.
@@ -419,11 +428,104 @@ the gate's full Rust, Python, and Node prerequisites.
 
 ## Configuration
 
+`settings.yml` is the main maintainer-facing declaration. It owns the site and
+repository identity, social destinations, search shortcuts, the `pages` and
+`docstrings` Markdown profiles, Blog policy, git-footer policy, sitemap and
+crawler policy, external inventory endpoints, and release-note exclusions.
+The builder loads it together with `reference.yml`, `ui_library.yml`,
+`redirects.yml`, and `docs_versions.yml` once at each command boundary and
+validates all of them before a build clears or writes output.
+
+Every manifest contains comments beside its editable declarations. Unknown
+fields and duplicate YAML keys fail validation. The exact settings schema is
+implemented by [`SiteSettings`](./_internal/settings.py) and its nested
+dataclasses; version defaults and validation live in
+[`VersionsConfig`](./_internal/bootstrap.py).
+
+### Site settings fields
+
+All fields in `settings.yml` are required. Lists described as unique reject
+duplicate values.
+
+| Field | Accepted value | Used for |
+|---|---|---|
+| `site.name` | Non-empty string | Page titles and site chrome |
+| `site.public_url` | Absolute HTTP(S) URL ending in `/` | Canonicals, sitemap, feeds, and social metadata |
+| `site.language` | Non-empty string | HTML `lang` value |
+| `site.default_description` | Non-empty string | Fallback page description |
+| `repository.owner` | GitHub owner name | Repository identity and generated links |
+| `repository.name` | GitHub repository name | Repository identity and generated links |
+| `repository.url` | Exact `https://github.com/<owner>/<name>` URL | Source, edit, and social links |
+| `repository.edit_branch` | Safe Git branch name | Edit-page links |
+| `repository.issues_url` | `repository.url` plus `/issues` | Issue and 404 links |
+| `repository.sponsors_url` | Absolute HTTP(S) URL | Sponsor links |
+| `links.pypi` | Absolute HTTP(S) URL | Package links |
+| `links.discord` | Absolute HTTP(S) URL | Community links |
+| `search.pagefind_path` | Safe root-relative path | Search module location |
+| `search.quick_links` | Ordered list of `{label, path}` mappings with unique paths | Search shortcuts |
+| `markdown.pages.extensions` | Unique list of Python-Markdown extension names | Markdown page rendering |
+| `markdown.pages.extension_configs` | Mapping from enabled extension name to option mapping | Markdown page extension options |
+| `markdown.docstrings.extensions` | Unique list of Python-Markdown extension names | API docstring rendering |
+| `markdown.docstrings.extension_configs` | Mapping from enabled extension name to option mapping | Docstring extension options |
+| `blog.feed_path` | Safe root-relative path | Atom feed output |
+| `blog.feed_limit` | Integer at least 1 | Maximum posts in the feed |
+| `blog.words_per_minute` | Integer at least 1 | Reading-time estimates |
+| `git.exclude_patterns` | Unique list of non-empty path-pattern strings | Pages omitted from author footers |
+| `git.max_authors` | Integer at least 1 | Maximum displayed page authors |
+| `seo.ai_bots` | Unique list of non-empty user-agent strings | AI crawler policy |
+| `seo.priorities` | Ordered list of unique `{prefix, priority}` mappings; priority is from 0 through 1 | Sitemap priority overrides |
+| `inventory.python_docs_url` | Absolute HTTP(S) URL ending in `/` | Python intersphinx inventory |
+| `release_notes.exclude` | Unique list of non-empty changelog date strings | Releases omitted from docs |
+
+Extension option values may be strings, numbers, booleans, `null`, lists, or
+mappings. A profile may configure only extensions enabled in that profile.
+
+### Version policy fields
+
+Every mapping and field in `docs_versions.yml` is optional. Omitted values use
+the defaults shown below.
+
+| Field | Accepted value | Default |
+|---|---|---|
+| `versions.pattern` | Non-empty Python regular-expression string | Full three-part versions, with optional `v` prefix |
+| `versions.include` | Unique list of non-empty tag strings | `[]` |
+| `versions.exclude` | Unique list of non-empty tag strings | `[]` |
+| `versions.oldest` | Empty string or full `major.minor.patch` version | `""` |
+| `versions.newest` | Empty string or full `major.minor.patch` version | `""` |
+| `aliases.latest` | Empty string or full `major.minor.patch` version | `""`, meaning newest built version |
+| `publish.window` | Non-negative integer; `0` publishes all versions | `0` |
+| `indexing.keep_recent` | Non-negative integer; `0` indexes all versions | `2` |
+
+A tag cannot appear in both include and exclude. When both version bounds are
+set, `oldest` cannot be newer than `newest`.
+
+Markdown extension ordering and ordinary extension options belong in the named
+profiles. Snippet base paths and the custom capture and table extensions remain
+implementation-owned because they depend on the active checkout and precise
+pipeline ordering.
+
+To change Reference order or symbol ownership, edit `reference.yml`. Authored
+Reference entries declare their Markdown source and stable anchors there. To
+add or reorder Citry UI pages, edit `ui_library.yml`. Each family also declares
+the API headings its source page must provide, so adding a family does not
+require changing an internal Python registry. Then synchronize the public
+copies:
+
+```bash
+uv run --no-sync python -m docs_site sync-ui-library
+```
+
+The command validates the complete catalog and all source front matter before
+writing, copies every declared page byte-for-byte, and removes stale projected
+Markdown files. The same catalog drives sidebar order and the UI overview.
+Add a published redirect to `redirects.yml`; redirect chains and unsafe paths
+are rejected.
+
 The builder reads these variables when the Python process starts:
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `DOCS_SITE_URL` | Canonical, sitemap, Open Graph, and other public URLs | `https://citry.dev/` |
+| `DOCS_SITE_URL` | Override canonical, sitemap, Open Graph, and other public URLs | `settings.yml` |
 | `DOCS_BASE_PATH` | Root-relative prefix for project Pages or fork previews | empty |
 | `DOCS_GOOGLE_SITE_VERIFICATION` | Optional Google Search Console token | empty |
 
@@ -513,6 +615,11 @@ maintainer decision:
   building, so the snapshot is internally consistent but a later `main` tip
   could differ from the commit carrying the tag.
 
+Before the first real docs release, change that second behavior so the
+versioned snapshot is built from the tag commit while the current root site is
+assembled from `main`. The current main-based snapshot source is a release
+blocker, not the model for editorial deploys.
+
 A manual dispatch of the release workflow only assembles and redeploys the
 existing version tree. Snapshot creation is conditional on a tag event.
 
@@ -526,19 +633,22 @@ uv run --no-sync python -m docs_site versions-check --strict
 
 It walks selected release tags in temporary Git worktrees and modifies the
 committed version tree. Tags that predate the docs builder are skipped. Selection
-and the publication window are defined in `docs_versions.toml`.
+and the publication window are defined in `docs_versions.yml`.
 
 ## Maintenance workflows
 
 | Job | Schedule | Manual operation |
 |---|---|---|
-| People data | Monthly | `GITHUB_TOKEN=... python docs_site/scripts/people.py` |
+| People data | Monthly | `GITHUB_TOKEN=... uv run --no-sync python docs_site/scripts/people.py` |
 | External links | Mondays at 06:00 UTC | `gh workflow run repo--docs-external-links.yml` |
 | Lighthouse | Relevant pull requests | `gh workflow run repo--docs-lighthouse.yml` |
 
-The People script overwrites `docs_site/data/people.yml` and needs a token that
-can read the public Citry and django-components repositories. Its workflow opens
-a pull request when the generated data changes.
+The People script reads `people_sources.yml`, resolves its `site` repository
+entry from the `repository` mapping in `settings.yml`, and overwrites
+`docs_site/data/people.yml`, and needs a token that can read every configured
+repository. Repository order controls tie order and which later profile data
+wins. The `maintainers` and `special_thanks` list order is the display order.
+The workflow opens a pull request when generated data changes.
 
 Internal links, anchors, assets, headings, snippets, and generated site structure
 are checked by `build-check`. External links are intentionally checked on a
