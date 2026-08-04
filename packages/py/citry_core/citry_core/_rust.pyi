@@ -199,6 +199,22 @@ class safe_eval:
         """
 
 ########################################################
+# Template formatter
+########################################################
+
+class template_formatter:
+    class TemplateFormatError(ValueError):
+        """A structured refusal to format authored Citry template text."""
+
+        code: str
+        message: str
+        range: tuple[int, int] | None
+        diagnostic: template_parser.ParseDiagnostic | None
+
+    @staticmethod
+    def format_template(source: str) -> str: ...
+
+########################################################
 # Template parser (V3)
 ########################################################
 

@@ -1,0 +1,8 @@
+<div
+  class='row'
+  @click="select()"
+  :class="active"
+  c-title="title # keep"
+  #c-key="row.id"
+  #c-ignore
+></div>

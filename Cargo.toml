@@ -2,6 +2,7 @@
 members = [
     "crates/citry_core_py",
     "crates/citry_html_transform",
+    "crates/citry_template_formatter",
     "crates/citry_template_parser",
     "crates/python_safe_eval",
 ]

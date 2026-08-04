@@ -1,0 +1,5 @@
+<c-card
+  c-body="<main>
+    <section></section>
+  </main>"
+/>

@@ -1,0 +1,4 @@
+<main>
+  <div c-if="show" c-for="item in items"><section>{{ item }}</section></div>
+  <footer></footer>
+</main>

@@ -22,12 +22,14 @@ each entry to one paragraph and link to longer docs rather than copying them.
 |---|---|
 | Template parser: grammar, AST, parser, compiler, lang impls | [`crates/citry_template_parser/docs/agent/INDEX.md`](../../crates/citry_template_parser/docs/agent/INDEX.md) |
 | Template parser: quick pointers + gotchas | [`crates/citry_template_parser/AGENTS.md`](../../crates/citry_template_parser/AGENTS.md) |
+| Template formatter: Rust core, Python rewrites, CLI, LSP, and editors | [`docs/design/template_formatter.md`](../design/template_formatter.md) |
 | PyO3 glue: what Python sees, module registration | [`crates/citry_core_py/AGENTS.md`](../../crates/citry_core_py/AGENTS.md) |
 | Sandboxed Python expression transform | [`crates/python_safe_eval/AGENTS.md`](../../crates/python_safe_eval/AGENTS.md) |
 | HTML attribute transformer | [`crates/citry_html_transform/AGENTS.md`](../../crates/citry_html_transform/AGENTS.md) |
 | Python package surface (`citry_core` on PyPI) | [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md) |
 | Monorepo dev / build / release conventions | [`docs/codebase.md`](../codebase.md) |
 | Alpine, browser ownership graph, props, boundary handlers, slots, and morph lifecycle | [`docs/design/alpinejs.md`](../design/alpinejs.md) |
+| ComponentRange identity, physical placements, matching, and range-level morph policy | [`docs/design/component_ranges.md`](../design/component_ranges.md) |
 | Current status snapshot (dated) | [`docs/../TODO/project_status_june_2026.md`](../../TODO/project_status_june_2026.md) |
 
 ---
@@ -55,6 +57,18 @@ JS (wasm-bindgen), PHP (FFI), and Go (cgo) are planned. The same crate is
 released per language. Dev setup, the monorepo layout, dependency-pinning
 rules, release tags, and CI workflow naming are documented in
 [`docs/codebase.md`](../codebase.md); do not duplicate them here.
+
+### Browser wire protocols
+
+The language-neutral contracts for server/browser JSON are
+[`citry-events/1`](../../packages/protocol/events/v1/README.md) and
+[`citry-client-graph/1`](../../packages/protocol/client_graph/v1/README.md).
+Their standard-library-only Python packages are copied byte for byte into
+`citry._protocol`, while their TypeScript packages build into the two browser
+artifacts. Product code chooses application data and DOM behavior; the
+protocol packages own fixed record construction and remote-input validation.
+The copy, build, constraint-ownership, and distribution checks are documented
+in [`docs/codebase.md`](../codebase.md#protocol-packages-and-shipped-copies).
 
 ### The grammar -> AST -> compiler -> codegen pipeline
 

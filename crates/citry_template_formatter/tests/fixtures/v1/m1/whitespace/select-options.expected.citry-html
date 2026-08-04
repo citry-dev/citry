@@ -1,0 +1,6 @@
+<select>
+  <option value="a">A</option>
+  <optgroup label="B">
+    <option value="b">B</option>
+  </optgroup>
+</select>

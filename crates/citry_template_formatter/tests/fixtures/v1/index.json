@@ -1,0 +1,507 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "opening-tags.tags.normalize-spacing",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "m0/tags/normalize-spacing.input.citry-html",
+      "expected": "m0/tags/normalize-spacing.expected.citry-html",
+      "features": ["attribute-spacing", "bare-attribute"]
+    },
+    {
+      "id": "opening-tags.tags.collapse-short-tag",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "m0/tags/collapse-short-tag.input.citry-html",
+      "expected": "m0/tags/collapse-short-tag.expected.citry-html",
+      "features": ["collapse", "self-closing-style"]
+    },
+    {
+      "id": "opening-tags.tags.wrap-long-tag",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "m0/tags/wrap-long-tag.input.citry-html",
+      "expected": "m0/tags/wrap-long-tag.expected.citry-html",
+      "features": ["preferred-width", "expression-attribute"]
+    },
+    {
+      "id": "opening-tags.comments.tag-internal",
+      "capability": "opening-tags",
+      "category": "comments",
+      "input": "m0/comments/tag-internal.input.citry-html",
+      "expected": "m0/comments/tag-internal.expected.citry-html",
+      "features": ["template-comment", "self-closing"]
+    },
+    {
+      "id": "structural-layout.whitespace.block-structure",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "m1/whitespace/block-structure.input.citry-html",
+      "expected": "m1/whitespace/block-structure.expected.citry-html",
+      "features": ["block-container", "expression-delimiters"]
+    },
+    {
+      "id": "structural-layout.whitespace.inline-boundaries",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "m1/whitespace/inline-boundaries.input.citry-html",
+      "expected": "m1/whitespace/inline-boundaries.expected.citry-html",
+      "features": ["inline", "mixed-content", "no-space-vs-space"]
+    },
+    {
+      "id": "structural-layout.whitespace.component-boundary",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "m1/whitespace/component-boundary.input.citry-html",
+      "expected": "m1/whitespace/component-boundary.expected.citry-html",
+      "features": ["component", "sensitive-boundary"]
+    },
+    {
+      "id": "structural-layout.whitespace.select-options",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "m1/whitespace/select-options.input.citry-html",
+      "expected": "m1/whitespace/select-options.expected.citry-html",
+      "features": ["select", "structural-container", "sensitive-outer-edge"]
+    },
+    {
+      "id": "structural-layout.whitespace.pre-body",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "m1/whitespace/pre-body.input.citry-html",
+      "expected": "m1/whitespace/pre-body.expected.citry-html",
+      "features": ["pre", "verbatim-body", "block-boundary"]
+    },
+    {
+      "id": "structural-layout.comments.structural-html-comment",
+      "capability": "structural-layout",
+      "category": "comments",
+      "input": "m1/comments/structural-html-comment.input.citry-html",
+      "expected": "m1/comments/structural-html-comment.expected.citry-html",
+      "features": ["html-comment", "structural-gap"]
+    },
+    {
+      "id": "structural-layout.comments.structural-template-comment",
+      "capability": "structural-layout",
+      "category": "comments",
+      "input": "m1/comments/structural-template-comment.input.citry-html",
+      "expected": "m1/comments/structural-template-comment.expected.citry-html",
+      "features": ["template-comment", "comment-association"]
+    },
+    {
+      "id": "structural-layout.comments.python-comment-expression",
+      "capability": "structural-layout",
+      "category": "comments",
+      "input": "m1/comments/python-comment-expression.input.citry-html",
+      "expected": "m1/comments/python-comment-expression.expected.citry-html",
+      "features": ["python-comment", "sensitive-expression"]
+    },
+    {
+      "id": "opening-tags.tags.attribute-kinds",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "m0/tags/attribute-kinds.input.citry-html",
+      "expected": "m0/tags/attribute-kinds.expected.citry-html",
+      "features": ["attribute-kinds", "event-attribute", "binding-attribute", "metadata-attribute", "python-comment"]
+    },
+    {
+      "id": "opening-tags.tags.lowercase-component",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "m0/tags/lowercase-component.input.citry-html",
+      "expected": "m0/tags/lowercase-component.expected.citry-html",
+      "features": ["component", "lowercase-component", "tag-spelling"]
+    },
+    {
+      "id": "opening-tags.tags.unbreakable-unicode",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "m0/tags/unbreakable-unicode.input.citry-html",
+      "expected": "m0/tags/unbreakable-unicode.expected.citry-html",
+      "features": ["unicode", "unbreakable-token", "preferred-width"]
+    },
+    {
+      "id": "opening-tags.comments.exact-expression-and-end-tag",
+      "capability": "opening-tags",
+      "category": "comments",
+      "input": "m0/comments/exact-expression-and-end-tag.input.citry-html",
+      "expected": "m0/comments/exact-expression-and-end-tag.expected.citry-html",
+      "features": ["expression-byte-exact", "end-tag-comment", "template-comment"]
+    },
+    {
+      "id": "opening-tags.layout.comment-only",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input": "m0/layout/comment-only.input.citry-html",
+      "expected": "m0/layout/comment-only.expected.citry-html",
+      "features": ["template-comment", "comment-only-tag", "inline-comment"]
+    },
+    {
+      "id": "opening-tags.layout.nonzero-column",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input": "m0/layout/nonzero-column.input.citry-html",
+      "expected": "m0/layout/nonzero-column.expected.citry-html",
+      "features": ["source-column", "preferred-width", "multiline-tag"]
+    },
+    {
+      "id": "opening-tags.layout.crlf",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input_text": "prefix\r\n  <div {# note #} id = \"x\"></div>",
+      "expected_text": "prefix\r\n  <div {# note #} id=\"x\"></div>",
+      "features": ["crlf", "newline-detection", "source-column", "template-comment"]
+    },
+    {
+      "id": "opening-tags.layout.itemless-trailing-space",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input": "m0/layout/itemless-trailing-space.input.citry-html",
+      "expected": "m0/layout/itemless-trailing-space.expected.citry-html",
+      "features": ["itemless-tag", "delimiter-spacing"]
+    },
+    {
+      "id": "opening-tags.layout.multiline-value",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input": "m0/layout/multiline-value.input.citry-html",
+      "expected": "m0/layout/multiline-value.expected.citry-html",
+      "features": ["multiline-attribute", "multiline-tag", "static-attribute"]
+    },
+    {
+      "id": "opening-tags.suppression.off-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/off-on.input.citry-html",
+      "expected": "m0/suppression/off-on.expected.citry-html",
+      "features": ["suppression", "fmt-off", "fmt-on", "protected-node"]
+    },
+    {
+      "id": "opening-tags.suppression.unmatched-off",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/unmatched-off.input.citry-html",
+      "expected": "m0/suppression/unmatched-off.expected.citry-html",
+      "features": ["suppression", "fmt-off", "protected-to-end"]
+    },
+    {
+      "id": "opening-tags.suppression.skip-node",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/skip-node.input.citry-html",
+      "expected": "m0/suppression/skip-node.expected.citry-html",
+      "features": ["suppression", "fmt-skip", "protected-node"]
+    },
+    {
+      "id": "opening-tags.suppression.skip-expression",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/skip-expression.input.citry-html",
+      "expected": "m0/suppression/skip-expression.expected.citry-html",
+      "features": ["suppression", "fmt-skip", "protected-expression"]
+    },
+    {
+      "id": "opening-tags.suppression.skip-attribute",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/skip-attribute.input.citry-html",
+      "expected": "m0/suppression/skip-attribute.expected.citry-html",
+      "features": ["suppression", "fmt-skip", "protected-attribute", "template-comment"]
+    },
+    {
+      "id": "opening-tags.suppression.directive-looking-content",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/directive-looking-content.input.citry-html",
+      "expected": "m0/suppression/directive-looking-content.expected.citry-html",
+      "features": ["suppression", "raw-body", "expression-attribute", "literal-directive-text"]
+    },
+    {
+      "id": "opening-tags.errors.nested-fmt-off",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "m0/errors/nested-fmt-off.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "nested"
+      },
+      "features": ["invalid-suppression", "fmt-off"]
+    },
+    {
+      "id": "opening-tags.errors.skip-before-text",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "m0/errors/skip-before-text.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "rendered text"
+      },
+      "features": ["invalid-suppression", "fmt-skip"]
+    },
+    {
+      "id": "opening-tags.errors.tag-skip-without-attribute",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "m0/errors/tag-skip-without-attribute.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "attribute"
+      },
+      "features": ["invalid-suppression", "fmt-skip", "tag-internal"]
+    },
+    {
+      "id": "opening-tags.errors.tag-fmt-off",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "m0/errors/tag-fmt-off.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "start tag"
+      },
+      "features": ["invalid-suppression", "fmt-off", "tag-internal"]
+    },
+    {
+      "id": "opening-tags.errors.nested-template-fmt-on",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "m0/errors/nested-template-fmt-on.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "matching"
+      },
+      "features": ["invalid-suppression", "fmt-on", "nested-template"]
+    },
+    {
+      "id": "opening-tags.errors.end-tag-directive",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "m0/errors/end-tag-directive.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "end tag"
+      },
+      "features": ["invalid-suppression", "fmt-skip", "end-tag-directive"]
+    },
+    {
+      "id": "structural-layout.control.exhaustive-if",
+      "capability": "structural-layout",
+      "category": "control",
+      "input": "m1/control/exhaustive-if.input.citry-html",
+      "expected": "m1/control/exhaustive-if.expected.citry-html",
+      "features": ["control-exhaustive", "transparent-control", "block-container"]
+    },
+    {
+      "id": "structural-layout.control.optional-if",
+      "capability": "structural-layout",
+      "category": "control",
+      "input": "m1/control/optional-if.input.citry-html",
+      "expected": "m1/control/optional-if.expected.citry-html",
+      "features": ["control-optional", "possibly-empty-edge"]
+    },
+    {
+      "id": "structural-layout.control.shorthand-nested-loop",
+      "capability": "structural-layout",
+      "category": "control",
+      "input": "m1/control/shorthand-nested-loop.input.citry-html",
+      "expected": "m1/control/shorthand-nested-loop.expected.citry-html",
+      "features": ["control-optional", "shorthand-control", "nested-control"]
+    },
+    {
+      "id": "structural-layout.whitespace.contextual-option",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "m1/whitespace/contextual-option.input.citry-html",
+      "expected": "m1/whitespace/contextual-option.expected.citry-html",
+      "features": ["contextual-option", "sensitive-boundary"]
+    },
+    {
+      "id": "structural-layout.whitespace.empty-and-comment-only",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "m1/whitespace/empty-and-comment-only.input.citry-html",
+      "expected": "m1/whitespace/empty-and-comment-only.expected.citry-html",
+      "features": ["empty-body", "comment-only-body", "template-comment"]
+    },
+    {
+      "id": "structural-layout.whitespace.rendered-nbsp",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "m1/whitespace/rendered-nbsp.input.citry-html",
+      "expected": "m1/whitespace/rendered-nbsp.expected.citry-html",
+      "features": ["unicode", "rendered-unicode-space", "mixed-content", "sensitive-boundary"]
+    },
+    {
+      "id": "structural-layout.root.doctype",
+      "capability": "structural-layout",
+      "category": "root",
+      "input": "m1/root/doctype.input.citry-html",
+      "expected": "m1/root/doctype.expected.citry-html",
+      "features": ["doctype", "root-structure"]
+    },
+    {
+      "id": "structural-layout.bytes.crlf",
+      "capability": "structural-layout",
+      "category": "bytes",
+      "input_text": "<main><section></section></main>\r\n",
+      "expected_text": "<main>\r\n  <section></section>\r\n</main>\r\n",
+      "features": ["crlf", "newline-detection", "block-container"]
+    },
+    {
+      "id": "structural-layout.bytes.no-final-newline",
+      "capability": "structural-layout",
+      "category": "bytes",
+      "input_text": "<main><section></section></main>",
+      "expected_text": "<main>\n  <section></section>\n</main>",
+      "features": ["missing-final-newline", "block-container"]
+    },
+    {
+      "id": "structural-layout.attributes.nested-template",
+      "capability": "structural-layout",
+      "category": "attributes",
+      "input": "m1/attributes/nested-template.input.citry-html",
+      "expected": "m1/attributes/nested-template.expected.citry-html",
+      "features": ["nested-template", "recursive-formatting"]
+    },
+    {
+      "id": "structural-layout.attributes.nested-fragment",
+      "capability": "structural-layout",
+      "category": "attributes",
+      "input": "m1/attributes/nested-fragment.input.citry-html",
+      "expected": "m1/attributes/nested-fragment.expected.citry-html",
+      "features": ["nested-template", "fragment", "recursive-formatting"]
+    },
+    {
+      "id": "python-expressions.attributes.python-comment",
+      "capability": "python-expressions",
+      "category": "attributes",
+      "input": "m1/attributes/python-comment.input.citry-html",
+      "expected": "m1/attributes/python-comment.expected.citry-html",
+      "features": ["python-comment", "expression-attribute", "python-expression-formatting"]
+    },
+    {
+      "id": "structural-layout.components.slots-and-fills",
+      "capability": "structural-layout",
+      "category": "components",
+      "input": "m1/components/slots-and-fills.input.citry-html",
+      "expected": "m1/components/slots-and-fills.expected.citry-html",
+      "features": ["component", "slot", "fill", "slot-data", "typed-slot-data"]
+    },
+    {
+      "id": "structural-layout.verbatim.protected-bodies",
+      "capability": "structural-layout",
+      "category": "verbatim",
+      "input": "m1/verbatim/protected-bodies.input.citry-html",
+      "expected": "m1/verbatim/protected-bodies.expected.citry-html",
+      "features": ["raw-body", "script-body", "style-body", "textarea-body", "verbatim-body"]
+    },
+    {
+      "id": "structural-layout.comments.mixed-html-comment",
+      "capability": "structural-layout",
+      "category": "comments",
+      "input": "m1/comments/mixed-html-comment.input.citry-html",
+      "expected": "m1/comments/mixed-html-comment.expected.citry-html",
+      "features": ["html-comment", "mixed-content", "sensitive-boundary"]
+    },
+    {
+      "id": "structural-layout.suppression.all-directives",
+      "capability": "structural-layout",
+      "category": "suppression",
+      "input": "m1/suppression/all-directives.input.citry-html",
+      "expected": "m1/suppression/all-directives.expected.citry-html",
+      "features": ["suppression", "fmt-off", "fmt-on", "fmt-skip"]
+    },
+    {
+      "id": "opening-tags.errors.unmatched-fmt-on",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "m1/errors/unmatched-fmt-on.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression"
+      },
+      "features": ["invalid-suppression", "fmt-on"]
+    },
+    {
+      "id": "structural-layout.errors.invalid-citry",
+      "capability": "structural-layout",
+      "category": "errors",
+      "input": "m1/errors/invalid-citry.input.citry-html",
+      "expected_error": {
+        "phase": "parse",
+        "code": "citry.format.syntax",
+        "contains": "c-raw"
+      },
+      "features": ["invalid-citry", "parse-error"]
+    }
+  ],
+  "python_hosts": [
+    {
+      "id": "python-hosts.framing.triple-double",
+      "category": "framing",
+      "input": "m0/python-hosts/framing/triple-double.input.py",
+      "expected": "m0/python-hosts/framing/triple-double.expected.py",
+      "features": ["python-host-framing", "triple-double-quote"]
+    },
+    {
+      "id": "python-hosts.rewrites.reverse-order",
+      "category": "rewrites",
+      "input": "m0/python-hosts/rewrites/reverse-order.input.py",
+      "expected": "m0/python-hosts/rewrites/reverse-order.expected.py",
+      "features": ["python-host-reverse-rewrite", "raw-prefix", "unicode-prefix"]
+    },
+    {
+      "id": "python-hosts.framing.crlf-wrapped-tag",
+      "category": "framing",
+      "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton class=\\\"primary\\\" c-disabled=\\\"not enabled\\\" aria-label=\\\"Save changes to the current profile and return to the account overview\\\"></c-CButton>\"\"\"\r\n",
+      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton\r\n  class=\\\"primary\\\"\r\n  c-disabled=\\\"not enabled\\\"\r\n  aria-label=\\\"Save changes to the current profile and return to the account overview\\\"\r\n></c-CButton>\"\"\"\r\n",
+      "features": ["python-host-crlf", "python-host-framing", "preferred-width"]
+    },
+    {
+      "id": "python-hosts.eligibility.implicit-concatenation",
+      "category": "eligibility",
+      "input": "m0/python-hosts/eligibility/implicit-concatenation.input.py",
+      "expected_error": {
+        "code": "citry.format.ineligible",
+        "contains": "implicit"
+      },
+      "features": ["python-literal-concatenation", "atomic-rewrite"]
+    },
+    {
+      "id": "python-hosts.eligibility.escape",
+      "category": "eligibility",
+      "input": "m0/python-hosts/eligibility/escape.input.py",
+      "expected_error": {
+        "code": "citry.format.ineligible",
+        "contains": "escape"
+      },
+      "features": ["python-literal-escape", "atomic-rewrite"]
+    },
+    {
+      "id": "python-hosts.errors.invalid-python",
+      "category": "errors",
+      "input": "m0/python-hosts/errors/invalid-python.input.py",
+      "expected_error": {
+        "code": "citry.format.host-syntax",
+        "contains": "Python"
+      },
+      "features": ["invalid-python-host", "atomic-rewrite"]
+    },
+    {
+      "id": "python-hosts.errors.invalid-citry",
+      "category": "errors",
+      "input": "m0/python-hosts/errors/invalid-citry.input.py",
+      "expected_error": {
+        "code": "citry.format.syntax",
+        "contains": "Parse error"
+      },
+      "features": ["invalid-citry", "atomic-rewrite"]
+    }
+  ]
+}

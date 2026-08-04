@@ -57,6 +57,7 @@ packages/py/citry_core/
 │   ├── html_transform/      # HTML transformation API
 │   │   └── __init__.py      # API for this submodule
 │   ├── safe_eval/           # Safe eval API
+│   ├── template_formatter/  # Authored template formatting API
 │   ├── template_parser/     # Template parsing API
 │   └── ...
 ├── tests/                    # Package tests
@@ -75,6 +76,7 @@ packages/py/citry_core/
 
 - `citry_core/html_transform/__init__.py`
 - `citry_core/safe_eval/__init__.py`
+- `citry_core/template_formatter/__init__.py`
 - `citry_core/template_parser/__init__.py`
 
 This allows clean, namespaced imports:
@@ -82,6 +84,7 @@ This allows clean, namespaced imports:
 ```python
 from citry_core.html_transform import transform_html
 from citry_core.safe_eval import safe_eval
+from citry_core.template_formatter import format_template
 from citry_core.template_parser import parse_tag
 ```
 

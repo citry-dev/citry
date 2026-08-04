@@ -1,0 +1,14 @@
+[package]
+name = "citry_template_formatter"
+description = "Format authored Citry templates"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+citry_template_parser = { path = "../citry_template_parser" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }

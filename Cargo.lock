@@ -204,6 +204,7 @@ name = "citry_core_py"
 version = "1.1.0"
 dependencies = [
  "citry_html_transform",
+ "citry_template_formatter",
  "citry_template_parser",
  "pyo3",
  "python_safe_eval",
@@ -215,6 +216,16 @@ name = "citry_html_transform"
 version = "1.0.3"
 dependencies = [
  "quick-xml",
+]
+
+[[package]]
+name = "citry_template_formatter"
+version = "0.0.0"
+dependencies = [
+ "citry_template_parser",
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]
