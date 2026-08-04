@@ -73,6 +73,62 @@ print(json.dumps([rendered, result]))
     return rendered, result
 
 
+def _dispatch_render_source(source: str, handler: str, *, run_id: int = 7) -> tuple[dict, dict, list[dict]]:
+    program = f"""
+import base64
+import json
+import re
+import runpy
+import sys
+
+adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
+payload = json.load(sys.stdin)
+rendered = json.loads(adapter["run_source_json"](payload["source"], payload["run_id"]))
+manifest = json.loads(re.search(
+    r'<script[^>]*data-citry-events[^>]*>(.*?)</script>',
+    rendered["html"],
+    re.DOTALL,
+).group(1))
+instance = manifest["componentInstances"][0]
+envelope = {{
+    "protocol": "citry-events/1",
+    "requestId": "playground-render-test",
+    "calls": [{{
+        "componentClassId": instance["componentClassId"],
+        "handlerName": payload["handler"],
+        "callerRenderId": instance["renderId"],
+        "args": {{}},
+        "sendSequence": 1,
+    }}],
+}}
+response = json.loads(adapter["dispatch_event_json"](json.dumps(envelope), payload["run_id"]))
+action = response["results"][0]["actions"][0]
+dependency = json.loads(re.search(
+    r'<script[^>]*data-citry(?:>|=[^>]*>)(.*?)</script>',
+    action["html"],
+    re.DOTALL,
+).group(1))
+paths = []
+for kind in ("js", "css"):
+    for encoded in dependency["fetch"][kind]:
+        descriptor = json.loads(base64.b64decode(encoded).decode())
+        path = descriptor.get("attrs", {{}}).get("src") or descriptor.get("attrs", {{}}).get("href")
+        if path:
+            paths.append(path)
+assets = json.loads(adapter["load_playground_assets_json"](json.dumps(paths), payload["run_id"]))
+print(json.dumps([rendered, response, assets]))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        input=json.dumps({"source": source, "handler": handler, "run_id": run_id}),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    rendered, result, assets = json.loads(completed.stdout)
+    return rendered, result, assets
+
+
 def test_worker_revalidates_the_coupled_runtime_files() -> None:
     worker = _WORKER.read_text(encoding="utf-8")
 
@@ -133,6 +189,135 @@ def test_starter_state_and_dispatch_handler_round_trip() -> None:
         "detail": {"greetings": 1},
         "target": f"render:{state['targetRenderId']}",
     }
+
+
+def test_render_action_resolves_its_browser_assets() -> None:
+    source = '''
+from citry import Component
+from citry.ext.events import actions
+
+
+class LoadedFragment(Component):
+    class Kwargs:
+        kind: str
+
+    class Events:
+        def ping(self):
+            return actions.Dispatch("fragment:ping", {"kind": "nested"})
+
+    def js_data(self, kwargs, slots):
+        return {"kind": kwargs.kind}
+
+    template = """
+      <section class="loaded-fragment">
+        <button type="button" @c-click="ping">Ping</button>
+      </section>
+    """
+
+    js = """
+      window.__fragmentAssetLoads = (window.__fragmentAssetLoads || 0) + 1;
+      $component(({ els, data }) => {
+        els[0].setAttribute("data-component-js", data.kind);
+      });
+    """
+
+    css = """
+      .loaded-fragment {
+        background-color: rgb(231, 241, 255);
+      }
+    """
+
+
+class FragmentLoader(Component):
+    class Events:
+        def load(self):
+            return actions.Render(
+                LoadedFragment(kind="rendered"),
+                target="#fragment-target",
+                swap="inner",
+            )
+
+    template = """
+      <main>
+        <button type="button" @c-click="load">Load</button>
+        <div id="fragment-target"></div>
+      </main>
+    """
+
+
+FragmentLoader()
+'''
+
+    rendered, response, assets = _dispatch_render_source(source, "load")
+
+    assert rendered["ok"]
+    [result] = response["results"]
+    assert result["ok"]
+    [render] = result["actions"]
+    assert render["action"] == "render"
+    assert render["target"] == "#fragment-target"
+    assert render["swap"] == "inner"
+    assert "loaded-fragment" in render["html"]
+    assert assets
+    assert all(asset["path"].startswith("/__citry_playground__/") for asset in assets)
+    assert {asset["contentType"] for asset in assets} == {"text/css", "text/javascript"}
+    contents = "\n".join(asset["content"] for asset in assets)
+    assert "__fragmentAssetLoads" in contents
+    assert "background-color" in contents
+
+
+def test_browser_asset_loader_rejects_unowned_and_stale_requests() -> None:
+    program = f"""
+import json
+import runpy
+
+adapter = runpy.run_path({_EXECUTOR.as_posix()!r})
+json.loads(adapter["run_source_json"]("value = '<p>ready</p>'\\nvalue", 7))
+errors = []
+for paths, run_id in [
+    (["/__citry_playground__/visitor.js"], 7),
+    (["/__citry_playground__/citry.js?unexpected=1"], 7),
+    (["/__citry_playground__/asset/../citry.js"], 7),
+    (["/__citry_playground__/asset/file%2fescape.js"], 7),
+    (["/__citry_playground__/citry.js", "/__citry_playground__/citry.js"], 7),
+    (["/__citry_playground__/citry.js"], 8),
+]:
+    try:
+        adapter["load_playground_assets_json"](json.dumps(paths), run_id)
+    except Exception as error:
+        errors.append([type(error).__name__, str(error)])
+print(json.dumps(errors))
+"""
+    completed = subprocess.run(
+        [sys.executable, "-c", program],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert json.loads(completed.stdout) == [
+        ["ValueError", "Unsupported playground asset path: '/__citry_playground__/visitor.js'."],
+        [
+            "ValueError",
+            "Unsupported playground asset path: '/__citry_playground__/citry.js?unexpected=1'.",
+        ],
+        [
+            "ValueError",
+            "Unsupported playground asset path: '/__citry_playground__/asset/../citry.js'.",
+        ],
+        [
+            "ValueError",
+            "Unsupported playground asset path: '/__citry_playground__/asset/file%2fescape.js'.",
+        ],
+        [
+            "ValueError",
+            "Duplicate playground asset path: '/__citry_playground__/citry.js'.",
+        ],
+        [
+            "RuntimeError",
+            "These assets belong to a preview that is no longer active. Run the module again.",
+        ],
+    ]
 
 
 def test_event_request_is_synthetic_and_server_only_action_is_rejected() -> None:

@@ -90,12 +90,18 @@ def _client_active_tabs_page() -> str:
     return f"<!doctype html><html lang='en'><head></head><body>{Demo()}</body></html>"
 
 
-def _render_through_preview_bridge(page: Any, base_url: str, html: str) -> None:
+def _render_through_preview_bridge(
+    page: Any,
+    base_url: str,
+    html: str,
+    *,
+    assets: list[dict[str, str]] | None = None,
+) -> None:
     page.goto(base_url + "/", wait_until="domcontentloaded")
     page.evaluate(
-        """async ({ baseUrl, html }) => {
+        """async ({ baseUrl, html, assets }) => {
           const { PreviewBridge } = await import(
-            `${baseUrl}/docs_site/frontend/src/preview_bridge.js`
+            `${baseUrl}/docs_site/_internal/frontend/src/preview_bridge.js`
           );
           const iframe = document.createElement('iframe');
           iframe.id = 'preview';
@@ -105,8 +111,14 @@ def _render_through_preview_bridge(page: Any, base_url: str, html: str) -> None:
           document.body.append(iframe);
           window.__previewDiagnostics = [];
           window.__previewCommitted = false;
+          window.__previewAssets = assets || [];
           window.__previewBridge = new PreviewBridge({
             iframe,
+            onAssets: async paths => paths.map(path => {
+              const asset = window.__previewAssets.find(candidate => candidate.path === path);
+              if (!asset) throw new Error(`Missing test asset: ${path}`);
+              return asset;
+            }),
             onCommit: () => { window.__previewCommitted = true; },
             onDiagnostic: (kind, message) => {
               window.__previewDiagnostics.push({ kind, message });
@@ -116,7 +128,7 @@ def _render_through_preview_bridge(page: Any, base_url: str, html: str) -> None:
           });
           await window.__previewBridge.render(html, 1);
         }""",
-        {"baseUrl": base_url, "html": html},
+        {"baseUrl": base_url, "html": html, "assets": assets},
     )
 
 
@@ -266,3 +278,82 @@ def test_preview_bridge_waits_for_ordered_external_scripts_before_manifests(
 
     assert order == ["external", "manifest"]
     assert page.evaluate("window.__previewDiagnostics") == []
+
+
+def test_preview_bridge_loads_internal_assets_before_committing_candidate(
+    page: Any,
+    workspace_static_url: str,
+) -> None:
+    script_path = "/__citry_playground__/cache/Test.abc123.js"
+    style_path = "/__citry_playground__/cache/Test.abc123.css"
+    html = f"""
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <link rel="stylesheet" href="{style_path}">
+        </head>
+        <body>
+          <output id="asset-status">waiting</output>
+          <script src="{script_path}"></script>
+        </body>
+      </html>
+    """
+    assets = [
+        {
+            "path": script_path,
+            "contentType": "text/javascript",
+            "content": "document.querySelector('#asset-status').textContent = 'ready';",
+        },
+        {
+            "path": style_path,
+            "contentType": "text/css",
+            "content": "#asset-status { color: rgb(12, 34, 56); }",
+        },
+    ]
+
+    _render_through_preview_bridge(page, workspace_static_url, html, assets=assets)
+    preview = page.frame_locator("#preview")
+
+    expect(preview.locator("#asset-status")).to_have_text("ready")
+    color = preview.locator("#asset-status").evaluate("element => getComputedStyle(element).color")
+    assert color == "rgb(12, 34, 56)"
+    assert page.evaluate("window.__previewCommitted") is True
+    assert page.evaluate("window.__previewDiagnostics") == []
+
+
+def test_preview_bridge_keeps_displayed_result_when_candidate_asset_fails(
+    page: Any,
+    workspace_static_url: str,
+) -> None:
+    _render_through_preview_bridge(
+        page,
+        workspace_static_url,
+        "<!doctype html><html><body><output id='stable'>Last good result</output></body></html>",
+    )
+    failed_html = """
+      <!doctype html>
+      <html>
+        <head>
+          <script src="/__citry_playground__/cache/Missing.abc123.js"></script>
+        </head>
+        <body><output id="replacement">Broken candidate</output></body>
+      </html>
+    """
+
+    message = page.evaluate(
+        """async html => {
+          try {
+            await window.__previewBridge.render(html, 2);
+            return "";
+          } catch (error) {
+            return String(error?.message || error);
+          }
+        }""",
+        failed_html,
+    )
+
+    assert message == "Missing test asset: /__citry_playground__/cache/Missing.abc123.js"
+    preview = page.frame_locator("#preview")
+    expect(preview.locator("#stable")).to_have_text("Last good result")
+    expect(preview.locator("#replacement")).to_have_count(0)
+    expect(page.locator("iframe[id$='-candidate']")).to_have_count(0)

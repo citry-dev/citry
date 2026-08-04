@@ -75,6 +75,124 @@ def test_right_rail_toc_offsets_links_by_heading_level(page: Any, docs_site_url:
     assert h4_box["x"] >= h3_box["x"] + 8
 
 
+def test_right_rail_toc_follows_back_and_forward_between_anchors(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    def wait_for_active_toc_link(href: str) -> None:
+        page.wait_for_function(
+            """href => {
+                const active = Array.from(
+                    document.querySelectorAll('.djc-toc__link.is-active')
+                );
+                return active.length === 2
+                    && active.every(link => link.getAttribute('href') === href);
+            }""",
+            arg=href,
+            timeout=1000,
+        )
+
+    def wait_for_no_active_toc_link() -> None:
+        page.wait_for_function(
+            "document.querySelectorAll('.djc-toc__link.is-active').length === 0",
+            timeout=1000,
+        )
+
+    page.set_viewport_size({"width": 1280, "height": 600})
+    page.add_init_script(
+        """window.IntersectionObserver = class {
+            observe() {}
+            unobserve() {}
+            disconnect() {}
+        };"""
+    )
+    page.goto(docs_site_url + "/__tests__/toc-history/")
+    first_href = "#first-target"
+    second_href = "#second-target"
+
+    page.evaluate("href => { window.location.hash = href; }", first_href)
+    page.wait_for_function("href => window.location.hash === href", arg=first_href)
+    wait_for_active_toc_link(first_href)
+    page.evaluate("href => { window.location.hash = href; }", second_href)
+    page.wait_for_function("href => window.location.hash === href", arg=second_href)
+    wait_for_active_toc_link(second_href)
+
+    page.go_back()
+    page.wait_for_function("href => window.location.hash === href", arg=first_href)
+    wait_for_active_toc_link(first_href)
+
+    page.go_forward()
+    page.wait_for_function("href => window.location.hash === href", arg=second_href)
+    wait_for_active_toc_link(second_href)
+
+    page.go_back()
+    page.wait_for_function("href => window.location.hash === href", arg=first_href)
+    page.go_back()
+    page.wait_for_function("window.location.hash === ''")
+    wait_for_no_active_toc_link()
+
+
+def test_toc_anchor_click_activates_desktop_and_mobile_copies(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    def wait_for_rendering() -> None:
+        page.evaluate(
+            """() => new Promise(resolve => requestAnimationFrame(
+                () => requestAnimationFrame(resolve)
+            ))"""
+        )
+
+    def assert_active_href(href: str) -> None:
+        active_hrefs = page.locator(".djc-toc__link.is-active").evaluate_all(
+            "links => links.map(link => link.getAttribute('href'))"
+        )
+        assert active_hrefs == [href, href]
+
+    page.set_viewport_size({"width": 1280, "height": 600})
+    second_href = "#second-target"
+    third_href = "#third-target"
+    page.goto(docs_site_url + "/__tests__/toc-history/" + second_href)
+
+    wait_for_rendering()
+    assert_active_href(second_href)
+
+    page.locator(f'#djc-toc .djc-toc__link[href="{third_href}"]').click()
+    page.wait_for_function("href => window.location.hash === href", arg=third_href)
+    wait_for_rendering()
+    assert_active_href(third_href)
+
+    page.locator(f'#djc-toc .djc-toc__link[href="{second_href}"]').click()
+    page.wait_for_function("href => window.location.hash === href", arg=second_href)
+    wait_for_rendering()
+    assert_active_href(second_href)
+
+    page.evaluate(
+        """href => {
+            const heading = document.getElementById(href.slice(1));
+            window.scrollTo(0, heading.offsetTop - 70);
+        }""",
+        "#first-target",
+    )
+    page.wait_for_function(
+        """href => {
+            const active = Array.from(
+                document.querySelectorAll('.djc-toc__link.is-active')
+            );
+            return active.length === 2
+                && active.every(link => link.getAttribute('href') === href);
+        }""",
+        arg="#first-target",
+    )
+    page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))")
+    wait_for_rendering()
+    assert_active_href("#first-target")
+
+    page.locator(f'#djc-toc .djc-toc__link[href="{second_href}"]').click()
+    wait_for_rendering()
+    assert_active_href(second_href)
+
+
 def test_both_resize_handles_present(page: Any, docs_site_url: str) -> None:
     # Left sidebar handle + right TOC handle (the right one was the dropped hook).
     page.goto(docs_site_url + "/reference/component/")
@@ -132,6 +250,99 @@ def test_active_nav_item_is_marked(page: Any, docs_site_url: str) -> None:
     page.goto(docs_site_url + "/reference/component/")
     # The current page's sidebar link carries the active class.
     assert page.locator(".djc-sidebar__link.is-active").count() >= 1
+
+
+@pytest.mark.parametrize(
+    ("viewport_width", "open_drawer"),
+    [(1280, False), (375, True)],
+    ids=("desktop", "mobile-drawer"),
+)
+def test_internal_page_link_brings_active_sidebar_item_clearly_into_view(
+    page: Any,
+    docs_site_url: str,
+    viewport_width: int,
+    open_drawer: bool,
+) -> None:
+    def assert_active_link_is_clear(target_path: str) -> None:
+        active = page.locator(f'.djc-sidebar__link.is-active[href="{target_path}"]')
+        gaps = active.evaluate(
+            """link => {
+                const sidebar = link.closest('#djc-sidebar');
+                const sidebarRect = sidebar.getBoundingClientRect();
+                const linkRect = link.getBoundingClientRect();
+                const viewportTop = sidebarRect.top + sidebar.clientTop;
+                const viewportBottom = viewportTop + sidebar.clientHeight;
+                return {
+                    top: linkRect.top - viewportTop,
+                    bottom: viewportBottom - linkRect.bottom,
+                };
+            }"""
+        )
+        assert gaps["top"] >= 24
+        assert gaps["bottom"] >= 24
+
+    def follow_content_link(target_path: str) -> None:
+        page.locator("main").evaluate(
+            """(main, path) => {
+                const link = document.createElement('a');
+                link.id = 'sidebar-scroll-test-link';
+                link.href = path;
+                link.textContent = 'Open another documentation page';
+                main.prepend(link);
+            }""",
+            target_path,
+        )
+        page.locator("#sidebar-scroll-test-link").click()
+        page.wait_for_url(docs_site_url + target_path)
+
+    page.set_viewport_size({"width": viewport_width, "height": 480})
+    page.goto(docs_site_url + "/docs/")
+    sidebar = page.locator("#djc-sidebar")
+    sidebar.evaluate("element => { element.scrollTop = 0; }")
+    first_path = sidebar.locator(".djc-sidebar__link").first.get_attribute("href")
+    assert first_path is not None
+    target_path = sidebar.locator(".djc-sidebar__link").evaluate_all(
+        """links => links
+            .filter(link => !link.closest('[hidden]'))
+            .sort((left, right) => (
+                left.getBoundingClientRect().top - right.getBoundingClientRect().top
+            ))
+            .at(-1)
+            .getAttribute('href')"""
+    )
+    assert target_path is not None
+    target_is_below_viewport = sidebar.locator(f'.djc-sidebar__link[href="{target_path}"]').evaluate(
+        """link => {
+            const sidebar = link.closest('#djc-sidebar');
+            const sidebarRect = sidebar.getBoundingClientRect();
+            return link.getBoundingClientRect().top
+                >= sidebarRect.top + sidebar.clientTop + sidebar.clientHeight;
+        }"""
+    )
+    assert target_is_below_viewport
+
+    follow_content_link(target_path)
+
+    if open_drawer:
+        page.locator(".djc-hamburger").click()
+    assert_active_link_is_clear(target_path)
+
+    if open_drawer:
+        page.locator(".djc-drawer-overlay").click()
+    sidebar.evaluate("element => { element.scrollTop = element.scrollHeight; }")
+    first_is_above_viewport = sidebar.locator(f'.djc-sidebar__link[href="{first_path}"]').evaluate(
+        """link => {
+            const sidebar = link.closest('#djc-sidebar');
+            const sidebarRect = sidebar.getBoundingClientRect();
+            return link.getBoundingClientRect().bottom
+                <= sidebarRect.top + sidebar.clientTop;
+        }"""
+    )
+    assert first_is_above_viewport
+    follow_content_link(first_path)
+    if open_drawer:
+        page.locator(".djc-hamburger").click()
+    assert_active_link_is_clear(first_path)
 
 
 def test_navigation_status_badges_and_review_hint_render(page: Any, docs_site_url: str) -> None:

@@ -86,6 +86,27 @@ title: Incomplete live example
     incomplete_path.parent.mkdir(parents=True)
     incomplete_path.write_text(incomplete, encoding="utf-8")
 
+    toc_history = render_page(
+        """---
+title: TOC history fixture
+---
+
+# TOC history fixture
+
+## First target
+
+<div style="height: 50rem"></div>
+
+## Second target
+
+### Third target
+""",
+        current_path="__tests__/toc-history/",
+    ).html
+    toc_history_path = site / "__tests__" / "toc-history" / "index.html"
+    toc_history_path.parent.mkdir(parents=True)
+    toc_history_path.write_text(toc_history, encoding="utf-8")
+
     handler = functools.partial(_QuietHandler, directory=str(site))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()

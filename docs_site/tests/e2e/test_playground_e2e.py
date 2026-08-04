@@ -351,6 +351,210 @@ DataProbe(value="start")
     _set_source(
         page,
         '''from citry import Component
+from citry.ext.events import actions
+
+
+class NestedEditor(Component):
+    class State:
+        value: str = "start"
+
+    class Events:
+        def changed(self, state):
+            return actions.Dispatch("nested:changed", {"value": state.value})
+
+    template = """
+      <div id="nested-editor" @nested:changed="$el.dataset.value = $event.detail.value">
+        <input id="nested-input" :c-value="changed" />
+        <output id="nested-output" x-text="$state.value">start</output>
+      </div>
+    """
+
+
+class PropChild(Component):
+    template = """
+      <output id="prop-output" x-text="clientProps.label"></output>
+    """
+
+    js = """
+      $component({
+        props: {
+          label: { type: String, required: true },
+        },
+        init: ({ props, scope }) => {
+          scope.clientProps = props;
+        },
+      });
+    """
+
+
+class Placeholder(Component):
+    template = "<span>Cleared</span>"
+
+
+class CssOnly(Component):
+    template = '<div id="css-only" class="css-only">CSS lifecycle</div>'
+
+    css = """
+      .css-only {
+        color: rgb(14, 73, 122);
+      }
+    """
+
+
+class CssDataProbe(Component):
+    class Kwargs:
+        accent: str
+
+    def css_data(self, kwargs, slots):
+        return {"accent": kwargs.accent}
+
+    template = '<div id="css-data-probe" class="css-data-probe">CSS data</div>'
+
+    css = """
+      .css-data-probe {
+        color: var(--accent);
+      }
+    """
+
+
+class LoadedFragment(Component):
+    class Kwargs:
+        kind: str
+        accent: str
+
+    class Events:
+        def ping(self):
+            return actions.Dispatch("fragment:ping", {"kind": "nested"})
+
+    def js_data(self, kwargs, slots):
+        return {"kind": kwargs.kind}
+
+    def css_data(self, kwargs, slots):
+        return {"accent": kwargs.accent}
+
+    template = """
+      <section
+        id="loaded-fragment"
+        class="loaded-fragment"
+        x-data="{ label: 'before' }"
+        @fragment:ping="$el.dataset.ping = $event.detail.kind"
+      >
+        <button id="fragment-ping" type="button" @c-click="ping">Ping</button>
+        <button id="prop-update" type="button" @click="label = 'after'">Update prop</button>
+        <c-PropChild $c-props="{ label }" />
+        <c-NestedEditor />
+      </section>
+    """
+
+    js = """
+      window.__fragmentAssetLoads = (window.__fragmentAssetLoads || 0) + 1;
+      $component(({ els, data }) => {
+        els[0].setAttribute("data-component-js", data.kind);
+      });
+    """
+
+    css = """
+      .loaded-fragment {
+        border: 3px solid var(--accent);
+        background-color: rgb(231, 241, 255);
+      }
+    """
+
+
+class FragmentLoader(Component):
+    class Events:
+        def load(self):
+            return actions.Render(
+                LoadedFragment(kind="rendered", accent="rgb(45, 67, 89)"),
+                target="#fragment-target",
+                swap="inner",
+            )
+
+        def load_css(self):
+            return actions.Render(CssOnly(), target="#css-target", swap="inner")
+
+        def load_css_data(self):
+            return actions.Render(
+                CssDataProbe(accent="rgb(122, 51, 19)"),
+                target="#css-data-target",
+                swap="inner",
+            )
+
+        def clear_css(self):
+            return [
+                actions.Render(Placeholder(), target="#css-initial", swap="inner"),
+                actions.Render(Placeholder(), target="#css-target", swap="inner"),
+            ]
+
+    template = """
+      <main>
+        <div id="initial-fragment">
+          <c-LoadedFragment kind="initial" accent="rgb(90, 90, 90)" />
+        </div>
+        <button id="load-fragment" type="button" @c-click="load">Load</button>
+        <div id="fragment-target"></div>
+        <div id="css-initial"><c-CssOnly /></div>
+        <button id="load-css" type="button" @c-click="load_css">Load CSS probe</button>
+        <button id="clear-css" type="button" @c-click="clear_css">Clear CSS probe</button>
+        <div id="css-target"></div>
+        <div id="css-data-initial"><c-CssDataProbe accent="rgb(122, 51, 19)" /></div>
+        <button id="load-css-data" type="button" @c-click="load_css_data">Load CSS data probe</button>
+        <div id="css-data-target"></div>
+      </main>
+    """
+
+
+FragmentLoader()
+''',
+    )
+    _run_and_wait(page)
+    render_preview = page.frame_locator("#citry-playground-preview")
+    load_fragment = render_preview.locator("#load-fragment")
+    load_fragment.click()
+    loaded_fragment = render_preview.locator("#fragment-target #loaded-fragment")
+    expect(loaded_fragment).to_have_attribute("data-component-js", "rendered", timeout=10_000)
+    expect(loaded_fragment).to_have_css("background-color", "rgb(231, 241, 255)")
+    expect(loaded_fragment).to_have_css("border-top-color", "rgb(45, 67, 89)")
+    loaded_fragment.locator("#fragment-ping").click()
+    expect(loaded_fragment).to_have_attribute("data-ping", "nested", timeout=10_000)
+    expect(loaded_fragment.locator("#prop-output")).to_have_text("before", timeout=10_000)
+    loaded_fragment.locator("#prop-update").click()
+    expect(loaded_fragment.locator("#prop-output")).to_have_text("after", timeout=10_000)
+    loaded_fragment.locator("#nested-input").fill("edited")
+    expect(loaded_fragment.locator("#nested-output")).to_have_text("edited", timeout=10_000)
+    expect(loaded_fragment.locator("#nested-editor")).to_have_attribute("data-value", "edited", timeout=10_000)
+
+    asset_loads = render_preview.locator("body").evaluate(
+        "body => body.ownerDocument.defaultView.__fragmentAssetLoads"
+    )
+    assert asset_loads == 1
+
+    render_preview.locator("#load-css").click()
+    css_probe = render_preview.locator("#css-target #css-only")
+    expect(css_probe).to_have_css("color", "rgb(14, 73, 122)", timeout=10_000)
+    class_style_sheets = render_preview.locator("[data-citry-css-class]")
+    expect(class_style_sheets).to_have_count(3)
+    render_preview.locator("#clear-css").click()
+    expect(render_preview.locator("#css-only")).to_have_count(0, timeout=10_000)
+    expect(class_style_sheets).to_have_count(2, timeout=10_000)
+    render_preview.locator("#load-css").click()
+    css_probe_again = render_preview.locator("#css-target #css-only")
+    expect(css_probe_again).to_have_css("color", "rgb(14, 73, 122)", timeout=10_000)
+    expect(class_style_sheets).to_have_count(3, timeout=10_000)
+
+    stylesheet_count = render_preview.locator('style, link[rel~="stylesheet"]').count()
+    render_preview.locator("#load-css-data").click()
+    css_data_probe = render_preview.locator("#css-data-target #css-data-probe")
+    expect(css_data_probe).to_have_css("color", "rgb(122, 51, 19)", timeout=10_000)
+    expect(render_preview.locator('style, link[rel~="stylesheet"]')).to_have_count(stylesheet_count)
+    if not page.locator("#citry-playground-preview-diagnostic").is_hidden():
+        summary = page.locator("#citry-playground-preview-summary").inner_text()
+        details = page.locator("#citry-playground-preview-details").inner_text()
+        pytest.fail(f"Render lifecycle reported a client diagnostic: {summary}\n{details}")
+
+    _set_source(
+        page,
+        '''from citry import Component
 from citry.ext.events import EventError, actions
 
 
