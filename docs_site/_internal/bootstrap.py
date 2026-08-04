@@ -4,7 +4,7 @@ rebuild loop.
 
 ``build-all`` rebuilds many doc versions in one shot. It is the bootstrap /
 disaster-recovery command, not part of a normal release: it walks the git tags
-selected by ``docs_versions.toml``, checks each one out, runs a per-version build
+selected by ``docs_versions.yml``, checks each one out, runs a per-version build
 against it, and finally rewrites ``versions.json`` from whatever version dirs end
 up on disk. Day to day you never run it; each release builds a single version.
 See the command table and the "build-all" note in ``docs/design/docs_site.md``
@@ -13,7 +13,7 @@ See the command table and the "build-all" note in ``docs/design/docs_site.md``
 This module holds the pieces that do not touch git, so they are unit-testable on
 their own:
 
-- ``VersionsConfig`` + ``load_versions_config`` read ``docs_versions.toml``.
+- ``VersionsConfig`` + ``load_versions_config`` read ``docs_versions.yml``.
 - ``select_tags`` applies the pattern / include / exclude / oldest / newest rules
   and returns the tags newest-first.
 - ``needs_rebuild`` is the idempotency check: it compares a version dir's build
@@ -32,15 +32,25 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import tomllib
+from packaging.version import InvalidVersion
+from packaging.version import Version as Pep440Version
 
 from docs_site._internal._vendor.mike_versions import Version, Versions
+from docs_site._internal.config_loading import DocsConfigError, load_yaml, require_mapping
 from docs_site._internal.versioning import BUILD_INFO_NAME, materialize_alias, write_manifest
+
+_TABLE_KEYS = {
+    "versions": frozenset({"pattern", "include", "exclude", "oldest", "newest"}),
+    "aliases": frozenset({"latest"}),
+    "publish": frozenset({"window"}),
+    "indexing": frozenset({"keep_recent"}),
+}
+_RELEASE_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 
 @dataclass
 class VersionsConfig:
-    """Parsed ``docs_versions.toml``: which tags ``build-all`` rebuilds and how many publish."""
+    """Validated version-selection, publication, and crawl policy."""
 
     pattern: str = r"^v?\d+\.\d+\.\d+$"
     include: list[str] = field(default_factory=list)
@@ -49,26 +59,148 @@ class VersionsConfig:
     newest: str = ""
     latest_alias: str = ""  # which version `latest/` points at ("" = newest built)
     publish_window: int = 0  # how many newest releases a deploy publishes (0 = all)
+    index_keep_recent: int = 2  # newest releases that remain crawlable (0 = all)
 
 
 def load_versions_config(path: Path) -> VersionsConfig:
-    """Read ``docs_versions.toml``; a missing file or missing keys fall back to the defaults."""
+    """
+    Read and strictly validate ``docs_versions.yml``.
+
+    A missing file or omitted setting uses the dataclass default. Present values
+    must match the documented schema so a typo cannot silently change release or
+    crawler policy.
+    """
     if not path.is_file():
         return VersionsConfig()
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-    versions = data.get("versions", {})
-    aliases = data.get("aliases", {})
-    publish = data.get("publish", {})
+    loaded = load_yaml(path)
+    if loaded is None:
+        return VersionsConfig()
+    data = dict(require_mapping(loaded, str(path)))
+    try:
+        return _load_versions_data(data)
+    except DocsConfigError as exc:
+        raise DocsConfigError(f"{path}: {exc}") from exc
+
+
+def _load_versions_data(data: dict[str, object]) -> VersionsConfig:
+    """Validate already parsed version configuration data."""
+    _validate_keys(data, allowed=frozenset(_TABLE_KEYS), owner="top level")
+    tables = {name: _read_table(data, name) for name in _TABLE_KEYS}
+    for name, table in tables.items():
+        _validate_keys(table, allowed=_TABLE_KEYS[name], owner=name)
+
+    versions = tables["versions"]
+    aliases = tables["aliases"]
+    publish = tables["publish"]
+    indexing = tables["indexing"]
     defaults = VersionsConfig()
+    pattern = _read_string(versions, "pattern", owner="versions", default=defaults.pattern)
+    try:
+        re.compile(pattern)
+    except re.error as error:
+        msg = f"versions.pattern is not a valid regular expression: {error}"
+        raise DocsConfigError(msg) from error
+
+    include = _read_string_list(versions, "include", owner="versions")
+    exclude = _read_string_list(versions, "exclude", owner="versions")
+    overlap = sorted(set(include) & set(exclude))
+    if overlap:
+        msg = f"tags cannot appear in both versions.include and versions.exclude: {', '.join(overlap)}"
+        raise DocsConfigError(msg)
+
+    oldest = _read_string(versions, "oldest", owner="versions", default="")
+    newest = _read_string(versions, "newest", owner="versions", default="")
+    oldest_version = _parse_release_version(oldest, "versions.oldest") if oldest else None
+    newest_version = _parse_release_version(newest, "versions.newest") if newest else None
+    if oldest_version is not None and newest_version is not None and oldest_version > newest_version:
+        msg = "versions.oldest must not be newer than versions.newest"
+        raise DocsConfigError(msg)
+
+    latest_alias = _read_string(aliases, "latest", owner="aliases", default="")
+    if latest_alias:
+        _parse_release_version(latest_alias, "aliases.latest")
+
     return VersionsConfig(
-        pattern=versions.get("pattern") or defaults.pattern,
-        include=list(versions.get("include", [])),
-        exclude=list(versions.get("exclude", [])),
-        oldest=versions.get("oldest", "") or "",
-        newest=versions.get("newest", "") or "",
-        latest_alias=aliases.get("latest", "") or "",
-        publish_window=int(publish.get("window", 0) or 0),
+        pattern=pattern,
+        include=include,
+        exclude=exclude,
+        oldest=oldest,
+        newest=newest,
+        latest_alias=latest_alias,
+        publish_window=_read_non_negative_int(publish, "window", owner="publish", default=0),
+        index_keep_recent=_read_non_negative_int(
+            indexing,
+            "keep_recent",
+            owner="indexing",
+            default=defaults.index_keep_recent,
+        ),
     )
+
+
+def _validate_keys(data: dict[str, object], *, allowed: frozenset[str], owner: str) -> None:
+    """Reject unknown keys in a settings table."""
+    unknown = sorted(set(data) - allowed)
+    if unknown:
+        prefix = "" if owner == "top level" else f"{owner}."
+        msg = f"unknown {owner} setting(s): {', '.join(prefix + key for key in unknown)}"
+        raise DocsConfigError(msg)
+
+
+def _read_table(data: dict[str, object], name: str) -> dict[str, object]:
+    """Return one optional YAML mapping with an exact mapping type."""
+    value = data.get(name, {})
+    if not isinstance(value, dict):
+        msg = f"{name} must be a mapping"
+        raise DocsConfigError(msg)
+    return value
+
+
+def _read_string(data: dict[str, object], key: str, *, owner: str, default: str) -> str:
+    """Read an optional string setting without coercion."""
+    value = data.get(key, default)
+    if not isinstance(value, str):
+        msg = f"{owner}.{key} must be a string"
+        raise DocsConfigError(msg)
+    if key == "pattern" and not value:
+        msg = f"{owner}.{key} must not be empty"
+        raise DocsConfigError(msg)
+    return value
+
+
+def _read_string_list(data: dict[str, object], key: str, *, owner: str) -> list[str]:
+    """Read an optional list of unique, non-empty strings."""
+    value = data.get(key, [])
+    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
+        msg = f"{owner}.{key} must be a list of non-empty strings"
+        raise DocsConfigError(msg)
+    if len(value) != len(set(value)):
+        msg = f"{owner}.{key} must not contain duplicate tags"
+        raise DocsConfigError(msg)
+    return list(value)
+
+
+def _read_non_negative_int(data: dict[str, object], key: str, *, owner: str, default: int) -> int:
+    """Read an integer count, rejecting booleans and negative values."""
+    value = data.get(key, default)
+    if type(value) is not int:  # bool is an int subclass but not a valid policy count
+        msg = f"{owner}.{key} must be an integer"
+        raise DocsConfigError(msg)
+    if value < 0:
+        msg = f"{owner}.{key} must not be negative"
+        raise DocsConfigError(msg)
+    return value
+
+
+def _parse_release_version(value: str, field_name: str) -> Pep440Version:
+    """Validate a canonical, full three-part release version."""
+    if not _RELEASE_VERSION_RE.fullmatch(value):
+        msg = f"{field_name} must be empty or a full major.minor.patch version"
+        raise DocsConfigError(msg)
+    try:
+        return Pep440Version(value)
+    except InvalidVersion as error:
+        msg = f"{field_name} is not a valid version: {value!r}"
+        raise DocsConfigError(msg) from error
 
 
 def tag_to_version(tag: str) -> str:

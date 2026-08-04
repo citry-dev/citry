@@ -80,15 +80,7 @@ def select_published_versions(versions: Versions, window: int) -> list[str]:
     return releases[:window] if window and window > 0 else releases
 
 
-# How many of the newest versions stay crawlable and self-indexed. Every older
-# version's /v/<version>/ tree is set to noindex in the assembled site and
-# disallowed in robots.txt. Two (the current release plus the one before it) lets
-# a reader still reach the previous release's docs while search engines index
-# only the current one.
-KEEP_INDEXED_VERSIONS = 2
-
-
-def select_indexed_versions(versions: Versions, keep_recent: int = KEEP_INDEXED_VERSIONS) -> list[str]:
+def select_indexed_versions(versions: Versions, *, keep_recent: int) -> list[str]:
     """
     The versions that stay crawlable and self-indexed (newest-first): the newest
     ``keep_recent`` plus whatever the ``latest`` alias points at.

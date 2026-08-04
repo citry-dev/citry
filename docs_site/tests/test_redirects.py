@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from docs_site._internal.redirects import emit_redirects
+import pytest
+
+from docs_site._internal.config_loading import DocsConfigError
+from docs_site._internal.redirects import emit_redirects, load_redirect_catalog
 
 
 def test_empty_redirect_map_writes_nothing(tmp_path: Path) -> None:
@@ -30,3 +33,23 @@ def test_redirect_stub_forwards_and_self_excludes(tmp_path: Path) -> None:
     assert '<link rel="canonical" href="https://x.test/new/page/">' in stub
     href = json.dumps("../../new/page/")
     assert f"window.location.replace({href});" in stub
+
+
+@pytest.mark.parametrize(
+    "unsafe",
+    [
+        "/bad\\path/",
+        '/bad" onmouseover="x/',
+        "/bad<path>/",
+        "/bad\x00path/",
+    ],
+)
+def test_redirect_catalog_rejects_filesystem_and_html_unsafe_paths(tmp_path: Path, unsafe: str) -> None:
+    path = tmp_path / "redirects.yml"
+    path.write_text(
+        "redirects:\n  - from: " + json.dumps(unsafe) + "\n    to: /new/\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DocsConfigError):
+        load_redirect_catalog(path)

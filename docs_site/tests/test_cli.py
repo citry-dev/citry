@@ -18,6 +18,7 @@ from docs_site._internal import cli
 from docs_site._internal._vendor.mike_versions import Versions
 from docs_site._internal.assemble import AssembleOutcome
 from docs_site._internal.build import BuildOutcome
+from docs_site._internal.project import load_docs_project
 from docs_site._internal.versioning import write_build_info, write_manifest
 
 if TYPE_CHECKING:
@@ -43,6 +44,34 @@ def test_build_check_fails_when_search_index_fails(
 
     assert cli._run_build_check(strict=True) == 1
     assert "Search index failed: pagefind failed" in capsys.readouterr().out
+
+
+def test_build_check_uses_one_project_for_guards_and_build(monkeypatch, tmp_path: Path) -> None:
+    project = load_docs_project()
+    loads: list[object] = []
+    contexts: list[object] = []
+    builds: list[object] = []
+
+    def fake_load(_config):
+        loads.append(object())
+        return project
+
+    def fake_guards(context, **_kwargs):
+        contexts.append(context)
+        return [], True
+
+    def fake_build(**kwargs):
+        builds.append(kwargs["project"])
+        return BuildOutcome(output_dir=tmp_path, search_ok=True)
+
+    monkeypatch.setattr("docs_site._internal.project.load_docs_project", fake_load)
+    monkeypatch.setattr("docs_site._internal.guards.run_guards", fake_guards)
+    monkeypatch.setattr(cli, "build_site", fake_build)
+
+    assert cli._run_build_check(strict=True) == 0
+    assert len(loads) == 1
+    assert builds == [project]
+    assert [context.project for context in contexts] == [project, project]
 
 
 def test_assemble_command_fails_for_partial_build(
@@ -179,8 +208,8 @@ def test_build_all_dry_run_reports_up_to_date_and_stale(tmp_path: Path, capsys: 
     # citry-core@1.3.0 is a sibling package's tag: it must be excluded, not read as
     # docs version 1.3.0, so only two versions are considered.
     _init_git_repo(repo, ["citry@0.1.0", "citry@0.2.0", "citry-core@1.3.0"])
-    cfg = tmp_path / "docs_versions.toml"
-    cfg.write_text('[versions]\noldest = "0.0.1"\n', encoding="utf-8")  # default pattern, low floor
+    cfg = tmp_path / "docs_versions.yml"
+    cfg.write_text('versions:\n  oldest: "0.0.1"\n', encoding="utf-8")  # default pattern, low floor
     versions_root = tmp_path / "versions"
     # Stamp 0.2.0 as already built from its tag's commit -> up-to-date; 0.1.0 has
     # no dir -> stale.

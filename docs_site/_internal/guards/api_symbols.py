@@ -18,8 +18,8 @@ from typing import TYPE_CHECKING
 
 import citry
 from docs_site._internal.guards.base import GuardResult
+from docs_site._internal.project import current_docs_project
 from docs_site._internal.reference import extract_symbol
-from docs_site._internal.reference_pages import CATEGORIES
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -27,10 +27,11 @@ if TYPE_CHECKING:
     from docs_site._internal.guards.base import GuardContext
 
 
-def check(ctx: GuardContext) -> Iterator[GuardResult]:  # noqa: ARG001 - reads the categories + package, not the build
+def check(ctx: GuardContext) -> Iterator[GuardResult]:
     # Forward: every documented symbol resolves.
     documented_leaves: set[str] = set()
-    for cat in CATEGORIES:
+    project = ctx.project or current_docs_project()
+    for cat in project.reference.categories:
         if cat.source != "griffe":
             # Authored public surfaces have dedicated source guards. They do
             # not resolve through Python docstrings.

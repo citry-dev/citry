@@ -15,6 +15,7 @@ assembles the context from the site config and a built output directory.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 from docs_site._internal.config import config as default_config
@@ -51,12 +52,14 @@ from docs_site._internal.guards import (
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
 from docs_site._internal.guards.site_index import SiteIndex
+from docs_site._internal.project import use_docs_project
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from docs_site._internal.config import DocsConfig
     from docs_site._internal.guards.base import Guard
+    from docs_site._internal.project import DocsProject
 
 __all__ = [
     "GUARDS",
@@ -120,8 +123,9 @@ VERSION_GUARDS: list[Guard] = [
 ]
 
 
-def make_context(build_dir: Path, *, config: DocsConfig) -> GuardContext:
+def make_context(build_dir: Path, *, config: DocsConfig, project: DocsProject | None = None) -> GuardContext:
     """Assemble a ``GuardContext`` for the guard suite over a built site."""
+    examples_dir = project.runtime.examples_dir if project is not None else config.examples_dir
     return GuardContext(
         content_dir=config.content_dir,
         examples_dir=config.examples_dir,
@@ -130,12 +134,14 @@ def make_context(build_dir: Path, *, config: DocsConfig) -> GuardContext:
         repo_root=config.repo_root,
         base_path=config.base_path,
         site_index=SiteIndex(build_dir),
-        example_registry=get_example_registry(),
+        example_registry=get_example_registry(examples_dir),
+        project=project,
     )
 
 
-def make_source_context(*, config: DocsConfig) -> GuardContext:
+def make_source_context(*, config: DocsConfig, project: DocsProject | None = None) -> GuardContext:
     """Assemble a guard context that is safe to use before rendering starts."""
+    examples_dir = project.runtime.examples_dir if project is not None else config.examples_dir
     return GuardContext(
         content_dir=config.content_dir,
         examples_dir=config.examples_dir,
@@ -143,7 +149,8 @@ def make_source_context(*, config: DocsConfig) -> GuardContext:
         static_dir=config.base_dir / "static",
         repo_root=config.repo_root,
         base_path=config.base_path,
-        example_registry=get_example_registry(),
+        example_registry=get_example_registry(examples_dir),
+        project=project,
     )
 
 
@@ -178,16 +185,18 @@ def run_guards(
     silently pass the suite.
     """
     results: list[GuardResult] = []
-    for guard in guards if guards is not None else GUARDS:
-        try:
-            results.extend(guard(ctx))
-        except Exception as e:  # noqa: BLE001 - a broken guard must fail loudly, not pass silently
-            results.append(
-                GuardResult.error(
-                    guard=getattr(guard, "__module__", "unknown").rsplit(".", 1)[-1],
-                    message=f"Guard crashed: {type(e).__name__}: {e}",
+    project_scope = use_docs_project(ctx.project) if ctx.project is not None else nullcontext()
+    with project_scope:
+        for guard in guards if guards is not None else GUARDS:
+            try:
+                results.extend(guard(ctx))
+            except Exception as e:  # noqa: BLE001 - a broken guard must fail loudly, not pass silently
+                results.append(
+                    GuardResult.error(
+                        guard=getattr(guard, "__module__", "unknown").rsplit(".", 1)[-1],
+                        message=f"Guard crashed: {type(e).__name__}: {e}",
+                    )
                 )
-            )
 
     has_error = any(r.severity is Severity.ERROR for r in results)
     has_warning = any(r.severity is Severity.WARNING for r in results)

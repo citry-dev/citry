@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
     from docs_site._internal.examples import ExampleInfo
     from docs_site._internal.guards.site_index import SiteIndex
+    from docs_site._internal.project import DocsProject
 
 
 class Severity(Enum):
@@ -70,6 +71,8 @@ class GuardContext:
     # Root of the committed version tree (versions/<v>/ + versions.json). Set only
     # for the version guards (VERSION_GUARDS); None for the per-build suite.
     versions_dir: Path | None = None
+    # The exact declaration/runtime snapshot shared by every guard phase.
+    project: DocsProject | None = None
 
 
 # A guard is a function that yields zero or more results for a given context.

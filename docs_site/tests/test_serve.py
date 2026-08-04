@@ -11,6 +11,7 @@ from xml.etree import ElementTree as ET
 from starlette.testclient import TestClient
 
 from docs_site._internal.config import DocsConfig
+from docs_site._internal.config import config as default_config
 from docs_site._internal.local_playground_runtime import load_local_playground_runtime
 from docs_site._internal.serve import create_app
 
@@ -43,6 +44,35 @@ def test_serve_renders_clean_url_page(tmp_path: Path) -> None:
     assert "The intro." in response.text
 
 
+def test_custom_server_runtime_stays_active_during_example_requests(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    example = tmp_path / "examples" / "server_runtime"
+    example.mkdir(parents=True)
+    (example / "component.py").write_text(
+        "from citry import Component\nclass ServerRuntime(Component):\n    template = '<p>runtime</p>'\n",
+        encoding="utf-8",
+    )
+    (example / "page.py").write_text(
+        "from citry import Component\n"
+        "class ServerRuntimePage(Component):\n"
+        "    template = '<main>custom server runtime</main>'\n",
+        encoding="utf-8",
+    )
+    cfg = DocsConfig(
+        repo_root=tmp_path,
+        content_dir=content,
+        examples_dir=tmp_path / "examples",
+        site_dir=tmp_path / "site",
+    )
+
+    response = TestClient(create_app(config=cfg)).get("/examples/server-runtime/demo/")
+
+    assert response.status_code == 200
+    assert "custom server runtime" in response.text
+
+
 def test_serve_renders_playground_and_serves_its_static_runtime(tmp_path: Path) -> None:
     content = tmp_path / "content"
     content.mkdir()
@@ -57,7 +87,18 @@ def test_serve_renders_playground_and_serves_its_static_runtime(tmp_path: Path) 
     runtime = tmp_path / "static" / "playground"
     runtime.mkdir(parents=True)
     (runtime / "runtime.json").write_text('{"schema_version": 1}', encoding="utf-8")
-    config = DocsConfig(content_dir=content, site_dir=tmp_path / "site", repo_root=tmp_path, base_dir=tmp_path)
+    config = DocsConfig(
+        content_dir=content,
+        site_dir=tmp_path / "site",
+        repo_root=tmp_path,
+        base_dir=tmp_path,
+        settings_config=default_config.settings_config,
+        reference_config=default_config.reference_config,
+        ui_library_config=default_config.ui_library_config,
+        redirects_config=default_config.redirects_config,
+        versions_config=default_config.versions_config,
+        people_sources_config=default_config.people_sources_config,
+    )
     client = TestClient(create_app(config=config))
 
     page = client.get("/playground/")
@@ -116,6 +157,12 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
         site_dir=tmp_path / "site",
         repo_root=tmp_path,
         base_dir=tmp_path / "docs_site",
+        settings_config=default_config.settings_config,
+        reference_config=default_config.reference_config,
+        ui_library_config=default_config.ui_library_config,
+        redirects_config=default_config.redirects_config,
+        versions_config=default_config.versions_config,
+        people_sources_config=default_config.people_sources_config,
     )
     local_runtime = load_local_playground_runtime(local_dir)
     client = TestClient(create_app(config=config, local_playground_runtime=local_runtime))
@@ -172,11 +219,12 @@ def test_serve_pre_renders_a_fragment_variant_with_working_deps(tmp_path: Path) 
     # The fragment manifest lists its JS/CSS as base64 dep descriptors that point
     # at /citry/cache/<class_id>.<ext>; the /citry mount must serve each one.
     manifest = json.loads(re.search(r"data-citry>(\{.*\})</script>", frag.text).group(1))
-    dep_urls = [
-        json.loads(base64.b64decode(enc))["attrs"].get("src") or json.loads(base64.b64decode(enc))["attrs"]["href"]
+    descriptors = [
+        json.loads(base64.b64decode(entry[0] if isinstance(entry, list) else entry))
         for kind in ("js", "css")
-        for enc in manifest["fetch"][kind]
+        for entry in manifest["fetch"][kind]
     ]
+    dep_urls = [descriptor["attrs"].get("src") or descriptor["attrs"]["href"] for descriptor in descriptors]
     assert dep_urls  # the widget ships both JS and CSS
     for url in dep_urls:
         assert client.get(url).status_code == 200

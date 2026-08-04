@@ -6,6 +6,7 @@ import html as html_module
 import re
 from pathlib import Path
 
+from docs_site._internal.config import DocsConfig
 from docs_site._internal.fence_protection import protect_fences, restore_protected_code
 from docs_site._internal.pipeline import render_content, render_page
 
@@ -87,13 +88,13 @@ def test_expression_expands_and_code_is_protected() -> None:
     assert "c-if" in block
 
 
-def test_include_file_tag(tmp_path: Path, monkeypatch) -> None:
-    import docs_site._internal.components.include_file as include_file_mod
-
-    monkeypatch.setattr(include_file_mod.default_config, "repo_root", tmp_path)
+def test_include_file_tag(tmp_path: Path) -> None:
     (tmp_path / "snippet.py").write_text("greeting = 'hi'\n", encoding="utf-8")
 
-    html = render_page('<c-include-file path="snippet.py" />').html
+    html = render_page(
+        '<c-include-file path="snippet.py" />',
+        config=DocsConfig(repo_root=tmp_path),
+    ).html
 
     assert "greeting" in html
     assert 'class="highlight"' in html  # rendered as a code block

@@ -37,7 +37,7 @@ from docs_site._internal.guards import (
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
 from docs_site._internal.guards.site_index import SiteIndex
-from docs_site._internal.reference_pages import CATEGORIES
+from docs_site._internal.project import load_docs_project
 
 # A page that carries the generator marker is treated as a real doc page.
 _DOC = (
@@ -95,7 +95,8 @@ def _write_builtin_tags_page(root: Path, *, omit: str = "") -> None:
 def _write_browser_api_page(root: Path, *, omit: str = "") -> None:
     reference = root / "reference"
     reference.mkdir(exist_ok=True)
-    cat = next(cat for cat in CATEGORIES if cat.slug == "browser-apis")
+    cat = load_docs_project().reference.category("browser-apis")
+    assert cat is not None
     lines = [f'<h3 id="{entry.anchor}"><code>{entry.key}</code></h3>' for entry in cat.entries]
     (reference / "browser-apis.md").write_text(
         "\n".join(line for line in lines if not omit or omit not in line),
@@ -428,6 +429,12 @@ def test_single_h1_flags_a_blog_post_heading_expanded_from_a_snippet(tmp_path: P
         content_dir=content,
         site_dir=output,
         repo_root=tmp_path,
+        settings_config=default_config.settings_config,
+        reference_config=default_config.reference_config,
+        ui_library_config=default_config.ui_library_config,
+        redirects_config=default_config.redirects_config,
+        versions_config=default_config.versions_config,
+        people_sources_config=default_config.people_sources_config,
     )
 
     outcome = build_site(config=config, minify=False, search=False, social_cards=False)

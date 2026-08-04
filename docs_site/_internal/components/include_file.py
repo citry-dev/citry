@@ -11,7 +11,7 @@ from typing import Any
 from markupsafe import Markup
 
 from citry import Component
-from docs_site._internal.config import config as default_config
+from docs_site._internal.project import current_docs_project
 
 _EXT_TO_LANGUAGE = {
     ".py": "python",
@@ -46,7 +46,7 @@ class IncludeFile(Component):
         # A constant tag attribute arrives wrapped in citry's Const proxy; coerce
         # to a real str before handing it to pathlib (which type-checks).
         path = str(kwargs.path)
-        text = (default_config.repo_root / path).read_text(encoding="utf-8")
+        text = (current_docs_project().runtime.repo_root / path).read_text(encoding="utf-8")
         language = str(kwargs.language) or _EXT_TO_LANGUAGE.get(PurePosixPath(path).suffix, "")
         # Markup so the fenced block reaches the markdown pass un-escaped; the
         # markdown pass then escapes the code inside the fence. Trusted: the

@@ -140,6 +140,34 @@ def test_markdown_body_expands_nested_block_and_empty_snippets(tmp_path: Path) -
     assert "--8<--" not in result.markdown_body
 
 
+def test_configured_snippet_options_survive_runtime_path_overrides(tmp_path: Path) -> None:
+    settings_source = config.settings_config.read_text(encoding="utf-8")
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        settings_source.replace(
+            "  docstrings:\n",
+            "      pymdownx.snippets:\n        encoding: latin-1\n  docstrings:\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "latin.py").write_bytes("MESSAGE = 'café'\n".encode("latin-1"))
+    cfg = DocsConfig(
+        repo_root=tmp_path,
+        content_dir=tmp_path,
+        site_dir=tmp_path / "site",
+        settings_config=settings_path,
+    )
+
+    result = render_page(
+        '```python\n--8<-- "latin.py"\n```\n',
+        config=cfg,
+        wrap_in_layout=False,
+    )
+
+    assert "café" in result.html
+
+
 def test_content_index_renders() -> None:
     # Configure globals exactly as build and serve do before exercising the real
     # page through all three rendering passes.

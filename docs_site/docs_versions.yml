@@ -1,0 +1,32 @@
+# Version selection, publication, and crawler policy. All mappings and fields
+# are optional; omitted values use VersionsConfig defaults. Unknown fields fail
+# validation. See VersionsConfig in docs_site/_internal/bootstrap.py and the
+# field table in docs_site/README.md under "Configuration".
+#
+# `docs build-all` is the bootstrap and disaster-recovery command. It walks the
+# selected tags, checks each one out, and runs `docs build`. Normal releases
+# build one version. Tags without the docs builder are skipped automatically.
+
+versions:
+  # Non-empty Python regular-expression string matched against Git tags.
+  pattern: "^v?\\d+\\.\\d+\\.\\d+$"
+  # Unique non-empty tag strings included even when pattern does not match.
+  include: []
+  # Unique non-empty tag strings always excluded. A tag cannot be in both lists.
+  exclude: []
+  # Empty string or a full major.minor.patch lower bound.
+  oldest: "0.1.0"
+  # Empty string or a full major.minor.patch upper bound.
+  newest: ""
+
+aliases:
+  # Empty string selects the newest build; otherwise use major.minor.patch.
+  latest: ""
+
+publish:
+  # Non-negative integer count of newest releases to publish; 0 publishes all.
+  window: 15
+
+indexing:
+  # Non-negative integer count of newest snapshots to index; 0 indexes all.
+  keep_recent: 2

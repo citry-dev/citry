@@ -73,6 +73,7 @@ def generate_social_cards(
     nav_tree: NavTree,
     *,
     site_url: str,
+    site_name: str,
     cache_dir: Path,
     log: Callable[[str], None] = lambda _msg: None,
 ) -> SocialCardOutcome:
@@ -84,7 +85,7 @@ def generate_social_cards(
     work = [
         card
         for record in records
-        if (card := _card_for(record, output_dir, nav_tree, template_version, default_url)) is not None
+        if (card := _card_for(record, output_dir, nav_tree, template_version, default_url, site_name)) is not None
     ]
     outcome = SocialCardOutcome(eligible=len(work))
     if not work:
@@ -95,7 +96,7 @@ def generate_social_cards(
     outcome.cached = len(work) - len(todo)
 
     if todo:
-        outcome.rendered, outcome.skipped_reason = _render_cards(todo, cache_dir, log)
+        outcome.rendered, outcome.skipped_reason = _render_cards(todo, cache_dir, log, site_name)
 
     for card in work:
         cached_png = cache_dir / f"{card.digest}.png"
@@ -112,7 +113,12 @@ def generate_social_cards(
 
 
 def _card_for(
-    record: PageRecord, output_dir: Path, nav_tree: NavTree, template_version: str, default_url: str
+    record: PageRecord,
+    output_dir: Path,
+    nav_tree: NavTree,
+    template_version: str,
+    default_url: str,
+    site_name: str,
 ) -> _Card | None:
     """Build the work item for a page, or None when it should not get a card."""
     if not record.is_doc_page or record.noindex:
@@ -126,9 +132,9 @@ def _card_for(
     if default_url not in html:
         return None
 
-    title = record.title or "Citry"
+    title = record.title or site_name
     section = _section_label(nav_tree, record.url)
-    digest = _card_hash(template_version, title, record.description, section)
+    digest = _card_hash(template_version, site_name, title, record.description, section)
     return _Card(
         page_file=page_file,
         html=html,
@@ -160,12 +166,12 @@ def _section_label(nav_tree: NavTree, url: str) -> str:
     return "Documentation"
 
 
-def _card_hash(template_version: str, title: str, description: str, section: str) -> str:
-    raw = f"{template_version}\x00{title}\x00{description}\x00{section}"
+def _card_hash(template_version: str, site_name: str, title: str, description: str, section: str) -> str:
+    raw = f"{template_version}\x00{site_name}\x00{title}\x00{description}\x00{section}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
-def _render_cards(cards: list[_Card], cache_dir: Path, log: Callable[[str], None]) -> tuple[int, str]:
+def _render_cards(cards: list[_Card], cache_dir: Path, log: Callable[[str], None], site_name: str) -> tuple[int, str]:
     """
     Screenshot each card to ``<cache_dir>/<hash>.png``. Returns ``(rendered, reason)``.
 
@@ -180,10 +186,12 @@ def _render_cards(cards: list[_Card], cache_dir: Path, log: Callable[[str], None
     the screenshot pass is safe from any calling context.
     """
     with ThreadPoolExecutor(max_workers=1, thread_name_prefix="citry-og-cards") as pool:
-        return pool.submit(_screenshot_cards, cards, cache_dir, log).result()
+        return pool.submit(_screenshot_cards, cards, cache_dir, log, site_name).result()
 
 
-def _screenshot_cards(cards: list[_Card], cache_dir: Path, log: Callable[[str], None]) -> tuple[int, str]:
+def _screenshot_cards(
+    cards: list[_Card], cache_dir: Path, log: Callable[[str], None], site_name: str
+) -> tuple[int, str]:
     """Blocking browser pass for :func:`_render_cards`; run in a worker thread with no running loop."""
     try:
         from playwright.sync_api import sync_playwright  # noqa: PLC0415 - optional dependency
@@ -201,7 +209,14 @@ def _screenshot_cards(cards: list[_Card], cache_dir: Path, log: Callable[[str], 
         try:
             page = browser.new_page(viewport=OG_VIEWPORT, device_scale_factor=1)  # type: ignore[arg-type]
             for card in cards:
-                markup = str(OgCard(title=card.title, description=card.description, section=card.section))
+                markup = str(
+                    OgCard(
+                        title=card.title,
+                        description=card.description,
+                        section=card.section,
+                        site_name=site_name,
+                    )
+                )
                 page.set_content(markup, wait_until="load")
                 page.screenshot(path=str(cache_dir / f"{card.digest}.png"))
                 rendered += 1

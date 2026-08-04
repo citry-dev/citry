@@ -11,8 +11,9 @@ from starlette.testclient import TestClient
 from docs_site._internal.build import build_site
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.pipeline import render_page
+from docs_site._internal.project import load_docs_project
 from docs_site._internal.reference import extract_symbol, public_entrypoints
-from docs_site._internal.reference_pages import CATEGORIES, category, reference_nav_items, reference_page_markdown
+from docs_site._internal.reference_pages import category, reference_nav_items, reference_page_markdown
 from docs_site._internal.serve import create_app
 
 
@@ -20,7 +21,7 @@ def test_every_category_symbol_resolves() -> None:
     # Guards against a typo in the (hand-written) category symbol lists.
     missing = [
         symbol
-        for cat in CATEGORIES
+        for cat in load_docs_project().reference.categories
         if cat.source == "griffe"
         for symbol in cat.symbols
         if extract_symbol(symbol) is None
@@ -59,7 +60,9 @@ def test_categories_cover_the_public_api() -> None:
     # reference page, either under the entrypoint's own path or as the root
     # re-export. The reference is the enforcement of the public-API rule, so
     # a new export without a page fails here.
-    covered = {s for cat in CATEGORIES if cat.source == "griffe" for s in cat.symbols}
+    covered = {
+        symbol for cat in load_docs_project().reference.categories if cat.source == "griffe" for symbol in cat.symbols
+    }
     uncovered = [
         f"{entrypoint}.{name}"
         for entrypoint in public_entrypoints()
@@ -114,7 +117,7 @@ def test_unknown_builtin_shows_error() -> None:
 def test_build_writes_reference_pages(tmp_path: Path) -> None:
     out = tmp_path / "site"
     outcome = build_site(config=DocsConfig(site_dir=out))
-    generated = sum(not cat.authored for cat in CATEGORIES)
+    generated = sum(not cat.authored for cat in load_docs_project().reference.categories)
     assert outcome.reference == generated + 1  # generated categories plus index
     assert (out / "reference" / "index.html").is_file()
     component_page = out / "reference" / "component" / "index.html"

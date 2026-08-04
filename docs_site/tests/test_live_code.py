@@ -8,10 +8,25 @@ import pytest
 from lxml import html as lxml_html
 
 from docs_site._internal.config import DocsConfig
+from docs_site._internal.config import config as default_config
 from docs_site._internal.guards import live_code as live_code_guard
 from docs_site._internal.guards.base import GuardContext
 from docs_site._internal.live_code import LiveCodeValidationError, load_live_source
 from docs_site._internal.pipeline import render_page
+
+
+def _docs_config(root: Path) -> DocsConfig:
+    """Use temporary runtime paths with the repository's declarations."""
+    return DocsConfig(
+        repo_root=root,
+        base_dir=root / "docs_site",
+        versions_config=default_config.versions_config,
+        settings_config=default_config.settings_config,
+        reference_config=default_config.reference_config,
+        ui_library_config=default_config.ui_library_config,
+        redirects_config=default_config.redirects_config,
+        people_sources_config=default_config.people_sources_config,
+    )
 
 
 def _snippet_path(root: Path, source: str | bytes, name: str = "sample.py") -> str:
@@ -49,7 +64,7 @@ def _guard_context(root: Path, markdown: str) -> GuardContext:
 def test_live_code_is_static_first_exact_and_source_projected(tmp_path: Path) -> None:
     source = "\nfrom markupsafe import Markup\nvalue = 'héllo <>&'\nMarkup(f'<p>{value}</p>')"
     path = _snippet_path(tmp_path, source)
-    cfg = DocsConfig(repo_root=tmp_path, base_dir=tmp_path / "docs_site")
+    cfg = _docs_config(tmp_path)
     result = render_page(
         f'<c-live-code path="{path}" title="Escaped &amp; exact" />',
         config=cfg,
@@ -73,7 +88,7 @@ def test_live_code_is_static_first_exact_and_source_projected(tmp_path: Path) ->
 
 def test_live_code_assets_are_conditional_and_historical_pages_are_static(tmp_path: Path) -> None:
     path = _snippet_path(tmp_path, "html = '<p>hello</p>'\nhtml\n")
-    cfg = DocsConfig(repo_root=tmp_path, base_dir=tmp_path / "docs_site")
+    cfg = _docs_config(tmp_path)
 
     ordinary = render_page("# Ordinary", config=cfg).html
     literal_hook = render_page(
@@ -102,7 +117,7 @@ def test_live_code_assets_are_conditional_and_historical_pages_are_static(tmp_pa
 
 def test_multiple_live_code_blocks_have_independent_accessible_ids(tmp_path: Path) -> None:
     path = _snippet_path(tmp_path, "html = '<p>hello</p>'\nhtml\n")
-    cfg = DocsConfig(repo_root=tmp_path, base_dir=tmp_path / "docs_site")
+    cfg = _docs_config(tmp_path)
     directive = f'<c-live-code path="{path}" title="Hello" />'
 
     tree = lxml_html.fromstring(render_page(f"{directive}\n\n{directive}", config=cfg).html)
@@ -117,7 +132,7 @@ def test_multiple_live_code_blocks_have_independent_accessible_ids(tmp_path: Pat
 
 def test_live_code_full_height_is_opt_in(tmp_path: Path) -> None:
     path = _snippet_path(tmp_path, "html = '<p>hello</p>'\nhtml\n")
-    cfg = DocsConfig(repo_root=tmp_path, base_dir=tmp_path / "docs_site")
+    cfg = _docs_config(tmp_path)
     default = f'<c-live-code path="{path}" title="Default height" />'
     full_height = f'<c-live-code path="{path}" title="Full height" full_height />'
 
@@ -134,7 +149,7 @@ def test_static_component_snippet_uses_live_code_presentation_without_activation
     source = "import citry_ui\nfrom citry_ui import CTabs\nCTabs\n"
     path = _component_snippet_path(tmp_path, source)
     directive = f'<c-live-code path="{path}" title="Tabs" static />'
-    cfg = DocsConfig(repo_root=tmp_path, base_dir=tmp_path / "docs_site")
+    cfg = _docs_config(tmp_path)
 
     result = render_page(directive, config=cfg)
 
@@ -152,7 +167,7 @@ def test_local_ui_runtime_activates_an_authored_static_component_snippet(tmp_pat
     source = "import citry_ui\nfrom citry_ui import CTabs\nCTabs\n"
     path = _component_snippet_path(tmp_path, source)
     directive = f'<c-live-code path="{path}" title="Tabs" static />'
-    cfg = DocsConfig(repo_root=tmp_path, base_dir=tmp_path / "docs_site")
+    cfg = _docs_config(tmp_path)
 
     result = render_page(directive, config=cfg, allow_citry_ui=True)
 
@@ -194,7 +209,7 @@ def test_component_snippet_requires_static_mode_and_exact_location(tmp_path: Pat
 def test_live_code_projection_fence_exceeds_source_backtick_runs(tmp_path: Path) -> None:
     source = 'html = """\n````\n"""\nhtml\n'
     path = _snippet_path(tmp_path, source)
-    cfg = DocsConfig(repo_root=tmp_path, base_dir=tmp_path / "docs_site")
+    cfg = _docs_config(tmp_path)
 
     body = render_page(f'<c-live-code path="{path}" title="Ticks" />', config=cfg).markdown_body
 
@@ -237,7 +252,7 @@ def test_incomplete_live_source_remains_static_and_passes_the_guard(tmp_path: Pa
     source = "value = '<p>complete me</p>'\n"
     path = _snippet_path(tmp_path, source)
     directive = f'<c-live-code path="{path}" title="Incomplete example" />'
-    cfg = DocsConfig(repo_root=tmp_path, base_dir=tmp_path / "docs_site")
+    cfg = _docs_config(tmp_path)
 
     result = render_page(directive, config=cfg)
     tree = lxml_html.fromstring(result.html)

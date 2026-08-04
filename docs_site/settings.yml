@@ -1,0 +1,108 @@
+# Maintainer-facing site settings. Every listed key is required and unknown
+# keys fail validation before the builder writes output. Accepted types and
+# additional URL/path constraints are enforced by SiteSettings and its nested
+# dataclasses in docs_site/_internal/settings.py. The field reference also
+# lives in docs_site/README.md under "Configuration".
+
+site:
+  name: Citry # Non-empty string used in titles and site chrome.
+  public_url: https://citry.dev/ # Absolute HTTP(S) URL ending in /.
+  language: en # Non-empty HTML language string.
+  default_description: >- # Non-empty fallback description string.
+    Citry is a fast, simple, and smart frontend framework for Python that
+    brings the best of Vue, React, Django, Jinja, and LiveWire.
+
+repository:
+  owner: citry-dev # GitHub owner name, not an owner/repository path.
+  name: citry # GitHub repository name.
+  url: https://github.com/citry-dev/citry # Exact HTTPS URL for owner/name.
+  edit_branch: main # Safe Git branch name used by edit links.
+  issues_url: https://github.com/citry-dev/citry/issues # repository.url + /issues.
+  sponsors_url: https://github.com/sponsors/JuroOravec # Absolute HTTP(S) URL.
+
+links:
+  pypi: https://pypi.org/project/citry/ # Absolute HTTP(S) package URL.
+  discord: https://discord.gg/NaQ8QPyHtD # Absolute HTTP(S) community URL.
+
+search:
+  pagefind_path: /pagefind/pagefind.js # Safe root-relative URL path.
+  quick_links: # Ordered list of unique shortcuts shown in search.
+    - { label: Getting started, path: /getting-started/installation/ }
+    - { label: Components, path: /concepts/components/ }
+    - { label: Slots, path: /concepts/slots/ }
+    - { label: API reference, path: /reference/ }
+    - { label: Examples, path: /examples/ }
+  # Each quick link requires a non-empty label and a unique, safe,
+  # root-relative path.
+
+markdown:
+  # Each profile requires an ordered list of Python-Markdown extension names
+  # and a mapping of options keyed only by enabled extension names. Extension
+  # option values may be strings, numbers, booleans, nulls, lists, or mappings.
+  pages:
+    extensions:
+      - abbr
+      - admonition
+      - attr_list
+      - def_list
+      - tables
+      - md_in_html
+      - toc
+      - pymdownx.details
+      - pymdownx.highlight
+      - pymdownx.inlinehilite
+      - pymdownx.magiclink
+      - pymdownx.snippets
+      - pymdownx.superfences
+      - pymdownx.tabbed
+      - pymdownx.tasklist
+    extension_configs:
+      pymdownx.highlight:
+        anchor_linenums: false
+      pymdownx.tabbed:
+        alternate_style: true
+      pymdownx.tasklist:
+        custom_checkbox: true
+      toc:
+        permalink: "¤"
+      pymdownx.magiclink:
+        repo_url_shorthand: true
+  docstrings:
+    extensions:
+      - admonition
+      - attr_list
+      - def_list
+      - tables
+      - fenced_code
+    extension_configs: {}
+
+blog:
+  feed_path: /blog/feed.xml # Safe root-relative URL path.
+  feed_limit: 20 # Integer greater than or equal to 1.
+  words_per_minute: 200 # Integer greater than or equal to 1.
+
+git:
+  exclude_patterns: # Unique list of non-empty path-pattern strings.
+    - community/code-of-conduct.md
+    - community/license.md
+  max_authors: 5 # Integer greater than or equal to 1.
+
+seo:
+  ai_bots: # Unique list of non-empty crawler user-agent strings.
+    - GPTBot
+    - ClaudeBot
+    - anthropic-ai
+    - Google-Extended
+    - PerplexityBot
+    - CCBot
+  priorities: # Ordered, unique URL prefixes with numeric priorities from 0 to 1.
+    - { prefix: getting-started, priority: 0.8 }
+    - { prefix: concepts, priority: 0.6 }
+    - { prefix: reference, priority: 0.6 }
+
+inventory:
+  python_docs_url: https://docs.python.org/3.13/ # Absolute HTTP(S) URL ending in /.
+
+release_notes:
+  exclude: # Unique list of non-empty changelog date strings to omit.
+    - "2025-12-21"

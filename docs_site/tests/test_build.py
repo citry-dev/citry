@@ -12,6 +12,24 @@ import yaml
 
 from docs_site._internal.build import BuildOutcome, build_site
 from docs_site._internal.config import DocsConfig
+from docs_site._internal.config import config as default_config
+from docs_site._internal.config_loading import DocsConfigError
+from docs_site._internal.pipeline import render_page
+from docs_site._internal.project import load_docs_project
+
+
+def _default_declarations() -> dict[str, Path]:
+    return {
+        name: getattr(default_config, name)
+        for name in (
+            "settings_config",
+            "reference_config",
+            "ui_library_config",
+            "redirects_config",
+            "versions_config",
+            "people_sources_config",
+        )
+    }
 
 
 def _write_blog(content: Path) -> Path:
@@ -95,11 +113,135 @@ def test_build_copies_static_assets(tmp_path: Path) -> None:
     static_css.mkdir(parents=True)
     (static_css / "site.css").write_text("body{}", encoding="utf-8")
     # base_dir points at tmp so the build finds tmp/static.
-    config = DocsConfig(content_dir=content, site_dir=tmp_path / "site", repo_root=tmp_path, base_dir=tmp_path)
+    config = DocsConfig(
+        content_dir=content,
+        site_dir=tmp_path / "site",
+        repo_root=tmp_path,
+        base_dir=tmp_path,
+        **_default_declarations(),
+    )
 
     build_site(config=config)
 
     assert (config.site_dir / "static" / "css" / "site.css").read_text(encoding="utf-8") == "body{}"
+
+
+def test_redirect_cannot_overwrite_an_orphan_authored_page(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "_nav.yml").write_text(
+        "areas:\n  - label: Docs\n    items: [{ title: Home, path: / }]\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (content / "orphan.md").write_text("# Orphan\n", encoding="utf-8")
+    redirects = tmp_path / "redirects.yml"
+    redirects.write_text("redirects:\n  - { from: /orphan/, to: / }\n", encoding="utf-8")
+    output = tmp_path / "site"
+    output.mkdir()
+    sentinel = output / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    cfg = DocsConfig(
+        content_dir=content,
+        site_dir=output,
+        redirects_config=redirects,
+    )
+
+    with pytest.raises(DocsConfigError, match="collides"):
+        build_site(config=cfg, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_ui_projection_preflight_preserves_existing_output(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: UI\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "    groups:\n"
+        "      - label: Components\n"
+        "        source: ui_library\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (tmp_path / "button.md").write_text("---\ntitle: Button\n---\n\n# Button\n", encoding="utf-8")
+    ui_manifest = tmp_path / "ui_library.yml"
+    ui_manifest.write_text(
+        "components:\n"
+        "  - family: button\n"
+        "    slug: button\n"
+        "    source: button.md\n"
+        "    required_headings: ['#### Button inputs']\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "site"
+    output.mkdir()
+    sentinel = output / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    cfg = DocsConfig(
+        repo_root=tmp_path,
+        content_dir=content,
+        site_dir=output,
+        ui_library_config=ui_manifest,
+    )
+
+    with pytest.raises(DocsConfigError, match="title and description"):
+        build_site(config=cfg, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_custom_repository_identity_reaches_every_generated_surface(tmp_path: Path) -> None:
+    settings_source = default_config.settings_config.read_text(encoding="utf-8")
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        settings_source.replace("owner: citry-dev", "owner: acme", 1)
+        .replace("name: citry", "name: widgets", 1)
+        .replace(
+            "url: https://github.com/citry-dev/citry",
+            "url: https://github.com/acme/widgets",
+            1,
+        )
+        .replace(
+            "issues_url: https://github.com/citry-dev/citry/issues",
+            "issues_url: https://github.com/acme/widgets/issues",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    cfg = DocsConfig(
+        site_dir=tmp_path / "site",
+        settings_config=settings_path,
+        site_url="https://docs.acme.test/",
+    )
+    project = load_docs_project(cfg)
+
+    outcome = build_site(
+        project=project,
+        minify=False,
+        search=False,
+        social_cards=False,
+    )
+    direct = render_page(
+        "Repository: [{{ repo_full_name }}]({{ repo_url }}). Issue #123.",
+        project=project,
+        wrap_in_layout=False,
+    ).html
+    home = (outcome.output_dir / "index.html").read_text(encoding="utf-8")
+    authored = (outcome.output_dir / "concepts" / "components" / "index.html").read_text(encoding="utf-8")
+    generated = (outcome.output_dir / "reference" / "component" / "index.html").read_text(encoding="utf-8")
+    not_found = (outcome.output_dir / "404.html").read_text(encoding="utf-8")
+
+    assert outcome.failed == 0
+    assert "https://github.com/acme/widgets" in home
+    assert "https://github.com/acme/widgets/edit/main/docs_site/content/concepts/components.md" in authored
+    assert "https://github.com/acme/widgets/blob/main/packages/py/citry/citry/component.py" in generated
+    assert "https://github.com/acme/widgets/issues" in not_found
+    assert 'data-search-site-domain="docs.acme.test"' in authored
+    assert '<a href="https://github.com/acme/widgets">acme/widgets</a>' in direct
+    assert "https://github.com/acme/widgets/issues/123" in direct
 
 
 def test_build_records_failures_without_aborting(tmp_path: Path, monkeypatch) -> None:
@@ -212,7 +354,13 @@ def test_build_generates_social_cards_from_a_running_event_loop(tmp_path: Path) 
     # A fresh base_dir means an empty OG cache, so a card is actually rendered
     # this run (not copied from a prior run's cache) and the sync-Playwright path
     # is exercised under the running loop.
-    config = DocsConfig(content_dir=content, site_dir=tmp_path / "site", repo_root=tmp_path, base_dir=tmp_path)
+    config = DocsConfig(
+        content_dir=content,
+        site_dir=tmp_path / "site",
+        repo_root=tmp_path,
+        base_dir=tmp_path,
+        **_default_declarations(),
+    )
 
     async def _build() -> BuildOutcome:
         # A loop is now running in the calling thread: the failure condition.
@@ -284,6 +432,7 @@ def test_build_expands_snippets_in_markdown_outputs(tmp_path: Path) -> None:
         site_dir=out,
         repo_root=tmp_path,
         site_url="https://citry.dev/",
+        **_default_declarations(),
     )
     (content / "_nav.yml").write_text(
         "areas:\n  - label: Docs\n    items:\n      - { title: Home, path: / }\n",

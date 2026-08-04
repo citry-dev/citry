@@ -25,33 +25,18 @@ from markupsafe import Markup
 from citry import citry as _default_citry
 from citry.component_registry import NotRegistered
 from docs_site._internal.annotation import render_annotation
-from docs_site._internal.config import config
 from docs_site._internal.crossrefs import make_type_resolver, resolve_crossrefs
 from docs_site._internal.git_metadata import source_url_for
+from docs_site._internal.project import current_docs_project
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# A small, self-contained markdown set for docstring prose (no snippet includes
-# or repo-relative config, so it stays independent of the page pipeline).
-_MD_EXTENSIONS = ["admonition", "attr_list", "def_list", "tables", "fenced_code"]
 _ANCHOR_RE = re.compile(r"[^a-z0-9]+")
 
 # Docstring sections that are rendered as their own structured fields, so the
 # prose walk in _description skips them instead of repeating them.
 _FIELD_SECTIONS = frozenset({"parameters", "returns", "raises", "attributes"})
-
-# External re-exports can use a docstring format that Citry's Google-style
-# renderer does not understand. Keep their Citry-specific reference prose
-# scoped here rather than mutating or wrapping the upstream runtime object.
-_DESCRIPTION_OVERRIDES = {
-    "citry.Markup": """
-`citry.Markup` is exactly
-[`markupsafe.Markup`](https://markupsafe.palletsprojects.com/en/stable/escaping/#markupsafe.Markup),
-re-exported unchanged. `Markup(value)` trusts the complete value without
-sanitizing, validating, or escaping anything.
-""",
-}
 
 
 @functools.cache
@@ -115,7 +100,6 @@ def extract_symbol(dotted_path: str) -> SimpleNamespace | None:
     return _extract(obj, dotted_path) if obj is not None else None
 
 
-@functools.lru_cache(maxsize=1)
 def reference_anchor_map() -> dict[str, str]:
     """
     The unique HTML anchor for every reference symbol and member, keyed by path.
@@ -128,10 +112,13 @@ def reference_anchor_map() -> dict[str, str]:
     clash gets a numeric suffix. Both the rendered ids and the cross-reference
     links read from this map, so a symbol's anchor is the same in both places.
     """
-    from docs_site._internal.reference_pages import CATEGORIES  # noqa: PLC0415 - lazy: avoids an import cycle
+    return _reference_anchor_map(current_docs_project().reference.categories)
 
+
+@functools.lru_cache(maxsize=8)
+def _reference_anchor_map(categories: tuple[Any, ...]) -> dict[str, str]:
     mapping: dict[str, str] = {}
-    for cat in CATEGORIES:
+    for cat in categories:
         if cat.source != "griffe":
             continue  # builtin tags are distinct and need no dedup
         seen: set[str] = set()
@@ -174,6 +161,8 @@ def _extract(obj: Any, path: str, *, with_members: bool = True) -> SimpleNamespa
                 continue
             members.append(_extract(member, f"{path}.{name}", with_members=False))
 
+    project = current_docs_project()
+    repository = project.settings.repository
     return SimpleNamespace(
         name=obj.name,
         path=path,
@@ -186,7 +175,13 @@ def _extract(obj: Any, path: str, *, with_members: bool = True) -> SimpleNamespa
         bases=_bases(obj),
         source_url=""
         if external_alias
-        else source_url_for(config.repo_root, getattr(obj, "filepath", None), getattr(obj, "lineno", None)),
+        else source_url_for(
+            project.runtime.repo_root,
+            getattr(obj, "filepath", None),
+            getattr(obj, "lineno", None),
+            repo_url=repository.url,
+            edit_branch=repository.edit_branch,
+        ),
         params=_params(sections),
         returns=_returns(sections),
         raises=_raises(sections),
@@ -202,7 +197,7 @@ def is_external_alias(obj: Any) -> bool:
 
 def _description_for(path: str, sections: list) -> Markup:
     """Render a symbol's Citry-owned override or its parsed source docstring."""
-    override = _DESCRIPTION_OVERRIDES.get(path)
+    override = current_docs_project().reference.description_override(path)
     if override is not None:
         return Markup(_md(override.strip()))  # noqa: S704 - repository-owned reference prose
     return _description(sections)
@@ -432,7 +427,12 @@ def _md(text: str) -> str:
         return ""
     # Resolve [text][symbol] cross-refs to reference links before HTML conversion.
     resolved, _unresolved = resolve_crossrefs(text, degrade_unresolved=True)
-    return markdown.markdown(resolved, extensions=_MD_EXTENSIONS)
+    profile = current_docs_project().settings.markdown_docstrings
+    return markdown.markdown(
+        resolved,
+        extensions=list(profile.extensions),
+        extension_configs=profile.configs(),
+    )
 
 
 def _md_inline(text: str) -> Markup:

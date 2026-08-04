@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, cast
 from markupsafe import Markup, escape
 
 from citry import Component
-from docs_site._internal.config import config as default_config
+from docs_site._internal.project import current_docs_project
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -51,7 +51,7 @@ class ExampleInfo:
         return f"examples/{self.public_slug}.md"
 
 
-_registry: dict[str, ExampleInfo] | None = None
+_registries: dict[Path, dict[str, ExampleInfo]] = {}
 _PROJECTION_BLOCK_RE = re.compile(
     r"<!-- docs-example:(?P<name>[a-z0-9_-]+):start -->.*?"
     r"<!-- docs-example:(?P=name):end -->",
@@ -59,12 +59,12 @@ _PROJECTION_BLOCK_RE = re.compile(
 )
 
 
-def get_example_registry() -> dict[str, ExampleInfo]:
-    """Return the cached example registry, discovering on first call."""
-    global _registry  # noqa: PLW0603
-    if _registry is None:
-        _registry = _discover_examples(default_config.examples_dir)
-    return _registry
+def get_example_registry(examples_dir: Path | None = None) -> dict[str, ExampleInfo]:
+    """Return the registry for an explicit or active-project example directory."""
+    examples_dir = (examples_dir or current_docs_project().runtime.examples_dir).resolve()
+    if examples_dir not in _registries:
+        _registries[examples_dir] = _discover_examples(examples_dir)
+    return _registries[examples_dir]
 
 
 def get_example_by_slug(slug: str) -> ExampleInfo | None:
@@ -121,7 +121,7 @@ def _find_page_class(module: object) -> type[Component] | None:
 
 
 def _import_module_file(py_file: Path, example_name: str, module_type: str) -> object | None:
-    module_name = f"docs_site_examples.{example_name}.{module_type}"
+    module_name = f"docs_site.examples.{example_name}.{module_type}"
     if module_name in sys.modules:
         return sys.modules[module_name]
 
@@ -159,7 +159,7 @@ def project_examples_for_text(source: str) -> str:
 
     def replace(match: re.Match[str]) -> str:
         name = match.group("name")
-        info: ExampleInfo | None = registry.get(name)
+        info = registry.get(name)
         return match.group(0) if info is None else example_text_projection(info)
 
     return _PROJECTION_BLOCK_RE.sub(replace, source)

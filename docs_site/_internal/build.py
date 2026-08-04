@@ -27,6 +27,7 @@ import shutil
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from html import escape
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as get_version
 from pathlib import Path
@@ -35,7 +36,6 @@ from typing import TYPE_CHECKING
 from citry import citry as default_citry
 from docs_site._internal.base_path import apply_base_path
 from docs_site._internal.blog import (
-    BLOG_FEED_PATH,
     BlogCatalog,
     BlogPost,
     blog_source_routes,
@@ -43,7 +43,6 @@ from docs_site._internal.blog import (
     serialize_atom_feed,
 )
 from docs_site._internal.config import DocsConfig
-from docs_site._internal.config import config as default_config
 from docs_site._internal.crossrefs import build_objects_inv
 from docs_site._internal.examples import get_example_registry
 from docs_site._internal.llms import generate_llms_files
@@ -58,11 +57,12 @@ from docs_site._internal.paths import (
     md_to_url,
 )
 from docs_site._internal.pipeline import RenderResult, render_page
-from docs_site._internal.redirects import emit_redirects
+from docs_site._internal.project import DocsProject, current_docs_project, docs_project_scope
+from docs_site._internal.redirects import emit_redirects, validate_redirect_routes
 from docs_site._internal.reference_pages import (
-    CATEGORIES,
     reference_index_markdown,
     reference_page_markdown,
+    validate_authored_reference_sources,
 )
 from docs_site._internal.release_notes import (
     parse_changelog,
@@ -73,6 +73,7 @@ from docs_site._internal.seo import generate_seo_files
 from docs_site._internal.site_nav import load_site_nav
 from docs_site._internal.social_cards import generate_social_cards
 from docs_site._internal.static_deps import CITRY_MOUNT_PREFIX, export_fragment_deps, export_runtime
+from docs_site._internal.ui_library_projection import validate_ui_library_sources
 from docs_site._internal.versioning import git_head_sha, materialize_alias, update_manifest, write_build_info
 
 if TYPE_CHECKING:
@@ -137,6 +138,7 @@ class BuildOutcome:
     alias_redirects: int = 0  # redirect stubs written for a materialized alias
 
 
+@docs_project_scope
 def build_site(
     *,
     config: DocsConfig | None = None,
@@ -147,6 +149,7 @@ def build_site(
     docs_version: str = "",
     alias: str = "",
     update_versions_manifest: bool = True,
+    project: DocsProject | None = None,
 ) -> BuildOutcome:
     """
     Build every page in ``config.content_dir`` into ``output_dir``.
@@ -165,7 +168,8 @@ def build_site(
     stamped and added to ``versions.json`` (unless ``update_versions_manifest`` is
     False). ``alias`` (e.g. ``"latest"``) materializes that alias as redirects.
     """
-    config = config or default_config
+    if project is None:  # pragma: no cover - supplied by @docs_project_scope
+        raise RuntimeError("docs project scope was not initialized")
     content_dir = config.content_dir
     if output_dir is None:
         output_dir = (config.versions_dir / docs_version) if docs_version else config.site_dir
@@ -179,17 +183,27 @@ def build_site(
     # at the file the build writes, instead of being inlined into every page.
     default_citry.set_mounted_prefix(CITRY_MOUNT_PREFIX)
 
-    site_base = config.site_url.rstrip("/")
+    site_base = project.site_url.rstrip("/")
     # A version snapshot canonicals to its own /v/<version>/ tree.
     canonical_base = f"{site_base}/v/{docs_version}" if docs_version else site_base
     authored_nav = load_nav(content_dir / "_nav.yml")
+    if authored_nav.has_source("reference"):
+        validate_authored_reference_sources(project.reference, content_dir)
     include_site_content = not bool(docs_version)
+    include_ui_source = include_site_content or authored_nav.scope_for_source("ui_library") != SCOPE_SITE
+    if authored_nav.has_source("ui_library") and include_ui_source:
+        validate_ui_library_sources(
+            project.ui_library,
+            repo_root=config.repo_root,
+            content_dir=content_dir,
+        )
     include_blog_source = include_site_content or authored_nav.scope_for_source("blog") != SCOPE_SITE
     # Validate generated content before clearing the output directory whenever
     # it belongs to this build. Snapshot builds never inspect site-scoped input.
     blog_catalog = load_blog_catalog(content_dir) if authored_nav.has_source("blog") and include_blog_source else None
     nav_tree = load_site_nav(
         config,
+        project=project,
         blog_catalog=blog_catalog,
         include_site_content=include_site_content,
     )
@@ -200,9 +214,25 @@ def build_site(
         and _generic_loop_owns_authored_page(path, content_dir)
         and (include_site_content or nav_tree.scope_for_url(md_to_url(path.relative_to(content_dir))) != SCOPE_SITE)
     )
-    version = configure_docs_globals(config)
-    version_prefix = f"/v/{docs_version}" if docs_version else ""
     source_routes = blog_catalog.source_to_public_path if blog_catalog is not None else blog_source_routes(content_dir)
+    if include_site_content:
+        published_paths = {item.path for item in nav_tree.flat_pages()} | (
+            {nav_tree.home.path} if nav_tree.home else set()
+        )
+        occupied_paths = set(published_paths)
+        occupied_paths.update(md_to_url(path.relative_to(content_dir)) for path in md_files)
+        occupied_paths.update(source_routes.values())
+        for info in get_example_registry().values():
+            demo = f"/examples/{info.public_slug}/demo/"
+            occupied_paths.add(demo)
+            occupied_paths.update(f"{demo}{variant}/" for variant in info.fragments)
+        validate_redirect_routes(
+            project.redirects,
+            published_paths,
+            occupied_paths=occupied_paths,
+        )
+    version = configure_docs_globals(project)
+    version_prefix = f"/v/{docs_version}" if docs_version else ""
 
     if output_dir.exists():
         shutil.rmtree(output_dir)
@@ -210,7 +240,9 @@ def build_site(
     outcome = BuildOutcome(output_dir=output_dir, docs_version=docs_version)
     start = time.monotonic()
     blog_feed_url = (
-        nav_tree.project_path(BLOG_FEED_PATH, version_prefix) if blog_catalog and blog_catalog.posts else ""
+        nav_tree.project_path(project.settings.blog.feed_path, version_prefix)
+        if blog_catalog and blog_catalog.posts
+        else ""
     )
 
     for md_path in md_files:
@@ -337,11 +369,15 @@ def build_site(
     # The site-wide crawl / index / card files belong to the root build only; a
     # version snapshot is mounted under /v/ and shares the root's robots+sitemap.
     if not docs_version:
-        outcome.redirects = emit_redirects(output_dir, site_url=config.site_url)
+        outcome.redirects = emit_redirects(
+            output_dir,
+            site_url=project.site_url,
+            redirects=project.redirects.as_dict(),
+        )
         seo = generate_seo_files(
             outcome.records,
             output_dir,
-            site_url=config.site_url,
+            site_url=project.site_url,
             version=version,
             generated_at=datetime.now(tz=UTC),
             repo_root=config.repo_root,
@@ -352,14 +388,19 @@ def build_site(
         )
         outcome.sitemap_urls = seo.sitemap_urls
         outcome.llms_links, outcome.llms_pages = generate_llms_files(
-            outcome.records, output_dir, nav_tree, site_url=config.site_url, site_name=config.site_name
+            outcome.records,
+            output_dir,
+            nav_tree,
+            site_url=project.site_url,
+            site_name=project.settings.name,
         )
         if social_cards:
             card_outcome = generate_social_cards(
                 output_dir,
                 outcome.records,
                 nav_tree,
-                site_url=config.site_url,
+                site_url=project.site_url,
+                site_name=project.settings.name,
                 cache_dir=config.base_dir / ".cache" / "og",
             )
             outcome.social_cards_placed = card_outcome.placed
@@ -550,10 +591,17 @@ def _build_blog_posts(
 
 def _write_blog_feed(output_dir: Path, config: DocsConfig, catalog: BlogCatalog) -> bool:
     """Write the Atom feed when at least one published post exists."""
-    xml = serialize_atom_feed(catalog, site_url=config.site_url, base_path=config.base_path)
+    project = current_docs_project()
+    xml = serialize_atom_feed(
+        catalog,
+        site_url=project.site_url,
+        base_path=config.base_path,
+        feed_path=project.settings.blog.feed_path,
+        feed_limit=project.settings.blog.feed_limit,
+    )
     if not xml:
         return False
-    feed_path = output_dir / BLOG_FEED_PATH.lstrip("/")
+    feed_path = output_dir / project.settings.blog.feed_path.lstrip("/")
     feed_path.parent.mkdir(parents=True, exist_ok=True)
     feed_path.write_text(xml, encoding="utf-8")
     return True
@@ -567,7 +615,7 @@ def _citry_version() -> str:
         return ""
 
 
-def configure_docs_globals(config: DocsConfig) -> str:
+def configure_docs_globals(project: DocsProject | DocsConfig) -> str:
     """
     Expose shared values to every template, and return the citry version.
 
@@ -575,11 +623,22 @@ def configure_docs_globals(config: DocsConfig) -> str:
     write ``{{ version }}`` or ``{{ site_name }}`` directly (the docs site
     dogfoods Citry's global-variables feature instead of a dedicated tag).
     """
+    if isinstance(project, DocsConfig):
+        from docs_site._internal.project import load_docs_project  # noqa: PLC0415
+
+        project = load_docs_project(project)
     version = _citry_version()
     default_citry.template_globals.update(
         {
             "version": version,
-            "site_name": config.site_name,
+            "site_name": project.settings.name,
+            "repo_url": project.settings.repository.url,
+            "repo_full_name": project.settings.repository.full_name,
+            "repo_edit_branch": project.settings.repository.edit_branch,
+            "repo_issues_url": project.settings.repository.issues_url,
+            "repo_sponsors_url": project.settings.repository.sponsors_url,
+            "pypi_url": project.settings.pypi_url,
+            "discord_url": project.settings.discord_url,
         }
     )
     return version
@@ -667,8 +726,9 @@ def _build_reference(
         out_path.write_text(result.html, encoding="utf-8")
         records.append(_record_for(page_url, canonical, result, source_md=None))
 
-    write("reference/", reference_index_markdown())
-    for cat in CATEGORIES:
+    project = current_docs_project()
+    write("reference/", reference_index_markdown(project.reference))
+    for cat in project.reference.categories:
         # Authored categories were rendered with the normal content pages. Do
         # not overwrite their HTML or create a duplicate PageRecord here.
         if cat.authored:
@@ -718,7 +778,10 @@ def _build_releases(
     changelog = config.repo_root / "CHANGELOG.md"
     if not changelog.is_file():
         return records
-    releases = parse_changelog(changelog.read_text(encoding="utf-8"))
+    releases = parse_changelog(
+        changelog.read_text(encoding="utf-8"),
+        exclude=current_docs_project().settings.excluded_releases,
+    )
     write("releases/", release_index_markdown(releases))
     for release in releases:
         write(f"releases/{release.slug}/", release_page_markdown(release))
@@ -766,7 +829,8 @@ def _build_not_found(
         "If a page that recently existed is now missing, "
         # Raw anchor so the report link opens in a new tab (the site's convention
         # for offsite links), which a plain markdown link would not carry.
-        '<a href="https://github.com/citry-dev/citry/issues" target="_blank" rel="noopener">'
+        f'<a href="{escape(current_docs_project().settings.repository.issues_url, quote=True)}" '
+        'target="_blank" rel="noopener">'
         "open an issue</a> and we will fix the link.\n"
     )
     html = render_page(

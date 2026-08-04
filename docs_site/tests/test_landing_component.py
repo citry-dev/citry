@@ -26,9 +26,9 @@ from docs_site._internal.components.landing import (
     _render_diagnostics,
     _tour_code,
 )
-from docs_site._internal.components.social_links import DISCORD_URL, PYPI_URL, REPO_URL
 from docs_site._internal.nav import SCOPE_SITE, NavArea, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
+from docs_site._internal.project import default_docs_project
 
 
 def _landing_nav() -> NavTree:
@@ -330,6 +330,11 @@ def test_social_links_point_at_one_set_of_urls() -> None:
     for row in rows:
         links = row.xpath('.//a[contains(@class, "social-links__link")]')
         assert [a.get("aria-label") for a in links] == ["GitHub", "PyPI", "Discord"]
-        assert [a.get("href") for a in links] == [REPO_URL, PYPI_URL, DISCORD_URL]
+        settings = default_docs_project().settings
+        assert [a.get("href") for a in links] == [
+            settings.repository.url,
+            settings.pypi_url,
+            settings.discord_url,
+        ]
         # An icon-only link needs its name from somewhere.
         assert all(a.get("rel") == "noopener" for a in links)

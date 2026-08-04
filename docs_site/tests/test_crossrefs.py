@@ -33,6 +33,14 @@ def test_index_has_symbols_and_members() -> None:
     assert index["Citry.events.send"] == ("/reference/browser-apis/#citry-events-send")
 
 
+def test_ambiguous_generated_short_name_requires_a_qualified_key() -> None:
+    index = symbol_url_index()
+
+    assert "mount" not in index
+    assert "citry.contrib.fastapi.mount" in index
+    assert "citry.contrib.flask.mount" in index
+
+
 def test_case_colliding_symbols_get_distinct_consistent_anchors() -> None:
     # The Citry class and the citry instance live on one page and slugify to the
     # same anchor; they must be disambiguated, and the cross-ref index must point

@@ -15,23 +15,9 @@ up in its own index. The ``djc-*`` class names match the vendored
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import Any
 
 from citry import Component
-
-# A few popular pages shown before the user types anything. Kept short and
-# pointing at real content URLs (a moved target shows up as a dead link).
-DEFAULT_QUICK_LINKS = [
-    SimpleNamespace(label="Getting started", path="/getting-started/installation/"),
-    SimpleNamespace(label="Components", path="/concepts/components/"),
-    SimpleNamespace(label="Slots", path="/concepts/slots/"),
-    SimpleNamespace(label="API reference", path="/reference/"),
-    SimpleNamespace(label="Examples", path="/examples/"),
-]
-
-# Where search.js loads the Pagefind index from (absolute from the site root).
-DEFAULT_PAGEFIND_PATH = "/pagefind/pagefind.js"
 
 
 class SearchModal(Component):
@@ -43,15 +29,17 @@ class SearchModal(Component):
         # None falls back to DEFAULT_QUICK_LINKS (a mutable list cannot be a
         # dataclass default, which the Kwargs class becomes).
         quick_links: list | None = None
-        pagefind_path: str = DEFAULT_PAGEFIND_PATH
+        pagefind_path: str = "/pagefind/pagefind.js"
+        site_domain: str = ""
 
     class Slots:
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return {
-            "quick_links": kwargs.quick_links if kwargs.quick_links is not None else DEFAULT_QUICK_LINKS,
+            "quick_links": kwargs.quick_links or [],
             "pagefind_path": kwargs.pagefind_path,
+            "site_domain": kwargs.site_domain,
         }
 
     # Keep the arrow <kbd> tags adjacent so the hint has no artificial gap.
@@ -60,6 +48,7 @@ class SearchModal(Component):
         <div
           class="djc-search__overlay"
           c-data-pagefind-path="pagefind_path"
+          c-data-search-site-domain="site_domain"
           hidden
         >
           <div class="djc-search__backdrop" data-search-close></div>

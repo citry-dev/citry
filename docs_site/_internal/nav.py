@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 _AREA_SOURCES = frozenset({"blog", "reference"})
-_GROUP_SOURCES = frozenset({"releases"})
+_GROUP_SOURCES = frozenset({"releases", "ui_library"})
 _AREA_KEYS = frozenset({"label", "items", "groups", "source", "scope", "entry", "badge"})
 _GROUP_KEYS = frozenset({"label", "items", "source", "scope", "entry", "collapsible", "section_style"})
 _ITEM_KEYS = frozenset({"title", "path", "scope", "needs_review"})

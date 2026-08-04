@@ -489,19 +489,15 @@ def test_collapsible_state_does_not_hide_a_static_group_in_another_area(
     docs_site_url: str,
 ) -> None:
     tree = load_site_nav(config)
-    collapsible_area, collapsible_group, static_group = next(
-        (
-            collapsible_area,
-            collapsible_group,
-            static_group,
-        )
-        for collapsible_area in tree.areas
-        for collapsible_group in collapsible_area.groups
-        if collapsible_group.collapsible
-        for static_area in tree.areas
-        if static_area is not collapsible_area
-        for static_group in static_area.groups
-        if not static_group.collapsible and static_group.label == collapsible_group.label
+    collapsible_area, collapsible_group = next(
+        (area, group) for area in tree.areas for group in area.groups if group.collapsible
+    )
+    static_group = next(
+        group
+        for area in tree.areas
+        if area is not collapsible_area
+        for group in area.groups
+        if not group.collapsible and group.items
     )
 
     page.goto(docs_site_url + collapsible_area.entry_path)

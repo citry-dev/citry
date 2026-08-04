@@ -28,11 +28,11 @@ def test_select_indexed_versions_keeps_newest_two_plus_latest(tmp_path: Path) ->
     versions = load_manifest(tmp_path)
 
     # The newest two stay indexed; the older two fall out.
-    assert select_indexed_versions(versions) == ["1.3.0", "1.2.0"]
+    assert select_indexed_versions(versions, keep_recent=2) == ["1.3.0", "1.2.0"]
     # keep_recent tunes the window; 0 keeps everything (nothing is "old").
     assert select_indexed_versions(versions, keep_recent=1) == ["1.3.0"]
     assert select_indexed_versions(versions, keep_recent=0) == ["1.3.0", "1.2.0", "1.1.0", "1.0.0"]
-    assert select_indexed_versions(load_manifest(tmp_path / "missing")) == []
+    assert select_indexed_versions(load_manifest(tmp_path / "missing"), keep_recent=2) == []
 
 
 def test_select_indexed_versions_keeps_the_latest_alias_target(tmp_path: Path) -> None:
@@ -43,7 +43,7 @@ def test_select_indexed_versions_keeps_the_latest_alias_target(tmp_path: Path) -
     update_manifest(tmp_path, "1.2.0")
     update_manifest(tmp_path, "1.3.0")
 
-    assert select_indexed_versions(load_manifest(tmp_path)) == ["1.3.0", "1.2.0", "1.0.0"]
+    assert select_indexed_versions(load_manifest(tmp_path), keep_recent=2) == ["1.3.0", "1.2.0", "1.0.0"]
 
 
 def test_select_indexed_versions_keeps_dev_without_consuming_a_release_slot(tmp_path: Path) -> None:
@@ -57,7 +57,7 @@ def test_select_indexed_versions_keeps_dev_without_consuming_a_release_slot(tmp_
     update_manifest(tmp_path, "1.3.0", aliases=("latest",))
     update_manifest(tmp_path, "dev")
 
-    assert select_indexed_versions(load_manifest(tmp_path)) == ["dev", "1.3.0", "1.2.0"]
+    assert select_indexed_versions(load_manifest(tmp_path), keep_recent=2) == ["dev", "1.3.0", "1.2.0"]
 
 
 def test_manifest_orders_dev_above_releases(tmp_path: Path) -> None:

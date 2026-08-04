@@ -28,7 +28,13 @@ from urllib.parse import urlparse
 from docs_site._internal.paths import md_to_url
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
     from pathlib import Path
+
+    from docs_site._internal.nav import NavTree
+
+_ROOT_OWNED_PREFIXES = ("/static/", "/citry/", "/pagefind/", "/v/")
+_ROOT_OWNED_PATHS = frozenset({"/robots.txt", "/sitemap.xml", "/llms.txt", "/llms-full.txt"})
 
 # The href of an anchor in the rendered HTML. python-markdown / Pygments emit
 # double-quoted hrefs; code examples are HTML-escaped (&quot;), so this only

@@ -7,7 +7,7 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
-from docs_site._internal.reference_pages import CATEGORIES
+from docs_site._internal.project import current_docs_project
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -26,7 +26,8 @@ def _line(source: str, offset: int) -> int:
 def check(ctx: GuardContext) -> Iterator[GuardResult]:
     """Require one stable heading anchor for each declared authored API."""
     seen_keys: dict[str, str] = {}
-    for cat in CATEGORIES:
+    project = ctx.project or current_docs_project()
+    for cat in project.reference.categories:
         for entry in cat.entries:
             for key in (entry.key, *entry.aliases):
                 previous = seen_keys.get(key)
@@ -34,7 +35,7 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
                     yield GuardResult.error(
                         guard="authored_reference",
                         message=(f"Reference key {key!r} belongs to both {previous!r} and {cat.slug!r}."),
-                        source="reference_pages.py",
+                        source="reference.yml",
                     )
                 else:
                     seen_keys[key] = cat.slug
@@ -63,7 +64,7 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
             yield GuardResult.error(
                 guard="authored_reference",
                 message=(f"Reference category {cat.slug!r} declares anchor #{anchor} {count} times."),
-                source="reference_pages.py",
+                source="reference.yml",
             )
 
         for entry in cat.entries:

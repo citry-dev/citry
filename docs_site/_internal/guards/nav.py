@@ -18,7 +18,9 @@ from docs_site._internal.blog import BLOG_INDEX_PATH, BlogCatalogError, load_blo
 from docs_site._internal.guards.base import GuardResult
 from docs_site._internal.nav import load_nav
 from docs_site._internal.paths import md_to_url
+from docs_site._internal.project import current_docs_project
 from docs_site._internal.site_nav import load_site_nav_from_paths
+from docs_site._internal.ui_library_projection import ui_library_nav_items
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -63,6 +65,16 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
     coverage_urls = set(nav_urls)
     if blog_catalog is not None and "blog" in declared_sources:
         coverage_urls.update(_norm(item.path) for item in blog_catalog.nav_items())
+    if "ui_library" in declared_sources:
+        project = ctx.project or current_docs_project()
+        coverage_urls.update(
+            _norm(item.path)
+            for item in ui_library_nav_items(
+                project.ui_library,
+                repo_root=ctx.repo_root,
+                content_dir=ctx.content_dir,
+            )
+        )
 
     # The set of clean URLs backed by an actual content markdown file.
     content_urls: set[str] = set()
@@ -120,6 +132,7 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         nav_path=nav_path,
         repo_root=ctx.repo_root,
         blog_catalog=blog_catalog,
+        project=ctx.project or current_docs_project(),
     )
     for item in resolved.flat_pages():
         url = _norm(item.path)

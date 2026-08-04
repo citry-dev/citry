@@ -50,12 +50,6 @@ _DATE_PATTERNS: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = (
 _HEADING = re.compile(r"^(#{1,6})(\s.*)$")
 _FENCE = re.compile(r"^\s*(```+|~~~+)")
 
-# Changelog headings to leave out of the docs site, matched against the raw
-# "## <heading>" text (before any date is folded into the title). The initial
-# entry is repository history rather than a user-facing release, so it is
-# excluded by default; add a version here to hide its release page.
-EXCLUDED_RELEASES: tuple[str, ...] = ("2025-12-21",)
-
 
 @dataclass(frozen=True)
 class Release:
@@ -162,17 +156,21 @@ def _try_parse_date(raw: str, formats: tuple[str, ...]) -> datetime | None:
     return None
 
 
-def parse_changelog(text: str, *, exclude: Collection[str] = EXCLUDED_RELEASES) -> list[Release]:
+def parse_changelog(text: str, *, exclude: Collection[str] | None = None) -> list[Release]:
     """
     Split CHANGELOG.md text into one :class:`Release` per ``## version`` section.
 
     Sections are returned in file order (newest-first, as the changelog is
     written). Slugs are made unique so two headings that normalize to the same
-    string still get distinct pages. Headings in ``exclude`` (default
-    :data:`EXCLUDED_RELEASES`) are dropped entirely - no page, index entry, or
+    string still get distinct pages. Headings in ``exclude`` (defaulting to
+    ``settings.yml``) are dropped entirely: no page, index entry, or
     sidebar item - so a version can be hidden from the docs without touching the
     changelog.
     """
+    if exclude is None:
+        from docs_site._internal.project import current_docs_project  # noqa: PLC0415
+
+        exclude = current_docs_project().settings.excluded_releases
     releases: list[Release] = []
     seen_slugs: dict[str, int] = {}
     for chunk in _split_sections(text):

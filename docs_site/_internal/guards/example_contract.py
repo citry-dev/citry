@@ -141,7 +141,7 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
                 continue
             yield GuardResult.error(
                 guard="example_contract",
-                message=(f"Example {name!r} may only be embedded on its canonical page, {canonical}."),
+                message=(f"Example {name!r} may only be embedded in its canonical recipe, {canonical}."),
                 source=label,
                 line=line,
             )

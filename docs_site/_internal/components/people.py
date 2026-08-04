@@ -12,8 +12,8 @@ from markupsafe import Markup, escape
 
 from citry import Component
 from docs_site._internal.components.user_grid import UserGrid
-from docs_site._internal.config import config as default_config
-from docs_site._internal.util import lstrip_outside_pre
+from docs_site._internal.project import current_docs_project
+from docs_site._internal.util import flatten_for_markdown
 
 
 class People(Component):
@@ -23,6 +23,12 @@ class People(Component):
 
     class Kwargs:
         group: str
+        # Contributor counts belong on the People page; a page that only
+        # acknowledges the group can drop them with a bare `plain` attribute.
+        plain: bool = False
+        # `avatars` reduces the grid to circular portraits: no handle, no link.
+        # Use it where the group is an acknowledgment rather than a directory.
+        avatars: bool = False
 
     class Slots:
         pass
@@ -31,7 +37,7 @@ class People(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         group = str(kwargs.group)
-        people_path = default_config.base_dir / "data" / "people.yml"
+        people_path = current_docs_project().runtime.base_dir / "data" / "people.yml"
         if not people_path.is_file():
             return {
                 "grid": Markup(  # noqa: S704
@@ -49,5 +55,16 @@ class People(Component):
 
         # Render the grid, flush it left (outside <pre>) so the markdown pass treats
         # it as block HTML, and pad with blank lines. Trusted: our own people.yml.
-        grid = lstrip_outside_pre(str(UserGrid(users=users, show_count=group == "contributors")))
+        avatars_only = bool(kwargs.avatars)
+        show_count = group == "contributors" and not bool(kwargs.plain) and not avatars_only
+        grid = flatten_for_markdown(
+            str(
+                UserGrid(
+                    users=users,
+                    show_count=show_count,
+                    show_name=not avatars_only,
+                    link=not avatars_only,
+                ),
+            ),
+        )
         return {"grid": Markup(f"\n\n{grid}\n\n")}  # noqa: S704

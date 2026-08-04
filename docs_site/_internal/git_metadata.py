@@ -23,22 +23,7 @@ from fnmatch import fnmatch
 from functools import cache
 from pathlib import Path
 
-# The repository the docs live in, and the branch "edit on GitHub" points at.
-REPO_URL = "https://github.com/citry-dev/citry"
-EDIT_BRANCH = "main"
-
-# Content pages where a "last updated" date is misleading rather than useful.
-# Patterns match the content-relative posix path. Generated Reference pages and
-# standalone example demos have no source file, so they never reach this. The
-# authored non-Python Reference pages and example recipes do.
-EXCLUDE_PATTERNS = (
-    "community/code-of-conduct.md",
-    "community/license.md",
-)
-
-# Cap the footer author list so old, much-touched pages do not sprout a wall of
-# names.
-MAX_AUTHORS = 5
+from docs_site._internal.project import current_docs_project
 
 
 @dataclass(frozen=True)
@@ -52,14 +37,15 @@ class PageGitMeta:
 EMPTY_META = PageGitMeta(created=None, last_updated=None, authors=())
 
 
-def is_excluded(content_rel_path: Path) -> bool:
+def is_excluded(content_rel_path: Path, patterns: tuple[str, ...] | None = None) -> bool:
     """True for content pages that should not show a last-updated date."""
     posix = content_rel_path.as_posix()
-    return any(fnmatch(posix, pattern) for pattern in EXCLUDE_PATTERNS)
+    patterns = patterns if patterns is not None else current_docs_project().settings.git.exclude_patterns
+    return any(fnmatch(posix, pattern) for pattern in patterns)
 
 
 @cache
-def get_page_git_meta(repo_root: Path, page_path: Path) -> PageGitMeta:
+def get_page_git_meta(repo_root: Path, page_path: Path, max_authors: int | None = None) -> PageGitMeta:
     """
     Creation date, last-updated date, and recent authors for one source file.
 
@@ -93,10 +79,17 @@ def get_page_git_meta(repo_root: Path, page_path: Path) -> PageGitMeta:
     created = datetime.fromisoformat(rows[-1].split("\t", 1)[0])
     # fromkeys dedups while preserving the newest-first order.
     authors = dict.fromkeys(row.split("\t", 1)[1] for row in rows if "\t" in row)
-    return PageGitMeta(created=created, last_updated=last_updated, authors=tuple(list(authors)[:MAX_AUTHORS]))
+    limit = max_authors if max_authors is not None else current_docs_project().settings.git.max_authors
+    return PageGitMeta(created=created, last_updated=last_updated, authors=tuple(list(authors)[:limit]))
 
 
-def edit_url_for(repo_root: Path, page_path: Path) -> str:
+def edit_url_for(
+    repo_root: Path,
+    page_path: Path,
+    *,
+    repo_url: str | None = None,
+    edit_branch: str | None = None,
+) -> str:
     """
     GitHub "edit this page" URL for a content source file, or "" if it has none.
 
@@ -108,10 +101,18 @@ def edit_url_for(repo_root: Path, page_path: Path) -> str:
         rel = page_path.relative_to(repo_root)
     except ValueError:
         return ""
-    return f"{REPO_URL}/edit/{EDIT_BRANCH}/{rel.as_posix()}"
+    repository = current_docs_project().settings.repository
+    return f"{repo_url or repository.url}/edit/{edit_branch or repository.edit_branch}/{rel.as_posix()}"
 
 
-def source_url_for(repo_root: Path, filepath: Path | list[Path] | None, lineno: int | None = None) -> str:
+def source_url_for(
+    repo_root: Path,
+    filepath: Path | list[Path] | None,
+    lineno: int | None = None,
+    *,
+    repo_url: str | None = None,
+    edit_branch: str | None = None,
+) -> str:
     """
     GitHub "view source" URL for a documented symbol's file, or "" if it has none.
 
@@ -128,7 +129,8 @@ def source_url_for(repo_root: Path, filepath: Path | list[Path] | None, lineno: 
         rel = filepath.relative_to(repo_root)
     except ValueError:
         return ""
-    url = f"{REPO_URL}/blob/{EDIT_BRANCH}/{rel.as_posix()}"
+    repository = current_docs_project().settings.repository
+    url = f"{repo_url or repository.url}/blob/{edit_branch or repository.edit_branch}/{rel.as_posix()}"
     if lineno:
         url += f"#L{lineno}"
     return url

@@ -27,8 +27,7 @@ from typing import TYPE_CHECKING
 
 from docs_site._internal._vendor.mike_versions import Versions
 from docs_site._internal.build import build_site
-from docs_site._internal.config import DocsConfig
-from docs_site._internal.config import config as default_config
+from docs_site._internal.project import DocsProject, current_docs_project, docs_project_scope
 from docs_site._internal.versioning import (
     load_manifest,
     select_indexed_versions,
@@ -38,6 +37,8 @@ from docs_site._internal.versioning import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from docs_site._internal.config import DocsConfig
 
 
 @dataclass
@@ -57,11 +58,17 @@ class AssembleOutcome:
     noindexed_pages: int = 0
 
 
+@docs_project_scope
 def assemble_site(
-    *, config: DocsConfig | None = None, output_dir: Path | None = None, build: bool = True
+    *,
+    config: DocsConfig | None = None,
+    output_dir: Path | None = None,
+    build: bool = True,
+    project: DocsProject | None = None,
 ) -> AssembleOutcome:
     """Build the current version into the site root and mount the committed versions under ``/v/``."""
-    config = config or default_config
+    if project is None:  # pragma: no cover - supplied by @docs_project_scope
+        raise RuntimeError("docs project scope was not initialized")
     site_dir = (output_dir or config.site_dir).resolve()
     outcome = AssembleOutcome(output_dir=site_dir)
 
@@ -79,12 +86,12 @@ def assemble_site(
 
     dest_v = site_dir / "v"
     if (config.versions_dir / "versions.json").is_file():
-        outcome.published = _publish_versions(config.versions_dir, dest_v, config.publish_window)
+        outcome.published = _publish_versions(config.versions_dir, dest_v, project.versions.publish_window)
 
     if (dest_v / "versions.json").is_file():
         # Hide the old mounted versions from search (noindex + canonical to the
         # current release), then point the root pages' picker at the manifest.
-        outcome.noindexed_pages = _noindex_old_versions(site_dir, dest_v, site_url=config.site_url)
+        outcome.noindexed_pages = _noindex_old_versions(site_dir, dest_v, site_url=project.site_url)
         outcome.picker_pages = _enable_root_version_picker(site_dir, config.base_path)
     return outcome
 
@@ -213,7 +220,12 @@ def _noindex_old_versions(site_dir: Path, dest_v: Path, *, site_url: str) -> int
     """
     base = site_url.rstrip("/")
     manifest = load_manifest(dest_v)
-    kept = set(select_indexed_versions(manifest))
+    kept = set(
+        select_indexed_versions(
+            manifest,
+            keep_recent=current_docs_project().versions.index_keep_recent,
+        )
+    )
     old_versions = [str(info.version) for info in manifest if str(info.version) not in kept]
 
     changed = 0

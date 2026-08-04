@@ -13,6 +13,7 @@ from playwright.sync_api import expect
 pytestmark = pytest.mark.e2e
 
 _WELCOME_SOURCE = Path(__file__).parents[2] / "live_snippets" / "welcome.py"
+_ACTIVE_PREVIEW = ".citry-live-code__preview:not(.citry-playground__preview--candidate)"
 
 
 def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
@@ -39,7 +40,7 @@ def test_inline_example_loads_lazily_runs_events_and_recovers_a_draft(
     expect(root.locator("iframe")).to_be_attached()
     assert set(root.locator("iframe").get_attribute("sandbox").split()) == {"allow-forms", "allow-scripts"}
 
-    card = root.frame_locator(".citry-live-code__preview").locator(".welcome-card")
+    card = root.frame_locator(_ACTIVE_PREVIEW).locator(".welcome-card")
     expect(card).to_contain_text("Welcome, Ada Lovelace.", timeout=120_000)
     expect(root.locator('[data-live-tab="code"]')).to_have_attribute("aria-selected", "true")
     expect(root.locator('[data-live-panel="code"]')).to_be_visible()
@@ -167,7 +168,7 @@ def test_multiple_inline_examples_share_one_active_browser_runtime(page: Any, do
     expect(first.locator("[data-live-activate]")).to_have_text("Resume live")
     expect(first.locator("[data-live-draft]")).to_be_visible()
     assert page.locator(".cm-editor").count() == 1
-    assert page.locator(".citry-live-code__preview").count() == 1
+    assert page.locator(_ACTIVE_PREVIEW).count() == 1
 
     first.locator("[data-live-activate]").click()
     first.locator('[data-live-tab="code"]').click()
@@ -175,7 +176,7 @@ def test_multiple_inline_examples_share_one_active_browser_runtime(page: Any, do
     page.keyboard.press("ControlOrMeta+End")
     expect(first.locator(".cm-content")).to_contain_text("first draft")
     assert page.locator(".cm-editor").count() == 1
-    assert page.locator(".citry-live-code__preview").count() == 1
+    assert page.locator(_ACTIVE_PREVIEW).count() == 1
     expect(second.locator("[data-live-activate]")).to_have_text("Try live")
 
 
@@ -200,7 +201,7 @@ def test_incomplete_inline_example_can_be_edited_into_a_renderable_module(
     page.keyboard.insert_text('\n\nDraftCard(text="Finish the example")\n')
 
     expect(root.locator("[data-live-status]")).to_contain_text("Rendered in", timeout=120_000)
-    preview = root.frame_locator(".citry-live-code__preview")
+    preview = root.frame_locator(_ACTIVE_PREVIEW)
     expect(preview.locator(".draft-card")).to_contain_text("Finish the example")
     expect(root.locator("[data-live-python-diagnostic]")).to_be_hidden()
 
@@ -217,7 +218,7 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     counters.locator("[data-live-activate]").click()
     expect(counters.locator(".cm-content")).to_be_attached(timeout=15_000)
     expect(counters.locator("[data-live-status]")).to_contain_text("Rendered in", timeout=120_000)
-    counter_preview = counters.frame_locator(".citry-live-code__preview")
+    counter_preview = counters.frame_locator(_ACTIVE_PREVIEW)
     ada = counter_preview.locator(".counter").nth(0)
     grace = counter_preview.locator(".counter").nth(1)
     expect(ada).to_be_attached()
@@ -233,7 +234,7 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     connected.locator("[data-live-activate]").click()
     expect(connected.locator(".cm-content")).to_be_attached(timeout=15_000)
     expect(connected.locator("[data-live-status]")).to_contain_text("Rendered in", timeout=120_000)
-    connected_preview = connected.frame_locator(".citry-live-code__preview")
+    connected_preview = connected.frame_locator(_ACTIVE_PREVIEW)
     choice = connected_preview.locator(".choice-picker__value")
     expect(choice).to_have_text("Ocean")
     connected.locator('[data-live-tab="result"]').click()

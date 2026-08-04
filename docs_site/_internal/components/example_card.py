@@ -1,7 +1,7 @@
 """
 ``ExampleCard`` - the tabbed example widget, as a Citry component.
 
-Shows a live-demo iframe plus the example's two source files
+Shows the example's two source files plus a live-demo iframe
 (Pygments-highlighted), using the shared ``.tabbed-set`` markup that
 ``site.css`` / ``site.js`` already drive. Each card needs per-card-unique radio
 ids so two cards on one page do not toggle each other, so the ids and the
@@ -28,7 +28,7 @@ from pygments_citry.lexers import CitryPythonLexer
 
 
 class ExampleCard(Component):
-    """Tabbed widget: live demo, component source, page source."""
+    """Tabbed widget: component source, page source, live demo."""
 
     transparent = True
 
@@ -48,7 +48,11 @@ class ExampleCard(Component):
         # The citry lexer highlights the HTML/JS/CSS embedded in the example's
         # template/js/css strings, not just the Python around them.
         lexer = CitryPythonLexer()
-        component_code = highlight((info.example_dir / "component.py").read_text(encoding="utf-8"), lexer, formatter)
+        component_code = highlight(
+            (info.example_dir / "component.py").read_text(encoding="utf-8"),
+            lexer,
+            formatter,
+        )
         page_code = highlight((info.example_dir / "page.py").read_text(encoding="utf-8"), lexer, formatter)
 
         # self.id is unique per render, so two cards for the same example on one
@@ -56,18 +60,27 @@ class ExampleCard(Component):
         group = f"__tabbed_ex_{name}_{self.id}"
         return {
             "tabs_attr": f"ex-{name}:3",
-            "demo_url": f"/examples/{name}/",
+            "demo_url": f"/examples/{info.public_slug}/demo/",
+            "demo_title": f"{name.replace('_', ' ').replace('-', ' ').title()} example live demo",
+            "frame_class": ["example-demo-frame", {"example-demo-frame--theme-sync": name == "card"}],
             "group": group,
             "rid1": f"{group}_1",
             "rid2": f"{group}_2",
             "rid3": f"{group}_3",
+            "pid1": f"{group}_panel_1",
+            "pid2": f"{group}_panel_2",
+            "pid3": f"{group}_panel_3",
             # Trusted: Pygments output over the example's own source files.
             "component_code": Markup(component_code),  # noqa: S704
             "page_code": Markup(page_code),  # noqa: S704
         }
 
     template = """
-      <div class="tabbed-set example-card" c-data-tabs="tabs_attr">
+      <div
+        class="tabbed-set example-card"
+        c-data-tabs="tabs_attr"
+        data-pagefind-ignore
+      >
         <input
           c-id="rid1"
           c-name="group"
@@ -84,22 +97,71 @@ class ExampleCard(Component):
           c-name="group"
           type="radio"
         >
-        <div class="tabbed-labels">
-          <label c-bind="{'for': rid1}">Live demo</label>
-          <label c-bind="{'for': rid2}">Component</label>
-          <label c-bind="{'for': rid3}">Page</label>
+        <div class="tabbed-labels" role="tablist">
+          <label
+            c-bind="{'for': rid1}"
+            c-id="rid1 + '_label'"
+            role="tab"
+            aria-selected="true"
+            c-aria-controls="pid1"
+            tabindex="0"
+          >
+            Component
+          </label>
+          <label
+            c-bind="{'for': rid2}"
+            c-id="rid2 + '_label'"
+            role="tab"
+            aria-selected="false"
+            c-aria-controls="pid2"
+            tabindex="-1"
+          >
+            Page
+          </label>
+          <label
+            c-bind="{'for': rid3}"
+            c-id="rid3 + '_label'"
+            role="tab"
+            aria-selected="false"
+            c-aria-controls="pid3"
+            tabindex="-1"
+          >
+            Live demo
+          </label>
         </div>
         <div class="tabbed-content">
-          <div class="tabbed-block tabbed-block--demo">
+          <div
+            c-id="pid1"
+            class="tabbed-block is-active"
+            role="tabpanel"
+            c-aria-labelledby="rid1 + '_label'"
+          >
+            {{ component_code }}
+          </div>
+          <div
+            c-id="pid2"
+            class="tabbed-block"
+            role="tabpanel"
+            c-aria-labelledby="rid2 + '_label'"
+            hidden
+          >
+            {{ page_code }}
+          </div>
+          <div
+            c-id="pid3"
+            class="tabbed-block tabbed-block--demo"
+            role="tabpanel"
+            c-aria-labelledby="rid3 + '_label'"
+            hidden
+          >
             <iframe
               c-src="demo_url"
-              class="example-demo-frame"
-              sandbox="allow-scripts allow-same-origin"
+              c-title="demo_title"
+              c-class="frame_class"
+              sandbox="allow-forms allow-scripts allow-same-origin"
               loading="lazy"
             ></iframe>
           </div>
-          <div class="tabbed-block">{{ component_code }}</div>
-          <div class="tabbed-block">{{ page_code }}</div>
         </div>
       </div>
     """
@@ -127,4 +189,5 @@ class Example(Component):
         # treats it as block HTML, and pad with blank lines. Trusted: the card is
         # built from the example's own source plus Pygments output.
         card = lstrip_outside_pre(str(ExampleCard(name=example_name, info=info)))
-        return {"card": Markup(f"\n\n{card}\n\n")}  # noqa: S704
+        marked = f"<!-- docs-example:{example_name}:start -->\n{card}\n<!-- docs-example:{example_name}:end -->"
+        return {"card": Markup(f"\n\n{marked}\n\n")}  # noqa: S704

@@ -111,6 +111,7 @@ dependency = json.loads(re.search(
 paths = []
 for kind in ("js", "css"):
     for encoded in dependency["fetch"][kind]:
+        encoded = encoded[0] if isinstance(encoded, list) else encoded
         descriptor = json.loads(base64.b64decode(encoded).decode())
         path = descriptor.get("attrs", {{}}).get("src") or descriptor.get("attrs", {{}}).get("href")
         if path:

@@ -1,0 +1,4 @@
+# Published clean-URL redirects. Each list item accepts exactly `from` and `to`,
+# both safe root-relative paths. Sources must be unique; chains and cycles are
+# rejected. See docs_site/_internal/redirects.py for the validating dataclass.
+redirects: []
