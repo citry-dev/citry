@@ -30,7 +30,7 @@ class SearchModal(Component):
         # dataclass default, which the Kwargs class becomes).
         quick_links: list | None = None
         pagefind_path: str = "/pagefind/pagefind.js"
-        site_domain: str = ""
+        site_target: str = ""
 
     class Slots:
         pass
@@ -39,7 +39,7 @@ class SearchModal(Component):
         return {
             "quick_links": kwargs.quick_links or [],
             "pagefind_path": kwargs.pagefind_path,
-            "site_domain": kwargs.site_domain,
+            "site_target": kwargs.site_target,
         }
 
     # Keep the arrow <kbd> tags adjacent so the hint has no artificial gap.
@@ -48,7 +48,7 @@ class SearchModal(Component):
         <div
           class="djc-search__overlay"
           c-data-pagefind-path="pagefind_path"
-          c-data-search-site-domain="site_domain"
+          c-data-search-site-target="site_target"
           hidden
         >
           <div class="djc-search__backdrop" data-search-close></div>

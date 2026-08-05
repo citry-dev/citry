@@ -14,7 +14,9 @@ from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
 from docs_site._internal.examples import ExampleInfo, get_example_registry
 from docs_site._internal.guards import (
+    anchor,
     api_symbols,
+    asset,
     authored_reference,
     blog,
     blog_feed,
@@ -387,6 +389,48 @@ def test_internal_link_flags_broken_and_accepts_valid(tmp_path: Path) -> None:
 
     assert len(errors) == 1
     assert "/gone/" in errors[0].message
+
+
+def test_link_and_anchor_guards_strip_the_deployment_base_path(tmp_path: Path) -> None:
+    build = tmp_path / "site"
+    build.mkdir()
+    body = '<a href="/citry/ok/#target">ok</a><a href="/citry/gone/">gone</a>'
+    (build / "index.html").write_text(_DOC.format(body=body), encoding="utf-8")
+    (build / "ok").mkdir()
+    (build / "ok" / "index.html").write_text(_DOC.format(body='<h2 id="target">Target</h2>'), encoding="utf-8")
+    context = _index_ctx(tmp_path, build)
+    context.base_path = "/citry"
+
+    link_errors = [result for result in internal_link.check(context) if result.severity is Severity.ERROR]
+    anchor_warnings = list(anchor.check(context))
+
+    assert len(link_errors) == 1
+    assert "/citry/gone/" in link_errors[0].message
+    assert anchor_warnings == []
+
+
+def test_asset_guard_uses_the_configured_pagefind_directory(tmp_path: Path) -> None:
+    settings = tmp_path / "settings.yml"
+    settings.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/pagefind/pagefind.js",
+            "/custom-search/pagefind.js",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    project = load_docs_project(DocsConfig(settings_config=settings))
+    build = tmp_path / "site"
+    build.mkdir()
+    body = '<script src="/custom-search/pagefind.js"></script><script src="/pagefind/pagefind.js"></script>'
+    (build / "index.html").write_text(_DOC.format(body=body), encoding="utf-8")
+    context = _index_ctx(tmp_path, build)
+    context.project = project
+
+    errors = [result for result in asset.check(context) if result.severity is Severity.ERROR]
+
+    assert len(errors) == 1
+    assert "/pagefind/pagefind.js" in errors[0].message
 
 
 def test_single_h1_flags_pages_without_exactly_one(tmp_path: Path) -> None:

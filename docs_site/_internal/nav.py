@@ -468,6 +468,19 @@ def _parse_item(raw: dict, *, inherited_scope: str) -> NavItem:
     if not path.startswith("/") or not path.endswith("/"):
         msg = f"Navigation path {path!r} must start and end with '/'"
         raise ValueError(msg)
+    unsafe_path = (
+        "//" in path
+        or any(part in {".", ".."} for part in path.split("/"))
+        or any(
+            char.isspace()
+            or ord(char) < 32
+            or ord(char) == 127
+            or char in {'"', "'", "%", ":", "<", ">", "?", "#", "\\"}
+            for char in path
+        )
+    )
+    if unsafe_path:
+        raise ValueError(f"Navigation path {path!r} must be a safe clean URL")
     needs_review = raw.get("needs_review", False)
     if not isinstance(needs_review, bool):
         raise TypeError(f"Nav item {title!r} needs_review must be true or false")

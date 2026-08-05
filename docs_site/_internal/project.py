@@ -117,11 +117,17 @@ def docs_project_scope(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _validate_markdown_profile(profile: MarkdownProfile, *, settings: SiteSettings) -> None:
+    configs = materialize_markdown_configs(profile, settings=settings)
+    markdown.Markdown(extensions=list(profile.extensions), extension_configs=configs)
+
+
+def materialize_markdown_configs(profile: MarkdownProfile, *, settings: SiteSettings) -> dict[str, Any]:
+    """Return mutable profile options with runtime-owned repository identity applied."""
     configs = profile.configs()
     magiclink = configs.get("pymdownx.magiclink")
     if magiclink is not None:
         magiclink.update(user=settings.repository.owner, repo=settings.repository.name)
-    markdown.Markdown(extensions=list(profile.extensions), extension_configs=configs)
+    return configs
 
 
 def _validate_runtime(runtime: DocsConfig, settings: SiteSettings) -> None:
@@ -129,3 +135,5 @@ def _validate_runtime(runtime: DocsConfig, settings: SiteSettings) -> None:
     validate_absolute_url(site_url, "DOCS_SITE_URL")
     if runtime.base_path:
         validate_root_path(runtime.base_path, "DOCS_BASE_PATH")
+        if runtime.base_path == "/" or runtime.base_path.endswith("/"):
+            raise DocsConfigError("DOCS_BASE_PATH must not be / or end with /")

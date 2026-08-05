@@ -33,6 +33,7 @@ from docs_site._internal.components.landing import LandingPage  # noqa: F401
 from docs_site._internal.components.playground_workspace import PlaygroundWorkspace  # noqa: F401
 from docs_site._internal.nav import SCOPE_VERSIONED
 from docs_site._internal.project import current_docs_project
+from docs_site._internal.settings import google_search_site_target
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -224,7 +225,7 @@ class DocPage(Component):
         discord_url: str = ""
         search_quick_links: list | None = None
         pagefind_path: str = "/pagefind/pagefind.js"
-        search_site_domain: str = ""
+        search_site_target: str = ""
 
     class Slots:
         pass
@@ -375,8 +376,8 @@ class DocPage(Component):
             if nav_tree is not None
             else (kwargs.search_quick_links or settings.quick_links),
             "pagefind_path": kwargs.pagefind_path or settings.pagefind_path,
-            "search_site_domain": kwargs.search_site_domain
-            or (urlsplit(kwargs.site_url or settings.public_url).hostname or ""),
+            "search_site_target": kwargs.search_site_target
+            or google_search_site_target(kwargs.site_url or settings.public_url),
         }
 
     template = """
@@ -567,7 +568,7 @@ class DocPage(Component):
                   c-href="item.path"
                   c-aria-current="item.aria_current"
                 >
-                  <span>{{ item.label }}</span>
+                  <span class="djc-header__nav-label">{{ item.label }}</span>
                   <span
                     c-if="item.badge"
                     class="djc-nav-badge"
@@ -1281,7 +1282,7 @@ class DocPage(Component):
           <c-search-modal
             c-quick_links="search_quick_links"
             c-pagefind_path="pagefind_path"
-            c-site_domain="search_site_domain"
+            c-site_target="search_site_target"
           />
 
           <c-js />

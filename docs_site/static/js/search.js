@@ -33,8 +33,10 @@
   })();
 
   function withBasePath(url) {
-    // Only prefix root-absolute paths we haven't already prefixed.
-    if (!BASE_PATH || !url || url.charAt(0) !== '/' || url.indexOf(BASE_PATH + '/') === 0) {
+    // Pagefind returns output-root paths and this function is their single
+    // deployment projection. Prefix even when a logical route starts with the
+    // same segment as BASE_PATH, such as /docs/ under a /docs deployment.
+    if (!BASE_PATH || !url || url.charAt(0) !== '/' || url.indexOf('//') === 0) {
       return url;
     }
     return BASE_PATH + url;
@@ -272,8 +274,12 @@
     // query so the user isn't stranded.
     errorEl.textContent = 'Search is unavailable right now. ';
     var link = document.createElement('a');
+    var siteTarget = overlay.getAttribute('data-search-site-target') || window.location.hostname;
     link.href =
-      'https://www.google.com/search?q=site:citry.dev+' + encodeURIComponent(query || '');
+      'https://www.google.com/search?q=site:' +
+      encodeURIComponent(siteTarget) +
+      '+' +
+      encodeURIComponent(query || '');
     link.target = '_blank';
     link.rel = 'noopener';
     link.textContent = 'Search with Google instead';

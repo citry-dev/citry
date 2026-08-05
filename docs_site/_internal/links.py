@@ -25,7 +25,9 @@ import re
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from docs_site._internal.html_rewrite import StartTag, rewrite_attribute_values, rewrite_start_tags
 from docs_site._internal.paths import md_to_url
+from docs_site._internal.project import current_docs_project
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -33,7 +35,7 @@ if TYPE_CHECKING:
 
     from docs_site._internal.nav import NavTree
 
-_ROOT_OWNED_PREFIXES = ("/static/", "/citry/", "/pagefind/", "/v/")
+_ROOT_OWNED_PREFIXES = ("/static/", "/citry/", "/v/")
 _ROOT_OWNED_PATHS = frozenset({"/robots.txt", "/sitemap.xml", "/llms.txt", "/llms-full.txt"})
 
 # The href of an anchor in the rendered HTML. python-markdown / Pygments emit
@@ -52,7 +54,13 @@ _MD_LINK_RE = re.compile(
     r"(?P<destination><[^>\n]+>|[^)\s\n]+)"
     r'(?P<suffix>(?:\s+["\'][^)\n]*["\'])?\))'
 )
+_MD_REFERENCE_DESTINATION_RE = re.compile(
+    r"(?m)^(?P<prefix>[ \t]{0,3}\[[^\]\n]+\]:[ \t]*)(?P<destination><[^>\n]+>|[^\s\n]+)"
+)
 _FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+_RAW_HTML_URL_ATTRS = frozenset(
+    {"href", "src", "action", "formaction", "poster", "data-pagefind-path", "data-fragment-url"}
+)
 
 # Any heading that carries an id. Markdown headings and the raw-HTML
 # API-reference symbol headings both emit the id first (the minifier reorders
@@ -302,6 +310,69 @@ def project_internal_markdown_urls(
     return "".join(lines)
 
 
+def project_markdown_base_path(source: str, base_path: str) -> str:
+    """Prefix root-relative Markdown destinations for a subpath deployment."""
+    base = "/" + base_path.strip("/") if base_path.strip("/") else ""
+    if not base:
+        return source
+
+    def project(destination: str) -> str:
+        parsed = urlparse(destination)
+        if parsed.scheme or parsed.netloc or not parsed.path.startswith("/"):
+            return destination
+        return _join_url_parts(f"{base}{parsed.path}", parsed.query, parsed.fragment)
+
+    def project_destination(match: re.Match[str]) -> str:
+        destination = match.group("destination")
+        wrapped = destination.startswith("<") and destination.endswith(">")
+        raw = destination[1:-1] if wrapped else destination
+        projected = project(raw)
+        if wrapped:
+            projected = f"<{projected}>"
+        return f"{match.group('prefix')}{projected}{match.groupdict().get('suffix', '')}"
+
+    def project_html_tag(tag: StartTag) -> str:
+        return rewrite_attribute_values(
+            tag.source,
+            lambda name, value: project(value) if name in _RAW_HTML_URL_ATTRS else value,
+        )
+
+    def project_chunk(chunk: str) -> str:
+        chunk = _MD_LINK_RE.sub(project_destination, chunk)
+        chunk = _MD_REFERENCE_DESTINATION_RE.sub(project_destination, chunk)
+        return rewrite_start_tags(chunk, project_html_tag)
+
+    in_fence = False
+    fence_marker = ""
+    lines: list[str] = []
+    prose: list[str] = []
+
+    def flush_prose() -> None:
+        if prose:
+            lines.append(project_chunk("".join(prose)))
+            prose.clear()
+
+    for line in source.splitlines(keepends=True):
+        fence = _FENCE_RE.match(line)
+        if fence:
+            flush_prose()
+            marker = fence.group(1)
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker[0]
+            elif marker[0] == fence_marker:
+                in_fence = False
+                fence_marker = ""
+            lines.append(line)
+            continue
+        if in_fence:
+            lines.append(line)
+            continue
+        prose.append(line)
+    flush_prose()
+    return "".join(lines)
+
+
 def _rewrite_one(
     href: str,
     *,
@@ -451,7 +522,9 @@ def _project_clean_route(
     parsed = urlparse(href)
     if parsed.scheme or parsed.netloc or not parsed.path:
         return href
-    if parsed.path in _ROOT_OWNED_PATHS or parsed.path.startswith(_ROOT_OWNED_PREFIXES):
+    pagefind_dir = current_docs_project().settings.pagefind_path.rsplit("/", 1)[0]
+    root_owned_prefixes = (*_ROOT_OWNED_PREFIXES, f"{pagefind_dir}/")
+    if parsed.path in _ROOT_OWNED_PATHS or parsed.path.startswith(root_owned_prefixes):
         return href
 
     if parsed.path.startswith("/"):

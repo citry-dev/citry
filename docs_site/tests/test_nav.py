@@ -304,6 +304,30 @@ areas:
 """,
             "titles may not be empty",
         ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: Encoded, path: /old/%2e%2e/new/ }]
+""",
+            "safe clean URL",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: Spaced, path: '/bad path/' }]
+""",
+            "safe clean URL",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: Spaced, path: '/bad\N{NO-BREAK SPACE}path/' }]
+""",
+            "safe clean URL",
+        ),
     ],
 )
 def test_invalid_navigation_is_rejected(

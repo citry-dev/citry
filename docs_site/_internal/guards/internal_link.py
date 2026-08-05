@@ -13,6 +13,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
+from docs_site._internal.guards.site_index import strip_base_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -36,7 +37,8 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         for link in page.links:
             if link.is_external or link.is_anchor_only or not link.target:
                 continue
-            if index.resolve_link(page.rel_path, link.target) is not None:
+            target = strip_base_path(link.target, ctx.base_path)
+            if index.resolve_link(page.rel_path, target) is not None:
                 continue
             # Unresolved targets that look like asset files are the asset guard's
             # job; only flag links that look like pages.

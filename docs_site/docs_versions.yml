@@ -1,18 +1,23 @@
 # Version selection, publication, and crawler policy. All mappings and fields
 # are optional; omitted values use VersionsConfig defaults. Unknown fields fail
-# validation. See VersionsConfig in docs_site/_internal/bootstrap.py and the
-# field table in docs_site/README.md under "Configuration".
+# validation, but this manifest file itself is required. See VersionsConfig in
+# docs_site/_internal/bootstrap.py and the field table in docs_site/README.md
+# under "Configuration".
 #
-# `docs build-all` is the bootstrap and disaster-recovery command. It walks the
-# selected tags, checks each one out, and runs `docs build`. Normal releases
-# build one version. Tags without the docs builder are skipped automatically.
+# `docs build-all` is the bootstrap and disaster-recovery command. It removes
+# Citry's `citry@` prefix from repository tags, applies this policy to those
+# normalized identifiers, checks each selected tag out, and runs `docs build`.
+# Normal releases build one version. Tags without the docs builder are skipped.
 
 versions:
-  # Non-empty Python regular-expression string matched against Git tags.
+  # Non-empty Python regex matched against normalized Citry tag identifiers.
   pattern: "^v?\\d+\\.\\d+\\.\\d+$"
-  # Unique non-empty tag strings included even when pattern does not match.
+  # Unique normalized single-segment identifiers included even when the pattern
+  # or oldest/newest bounds do not match. They start/end with a letter or digit;
+  # internal `.`, `_`, and `-` are accepted.
   include: []
-  # Unique non-empty tag strings always excluded. A tag cannot be in both lists.
+  # Unique normalized single-segment identifiers always excluded, with the same
+  # character policy as include. An identifier cannot be in both lists.
   exclude: []
   # Empty string or a full major.minor.patch lower bound.
   oldest: "0.1.0"

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from math import isfinite
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
@@ -21,6 +22,7 @@ from docs_site._internal.config_loading import (
 
 _GITHUB_OWNER_RE = re.compile(r"(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\Z")
 _GITHUB_REPOSITORY_RE = re.compile(r"[A-Za-z0-9_.-]{1,100}\Z")
+_PAGEFIND_DIRECTORY_SEGMENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -53,7 +55,10 @@ class MarkdownProfile:
 
     def configs(self) -> dict[str, dict[str, Any]]:
         """Return the mutable shape Python-Markdown expects."""
-        return {name: dict(values) for name, values in self.extension_configs.items()}
+        return {
+            name: {key: _thaw_markdown_option(value) for key, value in values.items()}
+            for name, values in self.extension_configs.items()
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,7 +173,7 @@ def load_site_settings(path: Path) -> SiteSettings:
 
     blog = require_mapping(root["blog"], "blog")
     require_keys(blog, "blog", required={"feed_path", "feed_limit", "words_per_minute"})
-    feed_path = _root_path(blog["feed_path"], "blog.feed_path")
+    feed_path = _feed_path(blog["feed_path"], "blog.feed_path")
 
     git = require_mapping(root["git"], "git")
     require_keys(git, "git", required={"exclude_patterns", "max_authors"})
@@ -204,7 +209,7 @@ def load_site_settings(path: Path) -> SiteSettings:
         pypi_url=_absolute_url(links["pypi"], "links.pypi"),
         discord_url=_absolute_url(links["discord"], "links.discord"),
         quick_links=quick_links,
-        pagefind_path=_root_path(search["pagefind_path"], "search.pagefind_path"),
+        pagefind_path=_pagefind_path(search["pagefind_path"], "search.pagefind_path"),
         markdown_pages=_load_markdown_profile(markdown_data["pages"], "markdown.pages"),
         markdown_docstrings=_load_markdown_profile(markdown_data["docstrings"], "markdown.docstrings"),
         blog=BlogSettings(
@@ -253,10 +258,59 @@ def _load_markdown_profile(value: Any, label: str) -> MarkdownProfile:
     for extension, raw_values in raw_configs.items():
         values = require_mapping(raw_values, f"{label}.extension_configs.{extension}")
         for key, item in values.items():
-            if not isinstance(item, (str, int, float, bool, list, dict)) and item is not None:
-                raise DocsConfigError(f"{label}.extension_configs.{extension}.{key} has an unsupported value")
-        configs[extension] = MappingProxyType(dict(values))
+            _validate_markdown_option(item, f"{label}.extension_configs.{extension}.{key}")
+        configs[extension] = MappingProxyType({key: _freeze_markdown_option(item) for key, item in values.items()})
     return MarkdownProfile(extensions=extensions, extension_configs=MappingProxyType(configs))
+
+
+def _freeze_markdown_option(value: Any) -> Any:
+    """Recursively detach and freeze a validated Markdown option value."""
+    if isinstance(value, list):
+        return tuple(_freeze_markdown_option(item) for item in value)
+    if isinstance(value, dict):
+        return MappingProxyType({key: _freeze_markdown_option(item) for key, item in value.items()})
+    return value
+
+
+def _thaw_markdown_option(value: Any) -> Any:
+    """Return a detached mutable value for Python-Markdown."""
+    if isinstance(value, tuple):
+        return [_thaw_markdown_option(item) for item in value]
+    if isinstance(value, MappingProxyType):
+        return {key: _thaw_markdown_option(item) for key, item in value.items()}
+    return value
+
+
+def _validate_markdown_option(
+    value: Any,
+    label: str,
+    *,
+    ancestors: frozenset[int] = frozenset(),
+    depth: int = 0,
+) -> None:
+    """Accept only recursively JSON-shaped extension configuration values."""
+    if depth > 100:
+        raise DocsConfigError(f"{label} is nested too deeply")
+    if value is None or isinstance(value, (str, int, bool)):
+        return
+    if isinstance(value, float):
+        if not isfinite(value):
+            raise DocsConfigError(f"{label} must be a finite number")
+        return
+    if isinstance(value, (list, dict)):
+        identity = id(value)
+        if identity in ancestors:
+            raise DocsConfigError(f"{label} contains a cyclic YAML alias")
+        ancestors = ancestors | {identity}
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _validate_markdown_option(item, f"{label}[{index}]", ancestors=ancestors, depth=depth + 1)
+        return
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        for key, item in value.items():
+            _validate_markdown_option(item, f"{label}.{key}", ancestors=ancestors, depth=depth + 1)
+        return
+    raise DocsConfigError(f"{label} has an unsupported value")
 
 
 def _load_priority(value: Any, index: int) -> tuple[str, float]:
@@ -303,10 +357,33 @@ def validate_absolute_url(value: Any, label: str, *, trailing_slash: bool = Fals
     return _absolute_url(value, label, trailing_slash=trailing_slash)
 
 
+def google_search_site_target(public_url: str) -> str:
+    """Return the host and path accepted by Google's ``site:`` operator."""
+    parsed = urlsplit(public_url)
+    return f"{parsed.netloc}{parsed.path.rstrip('/')}"
+
+
 def _root_path(value: Any, label: str) -> str:
     path = require_str(value, label)
     if not _is_safe_path(path, root_relative=True):
         raise DocsConfigError(f"{label} must be a safe root-relative URL path")
+    return path
+
+
+def _feed_path(value: Any, label: str) -> str:
+    path = _root_path(value, label)
+    if not path.startswith("/blog/") or not path.endswith(".xml"):
+        raise DocsConfigError(f"{label} must be an .xml path under /blog/")
+    return path
+
+
+def _pagefind_path(value: Any, label: str) -> str:
+    path = _root_path(value, label)
+    if path.count("/") < 2 or not path.endswith("/pagefind.js"):
+        raise DocsConfigError(f"{label} must end with /pagefind.js inside an output subdirectory")
+    directories = path.strip("/").split("/")[:-1]
+    if any(not _PAGEFIND_DIRECTORY_SEGMENT_RE.fullmatch(segment) for segment in directories):
+        raise DocsConfigError(f"{label} directory segments must contain only letters, digits, _ and -")
     return path
 
 
@@ -339,6 +416,8 @@ def _is_safe_path(path: str, *, root_relative: bool) -> bool:
         "//" in path
         or "?" in path
         or "#" in path
+        or "%" in path
+        or ":" in path
         or "\\" in path
         or any(char.isspace() or char in {'"', "'", "<", ">"} for char in path)
     ):

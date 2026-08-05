@@ -24,12 +24,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
+from unicodedata import normalize
 
 from docs_site._internal._vendor.mike_versions import Versions
+from docs_site._internal.config_loading import DocsConfigError
 
 # Stamped into every _build_info.json. Bump when the builder's output format
 # changes in a way that warrants rebuilding historical versions.
@@ -48,6 +51,57 @@ IMPORTED_BUILDER_VERSION = "imported-ghpages"
 
 # Vendored mike redirect template (one stub per aliased page).
 _REDIRECT_TEMPLATE = Path(__file__).resolve().parent / "_vendor" / "mike_redirect.html"
+_TREE_IDENTIFIER_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?\Z")
+
+
+def validate_tree_identifier(value: str, label: str) -> str:
+    """Require a portable single segment used below ``versions/`` and in URLs."""
+    if not isinstance(value, str) or not _TREE_IDENTIFIER_RE.fullmatch(value):
+        raise DocsConfigError(
+            f"{label} must be a single segment starting and ending with a letter or digit; "
+            "internal characters may be letters, digits, ., _ or -"
+        )
+    return value
+
+
+def validate_alias_target(versions_root: Path, alias: str, target_version: str) -> tuple[str, str]:
+    """Reject an alias that could overwrite its target or another real snapshot."""
+    safe_alias = validate_tree_identifier(alias, "docs alias")
+    safe_target = validate_tree_identifier(target_version, "docs target version")
+    alias_key = _portable_identifier_key(safe_alias)
+    if alias_key == _portable_identifier_key(safe_target):
+        raise DocsConfigError("docs alias must differ from its target version")
+
+    manifest_versions = {_portable_identifier_key(str(info.version)) for info in load_manifest(versions_root)}
+    if alias_key in manifest_versions:
+        raise DocsConfigError("docs alias collides with a version in versions.json")
+    if versions_root.is_dir():
+        for child in versions_root.iterdir():
+            if (
+                child.is_dir()
+                and _portable_identifier_key(child.name) == alias_key
+                and (child / BUILD_INFO_NAME).is_file()
+            ):
+                raise DocsConfigError(f"docs alias collides with snapshot directory {child.name!r}")
+    return safe_alias, safe_target
+
+
+def validate_version_target(versions_root: Path, version: str) -> str:
+    """Reject a version name that aliases or portably shadows another manifest entry."""
+    safe_version = validate_tree_identifier(version, "docs version")
+    version_key = _portable_identifier_key(safe_version)
+    manifest = load_manifest(versions_root)
+    for info in manifest:
+        existing = str(info.version)
+        if _portable_identifier_key(existing) == version_key and existing != safe_version:
+            raise DocsConfigError(f"docs version portably collides with existing version {existing!r}")
+        if any(_portable_identifier_key(alias) == version_key for alias in info.aliases):
+            raise DocsConfigError(f"docs version collides with existing alias {safe_version!r}")
+    return safe_version
+
+
+def _portable_identifier_key(value: str) -> str:
+    return normalize("NFC", value).casefold()
 
 
 def is_frozen_import(version_dir: Path) -> bool:
@@ -205,8 +259,11 @@ def materialize_alias(versions_root: Path, alias: str, target_version: str) -> i
     the matching page with a relative href, so it resolves whether the tree is
     served from the repo or from the deploy artifact.
     """
-    target_dir = versions_root / target_version
-    alias_dir = versions_root / alias
+    safe_alias, safe_target = validate_alias_target(versions_root, alias, target_version)
+    target_dir = versions_root / safe_target
+    alias_dir = versions_root / safe_alias
+    if not target_dir.is_dir():
+        raise DocsConfigError(f"docs alias target directory does not exist: {safe_target}")
     if alias_dir.exists():
         shutil.rmtree(alias_dir)
 

@@ -300,6 +300,23 @@ def _candidate_paths(normalized: str) -> list[str]:
     return candidates
 
 
+def strip_base_path(target: str, base_path: str) -> str:
+    """Remove a deployment prefix from a local URL without changing its suffix."""
+    base = "/" + base_path.strip("/") if base_path.strip("/") else ""
+    if not base or not target.startswith("/"):
+        return target
+    suffix_index = len(target)
+    for separator in ("?", "#"):
+        index = target.find(separator)
+        if index >= 0:
+            suffix_index = min(suffix_index, index)
+    path = target[:suffix_index]
+    if path != base and not path.startswith(f"{base}/"):
+        return target
+    stripped = path[len(base) :] or "/"
+    return stripped + target[suffix_index:]
+
+
 def _parse_link(href: str) -> LinkRef:
     if href.startswith("#"):
         return LinkRef(href=href, target="", anchor=href[1:])

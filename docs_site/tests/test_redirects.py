@@ -42,6 +42,10 @@ def test_redirect_stub_forwards_and_self_excludes(tmp_path: Path) -> None:
         '/bad" onmouseover="x/',
         "/bad<path>/",
         "/bad\x00path/",
+        "/old/%2e%2e/new/",
+        "/C:/escape/",
+        "/bad path/",
+        "/bad\N{NO-BREAK SPACE}path/",
     ],
 )
 def test_redirect_catalog_rejects_filesystem_and_html_unsafe_paths(tmp_path: Path, unsafe: str) -> None:

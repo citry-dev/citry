@@ -11,6 +11,7 @@ isolation.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -240,6 +241,65 @@ def test_search_finds_the_card_color_journey(page: Any, docs_site_url: str) -> N
     assert "/getting-started/your-first-component/" in paths or "/examples/card/" in paths
 
 
+def test_search_prefixes_a_result_route_that_matches_the_deployment_base(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/")
+    page.route(
+        "**/__pagefind_base_path_test__.js",
+        lambda route: route.fulfill(
+            content_type="text/javascript",
+            body=(
+                "export function debouncedSearch() {"
+                "return Promise.resolve({results: [{data: () => Promise.resolve({"
+                "url: '/docs/', meta: {title: 'Docs'}, excerpt: 'Docs'"
+                "})}]});}"
+            ),
+        ),
+    )
+    page.set_content(
+        '<head><meta name="djc-base-path" content="/docs"></head><body>'
+        "<button data-search-open>Search</button>"
+        '<div class="djc-search__overlay" data-pagefind-path="/__pagefind_base_path_test__.js" hidden>'
+        '<div class="djc-search__dialog">'
+        '<button data-search-close>Close</button><input class="djc-search__input">'
+        '<div class="djc-search__results"><div data-search-list></div>'
+        "<div data-search-empty></div><div data-search-noresults hidden></div>"
+        "<div data-search-error hidden></div></div></div></div></body>"
+    )
+    page.add_script_tag(path=str(Path("docs_site/static/js/search.js").resolve()))
+
+    page.locator("[data-search-open]").click()
+    page.locator(".djc-search__input").fill("docs")
+    result = page.locator(".djc-search__result")
+    result.wait_for()
+
+    assert result.get_attribute("href").startswith("/docs/docs/?h=docs")
+
+
+def test_google_search_fallback_scopes_to_the_public_site_path(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/")
+    page.route("**/__missing_pagefind__.js", lambda route: route.abort())
+    page.set_content(
+        "<body><button data-search-open>Search</button>"
+        '<div class="djc-search__overlay" data-pagefind-path="/__missing_pagefind__.js" '
+        'data-search-site-target="owner.github.io/citry" hidden>'
+        '<div class="djc-search__dialog"><button data-search-close>Close</button>'
+        '<input class="djc-search__input"><div class="djc-search__results">'
+        "<div data-search-list></div><div data-search-empty></div>"
+        "<div data-search-noresults hidden></div><div data-search-error hidden></div>"
+        "</div></div></div></body>"
+    )
+    page.add_script_tag(path=str(Path("docs_site/static/js/search.js").resolve()))
+
+    page.locator("[data-search-open]").click()
+    page.locator(".djc-search__input").fill("components")
+    fallback = page.locator("[data-search-error] a")
+    fallback.wait_for()
+
+    assert fallback.get_attribute("href") == (
+        "https://www.google.com/search?q=site:owner.github.io%2Fcitry+components"
+    )
+
+
 def test_theme_toggle_sets_data_theme(page: Any, docs_site_url: str) -> None:
     page.goto(docs_site_url + "/")
     page.locator('.djc-header__actions [data-theme-value="dark"]').first.click()
@@ -360,6 +420,19 @@ def test_navigation_status_badges_and_review_hint_render(page: Any, docs_site_ur
         "el => getComputedStyle(el).opacity === '1'",
         arg=hint.element_handle(),
     )
+
+
+def test_active_header_underline_excludes_status_badge(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/ui-library/")
+
+    active = page.locator('.djc-header__nav a[href="/ui-library/"]')
+    label = active.locator(".djc-header__nav-label")
+    badge = active.locator(".djc-nav-badge")
+
+    assert "is-active" in (active.get_attribute("class") or "")
+    assert active.evaluate("el => getComputedStyle(el).textDecorationLine") == "none"
+    assert label.evaluate("el => getComputedStyle(el).textDecorationLine") == "underline"
+    assert badge.evaluate("el => getComputedStyle(el).textDecorationLine") == "none"
 
 
 def test_navigation_review_hint_stays_inside_resized_sidebar(page: Any, docs_site_url: str) -> None:

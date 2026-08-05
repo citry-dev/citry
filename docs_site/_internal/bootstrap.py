@@ -37,7 +37,12 @@ from packaging.version import Version as Pep440Version
 
 from docs_site._internal._vendor.mike_versions import Version, Versions
 from docs_site._internal.config_loading import DocsConfigError, load_yaml, require_mapping
-from docs_site._internal.versioning import BUILD_INFO_NAME, materialize_alias, write_manifest
+from docs_site._internal.versioning import (
+    BUILD_INFO_NAME,
+    materialize_alias,
+    validate_tree_identifier,
+    write_manifest,
+)
 
 _TABLE_KEYS = {
     "versions": frozenset({"pattern", "include", "exclude", "oldest", "newest"}),
@@ -66,12 +71,12 @@ def load_versions_config(path: Path) -> VersionsConfig:
     """
     Read and strictly validate ``docs_versions.yml``.
 
-    A missing file or omitted setting uses the dataclass default. Present values
-    must match the documented schema so a typo cannot silently change release or
-    crawler policy.
+    Omitted settings use the dataclass defaults. The manifest itself is required,
+    and present values must match the documented schema so a typo cannot silently
+    change release or crawler policy.
     """
     if not path.is_file():
-        return VersionsConfig()
+        raise DocsConfigError(f"docs configuration file does not exist: {path}")
     loaded = load_yaml(path)
     if loaded is None:
         return VersionsConfig()
@@ -103,6 +108,9 @@ def _load_versions_data(data: dict[str, object]) -> VersionsConfig:
 
     include = _read_string_list(versions, "include", owner="versions")
     exclude = _read_string_list(versions, "exclude", owner="versions")
+    for field_name, values in (("include", include), ("exclude", exclude)):
+        for index, value in enumerate(values):
+            validate_tree_identifier(value, f"versions.{field_name}[{index}]")
     overlap = sorted(set(include) & set(exclude))
     if overlap:
         msg = f"tags cannot appear in both versions.include and versions.exclude: {', '.join(overlap)}"
@@ -147,12 +155,9 @@ def _validate_keys(data: dict[str, object], *, allowed: frozenset[str], owner: s
 
 
 def _read_table(data: dict[str, object], name: str) -> dict[str, object]:
-    """Return one optional YAML mapping with an exact mapping type."""
+    """Return one optional YAML mapping with string keys."""
     value = data.get(name, {})
-    if not isinstance(value, dict):
-        msg = f"{name} must be a mapping"
-        raise DocsConfigError(msg)
-    return value
+    return dict(require_mapping(value, name))
 
 
 def _read_string(data: dict[str, object], key: str, *, owner: str, default: str) -> str:
@@ -161,7 +166,7 @@ def _read_string(data: dict[str, object], key: str, *, owner: str, default: str)
     if not isinstance(value, str):
         msg = f"{owner}.{key} must be a string"
         raise DocsConfigError(msg)
-    if key == "pattern" and not value:
+    if key == "pattern" and not value.strip():
         msg = f"{owner}.{key} must not be empty"
         raise DocsConfigError(msg)
     return value
@@ -170,8 +175,10 @@ def _read_string(data: dict[str, object], key: str, *, owner: str, default: str)
 def _read_string_list(data: dict[str, object], key: str, *, owner: str) -> list[str]:
     """Read an optional list of unique, non-empty strings."""
     value = data.get(key, [])
-    if not isinstance(value, list) or any(not isinstance(item, str) or not item for item in value):
-        msg = f"{owner}.{key} must be a list of non-empty strings"
+    if not isinstance(value, list) or any(
+        not isinstance(item, str) or not item.strip() or item != item.strip() for item in value
+    ):
+        msg = f"{owner}.{key} must be a list of non-empty strings without surrounding whitespace"
         raise DocsConfigError(msg)
     if len(value) != len(set(value)):
         msg = f"{owner}.{key} must not contain duplicate tags"
@@ -232,6 +239,8 @@ def select_tags(all_tags: list[str], config: VersionsConfig) -> list[str]:
     extras = [t for t in config.include if t in all_tags and t not in excluded]
     # Remove duplicates while keeping first-seen order, then sort newest-first.
     result = list(dict.fromkeys(matched + extras))
+    for tag in result:
+        validate_tree_identifier(tag_to_version(tag), f"selected tag {tag!r}")
     result.sort(key=_lv, reverse=True)
     return result
 

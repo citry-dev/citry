@@ -4,14 +4,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from docs_site._internal.config import DocsConfig
+from docs_site._internal.config import config as default_config
 from docs_site._internal.links import (
     linkify_headings,
     project_internal_markdown_urls,
+    project_markdown_base_path,
     rewrite_internal_md_links,
     rewrite_internal_md_links_in_markdown,
 )
 from docs_site._internal.nav import SCOPE_SITE, NavArea, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
+from docs_site._internal.project import load_docs_project, use_docs_project
 
 _MARKDOWN_HEADING = (
     '<h2 id="refactor">Refactor<a class="headerlink" href="#refactor" title="Permanent link">¤</a></h2>'
@@ -144,3 +148,65 @@ def test_generated_markdown_projects_versioned_and_site_routes() -> None:
     assert "[Widget](/v/1.2.3/reference/widget/?view=all#api)" in projected
     assert "[Post](/blog/post/)" in projected
     assert "[Literal](/reference/widget/)" in projected
+
+
+def test_generated_markdown_uses_the_configured_root_pagefind_directory(tmp_path: Path) -> None:
+    settings = tmp_path / "settings.yml"
+    settings.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/pagefind/pagefind.js",
+            "/custom-search/pagefind.js",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    project = load_docs_project(DocsConfig(settings_config=settings))
+    tree = NavTree(areas=[NavArea(label="Docs", items=[NavItem(title="Docs", path="/docs/")])])
+    source = "[Current](/custom-search/pagefind.js) [Stale](/pagefind/pagefind.js)"
+
+    with use_docs_project(project):
+        projected = project_internal_markdown_urls(
+            source,
+            current_public_path="docs/",
+            nav_tree=tree,
+            version_prefix="/v/1.2.3",
+        )
+
+    assert "[Current](/custom-search/pagefind.js)" in projected
+    assert "[Stale](/v/1.2.3/pagefind/pagefind.js)" in projected
+
+
+def test_markdown_base_path_projection_preserves_non_root_and_fenced_destinations() -> None:
+    source = (
+        "[Guide](/guide/?view=all#part)\n"
+        "![Image](</static/image.png>)\n"
+        "[Route collision](/citry/reference/)\n"
+        "[Relative](../other/)\n"
+        "[Anchor](#part)\n"
+        "[External](https://example.com/root/)\n\n"
+        "[Guide reference]: /guide/reference/#part\n"
+        '<a href="/guide/raw/">Raw link</a>\n'
+        '<img src="/static/image.png">\n\n'
+        "```markdown\n"
+        "[Literal](/guide/)\n"
+        "[Literal reference]: /guide/reference/\n"
+        '<a href="/guide/raw/">Literal raw link</a>\n'
+        '<img src="/static/literal.png">\n'
+        "```\n"
+    )
+
+    projected = project_markdown_base_path(source, "/citry")
+
+    assert "[Guide](/citry/guide/?view=all#part)" in projected
+    assert "![Image](</citry/static/image.png>)" in projected
+    assert "[Route collision](/citry/citry/reference/)" in projected
+    assert "[Relative](../other/)" in projected
+    assert "[Anchor](#part)" in projected
+    assert "[External](https://example.com/root/)" in projected
+    assert "[Guide reference]: /citry/guide/reference/#part" in projected
+    assert '<a href="/citry/guide/raw/">Raw link</a>' in projected
+    assert '<img src="/citry/static/image.png">' in projected
+    assert "[Literal](/guide/)" in projected
+    assert "[Literal reference]: /guide/reference/" in projected
+    assert '<a href="/guide/raw/">Literal raw link</a>' in projected
+    assert '<img src="/static/literal.png">' in projected

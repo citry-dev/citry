@@ -43,6 +43,8 @@ def load_yaml(path: Path) -> Any:
         raise DocsConfigError(f"cannot read YAML configuration {path}: {exc}") from exc
     try:
         return yaml.load(source, Loader=_UniqueKeyLoader)  # noqa: S506 - safe subclass
+    except DocsConfigError as exc:
+        raise DocsConfigError(f"{path}: {exc}") from exc
     except (TypeError, yaml.YAMLError) as exc:
         raise DocsConfigError(f"invalid YAML in {path}: {exc}") from exc
 

@@ -15,6 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
+from docs_site._internal.guards.site_index import strip_base_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -39,7 +40,7 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
             elif link.is_external:
                 continue
             else:
-                resolved = index.resolve_link(page.rel_path, link.target)
+                resolved = index.resolve_link(page.rel_path, strip_base_path(link.target, ctx.base_path))
                 target_page = index.get_page(resolved)
                 if target_page is None:
                     continue  # the internal_link guard owns the missing target

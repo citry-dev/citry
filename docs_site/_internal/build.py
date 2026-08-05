@@ -24,6 +24,7 @@ the output.
 from __future__ import annotations
 
 import shutil
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -32,6 +33,7 @@ from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as get_version
 from pathlib import Path
 from typing import TYPE_CHECKING
+from unicodedata import normalize
 
 from citry import citry as default_citry
 from docs_site._internal.base_path import apply_base_path
@@ -43,6 +45,7 @@ from docs_site._internal.blog import (
     serialize_atom_feed,
 )
 from docs_site._internal.config import DocsConfig
+from docs_site._internal.config_loading import DocsConfigError
 from docs_site._internal.crossrefs import build_objects_inv
 from docs_site._internal.examples import get_example_registry
 from docs_site._internal.llms import generate_llms_files
@@ -74,7 +77,15 @@ from docs_site._internal.site_nav import load_site_nav
 from docs_site._internal.social_cards import generate_social_cards
 from docs_site._internal.static_deps import CITRY_MOUNT_PREFIX, export_fragment_deps, export_runtime
 from docs_site._internal.ui_library_projection import validate_ui_library_sources
-from docs_site._internal.versioning import git_head_sha, materialize_alias, update_manifest, write_build_info
+from docs_site._internal.versioning import (
+    git_head_sha,
+    materialize_alias,
+    update_manifest,
+    validate_alias_target,
+    validate_tree_identifier,
+    validate_version_target,
+    write_build_info,
+)
 
 if TYPE_CHECKING:
     from docs_site._internal.frontmatter import PageMeta
@@ -151,6 +162,82 @@ def build_site(
     update_versions_manifest: bool = True,
     project: DocsProject | None = None,
 ) -> BuildOutcome:
+    """Build the root site directly, or publish a version snapshot after staging it."""
+    if project is None:  # pragma: no cover - supplied by @docs_project_scope
+        raise RuntimeError("docs project scope was not initialized")
+    if not docs_version:
+        return _build_site_to_output(
+            config=config,
+            output_dir=output_dir,
+            minify=minify,
+            search=search,
+            social_cards=social_cards,
+            docs_version=docs_version,
+            alias=alias,
+            update_versions_manifest=update_versions_manifest,
+            project=project,
+        )
+
+    if not update_versions_manifest and alias:
+        raise DocsConfigError("a detached docs-version build cannot materialize an alias")
+    validate_version_target(config.versions_dir, docs_version)
+    if alias:
+        validate_tree_identifier(alias, "alias")
+        validate_alias_target(config.versions_dir, alias, docs_version)
+
+    canonical_version_dir = (config.versions_dir / docs_version).resolve()
+    requested_target = output_dir or (config.versions_dir / docs_version)
+    if requested_target.is_symlink():
+        raise ValueError(f"Refusing to replace symlink output dir: {requested_target}")
+    target_dir = requested_target.resolve()
+    if target_dir != canonical_version_dir and (update_versions_manifest or alias):
+        raise DocsConfigError("a custom docs-version output requires update_versions_manifest=False and no alias")
+    if _is_unsafe_output(target_dir, config.content_dir, config, docs_version=docs_version):
+        raise ValueError(f"Refusing to clear unsafe output dir: {target_dir}")
+
+    # A failed page render is a normal BuildOutcome, not an exception. Build the
+    # complete candidate away from the published tree so either kind of failure
+    # leaves the last known-good snapshot, manifest, and alias untouched.
+    target_dir.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f".{target_dir.name}.build-", dir=target_dir.parent) as temporary:
+        staged_dir = Path(temporary)
+        outcome = _build_site_to_output(
+            config=config,
+            output_dir=staged_dir,
+            minify=minify,
+            search=search,
+            social_cards=social_cards,
+            docs_version=docs_version,
+            alias="",
+            update_versions_manifest=False,
+            project=project,
+            staging_output=True,
+        )
+        outcome.output_dir = target_dir
+        if outcome.failed:
+            return outcome
+        _replace_output_directory(staged_dir, target_dir)
+
+    if update_versions_manifest:
+        update_manifest(config.versions_dir, docs_version, aliases=(alias,) if alias else ())
+    if alias:
+        outcome.alias_redirects = materialize_alias(config.versions_dir, alias, docs_version)
+    return outcome
+
+
+def _build_site_to_output(
+    *,
+    config: DocsConfig,
+    output_dir: Path | None = None,
+    minify: bool = True,
+    search: bool = True,
+    social_cards: bool = True,
+    docs_version: str = "",
+    alias: str = "",
+    update_versions_manifest: bool = True,
+    project: DocsProject,
+    staging_output: bool = False,
+) -> BuildOutcome:
     """
     Build every page in ``config.content_dir`` into ``output_dir``.
 
@@ -170,12 +257,29 @@ def build_site(
     """
     if project is None:  # pragma: no cover - supplied by @docs_project_scope
         raise RuntimeError("docs project scope was not initialized")
+    if not update_versions_manifest and not docs_version:
+        raise DocsConfigError("update_versions_manifest=False requires docs_version")
+    if not update_versions_manifest and alias:
+        raise DocsConfigError("a detached docs-version build cannot materialize an alias")
+    if docs_version:
+        validate_version_target(config.versions_dir, docs_version)
+    if alias:
+        validate_tree_identifier(alias, "alias")
+        if not docs_version:
+            raise DocsConfigError("alias requires docs_version")
+        validate_alias_target(config.versions_dir, alias, docs_version)
     content_dir = config.content_dir
     if output_dir is None:
         output_dir = (config.versions_dir / docs_version) if docs_version else config.site_dir
+    if output_dir.is_symlink():
+        raise ValueError(f"Refusing to clear symlink output dir: {output_dir}")
     output_dir = output_dir.resolve()
+    if docs_version:
+        canonical_version_dir = (config.versions_dir / docs_version).resolve()
+        if output_dir != canonical_version_dir and (update_versions_manifest or alias):
+            raise DocsConfigError("a custom docs-version output requires update_versions_manifest=False and no alias")
 
-    if _is_unsafe_output(output_dir, content_dir, config):
+    if not staging_output and _is_unsafe_output(output_dir, content_dir, config, docs_version=docs_version):
         msg = f"Refusing to clear unsafe output dir: {output_dir}"
         raise ValueError(msg)
 
@@ -230,6 +334,18 @@ def build_site(
             project.redirects,
             published_paths,
             occupied_paths=occupied_paths,
+        )
+        _validate_blog_feed_output(
+            project.settings.blog.feed_path,
+            pagefind_path=project.settings.pagefind_path,
+            content_dir=content_dir,
+            occupied_paths=occupied_paths | set(project.redirects.as_dict()),
+        )
+        _validate_pagefind_output(
+            project.settings.pagefind_path,
+            feed_path=project.settings.blog.feed_path,
+            content_dir=content_dir,
+            occupied_paths=occupied_paths | set(project.redirects.as_dict()),
         )
     version = configure_docs_globals(project)
     version_prefix = f"/v/{docs_version}" if docs_version else ""
@@ -407,7 +523,8 @@ def build_site(
             outcome.social_cards_skipped = card_outcome.skipped_reason
 
     # The client runtime and the search index are also shared from the root: a
-    # snapshot's pages reference /citry/citry.js and /pagefind/ at the site root.
+    # snapshot's pages reference the client and configured search assets at the
+    # site root.
     if not docs_version:
         # The client runtime, so a component's JavaScript loads from flat files.
         outcome.runtime = export_runtime(output_dir, default_citry)
@@ -415,7 +532,8 @@ def build_site(
         # The search index, built by scanning the written HTML. A failure here is
         # recorded but does not fail the build (the pages are already on disk).
         if search:
-            search_result = run_pagefind(output_dir)
+            pagefind_subdir = project.settings.pagefind_path.removeprefix("/").rsplit("/", 1)[0]
+            search_result = run_pagefind(output_dir, pagefind_subdir)
             outcome.search_ok = search_result.ok
             outcome.search_message = search_result.message
 
@@ -430,7 +548,7 @@ def build_site(
 
     # Version mode: stamp the snapshot, record it in the manifest, and write any
     # alias redirects, so the committed versions tree stays consistent.
-    if docs_version:
+    if docs_version and not outcome.failed:
         write_build_info(
             output_dir,
             version=docs_version,
@@ -444,6 +562,27 @@ def build_site(
 
     outcome.elapsed = time.monotonic() - start
     return outcome
+
+
+def _replace_output_directory(staged_dir: Path, target_dir: Path) -> None:
+    """Replace ``target_dir`` with a completed staged build, restoring it on error."""
+    if staged_dir.is_symlink() or not staged_dir.is_dir():
+        raise ValueError(f"Staged output must be a directory: {staged_dir}")
+    if target_dir.is_symlink() or (target_dir.exists() and not target_dir.is_dir()):
+        raise ValueError(f"Existing output target must be a directory: {target_dir}")
+    backup_dir: Path | None = None
+    if target_dir.exists():
+        backup_dir = Path(tempfile.mkdtemp(prefix=f".{target_dir.name}.backup-", dir=target_dir.parent))
+        backup_dir.rmdir()
+        target_dir.replace(backup_dir)
+    try:
+        staged_dir.replace(target_dir)
+    except Exception:
+        if backup_dir is not None:
+            backup_dir.replace(target_dir)
+        raise
+    if backup_dir is not None:
+        shutil.rmtree(backup_dir)
 
 
 def _record_for(
@@ -534,6 +673,106 @@ def _generic_loop_owns_authored_page(path: Path, content_dir: Path) -> bool:
     # The Blog index follows the ordinary clean-URL path. Dated posts are built
     # separately from the catalog so their filenames never leak into URLs.
     return rel == Path("blog/index.md")
+
+
+def _validate_blog_feed_output(
+    feed_path: str,
+    *,
+    pagefind_path: str,
+    content_dir: Path,
+    occupied_paths: set[str],
+) -> None:
+    """Require the feed to own a file path outside every other output tree."""
+    feed_relative = feed_path.lstrip("/")
+    pagefind_subdir = pagefind_path.lstrip("/").rsplit("/", 1)[0]
+    planned_files = _planned_output_files(content_dir, occupied_paths)
+    if _file_collides_with_files(feed_relative, planned_files) or _file_collides_with_directory(
+        feed_relative, pagefind_subdir
+    ):
+        raise DocsConfigError(f"blog.feed_path collides with another output: {feed_path}")
+
+
+def _validate_pagefind_output(
+    pagefind_path: str,
+    *,
+    feed_path: str,
+    content_dir: Path,
+    occupied_paths: set[str],
+) -> None:
+    """Require Pagefind to own a previously unused output directory."""
+    output_subdir = pagefind_path.removeprefix("/").rsplit("/", 1)[0]
+    reserved_root = output_subdir.split("/", 1)[0].casefold() in {"citry", "meta", "og", "static", "v"}
+    planned_files = _planned_output_files(content_dir, occupied_paths)
+    planned_files.add(feed_path.lstrip("/"))
+    if reserved_root or _directory_collides_with_files(output_subdir, planned_files):
+        raise DocsConfigError(f"search.pagefind_path collides with another output: {pagefind_path}")
+
+
+def _normalize_output_routes(paths: set[str]) -> set[str]:
+    return {f"/{path.strip('/')}/" if path.strip("/") else "/" for path in paths}
+
+
+def _route_output_files(routes: set[str]) -> set[str]:
+    files: set[str] = set()
+    for path in routes:
+        route = path.strip("/")
+        prefix = f"{route}/" if route else ""
+        files.update({f"{prefix}index.html", f"{prefix}index.md"})
+    return files
+
+
+def _planned_output_files(content_dir: Path, occupied_paths: set[str]) -> set[str]:
+    """Return file paths that are known before the output directory is cleared."""
+    files = _route_output_files(_normalize_output_routes(occupied_paths))
+    files.update(
+        {
+            "404.html",
+            "llms-full.txt",
+            "llms.txt",
+            "meta/indexing.json",
+            "objects.inv",
+            "robots.txt",
+            "sitemap.xml",
+        }
+    )
+    files.update(
+        path.relative_to(content_dir).as_posix()
+        for path in content_dir.rglob("*")
+        if path.is_file() and path.suffix != ".md" and path.name != "_nav.yml"
+    )
+    return files
+
+
+def _file_collides_with_files(path: str, files: set[str]) -> bool:
+    """Return whether either file path would require treating the other as a directory."""
+    comparable = _portable_path_key(path)
+    return any(
+        comparable == (other := _portable_path_key(candidate))
+        or comparable.startswith(f"{other}/")
+        or other.startswith(f"{comparable}/")
+        for candidate in files
+    )
+
+
+def _file_collides_with_directory(file_path: str, directory: str) -> bool:
+    """Return whether a file is the directory, contains it, or lives below it."""
+    comparable_file = _portable_path_key(file_path)
+    comparable_directory = _portable_path_key(directory)
+    return (
+        comparable_file == comparable_directory
+        or comparable_file.startswith(f"{comparable_directory}/")
+        or comparable_directory.startswith(f"{comparable_file}/")
+    )
+
+
+def _directory_collides_with_files(directory: str, files: set[str]) -> bool:
+    """Return whether a generated directory overlaps any planned output file."""
+    return any(_file_collides_with_directory(file_path, directory) for file_path in files)
+
+
+def _portable_path_key(path: str) -> str:
+    """Compare output paths as case- and normalization-insensitive filesystems do."""
+    return normalize("NFC", path).casefold()
 
 
 def _build_blog_posts(
@@ -644,11 +883,55 @@ def configure_docs_globals(project: DocsProject | DocsConfig) -> str:
     return version
 
 
-def _is_unsafe_output(output_dir: Path, content_dir: Path, config: DocsConfig) -> bool:
-    """The output dir is cleared, so refuse the repo root, content dir, or a filesystem root."""
+def _is_unsafe_output(
+    output_dir: Path,
+    content_dir: Path,
+    config: DocsConfig,
+    *,
+    docs_version: str = "",
+) -> bool:
+    """Reject any clear target that overlaps source, config, or version inputs."""
     resolved = output_dir.resolve()
-    unsafe = {config.repo_root.resolve(), content_dir.resolve(), Path(resolved.anchor)}
-    return resolved in unsafe
+    if resolved == Path(resolved.anchor):
+        return True
+
+    repo_root = config.repo_root.resolve()
+    if resolved == repo_root or repo_root.is_relative_to(resolved):
+        return True
+
+    base_dir = config.base_dir.resolve()
+    protected_dirs = {
+        content_dir.resolve(),
+        config.examples_dir.resolve(),
+        *(base_dir / name for name in ("_internal", "data", "scripts", "static")),
+    }
+    if any(
+        resolved == protected or resolved.is_relative_to(protected) or protected.is_relative_to(resolved)
+        for protected in protected_dirs
+    ):
+        return True
+
+    versions_dir = config.versions_dir.resolve()
+    allowed_version_output = bool(docs_version) and resolved == (versions_dir / docs_version).resolve()
+    declared_site_output = not docs_version and resolved == config.site_dir.resolve() and resolved != base_dir
+    if not (allowed_version_output or declared_site_output) and (
+        resolved == base_dir or resolved.is_relative_to(base_dir) or base_dir.is_relative_to(resolved)
+    ):
+        return True
+    if not allowed_version_output and (
+        resolved == versions_dir or resolved.is_relative_to(versions_dir) or versions_dir.is_relative_to(resolved)
+    ):
+        return True
+
+    config_paths = {
+        config.settings_config,
+        config.reference_config,
+        config.ui_library_config,
+        config.redirects_config,
+        config.versions_config,
+        config.people_sources_config,
+    }
+    return any(path.resolve() == resolved or path.resolve().is_relative_to(resolved) for path in config_paths)
 
 
 def _copy_non_markdown_assets(

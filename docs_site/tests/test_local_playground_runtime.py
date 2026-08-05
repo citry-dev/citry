@@ -148,6 +148,7 @@ def test_local_runtime_can_be_loaded_from_its_generated_directory(tmp_path: Path
     )
     manifest = {
         "schema_version": 1,
+        "protocol_version": 1,
         "citry": {"version": "0.3.2", "core_version": "1.4.0", "ui_version": "0.0.1"},
         "packages": [
             {
@@ -184,6 +185,8 @@ def test_local_runtime_rejects_a_manifest_without_local_citry_ui(tmp_path: Path)
     (local_dir / "runtime.json").write_text(
         json.dumps(
             {
+                "schema_version": 1,
+                "protocol_version": 1,
                 "citry": {"version": "0.3.2", "core_version": "1.4.0", "ui_version": "0.0.1"},
                 "packages": [
                     {
@@ -202,4 +205,25 @@ def test_local_runtime_rejects_a_manifest_without_local_citry_ui(tmp_path: Path)
         local_playground_runtime.LocalPlaygroundRuntimeError,
         match=r"missing citry-ui 0\.0\.1",
     ):
+        local_playground_runtime.load_local_playground_runtime(local_dir)
+
+
+@pytest.mark.parametrize("field", ["schema_version", "protocol_version"])
+@pytest.mark.parametrize("value", [True, 1.0, 2, None])
+def test_local_runtime_rejects_unsupported_manifest_versions(tmp_path: Path, field: str, value: object) -> None:
+    local_dir = tmp_path / "runtime"
+    local_dir.mkdir()
+    manifest = {
+        "schema_version": 1,
+        "protocol_version": 1,
+        "packages": [],
+        "citry": {"version": "0.3.2", "ui_version": "0.0.1"},
+    }
+    if value is None:
+        manifest.pop(field)
+    else:
+        manifest[field] = value
+    (local_dir / "runtime.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(local_playground_runtime.LocalPlaygroundRuntimeError, match=f"{field.split('_')[0]} version 1"):
         local_playground_runtime.load_local_playground_runtime(local_dir)

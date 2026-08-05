@@ -136,7 +136,10 @@ A root build is not the same thing as site scope. It contains the current copy
 of versioned content plus all site-scoped content. A snapshot contains only
 versioned content. In snapshot HTML, links to versioned pages are projected
 under `/v/<version>/`; links to site pages remain at the root. Shared
-`/static/`, `/citry/`, and `/pagefind/` outputs also remain root-owned.
+`/static/`, `/citry/`, and the configured Pagefind output also remain
+root-owned. During assembly, mounted snapshot pages are rewritten to load that
+root Pagefind bundle, so changing its configured directory does not strand
+historical versions on an old asset URL.
 Content assets inherit the unanimous scope of their first route segment. Keep a
 content-asset directory within one scope; put site-global assets under
 `static/`. An unknown or mixed asset namespace defaults to `versioned` so the
@@ -455,19 +458,19 @@ duplicate values.
 | `site.default_description` | Non-empty string | Fallback page description |
 | `repository.owner` | GitHub owner name | Repository identity and generated links |
 | `repository.name` | GitHub repository name | Repository identity and generated links |
-| `repository.url` | Exact `https://github.com/<owner>/<name>` URL | Source, edit, and social links |
+| `repository.url` | `https://github.com/<owner>/<name>` URL, with an optional trailing slash | Source, edit, and social links |
 | `repository.edit_branch` | Safe Git branch name | Edit-page links |
 | `repository.issues_url` | `repository.url` plus `/issues` | Issue and 404 links |
 | `repository.sponsors_url` | Absolute HTTP(S) URL | Sponsor links |
 | `links.pypi` | Absolute HTTP(S) URL | Package links |
 | `links.discord` | Absolute HTTP(S) URL | Community links |
-| `search.pagefind_path` | Safe root-relative path | Search module location |
+| `search.pagefind_path` | Safe root-relative path ending in `/pagefind.js`; parent segments start with a letter or digit and then use only letters, digits, `_`, and `-`; the non-colliding root is outside `static`, `citry`, `meta`, `og`, and `v` | Search module and generated bundle location |
 | `search.quick_links` | Ordered list of `{label, path}` mappings with unique paths | Search shortcuts |
 | `markdown.pages.extensions` | Unique list of Python-Markdown extension names | Markdown page rendering |
 | `markdown.pages.extension_configs` | Mapping from enabled extension name to option mapping | Markdown page extension options |
 | `markdown.docstrings.extensions` | Unique list of Python-Markdown extension names | API docstring rendering |
 | `markdown.docstrings.extension_configs` | Mapping from enabled extension name to option mapping | Docstring extension options |
-| `blog.feed_path` | Safe root-relative path | Atom feed output |
+| `blog.feed_path` | Root-relative `.xml` path under `/blog/` that does not overlap authored/generated routes, redirects, copied assets, or Pagefind output | Atom feed output |
 | `blog.feed_limit` | Integer at least 1 | Maximum posts in the feed |
 | `blog.words_per_minute` | Integer at least 1 | Reading-time estimates |
 | `git.exclude_patterns` | Unique list of non-empty path-pattern strings | Pages omitted from author footers |
@@ -475,26 +478,32 @@ duplicate values.
 | `seo.ai_bots` | Unique list of non-empty user-agent strings | AI crawler policy |
 | `seo.priorities` | Ordered list of unique `{prefix, priority}` mappings; priority is from 0 through 1 | Sitemap priority overrides |
 | `inventory.python_docs_url` | Absolute HTTP(S) URL ending in `/` | Python intersphinx inventory |
-| `release_notes.exclude` | Unique list of non-empty changelog date strings | Releases omitted from docs |
+| `release_notes.exclude` | Unique list of exact, non-empty changelog heading strings | Releases omitted from docs |
 
-Extension option values may be strings, numbers, booleans, `null`, lists, or
-mappings. A profile may configure only extensions enabled in that profile.
+Extension option values may recursively contain strings, finite numbers,
+booleans, `null`, lists, or mappings with string keys, to a maximum depth of
+100 levels. A profile may configure only extensions enabled in that profile.
+All configured HTTP(S) URLs reject credentials, query strings, fragments,
+control characters, unsafe markup characters, and invalid ports.
+Safe maintainer URL paths are literal paths: percent escapes, drive separators,
+query strings, fragments, backslashes, whitespace, and dot segments are
+rejected.
 
 ### Version policy fields
 
 Every mapping and field in `docs_versions.yml` is optional. Omitted values use
-the defaults shown below.
+the defaults shown below, but the manifest file itself is required.
 
 | Field | Accepted value | Default |
 |---|---|---|
-| `versions.pattern` | Non-empty Python regular-expression string | Full three-part versions, with optional `v` prefix |
-| `versions.include` | Unique list of non-empty tag strings | `[]` |
-| `versions.exclude` | Unique list of non-empty tag strings | `[]` |
+| `versions.pattern` | Non-empty Python regular-expression matched after removing Citry's `citry@` tag prefix | Full three-part versions, with optional `v` prefix |
+| `versions.include` | Unique list of normalized single-segment tag identifiers that start/end with a letter or digit and use `.`, `_`, or `-` internally; bypasses pattern and version bounds | `[]` |
+| `versions.exclude` | Unique list of normalized single-segment tag identifiers with the same character policy | `[]` |
 | `versions.oldest` | Empty string or full `major.minor.patch` version | `""` |
 | `versions.newest` | Empty string or full `major.minor.patch` version | `""` |
 | `aliases.latest` | Empty string or full `major.minor.patch` version | `""`, meaning newest built version |
 | `publish.window` | Non-negative integer; `0` publishes all versions | `0` |
-| `indexing.keep_recent` | Non-negative integer; `0` indexes all versions | `2` |
+| `indexing.keep_recent` | Non-negative integer; `0` indexes all versions; `dev` and the `latest` target are always retained | `2` |
 
 A tag cannot appear in both include and exclude. When both version bounds are
 set, `oldest` cannot be newer than `newest`.
@@ -526,7 +535,7 @@ The builder reads these variables when the Python process starts:
 | Variable | Purpose | Default |
 |---|---|---|
 | `DOCS_SITE_URL` | Override canonical, sitemap, Open Graph, and other public URLs | `settings.yml` |
-| `DOCS_BASE_PATH` | Root-relative prefix for project Pages or fork previews | empty |
+| `DOCS_BASE_PATH` | Empty or a root-relative prefix such as `/citry`, never `/` and without a trailing slash | empty |
 | `DOCS_GOOGLE_SITE_VERIFICATION` | Optional Google Search Console token | empty |
 
 For a custom domain, `DOCS_SITE_URL` must match the Pages custom-domain setting.
@@ -555,9 +564,11 @@ through the `github-pages` environment.
 An editorial-only merge, such as a Blog post, Community update, landing-page
 change, or another `scope: site` page, uses this same workflow. It rebuilds the
 root site and root-owned Pagefind, sitemap, LLM, feed, redirect, and social-card
-outputs, then mounts the existing committed snapshots unchanged. It does not
-create, modify, or regenerate a release snapshot. GitHub Pages replaces the
-artifact atomically, so there is no separate partial-upload path to maintain.
+outputs, then mounts copies of the existing committed snapshots. Assembly may
+adjust those deployed copies for canonical/robots policy, the configured
+Pagefind path, and a deployment base path; it never modifies or regenerates the
+committed source snapshots. GitHub Pages replaces the artifact atomically, so
+there is no separate partial-upload path to maintain.
 Any future site-scoped source outside `docs_site/**` must be added to both the
 docs-check and docs-deploy workflow path filters.
 
@@ -584,6 +595,10 @@ uv run --no-sync python -m docs_site build \
 uv run --no-sync python -m docs_site versions-check --strict
 ```
 
+For a detached snapshot at a custom path, add `-o <path>` and
+`--no-update-versions-manifest`; detached builds require `--docs-version` and
+cannot materialize an alias.
+
 Snapshots contain only `scope: versioned` pages and their content assets. They
 omit site-scoped pages and root-owned search, crawl, runtime, static, feed, and
 social-card outputs. A site-scoped root landing page is replaced in the
@@ -603,22 +618,23 @@ root links. Reclassifying a published route is nevertheless a migration that
 requires review of redirects, canonicals, content assets, and picker behavior.
 
 Pushing a `citry@X.Y.Z` tag triggers
-[`repo--docs-release.yml`](../.github/workflows/repo--docs-release.yml). Review
-that workflow's warning header before the first real release. This path has not
-yet been proven with a real version snapshot, and two details need an explicit
-maintainer decision:
+[`repo--docs-release.yml`](../.github/workflows/repo--docs-release.yml). The
+workflow checks out `main` for commit-back and current-root assembly, while
+`build-tag` creates the released snapshot in a detached worktree at the exact
+tag commit:
+
+```bash
+uv run --no-sync python -m docs_site build-tag citry@X.Y.Z
+uv run --no-sync python -m docs_site versions-check --strict
+```
+
+The snapshot is staged and replaces an existing version only after the tagged
+builder exits successfully and writes its build stamp. One authorization detail
+still needs an explicit maintainer decision before the first real snapshot:
 
 - It attempts to commit the generated snapshot back to protected `main` with
   the default `GITHUB_TOKEN`, which may need replacement with an approved
   GitHub App token or PAT.
-- It deliberately checks out `origin/main` before dependency installation and
-  building, so the snapshot is internally consistent but a later `main` tip
-  could differ from the commit carrying the tag.
-
-Before the first real docs release, change that second behavior so the
-versioned snapshot is built from the tag commit while the current root site is
-assembled from `main`. The current main-based snapshot source is a release
-blocker, not the model for editorial deploys.
 
 A manual dispatch of the release workflow only assembles and redeploys the
 existing version tree. Snapshot creation is conditional on a tag event.

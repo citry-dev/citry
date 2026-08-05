@@ -11,11 +11,11 @@ The upstream django-components site renders each page in three passes:
 This module runs all three. Pass 1 is ``render_content`` (below): it renders the
 markdown body as a Citry template so the custom tags (each a small component under
 ``components/``) turn into HTML, after fence protection. Passes 2 and 3 are the
-markdown conversion (Django-independent, copied as-is from upstream) and the
-``DocPage`` layout wrap (a Citry component).
+Markdown conversion and the ``DocPage`` layout wrap (a Citry component).
 
-The markdown extension set and its config are copied verbatim from the upstream
-site: they plug into python-markdown directly and never depended on Django.
+Maintainers select and configure ordinary Python-Markdown extensions in
+``settings.yml``. The pipeline adds its capture and table wrappers, and supplies
+checkout-specific snippet and repository options at runtime.
 """
 
 from __future__ import annotations
@@ -24,7 +24,6 @@ import itertools
 from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from urllib.parse import urlsplit
 from xml.etree import ElementTree as ET
 
 import markdown
@@ -70,12 +69,19 @@ from docs_site._internal.links import (
     linkify_headings,
     project_internal_html_urls,
     project_internal_markdown_urls,
+    project_markdown_base_path,
     rewrite_internal_md_links,
     rewrite_internal_md_links_in_markdown,
 )
 from docs_site._internal.live_code import LiveCodeContext, use_live_code_context
 from docs_site._internal.live_code_projection import project_live_code_for_text
-from docs_site._internal.project import DocsProject, docs_project_scope, load_docs_project
+from docs_site._internal.project import (
+    DocsProject,
+    docs_project_scope,
+    load_docs_project,
+    materialize_markdown_configs,
+)
+from docs_site._internal.settings import google_search_site_target
 from docs_site._internal.toc import merge_html_headings_into_toc
 
 if TYPE_CHECKING:
@@ -375,6 +381,9 @@ def render_page(
             nav_tree=nav_tree,
             version_prefix=version_prefix,
         )
+    # Markdown companions and llms-full.txt are deployed beneath the same base
+    # path as HTML. Root-relative destinations therefore need the prefix too.
+    expanded = project_markdown_base_path(expanded, config.base_path)
     # The API-reference symbol headings are injected as raw HTML, so the markdown
     # TOC pass never saw them; fold them in from the rendered HTML.
     toc_tokens = merge_html_headings_into_toc(content_html, toc_tokens)
@@ -451,7 +460,7 @@ def render_page(
             discord_url=settings.discord_url,
             search_quick_links=list(settings.quick_links),
             pagefind_path=settings.pagefind_path,
-            search_site_domain=urlsplit(project.site_url).hostname or "",
+            search_site_target=google_search_site_target(project.site_url),
         )
     )
     return RenderResult(html=page_html, toc_tokens=toc_tokens, meta=meta, markdown_body=expanded)
@@ -473,7 +482,7 @@ def _pass2_markdown_with_expanded_source(
     """Convert Markdown and return HTML, TOC tokens, and snippet-expanded source."""
     project = project or load_docs_project(config)
     settings = project.settings
-    configs = settings.markdown_pages.configs()
+    configs = materialize_markdown_configs(settings.markdown_pages, settings=settings)
     # `--8<-- "path"` includes resolve against the repo root ONLY (matching
     # upstream). Adding the source file's own dir would, on a case-insensitive
     # filesystem, let a root-relative include resolve to the including page
@@ -482,10 +491,6 @@ def _pass2_markdown_with_expanded_source(
     configs.setdefault("pymdownx.snippets", {}).update(
         check_paths=True,
         base_path=[str(config.repo_root)],
-    )
-    configs.setdefault("pymdownx.magiclink", {}).update(
-        user=settings.repository.owner,
-        repo=settings.repository.name,
     )
     captured: list[str] = []
     md = markdown.Markdown(

@@ -78,7 +78,10 @@ def _clean_path(value: object, label: str) -> str:
     path = require_str(value, label)
     if not path.startswith("/") or not path.endswith("/") or "//" in path:
         raise DocsConfigError(f"{label} must have one leading and one trailing slash")
-    unsafe = any(ord(char) < 32 or ord(char) == 127 or char in {'"', "'", "<", ">", "\\"} for char in path)
+    unsafe = any(
+        char.isspace() or ord(char) < 32 or ord(char) == 127 or char in {'"', "'", "%", ":", "<", ">", "\\"}
+        for char in path
+    )
     if unsafe or any(part in {".", ".."} for part in path.split("/")) or "?" in path or "#" in path:
         raise DocsConfigError(f"{label} must be a safe clean URL without query or fragment")
     return path

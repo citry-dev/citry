@@ -5,7 +5,13 @@
 # Each `categories` item requires kind, slug, title, and intro. Supported kinds:
 # - generated_python: also requires a non-empty, unique `symbols` list.
 # - authored_api: also requires a safe `.md` `source` and non-empty `entries`;
-#   each entry requires unique `key`, safe `anchor`, and supported `role`.
+#   each entry requires a unique, single-line, whitespace-free `key`, a
+#   lowercase kebab-case `anchor`, and a `role` chosen from `js:data`,
+#   `js:function`, `py:obj`, or `std:label`; `aliases` is an optional unique
+#   list of additional single-line, whitespace-free cross-reference keys.
+# - authored_builtins: also requires its matching `reference/<slug>.md` source
+#   and a non-empty unique list of lowercase kebab-case `tags`; each tag becomes
+#   a `c-<tag>` anchor.
 # Unknown fields, duplicate slugs, and duplicate symbol ownership are rejected.
 description_overrides:
   citry.Markup: >-

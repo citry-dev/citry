@@ -146,12 +146,12 @@
   });
 
   // Sidebar scroll persistence: keep the left-nav scroll position when moving
-  // between pages in the SAME nav section; only re-center on the active item
-  // when entering a section we have no saved position for. Without this, every
-  // click is a full page load that snaps the sidebar back near the top.
+  // between pages in the same nav section, then adjust it if the new active
+  // item would be clipped or crowded against an edge.
   var sidebar = document.getElementById('djc-sidebar');
   if (sidebar) {
     var SIDEBAR_SCROLL_KEY = 'djc-sidebar-scroll';
+    var ACTIVE_LINK_INSET = 24;
 
     // The active primary area is stable across pages in the same sidebar and
     // distinct from every other top-level area declared in _nav.yml.
@@ -170,15 +170,29 @@
       }
     };
 
-    // Restore this section's saved scroll, else bring the active item into view.
+    var bringActiveLinkIntoView = function () {
+      var active = sidebar.querySelector('.djc-sidebar__link.is-active');
+      if (!active) return;
+
+      var sidebarRect = sidebar.getBoundingClientRect();
+      var activeRect = active.getBoundingClientRect();
+      var viewportTop = sidebarRect.top + sidebar.clientTop;
+      var viewportBottom = viewportTop + sidebar.clientHeight;
+      var clearlyVisible = activeRect.top >= viewportTop + ACTIVE_LINK_INSET
+        && activeRect.bottom <= viewportBottom - ACTIVE_LINK_INSET;
+      if (clearlyVisible) return;
+
+      var activeTop = sidebar.scrollTop + activeRect.top - viewportTop;
+      sidebar.scrollTop = activeTop - (sidebar.clientHeight - activeRect.height) / 2;
+    };
+
+    // Restore this section's saved scroll before checking the new active item.
     var sig = activeSectionSig();
     var savedTop = sig !== null ? loadScrollMap()[sig] : undefined;
     if (savedTop !== undefined) {
       sidebar.scrollTop = savedTop;
-    } else {
-      var activeNavLink = sidebar.querySelector('.djc-sidebar__link.is-active');
-      if (activeNavLink) activeNavLink.scrollIntoView({ block: 'nearest' });
     }
+    bringActiveLinkIntoView();
 
     // Persist the current section's scroll (debounced while scrolling, flushed
     // on navigate-away) so the next same-section page can restore it.
@@ -337,6 +351,41 @@
       });
     };
 
+    var tocLinkId = function (link) {
+      var href = link.getAttribute('href');
+      if (!href || !href.startsWith('#')) return null;
+      try {
+        return decodeURIComponent(href.slice(1));
+      } catch (e) {
+        return href.slice(1);
+      }
+    };
+
+    var activateTocLink = function (activeId) {
+      var activeLinks = [];
+      tocLinks.forEach(function (link) {
+        if (tocLinkId(link) === activeId) activeLinks.push(link);
+      });
+      if (activeLinks.length === 0) return false;
+
+      tocLinks.forEach(function (link) {
+        link.classList.toggle('is-active', activeLinks.indexOf(link) !== -1);
+      });
+      var expansionLink = activeLinks[0];
+      activeLinks.forEach(function (link) {
+        if (link.closest('#djc-toc')) expansionLink = link;
+      });
+      syncExpansion(expansionLink);
+      return true;
+    };
+
+    var clearActiveTocLinks = function () {
+      tocLinks.forEach(function (link) {
+        link.classList.remove('is-active');
+      });
+      syncExpansion(null);
+    };
+
     // Manual toggle: pin a class open (or collapse it) regardless of scroll.
     document.querySelectorAll('.djc-toc__toggle').forEach(function (btn) {
       btn.addEventListener('click', function () {
@@ -354,39 +403,108 @@
 
     var headingIds = [];
     tocLinks.forEach(function (link) {
-      var href = link.getAttribute('href');
-      if (href && href.startsWith('#')) {
-        headingIds.push(href.slice(1));
-      }
+      var id = tocLinkId(link);
+      if (id && headingIds.indexOf(id) === -1) headingIds.push(id);
     });
 
     var headingElements = headingIds
       .map(function (id) { return document.getElementById(id); })
       .filter(Boolean);
 
+    var TOC_ACTIVATION_TOP = 80;
+
+    var activeHeadingFromViewport = function () {
+      var activeId = null;
+      headingElements.forEach(function (heading) {
+        if (heading.getBoundingClientRect().top <= TOC_ACTIVATION_TOP) {
+          activeId = heading.id;
+        }
+      });
+      return activeId;
+    };
+
+    var locationHeadingIsCurrent = function (activeId) {
+      var heading = document.getElementById(activeId);
+      if (!heading) return false;
+      var rect = heading.getBoundingClientRect();
+      var currentAtActivationLine = activeHeadingFromViewport() === activeId;
+      var documentHeight = document.documentElement.scrollHeight;
+      var atDocumentEnd = window.scrollY + window.innerHeight >= documentHeight - 1;
+      var visibleAtDocumentEnd = atDocumentEnd && rect.bottom >= 0 && rect.top <= window.innerHeight;
+      return currentAtActivationLine || visibleAtDocumentEnd;
+    };
+
+    var locationHeadingId = function () {
+      if (!window.location.hash) return null;
+      try {
+        return decodeURIComponent(window.location.hash.slice(1));
+      } catch (e) {
+        return window.location.hash.slice(1);
+      }
+    };
+
+    var syncTocToViewport = function (preferredId) {
+      if (preferredId && locationHeadingIsCurrent(preferredId) && activateTocLink(preferredId)) return;
+      var activeId = activeHeadingFromViewport();
+      if (activeId) {
+        activateTocLink(activeId);
+      } else {
+        clearActiveTocLinks();
+      }
+    };
+
+    var navigationActiveId = null;
+    var navigationActiveTop = null;
+
+    var scheduleTocSync = function () {
+      requestAnimationFrame(function () {
+        var preferredId = locationHeadingId();
+        if (preferredId && locationHeadingIsCurrent(preferredId)) {
+          var heading = document.getElementById(preferredId);
+          navigationActiveId = preferredId;
+          navigationActiveTop = heading.getBoundingClientRect().top;
+          syncTocToViewport(preferredId);
+        } else {
+          navigationActiveId = null;
+          navigationActiveTop = null;
+          syncTocToViewport(null);
+        }
+      });
+    };
+
+    window.addEventListener('hashchange', scheduleTocSync);
+    window.addEventListener('load', scheduleTocSync);
+    window.addEventListener('pageshow', scheduleTocSync);
+    tocLinks.forEach(function (link) {
+      link.addEventListener('click', function (event) {
+        var opensCurrentPage = event.button === 0
+          && !event.altKey
+          && !event.ctrlKey
+          && !event.metaKey
+          && !event.shiftKey;
+        if (opensCurrentPage && !event.defaultPrevented) scheduleTocSync();
+      });
+    });
+
     if (headingElements.length > 0) {
       var observer = new IntersectionObserver(
-        function (entries) {
-          // Find the first heading currently intersecting
-          var activeId = null;
-          entries.forEach(function (entry) {
-            if (entry.isIntersecting) {
-              activeId = entry.target.id;
+        function () {
+          var preferredId = null;
+          if (navigationActiveId) {
+            var heading = document.getElementById(navigationActiveId);
+            var headingStayedPut = heading
+              && Math.abs(heading.getBoundingClientRect().top - navigationActiveTop) <= 1;
+            if (headingStayedPut) {
+              preferredId = navigationActiveId;
+            } else {
+              navigationActiveId = null;
+              navigationActiveTop = null;
             }
-          });
-
-          if (activeId) {
-            var activeLink = null;
-            tocLinks.forEach(function (link) {
-              var isActive = link.getAttribute('href') === '#' + activeId;
-              link.classList.toggle('is-active', isActive);
-              if (isActive) activeLink = link;
-            });
-            syncExpansion(activeLink);
           }
+          syncTocToViewport(preferredId);
         },
         {
-          rootMargin: '-80px 0px -70% 0px',
+          rootMargin: '-' + TOC_ACTIVATION_TOP + 'px 0px -70% 0px',
           threshold: 0,
         }
       );
@@ -395,6 +513,7 @@
         observer.observe(el);
       });
     }
+    scheduleTocSync();
   }
 
   // ----------------------------------------------------------------

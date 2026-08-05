@@ -44,13 +44,9 @@ def test_load_config_parses_yaml(tmp_path: Path) -> None:
     assert cfg.index_keep_recent == 3
 
 
-def test_load_config_missing_file_uses_defaults(tmp_path: Path) -> None:
-    cfg = load_versions_config(tmp_path / "nope.yml")
-
-    assert cfg.pattern  # a default pattern is always present
-    assert cfg.exclude == []
-    assert cfg.publish_window == 0
-    assert cfg.index_keep_recent == 2
+def test_load_config_rejects_missing_file(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="configuration file does not exist"):
+        load_versions_config(tmp_path / "nope.yml")
 
 
 def test_load_config_empty_yaml_uses_defaults(tmp_path: Path) -> None:
@@ -65,6 +61,32 @@ def test_load_config_rejects_duplicate_yaml_keys(tmp_path: Path) -> None:
     path.write_text("publish:\n  window: 1\n  window: 2\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="duplicate YAML key"):
+        load_versions_config(path)
+
+
+def test_load_config_rejects_non_string_nested_keys(tmp_path: Path) -> None:
+    path = tmp_path / "docs_versions.yml"
+    path.write_text("versions:\n  1: value\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="mapping with string keys"):
+        load_versions_config(path)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        'versions:\n  pattern: "   "\n',
+        'versions:\n  include: ["   "]\n',
+        'versions:\n  exclude: ["   "]\n',
+        'versions:\n  include: [" 1.0.0"]\n',
+        'versions:\n  exclude: ["1.0.0 "]\n',
+    ],
+)
+def test_load_config_rejects_whitespace_only_strings(tmp_path: Path, text: str) -> None:
+    path = tmp_path / "docs_versions.yml"
+    path.write_text(text, encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"versions\.(?:pattern|include|exclude)"):
         load_versions_config(path)
 
 
@@ -153,6 +175,15 @@ def test_load_config_rejects_include_exclude_overlap(tmp_path: Path) -> None:
         load_versions_config(path)
 
 
+@pytest.mark.parametrize("field", ["include", "exclude"])
+def test_load_config_rejects_multi_segment_tag_identifiers(tmp_path: Path, field: str) -> None:
+    path = tmp_path / "docs_versions.yml"
+    path.write_text(f'versions:\n  {field}: ["feature/foo"]\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match=rf"versions\.{field}\[0\].*single segment"):
+        load_versions_config(path)
+
+
 @pytest.mark.parametrize("field", ["oldest", "newest"])
 @pytest.mark.parametrize("value", ["1.0", "v1.0.0", "nightly", "../1.0.0"])
 def test_load_config_rejects_malformed_version_bounds(tmp_path: Path, field: str, value: str) -> None:
@@ -194,6 +225,11 @@ def test_select_tags_filters_bounds_excludes_and_sorts() -> None:
     # 0.0.9 below oldest, 0.4.0 above newest, 0.1.1 excluded, "random" no match;
     # v0.2.5 is kept and sorted by its parsed version (between 0.3.0 and 0.2.0).
     assert select_tags(tags, cfg) == ["0.3.0", "v0.2.5", "0.2.0", "0.1.0"]
+
+
+def test_select_tags_rejects_a_pattern_selected_multi_segment_tag() -> None:
+    with pytest.raises(ValueError, match=r"selected tag.*single segment"):
+        select_tags(["feature/foo"], VersionsConfig(pattern=".*"))
 
 
 def test_select_tags_include_bypasses_pattern() -> None:

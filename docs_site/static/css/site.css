@@ -756,6 +756,15 @@ body {
   flex-shrink: 0;
 }
 
+/* The C3 mark sits in the accent colour so the wordmark beside it stays in the
+   reading ink; sized by height so it tracks the wordmark rather than the box. */
+.djc-logo__mark {
+  height: 1rem;
+  width: auto;
+  color: var(--c-accent);
+  flex-shrink: 0;
+}
+
 .djc-logo__wordmark {
   font-weight: 700;
   font-size: 1.05rem;
@@ -815,6 +824,10 @@ body {
 }
 
 .djc-header__nav a.is-active {
+  text-decoration: none;
+}
+
+.djc-header__nav a.is-active > .djc-header__nav-label {
   text-decoration: underline;
   text-decoration-color: var(--c-accent);
   text-decoration-thickness: 2px;

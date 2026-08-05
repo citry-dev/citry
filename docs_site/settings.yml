@@ -15,7 +15,7 @@ site:
 repository:
   owner: citry-dev # GitHub owner name, not an owner/repository path.
   name: citry # GitHub repository name.
-  url: https://github.com/citry-dev/citry # Exact HTTPS URL for owner/name.
+  url: https://github.com/citry-dev/citry # Owner/name HTTPS URL; trailing / is accepted.
   edit_branch: main # Safe Git branch name used by edit links.
   issues_url: https://github.com/citry-dev/citry/issues # repository.url + /issues.
   sponsors_url: https://github.com/sponsors/JuroOravec # Absolute HTTP(S) URL.
@@ -25,7 +25,11 @@ links:
   discord: https://discord.gg/NaQ8QPyHtD # Absolute HTTP(S) community URL.
 
 search:
-  pagefind_path: /pagefind/pagefind.js # Safe root-relative URL path.
+  # Safe root-relative path ending in /pagefind.js. Parent segments start with
+  # a letter or digit, then accept only letters, digits, `_`, and `-`; the
+  # parent becomes Pagefind's output directory. `static`, `citry`, `meta`, `og`,
+  # and `v` are reserved roots, compared case-insensitively for portable builds.
+  pagefind_path: /pagefind/pagefind.js
   quick_links: # Ordered list of unique shortcuts shown in search.
     - { label: Getting started, path: /getting-started/installation/ }
     - { label: Components, path: /concepts/components/ }
@@ -38,7 +42,8 @@ search:
 markdown:
   # Each profile requires an ordered list of Python-Markdown extension names
   # and a mapping of options keyed only by enabled extension names. Extension
-  # option values may be strings, numbers, booleans, nulls, lists, or mappings.
+  # option values may be strings, finite numbers, booleans, nulls, lists, or
+  # mappings with string keys, recursively to at most 100 levels.
   pages:
     extensions:
       - abbr
@@ -77,7 +82,9 @@ markdown:
     extension_configs: {}
 
 blog:
-  feed_path: /blog/feed.xml # Safe root-relative URL path.
+  # Safe root-relative .xml path under /blog/. It must not collide with an
+  # authored/generated route, redirect, copied content asset, or Pagefind output.
+  feed_path: /blog/feed.xml
   feed_limit: 20 # Integer greater than or equal to 1.
   words_per_minute: 200 # Integer greater than or equal to 1.
 
@@ -104,5 +111,5 @@ inventory:
   python_docs_url: https://docs.python.org/3.13/ # Absolute HTTP(S) URL ending in /.
 
 release_notes:
-  exclude: # Unique list of non-empty changelog date strings to omit.
+  exclude: # Unique list of exact, non-empty changelog heading strings to omit.
     - "2025-12-21"

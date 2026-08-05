@@ -134,6 +134,8 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
         json.dumps(
             {
                 "source": "local",
+                "schema_version": 1,
+                "protocol_version": 1,
                 "citry": {"version": "0.3.2", "core_version": "1.4.0", "ui_version": "0.0.1"},
                 "packages": [
                     {

@@ -21,6 +21,7 @@ from docs_site._internal.nav import NavItem
 
 ReferenceKind = Literal["generated_python", "authored_api", "authored_builtins"]
 _SLUG_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+_BUILTIN_TAG_RE = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*\Z")
 _INVENTORY_ROLES = frozenset({"js:data", "js:function", "py:obj", "std:label"})
 
 
@@ -132,6 +133,9 @@ def load_reference_catalog(path: Path) -> ReferenceCatalog:
         tags = require_str_list(item["tags"], f"{label}.tags")
         if not tags:
             raise DocsConfigError(f"{label}.tags must not be empty")
+        for tag_index, tag in enumerate(tags):
+            if not _BUILTIN_TAG_RE.fullmatch(tag):
+                raise DocsConfigError(f"{label}.tags[{tag_index}] must be lowercase kebab-case")
         entries = tuple(
             ReferenceEntry(
                 key=f"c-{tag}",
@@ -187,12 +191,24 @@ def _load_entry(value: Any, label: str) -> ReferenceEntry:
     if role not in _INVENTORY_ROLES:
         supported = ", ".join(sorted(_INVENTORY_ROLES))
         raise DocsConfigError(f"{label}.role must be one of: {supported}")
+    key = _inventory_key(item["key"], f"{label}.key")
+    aliases = tuple(
+        _inventory_key(alias, f"{label}.aliases[{index}]")
+        for index, alias in enumerate(require_str_list(item.get("aliases", []), f"{label}.aliases"))
+    )
     return ReferenceEntry(
-        key=require_str(item["key"], f"{label}.key"),
+        key=key,
         anchor=anchor,
-        aliases=require_str_list(item.get("aliases", []), f"{label}.aliases"),
+        aliases=aliases,
         inventory_role=role,
     )
+
+
+def _inventory_key(value: Any, label: str) -> str:
+    key = require_str(value, label)
+    if any(character.isspace() or ord(character) < 32 or ord(character) == 127 for character in key):
+        raise DocsConfigError(f"{label} must be a single-line inventory key without whitespace")
+    return key
 
 
 def _claim_entry_keys(entries: tuple[ReferenceEntry, ...], claimed: set[str], label: str) -> None:

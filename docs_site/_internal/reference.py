@@ -27,7 +27,7 @@ from citry.component_registry import NotRegistered
 from docs_site._internal.annotation import render_annotation
 from docs_site._internal.crossrefs import make_type_resolver, resolve_crossrefs
 from docs_site._internal.git_metadata import source_url_for
-from docs_site._internal.project import current_docs_project
+from docs_site._internal.project import current_docs_project, materialize_markdown_configs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -427,11 +427,12 @@ def _md(text: str) -> str:
         return ""
     # Resolve [text][symbol] cross-refs to reference links before HTML conversion.
     resolved, _unresolved = resolve_crossrefs(text, degrade_unresolved=True)
-    profile = current_docs_project().settings.markdown_docstrings
+    settings = current_docs_project().settings
+    profile = settings.markdown_docstrings
     return markdown.markdown(
         resolved,
         extensions=list(profile.extensions),
-        extension_configs=profile.configs(),
+        extension_configs=materialize_markdown_configs(profile, settings=settings),
     )
 
 
