@@ -1,0 +1,18 @@
+<c-card
+  c-data='{
+    "message": "hello",
+    "items": [transform(item) for item in items if item.visible],  # keep items
+    "nested": {
+      "coords": (
+        1,
+        2,
+      ),
+    },
+  }'
+/>
+<c-card
+  c-data="[
+    first,  # keep first
+    second,
+  ]"
+/>

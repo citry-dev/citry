@@ -1,0 +1,4 @@
+<c-for each="item in items  #keep the items
+">{{item}}</c-for>
+<li c-for="other in others  #keep the others
+">{{other}}</li>

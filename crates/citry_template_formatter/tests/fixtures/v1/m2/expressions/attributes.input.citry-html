@@ -1,0 +1,1 @@
+<c-card c-title="foo( 1,bar= [1,2])" #c-key="row . id" c-$c-props="{'x':1}" @click="foo( 1 )" :class="active  ? yes : no" />

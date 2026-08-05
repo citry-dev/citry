@@ -1,5 +1,6 @@
 {
   "schema_version": 1,
+  "python_expression_provider": "ruff@0.14.10+45bbb4cbff",
   "cases": [
     {
       "id": "opening-tags.tags.normalize-spacing",
