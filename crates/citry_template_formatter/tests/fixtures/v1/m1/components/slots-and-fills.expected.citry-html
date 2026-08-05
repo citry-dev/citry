@@ -3,8 +3,8 @@
     name="item"
     data="{root_attrs, table_attrs as item_attrs, **rest}"
   >
-  <div>{{ root_attrs }}</div>
-</c-fill>
+    <div>{{ root_attrs }}</div>
+  </c-fill>
 </c-Card>
 <c-slot name="item" required c-label="label">
   <span>{{ label }}</span>

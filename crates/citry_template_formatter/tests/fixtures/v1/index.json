@@ -231,16 +231,12 @@
       "features": ["invalid-suppression", "fmt-off"]
     },
     {
-      "id": "opening-tags.errors.skip-before-text",
+      "id": "opening-tags.suppression.skip-text",
       "capability": "opening-tags",
-      "category": "errors",
-      "input": "m0/errors/skip-before-text.input.citry-html",
-      "expected_error": {
-        "phase": "format",
-        "code": "citry.format.suppression",
-        "contains": "rendered text"
-      },
-      "features": ["invalid-suppression", "fmt-skip"]
+      "category": "suppression",
+      "input": "m0/suppression/skip-text.input.citry-html",
+      "expected": "m0/suppression/skip-text.expected.citry-html",
+      "features": ["suppression", "fmt-skip", "protected-text"]
     },
     {
       "id": "opening-tags.errors.tag-skip-without-attribute",
@@ -255,16 +251,60 @@
       "features": ["invalid-suppression", "fmt-skip", "tag-internal"]
     },
     {
-      "id": "opening-tags.errors.tag-fmt-off",
+      "id": "opening-tags.suppression.tag-fmt-off",
       "capability": "opening-tags",
-      "category": "errors",
-      "input": "m0/errors/tag-fmt-off.input.citry-html",
-      "expected_error": {
-        "phase": "format",
-        "code": "citry.format.suppression",
-        "contains": "start tag"
-      },
-      "features": ["invalid-suppression", "fmt-off", "tag-internal"]
+      "category": "suppression",
+      "input": "m0/suppression/tag-fmt-off.input.citry-html",
+      "expected": "m0/suppression/tag-fmt-off.expected.citry-html",
+      "features": ["suppression", "fmt-off", "tag-internal", "scope-end"]
+    },
+    {
+      "id": "opening-tags.suppression.tag-fmt-off-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/tag-fmt-off-on.input.citry-html",
+      "expected": "m0/suppression/tag-fmt-off-on.expected.citry-html",
+      "features": ["suppression", "fmt-off", "fmt-on", "tag-internal"]
+    },
+    {
+      "id": "opening-tags.suppression.inherited-body-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/inherited-body-on.input.citry-html",
+      "expected": "m0/suppression/inherited-body-on.expected.citry-html",
+      "features": ["suppression", "inherited-state", "body-scope", "end-tag-state"]
+    },
+    {
+      "id": "opening-tags.suppression.body-off-end-tag",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/body-off-end-tag.input.citry-html",
+      "expected": "m0/suppression/body-off-end-tag.expected.citry-html",
+      "features": ["suppression", "body-scope", "end-tag-state", "parent-restoration"]
+    },
+    {
+      "id": "opening-tags.suppression.inherited-end-tag-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/inherited-end-tag-on.input.citry-html",
+      "expected": "m0/suppression/inherited-end-tag-on.expected.citry-html",
+      "features": ["suppression", "inherited-state", "end-tag-state", "fmt-on"]
+    },
+    {
+      "id": "opening-tags.suppression.inherited-nested-template-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/inherited-nested-template-on.input.citry-html",
+      "expected": "m0/suppression/inherited-nested-template-on.expected.citry-html",
+      "features": ["suppression", "inherited-state", "nested-template", "fmt-on"]
+    },
+    {
+      "id": "opening-tags.suppression.inherited-start-tag-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "m0/suppression/inherited-start-tag-on.input.citry-html",
+      "expected": "m0/suppression/inherited-start-tag-on.expected.citry-html",
+      "features": ["suppression", "inherited-state", "tag-internal", "nested-template"]
     },
     {
       "id": "opening-tags.errors.nested-template-fmt-on",

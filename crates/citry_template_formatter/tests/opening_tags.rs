@@ -104,7 +104,7 @@ fn long_item_boundary_uses_unicode_scalars() {
 }
 
 #[test]
-fn multiline_tags_move_only_across_unprotected_structural_gaps() {
+fn protected_nodes_keep_their_bytes_while_outer_structural_gaps_layout() {
     let title = "x".repeat(100);
     let component = format!(r#"<c-Card><div title="{title}"></div></c-Card>"#);
     let formatted_component = format_template(&component).unwrap();
@@ -112,7 +112,9 @@ fn multiline_tags_move_only_across_unprotected_structural_gaps() {
     assert!(formatted_component.ends_with("></div></c-Card>"));
 
     let skipped = format!(r#"<main>{{# fmt: skip #}}<div title="{title}"></div></main>"#,);
-    assert_eq!(format_template(&skipped).unwrap(), skipped);
+    let skipped_expected =
+        format!("<main>\n  {{# fmt: skip #}}<div title=\"{title}\"></div>\n</main>");
+    assert_eq!(format_template(&skipped).unwrap(), skipped_expected);
 
     let shorthand = format!(r#"<main><div c-if="show" title="{title}"></div></main>"#,);
     let formatted_shorthand = format_template(&shorthand).unwrap();
@@ -171,7 +173,7 @@ fn empty_and_text_only_templates_are_stable() {
 }
 
 #[test]
-fn directives_inside_end_tags_are_rejected() {
+fn fmt_skip_inside_an_end_tag_is_rejected_without_a_target() {
     let error = format_template("<div></div {# fmt: skip #}>").unwrap_err();
 
     assert_eq!(error.kind(), FormatErrorKind::Suppression);

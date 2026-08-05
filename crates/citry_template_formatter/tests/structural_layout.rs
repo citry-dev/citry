@@ -116,6 +116,23 @@ fn structural_layout_resumes_around_protected_nodes() {
 }
 
 #[test]
+fn fully_protected_children_still_layout_their_outer_container() {
+    let source = concat!(
+        "<main>{# fmt: off #}<section> <div></div> </section>{# fmt: on #}",
+        "{# fmt: skip #}<footer> <div></div> </footer></main>",
+    );
+    let expected = concat!(
+        "<main>\n",
+        "  {# fmt: off #}<section> <div></div> </section>{# fmt: on #}\n",
+        "  {# fmt: skip #}<footer> <div></div> </footer>\n",
+        "</main>",
+    );
+
+    assert_eq!(format_template(source).unwrap(), expected);
+    assert_eq!(format_template(expected).unwrap(), expected);
+}
+
+#[test]
 fn expression_trivia_has_a_deterministic_width_boundary() {
     let fitting_value = "x".repeat(94);
     let fitting = format!("{{{{  {fitting_value}  }}}}");
