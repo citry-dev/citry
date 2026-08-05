@@ -609,6 +609,304 @@
       "features": ["python-expression-formatting", "invalid-python-expression", "parse-error"]
     }
   ],
+  "embedded_cases": [
+    {
+      "id": "embedded-formatting.bodies.script-style",
+      "category": "embedded-bodies",
+      "input": "embedded/script-style.input.citry-html",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "const  answer=41+1;",
+          "virtual_source": "const  answer=41+1;",
+          "base_indent": 4,
+          "newline": "\n"
+        },
+        {
+          "language": "css",
+          "kind": "style-body",
+          "source": ".card{color:red}",
+          "virtual_source": ".card{color:red}",
+          "base_indent": 4,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {
+          "status": "formatted",
+          "region": 0,
+          "text": "const answer = 41 + 1;\n",
+          "provider": "fake-javascript@1"
+        },
+        {
+          "status": "formatted",
+          "region": 1,
+          "text": ".card {\n  color: red;\n}\n",
+          "provider": "fake-css@1"
+        }
+      ],
+      "expected": "embedded/script-style.expected.citry-html",
+      "outcome_notices": [],
+      "providers": ["fake-css@1", "fake-javascript@1"],
+      "features": ["script-body", "style-body", "embedded-virtual-mapping", "embedded-idempotence"]
+    },
+    {
+      "id": "embedded-formatting.providers.unavailable",
+      "category": "providers",
+      "input_text": "<style>.a{color:red}</style>",
+      "requests": [
+        {
+          "language": "css",
+          "kind": "style-body",
+          "source": ".a{color:red}",
+          "virtual_source": ".a{color:red}",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {
+          "status": "unavailable",
+          "region": 0,
+          "provider": "fake-css@1",
+          "message": "no CSS provider"
+        }
+      ],
+      "expected_text": "<style>.a{color:red}</style>",
+      "outcome_notices": [
+        {"code": "citry.format.provider-unavailable", "contains": "no CSS provider"}
+      ],
+      "providers": [],
+      "features": ["style-body", "embedded-provider-unavailable"]
+    },
+    {
+      "id": "embedded-formatting.preservation.unavailable-regions",
+      "category": "preservation",
+      "input": "preservation/unavailable.input.citry-html",
+      "requests": [],
+      "plan_notices": [
+        {"code": "citry.format.embedded-interpolation-unsupported", "contains": "interpolation"},
+        {"code": "citry.format.embedded-language-unsupported", "contains": "alternate"},
+        {"code": "citry.format.embedded-suppressed", "contains": "protected"}
+      ],
+      "results": [],
+      "expected": "preservation/unavailable.expected.citry-html",
+      "outcome_notices": [
+        {"code": "citry.format.embedded-interpolation-unsupported", "contains": "interpolation"},
+        {"code": "citry.format.embedded-language-unsupported", "contains": "alternate"},
+        {"code": "citry.format.embedded-suppressed", "contains": "protected"}
+      ],
+      "providers": [],
+      "features": ["script-body", "style-body", "suppression", "embedded-interpolation-unsupported"]
+    },
+    {
+      "id": "embedded-formatting.preservation.multiline-literal",
+      "category": "preservation",
+      "input_text": "<script>\n    const x = `\n      hello\n    `;\n    console.log(x);\n</script>",
+      "requests": [],
+      "plan_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "results": [],
+      "expected_text": "<script>\n    const x = `\n      hello\n    `;\n    console.log(x);\n</script>",
+      "outcome_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "providers": [],
+      "features": ["script-body", "multiline-literal", "whitespace-sensitive-preservation"]
+    },
+    {
+      "id": "embedded-formatting.preservation.ambiguous-regex-before-multiline-literal",
+      "category": "preservation",
+      "input_text": "<script>if(ok) /`/.test(x);const s=`a\nb`;</script>",
+      "requests": [],
+      "plan_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "results": [],
+      "expected_text": "<script>if(ok) /`/.test(x);const s=`a\nb`;</script>",
+      "outcome_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "providers": [],
+      "features": ["script-body", "ambiguous-regex", "whitespace-sensitive-preservation"]
+    },
+    {
+      "id": "embedded-formatting.preservation.css-escape-before-multiline-string",
+      "category": "preservation",
+      "input_text": "<style>a{--x:foo\\'bar;content:'a\\\nb'}</style>",
+      "requests": [],
+      "plan_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "results": [],
+      "expected_text": "<style>a{--x:foo\\'bar;content:'a\\\nb'}</style>",
+      "outcome_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "providers": [],
+      "features": ["style-body", "css-escape", "whitespace-sensitive-preservation"]
+    },
+    {
+      "id": "embedded-formatting.providers.error",
+      "category": "providers",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {
+          "status": "error",
+          "region": 0,
+          "provider": "fake-javascript@1",
+          "message": "provider crashed"
+        }
+      ],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "provider crashed"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-provider-error"]
+    },
+    {
+      "id": "embedded-formatting.results.stale",
+      "category": "result-validation",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {"status": "stale-plan", "region": 0, "text": "let value = 1;\n", "provider": "fake@1"}
+      ],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "different plan"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-result-stale"]
+    },
+    {
+      "id": "embedded-formatting.results.duplicate",
+      "category": "result-validation",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {"status": "duplicate", "region": 0, "text": "let value = 1;\n", "provider": "fake@1"}
+      ],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "result count"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-result-duplicate"]
+    },
+    {
+      "id": "embedded-formatting.results.missing",
+      "category": "result-validation",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "result count"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-result-missing"]
+    },
+    {
+      "id": "embedded-formatting.results.delimiter-conflict",
+      "category": "result-validation",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {"status": "formatted", "region": 0, "text": "const value = '</script>';\n", "provider": "fake@1"}
+      ],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "forbidden delimiter"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-delimiter-conflict"]
+    }
+  ],
   "python_hosts": [
     {
       "id": "python-hosts.framing.triple-double",

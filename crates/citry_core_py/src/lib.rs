@@ -7,6 +7,7 @@
 
 pub mod html_transform;
 pub mod safe_eval;
+pub mod template_formatter;
 pub mod template_parser;
 
 use pyo3::prelude::*;
@@ -20,6 +21,10 @@ use citry_template_parser::{
 };
 
 use crate::html_transform::{mark_html, transform_html};
+use crate::template_formatter::{
+    PyEmbeddedFormatPlan, TemplateFormatError, finish_embedded_format, format_template,
+    prepare_embedded_format, python_expression_provider,
+};
 use crate::template_parser::{compile_template, parse_template};
 
 /// Singular Python API that brings together all the other Rust crates.
@@ -42,6 +47,29 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         crate::safe_eval::safe_eval,
         &safe_eval_mod
     )?)?;
+
+    // Template formatter
+    let template_formatter_mod = PyModule::new(m.py(), "template_formatter")?;
+    m.add_submodule(&template_formatter_mod)?;
+    template_formatter_mod
+        .add_function(wrap_pyfunction!(format_template, &template_formatter_mod)?)?;
+    template_formatter_mod.add_function(wrap_pyfunction!(
+        python_expression_provider,
+        &template_formatter_mod
+    )?)?;
+    template_formatter_mod.add_function(wrap_pyfunction!(
+        prepare_embedded_format,
+        &template_formatter_mod
+    )?)?;
+    template_formatter_mod.add_function(wrap_pyfunction!(
+        finish_embedded_format,
+        &template_formatter_mod
+    )?)?;
+    template_formatter_mod.add_class::<PyEmbeddedFormatPlan>()?;
+    template_formatter_mod.add(
+        "TemplateFormatError",
+        m.py().get_type::<TemplateFormatError>(),
+    )?;
 
     // Template parser
     let template_parser_mod = PyModule::new(m.py(), "template_parser")?;

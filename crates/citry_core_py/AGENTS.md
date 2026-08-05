@@ -14,6 +14,8 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   can import.
 - `src/html_transform.rs` - wraps `citry_html_transform`.
 - `src/safe_eval.rs` - wraps `python_safe_eval`.
+- `src/template_formatter.rs` - wraps `citry_template_formatter` and attaches
+  stable formatter codes, ranges, and parser diagnostics to Python errors.
 - `src/template_parser.rs` - wraps `citry_template_parser`: `parse_template`
   / `compile_template`, the V3 AST classes, and `TagRules`.
 - `Cargo.toml` - depends on the sibling crates by path; `crate-type =
