@@ -54,13 +54,7 @@ save_button = CButton(
 )
 
 class SaveActions(Component):
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
-
-    def template_data(self, kwargs: Kwargs, slots: Slots):
+    def template_data(self, kwargs, slots):
         return {"save_button": save_button}
 
     template = """

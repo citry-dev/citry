@@ -10,15 +10,22 @@ from citry_setup import citry_app
 class Task:
     id: int
     title: str
+    completed: bool = False
 
 
 # This represents the "database" of tasks.
 # In a real app, this would be stored in a database.
 TASKS = [
-    Task(id=1, title="Review the draft"),
+    Task(id=1, title="Review the draft", completed=True),
     Task(id=2, title="Send the invitation"),
     Task(id=3, title="Publish the notes"),
 ]
+
+
+def load_tasks(*, hide_completed: bool = False) -> list[Task]:
+    if hide_completed:
+        return [task for task in TASKS if not task.completed]
+    return TASKS
 
 
 class RenameTaskIn:
@@ -51,6 +58,7 @@ class TaskRow(Component):
                     fields={"title": "Use at least three characters."},
                 )
 
+            # Perform a "database" update.
             for task in TASKS:
                 if task.id == state.task_id:
                     task.title = title
@@ -107,21 +115,50 @@ class TaskRow(Component):
     """
 
 
-class CompactModeIn:
-    compact: bool
-
-
-class CompactToggle(Component):
+class TaskRows(Component):
     citry = citry_app
+
+    class Kwargs:
+        tasks: list[Task]
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs, slots):
+        return {"tasks": kwargs.tasks}
+
+    template = """
+      <c-for each="task in tasks">
+        <c-TaskRow
+          #c-key="task.id"
+          c-task_id="task.id"
+          c-title="task.title"
+        />
+      </c-for>
+    """
+
+
+class FilterTasksIn:
+    hide_completed: bool
+
+
+class TaskFilterToggle(Component):
+    citry = citry_app
+
+    class Kwargs:
+        pass
+
+    class Slots:
+        pass
 
     template = """
       <button
         type="button"
         :disabled="clientProps.loading"
         x-text="
-          clientProps.compact
-            ? 'Use roomy rows'
-            : 'Use compact rows'
+          clientProps.hideCompleted
+            ? 'Show all tasks'
+            : 'Hide completed tasks'
         "
       ></button>
     """
@@ -129,7 +166,7 @@ class CompactToggle(Component):
     js = """
       $component({
         props: {
-          compact: { type: Boolean, required: true },
+          hideCompleted: { type: Boolean, required: true },
           loading: { type: Boolean, required: true },
         },
         init: ({ props, scope }) => {
@@ -149,65 +186,65 @@ class TaskList(Component):
         pass
 
     class Events:
-        def set_compact(self, data: CompactModeIn):
-            return actions.Dispatch(
-                "TaskList:compact-changed",
-                {"compact": data.compact},
+        def filter_tasks(self, data: FilterTasksIn):
+            visible_tasks = load_tasks(
+                hide_completed=data.hide_completed,
             )
+            return [
+                actions.Dispatch(
+                    "TaskList:filter-changed",
+                    {"hideCompleted": data.hide_completed},
+                ),
+                actions.Render(
+                    TaskRows(tasks=visible_tasks),
+                    target="#task-rows",
+                    swap="inner",
+                ),
+            ]
 
     def template_data(self, kwargs, slots):
-        return {"tasks": kwargs.tasks}
+        return {
+            "tasks": kwargs.tasks,
+        }
 
     template = """
-      <section :class="{ 'task-list--compact': compact }">
-        <c-CompactToggle
+      <section>
+        <c-TaskFilterToggle
           $c-props="{
-            compact,
-            loading: $loading('set_compact'),
+            hideCompleted,
+            loading: $loading('filter_tasks'),
           }"
-          @c-click="set_compact({ compact: !compact })"
+          @c-click="filter_tasks({
+            hide_completed: !hideCompleted,
+          })"
         />
 
-        <ul>
-          <c-for each="task in tasks">
-            <c-TaskRow
-              #c-key="task.id"
-              c-task_id="task.id"
-              c-title="task.title"
-            />
-          </c-for>
+        <ul id="task-rows">
+          <c-TaskRows c-tasks="tasks" />
         </ul>
 
-        <c-CompactToggle
+        <c-TaskFilterToggle
           $c-props="{
-            compact,
-            loading: $loading('set_compact'),
+            hideCompleted,
+            loading: $loading('filter_tasks'),
           }"
-          @c-click="set_compact({ compact: !compact })"
+          @c-click="filter_tasks({
+            hide_completed: !hideCompleted,
+          })"
         />
       </section>
     """
 
     js = """
       $component(({ onEvent, scope }) => {
-        scope.compact = false;
+        scope.hideCompleted = false;
         onEvent(
-          'TaskList:compact-changed',
+          'TaskList:filter-changed',
           (detail) => {
-            scope.compact = detail.compact;
+            scope.hideCompleted = detail.hideCompleted;
           },
         );
       });
-    """
-
-    css = """
-      .task-row {
-        padding-block: 0.75rem;
-      }
-
-      .task-list--compact .task-row {
-        padding-block: 0.25rem;
-      }
     """
 
 
@@ -221,7 +258,7 @@ class TutorialPage(Component):
         pass
 
     def template_data(self, kwargs, slots):
-        return {"tasks": TASKS}
+        return {"tasks": load_tasks()}
 
     template = """
       <!DOCTYPE html>

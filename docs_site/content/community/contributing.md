@@ -11,37 +11,37 @@ contributions of all sizes are welcome.
 
 ## Found a bug?
 
-Open [an issue](https://github.com/citry-dev/citry/issues/new/choose){: target="_blank" rel="noopener"} with the details of what went wrong.
+Open [an issue]({{ repo_url }}/issues/new/choose){: target="_blank" rel="noopener"} with the details of what went wrong.
 
 The more details you can give, the faster it can be tracked down.
 
 ## Got a fix?
 
 Found a bug or a typo and know how to fix it? Open a
-[pull request](https://github.com/citry-dev/citry/pulls){: target="_blank" rel="noopener"}.
+[pull request]({{ repo_url }}/pulls){: target="_blank" rel="noopener"}.
 
 [See what a good PR should include](/community/development/#making-a-change). We will help you get it across the finish line.
 
 ## Have an idea?
 
 - Open a
-[Discussions](https://github.com/citry-dev/citry/discussions){: target="_blank" rel="noopener"} if you want to talk it through first
+[Discussions]({{ repo_url }}/discussions){: target="_blank" rel="noopener"} if you want to talk it through first
 - Open a [feature
-request issue](https://github.com/citry-dev/citry/issues/new/choose){: target="_blank" rel="noopener"} when you have a concrete proposal.
+request issue]({{ repo_url }}/issues/new/choose){: target="_blank" rel="noopener"} when you have a concrete proposal.
 
 Describing the problem before the solution helps a lot.
 
 ## Support the project
 
 Citry is maintained in the open. Help it keep it going, [sponsor the project on
-GitHub](https://github.com/sponsors/JuroOravec){: target="_blank" rel="noopener"}. Every bit helps.
+GitHub]({{ repo_sponsors_url }}){: target="_blank" rel="noopener"}. Every bit helps.
 
 ## Help others
 
 You can help just by answering questions and sharing what you have worked out:
 
-- [Discussions](https://github.com/citry-dev/citry/discussions){: target="_blank" rel="noopener"} - questions, ideas, and general conversation.
-- [Issues](https://github.com/citry-dev/citry/issues){: target="_blank" rel="noopener"} - bug reports and feature requests where an extra pair of
+- [Discussions]({{ repo_url }}/discussions){: target="_blank" rel="noopener"} - questions, ideas, and general conversation.
+- [Issues]({{ repo_issues_url }}){: target="_blank" rel="noopener"} - bug reports and feature requests where an extra pair of
   eyes often unblocks someone.
 
 ## Get coding
@@ -49,8 +49,8 @@ You can help just by answering questions and sharing what you have worked out:
 Citry is still young and there is a lot to build. Getting started is easy.
 
 1. Find something to work on. Browse the
-[open issues](https://github.com/citry-dev/citry/issues){: target="_blank" rel="noopener"}. Anything labeled
-[good first issue](https://github.com/citry-dev/citry/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22){: target="_blank" rel="noopener"} is a friendly place to start.
+[open issues]({{ repo_issues_url }}){: target="_blank" rel="noopener"}. Anything labeled
+[good first issue]({{ repo_issues_url }}?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22){: target="_blank" rel="noopener"} is a friendly place to start.
 
 2. [Set up your environment](/community/development/#getting-set-up).
 
@@ -59,11 +59,11 @@ Citry is still young and there is a lot to build. Getting started is easy.
 4. Open a pull request.
 
 For the complete setup and workflow, see
-[CONTRIBUTING.md](https://github.com/citry-dev/citry/blob/main/CONTRIBUTING.md){: target="_blank" rel="noopener"}.
+[CONTRIBUTING.md]({{ repo_url }}/blob/{{ repo_edit_branch }}/CONTRIBUTING.md){: target="_blank" rel="noopener"}.
 
 For how the codebase fits together (the Rust crates, the language bindings, and
 how releases work), see
-[docs/codebase.md](https://github.com/citry-dev/citry/blob/main/docs/codebase.md){: target="_blank" rel="noopener"}.
+[docs/codebase.md]({{ repo_url }}/blob/{{ repo_edit_branch }}/docs/codebase.md){: target="_blank" rel="noopener"}.
 
 ## Code of conduct
 

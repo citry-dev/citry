@@ -63,13 +63,13 @@ Citry also has attributes for browser and server interaction:
 - `$c-props`, `@c-*`, and `:c-*` are covered in
 [Client interactivity](/concepts/client-interactivity/) and [Events](/events/)
 - `#c-key` and `#c-ignore` are the template's
-[template flags](/syntax/dynamic-attributes/#template-flags). They guide how
+[template flags](/syntax/dynamic-attributes/#c-template-flags). They guide how
 an event response updates existing HTML. See also
 [Event actions](/events/actions/).
 
 ## Self-closing tags
 
-Opening and closing tags must match. Standard void elements such as `<input>`
+Opening and closing tags must match (case-insensitive). Standard void elements such as `<input>`
 and `<br>` do not need closing tags. Other tags may use the compact
 self-closing form too:
 
