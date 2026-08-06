@@ -39,7 +39,7 @@ dependencies = [
     "citry-core==1.4.0",
     "wrapt>=1.16",
     "markupsafe>=2.1",
-    "typing-extensions>=4.6",
+    "typing-extensions>=4.16.0",
 ]
 
 # Optional runtime extras, namespaced `<category>-<name>` (see docs/codebase.md).
