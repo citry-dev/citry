@@ -93,6 +93,8 @@
      "clientBindings": [],
      "invocationId": 1,
      "locationId": 2,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": null,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -104,6 +106,8 @@
      "clientBindings": [],
      "invocationId": 2,
      "locationId": 6,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": 1,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -115,6 +119,8 @@
      "clientBindings": [],
      "invocationId": 3,
      "locationId": 9,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": 2,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -158,11 +164,11 @@
      "ownerClassId": "Page_df2715",
      "ownerRenderId": "c1",
      "sourceOffset": {
-      "end": 157,
-      "start": 15
+      "end": 87,
+      "start": 1
      },
      "sourcePos": {
-      "column": 15,
+      "column": 1,
       "line": 2
      }
     },
@@ -176,11 +182,11 @@
      "ownerClassId": "Page_df2715",
      "ownerRenderId": "c1",
      "sourceOffset": {
-      "end": 157,
-      "start": 15
+      "end": 87,
+      "start": 1
      },
      "sourcePos": {
-      "column": 15,
+      "column": 1,
       "line": 2
      }
     },
@@ -212,11 +218,11 @@
      "ownerClassId": "Page_df2715",
      "ownerRenderId": "c1",
      "sourceOffset": {
-      "end": 132,
-      "start": 53
+      "end": 76,
+      "start": 25
      },
      "sourcePos": {
-      "column": 17,
+      "column": 3,
       "line": 3
      }
     },
@@ -230,11 +236,11 @@
      "ownerClassId": "Page_df2715",
      "ownerRenderId": "c1",
      "sourceOffset": {
-      "end": 132,
-      "start": 53
+      "end": 76,
+      "start": 25
      },
      "sourcePos": {
-      "column": 17,
+      "column": 3,
       "line": 3
      }
     },
@@ -266,11 +272,11 @@
      "ownerClassId": "Page_df2715",
      "ownerRenderId": "c1",
      "sourceOffset": {
-      "end": 105,
-      "start": 93
+      "end": 63,
+      "start": 51
      },
      "sourcePos": {
-      "column": 19,
+      "column": 5,
       "line": 4
      }
     }
@@ -279,5 +285,5 @@
  ],
  "mode": "development",
  "protocol": "citry-client-graph/1",
- "revision": "108d0cf13a3f6705d8c8a91d7231c670baa95d2e84c3909187ea7955f4806bfd"
+ "revision": "eb84d3a09cc89821ac7a7f6d3bae3c762826d8109615b7113b8950ec0b743910"
 }

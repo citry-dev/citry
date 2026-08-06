@@ -134,6 +134,8 @@
      ],
      "invocationId": 1,
      "locationId": 7,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": null,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -145,6 +147,8 @@
      "clientBindings": [],
      "invocationId": 2,
      "locationId": 8,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": null,
      "sourceClassId": "Child_3b64a6",
      "sourceRenderId": "c2",
@@ -304,5 +308,5 @@
  ],
  "mode": "development",
  "protocol": "citry-client-graph/1",
- "revision": "99756a4de7b4aabede69d122e23ccfb8af120c60371039c1c5fcc4de62e0cc82"
+ "revision": "9bc539e25e2f67b05c71a3a18ceaf502ea35f1047af3f01d4e5f11a3cabfbbc4"
 }

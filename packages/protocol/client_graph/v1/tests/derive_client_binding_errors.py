@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from check_canonicalization import canonical_json
+
 if TYPE_CHECKING:
     from collections.abc import Callable
 
@@ -17,7 +19,7 @@ BASE = FIXTURES / "component_tag_client_bindings.manifest.json"
 
 def _revision(manifest: dict[str, Any]) -> str:
     unsigned = {key: value for key, value in manifest.items() if key != "revision"}
-    canonical = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode("utf8")
+    canonical = canonical_json(unsigned).encode("utf8")
     return hashlib.sha256(canonical).hexdigest()
 
 

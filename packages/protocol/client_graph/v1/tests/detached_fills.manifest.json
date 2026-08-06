@@ -86,11 +86,11 @@
      "ownerClassId": "Card_0f1c15",
      "ownerRenderId": "c1",
      "sourceOffset": {
-      "end": 69,
-      "start": 45
+      "end": 41,
+      "start": 17
      },
      "sourcePos": {
-      "column": 25,
+      "column": 11,
       "line": 3
      }
     },
@@ -104,11 +104,11 @@
      "ownerClassId": "Card_0f1c15",
      "ownerRenderId": "c1",
      "sourceOffset": {
-      "end": 111,
-      "start": 101
+      "end": 69,
+      "start": 59
      },
      "sourcePos": {
-      "column": 23,
+      "column": 9,
       "line": 4
      }
     }
@@ -117,5 +117,5 @@
  ],
  "mode": "development",
  "protocol": "citry-client-graph/1",
- "revision": "e129f5c2ab6e764c6df231ea6cb9952e6d893ab4ec1ff1ee68789faeb67d7269"
+ "revision": "250c441116bcaa53b2b3b547646c5cde8675cc28793d9830e48384b98e9c022c"
 }

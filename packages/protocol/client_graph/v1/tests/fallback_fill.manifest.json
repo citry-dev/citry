@@ -60,6 +60,8 @@
      "clientBindings": [],
      "invocationId": 1,
      "locationId": 1,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": null,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -92,11 +94,11 @@
      "ownerClassId": "Page_df2715",
      "ownerRenderId": "c1",
      "sourceOffset": {
-      "end": 25,
-      "start": 15
+      "end": 11,
+      "start": 1
      },
      "sourcePos": {
-      "column": 15,
+      "column": 1,
       "line": 2
      }
     },
@@ -110,11 +112,11 @@
      "ownerClassId": "Card_0f1c15",
      "ownerRenderId": "c2",
      "sourceOffset": {
-      "end": 71,
-      "start": 24
+      "end": 57,
+      "start": 10
      },
      "sourcePos": {
-      "column": 24,
+      "column": 10,
       "line": 2
      }
     },
@@ -128,11 +130,11 @@
      "ownerClassId": "Card_0f1c15",
      "ownerRenderId": "c2",
      "sourceOffset": {
-      "end": 71,
-      "start": 24
+      "end": 57,
+      "start": 10
      },
      "sourcePos": {
-      "column": 24,
+      "column": 10,
       "line": 2
      }
     }
@@ -141,5 +143,5 @@
  ],
  "mode": "development",
  "protocol": "citry-client-graph/1",
- "revision": "8c7188b102f521702fd50a0b98bd87547549578b3c21e864e6b67c17d73f6077"
+ "revision": "02279b302d09feee327415dc5576b0982ebdc7452955b85366c6538d1cd01ec2"
 }

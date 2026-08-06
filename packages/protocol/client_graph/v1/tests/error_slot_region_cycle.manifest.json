@@ -93,6 +93,8 @@
      "clientBindings": [],
      "invocationId": 1,
      "locationId": 2,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": null,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -104,6 +106,8 @@
      "clientBindings": [],
      "invocationId": 2,
      "locationId": 6,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": 1,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -115,6 +119,8 @@
      "clientBindings": [],
      "invocationId": 3,
      "locationId": 9,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": 2,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -279,5 +285,5 @@
  ],
  "mode": "development",
  "protocol": "citry-client-graph/1",
- "revision": "8a6738cfb9fbcbead1199721c855b1ecc559e4af3c31f0b2150aedce3cd1b564"
+ "revision": "8703266c0c067000c6c906214a5d57678b322de16d4eff4dbdbaa83631af1b73"
 }
