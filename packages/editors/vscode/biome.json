@@ -1,0 +1,13 @@
+{
+	"$schema": "https://biomejs.dev/schemas/2.5.6/schema.json",
+	"files": {
+		"includes": ["**", "!dist", "!out"]
+	},
+	"formatter": {
+		"enabled": true,
+		"lineWidth": 120
+	},
+	"linter": {
+		"enabled": true
+	}
+}

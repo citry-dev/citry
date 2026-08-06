@@ -20,6 +20,11 @@
       "description": "The build that produced this manifest. 'development' ships source provenance in sourceLocations; 'production' keeps sourceLocations empty and nulls every location reference.",
       "enum": ["production", "development"]
     },
+    "graphs": {
+      "description": "The ownership graphs, in the order they first appear in the HTML.",
+      "type": "array",
+      "items": {"$ref": "#/$defs/graph"}
+    },
     "delimiters": {
       "description": "The literal prefix of the HTML comments that bracket each component instance and slot region in the rendered HTML.",
       "type": "object",
@@ -31,19 +36,14 @@
           "const": "citry:g1"
         }
       }
-    },
-    "graphs": {
-      "description": "The ownership graphs, in the order they first appear in the HTML.",
-      "type": "array",
-      "items": {"$ref": "#/$defs/graph"}
     }
   },
   "$defs": {
     "str": {"type": "string"},
     "nullableStr": {"oneOf": [{"type": "string"}, {"type": "null"}]},
-    "id": {"description": "A record id, unique within its collection in one graph, starting at 1.", "type": "integer", "minimum": 1},
-    "nullableId": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]},
-    "offset": {"type": "integer", "minimum": 0},
+    "id": {"description": "A record id, unique within its collection in one graph, starting at 1.", "type": "integer", "minimum": 1, "maximum": 9007199254740991},
+    "nullableId": {"oneOf": [{"type": "integer", "minimum": 1, "maximum": 9007199254740991}, {"type": "null"}]},
+    "offset": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
     "componentClass": {
       "description": "One component class referenced by this graph.",
       "type": "object",
@@ -61,7 +61,7 @@
       "required": ["instanceId", "renderId", "classId", "invocationId", "parentRenderId", "transparent"],
       "properties": {
         "instanceId": {"description": "This component instance's record id.", "$ref": "#/$defs/id"},
-        "renderId": {"description": "The component instance's runtime identity; element-root instances use it as the suffix in data-cid-<render-id>, and roots marked as Citry-managed Alpine boundaries also include it as a whitespace-separated token in data-cid. Matches ^[a-z0-9_-]+$.", "type": "string"},
+        "renderId": {"description": "The component instance's runtime identity; element-root instances use it as the suffix in data-cid-<render-id>, and roots marked as Citry-managed Alpine boundaries also include it as a whitespace-separated token in data-cid. Matches ^[a-z0-9_-]+$.", "type": "string", "pattern": "^[a-z0-9_-]+$"},
         "classId": {"description": "The component instance's class id; must match one of this graph's componentClasses records.", "type": "string"},
         "invocationId": {"description": "Record id of the nested component tag execution that produced this component instance, or null for a graph root.", "$ref": "#/$defs/nullableId"},
         "parentRenderId": {"description": "Render id of the parent component instance, or null when it has no parent in this graph.", "$ref": "#/$defs/nullableStr"},
@@ -84,8 +84,8 @@
       "additionalProperties": false,
       "required": ["line", "column"],
       "properties": {
-        "line": {"description": "Line in the source, starting at 1.", "type": "integer", "minimum": 1},
-        "column": {"description": "Column in the source, starting at 1.", "type": "integer", "minimum": 1}
+        "line": {"description": "Line in the source, starting at 1.", "type": "integer", "minimum": 1, "maximum": 9007199254740991},
+        "column": {"description": "Column in the source, starting at 1.", "type": "integer", "minimum": 1, "maximum": 9007199254740991}
       }
     },
     "sourceLocation": {
@@ -103,7 +103,7 @@
         "sourceOffset": {"$ref": "#/$defs/sourceOffset"},
         "sourcePos": {"$ref": "#/$defs/sourcePos"},
         "mappingKey": {"description": "The spread key this location came from, or null.", "$ref": "#/$defs/nullableStr"},
-        "mappingIndex": {"description": "Position within the spread this location came from, or null.", "oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]}
+        "mappingIndex": {"description": "Position within the spread this location came from, or null.", "oneOf": [{"type": "integer", "minimum": 0, "maximum": 9007199254740991}, {"type": "null"}]}
       }
     },
     "expressionPayload": {
@@ -129,8 +129,8 @@
         "args": {"description": "An opaque Alpine argument expression, or null.", "$ref": "#/$defs/nullableStr"},
         "prevent": {"type": "boolean"}, "stop": {"type": "boolean"}, "self": {"type": "boolean"}, "once": {"type": "boolean"},
         "key": {"description": "A keyboard-key filter, or null.", "$ref": "#/$defs/nullableStr"},
-        "debounce": {"description": "Debounce delay in milliseconds, or null.", "oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]},
-        "throttle": {"description": "Throttle interval in milliseconds, or null.", "oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}]}
+        "debounce": {"description": "Debounce delay in milliseconds, or null.", "oneOf": [{"type": "integer", "minimum": 0, "maximum": 9007199254740991}, {"type": "null"}]},
+        "throttle": {"description": "Throttle interval in milliseconds, or null.", "oneOf": [{"type": "integer", "minimum": 0, "maximum": 9007199254740991}, {"type": "null"}]}
       }
     },
     "pollPayload": {
@@ -143,7 +143,7 @@
         "classId": {"description": "Class id of the parent component that owns the polling handler.", "type": "string"},
         "handler": {"description": "The server handler name.", "type": "string"},
         "args": {"description": "An opaque Alpine argument expression, or null.", "$ref": "#/$defs/nullableStr"},
-        "interval": {"description": "Poll interval in milliseconds, at least 1.", "type": "integer", "minimum": 1}
+        "interval": {"description": "Poll interval in milliseconds, at least 1.", "type": "integer", "minimum": 1, "maximum": 9007199254740991}
       }
     },
     "componentTagClientBinding": {
@@ -162,7 +162,7 @@
       "description": "One executed occurrence of a component tag: a parent component rendering one child occurrence.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["invocationId", "sourceRenderId", "sourceClassId", "locationId", "tagName", "targetClassId", "targetRenderId", "parentRegionId", "clientBindings"],
+      "required": ["invocationId", "sourceRenderId", "sourceClassId", "locationId", "tagName", "targetClassId", "morphKey", "morphMode", "targetRenderId", "parentRegionId", "clientBindings"],
       "properties": {
         "invocationId": {"description": "This nested component execution's record id.", "$ref": "#/$defs/id"},
         "sourceRenderId": {"description": "Render id of the parent component.", "type": "string"},
@@ -170,6 +170,8 @@
         "locationId": {"description": "Record id of the component-call location, or null in production.", "$ref": "#/$defs/nullableId"},
         "tagName": {"description": "The nested component tag name.", "type": "string"},
         "targetClassId": {"description": "Class id of the child component.", "type": "string"},
+        "morphKey": {"description": "The component range's parent-authored morph key, or null when unkeyed.", "$ref": "#/$defs/nullableStr"},
+        "morphMode": {"description": "The component range's parent-authored morph policy, or null for normal morphing.", "oneOf": [{"enum": ["ignore"]}, {"type": "null"}]},
         "targetRenderId": {"description": "Render id of the child component.", "type": "string"},
         "parentRegionId": {"description": "Record id of the slot region this nested component sits inside, or null.", "$ref": "#/$defs/nullableId"},
         "clientBindings": {"description": "The winning browser-side bindings resolved from this nested component tag.", "type": "array", "items": {"$ref": "#/$defs/componentTagClientBinding"}}
@@ -228,7 +230,7 @@
       "additionalProperties": false,
       "required": ["graphId", "componentClasses", "componentInstances", "sourceLocations", "nestedComponents", "componentExecutionOrderConstraints", "fills", "slotRegions"],
       "properties": {
-        "graphId": {"description": "This graph's id, dense and zero-based, equal to its position in 'graphs'.", "type": "integer", "minimum": 0},
+        "graphId": {"description": "This graph's id, dense and zero-based, equal to its position in 'graphs'.", "type": "integer", "minimum": 0, "maximum": 9007199254740991},
         "componentClasses": {"type": "array", "items": {"$ref": "#/$defs/componentClass"}},
         "componentInstances": {"type": "array", "items": {"$ref": "#/$defs/componentInstance"}},
         "sourceLocations": {"description": "Source locations (development only; empty in production).", "type": "array", "items": {"$ref": "#/$defs/sourceLocation"}},

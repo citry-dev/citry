@@ -56,6 +56,7 @@ from docs_site._internal.components import (  # noqa: F401
     people,
     search_modal,
     social_links,
+    ui_demo,
     ui_library,
     version_picker,
 )
@@ -83,6 +84,11 @@ from docs_site._internal.project import (
 )
 from docs_site._internal.settings import google_search_site_target
 from docs_site._internal.toc import merge_html_headings_into_toc
+from docs_site._internal.ui_previews import (
+    UiPreviewRenderContext,
+    project_ui_previews_for_text,
+    use_ui_preview_context,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -299,6 +305,14 @@ def render_page(
             allow_citry_ui=allow_citry_ui,
         )
         live_context = use_live_code_context(live_state)
+        ui_preview_state = UiPreviewRenderContext(
+            config=config,
+            catalog=project.ui_library,
+            source_path=source_path,
+            current_path=current_path,
+            version_prefix=version_prefix,
+        )
+        ui_preview_context = use_ui_preview_context(ui_preview_state)
         repository = settings.repository
         render_context = {
             "current_path": current_path,
@@ -313,7 +327,7 @@ def render_page(
         }
         if version:
             render_context["version"] = version
-        with catalog_context, live_context:
+        with catalog_context, live_context, ui_preview_context:
             expanded = restore_protected_code(render_content(protected, context=render_context))
         has_live_code = live_state.has_live_code
         has_interactive_live_code = live_state.has_interactive
@@ -340,6 +354,7 @@ def render_page(
         repo_root=config.repo_root,
         allow_citry_ui=allow_citry_ui,
     )
+    expanded = project_ui_previews_for_text(expanded, repo_root=config.repo_root)
     if blog_catalog is not None:
         expanded = project_blog_list_for_text(expanded, blog_catalog)
     # Rewrite internal `.md` links (e.g. ./other.md -> ../other/) so they resolve

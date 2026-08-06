@@ -15,7 +15,7 @@ A Slot is:
   (for example a ``<c-slot>`` inside a loop calls its fill once per item).
 - **Standalone.** Calling a Slot needs no component or render context::
 
-      slot = Slot(lambda ctx: f"Hello, {ctx.data['name']}!")
+      slot = Slot(lambda ctx: f"Hello, {ctx.data.name}!")
       slot({"name": "John"})   # 'Hello, John!'
 
 The slot's fallback content is itself a ``Slot`` (``SlotContext.fallback``),
@@ -24,36 +24,110 @@ same path as any other slot value.
 
 Escaping: a plain string (or scalar) is escaped when the Slot is constructed;
 a function's return value is escaped when the Slot is called. A
-``SafeString``, ``CitryElement``, or ``CitryRender`` result is trusted and is
+``Markup``, ``CitryElement``, or ``CitryRender`` result is trusted and is
 not escaped. This matches how ``{{ expr }}`` results are escaped.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeAlias, TypeVar
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeAlias, TypeVar, cast
+
+from typing_extensions import TypeAliasType
 
 from citry.citry_element import CitryElement
-from citry.util.html import SafeString, escape
+from citry.component_like import ComponentLike
+from citry.util.html import Markup, escape
 
 if TYPE_CHECKING:
     from citry.citry_render import CitryRender, RenderPart
 
-TSlotData = TypeVar("TSlotData", bound=Mapping)
+TSlotData = TypeVar("TSlotData")
 
 SlotName: TypeAlias = str
 
-SlotResult: TypeAlias = "str | SafeString | CitryRender"
+
+@dataclass(frozen=True, slots=True, eq=False)
+class SlotData(Mapping[str, Any]):
+    """
+    Immutable data passed from a slot outlet to its fill.
+
+    Identifier-like keys are available as attributes, while every key remains
+    available through mapping access. Keys beginning with an underscore and
+    keys that collide with mapping methods intentionally require bracket
+    access or fill-data destructuring.
+
+    Args:
+        values: The slot data values. Citry takes a shallow copy so later
+            changes to the input mapping do not change a retained slot call.
+
+    Example:
+        ::
+
+            data = SlotData({"label": "Save", "aria-label": "Save item"})
+            data.label
+            data["aria-label"]
+
+    """
+
+    _values: Mapping[str, Any]
+
+    def __init__(self, values: Mapping[str, Any] | None = None) -> None:
+        copied = {} if values is None else dict(values)
+        object.__setattr__(self, "_values", MappingProxyType(copied))
+
+    def __getitem__(self, key: str) -> Any:
+        return self._values[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __getattr__(self, name: str) -> Any:
+        if not name.startswith("_") and name.isidentifier():
+            try:
+                return self._values[name]
+            except KeyError:
+                pass
+        msg = f"{type(self).__name__!s} has no attribute {name!r}"
+        raise AttributeError(msg)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({dict(self._values)!r})"
+
+
+_EMPTY_SLOT_DATA = SlotData()
+
+
+def _normalize_slot_data(data: Mapping[str, Any] | SlotData | None) -> SlotData:
+    if data is None:
+        return _EMPTY_SLOT_DATA
+    if isinstance(data, SlotData):
+        return data
+    if not isinstance(data, Mapping):
+        msg = f"Slot data must be a mapping, got {type(data).__name__}."
+        raise TypeError(msg)
+    return SlotData(data)
+
+
+SlotResult = TypeAliasType(
+    "SlotResult",
+    "str | Markup | CitryRender | ComponentLike",
+)
 """
 What a slot function may return.
 
-A plain ``str`` is escaped when the slot renders; a ``SafeString`` or
-``CitryRender`` is trusted and inlined as-is.
+A plain ``str`` is escaped when the slot renders; ``Markup`` or a
+``CitryRender`` is trusted and inlined as-is. A ``ComponentLike`` resolves
+against the Citry instance rendering the slot.
 """
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class SlotContext(Generic[TSlotData]):
     """
     The single argument a slot function receives.
@@ -62,15 +136,16 @@ class SlotContext(Generic[TSlotData]):
         ::
 
             def my_slot(ctx: SlotContext) -> str:
-                return f"Hello, {ctx.data['name']}!"
+                return f"Hello, {ctx.data.name}!"
 
     """
 
     data: TSlotData
     """
     Data passed to the slot by the ``<c-slot>`` tag (its extra attributes), or
-    by the caller when the Slot is invoked directly. An empty mapping when no
-    data was given.
+    by the caller when the Slot is invoked directly. At runtime this is an
+    immutable [`SlotData`][citry.SlotData]; the type parameter may describe a
+    more precise component-specific field shape.
     """
 
     fallback: Slot | None = None
@@ -101,7 +176,7 @@ class SlotFunc(Protocol[TSlotData]):
 
             def header(ctx: SlotContext) -> str:
                 if ctx.data.get("name"):
-                    return f"Hello, {ctx.data['name']}!"
+                    return f"Hello, {ctx.data.name}!"
                 return str(ctx.fallback)
 
     """
@@ -115,15 +190,17 @@ class Slot(Generic[TSlotData]):
     """
     Normalized slot content: a lazy, repeatable, standalone callable.
 
-    Construct it from a string, a function, a ``CitryElement``, or a
-    ``CitryRender``. Calling the Slot returns a render part (a ``str`` or a
-    ``CitryRender``); ``str(slot)`` renders and serializes in one step.
+    Construct it from a string, a function, a ``CitryElement``, a
+    ``ComponentLike``, or a ``CitryRender``. Calling the Slot returns a render
+    part; ``str(slot)`` renders and serializes in one step. A standalone Slot
+    containing a ``ComponentLike`` cannot resolve without an active component
+    render.
 
     Example:
         ::
 
             Slot("Hello!")                                # static content
-            Slot(lambda ctx: f"Hi {ctx.data['name']}!")   # content function
+            Slot(lambda ctx: f"Hi {ctx.data.name}!")   # content function
             Slot(Card(title="Hi"))                        # composed element
 
     """
@@ -168,7 +245,7 @@ class Slot(Generic[TSlotData]):
 
     def __call__(
         self,
-        data: TSlotData | None = None,
+        data: Mapping[str, Any] | SlotData | None = None,
         fallback: Slot | None = None,
         *,
         provides: dict[str, Any] | None = None,
@@ -176,25 +253,35 @@ class Slot(Generic[TSlotData]):
         """
         Render the slot content and return it as a render part.
 
-        The result is a ``str`` (escaped text) or a ``CitryRender`` (a rendered
-        subtree, with its collected data intact). Pass ``data`` to expose slot
-        data to the content function; pass ``fallback`` to give it access to
-        the slot's fallback content. ``provides`` carries the provide/inject
-        entries active at the invoking site (set by the ``<c-slot>`` and
-        expression machinery); content rendered here inherits them.
+        The result is a ``str`` (escaped text), a ``CitryRender`` (a rendered
+        subtree with its collected data intact), or another structural render
+        part. Pass ``data`` to expose slot data to the content function; pass
+        ``fallback`` to give it access to the slot's fallback content.
+        ``provides`` carries the provide/inject entries active at the invoking
+        site (set by the ``<c-slot>`` and expression machinery); content
+        rendered here inherits them. A ``ComponentLike`` result requires an
+        active component render so its Citry instance is unambiguous.
         """
         # Imported here, not at module load: citry_render imports Slot (for the
         # `{{ my_slot }}` detection in _render_value), so a top-level import
         # back into it would be circular.
         from citry.citry_render import _render_value  # noqa: PLC0415
 
-        ctx: SlotContext[Any] = SlotContext(
-            data=data if data is not None else {},
+        ctx: SlotContext[TSlotData] = SlotContext(
+            data=cast("TSlotData", _normalize_slot_data(data)),
             fallback=fallback,
             provides=provides,
         )
-        result = self.content_func(ctx)
-        return _render_value(result, provides=provides)
+
+        def invoke() -> RenderPart:
+            result = self.content_func(ctx)
+            return _render_value(result, provides=provides)
+
+        # Imported lazily so Slot remains usable without pulling the render
+        # ownership module into the slots/citry_render import cycle.
+        from citry.ownership import capture_current_slot_call  # noqa: PLC0415
+
+        return capture_current_slot_call(self, invoke)
 
     def __str__(self) -> str:
         """
@@ -204,11 +291,31 @@ class Slot(Generic[TSlotData]):
         longer merge its collected data (JS/CSS dependencies) into another
         tree. Keep the value a Slot for as long as you compose.
         """
-        from citry.citry_render import CitryRender  # noqa: PLC0415
+        from citry.citry_render import (  # noqa: PLC0415
+            CitryRender,
+            PhysicalRegionPart,
+            PhysicalRegionRender,
+            unwrap_physical_region,
+        )
 
         part = self()
-        if isinstance(part, CitryRender):
-            return part.serialize()
+        unwrapped = unwrap_physical_region(part)
+        if isinstance(unwrapped, CitryRender):
+            # A template-defined fill returns an interior render. When the
+            # Slot is invoked as part of its owning page, that page's render
+            # queue settles deferred components in the fill body. Invoked
+            # standalone, there is no outer queue, so settle those descendants
+            # here before serialization without finalizing the already-rendered
+            # owner component a second time.
+            from citry.component_render import _settle_render  # noqa: PLC0415
+            from citry.ownership import resume_ownership_graph  # noqa: PLC0415
+
+            with resume_ownership_graph(unwrapped.context.ownership):
+                settled = _settle_render(unwrapped, finalize_root=False)
+                if isinstance(part, (PhysicalRegionPart, PhysicalRegionRender)):
+                    part.part = settled
+                    return CitryRender(parts=[part], context=settled.context).serialize()
+                return settled.serialize()
         return str(part)
 
     def __repr__(self) -> str:
@@ -226,15 +333,17 @@ class Slot(Generic[TSlotData]):
           ``CitryElement``/``CitryRender`` is returned as-is (rendered or
           inlined at call time), and any other value is escaped NOW, so unsafe
           text is neutralized as early as possible. ``escape`` respects
-          ``__html__``, so a ``SafeString`` stays trusted.
+          ``__html__``, so ``Markup`` stays trusted.
         """
-        if callable(contents):
-            return contents
-
         # Imported here, not at module load: citry_render imports this module.
         from citry.citry_render import CitryRender  # noqa: PLC0415
 
-        value: Any = contents if isinstance(contents, (CitryElement, CitryRender)) else escape(contents)
+        if isinstance(contents, ComponentLike):
+            value: Any = contents
+        elif callable(contents):
+            return contents
+        else:
+            value = contents if isinstance(contents, (CitryElement, CitryRender)) else escape(contents)
 
         def render_func(_ctx: SlotContext[TSlotData]) -> Any:
             return value
@@ -242,7 +351,11 @@ class Slot(Generic[TSlotData]):
         return render_func
 
 
-SlotInput: TypeAlias = "SlotResult | SlotFunc[TSlotData] | Slot[TSlotData] | CitryElement"
+SlotInput = TypeAliasType(
+    "SlotInput",
+    "SlotResult | SlotFunc[TSlotData] | Slot[TSlotData] | CitryElement",
+    type_params=(TSlotData,),
+)
 """
 All forms in which slot content can be passed to a component.
 
@@ -252,6 +365,11 @@ Use this to type the fields of a component's ``Slots`` class::
         class Slots:
             header: SlotInput
             footer: SlotInput[FooterSlotData]
+
+A field without a default must be filled whenever the component is used. A
+field annotated as ``SlotInput | None`` with a ``None`` default is optional.
+The ``required`` attribute on ``<c-slot>`` checks something different: it
+raises an error only if Citry renders that tag without content.
 """
 
 
@@ -269,7 +387,7 @@ def normalize_slot_fills(
     - A ``Slot`` that already carries its names is kept as-is; one with
       missing names is copied (not mutated) with the names filled in.
     - A function becomes a ``Slot`` around it.
-    - Anything else (string, ``SafeString``, ``CitryElement``,
+    - Anything else (string, ``Markup``, ``CitryElement``,
       ``CitryRender``, scalar) becomes a static ``Slot``.
     """
     norm_fills: dict[SlotName, Slot] = {}

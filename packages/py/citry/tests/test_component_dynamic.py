@@ -1,6 +1,6 @@
 """
 Tests for the ``<c-component>`` (dynamic component) and ``<c-element>``
-(dynamic HTML element) built-ins. See docs/design/dynamic_component.md.
+(dynamic HTML element) built-ins. See docs/design/component_dynamic.md.
 
 The static-`is` forms compile away (covered by the Rust compiler tests in
 ``crates/citry_template_parser/tests/tag_compiler_dynamic.rs``); the tests
@@ -87,6 +87,64 @@ class TestDynamicComponent:
             template = "<c-component c-bind=\"{'is': 'card', 'title': 'Spread'}\" />"
 
         assert str(Page()) == '<div class="card" data-cid-c3="" data-cid-c1="">Spread: </div>'
+
+    def test_static_is_then_c_bind_selects_spread_target(self):
+        c = Citry()
+
+        class Alpha(Component):
+            citry = c
+            template = """
+                alpha
+            """
+
+        class Beta(Component):
+            citry = c
+            template = """
+                beta
+            """
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-component
+                    is="alpha"
+                    c-bind="props"
+                />
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"props": {"is": "beta"}}
+
+        assert str(Page()).strip() == "beta"
+
+    def test_c_bind_then_static_is_selects_static_target(self):
+        c = Citry()
+
+        class Alpha(Component):
+            citry = c
+            template = """
+                alpha
+            """
+
+        class Beta(Component):
+            citry = c
+            template = """
+                beta
+            """
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-component
+                    c-bind="props"
+                    is="alpha"
+                />
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"props": {"is": "beta"}}
+
+        assert str(Page()).strip() == "alpha"
 
     def test_named_slots_pass_through(self):
         c = Citry()
@@ -190,6 +248,23 @@ class TestDynamicComponent:
         with pytest.raises(TypeError, match="requires an 'is' value"):
             str(Page())
 
+    @pytest.mark.parametrize(
+        "template_source",
+        [
+            "<c-component c-is=\"''\" />",
+            "<c-component c-bind=\"{'is': ''}\" />",
+        ],
+    )
+    def test_dynamic_empty_is_raises_at_runtime(self, template_source):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = template_source
+
+        with pytest.raises(TypeError, match="requires an 'is' value"):
+            str(Page())
+
     def test_invalid_is_type_raises(self):
         c = Citry()
 
@@ -238,7 +313,7 @@ class TestDynamicComponent:
 
     def test_chained_dynamic_components(self):
         # Each wrapper-in-wrapper level adds Python stack frames (the
-        # documented limitation in docs/design/dynamic_component.md section
+        # documented limitation in docs/design/component_dynamic.md section
         # 8); realistic chains are a handful deep, and depth 50 must work.
         c = Citry()
 
@@ -275,6 +350,15 @@ class TestDynamicElement:
         # it as the root element, like a statically written tag.
         assert str(Page()) == '<section class="s" data-cid-c1="">inner</section>'
 
+    def test_static_is_identity_is_ascii_case_insensitive(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<c-Element IS="BR" />'
+
+        assert str(Page()) == '<BR data-cid-c1=""/>'
+
     def test_dynamic_is_renders_element(self):
         c = Citry()
 
@@ -286,6 +370,65 @@ class TestDynamicElement:
                 return {"tag": "section", "w": "world"}
 
         assert str(Page()) == '<section class="x" data-cid-c1="">hello world</section>'
+
+    def test_dynamic_is_identity_is_ascii_case_insensitive(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<c-Element c-IS="tag" class="x" />'
+
+            def template_data(self, kwargs, slots):
+                return {"tag": "BR"}
+
+        assert str(Page()) == '<BR class="x" data-cid-c1=""/>'
+
+    def test_spread_is_identity_is_ascii_case_insensitive(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<c-element c-bind="attrs" />'
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": {"IS": "BR", "CLASS": "x"}}
+
+        assert str(Page()) == '<BR CLASS="x" data-cid-c1=""/>'
+
+    def test_static_is_then_c_bind_selects_spread_tag(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-element
+                    is="br"
+                    c-bind="attrs"
+                >child</c-element>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": {"is": "section"}}
+
+        assert str(Page()).strip() == '<section data-cid-c1="">child</section>'
+
+    def test_c_bind_then_static_is_applies_void_validation_to_winner(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-element
+                    c-bind="attrs"
+                    is="br"
+                >child</c-element>
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"attrs": {"is": "section"}}
+
+        with pytest.raises(ValueError, match="void element 'br' cannot have children"):
+            str(Page())
 
     def test_custom_element_name(self):
         c = Citry()
@@ -326,6 +469,67 @@ class TestDynamicElement:
 
         assert str(Page()) == '<hr id="el1" class="a b" disabled data-cid-c1=""/>'
 
+    def test_attribute_case_variants_follow_html_merge_in_source_order(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<c-element c-is="tag" c-bind="first" c-class="\'middle\'" c-bind="last" />'
+
+            def template_data(self, kwargs, slots):
+                return {
+                    "tag": "div",
+                    "first": {"CLASS": "base", "ID": "first"},
+                    "last": {"class": "tail", "id": "last"},
+                }
+
+        assert str(Page()) == '<div CLASS="base middle tail" ID="last" data-cid-c1=""></div>'
+
+    @pytest.mark.parametrize(
+        ("attrs", "expected_class", "expected_style"),
+        [
+            (
+                (
+                    'class="direct" style="color: red; width: 1px" '
+                    'c-bind="spread" c-class="dynamic" c-style="dynamic_style"'
+                ),
+                "direct spread active dynamic",
+                "color: blue; width: 1px; margin: 0; height: 2px;",
+            ),
+            (
+                'c-bind="spread" class="direct" c-style="dynamic_style" c-class="dynamic"',
+                "spread active direct dynamic",
+                "color: blue; margin: 0; height: 2px;",
+            ),
+        ],
+    )
+    def test_class_and_style_merge_across_all_dynamic_element_contributions(
+        self,
+        attrs,
+        expected_class,
+        expected_style,
+    ):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = f"""
+                <c-element c-is="tag" {attrs} />
+            """
+
+            def template_data(self, kwargs, slots):
+                return {
+                    "tag": "hr",
+                    "spread": {
+                        "class": ["spread", {"active": True}],
+                        "style": {"color": "blue", "margin": 0},
+                    },
+                    "dynamic": ["dynamic"],
+                    "dynamic_style": {"height": "2px"},
+                }
+
+        assert str(Page()).strip() == (f'<hr class="{expected_class}" style="{expected_style}" data-cid-c1=""/>')
+
     def test_attr_values_are_escaped(self):
         c = Citry()
 
@@ -362,6 +566,18 @@ class TestDynamicElement:
 
         assert str(Page()) == '<br class="x" data-cid-c1=""/>'
 
+    def test_void_element_identity_is_ascii_case_insensitive(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = '<c-Element c-is="tag" class="x" />'
+
+            def template_data(self, kwargs, slots):
+                return {"tag": "BR"}
+
+        assert str(Page()) == '<BR class="x" data-cid-c1=""/>'
+
     def test_void_element_with_body_raises(self):
         c = Citry()
 
@@ -375,7 +591,7 @@ class TestDynamicElement:
         with pytest.raises(ValueError, match="void element 'br' cannot have children"):
             str(Page())
 
-    @pytest.mark.parametrize("bad_tag", ["bad name", "a>b", 'a"b', "1abc", ""])
+    @pytest.mark.parametrize("bad_tag", ["bad name", "a>b", 'a"b', "1abc", "", "div\n"])
     def test_invalid_tag_name_raises(self, bad_tag):
         c = Citry()
 
@@ -389,6 +605,16 @@ class TestDynamicElement:
         with pytest.raises((TypeError, ValueError), match="<c-element>"):
             str(Page())
 
+    def test_c_bind_empty_is_raises_at_runtime(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = "<c-element c-bind=\"{'is': ''}\" />"
+
+        with pytest.raises(TypeError, match="requires an 'is' value"):
+            str(Page())
+
     def test_non_string_tag_raises(self):
         c = Citry()
 
@@ -400,6 +626,21 @@ class TestDynamicElement:
                 return {"tag": 42}
 
         with pytest.raises(TypeError, match="naming the HTML tag"):
+            str(Page())
+
+    def test_c_bind_rejects_malformed_attribute_name(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-element c-is="tag" c-bind="attrs" />
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"tag": "div", "attrs": {"bad name": "value"}}
+
+        with pytest.raises(ValueError, match="invalid HTML attribute name 'bad name'"):
             str(Page())
 
     def test_dynamic_named_fill_raises(self):
@@ -432,6 +673,104 @@ class TestDynamicElement:
                 return {"tag": "div", "x": "hi"}
 
         with pytest.raises(TypeError, match="does not support nested-template attribute"):
+            str(Page())
+
+    @pytest.mark.parametrize(
+        ("value", "rendered"),
+        [(None, None), (False, "False"), (0, "0"), ("", ""), ("a<b>&", "a&lt;b&gt;&amp;")],
+    )
+    def test_private_element_metadata_materializes_after_input_hooks(self, value, rendered):
+        captured = []
+
+        class Capture(Extension):
+            name = "metadata_fixture"
+
+            def on_component_input(self, ctx):
+                if getattr(type(ctx.component), "name", None) == "element":
+                    captured.append((ctx.component._element_morph_metadata, dict(ctx.kwargs)))
+
+        c = Citry(extensions=[Capture])
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-element
+                    c-is="'hr'"
+                    #c-key="key_value"
+                    #c-ignore
+                />
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"key_value": kwargs["key_value"]}
+
+        component_render = Page(key_value=value).render()
+        invocation = next(
+            item
+            for item in component_render.context.ownership.snapshot().component_invocations
+            if item.authored_tag == "element"
+        )
+        assert invocation.morph_key is None
+        assert invocation.morph_mode is None
+
+        html = component_render.serialize().strip()
+        key_html = "" if rendered is None else f' data-citry-key=":{rendered}"'
+        assert html == f'<hr{key_html} data-citry-morph="ignore" data-cid-c1=""/>'
+        assert "data-citry-graph" not in html
+        assert captured[0][0].key == (None if value is None else str(value))
+        assert captured[0][0].morph_mode == "ignore"
+        assert set(captured[0][1]) == {"is"}
+
+    def test_private_key_only_keeps_nonconflicting_ordinary_attrs(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-element
+                    c-is="'hr'"
+                    title="ordinary"
+                    #c-key="'row'"
+                />
+            """
+
+        html = str(Page()).strip()
+        assert 'title="ordinary"' in html
+        assert 'data-citry-key=":row"' in html
+        assert "data-citry-morph" not in html
+
+    def test_private_key_rejects_an_ordinary_attribute_before_attrs_hook(self):
+        c = Citry()
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-element
+                    c-is="'hr'"
+                    data-citry-key="ordinary"
+                    #c-key="'private'"
+                />
+            """
+
+        with pytest.raises(ValueError, match=r"data-citry-key.*#c-key metadata"):
+            str(Page())
+
+    def test_private_morph_rejects_extension_injection_after_attrs_hook(self):
+        class Inject(Extension):
+            name = "metadata_fixture"
+
+            def on_attrs_resolved(self, ctx):
+                ctx.attrs["data-citry-morph"] = "replace"
+
+        c = Citry(extensions=[Inject])
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-element c-is="'hr'" #c-ignore />
+            """
+
+        with pytest.raises(ValueError, match=r"data-citry-morph.*#c-ignore metadata"):
             str(Page())
 
 
@@ -479,7 +818,7 @@ class TestAttributeParity:
             name = "spy"
 
             def on_attrs_resolved(self, ctx):
-                calls.append((ctx.tag_name, dict(ctx.attrs)))
+                calls.append((type(ctx.component), ctx.tag_name, dict(ctx.attrs)))
 
         c = Citry(extensions=[Spy])
 
@@ -491,7 +830,7 @@ class TestAttributeParity:
                 return {"tag": "hr"}
 
         str(Page())
-        assert ("hr", {"class": "x", "n": 1}) in calls
+        assert (Page, "hr", {"class": "x", "n": 1}) in calls
 
 
 class TestRegistryReservation:

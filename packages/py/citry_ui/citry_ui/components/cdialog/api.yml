@@ -1,0 +1,168 @@
+schema_version: 1
+family: dialog
+
+components:
+  - CDialog
+
+inputs:
+  - id: cdialog-server-inputs
+    component: CDialog
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Sets native identity and title, description, and activator relationships.'}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible initial open state. A valid client `open` input controls later state.}
+      - {id: dismissible, name: dismissible, type: bool, default: {kind: literal, value: true}, effect: Shows the built-in close control and permits passive dismissal. Explicit action bindings remain available when false.}
+      - {id: close-on-escape, name: close_on_escape, type: bool, default: {kind: literal, value: true}, effect: Permits Escape and equivalent platform cancel requests when dismissible.}
+      - {id: close-on-outside, name: close_on_outside, type: bool, default: {kind: literal, value: true}, effect: Permits a press that begins and ends on this Dialog's backdrop when dismissible.}
+      - id: initial-focus
+        name: initial_focus
+        type: {display: '"auto" | "title"', interfaces: [CDialogInitialFocus]}
+        default: {kind: literal, value: auto}
+        effect: Preserves native autofocus and Dialog focus steps, or focuses the fixed title after opening.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg" | "full"', interfaces: [CDialogSize]}
+        default: {kind: literal, value: md}
+        effect: Sets the responsive surface size.
+      - id: scroll
+        name: scroll
+        type: {display: '"body" | "dialog"', interfaces: [CDialogScroll]}
+        default: {kind: literal, value: body}
+        effect: Scrolls only body content or the complete Dialog surface.
+      - {id: close-label, name: close_label, type: non-empty str, default: {kind: literal, value: Close}, effect: Sets the built-in close Button's accessible name.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds native Dialog classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds native Dialog inline styles from CSS text, a property mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native Dialog, ARIA, Alpine, and data attributes. It may also contribute class and style values; prefer the top-level inputs for those.'}
+
+  - id: cdialog-client-inputs
+    component: CDialog
+    channel: client
+    column_widths: [fit, 12rem, 12rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Continues uncontrolled from the current committed state. `null` has the same effect., effect: Controls visible open state while supplied as a Boolean. An invalid value reports once and releases control from the current state.}
+      - {id: dismissible, name: dismissible, type: boolean, omitted: Uses the server input., effect: Controls built-in close visibility and passive dismissal.}
+      - {id: close-on-escape, name: closeOnEscape, type: boolean, omitted: Uses the server input., effect: Controls Escape and platform cancel dismissal.}
+      - {id: close-on-outside, name: closeOnOutside, type: boolean, omitted: Uses the server input., effect: Controls backdrop-press dismissal.}
+      - id: initial-focus
+        name: initialFocus
+        type: {display: '"auto" | "title"', interfaces: [CDialogInitialFocus]}
+        omitted: Uses the server input.
+        effect: Controls focus placement on the next opening.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg" | "full"', interfaces: [CDialogSize]}
+        omitted: Uses the server input.
+        effect: Controls `data-size` and responsive geometry.
+      - id: scroll
+        name: scroll
+        type: {display: '"body" | "dialog"', interfaces: [CDialogScroll]}
+        omitted: Uses the server input.
+        effect: Controls `data-scroll` and overflow behavior.
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a component callback., effect: Receives user-authored open requests and unavoidable native close reconciliation.}
+
+slots:
+  - id: cdialog-slots
+    component: CDialog
+    entries:
+      - id: activator
+        name: activator
+        required: false
+        data: {display: '{activator_attrs: dict[str, object]}', interfaces: [CDialogActivatorSlotData]}
+        fallback: No activator.
+      - {id: title, name: title, required: true, data: {display: '{}', interfaces: [CDialogTitleSlotData]}, fallback: none}
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CDialogDescriptionSlotData]}, fallback: 'Omitted, with no `aria-describedby`.'}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CDialogDefaultSlotData]}, fallback: none}
+      - id: actions
+        name: actions
+        required: false
+        data: {display: '{close_attrs: dict[str, object]}', interfaces: [CDialogActionsSlotData]}
+        fallback: omitted
+      - id: close
+        name: close
+        required: false
+        data: {display: '{}', interfaces: [CDialogCloseSlotData]}
+        fallback: Built-in multiplication-sign icon inside the accessible close Button.
+
+events:
+  - id: cdialog-events
+    component: CDialog
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(requestedOpen: boolean, detail: CDialogOpenChangeDetail) => void', interfaces: [CDialogOpenChangeDetail]}
+        trigger: An owned trigger, built-in close, explicit action, Escape, outside press, or native close requests a different open state.
+        detail: {display: '{reason: "trigger" | "close-button" | "action" | "escape" | "outside" | "native", controlled: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CDialogOpenChangeDetail]}
+        behavior: Uncontrolled requests commit before notification. Controlled requests, including successful Dialog Form submission, wait for the owner. An external native close is reconciled immediately and a stale true input cannot reopen it. Owner commits do not notify.
+
+methods: []
+
+css:
+  - id: cdialog-css-variables
+    component: CDialog
+    entries:
+      - {id: cui-dialog-backdrop, name: --cui-dialog-backdrop, type: color, purpose: Top-layer backdrop color., default: rgb(15 23 42 / 58%)}
+      - {id: cui-dialog-background, name: --cui-dialog-background, type: color, purpose: Surface background., default: Canvas}
+      - {id: cui-dialog-foreground, name: --cui-dialog-foreground, type: color, purpose: Surface text., default: CanvasText}
+      - {id: cui-dialog-border-color, name: --cui-dialog-border-color, type: color, purpose: Surface boundary., default: Subtle CanvasText mix.}
+      - {id: cui-dialog-radius, name: --cui-dialog-radius, type: length, purpose: Surface corner radius., default: 0.875rem}
+      - {id: cui-dialog-shadow, name: --cui-dialog-shadow, type: shadow, purpose: Surface elevation., default: 0 1.5rem 4rem rgb(15 23 42 / 28%)}
+      - {id: cui-dialog-inline-size, name: --cui-dialog-inline-size, type: length, purpose: Responsive preferred width., default: 'Size-derived; 36rem at `md`.'}
+      - {id: cui-dialog-max-block-size, name: --cui-dialog-max-block-size, type: length, purpose: Maximum non-full height., default: calc(100dvb - 2rem)}
+      - {id: cui-dialog-padding, name: --cui-dialog-padding, type: length, purpose: Surface region padding., default: 1.25rem}
+      - {id: cui-dialog-gap, name: --cui-dialog-gap, type: length, purpose: Gap between Dialog regions., default: 1rem}
+      - {id: cui-dialog-close-size, name: --cui-dialog-close-size, type: length, purpose: Built-in close Button target size., default: 2.5rem}
+      - {id: cui-dialog-close-radius, name: --cui-dialog-close-radius, type: length, purpose: Built-in close Button radius., default: 0.5rem}
+
+attributes:
+  - id: cdialog-attributes
+    component: CDialog
+    entries:
+      - {id: data-open, name: data-open, element: Native Dialog, type: present | absent, meaning: Mirrors effective native open state.}
+      - {id: data-size, name: data-size, element: Native Dialog, type: '"sm" | "md" | "lg" | "full"', meaning: Mirrors effective responsive size.}
+      - {id: data-scroll, name: data-scroll, element: Native Dialog, type: '"body" | "dialog"', meaning: Mirrors effective overflow mode.}
+
+selectors:
+  - id: cdialog-selectors
+    component: CDialog
+    entries:
+      - {id: data-citry-ui-part-dialog, selector: '[data-citry-ui-part="dialog"]', element: Native Dialog, purpose: Modal root and `attrs` destination.}
+      - {id: data-citry-ui-part-surface, selector: '[data-citry-ui-part="surface"]', element: Surface, purpose: Visual Dialog surface.}
+      - {id: data-citry-ui-part-header, selector: '[data-citry-ui-part="header"]', element: Header, purpose: Title and built-in close layout.}
+      - {id: data-citry-ui-part-title, selector: '[data-citry-ui-part="title"]', element: Title, purpose: Required accessible visible title.}
+      - {id: data-citry-ui-part-description, selector: '[data-citry-ui-part="description"]', element: Description, purpose: Optional concise described-by content.}
+      - {id: data-citry-ui-part-close, selector: '[data-citry-ui-part="close"]', element: Close Button, purpose: Built-in accessible dismissal control.}
+      - {id: data-citry-ui-part-body, selector: '[data-citry-ui-part="body"]', element: Body, purpose: Required default content region.}
+      - {id: data-citry-ui-part-actions, selector: '[data-citry-ui-part="actions"]', element: Actions, purpose: Optional explicit-action region.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-cdialog-initial-focus, name: CDialogInitialFocus, definition: 'Literal["auto", "title"]'}
+      - {id: input-type-aliases-cdialog-size, name: CDialogSize, definition: 'Literal["sm", "md", "lg", "full"]'}
+      - {id: input-type-aliases-cdialog-scroll, name: CDialogScroll, definition: 'Literal["body", "dialog"]'}
+  - id: cdialog-activator-slot-data
+    kind: record
+    name: CDialogActivatorSlotData
+    entries:
+      - {id: activator-attrs, name: activator_attrs, type: 'dict[str, object]', meaning: 'Owned trigger marker plus `aria-haspopup`, `aria-controls`, and synchronized `aria-expanded`.'}
+  - {id: cdialog-title-slot-data, kind: record, name: CDialogTitleSlotData, entries: []}
+  - {id: cdialog-description-slot-data, kind: record, name: CDialogDescriptionSlotData, entries: []}
+  - {id: cdialog-default-slot-data, kind: record, name: CDialogDefaultSlotData, entries: []}
+  - id: cdialog-actions-slot-data
+    kind: record
+    name: CDialogActionsSlotData
+    entries:
+      - {id: close-attrs, name: close_attrs, type: 'dict[str, object]', meaning: Explicit-close marker for an action control. A Button value becomes the requested return value.}
+  - {id: cdialog-close-slot-data, kind: record, name: CDialogCloseSlotData, entries: []}
+  - id: cdialog-open-change-detail
+    kind: record
+    name: CDialogOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: '"trigger" | "close-button" | "action" | "escape" | "outside" | "native"', meaning: Source of the open or close request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client `open` value currently owns state.}
+      - {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the request.}
+      - {id: return-value, name: returnValue, type: string, meaning: Explicit action value or native Dialog Form return value; empty for other requests.}

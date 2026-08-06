@@ -26,7 +26,10 @@ so adapting any other store takes minutes.
 
 from __future__ import annotations
 
+import math
 from typing import Any
+
+from citry.cache import _normalize_ttl
 
 __all__ = ["DiskCache", "RedisCache"]
 
@@ -52,9 +55,13 @@ class RedisCache:
         return value.decode() if isinstance(value, bytes) else str(value)
 
     def set(self, key: str, value: str, ttl: float | None = None) -> None:
+        normalized_ttl = _normalize_ttl(ttl)
+        if normalized_ttl == 0:
+            self.delete(key)
+            return
         # Redis expiries are whole seconds; round up so a short ttl never
         # becomes "expire immediately".
-        expiry = None if ttl is None else max(1, round(ttl))
+        expiry = None if normalized_ttl is None else math.ceil(normalized_ttl)
         self._client.set(self._prefix + key, value, ex=expiry)
 
     def delete(self, key: str) -> None:
@@ -79,7 +86,11 @@ class DiskCache:
         return value if isinstance(value, str) else None
 
     def set(self, key: str, value: str, ttl: float | None = None) -> None:
-        self._cache.set(key, value, expire=ttl)
+        normalized_ttl = _normalize_ttl(ttl)
+        if normalized_ttl == 0:
+            self.delete(key)
+            return
+        self._cache.set(key, value, expire=normalized_ttl)
 
     def delete(self, key: str) -> None:
         self._cache.delete(key)

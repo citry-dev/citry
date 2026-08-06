@@ -46,7 +46,7 @@ implementation, itself derived from django-web-components (credited at
 - **`format_attributes`** (`:93-121`): dict -> HTML attribute string.
   `None`/`False` values skip the attribute, `True` renders the bare key,
   everything else renders `key="value"` with `conditional_escape` +
-  `format_html`. Returns a SafeString.
+  `format_html`. Returns Django's trusted-string type.
 - **`merge_attributes`** (`:131-232`): merges dicts left to right. `class`
   and `style` values are collected across all dicts and normalized at the
   end; any other repeated key is joined with a space (`:219-222`), a
@@ -69,7 +69,7 @@ implementation, itself derived from django-web-components (credited at
   `StyleValue = Sequence[StyleValue] | str | StyleDict` with
   `StyleDict = dict[str, str | int | Literal[False] | None]`.
 - **Tests**: `tests/test_attributes.py` (601 lines) covers escaping,
-  SafeString passthrough, `True`/`False`/`None` attribute values, class and
+  trusted-string passthrough, `True`/`False`/`None` attribute values, class and
   style merging incl. `None`/`False` cases, the tag's positional/kwarg/spread
   forms, and `parse_string_style` edge cases (comments, missing delimiters,
   incomplete declarations). The edge-case inventory ports almost wholesale.
@@ -128,7 +128,7 @@ the same structured treatment.
 Also relevant in `packages/py/citry/citry/`:
 
 - `util/html.py`: `escape` (markupsafe, escapes all five of `& < > ' "` so
-  one escaping is safe in body and attribute position) and `SafeString`
+  one escaping is safe in body and attribute position) and `Markup`
   with `__html__` passthrough. The new code uses these, nothing new needed.
 - The static-attr path already normalizes `key=""` to the bare boolean form
   at compile time (`compiler.rs:456-460`), and `StaticHtmlAttr.resolve`
@@ -241,7 +241,7 @@ resolves to a Python object. What it means depends on the attribute:
 |---|---|
 | `True` | bare attribute: `disabled` |
 | `False` or `None` | attribute omitted entirely |
-| string / number / other | `key="value"`, value escaped via `escape()` (SafeString / `__html__` objects pass through unescaped) |
+| string / number / other | `key="value"`, value escaped via `escape()` (`Markup` / `__html__` objects pass through unescaped) |
 
 A value-less or empty dynamic attribute (`<div c-foo>`, `<div c-foo="">`) is
 a **parse error**: there is nothing to evaluate, and it is almost certainly
@@ -318,19 +318,38 @@ For one element, attributes are collected **left to right in source order**:
    the README's "c-bind spreads are checked at render"). Each key must be a
    string satisfying the same attribute-name delimiters as the template
    grammar; invalid runtime keys raise instead of being interpolated into
-   malformed markup. `format_attrs()` enforces the same rule for mappings
+   malformed markup. A key beginning with `#c-` is rejected because template
+   flags are written explicitly on the tag; this includes an entry whose value
+   is `None`. `format_attrs()` enforces the ordinary name rule for mappings
    built directly in Python or rewritten by an extension hook.
 
 Resolution per key:
 
+- Ordinary HTML attribute identity is ASCII-case-insensitive. `ID`, `id`, and
+  spread-provided `Id` are one key. The last contribution supplies its value,
+  while the first contribution keeps its output position and authored
+  spelling. `class` and `style` are recognized through that folded identity,
+  including after `on_attrs_resolved` hooks. Case-sensitive Citry payloads
+  carried inside `@c-*`, `:c-*`, and `#c-*` names are not folded together.
 - `class`, `style`: every contribution is kept, in order, and the list
   normalizes per section 3 at the end. Order is contribution order, so later
   entries override (style) or can disable (class dict) earlier ones.
-- every other key: last contribution wins.
+- every other ordinary attribute key: last contribution wins.
 
 Attribute output order is **first-seen order of each key**, so adding a
 later override does not move the attribute in the output (and output stays
 deterministic, per the repo-wide determinism rule).
+
+For explicit attributes known at parse time, two case variants of the same
+full HTML name are duplicates (`ID` plus `id`), and static/dynamic variants of
+the same folded logical name conflict (`ID` plus `c-id`). `CLASS` plus
+`c-class` and `STYLE` plus `c-style` remain the accumulating exceptions.
+Component attributes are Python kwargs rather than HTML attributes, so their
+names remain case-sensitive and do not use this folding rule.
+The built-in `<c-element>` is on the HTML side of that boundary: even its
+special selector folds, so `IS`, `c-IS`, and spread-provided `Is` select the
+same target as `is` / `c-is`. `<c-component>` remains on the component side
+and requires the exact lowercase selector names.
 
 Worked example (the README interlacing example under the new semantics):
 
@@ -362,7 +381,7 @@ normalize_class(value) -> str
 normalize_style(value) -> str
 parse_string_style(css_text) -> dict
 merge_attrs(*dicts) -> dict      # left-to-right, class/style merging
-format_attrs(attrs) -> SafeString  # dict -> 'key="value" ...', True/False/None rules
+format_attrs(attrs) -> Markup  # dict -> 'key="value" ...', True/False/None rules
 ```
 
 `format_attrs` accepts the structured class/style forms itself (it runs
@@ -407,6 +426,11 @@ ElementAttrsNode(source, (start, end), (attr_nodes...), (used_vars...))
   an `ElementAttrsNode` whose members are all literal renders to a constant
   string and folds like any other literal part (component_constness.md). This keeps
   `<div c-class="['a', 'b']">` (no variables) free after the first render.
+- The `#c-*` metadata channel never enters this node or its extension hook.
+  An explicit element `#c-key` compiles to a separate `ElementKeyNode` after
+  the ordinary attribute region. That node emits the complete composite key
+  attribute for every value except `None`, which emits nothing. An explicit
+  `#c-ignore` compiles to its fixed morph marker.
 
 ### 5.3 Compiler change (high-risk area: compiler output format)
 
@@ -416,6 +440,23 @@ In `compile_html_node` (`compiler.rs:432`): when any attribute is
 flattening; otherwise emit the current static chunks. The attr-tuple
 codegen already exists for components (`compile_component_node`,
 `compiler.rs:771`) and is reused.
+
+After the ordinary region, an element `#c-key` emits
+`ElementKeyNode(ExprHtmlAttr(...))`. Keeping the whole output attribute in one
+runtime node lets `None` omit it without producing an empty composite prefix.
+On a component invocation the compiler continues to carry the expression as
+the `ComponentNode` range-metadata argument. The same private tuple carries a
+bare component `#c-ignore` as range morph policy. The Python runtime records
+every non-`None` key as the invocation's `morphKey` and ignore as
+`morphMode: "ignore"` in the client ownership graph; it never adds either
+component flag to the child's root attributes. `None` records an unkeyed
+invocation. This keeps component range metadata independent from ordinary
+element flags authored on the child's own root.
+
+Runtime-selected `<c-element>` uses the tuple's separate element locus. Its
+private metadata is rendered as `data-citry-key` / `data-citry-morph` on the
+selected HTML element, not recorded on the transparent helper's range and not
+exposed to kwargs or `on_attrs_resolved`.
 
 Cross-binding consistency audit (CLAUDE.md Mechanism 4):
 
@@ -457,12 +498,16 @@ hook would hand extensions an HTML string they must re-parse.
 @dataclass(frozen=True, slots=True)
 class OnAttrsResolvedContext:
     citry: Citry
-    component: Component   # whose template holds the element
+    component: Component   # lexical owner whose template holds the element
     tag_name: str
     attrs: dict[str, Any]  # resolved; threaded with result="map"
 
 def on_attrs_resolved(self, ctx) -> dict[str, Any] | None: ...
 ```
+
+That ownership rule includes dynamic `<c-element>`: its transparent built-in
+formats the selected tag, but the hook receives the component that authored the
+invocation rather than the built-in renderer.
 
 `ElementAttrsNode.render()` funnels through one resolve-then-format
 function and emits there with `result="map"` on `attrs`. This ships with
@@ -556,7 +601,7 @@ Phases 1 and 2 unblock the benchmark small-scenario port
   decision 5 keeps it out of scope here.
 - **Nested-template attribute values** (`c-foo="<span>...</span>"`):
   `TemplateHtmlAttr` resolves to rendered HTML; under the new node it is
-  escaped into the attribute value like any other string (SafeString rules
+  escaped into the attribute value like any other string (`Markup` rules
   apply). Behavior today is the same, just via flattened codegen.
 
 ---

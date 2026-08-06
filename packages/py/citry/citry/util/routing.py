@@ -15,6 +15,9 @@ the same framework-neutral view of the HTTP request under every adapter, with
 the untouched host object riding along as ``RouteRequest.native``. Under the
 ASGI adapter a handler may also be ``async def`` (see :func:`call_maybe_sync`);
 the WSGI and Django adapters run plain handlers only and reject async ones.
+A route that must serve the sync hosts and still run natively on an event
+loop carries both: the plain ``handler`` every adapter mounts, plus an
+``async def`` twin on ``handler_async`` that the ASGI adapter prefers.
 
 Adapted from django-components' ``URLRoute`` (which was already
 framework-free), with two changes: ``methods`` is an explicit field (djc left
@@ -32,7 +35,7 @@ import inspect
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from functools import cache, partial
+from functools import cache
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
 
 if TYPE_CHECKING:
@@ -158,6 +161,13 @@ class URLRoute:
     concatenation; end a parent path with ``/``). ``{name}`` segments in the
     path become keyword arguments of the handler.
 
+    ``handler_async`` optionally carries an ``async def`` twin of ``handler``
+    (same signature and behavior). Adapters that run an event loop (ASGI)
+    serve the route through the twin, awaiting it natively, while the plain
+    ``handler`` stays what the sync hosts (WSGI, sync Django) mount and run.
+    Only routes that need both worlds carry it; a route table meant solely
+    for ASGI can simply pass an ``async def`` function as ``handler``.
+
     Example::
 
         URLRoute("cache/{class_id}.{script_type}", handler=serve_script, name="citry_cached_script")
@@ -171,6 +181,7 @@ class URLRoute:
     # The Awaitable side of the union admits `async def` handlers, which the
     # ASGI adapter awaits (the sync adapters reject them).
     handler: Callable[..., RouteResponse | Awaitable[RouteResponse]] | None = None
+    handler_async: Callable[..., Awaitable[RouteResponse]] | None = None
     children: tuple[URLRoute, ...] = ()
     name: str | None = None
     methods: tuple[str, ...] = ("GET",)
@@ -179,6 +190,13 @@ class URLRoute:
     def __post_init__(self) -> None:
         if self.handler is not None and self.children:
             msg = "URLRoute cannot have both a handler and children"
+            raise ValueError(msg)
+        if self.handler_async is not None and self.handler is None:
+            msg = (
+                "URLRoute got handler_async without a handler. The async twin rides alongside a plain"
+                " 'def' handler (what the sync adapters mount and run); pass handler as well. For a"
+                " route served only under ASGI, pass the async function as handler instead."
+            )
             raise ValueError(msg)
 
 
@@ -263,9 +281,10 @@ async def call_maybe_sync(fn: Callable[..., _R | Awaitable[_R]], /, *args: Any, 
     """
     if inspect.iscoroutinefunction(fn):
         return await fn(*args, **kwargs)
-    loop = asyncio.get_running_loop()
-    # partial() binds the arguments because run_in_executor accepts none itself.
-    result = await loop.run_in_executor(None, partial(fn, *args, **kwargs))
+    # asyncio.to_thread preserves the caller's ContextVars in the worker. The
+    # events dispatcher relies on that for per-call construction tracking,
+    # and extension or request context should behave the same way.
+    result = await asyncio.to_thread(fn, *args, **kwargs)
     # This branch only runs plain callables, so the result is already the final
     # value; the cast spells out what the union-typed signature cannot.
     return cast("_R", result)

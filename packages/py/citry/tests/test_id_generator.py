@@ -65,7 +65,7 @@ class TestIdGeneratorOverride:
             """
 
         assert callable(app.id_generator)
-        assert re.fullmatch(r"c[0-9A-Za-z]{6}", Card._create_instance().id)
+        assert re.fullmatch(r"c[0-9a-z]{8}", Card._create_instance().id)
 
 
 class TestIdGeneratorDefaults:
@@ -90,6 +90,16 @@ class TestIdGeneratorDefaults:
 
 
 class TestIdGeneratorValidation:
+    @pytest.mark.parametrize("value", ["mixedCase", "has space", "dot.id", "", 123])
+    def test_generated_render_id_must_be_html_attribute_safe(self, value):
+        app = Citry(id_generator=lambda: value)
+
+        class Card(Component):
+            citry = app
+
+        with pytest.raises((TypeError, ValueError), match="render ID"):
+            Card._create_instance()
+
     def test_non_callable_spec_raises(self):
         with pytest.raises(TypeError, match="id_generator must be callable"):
             Citry(id_generator=123)  # type: ignore[arg-type]

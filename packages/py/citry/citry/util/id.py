@@ -1,5 +1,5 @@
 """
-Short ids for rendered components (e.g. ``c1A2b3c``).
+Short ids for rendered components (e.g. ``c1a2b3c4d``).
 
 Every rendered component instance gets one. It scopes the component's CSS and JS
 to its own elements on the page (through ``data-cid-<id>`` markers) and is used
@@ -15,35 +15,38 @@ An id is generated in two steps:
    the random starting point means two separate processes do not hand out the
    same sequence of ids.
 
-2. **Turn the number into characters.** Ids are written with 62 possible
-   characters (the digits, then lowercase, then uppercase letters). A 6-character
-   id is therefore just a number written in base 62 (62 "digits" per position
-   instead of the usual 10). Rather than work out one character at a time, we
-   build a table of all 62 x 62 two-character pairs up front and split the number
-   into three pairs, so producing an id is three quick table lookups.
+2. **Turn the number into characters.** Ids use lowercase base 36. HTML
+   attribute names are case-insensitive, so uppercase characters would let two
+   distinct ids collapse onto one ``data-cid-*`` marker. Eight base-36
+   characters preserve more space than the old six-character base-62 form.
+   Rather than work out one character at a time, we build a table of all 36 x
+   36 two-character pairs up front and split the number into four pairs.
 
-The result is the same length and about the same chance of a clash as a fully
-random id, but much cheaper to produce: one counter step and three lookups
-instead of six random draws. See docs/design/performance.md section 8.
+The result has more address space than the prior mixed-case form, but is much
+cheaper to produce than independent random draws: one counter step and four
+table lookups. See docs/design/performance.md section 8.
 """
 
 from __future__ import annotations
 
 import itertools
 import random
+import re
 
 from citry.constants import COMP_ID_PREFIX, UID_LENGTH
 
-# The characters an id can be made of: digits, then lowercase, then uppercase.
-_ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-_ID_BASE = len(_ID_ALPHABET)  # 62 possible characters per position.
+# Render ids are embedded in HTML attribute names and CSS attribute selectors.
+# Keep their public override form to this lowercase, unescaped subset.
+_ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz"
+_ID_BASE = len(_ID_ALPHABET)
+_RENDER_ID_RE = re.compile(r"[a-z0-9_-]+")
 
-# How many different ids exist: UID_LENGTH characters, each one of 62 choices.
+# How many different ids exist: UID_LENGTH characters, each one of 36 choices.
 # An id is a number somewhere in 0 .. _ID_SPACE - 1.
 _ID_SPACE = _ID_BASE**UID_LENGTH
 
 # A table of every two-character pair, in order, so ``_ID_CHUNK[n]`` is the pair
-# for the number n (where 0 <= n < 62 * 62). Looking pairs up is faster than
+# for the number n (where 0 <= n < 36 * 36). Looking pairs up is faster than
 # building the id one character at a time.
 _ID_CHUNK = [_ID_ALPHABET[i // _ID_BASE] + _ID_ALPHABET[i % _ID_BASE] for i in range(_ID_BASE * _ID_BASE)]
 
@@ -54,18 +57,31 @@ _id_counter = itertools.count()
 
 
 def gen_id() -> str:
-    """Return the next 6-character id (e.g. ``1A2b3c``), unique within the process."""
+    """Return the next 8-character lowercase id, unique within the process."""
     # The next number in the sequence, wrapped back to the start if the counter
     # ever runs past the last id.
     value = (_id_base + next(_id_counter)) % _ID_SPACE
-    # Split that number into three two-character pairs and look each up. Six
-    # characters are exactly three pairs because 62 ** 6 == (62 * 62) ** 3:
-    # `low` is the last pair, `mid` the middle, `high` the first.
+    # Split that number into four two-character pairs and look each up.
     value, low = divmod(value, _ID_BASE * _ID_BASE)
-    high, mid = divmod(value, _ID_BASE * _ID_BASE)
-    return _ID_CHUNK[high] + _ID_CHUNK[mid] + _ID_CHUNK[low]
+    value, middle_low = divmod(value, _ID_BASE * _ID_BASE)
+    high, middle_high = divmod(value, _ID_BASE * _ID_BASE)
+    return _ID_CHUNK[high] + _ID_CHUNK[middle_high] + _ID_CHUNK[middle_low] + _ID_CHUNK[low]
 
 
 def gen_render_id() -> str:
-    """Return a component render id: the ``c`` prefix plus a generated id (e.g. ``c1A2b3c``)."""
+    """Return a component render id: the ``c`` prefix plus a generated id."""
     return COMP_ID_PREFIX + gen_id()
+
+
+def validate_render_id(value: object) -> str:
+    """Return an id safe for Citry's case-insensitive HTML marker names."""
+    if not isinstance(value, str):
+        msg = f"Citry render ID must be a string, got {type(value).__name__}."
+        raise TypeError(msg)
+    if not _RENDER_ID_RE.fullmatch(value):
+        msg = (
+            f"Citry render ID {value!r} must use only lowercase ASCII letters, digits, hyphens, and underscores; "
+            "render IDs are embedded in case-insensitive HTML attribute names."
+        )
+        raise ValueError(msg)
+    return value

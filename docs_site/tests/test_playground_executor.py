@@ -138,6 +138,8 @@ def test_worker_revalidates_the_coupled_runtime_files() -> None:
     assert "new URL(packageInfo.url, import.meta.url).href" in worker
     assert 'importlib.metadata.version("citry-ui")' in worker
     assert "runtime.citry.ui_version" in worker
+    assert "citry-events.js" not in worker
+    assert "install_events_client_runtime" not in worker
 
 
 def test_executor_accepts_html_markup_element_render_and_starter() -> None:

@@ -1,0 +1,13 @@
+{
+	"name": "JavaScript test host",
+	"scopeName": "source.js",
+	"patterns": [
+		{ "begin": "/\\*", "end": "\\*/", "name": "comment.block.js" },
+		{ "begin": "//", "end": "$", "name": "comment.line.double-slash.js" },
+		{ "begin": "\"", "end": "\"", "name": "string.quoted.double.js" },
+		{ "begin": "'", "end": "'", "name": "string.quoted.single.js" },
+		{ "match": "\\b(?:const|false|let|true|var)\\b", "name": "constant.language.js" },
+		{ "match": "[A-Za-z_$\\p{L}][\\w$\\p{L}]*", "name": "variable.other.readwrite.js" },
+		{ "match": "[{}()\\[\\].,:!=]", "name": "punctuation.js" }
+	]
+}

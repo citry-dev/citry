@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Citry playground vertical proof</title>
+    <link rel="stylesheet" href="__HOST_CSS__">
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="__BASE_PATH__">Citry</a>
+      <nav aria-label="Primary">
+        <a href="__BASE_PATH__docs/">Docs</a>
+        <a href="__BASE_PATH__examples/">Examples</a>
+        <a href="__BASE_PATH__reference/">Reference</a>
+        <a href="__BASE_PATH__playground/" aria-current="page">Try it</a>
+        <a href="__BASE_PATH__community/">Community</a>
+      </nav>
+    </header>
+    <main class="playground" data-runner-url="__RUNNER_URL__">
+      <h1 class="visually-hidden">Citry playground</h1>
+      <div class="mobile-tabs" role="tablist" aria-label="Playground panels">
+        <button id="code-tab" role="tab" aria-controls="code-panel" aria-selected="true">Code</button>
+        <button id="result-tab" role="tab" aria-controls="result-panel" aria-selected="false" tabindex="-1">Result</button>
+      </div>
+      <section id="code-panel" class="panel code-panel" role="tabpanel" aria-labelledby="code-tab">
+        <div class="toolbar" aria-label="Code controls">
+          <button id="run-button" class="primary" type="button">Run</button>
+          <button id="stop-button" type="button" hidden>Stop</button>
+          <label class="toggle"><input id="auto-run" type="checkbox"> Auto-run</label>
+          <button id="reset-button" type="button">Reset</button>
+          <span id="runtime-version" class="version">__RUNTIME_LABEL__</span>
+        </div>
+        <div id="editor" class="editor"></div>
+        <textarea id="editor-fallback" aria-label="Citry Python module" hidden></textarea>
+        <aside id="python-diagnostic" class="diagnostic" aria-labelledby="python-diagnostic-title" hidden>
+          <div class="diagnostic-heading">
+            <strong id="python-diagnostic-title">Python problem</strong>
+            <button id="dismiss-python" type="button">Dismiss</button>
+          </div>
+          <p id="python-diagnostic-summary"></p>
+          <details><summary>Details</summary><pre id="python-diagnostic-details"></pre></details>
+        </aside>
+      </section>
+      <div
+        id="divider"
+        class="divider"
+        role="separator"
+        aria-label="Resize code and result panels"
+        aria-controls="code-panel result-panel"
+        aria-orientation="vertical"
+        aria-valuemin="25"
+        aria-valuemax="75"
+        aria-valuenow="50"
+        tabindex="0"
+      ></div>
+      <section id="result-panel" class="panel result-panel" role="tabpanel" aria-labelledby="result-tab">
+        <div class="result-statusbar">
+          <span id="run-status" role="status" aria-live="polite">Preparing playground</span>
+          <span id="stale-status" hidden>Showing previous result</span>
+        </div>
+        <iframe id="preview" title="Rendered Citry result" sandbox="allow-scripts"></iframe>
+        <aside id="preview-diagnostic" class="diagnostic" aria-labelledby="preview-diagnostic-title" hidden>
+          <div class="diagnostic-heading">
+            <strong id="preview-diagnostic-title">Rendered page problem</strong>
+            <button id="dismiss-preview" type="button">Dismiss</button>
+          </div>
+          <p id="preview-diagnostic-summary"></p>
+          <details><summary>Details</summary><pre id="preview-diagnostic-details"></pre></details>
+        </aside>
+      </section>
+      <iframe id="runner-frame" title="Citry Python runner" hidden></iframe>
+      <div id="announcer" class="visually-hidden" aria-live="assertive" aria-atomic="true"></div>
+    </main>
+    <script type="module" src="__HOST_JS__"></script>
+  </body>
+</html>

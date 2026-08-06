@@ -32,7 +32,6 @@ from markupsafe import Markup, escape
 
 # ----------- IMPORTS END ------------ #
 
-SafeString = Markup
 
 # This is the plain citry variant. The Const optimization is exercised by a
 # separate file, test_benchmark_citry_const.py, which marks each component's
@@ -92,7 +91,7 @@ def _plain(value: Any) -> Any:
 
     json.dumps and other C-level APIs reject the proxy, and the scenario marks
     inputs Const in const mode (and static attrs are auto-marked anyway), so
-    the serializing helpers unwrap first. See docs/design/constness.md.
+    the serializing helpers unwrap first. See docs/design/component_constness.md.
     """
     if isinstance(value, dict):
         return {_plain(k): _plain(v) for k, v in value.items()}
@@ -1553,7 +1552,7 @@ def construct_btn_onclick(model: str, btn_on_click: "str | None") -> Any:
     on_click_cb = f"{model} = false;"
     if btn_on_click:
         on_click_cb = f"{btn_on_click}; {on_click_cb}"
-    return SafeString(on_click_cb)
+    return Markup(on_click_cb)
 
 
 
@@ -2156,7 +2155,7 @@ def _Tabledata(headers, rows, attrs=None):
         for header in prepare_row_headers(row, headers):
             cell = row.cols.get(header.key)
             cell = NULL_CELL if cell is None else cell
-            display = SafeString(linebreaksbr(cell.value)) if cell.linebreaks else cell.value
+            display = Markup(linebreaksbr(cell.value)) if cell.linebreaks else cell.value
             cells.append((cell, display))
         rows_out.append((row, cells))
     return {
@@ -2399,7 +2398,7 @@ def _ProjectUsersdata(project_id, roles_with_users, available_roles, available_u
 
     role_choices = [(r, r) for r in available_roles] if available_roles else []
     user_choices = [(str(u["id"]), u["name"]) for u in available_users] if available_users else []
-    add_user_form = SafeString(
+    add_user_form = Markup(
         _render_choice_field("user_id", "User", user_choices) + _render_choice_field("role", "Role", role_choices)
     )
 

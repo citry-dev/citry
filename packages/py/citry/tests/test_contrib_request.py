@@ -16,6 +16,7 @@ import json
 import threading
 import time
 from contextlib import contextmanager
+from contextvars import ContextVar
 
 import pytest
 
@@ -60,6 +61,20 @@ def _with_headers(_request):
 def _with_repeated_headers(_request):
     """Two Set-Cookie lines: the canonical header a response sends repeatedly."""
     return RouteResponse(content="ok", headers=(("Set-Cookie", "a=1"), ("Set-Cookie", "b=2")))
+
+
+def _pick_sync(_request):
+    return RouteResponse(content="from-sync-handler")
+
+
+async def _pick_async(_request):
+    await asyncio.sleep(0)
+    return RouteResponse(content="from-async-twin")
+
+
+def _twin_route():
+    """One route carrying both a plain handler and its async twin, shared by the per-adapter suites."""
+    return URLRoute("pick", handler=_pick_sync, handler_async=_pick_async)
 
 
 class TestRouteHeaders:
@@ -112,6 +127,20 @@ class TestCallMaybeSync:
         thread_id, result = asyncio.run(call_maybe_sync(which_thread, 3, offset=1))
         assert result == 7
         assert thread_id != threading.get_ident()
+
+    def test_worker_thread_receives_the_callers_context(self):
+        marker: ContextVar[str] = ContextVar("call_maybe_sync_test", default="missing")
+        marker.set("present")
+
+        assert asyncio.run(call_maybe_sync(marker.get)) == "present"
+
+
+class TestUrlRouteHandlerAsync:
+    def test_handler_async_without_a_handler_is_rejected(self):
+        # The async twin rides alongside the plain handler (the sync surface
+        # is what every adapter mounts); alone it cannot serve the sync hosts.
+        with pytest.raises(ValueError, match="handler_async without a handler"):
+            URLRoute("solo", handler_async=_pick_async)
 
 
 class TestAsgiAdapter:
@@ -183,6 +212,14 @@ class TestAsgiAdapter:
         response = client.get("/citry/ext/probe/async")
         assert response.status_code == 200
         assert response.text == "from-async"
+
+    def test_handler_async_twin_is_preferred(self, client_factory):
+        # This adapter runs an event loop, so a route carrying an async twin
+        # is served through the twin; the plain handler is for the sync hosts.
+        client = client_factory(_engine(_twin_route()))
+        response = client.get("/citry/ext/probe/pick")
+        assert response.status_code == 200
+        assert response.text == "from-async-twin"
 
 
 class TestAsgiSyncOffload:
@@ -406,6 +443,14 @@ class TestWsgiAdapter:
         assert "WSGI adapter cannot run" in message
         assert "citry.contrib.asgi.asgi_app" in message
 
+    def test_route_with_an_async_twin_runs_the_plain_handler(self):
+        # The twin is for adapters with an event loop; this synchronous
+        # adapter mounts and runs the plain handler, unchanged.
+        engine = _engine(_twin_route())
+        status, _headers, body = self._call(engine, {"REQUEST_METHOD": "GET", "PATH_INFO": "/ext/probe/pick"})
+        assert status == "200 OK"
+        assert body == b"from-sync-handler"
+
 
 class TestDjangoAdapter:
     """The neutral request under Django, through the test client."""
@@ -501,3 +546,12 @@ class TestDjangoAdapter:
         assert "'async def' handler" in message
         assert "Django view adapter cannot run" in message
         assert "citry.contrib.asgi.asgi_app" in message
+
+    def test_route_with_an_async_twin_mounts_and_runs_the_plain_handler(self):
+        # The twin is for adapters with an event loop; the synchronous Django
+        # views mount the route table unchanged and run the plain handler.
+        engine = _engine(_twin_route())
+        with self._serving(engine) as client:
+            response = client.get("/citry/ext/probe/pick")
+        assert response.status_code == 200
+        assert response.content == b"from-sync-handler"

@@ -1,34 +1,166 @@
-# Navigation tree for the docs sidebar.
-# A section has EITHER a `path` (a standalone link), `items` (one level), or
-# `groups` (two levels), never more than one. Paths are clean URLs.
+# Primary site navigation. Every top-level area appears in the header, in this
+# order. Its direct items and groups make up that area's sidebar. Generated
+# navigation is declared in place with `source`.
 
-sections:
+home:
+  title: Citry
+  path: /
+  scope: site
 
-  - label: Home
-    path: /
+areas:
 
-  - label: Getting started
+  - label: Docs
+    scope: versioned
     items:
-      - { title: Install Citry, path: /getting-started/installation/ }
-      - { title: Your first component, path: /getting-started/your-first-component/ }
-      - { title: Use data in components, path: /getting-started/parametrising-components/ }
-      - { title: Build a page from components, path: /getting-started/components-in-templates/ }
-      - { title: Add flexible content, path: /getting-started/adding-slots/ }
-      - { title: Add browser behavior, path: /getting-started/browser-interactivity/ }
-      - { title: Connect components in the browser, path: /getting-started/client-props-and-handlers/ }
-      - { title: Serve the page with FastAPI, path: /getting-started/fastapi/ }
-      - { title: Call Python from a click, path: /getting-started/call-python/ }
-      - { title: Keep a value between calls, path: /getting-started/state/ }
-      - { title: Handle and validate a form, path: /getting-started/forms/ }
-      - { title: Replace part of the page from Python, path: /getting-started/server-rendered-updates/ }
+      - { title: Overview, path: /docs/ }
+    groups:
+      - label: Getting started
+        items:
+          - { title: Install Citry, path: /getting-started/installation/ }
+          - { title: Your first component, path: /getting-started/your-first-component/ }
+          - { title: Use data in components, path: /getting-started/data-in-components/ }
+          - { title: Build a page from components, path: /getting-started/build-page/ }
+          - { title: Add flexible content, path: /getting-started/add-slots/ }
+          - { title: Add browser behavior, path: /getting-started/browser-interactivity/ }
+          - { title: Connect components in the browser, path: /getting-started/client-props-and-handlers/ }
+          - { title: Serve pages with FastAPI, path: /getting-started/fastapi/ }
+          - { title: Call Python from a click, path: /getting-started/call-python/ }
+          - { title: Events state, path: /getting-started/state/ }
+          - { title: Handle and validate forms, path: /getting-started/forms/ }
+          - { title: Update page from Python, path: /getting-started/server-rendered-updates/ }
+          - { title: Build CRUD pages, path: /getting-started/build-crud-pages/ }
 
-  - label: About
+      - label: Template syntax
+        items:
+          - { title: Template basics, path: /syntax/ }
+          - { title: Expressions, path: /syntax/expressions/ }
+          - { title: Attributes, path: /syntax/dynamic-attributes/ }
+          - { title: Conditions and loops, path: /syntax/control-flow/, needs_review: true }
+          - { title: Alpine, path: /syntax/alpine/, needs_review: true }
+          - { title: Comments and literal text, path: /syntax/comments/, needs_review: true }
+          - { title: Markup in attributes, path: /syntax/nested-templates/, needs_review: true }
+
+      - label: Concepts
+        items:
+          - { title: Components, path: /concepts/components/, needs_review: true }
+          - { title: Inputs and validation, path: /concepts/inputs-and-validation/, needs_review: true }
+          - { title: Slots, path: /concepts/slots/, needs_review: true }
+          - { title: Rendering, path: /concepts/rendering/, needs_review: true }
+          - { title: Registration, path: /concepts/registration/, needs_review: true }
+          - { title: Provide and inject, path: /concepts/provide-and-inject/, needs_review: true }
+          - { title: Client interactivity, path: /concepts/client-interactivity/, needs_review: true }
+          - { title: Error boundaries, path: /concepts/error-boundaries/, needs_review: true }
+
+      - label: Events
+        items:
+          - { title: Server events, path: /events/, needs_review: true }
+          - { title: Keep state between calls, path: /events/state/, needs_review: true }
+          - { title: Handle and validate forms, path: /events/forms/, needs_review: true }
+          - { title: Bind events in templates, path: /events/bindings/, needs_review: true }
+          - { title: Event actions, path: /events/actions/, needs_review: true }
+          - { title: Use event routes directly, path: /events/http/, needs_review: true }
+
+      - label: Advanced
+        items:
+          - { title: Dynamic components, path: /advanced/dynamic-components/, needs_review: true }
+          - { title: Custom component values, path: /advanced/custom-component-values/, needs_review: true }
+          - { title: Forward HTML attributes, path: /advanced/html-attributes/, needs_review: true }
+          - { title: Subclassing components, path: /advanced/subclassing/, needs_review: true }
+          - { title: Component discovery and startup, path: /advanced/component-discovery/, needs_review: true }
+          - { title: Component JavaScript and CSS, path: /advanced/js-and-css-dependencies/, needs_review: true }
+          - { title: Dependency files, path: /advanced/dependency-files/, needs_review: true }
+          - { title: Asset placement, path: /advanced/asset-placement/, needs_review: true }
+          - { title: Alpine runtime, path: /advanced/alpine-runtime/, needs_review: true }
+          - { title: HTML fragments, path: /advanced/html-fragments/, needs_review: true }
+          - { title: Const optimization, path: /advanced/const-optimization/, needs_review: true }
+          - { title: Cache rendered output, path: /advanced/caching/, needs_review: true }
+          - { title: Cache backends, path: /advanced/cache-backends/, needs_review: true }
+          - { title: Extensions, path: /advanced/extensions/, needs_review: true }
+          - { title: Component hooks, path: /advanced/hooks/, needs_review: true }
+          - { title: Component libraries, path: /advanced/component-libraries/, needs_review: true }
+          - { title: Testing components, path: /advanced/testing/, needs_review: true }
+          - { title: Command line, path: /cli/, needs_review: true }
+
+      - label: Guides
+        items:
+          - { title: Web frameworks, path: /web-frameworks/, needs_review: true }
+          - { title: Troubleshooting, path: /guides/troubleshooting/, needs_review: true }
+          - { title: Hot reload, path: /guides/dev-server/, needs_review: true }
+          - { title: Migrate from Component.View, path: /guides/migrate-from-component-view/, needs_review: true }
+          - { title: Migrate from django-unicorn, path: /guides/migrate-from-django-unicorn/, needs_review: true }
+          - { title: Migrate from Tetra, path: /guides/migrate-from-tetra/, needs_review: true }
+          - { title: Migrate from livecomponents, path: /guides/migrate-from-livecomponents/, needs_review: true }
+          - { title: Events migration parity, path: /guides/events-migration-parity/, needs_review: true }
+
+      - label: About
+        items:
+          - { title: Compatibility, path: /about/compatibility/ }
+          - { title: Benchmarks, path: /about/benchmarks/, needs_review: true }
+          - { title: Security, path: /security/, needs_review: true }
+
+      - label: Release notes
+        source: releases
+        collapsible: true
+        section_style: true
+
+  - label: Reference
+    source: reference
+    scope: versioned
+
+  - label: Examples
+    scope: versioned
     items:
-      - { title: Compatibility, path: /about/compatibility/ }
-      - { title: Benchmarks, path: /about/benchmarks/ }
-      - { title: Security, path: /security/ }
+      - { title: Overview, path: /examples/, needs_review: true }
+    groups:
+      - label: Components
+        items:
+          - { title: Card, path: /examples/card/, needs_review: true }
+          - { title: Slots, path: /examples/slots/, needs_review: true }
+          - { title: Provide and inject, path: /examples/provide-inject/, needs_review: true }
+          - { title: Error boundary, path: /examples/error-fallback/, needs_review: true }
+          - { title: Recursion, path: /examples/recursion/, needs_review: true }
+
+      - label: Template syntax
+        items:
+          - { title: Control flow, path: /examples/control-flow/, needs_review: true }
+
+      - label: Browser and server
+        items:
+          - { title: Tabs, path: /examples/tabs/, needs_review: true }
+          - { title: Form submission, path: /examples/form-submission/, needs_review: true }
+          - { title: Fragments, path: /examples/fragments/, needs_review: true }
+
+  - label: Try it
+    scope: site
+    items:
+      - { title: Playground, path: /playground/ }
+
+  - label: Citry UI
+    badge: alpha
+    scope: versioned
+    items:
+      - { title: Overview, path: /ui-library/, needs_review: true }
+    groups:
+      - label: Get started
+        items:
+          - { title: Installation, path: /ui-library/installation/ }
+          - { title: Theme components, path: /ui-library/theming/, needs_review: true }
+
+      - label: Components
+        source: ui_library
+
+  - label: IDE
+    scope: versioned
+    items:
+      - { title: Overview, path: /ide/, needs_review: true }
+    groups:
+      - label: Editors
+        items:
+          - { title: VS Code, path: /ide/vscode/, needs_review: true }
+          - { title: PyCharm, path: /ide/pycharm/, needs_review: true }
 
   - label: Community
+    scope: site
     items:
       - { title: People, path: /community/people/ }
       - { title: Getting help, path: /community/help/ }
@@ -38,5 +170,7 @@ sections:
       - { title: AI bot policy, path: /community/ai-bot-policy/ }
       - { title: License, path: /community/license/ }
 
-  - label: Examples
-    path: /examples/
+  - label: Blog
+    source: blog
+    scope: site
+    entry: { title: All posts, path: /blog/ }

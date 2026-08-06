@@ -6,13 +6,13 @@
 
 [![PyPI - Version](https://img.shields.io/pypi/v/citry)](https://pypi.org/project/citry/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/citry)](https://pypi.org/project/citry/)
-[![License](https://img.shields.io/pypi/l/citry)](./LICENSE)
+[![License](https://img.shields.io/pypi/l/citry)](https://github.com/citry-dev/citry/blob/main/LICENSE)
 [![CI](https://github.com/citry-dev/citry/actions/workflows/repo--check.yml/badge.svg)](https://github.com/citry-dev/citry/actions/workflows/repo--check.yml)
 [![Docs](https://img.shields.io/badge/docs-citry.dev-8a2be2)](https://citry.dev)
 [![Discord](https://img.shields.io/badge/Discord-join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/NaQ8QPyHtD)
 
 Citry is a **fast**, **simple**, and **smart** **frontend framework** for Python that brings the best of **Vue**, **React**,
-**Django**, and **Jinja**.
+**Django**, **Jinja**, and **LiveWire**.
 
 Compatible with FastAPI, Django, and [other web servers](#use-with-web-framework).
 
@@ -44,7 +44,7 @@ class Welcome(Component):
         return {"count": len(kwargs.messages)}
 
     js = """
-      $onComponent(({ els, data }) => {
+      $component(({ els, data }) => {
         els[0].title = `${data.count} new messages`;
       });
     """
@@ -76,7 +76,7 @@ Use Citry to build UI, HTML, XML, SVG, or anything that serializes to text.
 Citry is:
 
 - **Familiar** - if you know HTML and Vue/React, you are ready
-- **Simple** - just 2 rules and 13 built-in tags
+- **Simple** - just 2 rules and 15 built-in tags
 - **Fast** - Rust-powered parsing
 - **Safe** - expressions are sandboxed to block dangerous operations
 - **Smart** - manages JS and CSS scripts for you
@@ -181,7 +181,7 @@ If you know HTML, you already know most of Citry.
 
 ## Built-in tags
 
-Beyond your own components, Citry provides 13 built-in tags. With these, Citry
+Beyond your own components, Citry provides 15 built-in tags. With these, Citry
 is as expressive as Vue or React.
 
 | Tag             | Purpose                                                       |
@@ -196,13 +196,15 @@ is as expressive as Vue or React.
 | `<c-component>` | Render a component chosen at render time                     |
 | `<c-element>`   | Render an HTML element whose tag name is chosen at render time |
 | `<c-provide>`   | Provide a value to descendant components                     |
+| `<c-cache>`     | Cache and replay a named transparent template region          |
+| `<c-error-fallback>` | Render fallback content when its body raises             |
 | `<c-css>`       | Render the collected component CSS here                      |
 | `<c-js>`        | Render the collected component JS here                       |
 | `<c-raw>`       | Treat the contents as literal text                           |
 
 ## How templates look
 
-A short tour. The [template syntax reference](docs/template-syntax.md) covers
+A short tour. The [template syntax reference](https://github.com/citry-dev/citry/blob/main/docs/template-syntax.md) covers
 every feature in depth.
 
 ### Expressions
@@ -343,9 +345,9 @@ class Chart(Component):
       <div class="chart"></div>
     """
     js = """
-      $onComponent(({ els, data }) => {
+      $component(({ els, data }) => {
         draw(els[0], data.points);
-      )};
+      });
     """
     css = """
       .chart {
@@ -437,7 +439,10 @@ class Card(Component):
 
 Fragments are rendered components that can be inserted into a page.
 
-In browser, Citry smartly loads the fragments' JS/CSS scripts for you.
+In the browser, Citry adopts a client-active fragment's ownership graph and
+loads its JS/CSS assets. Alpine directives, component props and boundary
+handlers, slots, and Events therefore keep the same ownership rules as a full
+document. See [Client interactivity](https://citry.dev/concepts/client-interactivity/).
 
 Render a component specifically as a fragment with `.serialize()`:
 
@@ -446,7 +451,7 @@ card = Card(title="Welcome")
 card.render().serialize(deps_strategy="fragment")
 ```
 
-To use fragements, you must [mount a web framework](#use-with-web-framework).
+To use fragments, you must [mount a web framework](#use-with-web-framework).
 
 ### Performance - Render the constant parts once
 
@@ -486,7 +491,7 @@ rows = [
 - Extension system;
 - Dynamic components/HTML tags with `<c-component>` / `<c-element>`
 
-See the [changelog](CHANGELOG.md) for the full list.
+See the [changelog](https://github.com/citry-dev/citry/blob/main/CHANGELOG.md) for the full list.
 
 ## Use with web framework
 
@@ -500,7 +505,15 @@ from citry.contrib.fastapi import mount
 
 # `app` is your web framework's application object
 mount(app, citry)
+
+# Run this from the framework's startup lifecycle before request threads start.
+citry.initialize()
 ```
+
+`initialize()` imports configured component Python modules, registers built-ins,
+and builds parse-time tag rules. Template, JavaScript, and CSS asset files stay
+lazy. See the [web-framework guide](https://citry.dev/web-frameworks/) for the
+right startup hook in each supported host.
 
 Supported hosts:
 
@@ -530,12 +543,17 @@ You get a ready-to-edit starting point:
 
 ```python
 # my_button.py
+"""A Citry component."""
+
+from citry import Component
+
+
 class MyButton(Component):
     class Kwargs:
         title: str
 
-    def template_data(self, kwargs, slots):
-        return {"title": kwargs.title}
+    class Slots:
+        pass
 
     template = """
       <div>
@@ -544,13 +562,27 @@ class MyButton(Component):
     """
 ```
 
+Run the limited static check over literal component templates under the current
+directory without importing project code:
+
+```bash
+citry check --static
+```
+
 The other commands act on a Citry engine. Point them at the one you configured
 with `--app`, given as `module:attribute`:
 
 ```bash
 citry --app myproject.app:engine list        # components registered on that engine
+citry --app myproject.app:engine check       # templates plus registered component contracts
 citry --app myproject.app:engine ext list    # extensions installed on it
 ```
+
+The explicit engine lets `check` validate registered component names, inputs,
+and slots. If the engine cannot import or finish discovery, the command reports
+that failure, continues with syntax-only checking, and returns a nonzero status.
+Checking always requires one of these explicit modes; bare `citry check` is a
+usage error.
 
 Extensions can ship their own commands; run one with `citry --app ... ext run
 <extension> <command> [args]`. Run `citry --help` to see everything, and `citry
@@ -558,16 +590,16 @@ Extensions can ship their own commands; run one with `citry --app ... ext run
 
 ## Documentation
 
-- [Template syntax reference](docs/template-syntax.md) - every template feature
+- [Template syntax reference](https://github.com/citry-dev/citry/blob/main/docs/template-syntax.md) - every template feature
   in depth.
-- [Codebase and development setup](docs/codebase.md) - how to build, test, and
+- [Codebase and development setup](https://github.com/citry-dev/citry/blob/main/docs/codebase.md) - how to build, test, and
   contribute.
 
 ## Performance
 
 Rendering a large page (~325 component instances, ~205 KB of HTML):
 
-![Citry vs Django vs django-components rendering a large page. Lower is better.](docs/assets/benchmark.png)
+![Citry vs Django vs django-components rendering a large page. Lower is better.](https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmark.png)
 
 - **Versus django-components** (the fair component-to-component comparison),
   Citry is about **1.7x faster** on first render and **3.4x faster** on repeat
@@ -580,8 +612,8 @@ Rendering a large page (~325 component instances, ~205 KB of HTML):
   library at once.
 
 These are relative numbers from a single machine. See
-[`benchmarks/`](benchmarks/README.md) for the methodology and how to reproduce
-them, and the [performance notes](docs/design/performance.md) for where the
+[`benchmarks/`](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md) for the methodology and how to reproduce
+them, and the [performance notes](https://github.com/citry-dev/citry/blob/main/docs/design/performance.md) for where the
 remaining time goes.
 
 ## Help bring Citry to your language
@@ -602,7 +634,7 @@ repo to follow along, and open an issue if you would like to help port it.
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE) for details.
+MIT License - see [LICENSE](https://github.com/citry-dev/citry/blob/main/LICENSE) for details.
 
 ## Acknowledgments
 

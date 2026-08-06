@@ -1,0 +1,85 @@
+import {
+  loadCitryScenario,
+  renderCitryScenario,
+} from "../../src/html-adapter.js";
+
+const meta = {
+  title: "Citry UI/Tabs/Interactive",
+  argTypes: {
+  "selected": {
+    "control": {
+      "type": "select"
+    },
+    "description": "Server-selected tab.",
+    "options": [
+      "account",
+      "security"
+    ]
+  },
+  "orientation": {
+    "control": {
+      "type": "select"
+    },
+    "description": "Tab-list orientation and keyboard axis.",
+    "options": [
+      "horizontal",
+      "vertical"
+    ]
+  },
+  "direction": {
+    "control": {
+      "type": "select"
+    },
+    "description": "Writing direction metadata.",
+    "options": [
+      "ltr",
+      "rtl"
+    ]
+  },
+  "activation": {
+    "control": {
+      "type": "select"
+    },
+    "description": "Whether focus selects or Enter and Space activate.",
+    "options": [
+      "automatic",
+      "manual"
+    ]
+  }
+},
+  parameters: {
+  "citry": {
+    "catalogSchemaVersion": 1,
+    "clientInteractive": true,
+    "generatorVersion": 1,
+    "scenarioId": "tabs/server-selected",
+    "sourceDigest": "321764a7d9c70fcba6b729459e64fb4115f9208c4d9e3952801c9f7fefba41e7",
+    "readySelector": "[data-citry-tabs-root][data-citry-tabs-initialized]",
+    "readyTimeoutMs": 10000
+  },
+  "docs": {
+    "description": {
+      "component": "Server-rendered ARIA relationships with pointer and keyboard selection."
+    },
+    "source": {
+      "code": "from citry import Component\n\nclass AccountTabs(Component):\n    template = \"\"\"\n      <c-CTabs default_value=\"account\" aria_label=\"Account settings\">\n        {# CTab and CTabPanel declarations #}\n      </c-CTabs>\n    \"\"\"",
+      "language": "python"
+    }
+  }
+},
+  tags: ["autodocs"],
+};
+
+export default meta;
+
+export const Preview = {
+  name: "Preview",
+  args: {
+  "selected": "account",
+  "orientation": "horizontal",
+  "direction": "ltr",
+  "activation": "automatic"
+},
+  loaders: [loadCitryScenario],
+  render: renderCitryScenario,
+};

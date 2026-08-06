@@ -32,6 +32,13 @@ autoreloader::
         def ready(self):
             enable_hot_reload(citry_instance)  # mode="hot" by default
 
+Reusing Django's ``SECRET_KEY`` as citry's signing secret (so values citry
+signs are covered by the key the project already manages)::
+
+    from citry.contrib.django import secret
+
+    app = Citry(secret=secret())
+
 Citry owns this adapter (rather than leaving it to django-components) so
 plain citry works with Django regardless of how django-components ends up
 relating to citry. Django is imported lazily, only when these functions are
@@ -54,7 +61,7 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.util.routing import RouteResponse, URLRoute
 
-__all__ = ["DjangoCache", "enable_hot_reload", "urlpatterns"]
+__all__ = ["DjangoCache", "enable_hot_reload", "secret", "urlpatterns"]
 
 _PARAM_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
 
@@ -211,6 +218,56 @@ def enable_hot_reload(
     return on_component_file_changed
 
 
+def secret() -> str:
+    """
+    Django's ``SECRET_KEY``, for passing as ``Citry(secret=...)``.
+
+    Citry signs values with the engine-level
+    [`secret`][citry.CitrySettings.secret] setting. In a Django project the
+    natural signing key is the one the project already manages, so pass it
+    through::
+
+        from citry import Citry
+        from citry.contrib.django import secret
+
+        app = Citry(secret=secret())
+
+    The key is read when this is called, so Django settings must be configured
+    by then (in a normal Django startup they already are).
+
+    Returns:
+        The ``SECRET_KEY`` of the active Django settings.
+
+    Raises:
+        RuntimeError: When Django settings are not configured; the message
+            names the fix.
+        django.core.exceptions.ImproperlyConfigured: When settings are
+            configured but the ``SECRET_KEY`` itself is unusable (for example
+            empty); Django's own message explains the problem.
+
+    """
+    # Imported here, not at module load: this module must be importable
+    # without Django on the path (citry.contrib hosts several integrations).
+    from django.conf import settings as django_settings  # noqa: PLC0415
+    from django.core.exceptions import ImproperlyConfigured  # noqa: PLC0415
+
+    try:
+        return cast("str", django_settings.SECRET_KEY)
+    except ImproperlyConfigured as err:
+        if django_settings.configured:
+            # Settings are configured but unusable in some other way (for
+            # example an empty SECRET_KEY); Django's own message explains
+            # that better than a generic one here.
+            raise
+        msg = (
+            "citry.contrib.django.secret() reads Django's SECRET_KEY, but Django settings are not "
+            "configured. Set the DJANGO_SETTINGS_MODULE environment variable or call "
+            "django.conf.settings.configure() before building the Citry instance, or pass the "
+            'secret directly: Citry(secret="...").'
+        )
+        raise RuntimeError(msg) from err
+
+
 class DjangoCache:
     """
     Adapt a Django cache (``django.core.cache.caches[...]``) to citry's
@@ -226,8 +283,14 @@ class DjangoCache:
         return value if isinstance(value, str) else None
 
     def set(self, key: str, value: str, ttl: float | None = None) -> None:
+        from citry.cache import _normalize_ttl  # noqa: PLC0415
+
+        normalized_ttl = _normalize_ttl(ttl)
+        if normalized_ttl == 0:
+            self.delete(key)
+            return
         # Django: timeout=None means "never expire", matching citry's ttl.
-        self._cache.set(key, value, timeout=ttl)
+        self._cache.set(key, value, timeout=normalized_ttl)
 
     def delete(self, key: str) -> None:
         self._cache.delete(key)

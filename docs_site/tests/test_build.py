@@ -425,11 +425,7 @@ def test_ui_projection_preflight_preserves_existing_output(tmp_path: Path) -> No
     (tmp_path / "button.md").write_text("---\ntitle: Button\n---\n\n# Button\n", encoding="utf-8")
     ui_manifest = tmp_path / "ui_library.yml"
     ui_manifest.write_text(
-        "components:\n"
-        "  - family: button\n"
-        "    slug: button\n"
-        "    source: button.md\n"
-        "    required_headings: ['#### Button inputs']\n",
+        "components:\n  - family: button\n    slug: button\n    source: button.md\n",
         encoding="utf-8",
     )
     output = tmp_path / "site"
@@ -447,6 +443,139 @@ def test_ui_projection_preflight_preserves_existing_output(tmp_path: Path) -> No
         build_site(config=cfg, minify=False, search=False, social_cards=False)
 
     assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_build_renders_ui_library_source_directly_to_its_catalog_route(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: UI\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "    groups:\n"
+        "      - label: Components\n"
+        "        source: ui_library\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text("---\ntitle: Home\ndescription: Home.\n---\n\n# Home\n", encoding="utf-8")
+    source = tmp_path / "packages/py/citry_ui/citry_ui/components/button/api.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\ntitle: Button\ndescription: Button docs.\n---\n\n"
+        "# Button\n\n## Use Button\n\nDirect source marker.\n\n"
+        '<c-ui-demo path="packages/py/citry_ui/citry_ui/components/button/snippets/build_preview.py" '
+        'title="Build preview" />\n',
+        encoding="utf-8",
+    )
+    source.with_suffix(".yml").write_text(
+        "schema_version: 1\n"
+        "family: button\n"
+        "components: [CButton]\n"
+        "inputs: []\n"
+        "slots: []\n"
+        "events: []\n"
+        "methods: []\n"
+        "attributes: []\n"
+        "selectors: []\n"
+        "css: []\n"
+        "interfaces: []\n",
+        encoding="utf-8",
+    )
+    snippet = tmp_path / "packages/py/citry_ui/citry_ui/components/button/snippets/build_preview.py"
+    snippet.parent.mkdir(parents=True, exist_ok=True)
+    snippet.write_text(
+        "from citry import Component\n\n"
+        "class BuildPreviewSmoke(Component):\n"
+        "    template = '<button>Rendered build preview</button>'\n"
+        "    css = '''\n"
+        "      button {\n"
+        "        color: green;\n"
+        "      }\n"
+        "    '''\n\n"
+        "preview_controls = (\n"
+        "    {\n"
+        "        'name': 'tone',\n"
+        "        'label': 'Tone',\n"
+        "        'type': 'select',\n"
+        "        'default': 'quiet',\n"
+        "        'options': (('quiet', 'Quiet'), ('bold', 'Bold')),\n"
+        "    },\n"
+        "    {\n"
+        "        'name': 'disabled',\n"
+        "        'label': 'Disabled',\n"
+        "        'type': 'checkbox',\n"
+        "        'default': False,\n"
+        "    },\n"
+        ")\n\n"
+        "preview = BuildPreviewSmoke()\n"
+        "preview\n",
+        encoding="utf-8",
+    )
+    ui_manifest = tmp_path / "ui_library.yml"
+    ui_manifest.write_text(
+        "components:\n"
+        "  - family: button\n"
+        "    slug: button\n"
+        "    source: packages/py/citry_ui/citry_ui/components/button/api.md\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "site"
+    cfg = DocsConfig(
+        repo_root=tmp_path,
+        content_dir=content,
+        site_dir=output,
+        ui_library_config=ui_manifest,
+    )
+
+    outcome = build_site(config=cfg, minify=False, search=False, social_cards=False)
+
+    page = output / "ui-library/components/button/index.html"
+    companion = output / "ui-library/components/button/index.md"
+    assert outcome.failed == 0
+    assert outcome.ui_library == 1
+    assert outcome.ui_previews == 1
+    assert "Direct source marker." in page.read_text(encoding="utf-8")
+    page_source = page.read_text(encoding="utf-8")
+    companion_source = companion.read_text(encoding="utf-8")
+    assert 'src="/ui-library/components/button/_previews/build-preview/"' in page_source
+    assert 'title="Build preview rendered preview"' in page_source
+    assert 'sandbox="allow-forms allow-scripts"' in page_source
+    assert 'class="example-demo-frame--theme-sync"' in page_source
+    assert 'loading="lazy"' in page_source
+    assert page_source.index("data-ui-preview-controls") < page_source.index("data-ui-preview-frame")
+    assert page_source.index("data-ui-preview-frame") < page_source.index("citry-ui-demo__source")
+    assert "Customize example" in page_source
+    assert 'aria-label="Build preview controls"' in page_source
+    assert '<option value="quiet" selected>Quiet</option>' in page_source
+    assert 'name="disabled"' in page_source
+    assert "Show code" in page_source
+    assert "BuildPreviewSmoke" in page_source
+    assert "data-citry-live-code" not in page_source
+    assert "Try live" not in page_source
+    assert "/static/playground/live_code.js" not in page_source
+    assert "Direct source marker." in companion_source
+    assert "## API reference" in companion_source
+    assert "### Interfaces" in companion_source
+    assert "[Open the rendered preview](/ui-library/components/button/_previews/build-preview/)" in companion_source
+    assert "class BuildPreviewSmoke(Component):" in companion_source
+    preview_page = output / "ui-library/components/button/_previews/build-preview/index.html"
+    preview_source = preview_page.read_text(encoding="utf-8")
+    assert "Rendered build preview" in preview_source
+    assert "color: green" in preview_source
+    assert 'content="noindex,nofollow"' in preview_source
+    assert 'type: "citry-ui-preview-height"' in preview_source
+    assert 'type === "citry-ui-preview-theme"' in preview_source
+    assert 'type === "citry-ui-preview-controls"' in preview_source
+    assert 'new CustomEvent("citry-ui-preview-controls"' in preview_source
+    assert "font-size: 87.5%" in preview_source
+    assert "new ResizeObserver(publish)" in preview_source
+    assert not (output / "ui-library/components/button/_previews/build-preview/index.md").exists()
+    assert all(record.url != "ui-library/components/button/_previews/build-preview/" for record in outcome.records)
+    llms_full = (output / "llms-full.txt").read_text(encoding="utf-8")
+    assert "class BuildPreviewSmoke(Component):" in llms_full
+    assert "<iframe" not in llms_full
+    assert not (content / "ui-library/components/button.md").exists()
+    assert any(record.source_md == source for record in outcome.records)
 
 
 def test_custom_repository_identity_reaches_every_generated_surface(tmp_path: Path) -> None:

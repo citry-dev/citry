@@ -84,8 +84,14 @@ Python wrapper together (CLAUDE.md Mechanism 4).
 `parse_template(input, lang, user_rules)` builds the tree:
 
 - An HTML tag stack assembles `WithBody` nodes; a closing tag pops and must
-  match the open tag's name, else a mismatched-tags error.
-- Void elements (`constants::HTML_VOID_ELEMENTS`) are treated as self-closing.
+  match the open tag's name under ASCII-case-insensitive HTML identity, else a
+  mismatched-tags error. Authored spelling stays in the AST.
+- Void elements (`constants::HTML_VOID_ELEMENTS`) are treated as self-closing
+  through the same ASCII-case-insensitive identity.
+- Citry's `c-` prefix is exact lowercase. Component suffix identity is
+  ASCII-case-insensitive, including the dynamic built-ins, while structural
+  tags require their exact lowercase spelling. The shared helpers in
+  `constants.rs` keep parser and compiler dispatch aligned.
 - `c-*` attributes are classified: a value whose trimmed content starts with a
   real tag and whose last grammar element is a closing, self-closing, raw, or
   HTML void tag becomes `Template`, as does a value wholly enclosed by
@@ -115,6 +121,9 @@ attributes on raw tags. Attribute and slot rules per tag are data-driven in
 carry optional per-slot data-field names. A direct destructuring source is
 checked only when the effective fill name and data provider are both static;
 dynamic providers keep the runtime check.
+Ordinary HTML elements and `<c-element>` compare explicit attribute identities
+with ASCII folding (`ID`/`id` duplicate, `ID`/`c-id` logical conflict,
+`CLASS`/`c-class` accumulation). Component kwargs remain exact-case.
 
 ## Compiler (`compiler.rs`) and the output-format contract
 

@@ -19,11 +19,15 @@ on:
   pull_request:
     paths:
       - "docs_site/**"
+      - "packages/py/citry_ui/citry_ui/components/**/api.md"
       - "CHANGELOG.md"
       - "CODE_OF_CONDUCT.md"
       - "LICENSE"
+      - "package.json"
+      - "pnpm-lock.yaml"
       - ".github/workflows/repo--docs-lighthouse.yml"
       - ".github/lighthouserc.json"
+      - ".github/lighthouserc.citry-ui.json"
   workflow_dispatch:
 
 permissions:
@@ -78,10 +82,38 @@ jobs:
       - name: Build the docs site
         run: uv run --no-sync python -m docs_site build --no-search --no-social-cards -o "$GITHUB_WORKSPACE/lhsite"
 
-      - name: Run Lighthouse CI
+      - name: Render representative Citry UI qualification pages
+        shell: bash
         run: |
-          npm install -g @lhci/cli@0.14.x
-          lhci autorun --config=.github/lighthouserc.json
+          mkdir -p lhsite/__quality/citry-ui/orbit-access
+          mkdir -p lhsite/__quality/citry-ui/ledger-dashboard
+          uv run --no-sync python -m citry_ui.quality.routes \
+            composition.orbit-access \
+            --output lhsite/__quality/citry-ui/orbit-access/index.html
+          uv run --no-sync python -m citry_ui.quality.routes \
+            composition.ledger-dashboard \
+            --output lhsite/__quality/citry-ui/ledger-dashboard/index.html
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install the pinned Lighthouse tool
+        run: pnpm install --frozen-lockfile --filter citry-dev-tooling
+
+      - name: Run Lighthouse CI
+        run: pnpm exec lhci autorun --config=.github/lighthouserc.json
+
+      - name: Preserve the docs reports
+        run: mv .lighthouseci .lighthouseci-docs
+
+      - name: Run Citry UI Lighthouse CI
+        run: pnpm exec lhci autorun --config=.github/lighthouserc.citry-ui.json
 
       # lhci's assertion output only prints the category score (e.g.
       # "best-practices ... found 0.96"), not which audit caused it. This parses
@@ -125,3 +157,13 @@ jobs:
                         f"perf={data['categories'].get('performance',{}).get('score')})")
                   print("\n".join(rows))
           PY
+
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: |
+            .lighthouseci/
+            .lighthouseci-docs/
+          if-no-files-found: warn

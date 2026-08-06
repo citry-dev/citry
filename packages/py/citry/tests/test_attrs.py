@@ -1,5 +1,5 @@
 """
-Tests for the attribute value helpers (docs/design/html_attrs.md sections 3
+Tests for the attribute value helpers (docs/design/template_html_attrs.md sections 3
 and 4): class/style normalization, merging, and formatting.
 
 Ported from django-components' tests/test_attributes.py where the semantics
@@ -11,8 +11,7 @@ with a comment saying what changed and why.
 
 import pytest
 
-from citry import format_attrs, merge_attrs, normalize_class, normalize_style, parse_string_style
-from citry.util.html import SafeString
+from citry import Markup, format_attrs, merge_attrs, normalize_class, normalize_style, parse_string_style
 
 
 class TestFormatAttrs:
@@ -22,15 +21,31 @@ class TestFormatAttrs:
     def test_multiple_attributes(self):
         assert format_attrs({"class": "foo", "style": "color: red;"}) == 'class="foo" style="color: red;"'
 
+    def test_case_variants_share_html_identity_and_first_spelling(self):
+        assert format_attrs({"ID": "first", "id": "second", "DATA-X": "x"}) == 'ID="second" DATA-X="x"'
+
+    def test_case_variant_class_and_style_accumulate(self):
+        attrs = {
+            "CLASS": "base",
+            "class": {"active": True},
+            "STYLE": "color: red",
+            "style": {"width": "1px"},
+        }
+        assert format_attrs(attrs) == 'CLASS="base active" STYLE="color: red; width: 1px;"'
+
+    def test_citry_directive_payloads_remain_case_sensitive(self):
+        attrs = {"@c-Ready": "first", "@c-ready": "second", ":c-Value": True, ":c-value": True}
+        assert format_attrs(attrs) == '@c-Ready="first" @c-ready="second" :c-Value :c-value'
+
     def test_escapes_special_characters(self):
         assert format_attrs({"x-on:click": "bar", "@click": "'baz'"}) == 'x-on:click="bar" @click="&#39;baz&#39;"'
 
-    def test_does_not_escape_safe_strings(self):
-        assert format_attrs({"foo": SafeString("'bar'")}) == "foo=\"'bar'\""
+    def test_does_not_escape_markup(self):
+        assert format_attrs({"foo": Markup("'bar'")}) == "foo=\"'bar'\""
 
-    def test_result_is_safe_string(self):
+    def test_result_is_markup(self):
         result = format_attrs({"foo": "bar"})
-        assert isinstance(result, SafeString)
+        assert isinstance(result, Markup)
 
     def test_none_value_omits_attribute(self):
         assert format_attrs({"required": None}) == ""
@@ -43,6 +58,29 @@ class TestFormatAttrs:
 
     def test_number_value(self):
         assert format_attrs({"data-id": 3}) == 'data-id="3"'
+
+    def test_non_string_attribute_name_raises(self):
+        with pytest.raises(TypeError, match="must use string attribute names"):
+            format_attrs({1: "value"})
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "",
+            "bad name",
+            "bad\tname",
+            "bad\nname",
+            "bad\rname",
+            "bad=name",
+            "bad/name",
+            "bad>name",
+            "bad<name",
+            "bad{#name",
+        ],
+    )
+    def test_malformed_attribute_name_raises(self, name):
+        with pytest.raises(ValueError, match="invalid HTML attribute name"):
+            format_attrs({name: "value"})
 
     def test_structured_class_value(self):
         # format_attrs normalizes structured class/style itself, so
@@ -59,6 +97,17 @@ class TestFormatAttrs:
 
     def test_structured_style_normalizing_to_empty_is_omitted(self):
         assert format_attrs({"style": {"color": False}, "id": "x"}) == 'id="x"'
+
+    def test_empty_class_and_style_strings_are_omitted(self):
+        assert format_attrs({"class": "", "style": "", "id": "x"}) == 'id="x"'
+
+    def test_empty_class_and_style_from_merge_are_omitted(self):
+        attrs = merge_attrs(
+            {"class": "shown", "style": {"color": "red"}},
+            {"class": {"shown": False}, "style": {"color": False}},
+        )
+
+        assert format_attrs(attrs) == ""
 
 
 class TestMergeAttrs:
@@ -77,7 +126,7 @@ class TestMergeAttrs:
     def test_overlapping_keys_last_one_wins(self):
         # Divergence from django-components, which joins repeated plain keys
         # with a space. Citry resolves every non-class/style key
-        # last-one-wins (docs/design/html_attrs.md section 4).
+        # last-one-wins (docs/design/template_html_attrs.md section 4).
         assert merge_attrs({"foo": "bar"}, {"foo": "baz"}) == {"foo": "baz"}
         assert merge_attrs({"foo": None}, {"foo": "bar"}) == {"foo": "bar"}
         assert merge_attrs({"foo": "bar"}, {"foo": None}) == {"foo": None}
@@ -87,6 +136,17 @@ class TestMergeAttrs:
         merged = merge_attrs({"id": "a", "class": "x"}, {"data-x": "1", "id": "b"})
         assert list(merged) == ["id", "class", "data-x"]
         assert merged["id"] == "b"
+
+    def test_case_variants_merge_by_html_identity(self):
+        merged = merge_attrs(
+            {"ID": "first", "CLASS": "base", "STYLE": "color: red"},
+            {"id": "second", "class": "active", "style": {"width": "1px"}},
+        )
+        assert merged == {
+            "ID": "second",
+            "CLASS": "base active",
+            "STYLE": "color: red; width: 1px;",
+        }
 
     def test_merge_classes(self):
         assert merge_attrs(

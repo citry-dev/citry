@@ -4,14 +4,12 @@
 // wrapping the expression attribute. That runtime node owns the complete
 // composite output attribute, so `None` can omit it without leaving an empty
 // scope prefix. `#c-ignore` compiles to the literal
-// ` data-citry-morph="ignore"` marker. On a component tag, `#c-key` rides as
-// the ComponentNode's trailing key argument (an ExprHtmlAttr), never as one
-// of the kwargs attributes. See docs/design/events.md sections 5.1 and 5.3.
+// ` data-citry-morph="ignore"` marker. On a component tag, metadata rides in
+// the ComponentNode's tagged trailing tuple, never as one of the kwargs
+// attributes. See docs/design/component_ranges_plan.md.
 //
 // These tests assert the exact generated Python source string
 // (observe-then-lock, like tag_compiler.rs).
-
-mod common;
 
 #[cfg(test)]
 mod tests {
@@ -115,17 +113,17 @@ mod tests {
     }
 
     // =============================================================================
-    // COMPONENT TAGS: #c-key rides as the trailing key argument
+    // COMPONENT TAGS: tagged metadata envelope
     // =============================================================================
 
     #[test]
     fn test_key_on_component_tag() {
-        // The key is the trailing argument (an ExprHtmlAttr), NOT one of the
-        // attrs (argument 3), so it can never become a kwarg. Its variables
-        // still count into the node's used_vars (argument 5).
+        // The key entry is in the trailing range envelope, NOT one of the attrs
+        // (argument 3), so it can never become a kwarg. Its variables still
+        // count into the node's used_vars (argument 5).
         assert_compile(
             r#"<c-Card #c-key="item.id" title="Hi">body</c-Card>"#,
-            r##"[ComponentNode(source, (0, 49,), (StaticHtmlAttr(source, (25, 35,), """title""", """Hi""", ()),), ["""body""",], ("item",), """card""", False, ExprHtmlAttr(source, (8, 24,), """#c-key""", """item.id""", ("item",))),]"##,
+            r##"[ComponentNode(source, (0, 49,), (StaticHtmlAttr(source, (25, 35,), """title""", """Hi""", ()),), ["""body""",], ("item",), """card""", False, ("range", ("key", ExprHtmlAttr(source, (8, 24,), """#c-key""", """item.id""", ("item",)),),)),]"##,
         );
     }
 
@@ -133,13 +131,13 @@ mod tests {
     fn test_key_on_component_tag_with_dynamic_attr() {
         assert_compile(
             r#"<c-Card c-title="t" #c-key="k" />"#,
-            r##"[ComponentNode(source, (0, 33,), (ExprHtmlAttr(source, (8, 19,), """c-title""", """t""", ("t",)),), [], ("t", "k",), """card""", False, ExprHtmlAttr(source, (20, 30,), """#c-key""", """k""", ("k",))),]"##,
+            r##"[ComponentNode(source, (0, 33,), (ExprHtmlAttr(source, (8, 19,), """c-title""", """t""", ("t",)),), [], ("t", "k",), """card""", False, ("range", ("key", ExprHtmlAttr(source, (20, 30,), """#c-key""", """k""", ("k",)),),)),]"##,
         );
     }
 
     #[test]
     fn test_unkeyed_component_output_unchanged() {
-        // No trailing argument when the tag carries no `#c-key`: the emitted
+        // No trailing argument when the tag carries no metadata: the emitted
         // code for existing templates stays byte-identical.
         assert_compile(
             r#"<c-Card title="Hi" />"#,
@@ -158,12 +156,44 @@ mod tests {
     }
 
     #[test]
+    fn test_key_on_case_variant_c_element_keeps_element_locus() {
+        assert_compile(
+            r#"<c-Element is="div" #c-key="k">x</c-Element>"#,
+            r##"["""<div""", ElementKeyNode(ExprHtmlAttr(source, (20, 30,), """#c-key""", """k""", ("k",))), """>x</div>""",]"##,
+        );
+    }
+
+    #[test]
     fn test_key_on_c_component_with_static_is() {
         // The static `is` rewrite resolves the component name at compile time;
-        // the key rides the ComponentNode like on any component tag.
+        // the key rides in the range envelope like on any component tag.
         assert_compile(
             r#"<c-component is="Card" #c-key="k" />"#,
-            r##"[ComponentNode(source, (0, 36,), (), [], ("k",), """card""", False, ExprHtmlAttr(source, (23, 33,), """#c-key""", """k""", ("k",))),]"##,
+            r##"[ComponentNode(source, (0, 36,), (), [], ("k",), """card""", False, ("range", ("key", ExprHtmlAttr(source, (23, 33,), """#c-key""", """k""", ("k",)),),)),]"##,
+        );
+    }
+
+    #[test]
+    fn test_ignore_on_component_tag() {
+        assert_compile(
+            "<c-card #c-ignore />",
+            r#"[ComponentNode(source, (0, 20,), (), [], (), """card""", False, ("range", ("morph", "ignore",),)),]"#,
+        );
+    }
+
+    #[test]
+    fn test_component_metadata_is_canonical() {
+        assert_compile(
+            r#"<c-card #c-ignore #c-key="k" />"#,
+            r##"[ComponentNode(source, (0, 31,), (), [], ("k",), """card""", False, ("range", ("key", ExprHtmlAttr(source, (18, 28,), """#c-key""", """k""", ("k",)),), ("morph", "ignore",),)),]"##,
+        );
+    }
+
+    #[test]
+    fn test_dynamic_element_metadata() {
+        assert_compile(
+            r#"<c-element c-is="tag" #c-key="k" #c-ignore />"#,
+            r##"[ComponentNode(source, (0, 45,), (ExprHtmlAttr(source, (11, 21,), """c-is""", """tag""", ("tag",)),), [], ("tag", "k",), """element""", False, ("element", ("key", ExprHtmlAttr(source, (22, 32,), """#c-key""", """k""", ("k",)),), ("morph", "ignore",),)),]"##,
         );
     }
 
@@ -171,8 +201,7 @@ mod tests {
     fn test_compile_is_deterministic() {
         // Same input compiles to the same bytes across repeated runs (the
         // emitted fragments come from source-ordered Vecs, never a set).
-        let input =
-            r#"<c-Card c-title="t" #c-key="k" /><li class="a" #c-key="item.id" #c-ignore>x</li>"#;
+        let input = r#"<c-Card c-title="t" #c-ignore #c-key="k" /><li class="a" #c-key="item.id" #c-ignore>x</li>"#;
         let template = parse_template(input, None, None).unwrap();
         let first = compile_template(template, None).unwrap();
         for _ in 0..5 {

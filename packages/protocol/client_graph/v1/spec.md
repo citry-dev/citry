@@ -393,11 +393,25 @@ interface NestedComponent {
   locationId: number | null;
   tagName: string;
   targetClassId: string;
+  morphKey: string | null;
+  morphMode: "ignore" | null;
   targetRenderId: string;
   parentRegionId: number | null;
   clientBindings: ComponentTagClientBinding[];
 }
 ```
+
+`morphKey` belongs to the virtual component range delimited by the target
+instance's ownership comments. `null` means unkeyed; every string, including
+the empty string, is a key. Component correspondence uses `targetClassId` and
+`morphKey` together, so equal keys on different component classes do not
+collide.
+
+`morphMode` is the parent-authored policy for the same virtual component
+range. `null` means normal morphing and `"ignore"` retains the matched live
+range without adopting its incoming counterpart. The field is required. A
+missing field, boolean, unknown string, or other value rejects the graph
+before adoption.
 
 ### `ComponentTagClientBinding`
 
@@ -539,10 +553,11 @@ interface SlotRegion {
 The top-level object has exactly these members, no more and no fewer:
 
 - `protocol`: the exact string `citry-client-graph/1`.
-- `revision`: a fingerprint of the manifest. The server takes the whole object
-  with `revision` left out, serializes it canonically (sorted keys, no
-  whitespace, UTF-8), hashes that with SHA-256, and writes the lowercase hex
-  digest here. **Any edit to the manifest changes this value.**
+- `revision`: a fingerprint of the manifest. The server removes `revision`
+  from the decoded object, serializes the remaining value with the exact
+  algorithm below, hashes those bytes with SHA-256, and writes the lowercase
+  hexadecimal digest here. **Any change to the decoded manifest changes this
+  value.**
   
   **IMPORTANT:** The revision is a
   plain content hash, not a signature: there is no secret. Revision only confirms that
@@ -578,6 +593,45 @@ Each component-tag client binding says which kind it is. A `props` or
 server-handler binding plus an optional opaque Alpine argument expression. The
 browser never takes a Citry handler value and re-reads it as one whole Alpine
 expression.
+
+### How both languages calculate the revision
+
+The revision is calculated from the decoded JSON values. The spelling in the
+original JSON is not preserved: `1`, `1.0`, and `1e0` all decode to the same
+integer value. A spelling such as `1.0000000000000001` also decodes to `1` in
+Python and JavaScript and is treated as that value.
+
+Both languages follow these steps:
+
+1. Remove the top-level `revision` member.
+2. Accept only null, booleans, strings, arrays, objects, and decoded
+   non-negative safe integers. A safe integer is at most
+   `9007199254740991`. A boolean is not an integer.
+3. Write integers as ordinary decimal digits. Negative zero and values that
+   decode to zero are written as `0`.
+4. Escape strings as `JSON.stringify` does. Quotes, backslashes, and control
+   characters use JSON escapes. Paired Unicode characters are written
+   literally. An unpaired UTF-16 surrogate is written as a lowercase
+   `\udxxx` escape. Text is not Unicode-normalized.
+5. Keep array order. Sort object names by UTF-16 code units, then apply these
+   rules recursively to their values.
+6. Put `,` and `:` between values with no whitespace, encode the resulting
+   text as UTF-8, hash those bytes with SHA-256, and use lowercase hexadecimal.
+
+Validation uses the decoded number, not its original characters. This avoids a
+second JSON parser whose only job would be preserving number spellings. A
+number that decodes outside the safe-integer range is rejected before its
+revision is checked.
+
+The exact bytes and hashes are recorded in
+[`tests/canonicalization.json`](tests/canonicalization.json). That file also
+contains rejected values at the numeric boundary.
+
+The JSON placed inside the HTML script element is a separate representation.
+After calculating the revision, the server escapes every `<` in that transport
+JSON as `\u003c`. The browser's JSON parser restores the original string before
+it calculates the revision. This lets values such as `</script>` travel safely
+without changing the canonical hash.
 
 ## Where things were written: source locations (development only)
 

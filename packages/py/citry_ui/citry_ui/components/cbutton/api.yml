@@ -1,0 +1,216 @@
+schema_version: 1
+family: button
+
+components:
+  - CButton
+
+inputs:
+  - id: cbutton-server-inputs
+    component: CButton
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - id: type
+        name: type
+        type:
+          display: '"button" | "submit" | "reset"'
+          interfaces: [CButtonType]
+        default: {kind: literal, value: button}
+        effect: Selects native action Button behavior. It must remain `button` when `href` is set.
+      - id: href
+        name: href
+        type: str | None
+        default: {kind: literal, value: null}
+        effect: Renders a native link when set. Omit it to render a native action Button.
+      - id: disabled
+        name: disabled
+        type: bool
+        default: {kind: literal, value: false}
+        effect: Disables the action Button or makes the link inert and blocks activation; a disabled enclosing CForm always wins.
+      - id: loading
+        name: loading
+        type: bool
+        default: {kind: literal, value: false}
+        effect: Marks the action busy and blocks new activation while retaining focus after client activation.
+      - id: variant
+        name: variant
+        type:
+          display: '"solid" | "outline" | "ghost"'
+          interfaces: [CButtonVariant]
+        default: {kind: literal, value: solid}
+        effect: Selects presentation strength.
+      - id: intent
+        name: intent
+        type:
+          display: '"primary" | "neutral" | "success" | "warn" | "danger"'
+          interfaces: [CButtonIntent]
+        default: {kind: literal, value: primary}
+        effect: Selects the semantic color role.
+      - id: size
+        name: size
+        type:
+          display: '"sm" | "md" | "lg"'
+          interfaces: [CButtonSize]
+        default: {kind: literal, value: md}
+        effect: Sets height, spacing, and text size.
+      - id: block
+        name: block
+        type: bool
+        default: {kind: literal, value: false}
+        effect: Fills the available inline size.
+      - id: loading-pos
+        name: loading_pos
+        type:
+          display: '"start" | "center" | "end"'
+          interfaces: [CButtonLoadingPos]
+        default: {kind: literal, value: center}
+        effect: Replaces the matching visual position while loading. Center replaces all ordinary visual content.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles from CSS text, a property mapping, or a nested sequence and merges them with `attrs`.'}
+      - id: attrs
+        name: attrs
+        type: Mapping[str, object] | None
+        default: {kind: literal, value: null}
+        effect: Adds allowed native root, ARIA, Alpine, and data attributes. It may also contribute class and style values; prefer the top-level inputs for those. Form attributes apply only without `href`; link attributes such as `target`, `rel`, and `download` apply with `href`.
+
+  - id: cbutton-client-inputs
+    component: CButton
+    channel: client
+    column_widths: [fit, 12rem, 10rem, auto]
+    entries:
+      - id: disabled
+        name: disabled
+        type: boolean
+        omitted: Uses the server input.
+        effect: Controls local disabled state for action Buttons and links; a disabled enclosing CForm always wins and updates native state, `aria-disabled`, activation, and `data-disabled`.
+      - id: loading
+        name: loading
+        type: boolean
+        omitted: Uses the server input.
+        effect: Controls busy semantics, visual replacement, indicator visibility, activation, and `data-loading`.
+      - id: variant
+        name: variant
+        type:
+          display: '"solid" | "outline" | "ghost"'
+          interfaces: [CButtonVariant]
+        omitted: Uses the server input.
+        effect: Controls `data-variant` and presentation.
+      - id: intent
+        name: intent
+        type:
+          display: '"primary" | "neutral" | "success" | "warn" | "danger"'
+          interfaces: [CButtonIntent]
+        omitted: Uses the server input.
+        effect: Controls `data-intent` and colors.
+      - id: size
+        name: size
+        type:
+          display: '"sm" | "md" | "lg"'
+          interfaces: [CButtonSize]
+        omitted: Uses the server input.
+        effect: Controls `data-size` and geometry.
+      - id: block
+        name: block
+        type: boolean
+        omitted: Uses the server input.
+        effect: Controls `data-block` and inline sizing.
+      - id: loading-position
+        name: loadingPosition
+        type:
+          display: '"start" | "center" | "end"'
+          interfaces: [CButtonLoadingPos]
+        omitted: Uses the server input.
+        effect: Controls `data-loading-position` and which ordinary visual content loading replaces.
+
+slots:
+  - id: cbutton-slots
+    component: CButton
+    entries:
+      - id: default
+        name: default
+        required: true
+        data:
+          display: '{}'
+          interfaces: [CButtonDefaultSlotData]
+        fallback: none
+      - id: start
+        name: start
+        required: false
+        data:
+          display: '{}'
+          interfaces: [CButtonStartSlotData]
+        fallback: omitted
+      - id: end
+        name: end
+        required: false
+        data:
+          display: '{}'
+          interfaces: [CButtonEndSlotData]
+        fallback: omitted
+      - id: loading
+        name: loading
+        required: false
+        data:
+          display: '{}'
+          interfaces: [CButtonLoadingSlotData]
+        fallback: Built-in compact CSS spinner. Supplied content is a compact visual indicator hidden from the accessibility tree.
+
+events: []
+methods: []
+
+css:
+  - id: cbutton-css-variables
+    component: CButton
+    entries:
+      - {id: cui-button-background, name: --cui-button-background, type: color, purpose: Resting background., default: Variant- and intent-derived color.}
+      - {id: cui-button-foreground, name: --cui-button-foreground, type: color, purpose: Text and decoration., default: Derived contrast color.}
+      - {id: cui-button-border-color, name: --cui-button-border-color, type: color, purpose: Resting border., default: Variant- and intent-derived color.}
+      - {id: cui-button-hover-background, name: --cui-button-hover-background, type: color, purpose: Enabled hover background., default: Derived color mix.}
+      - {id: cui-button-active-background, name: --cui-button-active-background, type: color, purpose: Enabled active background., default: Derived stronger color mix.}
+      - {id: cui-button-focus-color, name: --cui-button-focus-color, type: color, purpose: Focus outline., default: Highlight}
+      - {id: cui-button-radius, name: --cui-button-radius, type: length, purpose: Corner radius., default: 0.5rem}
+      - {id: cui-button-font-weight, name: --cui-button-font-weight, type: number, purpose: Label weight., default: '600'}
+      - {id: cui-button-gap, name: --cui-button-gap, type: length, purpose: Gap between content parts., default: 0.5rem}
+      - {id: cui-button-disabled-opacity, name: --cui-button-disabled-opacity, type: number, purpose: Disabled presentation opacity., default: '0.48'}
+      - {id: cui-button-height, name: --cui-button-height, type: length, purpose: Minimum target height., default: Size-derived length.}
+      - {id: cui-button-inline-padding, name: --cui-button-inline-padding, type: length, purpose: Logical inline padding., default: Size-derived length.}
+      - {id: cui-button-block-padding, name: --cui-button-block-padding, type: length, purpose: Logical block padding., default: Size-derived length.}
+      - {id: cui-button-font-size, name: --cui-button-font-size, type: length, purpose: Label size., default: Size-derived length.}
+
+attributes:
+  - id: cbutton-attributes
+    component: CButton
+    entries:
+      - {id: data-loading, name: data-loading, element: Native root, type: present | absent, meaning: Mirrors effective loading state.}
+      - {id: data-disabled, name: data-disabled, element: Native root, type: present | absent, meaning: Mirrors effective disabled state.}
+      - {id: data-variant, name: data-variant, element: Native root, type: '"solid" | "outline" | "ghost"', meaning: Mirrors effective presentation variant.}
+      - {id: data-intent, name: data-intent, element: Native root, type: '"primary" | "neutral" | "success" | "warn" | "danger"', meaning: Mirrors effective semantic color role.}
+      - {id: data-size, name: data-size, element: Native root, type: '"sm" | "md" | "lg"', meaning: Mirrors effective size.}
+      - {id: data-block, name: data-block, element: Native root, type: present | absent, meaning: Mirrors full-width layout.}
+      - {id: data-loading-position, name: data-loading-position, element: Native root, type: '"start" | "center" | "end"', meaning: Mirrors effective loading-content position.}
+
+selectors:
+  - id: cbutton-selectors
+    component: CButton
+    entries:
+      - {id: data-citry-ui-part-button, selector: '[data-citry-ui-part="button"]', element: Native root, purpose: Button or link root and `attrs` destination.}
+      - {id: data-citry-ui-part-start, selector: '[data-citry-ui-part="start"]', element: Leading wrapper, purpose: Leading content hook.}
+      - {id: data-citry-ui-part-content, selector: '[data-citry-ui-part="content"]', element: Content wrapper, purpose: Required label and content hook.}
+      - {id: data-citry-ui-part-end, selector: '[data-citry-ui-part="end"]', element: Trailing wrapper, purpose: Trailing content hook.}
+      - {id: data-citry-ui-part-loading-indicator, selector: '[data-citry-ui-part="loading-indicator"]', element: Loading wrapper, purpose: Stable loading-content hook.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-cbutton-type, name: CButtonType, definition: 'Literal["button", "submit", "reset"]'}
+      - {id: input-type-aliases-cbutton-variant, name: CButtonVariant, definition: 'Literal["solid", "outline", "ghost"]'}
+      - {id: input-type-aliases-cbutton-intent, name: CButtonIntent, definition: 'Literal["primary", "neutral", "success", "warn", "danger"]'}
+      - {id: input-type-aliases-cbutton-size, name: CButtonSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: input-type-aliases-cbutton-loading-pos, name: CButtonLoadingPos, definition: 'Literal["start", "center", "end"]'}
+  - {id: cbutton-default-slot-data, kind: record, name: CButtonDefaultSlotData, entries: []}
+  - {id: cbutton-start-slot-data, kind: record, name: CButtonStartSlotData, entries: []}
+  - {id: cbutton-end-slot-data, kind: record, name: CButtonEndSlotData, entries: []}
+  - {id: cbutton-loading-slot-data, kind: record, name: CButtonLoadingSlotData, entries: []}

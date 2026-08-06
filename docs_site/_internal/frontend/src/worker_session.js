@@ -1,11 +1,15 @@
 // This parent-side session owns exactly one Pyodide Worker generation. It
 // matches replies to runs and event calls, and terminates stalled generations.
 const MAX_SOURCE_BYTES = 64 * 1024;
-const MAX_MESSAGE_BYTES = 2 * 1024 * 1024;
+const MAX_MESSAGE_BYTES = 6 * 1024 * 1024;
+const MAX_ASSET_PATHS = 32;
+const MAX_ASSET_PATH_BYTES = 512;
 const EXECUTION_TIMEOUT_MS = 5_000;
 const EVENT_TIMEOUT_MS = 5_000;
+const ASSET_TIMEOUT_MS = 5_000;
 const PREPARE_TIMEOUT_MS = 30_000;
 const MAX_PENDING_EVENTS = 16;
+const MAX_PENDING_ASSET_REQUESTS = 8;
 
 function messageBytes(value) {
   try {
@@ -27,6 +31,7 @@ export class CitryBrowserSession {
     this.generation = 0;
     this.activeRunId = null;
     this.eventSequence = 0;
+    this.assetSequence = 0;
     this.state = null;
   }
 
@@ -45,6 +50,11 @@ export class CitryBrowserSession {
       pending.reject(error);
     }
     state.eventRequests.clear();
+    for (const pending of state.assetRequests.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+    }
+    state.assetRequests.clear();
   }
 
   dispose() {
@@ -80,6 +90,8 @@ export class CitryBrowserSession {
       executionTimer: undefined,
       prepareTimer: undefined,
       eventRequests: new Map(),
+      assetRequests: new Map(),
+      runId: null,
     };
     state.prepareTimer = setTimeout(() => {
       if (this.state !== state) return;
@@ -106,6 +118,7 @@ export class CitryBrowserSession {
       } else if (data.type === "result" && data.runId === this.activeRunId && data.result) {
         clearTimeout(state.executionTimer);
         this.activeRunId = null;
+        state.runId = data.runId;
         this.onResult(data.runId, data.result, Number(data.durationMs) || 0);
       } else if (data.type === "event-result" || data.type === "event-failure") {
         const pending = state.eventRequests.get(data.eventId);
@@ -116,6 +129,18 @@ export class CitryBrowserSession {
           pending.resolve(data.result);
         } else {
           const error = new Error(String(data.message || "The Python event handler failed."));
+          error.cause = String(data.details || "");
+          pending.reject(error);
+        }
+      } else if (data.type === "assets-result" || data.type === "assets-failure") {
+        const pending = state.assetRequests.get(data.assetId);
+        if (!pending || pending.runId !== data.runId) return;
+        clearTimeout(pending.timeout);
+        state.assetRequests.delete(data.assetId);
+        if (data.type === "assets-result" && Array.isArray(data.assets)) {
+          pending.resolve(data.assets);
+        } else {
+          const error = new Error(String(data.message || "The Python asset loader failed."));
           error.cause = String(data.details || "");
           pending.reject(error);
         }
@@ -164,7 +189,7 @@ export class CitryBrowserSession {
     }
     // A run or event call still in flight cannot safely overlap new module
     // execution, so start that module in a fresh Worker. Idle Workers stay warm.
-    if (this.activeRunId !== null || this.state?.eventRequests.size) {
+    if (this.activeRunId !== null || this.state?.eventRequests.size || this.state?.assetRequests.size) {
       this.terminate("The displayed event was cancelled by a new Python run.");
     }
     const state = this.ensureWorker();
@@ -188,6 +213,7 @@ export class CitryBrowserSession {
     }
     const state = this.state;
     if (!state) throw new Error("The Python runtime is no longer active. Run the module again.");
+    if (state.runId !== runId) throw new Error("This event belongs to a preview that is no longer active.");
     if (state.eventRequests.size >= MAX_PENDING_EVENTS) {
       throw new Error(`The playground allows at most ${MAX_PENDING_EVENTS} pending event requests.`);
     }
@@ -217,6 +243,62 @@ export class CitryBrowserSession {
         envelope,
       });
     });
+  }
+
+  async loadAssets(runId, paths) {
+    const encoder = new TextEncoder();
+    if (
+      !Number.isSafeInteger(runId)
+      || runId <= 0
+      || !Array.isArray(paths)
+      || paths.length === 0
+      || paths.length > MAX_ASSET_PATHS
+      || paths.some((path) => typeof path !== "string" || encoder.encode(path).byteLength > MAX_ASSET_PATH_BYTES)
+    ) {
+      throw new Error("The preview sent an invalid asset request.");
+    }
+    if (this.activeRunId !== null) {
+      throw new Error("Wait for the current Python run to finish before loading its assets.");
+    }
+    const state = this.state;
+    if (!state || state.runId !== runId) {
+      throw new Error("These assets belong to a preview that is no longer active.");
+    }
+    if (state.assetRequests.size >= MAX_PENDING_ASSET_REQUESTS) {
+      throw new Error(`The playground allows at most ${MAX_PENDING_ASSET_REQUESTS} pending asset requests.`);
+    }
+
+    await state.ready;
+    if (this.state !== state || this.activeRunId !== null || state.runId !== runId) {
+      throw new Error("The Python runtime changed before the assets could load.");
+    }
+
+    // The Worker gets its own generation-scoped id; iframe request ids never
+    // cross this boundary or acquire Worker-level authority.
+    this.assetSequence += 1;
+    const assetId = `assets-${state.generation}-${this.assetSequence}`;
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (this.state !== state || !state.assetRequests.has(assetId)) return;
+        this.terminate(new Error(`Python exceeded the ${ASSET_TIMEOUT_MS / 1000}-second asset limit.`));
+      }, ASSET_TIMEOUT_MS);
+      state.assetRequests.set(assetId, { resolve, reject, timeout, runId });
+      state.worker.postMessage({
+        type: "assets",
+        consumer: "playground",
+        generation: state.generation,
+        runId,
+        assetId,
+        paths,
+      });
+    });
+  }
+
+  cancelAssetRequests(runId, message = "Asset loading was cancelled.") {
+    const state = this.state;
+    if (!state || ![...state.assetRequests.values()].some((pending) => pending.runId === runId)) return false;
+    this.terminate(message);
+    return true;
   }
 
   stop(runId, message = "Run stopped by the visitor.") {

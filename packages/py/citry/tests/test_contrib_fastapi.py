@@ -25,7 +25,7 @@ def _widget(c):
     class Widget(Component):
         citry = c
         template = "<span>w</span>"
-        js = "$onComponent(({ els, data }) => { els[0].textContent = data.rows; });"
+        js = "$component(({ els, data }) => { els[0].textContent = data.rows; });"
         css = ".w {}"
 
         def js_data(self, kwargs, slots):
@@ -64,7 +64,7 @@ class TestServedEndpoints:
         client = _build_app(c)
         js = client.get(f"/citry/cache/{widget.class_id}.js")
         assert js.status_code == 200
-        # The served form carries the $onComponent expansion.
+        # The served form carries the $component expansion.
         assert f'registerComponent("{widget.class_id}"' in js.text
         css = client.get(f"/citry/cache/{widget.class_id}.css")
         assert css.status_code == 200
@@ -94,7 +94,7 @@ class TestFragmentRoundTrip:
         match = re.search(r'<script type="application/json" data-citry>(.*?)</script>', fragment, re.DOTALL)
         manifest = json.loads(match.group(1))
         descriptors = [
-            json.loads(base64.b64decode(item).decode())
+            json.loads(base64.b64decode(item[0]).decode())
             for item in [*manifest["fetch"]["js"], *manifest["fetch"]["css"]]
         ]
         urls = [d["attrs"].get("src") or d["attrs"].get("href") for d in descriptors]

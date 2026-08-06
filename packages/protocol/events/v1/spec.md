@@ -249,8 +249,9 @@ type EventsResultEnvelope =
 ### Actions
 
 The literal `action` property selects one of six action shapes. Every action
-may be delayed; `wait` is omitted when the queue waits and is present only as
-`false` when later actions may continue immediately.
+may be delayed. Most actions may set `wait` to `false` so later actions can
+continue immediately. A data action always waits because applying it resolves
+the caller's promise.
 
 ```ts
 interface ActionTiming {
@@ -265,9 +266,10 @@ interface RenderAction extends ActionTiming {
   html: string;
 }
 
-interface DataAction extends ActionTiming {
+interface DataAction {
   action: "data";
   value: JsonValue;
+  delay?: number;
 }
 
 interface StateAction extends ActionTiming {
@@ -420,7 +422,7 @@ to send more calls splits them into successive envelopes.
 | Field | Rule | Purpose |
 |---|---|---|
 | `protocol` | Required; exactly `citry-events/1`. | Names the server's protocol. |
-| `requestId` | Required non-empty string, or `null` when the request was rejected before its ID could be read. | Echoes the call envelope's request ID when available. |
+| `requestId` | Required non-empty string, or `null` when the request supplied no usable ID. | Echoes the call envelope's request ID when available. |
 | `results` | Required non-empty array. | Holds one answer per call, in call order. |
 
 A success result is:
@@ -455,7 +457,7 @@ Actions are a closed v1 vocabulary:
 | Action | Required fields | Optional fields | Meaning |
 |---|---|---|---|
 | `render` | `target`, `swap`, `html` | `delay`, `wait` | Apply a complete Citry fragment to every selected target. |
-| `data` | `value` | `delay`, `wait` | Resolve the caller with any JSON value, including `null`. A result has at most one data action. |
+| `data` | `value` | `delay` | Resolve the caller with any JSON value, including `null`. A result has at most one data action. |
 | `state` | `targetRenderId`, `stateToken` | `delay`, `wait` | Replace one rendered component occurrence's stored State token. |
 | `event` | `eventName` | `detail`, `target`, `delay`, `wait` | Dispatch a bubbling DOM `CustomEvent`. Names beginning `citry:` are reserved. |
 | `redirect` | `url` | `delay`, `wait` | Navigate the page. |
@@ -489,16 +491,16 @@ unaddressed event then dispatches on `document`.
 
 ### Order and timing
 
-Actions keep their list order. Each action may add:
+Actions keep their list order. Each action may add `delay`, a finite number of
+seconds at least 0 that is omitted at 0. Every action except `data` may also
+add `wait: false` to schedule the delayed action and continue with the
+following action immediately. A data action must remain in the sequence
+because applying it settles the caller's promise.
 
-- `delay`: a finite number of seconds at least 0, omitted at 0;
-- `wait: false`: schedule the delayed action and continue with the following
-  action immediately. Omission means the action queue waits.
-
-Only `false` is valid when `wait` is present. A blocking delay preserves
-order. A non-blocking delay re-resolves its target when it eventually runs.
-Actions after a redirect race the navigation, so a server should warn when it
-encodes such a list even though the authored order remains unchanged.
+Only `false` is valid when `wait` is present. A blocking delay preserves order.
+A non-blocking delay re-resolves its target when it eventually runs. Actions
+after a redirect race the navigation, so a server should warn when it encodes
+such a list even though the authored order remains unchanged.
 
 ### Errors
 
@@ -528,18 +530,20 @@ misspelled code is not silently treated as generic.
 ### Failures before a request ID can be read
 
 An unknown protocol or more than 16 calls rejects the whole envelope before
-per-call execution. If the server can read the calls and request ID, it echoes
-the ID and mirrors the same error into one result per call. This preserves the
-index relationship.
+per-call execution. If the server can read a usable request ID and the calls,
+it echoes the ID and mirrors the same error into one result per call. This
+preserves the index relationship.
 
-Some transport failures happen before a valid request ID or call list can be
-read, for example malformed JSON or an HTTP body rejected before parsing. In
-that case the server answers with `requestId: null` and exactly one error
-result. That result has no `sendSequence`, because the server could not read a
-call whose sequence it could echo. The built-in browser transport applies that
-early error to every local call it sent. `null` has this one meaning; it is
-not a wildcard request ID. An unreadable body answers `protocol_mismatch`;
-one rejected by the transport's byte cap answers `payload_too_large`.
+Some failures leave the server without a usable request ID, for example
+malformed JSON, a missing or invalid `requestId`, or an HTTP body rejected
+before parsing. In that case the server answers with `requestId: null` and
+exactly one error result, even if it could read a `calls` array from the
+malformed input. That result has no `sendSequence`, because there is no valid
+request to correlate it with. The built-in browser transport applies that
+early error to every local call it sent. `null` has this one meaning; it is not
+a wildcard request ID. An unreadable or structurally invalid body answers
+`protocol_mismatch`; one rejected by the transport's byte cap answers
+`payload_too_large`.
 
 ## Capabilities
 
@@ -753,15 +757,15 @@ token, or send sequence.
 ## Versioning
 
 The protocol major is part of the exact `protocol` string. This directory is
-the working pre-release v1 contract. Until maintainers explicitly freeze the
-v1 beta, clearer field names and other contract corrections may change v1 in
+the working pre-release v1 contract. Until the owning Citry package reaches
+`1.0.0`, clearer field names and other incompatible corrections change v1 in
 place, but schemas, examples, server, browser, tests, and current docs must
 move together.
 
 Unknown fields and values are not a minor-version extension mechanism. A v1
 reader rejects them. If a future extension or third-party integration needs
 more wire data, design that point deliberately and add conformance examples.
-After the v1 beta freeze, an incompatible shape starts `v2/` and uses
+After Citry reaches `1.0.0`, an incompatible shape starts `v2/` and uses
 `citry-events/2`.
 
 ## The conformance component

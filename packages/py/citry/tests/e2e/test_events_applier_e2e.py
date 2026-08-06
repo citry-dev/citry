@@ -22,12 +22,12 @@ What this suite locks, mapped to the design:
   first; a plain-HTML render retires the anchor and the dependency
   reconciler's teardown runs exactly once; a different-class render adopts
   the fresh contract wholesale.
-- Reset and keyed linking under a parent render: an unkeyed child resets
-  (fresh anchor, pending writes discarded with the retirement warning); a
-  ``#c-key``-matched child links (draft, ``$loading``, subscription, and the
-  epoch pair survive), with the horizon cut dropping the child's in-flight
-  render while its ``data`` still resolves; two keyed inputs that swap
-  positions carry their typed values (the composite-key morph callback).
+- Positional-unkeyed and keyed linking under a parent render: a same-class
+  unkeyed child at the same direct-child position links, while a keyed child
+  can also link across reorder (draft, ``$loading``, subscription, and the
+  epoch pair survive). The horizon cut drops the child's in-flight render
+  while its ``data`` still resolves; two keyed inputs that swap positions
+  carry their typed values (the composite-key morph callback).
 - Targeted renders as remove-and-replace, with keyed matches inside the
   fragment linking; per-action liveness within one result and across results
   in one batch envelope (the caller-inside-target drop, reason ``retired``);
@@ -193,6 +193,7 @@ def test_wp5_fixtures_replay_through_the_applier(page: Any, serve_live: Any) -> 
 
     class Page(Component):
         citry = c
+
         template = """
           <html>
             <head><title>protocol examples</title></head>
@@ -302,6 +303,7 @@ def _make_todo_app() -> tuple[Citry, type[Component], type[Component]]:
 
     class Page(Component):
         citry = c
+
         template = """
           <html>
             <head><title>applier</title></head>
@@ -447,7 +449,12 @@ def test_adopt_and_plain_html_branches_through_a_real_morph(page: Any, serve_liv
                 return None
 
         template = """
-          <section class="panel">
+          <section
+            class="panel"
+            x-data
+            @private-event="window.__panelAlpine = (window.__panelAlpine || 0) + 1"
+            @c-private-event="flip"
+          >
             <span class="m" x-text="$state.mode"></span>
           </section>
         """
@@ -473,6 +480,16 @@ def test_adopt_and_plain_html_branches_through_a_real_morph(page: Any, serve_liv
           const internal = Citry.events._internal;
           const oldId = document.querySelector(".card").getAttribute("data-cid");
           const anchor = internal.getAnchor(oldId);
+          window.__panelCalls = [];
+          window.__panelAlpine = 0;
+          internal.setTransport((call) => { window.__panelCalls.push(call); return null; });
+          document.addEventListener('citry:events:swapped', () => {
+            document.querySelector('.panel')?.dispatchEvent(new CustomEvent('private-event'));
+            window.__duringSwapped = {
+              calls: window.__panelCalls.length,
+              alpine: window.__panelAlpine,
+            };
+          }, { once: true });
           anchor.stateProxy.title = "will-be-dropped"; // pending writes do not survive a class change
           const beforeProxy = anchor.stateProxy;
           await internal.applyResult(
@@ -500,6 +517,7 @@ def test_adopt_and_plain_html_branches_through_a_real_morph(page: Any, serve_liv
             writeError,
             rootIsSection: document.querySelector(".panel")?.tagName ?? null,
             cardGone: document.querySelector(".card") === null,
+            duringSwapped: window.__duringSwapped,
           };
         }
         """,
@@ -513,8 +531,14 @@ def test_adopt_and_plain_html_branches_through_a_real_morph(page: Any, serve_liv
     assert "not client-writable" in (adopt["writeError"] or "")  # the writable set switched with the class
     assert adopt["rootIsSection"] == "SECTION"  # a different root tag swaps wholesale
     assert adopt["cardGone"] is True
+    assert adopt["duringSwapped"] == {"calls": 0, "alpine": 0}
     # The card instance's teardown ran once when its id left the DOM.
     page.wait_for_function("window.__cardCleanups === 1")
+    page.wait_for_function("Citry.events._internal.debug().bindingListenerTargets === 1")
+    page.evaluate("document.querySelector('.panel').dispatchEvent(new CustomEvent('private-event'))")
+    page.wait_for_function("window.__panelCalls.length === 1")
+    assert page.evaluate("window.__panelCalls[0].handlerName") == "flip"
+    assert page.evaluate("window.__panelAlpine") == 1
 
     plain = page.evaluate(
         """
@@ -540,6 +564,7 @@ def test_adopt_and_plain_html_branches_through_a_real_morph(page: Any, serve_liv
         """
     )
     assert plain == {"text": "done", "retired": True, "unlinked": True, "panelGone": True}
+    page.wait_for_function("Citry.events._internal.debug().bindingListenerTargets === 0")
     assert _citry_errors(messages) == []
 
 
@@ -616,16 +641,16 @@ def _make_list_app() -> tuple[Citry, type[Component], type[Component], type[Comp
     return c, Parent, Item, Loose
 
 
-def test_unkeyed_child_resets_and_keyed_child_links_under_a_parent_render(page: Any, serve_live: Any) -> None:
-    # One parent render exercises both halves of the lifecycle. The unkeyed
-    # child resets: fresh anchor, pending writes discarded, and the
-    # retirement warning names the class and the dropped keys (machinery
-    # item 3). The keyed child links: the anchor with its draft, $loading
+def test_unkeyed_and_keyed_children_link_under_a_parent_render(page: Any, serve_live: Any) -> None:
+    # One parent render exercises both correspondence paths. The unkeyed child
+    # keeps positional same-class identity, including pending writes. The keyed
+    # child links by its component-range key: the anchor with its draft, $loading
     # count, subscription, and epoch pair carries across, the horizon cut
     # arms, and the post-patch re-apply restores the draft into the bound
-    # control. The two keyed plain inputs swap positions and their typed
-    # values travel (the composite-key callback pairing).
-    c, Parent, Item, Loose = _make_list_app()
+    # control. The component key lives on the invocation's virtual range,
+    # never on the child's root element. The two keyed plain inputs swap
+    # positions and their typed values travel through ordinary element keys.
+    c, Parent, _Item, _Loose = _make_list_app()
 
     class Page(Component):
         citry = c
@@ -661,7 +686,7 @@ def test_unkeyed_child_resets_and_keyed_child_links_under_a_parent_render(page: 
           itemAnchor.stateProxy.note = "draft-x"; // the keyed child's unsent draft
           itemAnchor.loading.any = 1; // an in-flight call's counter
           itemAnchor.epoch = 2; // two sends so far
-          looseAnchor.stateProxy.note = "will-drop"; // the unkeyed child's unsent draft
+          looseAnchor.stateProxy.note = "positional-draft"; // same-class unkeyed position links
           const unsub = Citry.events._onFor(itemId, "item:ping", (d) => window.__log.events.push(d));
 
           parentAnchor.epoch = 1;
@@ -689,10 +714,10 @@ def test_unkeyed_child_resets_and_keyed_child_links_under_a_parent_render(page: 
             loadingKept: itemAnchor.loading.any === 1,
             horizonCut: itemAnchor.highestApplied === 2 && itemAnchor.epochOwner === null,
             inputRestored: document.querySelector(".item .note").value,
-            keyStillStamped: document.querySelector(".item").getAttribute("data-citry-key"),
-            looseReset: internal.getAnchor(freshLooseId) !== looseAnchor,
+            componentKeyAbsent: !document.querySelector(".item").hasAttribute("data-citry-key"),
+            looseLinked: internal.getAnchor(freshLooseId) === looseAnchor,
             looseRetired: looseAnchor.componentId === null,
-            freshLoosePending: Object.keys(internal.getAnchor(freshLooseId).pending).length,
+            loosePending: looseAnchor.pending.note,
             flip: Array.from(document.querySelectorAll(".f")).map((el) => el.value),
             focusedValue: document.activeElement?.value,
             events: window.__log.events,
@@ -708,28 +733,23 @@ def test_unkeyed_child_resets_and_keyed_child_links_under_a_parent_render(page: 
     assert result["loadingKept"] is True
     assert result["horizonCut"] is True  # highest-applied jumped to the send counter at link time
     assert result["inputRestored"] == "draft-x"  # the post-patch re-apply restored the draft
-    assert result["keyStillStamped"] == f"{Item.class_id}:k1"
-    assert result["looseReset"] is True
-    assert result["looseRetired"] is True
-    assert result["freshLoosePending"] == 0  # the reset child starts clean
+    assert result["componentKeyAbsent"] is True
+    assert result["looseLinked"] is True
+    assert result["looseRetired"] is False
+    assert result["loosePending"] == "positional-draft"
     assert result["flip"] == ["two", "one"]  # the typed values followed their keys through the reorder
     assert result["focusedValue"] == "one"  # moving the keyed node does not drop browser focus
     assert result["events"] == [{"n": 1}]  # the subscription reads the anchor's current id at fire time
-    # The reset discarded user input, so the warning names the class and keys.
     warning = [m for m in messages if "was reset or removed while holding" in m]
-    assert len(warning) == 1
-    assert Loose.class_id.split("_")[0] in warning[0] or "Loose" in warning[0]
-    assert "pending unsent writes (note)" in warning[0]
+    assert warning == []
     assert _citry_errors(messages) == []
 
 
 def test_keyed_childs_own_self_render_keeps_the_key_and_links_again(page: Any, serve_live: Any) -> None:
-    # A parent's #c-key is stamped by the parent's render, so a child's own
-    # self-render fragment cannot carry it. The applier carries the composite
-    # key across the child's same-class render: the root still patches in
-    # place (a keyed old root against an unkeyed fresh root would
-    # wholesale-swap, morph compares keys before any hook), the key stays in
-    # the DOM, and the NEXT parent render still links the child.
+    # A parent's #c-key belongs to the child's logical invocation range. A
+    # child's own same-class render therefore keeps the parent-authored key on
+    # the logical state without copying it onto the root DOM element. The root
+    # patches in place and the next parent render links the same anchor again.
     c, Parent, Item, _Loose = _make_list_app()
 
     class Page(Component):
@@ -783,7 +803,7 @@ def test_keyed_childs_own_self_render_keeps_the_key_and_links_again(page: Any, s
           const rootAfterSelf = document.querySelector(".item");
           const afterSelf = {
             applied: itemAnchor.values.note === "self-rendered",
-            keyKept: rootAfterSelf.getAttribute("data-citry-key"),
+            componentKeyAbsent: !rootAfterSelf.hasAttribute("data-citry-key"),
             patchedInPlace: rootAfterSelf === rootBefore,
           };
 
@@ -808,7 +828,7 @@ def test_keyed_childs_own_self_render_keeps_the_key_and_links_again(page: Any, s
     )
 
     assert result["afterSelf"]["applied"] is True
-    assert result["afterSelf"]["keyKept"] == f"{Item.class_id}:k1"
+    assert result["afterSelf"]["componentKeyAbsent"] is True
     assert result["afterSelf"]["patchedInPlace"] is True
     assert result["linkedAgain"] is True
     assert _citry_errors(messages) == []
@@ -893,11 +913,11 @@ def test_horizon_cut_drops_a_linked_childs_in_flight_render_while_data_resolves(
 # ----- targeted renders -----
 
 
-def test_targeted_render_remints_the_region_and_links_keyed_matches(page: Any, serve_live: Any) -> None:
-    # A targeted render is remove-and-replace: departing instance ids retire
-    # with their anchors and the fragment's manifest mints fresh ones, with
-    # keyed matches inside the fragment linking instead (the one continuity
-    # mechanism on top). Driven through the public applyActions entry point.
+def test_selector_target_resets_through_an_unmatched_component_boundary(page: Any, serve_live: Any) -> None:
+    # A selector target has no explicit component-root correlation. Its
+    # enclosing PanelBody invocation is therefore unmatched and opaque, so a
+    # keyed Item inside that virtual boundary does not leak out and match by a
+    # region-wide scan. Driven through the public applyActions entry point.
     c = Citry(secret=SIGNING_KEY)
     c.set_mounted_prefix("/citry")
 
@@ -978,10 +998,12 @@ def test_targeted_render_remints_the_region_and_links_keyed_matches(page: Any, s
 
           const freshItemId = document.querySelector(".item").getAttribute("data-cid");
           const freshWidgetId = document.querySelector(".widget").getAttribute("data-cid");
+          const freshItemAnchor = internal.getAnchor(freshItemId);
           return {
             stamp: document.querySelector(".stamp").innerText,
             itemLinked: internal.getAnchor(freshItemId) === itemAnchor,
-            draftKept: itemAnchor.pending.note === "draft-kept",
+            itemRetired: itemAnchor.componentId === null,
+            freshItemPending: Object.keys(freshItemAnchor.pending).length,
             inputRestored: document.querySelector(".item .note").value,
             widgetReset: internal.getAnchor(freshWidgetId) !== widgetAnchor,
             widgetRetired: widgetAnchor.componentId === null,
@@ -992,10 +1014,11 @@ def test_targeted_render_remints_the_region_and_links_keyed_matches(page: Any, s
     )
 
     assert result["stamp"] == "v2"  # the region shows exactly what the handler returned
-    assert result["itemLinked"] is True  # the keyed match linked inside the targeted fragment
-    assert result["draftKept"] is True
-    assert result["inputRestored"] == "draft-kept"
-    assert result["widgetReset"] is True  # everything unkeyed re-minted
+    assert result["itemLinked"] is False
+    assert result["itemRetired"] is True
+    assert result["freshItemPending"] == 0
+    assert result["inputRestored"] == "srv"
+    assert result["widgetReset"] is True
     assert result["widgetRetired"] is True
     assert _citry_errors(messages) == []
 
@@ -1134,6 +1157,21 @@ def test_multi_target_render_mirrors_one_instance_and_strips_duplicate_tags(page
     c = Citry(secret=SIGNING_KEY)
     c.set_mounted_prefix("/citry")
 
+    class Sub(Component):
+        citry = c
+        template = '<aside class="badge-sub"><input class="sub-draft" /><span>sub</span></aside>'
+
+    class Frame(Component):
+        citry = c
+
+        class Kwargs:
+            count: int
+
+        template = '<div class="region-shell" c-data-count="count"><c-slot /></div>'
+
+        def template_data(self, kwargs, slots):
+            return {"count": kwargs.count}
+
     class BadgeState:
         count: int = 0
         _public = ("count",)
@@ -1150,6 +1188,10 @@ def test_multi_target_render_mirrors_one_instance_and_strips_duplicate_tags(page
           <div class="badge" x-data="{ local: 0 }">
             <span class="c" x-text="$state.count"></span>
             <button class="local" @click="local += 1" x-text="local"></button>
+            <c-sub #c-key="'stable-sub'" />
+            <c-frame c-count="count" #c-key="'stable-provider'">
+              <input class="badge-region-draft" #c-key="'region-input'" c-value="count" />
+            </c-frame>
           </div>
         """
 
@@ -1245,8 +1287,25 @@ def test_multi_target_render_mirrors_one_instance_and_strips_duplicate_tags(page
         """
         async ([html]) => {
           const internal = Citry.events._internal;
+          const ownership = Citry.manager.ownership;
           const oldId = document.querySelector(".badge").getAttribute("data-cid");
           const anchor = internal.getAnchor(oldId);
+          const oldSubRoots = Array.from(document.querySelectorAll(".badge-sub"));
+          const oldSubId = oldSubRoots[0].getAttribute("data-cid");
+          const oldSubRevision = ownership.revisions().find((candidate) => ownership.forRender(candidate, oldSubId));
+          const oldSubRoute = ownership.forRender(oldSubRevision, oldSubId);
+          const oldSubPlacements = ownership
+            .get(oldSubRevision)
+            .registry.physicalPlacements.get(oldSubRoute.instance.key);
+          oldSubRoots.forEach((root, index) => { root.querySelector(".sub-draft").value = `sub-${index}`; });
+          const oldRegionInputs = Array.from(document.querySelectorAll(".badge-region-draft"));
+          oldRegionInputs.forEach((input, index) => { input.value = `region-${index}`; });
+          document.querySelectorAll(".region-shell")[0].setAttribute("data-citry-morph", "ignore");
+          const oldBadgeState = ownership.get(oldSubRevision);
+          const oldRegion = Array.from(oldBadgeState.registry.slotRegions.values()).find(
+            (candidate) => oldBadgeState.registry.physicalPlacements.get(candidate.key).length === 2,
+          );
+          const oldRegionPlacements = oldBadgeState.registry.physicalPlacements.get(oldRegion.key);
           const tagsBefore = document.querySelectorAll("script[data-citry-events]").length;
           delete anchor.pending.count; // the write above rode a send; the server may win the field again
           anchor.epoch = 1;
@@ -1259,10 +1318,16 @@ def test_multi_target_render_mirrors_one_instance_and_strips_duplicate_tags(page
             { anchor, instance: oldId, event: "bump" },
           );
           const ids = Array.from(document.querySelectorAll(".badge")).map((el) => el.getAttribute("data-cid"));
-          const ownership = Citry.manager.ownership;
           const revision = ownership.revisions().find((candidate) => ownership.forRender(candidate, ids[0]));
           const route = ownership.forRender(revision, ids[0]);
           const placements = ownership.get(revision).registry.physicalPlacements.get(route.instance.key);
+          const subRoots = Array.from(document.querySelectorAll(".badge-sub"));
+          const subId = subRoots[0].getAttribute("data-cid");
+          const subRevision = ownership.revisions().find((candidate) => ownership.forRender(candidate, subId));
+          const subRoute = ownership.forRender(subRevision, subId);
+          const subPlacements = ownership.get(subRevision).registry.physicalPlacements.get(subRoute.instance.key);
+          const regionInputs = Array.from(document.querySelectorAll(".badge-region-draft"));
+          const regionPlacements = oldBadgeState.registry.physicalPlacements.get(oldRegion.key);
           return {
             ids,
             bothFresh: ids.length === 2 && ids[0] === ids[1] && ids[0] !== oldId,
@@ -1270,6 +1335,32 @@ def test_multi_target_render_mirrors_one_instance_and_strips_duplicate_tags(page
             count: anchor.values.count,
             tagsAdded: document.querySelectorAll("script[data-citry-events]").length - tagsBefore,
             placements: placements.map((placement) => placement.placementId),
+            nested: {
+              rootsKept: subRoots.every((root, index) => root === oldSubRoots[index]),
+              drafts: subRoots.map((root) => root.querySelector(".sub-draft").value),
+              anchorKept: subRoute.anchor === oldSubRoute.anchor,
+              logicalKept: subRoute.logicalInstance === oldSubRoute.logicalInstance,
+              capsKept: subPlacements.every(
+                (placement, index) =>
+                  placement.start === oldSubPlacements[index].start && placement.end === oldSubPlacements[index].end,
+              ),
+            },
+            region: {
+              shellCounts: Array.from(document.querySelectorAll(".region-shell")).map(
+                (shell) => shell.getAttribute("data-count"),
+              ),
+              rootsKept: regionInputs.every((input, index) => input === oldRegionInputs[index]),
+              drafts: regionInputs.map((input) => input.value),
+              freshValues: regionInputs.map((input) => input.getAttribute("value")),
+              capsKept: regionPlacements.every(
+                (placement, index) =>
+                  placement.start === oldRegionPlacements[index].start &&
+                  placement.end === oldRegionPlacements[index].end,
+              ),
+              placements: regionPlacements.map((placement) => placement.placementId),
+              markers: regionPlacements.map((placement) => placement.start.data),
+              oldRevisionKept: ownership.revisions().includes(oldSubRevision),
+            },
           };
         }
         """,
@@ -1281,6 +1372,23 @@ def test_multi_target_render_mirrors_one_instance_and_strips_duplicate_tags(page
     assert mirrored["tagsAdded"] == 1
     assert mirrored["placements"][0] is None
     assert isinstance(mirrored["placements"][1], str)
+    assert mirrored["nested"] == {
+        "rootsKept": True,
+        "drafts": ["sub-0", "sub-1"],
+        "anchorKept": True,
+        "logicalKept": True,
+        "capsKept": True,
+    }
+    assert mirrored["region"]["rootsKept"] is True
+    assert mirrored["region"]["shellCounts"] == ["1", "9"]
+    assert mirrored["region"]["drafts"] == ["region-0", "region-1"]
+    assert mirrored["region"]["freshValues"] == ["1", "1"]
+    assert mirrored["region"]["capsKept"] is True
+    assert mirrored["region"]["oldRevisionKept"] is True
+    assert mirrored["region"]["placements"][0] is None
+    assert isinstance(mirrored["region"]["placements"][1], str)
+    assert mirrored["region"]["markers"][0].startswith("citry:g1:")
+    assert mirrored["region"]["markers"][1].startswith("citry:p1:")
     page.wait_for_function(
         "Array.from(document.querySelectorAll('.badge .c')).map((el) => el.innerText).join(',') === '9,9'"
     )
@@ -1386,6 +1494,95 @@ def test_adjacent_mirror_placements_self_render_independently_and_event_dispatch
         "secondRootEvents": 0,
     }
     assert _citry_errors(messages) == []
+
+
+def test_corrupt_mirror_rejects_without_partial_incoming_adoption(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Tile(Component):
+        citry = c
+
+        class State:
+            n: int = 0
+            _public = ("n",)
+
+        class Events:
+            def refresh(self, state):
+                return None
+
+        template = '<div class="corrupt-tile">{{ label }}</div>'
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"]}
+
+    class Boot(Component):
+        citry = c
+
+        class Events:
+            def ready(self):
+                return None
+
+        template = "<i>boot</i>"
+
+    class Page(Component):
+        citry = c
+        template = """
+          <html><body><div class="corrupt-slot"></div><div class="corrupt-slot"></div><c-boot /></body></html>
+        """
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    first = _fragment(Tile(label="old"))
+    fresh = _fragment(Tile(label="new"))
+    result = page.evaluate(
+        """
+        async ([first, fresh]) => {
+          const internal = Citry.events._internal;
+          const ownership = Citry.manager.ownership;
+          await Citry.events.applyActions([{ action: "render", target: ".corrupt-slot", swap: "inner", html: first }]);
+          const oldId = document.querySelector(".corrupt-tile").getAttribute("data-cid");
+          const anchor = internal.getAnchor(oldId);
+          const revision = ownership.revisions().find((candidate) => ownership.forRender(candidate, oldId));
+          const route = ownership.forRender(revision, oldId);
+          const placements = ownership.get(revision).registry.physicalPlacements.get(route.instance.key);
+          placements[1].start.data += ":corrupt";
+          const incoming = document.createElement("template");
+          incoming.innerHTML = fresh;
+          const graph = JSON.parse(incoming.content.querySelector("script[data-citry-graph]").textContent);
+          const incomingIds = graph.graphs.flatMap((entry) =>
+            entry.componentInstances.map((instance) => instance.renderId),
+          );
+          let error = null;
+          anchor.epoch = 1;
+          try {
+            await internal.applyResult(
+              {
+                ok: true,
+                sendSequence: 1,
+                actions: [{ action: "render", target: "render:" + oldId, swap: "morph", html: fresh }],
+              },
+              { anchor, instance: oldId, event: "refresh" },
+            );
+          } catch (caught) {
+            error = String(caught && caught.message ? caught.message : caught);
+          }
+          return {
+            error,
+            texts: Array.from(document.querySelectorAll(".corrupt-tile")).map((element) => element.textContent),
+            anchorKept: internal.getAnchor(oldId) === anchor,
+            incomingAnchors: incomingIds.filter((renderId) => internal.getAnchor(renderId)).length,
+          };
+        }
+        """,
+        [first, fresh],
+    )
+    assert result["error"] is not None
+    assert "one physical placement" in result["error"]
+    assert result["texts"] == []  # landed corruption fails closed for the whole shared range
+    assert result["anchorKept"] is False
+    assert result["incomingAnchors"] == 0
+    expected_errors = [message for message in _citry_errors(messages) if "ownership range" in message]
+    assert len(expected_errors) <= 1
 
 
 # ----- the epoch guard at apply time -----
@@ -1621,12 +1818,15 @@ def test_preservation_poles_fast_typing_keeps_drafts_and_submit_then_clear_clear
     assert _citry_errors(messages) == []
 
 
-def test_ignore_marker_preserves_the_subtree_and_warns_on_an_instance_root(page: Any, serve_live: Any) -> None:
+def test_ignore_marker_preserves_nested_ranges_and_excludes_incoming_dependencies(
+    page: Any,
+    serve_live: Any,
+) -> None:
     # `#c-ignore` compiles to the runtime marker the morph hook reads: the
     # subtree another library owns stays untouched while everything else
-    # patches. On an instance root the marker is unsupported (skipping the
-    # root would desynchronize registry and DOM), so the runtime warns and
-    # patches normally.
+    # patches. A nested ComponentRange is retained with that ignored branch,
+    # and an incoming-only component inside the branch never inserts or runs
+    # its component dependency.
     c = Citry(secret=SIGNING_KEY)
     c.set_mounted_prefix("/citry")
 
@@ -1652,6 +1852,38 @@ def test_ignore_marker_preserves_the_subtree_and_warns_on_an_instance_root(page:
         tick: int = 0
         _public = ("tick",)
 
+    class Nested(Component):
+        citry = c
+
+        class State:
+            n: int = 0
+            _public = ("n",)
+
+        class Events:
+            def bump(self, state):
+                return None
+
+        template = """
+          <strong class="inside-range">{{ label }}</strong>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"]}
+
+    class IncomingOnly(Component):
+        citry = c
+        js = """
+          $component(() => {
+            window.__excludedDependencyFired = (window.__excludedDependencyFired || 0) + 1;
+          });
+        """
+        css = """
+          .incoming-only { --excluded-style: 1; }
+        """
+        template = """
+          <aside class="incoming-only">incoming</aside>
+        """
+
     class Host(Component):
         citry = c
         State = HostState
@@ -1664,14 +1896,20 @@ def test_ignore_marker_preserves_the_subtree_and_warns_on_an_instance_root(page:
           <div class="host">
             <div class="keep" #c-ignore>
               <span class="lib">{{ owned }}</span>
+              <c-nested c-label="owned" />
+              <c-if cond="show">
+                <c-root-ignored c-label="'excluded-x'" />
+                <c-incoming-only />
+              </c-if>
             </div>
             <p class="server">{{ owned }}</p>
+            <div class="keyed-wrap"><c-nested c-label="owned" #c-key="'k'" /></div>
             <c-root-ignored c-label="owned" />
           </div>
         """
 
         def template_data(self, kwargs, slots):
-            return {"owned": kwargs["owned"]}
+            return {"owned": kwargs["owned"], "show": kwargs["show"]}
 
     class Page(Component):
         citry = c
@@ -1679,20 +1917,55 @@ def test_ignore_marker_preserves_the_subtree_and_warns_on_an_instance_root(page:
           <html>
             <head><title>ignore</title></head>
             <body>
-              <c-host c-owned="'v1'" />
+              <c-host c-owned="'v1'" c-show="False" />
             </body>
           </html>
         """
 
     messages = _goto(page, serve_live, c, str(Page()))
 
-    fresh = _fragment(Host(owned="v2"))
+    fresh = _fragment(Host(owned="v2", show=True))
+    replacement = _fragment(Host(owned="v3", show=False))
     result = page.evaluate(
         """
-        async ([html]) => {
+        async ([html, incomingClass, replacementHtml]) => {
           const internal = Citry.events._internal;
           const id = document.querySelector(".host").getAttribute("data-cid");
           const anchor = internal.getAnchor(id);
+          const initialRevision = anchor.descriptorRevision;
+          const nestedId = document.querySelector(".inside-range").getAttribute("data-cid");
+          const nestedAnchor = internal.getAnchor(nestedId);
+          const activeChildId = document.querySelector(".child-root").getAttribute("data-cid");
+          const activeChildAnchor = internal.getAnchor(activeChildId);
+          const incoming = document.createElement("template");
+          incoming.innerHTML = html;
+          const graphManifest = JSON.parse(incoming.content.querySelector("script[data-citry-graph]").textContent);
+          const incomingRevision = graphManifest.revision;
+          const incomingIds = new Set(
+            graphManifest.graphs.flatMap((graph) =>
+              graph.componentInstances
+                .filter((instance) => instance.classId === incomingClass)
+                .map((instance) => instance.renderId),
+            ),
+          );
+          const dependencyManifest = JSON.parse(
+            incoming.content.querySelector("script[data-citry]:not([data-citry-events])").textContent,
+          );
+          const decode = (value) => decodeURIComponent(escape(atob(value)));
+          const excludedDescriptors = [
+            ...dependencyManifest.fetch.js,
+            ...dependencyManifest.fetch.css,
+          ]
+            .filter((entry) => entry[1]?.some((owner) => incomingIds.has(decode(owner))))
+            .map((entry) => JSON.parse(decode(entry[0])));
+          const eventsTag = incoming.content.querySelector("script[data-citry-events]");
+          const eventsManifest = JSON.parse(eventsTag.textContent);
+          const nestedDescriptor = eventsManifest.componentClasses.find(
+            (descriptor) => descriptor.componentClassId === nestedAnchor.classId,
+          );
+          nestedDescriptor.eventHandlers = {};
+          eventsTag.textContent = JSON.stringify(eventsManifest);
+          html = incoming.innerHTML;
           // A third-party library mutated its owned subtree client-side.
           const lib = document.querySelector(".keep .lib");
           lib.setAttribute("data-lib", "y");
@@ -1706,23 +1979,886 @@ def test_ignore_marker_preserves_the_subtree_and_warns_on_an_instance_root(page:
             },
             { anchor, instance: id, event: "refresh" },
           );
-          return {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          let retainedCall = null;
+          internal.setTransport((call) => {
+            retainedCall = call;
+            return { ok: true };
+          });
+          await Citry.events.send(document.querySelector(".inside-range"), "bump");
+          const retained = {
             libText: document.querySelector(".keep .lib").textContent,
             libAttr: document.querySelector(".keep .lib").getAttribute("data-lib"),
             serverText: document.querySelector(".server").innerText,
             childText: document.querySelector(".child-root").innerText,
+            activeChildLinked:
+              internal.getAnchor(document.querySelector(".child-root").getAttribute("data-cid")) === activeChildAnchor,
+            nestedText: document.querySelector(".inside-range").innerText,
+            nestedLinked:
+              internal.getAnchor(document.querySelector(".inside-range").getAttribute("data-cid")) === nestedAnchor,
+            incomingPresent: Boolean(document.querySelector(".incoming-only")),
+            excludedDependencyFired: window.__excludedDependencyFired || 0,
+            retainedHandler: retainedCall && retainedCall.handlerName,
+            excludedAnchorCount: Array.from(incomingIds).filter((incomingId) => internal.getAnchor(incomingId)).length,
+            excludedAssetsInserted: excludedDescriptors.filter((descriptor) => {
+              const url = descriptor.attrs && (descriptor.attrs.src || descriptor.attrs.href);
+              if (url) {
+                return Array.from(document.querySelectorAll(descriptor.tag)).some(
+                  (element) => element.getAttribute("src") === url || element.getAttribute("href") === url,
+                );
+              }
+              return Array.from(document.querySelectorAll(descriptor.tag)).some(
+                (element) => element.textContent === (descriptor.content || ""),
+              );
+            }).length,
+            excludedResourcesFetched: excludedDescriptors.filter((descriptor) => {
+              const url = descriptor.attrs && (descriptor.attrs.src || descriptor.attrs.href);
+              return url && performance.getEntriesByType("resource").some((entry) => entry.name.includes(url));
+            }).length,
+          };
+          const revisionsWhileRetained = Array.from(internal.descriptorRevisions.keys());
+          const replacement = document.createElement("template");
+          replacement.innerHTML = replacementHtml;
+          const replacementRevision = JSON.parse(
+            replacement.content.querySelector("script[data-citry-graph]").textContent,
+          ).revision;
+          const activeId = anchor.componentId;
+          anchor.epoch = 2;
+          await internal.applyResult(
+            {
+              ok: true,
+              sendSequence: 2,
+              actions: [{ action: "render", target: "render:" + activeId, swap: "replace", html: replacementHtml }],
+            },
+            { anchor, instance: activeId, event: "refresh" },
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const revisionsAfterReplace = Array.from(internal.descriptorRevisions.keys());
+          return {
+            ...retained,
+            retainedRevisionTables: {
+              initial: revisionsWhileRetained.includes(initialRevision),
+              incoming: revisionsWhileRetained.includes(incomingRevision),
+            },
+            replacedRevisionTables: {
+              initial: revisionsAfterReplace.includes(initialRevision),
+              incoming: revisionsAfterReplace.includes(incomingRevision),
+              replacement: revisionsAfterReplace.includes(replacementRevision),
+            },
           };
         }
         """,
-        [fresh],
+        [fresh, IncomingOnly.class_id, replacement],
     )
 
     assert result["libText"] == "client-owned"  # the ignored subtree kept the client's DOM
     assert result["libAttr"] == "y"
     assert result["serverText"] == "v2"  # everything else patched
-    assert result["childText"] == "v2"  # the root-marked child patched normally (the marker was not applied)
+    assert result["childText"] == "v1"
+    assert result["activeChildLinked"] is True  # final positional matching runs after excluded X leaves the pool
+    assert result["nestedText"] == "v1"
+    assert result["nestedLinked"] is True
+    assert result["incomingPresent"] is False
+    assert result["excludedDependencyFired"] == 0
+    assert result["retainedHandler"] == "bump"
+    assert result["excludedAnchorCount"] == 0
+    assert result["excludedAssetsInserted"] == 0
+    assert result["excludedResourcesFetched"] == 0
+    assert result["retainedRevisionTables"] == {"initial": True, "incoming": True}
+    # The document Page is still a live non-Events ownership root in the
+    # initial revision, so descriptor pruning must wait for it too.
+    assert result["replacedRevisionTables"] == {"initial": True, "incoming": False, "replacement": True}
     root_warnings = [m for m in messages if "component instance root" in m and "unsupported" in m]
-    assert len(root_warnings) >= 1
+    assert root_warnings == []
+    assert _citry_errors(messages) == []
+
+
+def test_duplicate_component_key_warning_waits_for_ignore_closure(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Item(Component):
+        citry = c
+        template = '<span class="closure-key-item">{{ label }}</span>'
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"]}
+
+    class Host(Component):
+        citry = c
+
+        class Events:
+            def refresh(self):
+                return None
+
+        template = """
+          <main class="closure-key-host">
+            <div class="closure-key-barrier" #c-ignore>
+              <c-item #c-key="'duplicate'" c-label="'first'" />
+              <c-item #c-key="'duplicate'" c-label="'second'" />
+            </div>
+            <c-item #c-key="'active'" c-label="'active'" />
+          </main>
+        """
+
+    class Page(Component):
+        citry = c
+        template = "<html><body><c-host /></body></html>"
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    fresh = _fragment(Host())
+    result = page.evaluate(
+        """
+        async ([html]) => {
+          const internal = Citry.events._internal;
+          const host = document.querySelector(".closure-key-host");
+          const id = host.getAttribute("data-cid");
+          const anchor = internal.getAnchor(id);
+          const retained = Array.from(document.querySelectorAll(".closure-key-barrier .closure-key-item"));
+          anchor.epoch = 1;
+          await internal.applyResult(
+            {
+              ok: true,
+              sendSequence: 1,
+              actions: [{ action: "render", target: "render:" + id, swap: "morph", html }],
+            },
+            { anchor, instance: id, event: "refresh" },
+          );
+          const after = Array.from(document.querySelectorAll(".closure-key-barrier .closure-key-item"));
+          return {
+            retained: after.length === 2 && after.every((node, index) => node === retained[index]),
+            labels: after.map((node) => node.textContent),
+          };
+        }
+        """,
+        [fresh],
+    )
+    assert result == {"retained": True, "labels": ["first", "second"]}
+    assert not [message for message in messages if "duplicate component key" in message]
+    assert _citry_errors(messages) == []
+
+
+def test_physical_planner_drops_stale_candidate_after_ignore_closure(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Leaf(Component):
+        citry = c
+        template = """<b class="stale-pool-leaf">leaf</b>"""
+
+    class Box(Component):
+        citry = c
+        template = """
+          <section class="stale-pool-box">
+            <c-if cond="has_leaf"><c-leaf #c-ignore /></c-if>
+            <span>{{ label }}</span>
+          </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"has_leaf": kwargs["has_leaf"], "label": kwargs["label"]}
+
+    class Host(Component):
+        citry = c
+
+        class Events:
+            def refresh(self):
+                return None
+
+        template = """
+          <main class="stale-pool-host">
+            <div class="stale-pool-ignore" #c-ignore>
+              <c-if cond="incoming_x"><c-box c-has_leaf="True" c-label="'excluded-x'" /></c-if>
+            </div>
+            <c-box c-has_leaf="outside_leaf" c-label="'active'" />
+          </main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {
+                "incoming_x": kwargs["incoming_x"],
+                "outside_leaf": kwargs["outside_leaf"],
+            }
+
+    class Page(Component):
+        citry = c
+        template = """<html><body><c-host c-incoming_x="False" c-outside_leaf="True" /></body></html>"""
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    fresh = _fragment(Host(incoming_x=True, outside_leaf=False))
+    result = page.evaluate(
+        """
+        async ([html]) => {
+          const ownership = Citry.manager.ownership;
+          const internal = Citry.events._internal;
+          const host = document.querySelector(".stale-pool-host");
+          const hostId = host.getAttribute("data-cid");
+          const anchor = internal.getAnchor(hostId);
+          const leaf = document.querySelector(".stale-pool-leaf");
+          const leafId = leaf.getAttribute("data-cid");
+          const oldRevision = ownership.revisions().find((revision) => ownership.forRender(revision, leafId));
+          anchor.epoch = 1;
+          await internal.applyResult(
+            {
+              ok: true,
+              sendSequence: 1,
+              actions: [{ action: "render", target: "render:" + hostId, swap: "morph", html }],
+            },
+            { anchor, instance: hostId, event: "refresh" },
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          return {
+            ignoredIncomingStayedExcluded: document.querySelector(".stale-pool-ignore").children.length === 0,
+            activeBoxLabel: document.querySelector(".stale-pool-box span").textContent,
+            leafRemoved: !document.querySelector(".stale-pool-leaf"),
+            leafAnchorRetired: internal.getAnchor(leafId) === null,
+            leafRouteRetired: ownership.forRender(oldRevision, leafId) === null,
+          };
+        }
+        """,
+        [fresh],
+    )
+    assert result == {
+        "ignoredIncomingStayedExcluded": True,
+        "activeBoxLabel": "active",
+        "leafRemoved": True,
+        "leafAnchorRetired": True,
+        "leafRouteRetired": True,
+    }
+    assert _citry_errors(messages) == []
+
+
+def test_unmatched_ignored_range_history_cannot_retain_nested_barrier_child(
+    page: Any,
+    serve_live: Any,
+) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Child(Component):
+        citry = c
+        js = """
+          $component(({ id }) => {
+            window.__historyChildInit = (window.__historyChildInit || []).concat(id);
+            return () => {
+              window.__historyChildCleanup = (window.__historyChildCleanup || []).concat(id);
+            };
+          });
+        """
+        template = """<b class="history-child">child</b>"""
+
+    class Ignored(Component):
+        citry = c
+        template = """
+          <div class="history-ignored-range">
+            <div class="history-ordinary-ignore" #c-ignore><c-child /></div>
+          </div>
+        """
+
+    class Host(Component):
+        citry = c
+
+        class Events:
+            def refresh(self):
+                return None
+
+        template = """
+          <main class="history-host">
+            <c-if cond="old_wrapper">
+              <section class="history-old-wrapper"><c-ignored #c-ignore /></section>
+            </c-if>
+            <c-else>
+              <article class="history-new-wrapper"><c-ignored #c-ignore /></article>
+            </c-else>
+          </main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"old_wrapper": kwargs["old_wrapper"]}
+
+    class Page(Component):
+        citry = c
+        template = """<html><body><c-host c-old_wrapper="True" /></body></html>"""
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    fresh = _fragment(Host(old_wrapper=False))
+    result = page.evaluate(
+        """
+        async ([html]) => {
+          const ownership = Citry.manager.ownership;
+          const internal = Citry.events._internal;
+          const host = document.querySelector(".history-host");
+          const hostId = host.getAttribute("data-cid");
+          const anchor = internal.getAnchor(hostId);
+          const oldIgnored = document.querySelector(".history-ignored-range");
+          const oldChild = document.querySelector(".history-child");
+          const oldIgnoredId = oldIgnored.getAttribute("data-cid");
+          const oldChildId = oldChild.getAttribute("data-cid");
+          const oldRevision = ownership.revisions().find(
+            (revision) => ownership.forRender(revision, oldIgnoredId),
+          );
+          anchor.epoch = 1;
+          await internal.applyResult(
+            {
+              ok: true,
+              sendSequence: 1,
+              actions: [{ action: "render", target: "render:" + hostId, swap: "morph", html }],
+            },
+            { anchor, instance: hostId, event: "refresh" },
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const newIgnored = document.querySelector(".history-ignored-range");
+          const newChild = document.querySelector(".history-child");
+          return {
+            wrapperReplaced:
+              !document.querySelector(".history-old-wrapper") &&
+              Boolean(document.querySelector(".history-new-wrapper")),
+            ignoredDomReplaced: !oldIgnored.isConnected && newIgnored !== oldIgnored,
+            childDomReplaced: !oldChild.isConnected && newChild !== oldChild,
+            oldIgnoredRouteRetired: ownership.forRender(oldRevision, oldIgnoredId) === null,
+            oldChildRouteRetired: ownership.forRender(oldRevision, oldChildId) === null,
+            oldChildCleaned: (window.__historyChildCleanup || []).includes(oldChildId),
+            newChildInitialized: (window.__historyChildInit || []).includes(newChild.getAttribute("data-cid")),
+          };
+        }
+        """,
+        [fresh],
+    )
+    assert result == {
+        "wrapperReplaced": True,
+        "ignoredDomReplaced": True,
+        "childDomReplaced": True,
+        "oldIgnoredRouteRetired": True,
+        "oldChildRouteRetired": True,
+        "oldChildCleaned": True,
+        "newChildInitialized": True,
+    }
+    assert _citry_errors(messages) == []
+
+
+def test_pure_morph_planner_matches_the_pinned_working_sequence(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Page(Component):
+        citry = c
+
+        class State:
+            ready: bool = True
+            _public = ("ready",)
+
+        class Events:
+            def refresh(self, state):
+                return None
+
+        template = """
+          <html>
+            <head><title>planner parity</title></head>
+            <body><main>ready</main></body>
+          </html>
+        """
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    traces = page.evaluate(
+        """
+        () => {
+          const cases = [
+            [
+              '<i data-probe="old-b" data-citry-key="b" data-citry-morph="ignore"></i>' +
+                '<i data-probe="old-c" data-citry-key="c"></i>',
+              '<i data-probe="new-a" data-citry-key="a"></i>' +
+                '<i data-probe="new-b" data-citry-key="b"></i>' +
+                '<i data-probe="new-c" data-citry-key="c"></i>',
+            ],
+            [
+              '<b data-probe="old-a" data-citry-key="a"></b>' +
+                '<b data-probe="old-b" data-citry-key="b"></b>',
+              '<b data-probe="new-b" data-citry-key="b"></b>' +
+                '<b data-probe="new-a" data-citry-key="a"></b>',
+            ],
+            [
+              '<u data-probe="old-u"></u><u data-probe="old-k" data-citry-key="k"></u>',
+              '<u data-probe="new-k" data-citry-key="k"></u><u data-probe="new-u"></u>',
+            ],
+            [
+              '<section data-probe="old-x"><em data-probe="old-child"></em></section>',
+              '<article data-probe="new-x"><em data-probe="new-child"></em></article>',
+            ],
+          ];
+          const key = (element) => element.getAttribute && element.getAttribute("data-citry-key");
+          const run = (oldHtml, newHtml, planning) => {
+            const oldContainer = document.createElement("div");
+            const newContainer = document.createElement("div");
+            oldContainer.innerHTML = oldHtml;
+            newContainer.innerHTML = newHtml;
+            const trace = [];
+            const options = {
+              key,
+              updating(from, to, _childrenOnly, skip) {
+                const oldProbe = from.getAttribute && from.getAttribute("data-probe");
+                const newProbe = to.getAttribute && to.getAttribute("data-probe");
+                if (oldProbe || newProbe) trace.push(`pair:${oldProbe || '-'}:${newProbe || '-'}`);
+                if (from.getAttribute?.("data-citry-morph") === "ignore") skip();
+              },
+              adding(node) {
+                const probe = node.getAttribute && node.getAttribute("data-probe");
+                if (probe) trace.push(`add:${probe}`);
+              },
+              removing(node) {
+                const probe = node.getAttribute && node.getAttribute("data-probe");
+                if (probe) trace.push(`remove:${probe}`);
+              },
+            };
+            if (planning) Alpine._citryPlanBetween(oldContainer, newContainer, options);
+            else Alpine.morph(oldContainer, newContainer, options);
+            return trace;
+          };
+          return cases.map(([oldHtml, newHtml]) => ({
+            planned: run(oldHtml, newHtml, true),
+            applied: run(oldHtml, newHtml, false),
+          }));
+        }
+        """,
+    )
+    assert all(case["planned"] == case["applied"] for case in traces), traces
+    assert _citry_errors(messages) == []
+
+
+def test_range_ignore_discards_every_incoming_resource(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class IncomingOnly(Component):
+        citry = c
+        js = """
+          $component(() => {
+            window.__discardedComponentFired = (window.__discardedComponentFired || 0) + 1;
+          });
+        """
+        css = """
+          .discarded-incoming { --discarded-style: 1; }
+        """
+        template = """
+          <aside class="discarded-incoming">incoming</aside>
+        """
+
+    class Frozen(Component):
+        citry = c
+
+        class State:
+            ready: bool = True
+            _public = ("ready",)
+
+        class Events:
+            def refresh(self, state):
+                return None
+
+        template = """
+          <section class="frozen">
+            <span class="frozen-label">{{ label }}</span>
+            <c-if cond="show"><c-incoming-only /></c-if>
+          </section>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"], "show": kwargs["show"]}
+
+    class Page(Component):
+        citry = c
+        template = """
+          <html>
+            <head><title>range discard</title></head>
+            <body><c-frozen c-label="'old'" c-show="False" #c-ignore /></body>
+          </html>
+        """
+
+    messages = _goto(page, serve_live, c, str(Page()))
+
+    fresh = _fragment(Frozen(label="new", show=True))
+    result = page.evaluate(
+        """
+        async ([html]) => {
+          const internal = Citry.events._internal;
+          const oldId = document.querySelector(".frozen").getAttribute("data-cid");
+          const oldAnchor = internal.getAnchor(oldId);
+          const incoming = document.createElement("template");
+          incoming.innerHTML = html;
+          const graphManifest = JSON.parse(incoming.content.querySelector("script[data-citry-graph]").textContent);
+          const incomingRevision = graphManifest.revision;
+          const incomingIds = graphManifest.graphs.flatMap((graph) =>
+            graph.componentInstances.map((instance) => instance.renderId),
+          );
+          const dependencyTag = incoming.content.querySelector("script[data-citry]:not([data-citry-events])");
+          const dependencyManifest = JSON.parse(dependencyTag.textContent);
+          const decode = (value) => decodeURIComponent(escape(atob(value)));
+          const descriptors = [...dependencyManifest.fetch.js, ...dependencyManifest.fetch.css]
+            .filter((entry) => entry[1] !== null)
+            .map((entry) => JSON.parse(decode(entry[0])));
+          const encode = (value) => btoa(unescape(encodeURIComponent(value)));
+          window.__discardedCustomConstructed = 0;
+          if (!customElements.get("citry-discarded-probe")) {
+            customElements.define("citry-discarded-probe", class extends HTMLElement {
+              constructor() {
+                super();
+                window.__discardedCustomConstructed += 1;
+              }
+            });
+          }
+          dependencyManifest.beforeManifest.push(
+            encode(
+              JSON.stringify({
+                tag: "script",
+                attrs: {},
+                content: "window.__discardedBeforeManifest = (window.__discardedBeforeManifest || 0) + 1;",
+              }),
+            ),
+            encode(
+              JSON.stringify({
+                tag: "citry-discarded-probe",
+                attrs: { "data-probe": "discarded" },
+                content: "",
+              }),
+            ),
+          );
+          dependencyTag.textContent = JSON.stringify(dependencyManifest);
+          html = incoming.innerHTML;
+          oldAnchor.epoch = 1;
+          await internal.applyResult(
+            {
+              ok: true,
+              sendSequence: 1,
+              actions: [{ action: "render", target: "render:" + oldId, swap: "morph", html }],
+            },
+            { anchor: oldAnchor, instance: oldId, event: "refresh" },
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          return {
+            text: document.querySelector(".frozen-label").textContent,
+            incomingPresent: Boolean(document.querySelector(".discarded-incoming")),
+            componentFired: window.__discardedComponentFired || 0,
+            beforeManifestFired: window.__discardedBeforeManifest || 0,
+            customConstructed: window.__discardedCustomConstructed,
+            customPresent: Boolean(document.querySelector("citry-discarded-probe")),
+            anchorKept: internal.getAnchor(oldId) === oldAnchor,
+            incomingAnchors: incomingIds.filter((renderId) => internal.getAnchor(renderId)).length,
+            assetsInserted: descriptors.filter((descriptor) => {
+              const url = descriptor.attrs && (descriptor.attrs.src || descriptor.attrs.href);
+              return Array.from(document.querySelectorAll(descriptor.tag)).some((element) =>
+                url
+                  ? element.getAttribute("src") === url || element.getAttribute("href") === url
+                  : element.textContent === (descriptor.content || ""),
+              );
+            }).length,
+            resourcesFetched: descriptors.filter((descriptor) => {
+              const url = descriptor.attrs && (descriptor.attrs.src || descriptor.attrs.href);
+              return url && performance.getEntriesByType("resource").some((entry) => entry.name.includes(url));
+            }).length,
+            incomingDescriptorRevision: internal.descriptorRevisions.has(incomingRevision),
+          };
+        }
+        """,
+        [fresh],
+    )
+    assert result == {
+        "text": "old",
+        "incomingPresent": False,
+        "componentFired": 0,
+        "beforeManifestFired": 0,
+        "customConstructed": 0,
+        "customPresent": False,
+        "anchorKept": True,
+        "incomingAnchors": 0,
+        "assetsInserted": 0,
+        "resourcesFetched": 0,
+        "incomingDescriptorRevision": False,
+    }
+    assert _citry_errors(messages) == []
+
+
+def test_failed_graph_descriptor_install_rolls_back_the_revision_table(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Widget(Component):
+        citry = c
+
+        class State:
+            value: str = ""
+            _public = ("value",)
+
+        class Events:
+            def save(self, state):
+                return None
+
+        template = "<section class='descriptor-widget'>{{ label }}</section>"
+
+        def template_data(self, kwargs, slots):
+            return {"label": kwargs["label"]}
+
+    class Page(Component):
+        citry = c
+        template = "<html><head></head><body><c-widget c-label=\"'old'\" /><div id='target'></div></body></html>"
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    fresh = _fragment(Widget(label="fresh"))
+    observer_fragment = _fragment(Widget(label="observer"))
+    result = page.evaluate(
+        """
+        async ([html, observerHtml, classId]) => {
+          const internal = Citry.events._internal;
+          const ownership = Citry.manager.ownership;
+          const observerParsed = document.createElement("template");
+          observerParsed.innerHTML = observerHtml;
+          const observerRevision = JSON.parse(
+            observerParsed.content.querySelector("script[data-citry-graph]").textContent,
+          ).revision;
+          const observerIds = JSON.parse(
+            observerParsed.content.querySelector("script[data-citry-graph]").textContent,
+          ).graphs.flatMap((graph) => graph.componentInstances.map((instance) => instance.renderId));
+          const oldId = document.querySelector(".descriptor-widget").getAttribute("data-cid");
+          const anchor = internal.getAnchor(oldId);
+          const oldDescriptorRevision = anchor.descriptorRevision;
+          const observerEventsTag = observerParsed.content.querySelector("script[data-citry-events]");
+          const observerEvents = JSON.parse(observerEventsTag.textContent);
+          observerEvents.componentInstances[0].renderId = oldId;
+          observerEventsTag.textContent = JSON.stringify(observerEvents);
+          const originalObserverAttach = ownership._attachEvents;
+          const originalObserverPreflight = ownership._preflightEvents;
+          ownership._preflightEvents = () => {};
+          ownership._attachEvents = () => { throw new Error("forced observer descriptor-install failure"); };
+          document.getElementById("target").innerHTML = observerParsed.innerHTML;
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          ownership._attachEvents = originalObserverAttach;
+          ownership._preflightEvents = originalObserverPreflight;
+          const observerRollback = {
+            revision: internal.descriptorRevisions.has(observerRevision),
+            anchors: observerIds.filter((renderId) => internal.getAnchor(renderId)).length,
+            anchorRevision: anchor.descriptorRevision === oldDescriptorRevision,
+            descriptor: internal.descriptorRevisions.has(oldDescriptorRevision),
+          };
+          const parsed = document.createElement("template");
+          parsed.innerHTML = html;
+          const revision = JSON.parse(parsed.content.querySelector("script[data-citry-graph]").textContent).revision;
+          const originalAttach = ownership._attachEvents;
+          ownership._attachEvents = () => { throw new Error("forced descriptor-install failure"); };
+          let error = null;
+          try {
+            anchor.epoch = 1;
+            await internal.applyResult(
+              {
+                ok: true,
+                sendSequence: 1,
+                actions: [{ action: "render", target: "render:" + oldId, swap: "morph", html }],
+              },
+              { anchor, instance: oldId, event: "save" },
+            );
+          } catch (err) {
+            error = String(err && err.message ? err.message : err);
+          } finally {
+            ownership._attachEvents = originalAttach;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          return {
+            observerRollback,
+            error,
+            failedRevisionPresent: internal.descriptorRevisions.has(revision),
+            failedRevisionPending: internal.pendingDescriptorRevisionRefs.has(revision),
+            failedOwnershipPresent: ownership.revisions().includes(revision),
+            graphDescriptorLeakedGlobal: internal.classes.has(classId),
+          };
+        }
+        """,
+        [fresh, observer_fragment, Widget.class_id],
+    )
+    assert result == {
+        "observerRollback": {
+            "revision": False,
+            "anchors": 0,
+            "anchorRevision": True,
+            "descriptor": True,
+        },
+        "error": "forced descriptor-install failure",
+        "failedRevisionPresent": False,
+        "failedRevisionPending": False,
+        "failedOwnershipPresent": False,
+        "graphDescriptorLeakedGlobal": False,
+    }
+    expected_errors = _citry_errors(messages)
+    assert expected_errors
+
+
+def test_pending_call_holds_descriptor_revision_until_full_settlement(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Widget(Component):
+        citry = c
+
+        class State:
+            value: str = ""
+            _public = ("value",)
+
+        class Events:
+            def save(self, state):
+                return None
+
+        template = "<section class='pending-descriptor'>pending</section>"
+
+    class Page(Component):
+        citry = c
+        template = "<html><head></head><body><c-widget /></body></html>"
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    result = page.evaluate(
+        """
+        async () => {
+          const internal = Citry.events._internal;
+          const ownership = Citry.manager.ownership;
+          const root = document.querySelector(".pending-descriptor");
+          const id = root.getAttribute("data-cid");
+          const anchor = internal.getAnchor(id);
+          const revision = anchor.descriptorRevision;
+          let resolveTransport;
+          internal.setTransport(() => new Promise((resolve) => { resolveTransport = resolve; }));
+          const pending = Citry.events.send(id, "save");
+          for (let i = 0; i < 20 && internal.pendingDescriptorRevisionRefs.get(revision) !== 1; i += 1) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+          root.remove();
+          internal.retireAnchor(anchor);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const held = {
+            refs: internal.pendingDescriptorRevisionRefs.get(revision) || 0,
+            descriptor: internal.descriptorRevisions.has(revision),
+            ownership: ownership.revisions().includes(revision),
+            pruneVetoed: Citry.events._pruneDescriptorRevision(revision) === false,
+          };
+          resolveTransport({ ok: true });
+          await pending;
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          return {
+            held,
+            released: {
+              refs: internal.pendingDescriptorRevisionRefs.get(revision) || 0,
+              descriptor: internal.descriptorRevisions.has(revision),
+              ownership: ownership.revisions().includes(revision),
+            },
+          };
+        }
+        """,
+    )
+    assert result == {
+        "held": {"refs": 1, "descriptor": True, "ownership": True, "pruneVetoed": True},
+        "released": {"refs": 0, "descriptor": True, "ownership": True},
+    }
+    assert _citry_errors(messages) == []
+
+
+def test_pinned_morph_key_map_filter_prevents_rejected_key_pull(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Page(Component):
+        citry = c
+
+        class Events:
+            def refresh(self):
+                return None
+
+        template = "<html><body><main>ready</main></body></html>"
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    result = page.evaluate(
+        """
+        () => {
+          const host = document.createElement("div");
+          document.body.append(host);
+          const start = document.createComment("filter-start");
+          const oldKeyed = document.createElement("button");
+          oldKeyed.dataset.key = "shared";
+          oldKeyed.textContent = "old-keyed";
+          const oldUnkeyed = document.createElement("i");
+          oldUnkeyed.textContent = "old-unkeyed";
+          const end = document.createComment("filter-end");
+          host.append(start, oldKeyed, oldUnkeyed, end);
+          const fresh = document.createElement("div");
+          fresh.innerHTML = '<i>new-unkeyed</i><button data-key="shared">new-keyed</button>';
+          Alpine.morphBetween(start, end, fresh, {
+            key: (element) => element.dataset.key || null,
+            keyMapFilter: (element) => element !== oldKeyed,
+          });
+          const landed = host.querySelector("button");
+          return {
+            oldPulledFromMap: landed === oldKeyed,
+            oldConnected: oldKeyed.isConnected,
+            landedText: landed && landed.textContent,
+            order: Array.from(host.children).map((element) => element.localName),
+          };
+        }
+        """
+    )
+    assert result == {
+        "oldPulledFromMap": False,
+        "oldConnected": False,
+        "landedText": "new-keyed",
+        "order": ["i", "button"],
+    }
+    assert _citry_errors(messages) == []
+
+
+def test_pure_morph_planner_does_not_construct_custom_elements(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Page(Component):
+        citry = c
+
+        class State:
+            ready: bool = True
+            _public = ("ready",)
+
+        class Events:
+            def refresh(self, state):
+                return None
+
+        template = """
+          <html>
+            <head><title>planner custom elements</title></head>
+            <body><main>ready</main></body>
+          </html>
+        """
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    counts = page.evaluate(
+        """
+        () => {
+          let constructed = 0;
+          customElements.define(
+            "x-citry-plan-probe",
+            class extends HTMLElement {
+              constructor() {
+                super();
+                constructed += 1;
+              }
+            },
+          );
+          const inert = document.implementation.createHTMLDocument("");
+          const oldContainer = inert.createElement("div");
+          const newContainer = inert.createElement("div");
+          oldContainer.append(inert.createElementNS("http://www.w3.org/1999/xhtml", "x-citry-plan-probe"));
+          newContainer.append(inert.createElementNS("http://www.w3.org/1999/xhtml", "x-citry-plan-probe"));
+          const afterStructure = constructed;
+          Alpine._citryPlanBetween(oldContainer, newContainer, {});
+          return { afterStructure, afterPlan: constructed };
+        }
+        """,
+    )
+    assert counts == {"afterStructure": 0, "afterPlan": 0}
     assert _citry_errors(messages) == []
 
 

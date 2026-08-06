@@ -50,6 +50,16 @@ from docs_site._internal.release_notes import (
     release_page_markdown,
 )
 from docs_site._internal.site_nav import load_site_nav
+from docs_site._internal.ui_library_projection import (
+    ui_library_projection_for_path,
+    ui_library_source_path,
+    ui_library_source_routes,
+)
+from docs_site._internal.ui_library_reference import compose_ui_library_source
+from docs_site._internal.ui_previews import (
+    render_ui_preview_document,
+    ui_preview_for_public_path,
+)
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -99,7 +109,20 @@ def create_app(
 
     async def serve_page(request: Request) -> HTMLResponse | PlainTextResponse:
         catalog = load_blog_catalog(config.content_dir)
-        md_path = url_to_md(config.content_dir, request.path_params.get("url_path", ""))
+        url_path = request.path_params.get("url_path", "")
+        ui_projection = ui_library_projection_for_path(project.ui_library, url_path)
+        if ui_projection is not None:
+            source_path = ui_library_source_path(ui_projection, repo_root=config.repo_root)
+            if not source_path.is_file():
+                return PlainTextResponse("Not Found", status_code=404)
+            return _render_content_page(
+                source_path,
+                catalog=catalog,
+                page_url=ui_projection.public_path.lstrip("/"),
+                page_source=compose_ui_library_source(source_path, family=ui_projection.family),
+            )
+
+        md_path = url_to_md(config.content_dir, url_path)
         if md_path is None:
             return PlainTextResponse("Not Found", status_code=404)
         # Dated Blog filenames are authoring identities, never public aliases.
@@ -120,21 +143,24 @@ def create_app(
         *,
         catalog: BlogCatalog | None = None,
         blog_post: BlogPost | None = None,
+        page_url: str | None = None,
+        page_source: str | None = None,
     ) -> HTMLResponse:
         """Render one authored Markdown page with build-equivalent metadata."""
         catalog = catalog or load_blog_catalog(config.content_dir)
         # Canonical and current_path match what the build would write, so a
         # preview matches the deployed page.
-        page_url = (
-            blog_post.public_path.lstrip("/")
-            if blog_post
-            else md_to_url(md_path.relative_to(config.content_dir.resolve()))
-        )
+        if page_url is None:
+            page_url = (
+                blog_post.public_path.lstrip("/")
+                if blog_post
+                else md_to_url(md_path.relative_to(config.content_dir.resolve()))
+            )
         site_base = project.site_url.rstrip("/")
         canonical = f"{site_base}/{page_url}" if site_base else ""
         # Load the nav fresh each request so edits to _nav.yml show up live.
         result = render_page(
-            md_path.read_text(encoding="utf-8"),
+            page_source if page_source is not None else md_path.read_text(encoding="utf-8"),
             config=config,
             canonical=canonical,
             nav_tree=load_site_nav(config, project=project, blog_catalog=catalog),
@@ -146,6 +172,10 @@ def create_app(
             is_blog_index=catalog.index_path is not None and md_path.resolve() == catalog.index_path.resolve(),
             blog_feed_url=feed_path if catalog.posts else "",
             allow_citry_ui=local_playground_runtime is not None,
+            source_to_public_path={
+                **catalog.source_to_public_path,
+                **ui_library_source_routes(project.ui_library, repo_root=config.repo_root),
+            },
             project=project,
         )
         return HTMLResponse(result.html)
@@ -190,6 +220,20 @@ def create_app(
         if variant is None:
             return PlainTextResponse("Not Found", status_code=404)
         return HTMLResponse(variant().render().serialize(deps_strategy="fragment"))
+
+    async def serve_ui_preview(request: Request) -> HTMLResponse | PlainTextResponse:
+        public_path = f"/ui-library/components/{request.path_params['slug']}/_previews/{request.path_params['name']}/"
+        preview = ui_preview_for_public_path(
+            project.ui_library,
+            public_path,
+            repo_root=config.repo_root,
+        )
+        if preview is None:
+            return PlainTextResponse("Not Found", status_code=404)
+        return HTMLResponse(
+            render_ui_preview_document(preview, repo_root=config.repo_root),
+            headers={"X-Robots-Tag": "noindex, nofollow"},
+        )
 
     def _render_reference(page_url: str, source: str) -> HTMLResponse:
         catalog = load_blog_catalog(config.content_dir)
@@ -275,13 +319,6 @@ def create_app(
                 headers={"Cache-Control": "no-store"},
             )
 
-        async def serve_local_events_runtime(request: Request) -> FileResponse:  # noqa: ARG001
-            return FileResponse(
-                local_playground_runtime.events_runtime_path,
-                media_type="text/javascript",
-                headers={"Cache-Control": "no-store"},
-            )
-
         async def serve_local_wheel(request: Request) -> FileResponse | PlainTextResponse:
             filename = request.path_params["filename"]
             if filename not in local_playground_runtime.wheel_names:
@@ -295,7 +332,6 @@ def create_app(
         routes.extend(
             [
                 Route("/static/playground/runtime.json", serve_local_runtime),
-                Route("/static/playground/citry-events.js", serve_local_events_runtime),
                 Route("/static/playground/local/{filename}", serve_local_wheel),
             ]
         )
@@ -306,6 +342,10 @@ def create_app(
             # handling. Authored Reference categories delegate back to content.
             Route("/examples/{slug}/demo/", serve_example),
             Route("/examples/{slug}/demo/{variant}/", serve_example_variant),
+            Route(
+                "/ui-library/components/{slug}/_previews/{name}/",
+                serve_ui_preview,
+            ),
             Route(feed_path, serve_blog_feed),
             Route("/blog/{slug}/", serve_blog_post),
             Route("/reference/", serve_reference_index),
@@ -330,9 +370,9 @@ def create_app(
 
 
 def create_local_app() -> Starlette:
-    """Build workspace browser wheels and create the live authoring app."""
+    """Add workspace Citry UI to the pinned browser runtime and serve it."""
     owner = tempfile.TemporaryDirectory(prefix="citry-docs-playground-")
-    print("Building local Citry and Citry UI wheels for the browser playground...")
+    print("Building the local Citry UI wheel for the browser playground...")
     local_runtime = build_local_playground_runtime(
         repo_root=default_config.repo_root,
         output_dir=Path(owner.name),

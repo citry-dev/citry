@@ -1,5 +1,8 @@
 """Tests for the cache backend (``citry/cache.py``) and its wiring on ``Citry``."""
 
+from concurrent.futures import ThreadPoolExecutor
+from decimal import Decimal
+
 import pytest
 
 from citry import Citry, CitryCache, InMemoryCache
@@ -29,13 +32,39 @@ class TestInMemoryCache:
         cache.set("k", "v2")
         assert cache.get("k") == "v2"
 
-    def test_ttl_expires(self):
+    def test_positive_ttl_expires_at_its_monotonic_deadline(self, monkeypatch):
+        now = [10.0]
+        monkeypatch.setattr("citry.cache.time.monotonic", lambda: now[0])
         cache = InMemoryCache()
-        # ttl=0 means the deadline is "now", so by the time get() runs the
-        # entry is expired. Deterministic (monotonic clocks never go back).
-        cache.set("k", "v", ttl=0)
+
+        cache.set("k", "v", ttl=2.5)
+        now[0] = 12.49
+        assert cache.get("k") == "v"
+
+        now[0] = 12.5
         assert cache.get("k") is None
         assert not cache.has("k")
+
+    @pytest.mark.parametrize("ttl", [None, 0, 1, 0.25])
+    def test_valid_ttl_values(self, ttl):
+        cache = InMemoryCache()
+        cache.set("k", "v", ttl=ttl)
+        assert cache.get("k") == (None if ttl == 0 else "v")
+
+    @pytest.mark.parametrize(
+        "ttl",
+        [True, False, -1, -0.25, float("nan"), float("inf"), float("-inf"), "1", Decimal(1)],
+    )
+    def test_invalid_ttl_values(self, ttl):
+        cache = InMemoryCache()
+        with pytest.raises(ValueError, match="ttl"):
+            cache.set("k", "v", ttl=ttl)
+
+    def test_zero_ttl_removes_an_existing_value(self):
+        cache = InMemoryCache()
+        cache.set("k", "old")
+        cache.set("k", "new", ttl=0)
+        assert cache.get("k") is None
 
     def test_no_ttl_keeps_entry(self):
         cache = InMemoryCache()
@@ -53,15 +82,60 @@ class TestInMemoryCache:
         assert cache.get("a") == "1"
         assert cache.get("c") == "3"
 
+    def test_has_refreshes_lru_recency(self):
+        cache = InMemoryCache(max_entries=2)
+        cache.set("a", "1")
+        cache.set("b", "2")
+        assert cache.has("a")
+        cache.set("c", "3")
+        assert cache.get("a") == "1"
+        assert cache.get("b") is None
+
+    def test_expired_entries_do_not_evict_live_entries(self, monkeypatch):
+        now = [10.0]
+        monkeypatch.setattr("citry.cache.time.monotonic", lambda: now[0])
+        cache = InMemoryCache(max_entries=2)
+        cache.set("live", "1")
+        cache.set("expired", "2", ttl=1)
+        now[0] = 12.0
+
+        cache.set("new", "3")
+
+        assert cache.get("live") == "1"
+        assert cache.get("expired") is None
+        assert cache.get("new") == "3"
+
     def test_max_entries_must_be_positive(self):
-        with pytest.raises(ValueError, match="max_entries"):
-            InMemoryCache(max_entries=0)
+        for value in (0, -1, True, 1.5):
+            with pytest.raises(ValueError, match="max_entries"):
+                InMemoryCache(max_entries=value)
 
     def test_clear(self):
         cache = InMemoryCache()
         cache.set("k", "v")
         cache.clear()
         assert cache.get("k") is None
+
+    def test_concurrent_operations_are_race_safe(self):
+        cache = InMemoryCache(max_entries=17)
+
+        def exercise(worker: int) -> None:
+            for index in range(500):
+                key = f"{worker}:{index % 23}"
+                cache.set(key, str(index), ttl=None if index % 5 else 0.01)
+                cache.get(key)
+                cache.has(key)
+                if index % 7 == 0:
+                    cache.delete(key)
+                if index % 113 == 0:
+                    cache.clear()
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            futures = [executor.submit(exercise, worker) for worker in range(8)]
+            for future in futures:
+                future.result()
+
+        assert len(cache._data) <= 17
 
     def test_satisfies_the_protocol(self):
         assert isinstance(InMemoryCache(), CitryCache)

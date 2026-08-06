@@ -121,6 +121,35 @@ def test_markdown_link_rewriting_uses_routes_and_skips_fences(tmp_path: Path) ->
     assert "[Literal](./2026-07-27-second.md)" in rewritten
 
 
+def test_link_rewriting_supports_catalog_sources_outside_content_dir(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    components = tmp_path / "package" / "components"
+    components.mkdir(parents=True)
+    button = components / "button.md"
+    field = components / "field.md"
+    routes = {
+        button.resolve(): "/ui-library/components/button/",
+        field.resolve(): "/ui-library/components/field/",
+    }
+
+    html = rewrite_internal_md_links(
+        '<a href="./field.md#validation">Field</a>',
+        source_path=button,
+        content_dir=content,
+        source_to_public_path=routes,
+    )
+    markdown = rewrite_internal_md_links_in_markdown(
+        "[Field](./field.md#validation)\n",
+        source_path=button,
+        content_dir=content,
+        source_to_public_path=routes,
+    )
+
+    assert 'href="../field/#validation"' in html
+    assert markdown == "[Field](../field/#validation)\n"
+
+
 def test_generated_markdown_projects_versioned_and_site_routes() -> None:
     tree = NavTree(
         areas=[

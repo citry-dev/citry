@@ -76,7 +76,18 @@ from docs_site._internal.seo import generate_seo_files
 from docs_site._internal.site_nav import load_site_nav
 from docs_site._internal.social_cards import generate_social_cards
 from docs_site._internal.static_deps import CITRY_MOUNT_PREFIX, export_fragment_deps, export_runtime
-from docs_site._internal.ui_library_projection import validate_ui_library_sources
+from docs_site._internal.ui_library_projection import (
+    UiLibraryCatalog,
+    ui_library_source_path,
+    ui_library_source_routes,
+    validate_ui_library_sources,
+)
+from docs_site._internal.ui_library_reference import compose_ui_library_source
+from docs_site._internal.ui_previews import (
+    UiPreview,
+    discover_ui_previews,
+    render_ui_preview_document,
+)
 from docs_site._internal.versioning import (
     git_head_sha,
     materialize_alias,
@@ -88,6 +99,8 @@ from docs_site._internal.versioning import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from docs_site._internal.frontmatter import PageMeta
     from docs_site._internal.nav import NavTree
 
@@ -104,7 +117,8 @@ class PageRecord:
     # True for pages the DocPage layout produced (content + reference). Example
     # demo pages are standalone and are not recorded here.
     is_doc_page: bool
-    # The markdown source for a content page, or None for a generated page.
+    # The authored markdown source, which may live outside content_dir, or None
+    # for a generated page.
     source_md: Path | None
     # The page body as expanded markdown, for the llms full-text export.
     markdown_body: str
@@ -123,13 +137,16 @@ class BuildOutcome:
     # Per-page `.md` companion files written beside content pages (the raw
     # expanded markdown, for LLMs and tools that want the source not the HTML).
     companions: int = 0
+    # Private rendered documents referenced by Citry UI component pages.
+    ui_previews: int = 0
     examples: int = 0
     reference: int = 0
     releases: int = 0
     blog_posts: int = 0
+    ui_library: int = 0
     blog_feed: bool = False
     elapsed: float = 0.0
-    # (page path relative to content dir, error message) for pages that raised.
+    # (authored source label, error message) for pages that raised.
     errors: list[tuple[str, str]] = field(default_factory=list)
     # Every layout-wrapped page, for sitemap / robots / llms generation.
     records: list[PageRecord] = field(default_factory=list)
@@ -299,8 +316,13 @@ def _build_site_to_output(
         validate_ui_library_sources(
             project.ui_library,
             repo_root=config.repo_root,
-            content_dir=content_dir,
         )
+        ui_previews = discover_ui_previews(
+            project.ui_library,
+            repo_root=config.repo_root,
+        )
+    else:
+        ui_previews = ()
     include_blog_source = include_site_content or authored_nav.scope_for_source("blog") != SCOPE_SITE
     # Validate generated content before clearing the output directory whenever
     # it belongs to this build. Snapshot builds never inspect site-scoped input.
@@ -318,7 +340,10 @@ def _build_site_to_output(
         and _generic_loop_owns_authored_page(path, content_dir)
         and (include_site_content or nav_tree.scope_for_url(md_to_url(path.relative_to(content_dir))) != SCOPE_SITE)
     )
-    source_routes = blog_catalog.source_to_public_path if blog_catalog is not None else blog_source_routes(content_dir)
+    source_routes = {
+        **(blog_catalog.source_to_public_path if blog_catalog is not None else blog_source_routes(content_dir)),
+        **ui_library_source_routes(project.ui_library, repo_root=config.repo_root),
+    }
     if include_site_content:
         published_paths = {item.path for item in nav_tree.flat_pages()} | (
             {nav_tree.home.path} if nav_tree.home else set()
@@ -326,6 +351,7 @@ def _build_site_to_output(
         occupied_paths = set(published_paths)
         occupied_paths.update(md_to_url(path.relative_to(content_dir)) for path in md_files)
         occupied_paths.update(source_routes.values())
+        occupied_paths.update(preview.public_path for preview in ui_previews)
         for info in get_example_registry().values():
             demo = f"/examples/{info.public_slug}/demo/"
             occupied_paths.add(demo)
@@ -396,6 +422,34 @@ def _build_site_to_output(
         except Exception as exc:  # noqa: BLE001 - one bad page must not abort the build
             outcome.failed += 1
             outcome.errors.append((str(rel), f"{type(exc).__name__}: {exc}"))
+
+    if include_ui_source and authored_nav.has_source("ui_library"):
+        ui_records, ui_errors = _build_ui_library_pages(
+            output_dir,
+            config,
+            nav_tree,
+            version,
+            canonical_base,
+            project.ui_library,
+            source_routes=source_routes,
+            blog_catalog=blog_catalog,
+            blog_feed_url=blog_feed_url,
+            version_prefix=version_prefix,
+        )
+        outcome.ui_library = len(ui_records)
+        outcome.built += len(ui_records)
+        outcome.companions += len(ui_records)
+        outcome.records.extend(ui_records)
+        outcome.failed += len(ui_errors)
+        outcome.errors.extend(ui_errors)
+        preview_count, preview_errors = _build_ui_previews(
+            output_dir,
+            ui_previews,
+            repo_root=config.repo_root,
+        )
+        outcome.ui_previews = preview_count
+        outcome.failed += len(preview_errors)
+        outcome.errors.extend(preview_errors)
 
     if blog_catalog is not None:
         blog_records, blog_errors = _build_blog_posts(
@@ -668,6 +722,11 @@ def _escape_yaml_double_quoted(value: str) -> str:
 def _generic_loop_owns_authored_page(path: Path, content_dir: Path) -> bool:
     """Return whether the generic authored-page loop owns ``path``."""
     rel = path.relative_to(content_dir)
+    # Citry UI component routes read their authoritative api.md files through
+    # the catalog. Reserve this old copy location so a stale derived file can
+    # never create a second page record for the same public route.
+    if rel.parts[:2] == ("ui-library", "components"):
+        return False
     if not rel.parts or rel.parts[0] != "blog":
         return True
     # The Blog index follows the ordinary clean-URL path. Dated posts are built
@@ -773,6 +832,78 @@ def _directory_collides_with_files(directory: str, files: set[str]) -> bool:
 def _portable_path_key(path: str) -> str:
     """Compare output paths as case- and normalization-insensitive filesystems do."""
     return normalize("NFC", path).casefold()
+
+
+def _build_ui_library_pages(
+    output_dir: Path,
+    config: DocsConfig,
+    nav_tree: NavTree,
+    version: str,
+    canonical_base: str,
+    catalog: UiLibraryCatalog,
+    *,
+    source_routes: Mapping[Path, str],
+    blog_catalog: BlogCatalog | None = None,
+    blog_feed_url: str = "",
+    version_prefix: str = "",
+) -> tuple[list[PageRecord], list[tuple[str, str]]]:
+    """Render component-owned API sources directly to their catalog routes."""
+    records: list[PageRecord] = []
+    errors: list[tuple[str, str]] = []
+    for projection in catalog.projections:
+        source_path = ui_library_source_path(projection, repo_root=config.repo_root)
+        page_url = projection.public_path.lstrip("/")
+        canonical = f"{canonical_base}{projection.public_path}" if canonical_base else ""
+        try:
+            result = render_page(
+                compose_ui_library_source(source_path, family=projection.family),
+                config=config,
+                canonical=canonical,
+                nav_tree=nav_tree,
+                current_path=page_url,
+                version=version,
+                source_path=source_path,
+                blog_catalog=blog_catalog,
+                blog_feed_url=blog_feed_url,
+                version_prefix=version_prefix,
+                source_to_public_path=source_routes,
+            )
+            html_path = clean_url_to_html_path(output_dir, projection.public_path)
+            html_path.parent.mkdir(parents=True, exist_ok=True)
+            html_path.write_text(result.html, encoding="utf-8")
+            record = _record_for(page_url, canonical, result, source_md=source_path)
+            _write_companion(
+                clean_url_to_companion_path(output_dir, projection.public_path),
+                result.meta,
+                result.markdown_body,
+                record.canonical,
+            )
+            records.append(record)
+        except Exception as exc:  # noqa: BLE001 - match ordinary authored-page failure isolation
+            errors.append((projection.source.as_posix(), f"{type(exc).__name__}: {exc}"))
+    return records, errors
+
+
+def _build_ui_previews(
+    output_dir: Path,
+    previews: tuple[UiPreview, ...],
+    *,
+    repo_root: Path,
+) -> tuple[int, list[tuple[str, str]]]:
+    """Render private component previews without publishing page records."""
+    built = 0
+    errors: list[tuple[str, str]] = []
+    for preview in previews:
+        try:
+            html = render_ui_preview_document(preview, repo_root=repo_root)
+            target = clean_url_to_html_path(output_dir, preview.public_path)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(html, encoding="utf-8")
+            built += 1
+        except Exception as exc:  # noqa: BLE001 - preserve per-page build isolation
+            label = f"{preview.source.as_posix()} ({preview.public_path})"
+            errors.append((label, f"{type(exc).__name__}: {exc}"))
+    return built, errors
 
 
 def _build_blog_posts(

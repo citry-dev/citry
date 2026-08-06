@@ -51,5 +51,48 @@ jobs:
       - name: Install the ${{ matrix.browser }} browser
         run: uv run --no-sync playwright install --with-deps ${{ matrix.browser }}
 
+      - name: Set up pnpm for the pinned axe runtime
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install the root browser quality tools
+        run: pnpm install --frozen-lockfile --filter citry-dev-tooling
+
+      - name: Compile the pinned Tailwind coexistence fixture
+        run: pnpm run citry-ui:quality-css
+
       - name: Run the browser e2e tests on ${{ matrix.browser }}
-        run: uv run --no-sync pytest packages/py/citry/tests/e2e --browser ${{ matrix.browser }}
+        run: >-
+          uv run --no-sync pytest
+          packages/py/citry/tests/e2e
+          packages/py/citry_ui/citry_ui/components
+          packages/py/citry_ui/citry_ui/quality/tests/e2e
+          -m e2e
+          --browser ${{ matrix.browser }}
+
+      - name: Capture Citry UI visual candidates
+        if: matrix.browser == 'chromium'
+        run: >-
+          uv run --no-sync python -m citry_ui.quality.capture_visuals
+          "$RUNNER_TEMP/citry-ui-visuals"
+
+      - name: Record bounded Citry UI scaling diagnostics
+        if: matrix.browser == 'chromium'
+        run: >-
+          uv run --no-sync python -m citry_ui.quality.scaling
+          > "$RUNNER_TEMP/citry-ui-scaling.json"
+
+      - name: Upload Citry UI scheduled evidence
+        if: matrix.browser == 'chromium'
+        uses: actions/upload-artifact@v4
+        with:
+          name: citry-ui-scheduled-quality
+          path: |
+            ${{ runner.temp }}/citry-ui-visuals/
+            ${{ runner.temp }}/citry-ui-scaling.json
+          if-no-files-found: error

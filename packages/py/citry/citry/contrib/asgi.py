@@ -20,14 +20,26 @@ messages). Everything else in this file is ASGI-protocol bookkeeping.
 
 Route handlers may be plain functions or ``async def``: async handlers are
 awaited on the event loop, plain ones run in a worker thread so they cannot
-block the loop (see ``citry.util.routing.call_maybe_sync``).
+block the loop (see ``citry.util.routing.call_maybe_sync``). A route that
+carries an ``async def`` twin of its handler (``URLRoute.handler_async``) is
+served through the twin here, so it runs natively on the loop while the
+plain handler keeps serving the sync hosts.
 
-For development, hot-reload component files by adding a watcher to the app's
-lifespan::
+For development, initialize Citry and add a hot-reload watcher in the app's
+root lifespan::
 
+    from contextlib import asynccontextmanager
     from citry.contrib.asgi import reload_lifespan
 
-    app = FastAPI(lifespan=reload_lifespan(citry_instance))   # or Starlette(...)
+    watch_lifespan = reload_lifespan(citry_instance)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        citry_instance.initialize()
+        async with watch_lifespan(app):
+            yield
+
+    app = FastAPI(lifespan=lifespan)   # or Starlette(...)
 """
 
 from __future__ import annotations
@@ -103,7 +115,8 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
     Build the ASGI application serving ``citry_instance.urls``.
 
     The returned app handles lifespan events (so it also works served
-    standalone), routes each http request to the matched citry handler,
+    standalone), routes each http request to the matched citry handler
+    (preferring a route's ``handler_async`` twin when it carries one),
     translates the scope into a ``RouteRequest`` (``_build_request``),
     dispatches it (``call_maybe_sync``: async handlers are awaited, sync
     ones run in a worker thread), and translates the returned
@@ -153,7 +166,11 @@ def asgi_app(citry_instance: Citry) -> Callable[[Scope, Receive, Send], Awaitabl
             body = drained
         request = _build_request(scope, method, full_path, body)
 
-        handler = matched.route.handler
+        # Prefer the route's async twin when it carries one: this adapter runs
+        # an event loop, so the twin is awaited natively, while the plain
+        # handler stays what the sync hosts mount.
+        route = matched.route
+        handler = route.handler_async if route.handler_async is not None else route.handler
         assert handler is not None  # noqa: S101 - match_route only returns handler routes
         # Translate in, dispatch, translate out.
         response = await call_maybe_sync(handler, request, **matched.params)
@@ -173,17 +190,28 @@ def reload_lifespan(
     A Starlette/FastAPI ``lifespan`` that hot-reloads component files while the
     app runs.
 
-    Pass it when you build the app::
+    Compose it into the app's root lifespan::
 
+        from contextlib import asynccontextmanager
         from citry.contrib.asgi import reload_lifespan
 
-        app = FastAPI(lifespan=reload_lifespan(citry_instance))   # or Starlette(...)
+        watch_lifespan = reload_lifespan(citry_instance)
+
+        @asynccontextmanager
+        async def lifespan(app):
+            citry_instance.initialize()
+            async with watch_lifespan(app):
+                yield
+
+        app = FastAPI(lifespan=lifespan)   # or Starlette(...)
 
     It starts the :mod:`citry.reload` watcher on startup and stops it on
     shutdown, so editing a component's template/JS/CSS shows up on the next
-    render without restarting. For development; in production simply do not add
-    it. If you already have a lifespan, nest this one inside yours. The keyword
-    arguments mirror :func:`citry.reload.watch`.
+    render without restarting. It manages only the watcher and does not call
+    [`Citry.initialize()`][citry.Citry.initialize]; the root lifespan owns
+    initialization. For development; in production simply do not add it. If you
+    already have a lifespan, nest this one inside yours. The keyword arguments
+    mirror :func:`citry.reload.watch`.
     """
 
     @asynccontextmanager

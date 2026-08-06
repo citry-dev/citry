@@ -1,12 +1,12 @@
 """
-Tests for render-path error tracing (docs/design/on_render.md section 6): an
+Tests for render-path error tracing (docs/design/component_on_render.md section 6): an
 error raised during a render carries the component path ("Page > Card >
 Avatar") in its message, with slot frames ("Card(slot:body)") where the
 failing content was filled into a slot.
 
 The path frames come from the component instances' ``parent`` links (added in
 ``component_render.py``), the slot frames from ``SlotNode.render``. Errors
-bubble up the component tree (docs/design/on_render.md section 5): each
+bubble up the component tree (docs/design/component_on_render.md section 5): each
 enclosing component's ``on_component_rendered`` extension hook may swallow
 the error by returning replacement output, and an unhandled error raises
 from the root.
@@ -107,6 +107,28 @@ class TestComponentPath:
 
         assert exc_info.value.args[0].startswith(f"{PREFIX} Root > Leaf:\n")
 
+    def test_child_template_parse_error_carries_path_and_origin(self):
+        # A child's template compiles lazily, at its first render, inside the
+        # traced per-component render. A syntax error therefore gets the full
+        # component path, plus a line naming where the template came from
+        # (the defining module's file for an inline template).
+        c = Citry()
+
+        class Broken(Component):
+            citry = c
+            template = "<div><c-if>unclosed"
+
+        class Root(Component):
+            citry = c
+            template = "<main><c-broken /></main>"
+
+        with pytest.raises(SyntaxError, match="Unclosed tag") as exc_info:
+            Root().render()
+
+        msg = exc_info.value.args[0]
+        assert msg.startswith(f"{PREFIX} Root > Broken:\nIn template {__file__}::Broken:\nParse error:")
+        assert "Unclosed tag <c-if>: expected </c-if> before end of template" in msg
+
     def test_embedded_element_failure(self):
         # A composed-but-unrendered element handed in via {{ ... }} renders
         # inside this component; its frames nest under this component's path.
@@ -203,7 +225,7 @@ class TestSlotFrames:
         # A component written inside fill content renders later (deferred);
         # its path comes from its parent chain. The slot frame is not present
         # for deferred descendants (documented divergence from
-        # django-components; docs/design/on_render.md section 6.2).
+        # django-components; docs/design/component_on_render.md section 6.2).
         c = Citry()
 
         class Failing(Component):
@@ -229,7 +251,7 @@ class TestSlotFrames:
 
 class TestTemplatePosition:
     """
-    The template-snippet layer of error tracing (docs/design/on_render.md
+    The template-snippet layer of error tracing (docs/design/component_on_render.md
     section 6.3): errors from a node's render carry an underlined snippet of
     the template at the failing node, with real line numbers. Expected
     strings were locked from observed output.
@@ -257,6 +279,36 @@ class TestTemplatePosition:
         assert "In template of 'Leaf' (" in msg
         assert "     3 |   <p>{{ broken() }}</p>" in msg
         assert "\n              ^^^^^^^^^^^^^^\n" in msg
+
+    def test_component_input_expression_error_shows_template_lines(self):
+        # A `c-*` component input gets the same three layers as a `{{ }}` body
+        # expression, but the underline covers the whole tag: the input is
+        # evaluated by the component node, which is the innermost node the
+        # render loop sees.
+        c = Citry()
+
+        class Leaf(Component):
+            citry = c
+            template = "<i>leaf</i>"
+
+        class Root(Component):
+            citry = c
+            template = '<main>\n  <c-leaf c-title="broken()" />\n</main>'
+
+            def template_data(self, kwargs, slots):
+                return {"broken": _boom}
+
+        with pytest.raises(ValueError, match="boom") as exc_info:
+            Root().render()
+
+        msg = exc_info.value.args[0]
+        # The path stops at Root: the input is evaluated in Root's scope while
+        # Root renders, before Leaf is queued, so Leaf adds no frame of its own.
+        assert msg.startswith(f"{PREFIX} Root:\n")
+        assert "Error in call: ValueError: boom" in msg
+        assert "In template of 'Root' (" in msg
+        assert '     2 |   <c-leaf c-title="broken()" />' in msg
+        assert "\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n" in msg
 
     def test_innermost_node_wins(self):
         # The failing expression inside <c-if> + <c-for> produces one
@@ -346,7 +398,7 @@ class TestTemplatePosition:
 
 class TestErrorBubbling:
     """
-    Error bubbling (docs/design/on_render.md section 5): a failing component's
+    Error bubbling (docs/design/component_on_render.md section 5): a failing component's
     error travels up the component tree; each enclosing component's
     ``on_component_rendered`` extension hook may swallow it by returning
     replacement output; an unhandled error raises from the root.

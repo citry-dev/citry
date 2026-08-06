@@ -192,6 +192,9 @@ function finishRun(run) {
 
 const preview = new PreviewBridge({
   iframe: elements.preview,
+  onAssets(paths, { runId }) {
+    return session.loadAssets(runId, paths);
+  },
   onCommit() {
     hideDiagnostic("preview");
   },
@@ -325,6 +328,7 @@ function stopRun(message = "Run stopped by the visitor.") {
   if (!activeRun) return;
   const stopped = activeRun;
   if (session.stop(stopped.id, message)) return;
+  session.cancelAssetRequests(stopped.id, message);
   uiGeneration += 1;
   activeRun = null;
   preview.cancelPending(message);

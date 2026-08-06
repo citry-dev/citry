@@ -1,0 +1,22 @@
+{
+  // Type-checking only: esbuild is the sole emitter (see the build script),
+  // so tsc runs with noEmit and never produces output. strict is the point.
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+
+    // Match the build: esbuild bundles for browsers at es2020.
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2020", "dom"],
+
+    // esbuild compiles file-by-file, so every file must stand alone.
+    "isolatedModules": true,
+
+    // No @types packages: the vendor surface is declared locally in
+    // src/alpine.d.ts (neither alpinejs nor @alpinejs/morph ships types).
+    "types": []
+  },
+  "include": ["src"]
+}

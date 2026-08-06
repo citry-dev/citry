@@ -13,6 +13,16 @@ pub const HTML_VOID_ELEMENTS: &[&str] = &[
     "track", "wbr",
 ];
 
+/// Whether `tag_name` names an HTML void element.
+///
+/// HTML tag identity is ASCII-case-insensitive even though the authored
+/// spelling is preserved in the AST and rendered output.
+pub fn is_html_void_element(tag_name: &str) -> bool {
+    HTML_VOID_ELEMENTS
+        .iter()
+        .any(|candidate| tag_name.eq_ignore_ascii_case(candidate))
+}
+
 // Reserved tag name constants
 // These provide a single source of truth for all reserved tag names.
 //
@@ -30,6 +40,49 @@ pub const C_FILL_TAG: &str = "c-fill";
 pub const C_SLOT_TAG: &str = "c-slot";
 pub const C_COMPONENT_TAG: &str = "c-component";
 pub const C_ELEMENT_TAG: &str = "c-element";
+
+/// Whether `tag_name` uses Citry's exact, lowercase component prefix.
+pub fn has_citry_component_prefix(tag_name: &str) -> bool {
+    tag_name.starts_with("c-")
+}
+
+/// Compare Citry component tags using an exact lowercase `c-` prefix and an
+/// ASCII-case-insensitive component-name suffix.
+pub fn citry_component_tag_eq(tag_name: &str, canonical: &str) -> bool {
+    let Some(component_name) = tag_name.strip_prefix("c-") else {
+        return false;
+    };
+    let Some(canonical_name) = canonical.strip_prefix("c-") else {
+        return false;
+    };
+
+    component_name.eq_ignore_ascii_case(canonical_name)
+}
+
+/// Whether `attr_name` is the static target selector for a dynamic built-in.
+///
+/// `<c-element>` is an HTML-attribute boundary, so its `is` identity folds
+/// ASCII case. `<c-component>` is a component-input boundary and therefore
+/// keeps the selector's spelling case-sensitive like every other kwarg.
+pub fn is_dynamic_target_static_attr(tag_name: &str, attr_name: &str) -> bool {
+    if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        attr_name.eq_ignore_ascii_case("is")
+    } else {
+        citry_component_tag_eq(tag_name, C_COMPONENT_TAG) && attr_name == "is"
+    }
+}
+
+/// Whether `attr_name` is the expression-valued target selector for a dynamic
+/// built-in. See [`is_dynamic_target_static_attr`] for the casing boundary.
+pub fn is_dynamic_target_expr_attr(tag_name: &str, attr_name: &str) -> bool {
+    if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        attr_name
+            .strip_prefix("c-")
+            .is_some_and(|name| name.eq_ignore_ascii_case("is"))
+    } else {
+        citry_component_tag_eq(tag_name, C_COMPONENT_TAG) && attr_name == "c-is"
+    }
+}
 
 // Citry client-runtime directives are evaluated by the browser integration,
 // not as Python component inputs. These constants reserve the props
@@ -52,15 +105,22 @@ pub const META_ATTR_PREFIX: &str = "#c-";
 pub const META_ATTR_KEY: &str = "#c-key";
 /// The whole-subtree morph opt-out marker: bare `#c-ignore`.
 pub const META_ATTR_IGNORE: &str = "#c-ignore";
-/// The rendered attribute `#c-key` compiles to. Its value is composite: a
-/// scope segment, a colon, then the evaluated key (empty scope for a plain
-/// element, the child's class id for a component instance root).
+/// The rendered attribute an element `#c-key` compiles to. Its value starts
+/// with an empty scope segment and a colon. Component-tag keys instead travel
+/// as ownership-graph invocation metadata and never use this DOM attribute.
 pub const KEY_OUTPUT_ATTR: &str = "data-citry-key";
 /// The rendered attribute `#c-ignore` compiles to (`data-citry-morph="ignore"`),
 /// read by the client's morph hook.
 pub const MORPH_OUTPUT_ATTR: &str = "data-citry-morph";
 /// The value `#c-ignore` stamps into the morph output attribute.
 pub const MORPH_OUTPUT_IGNORE_VALUE: &str = "ignore";
+
+// Tagged ComponentNode metadata envelope values. These are runtime protocol
+// literals in generated Python source, separate from rendered DOM attributes.
+pub const COMPONENT_METADATA_LOCUS_RANGE: &str = "range";
+pub const COMPONENT_METADATA_LOCUS_ELEMENT: &str = "element";
+pub const COMPONENT_METADATA_ENTRY_KEY: &str = "key";
+pub const COMPONENT_METADATA_ENTRY_MORPH: &str = "morph";
 
 // Node class name constants
 // These are the class/struct names that need to be defined in each language implementation.
@@ -73,8 +133,9 @@ pub const FOR_NODE: &str = "ForNode";
 pub const SLOT_NODE: &str = "SlotNode";
 pub const FILL_NODE: &str = "FillNode";
 pub const FILL_DATA_BINDING: &str = "FillDataBinding";
-// Renders the whole attribute region of an HTML start tag that has at least
-// one dynamic attribute (c-* value or c-bind spread). See compile_html_node.
+// Keeps the whole attribute region of an HTML start tag structured when it has
+// a dynamic attribute or an extension-owned literal binding/output name. See
+// compile_html_node.
 pub const ELEMENT_ATTRS_NODE: &str = "ElementAttrsNode";
 // Evaluates an explicit element `#c-key` and emits the complete composite
 // attribute only when the expression produces a key. See compile_meta_attr_on_element.
@@ -102,6 +163,15 @@ pub const RESERVED_TAG_NAMES: &[&str] = &[
     // c-component, c-element, c-provide, c-js, c-css
     // (c-element allows only the default fill, per TAG_SLOT_RULES_DATA)
 ];
+
+/// Whether an exact-prefix Citry tag has the identity of a reserved
+/// structural tag, regardless of suffix casing.
+pub fn is_reserved_citry_tag_identity(tag_name: &str) -> bool {
+    has_citry_component_prefix(tag_name)
+        && RESERVED_TAG_NAMES
+            .iter()
+            .any(|reserved| tag_name.eq_ignore_ascii_case(reserved))
+}
 
 /// Tag names that are forbidden in regular HTML tags
 /// These are handled by special grammar rules (e.g., html_raw for "c-raw")

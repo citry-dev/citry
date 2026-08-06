@@ -147,6 +147,9 @@ export function createLiveCodeRuntime({ root, initialSource, authoredSource, onC
   // calls to the Python session that produced the displayed result.
   preview = new PreviewBridge({
     iframe: frame,
+    onAssets(paths, { runId }) {
+      return session.loadAssets(runId, paths);
+    },
     onCommit() {
       hideDiagnostic("preview");
     },
@@ -281,6 +284,7 @@ export function createLiveCodeRuntime({ root, initialSource, authoredSource, onC
     if (!activeRun) return;
     const stopped = activeRun;
     if (session.stop(stopped.id)) return;
+    session.cancelAssetRequests(stopped.id, "Run stopped by the visitor.");
     operationEpoch += 1;
     activeRun = null;
     preview.cancelPending("Run stopped by the visitor.");

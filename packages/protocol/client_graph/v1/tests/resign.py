@@ -20,6 +20,8 @@ import json
 import sys
 from pathlib import Path
 
+from check_canonicalization import canonical_json
+
 FIXTURES = Path(__file__).resolve().parent
 
 
@@ -27,7 +29,7 @@ def resign(path: Path) -> bool:
     """Rewrite the file's revision; True when the file changed."""
     manifest = json.loads(path.read_text(encoding="utf8"))
     unsigned = {key: value for key, value in manifest.items() if key != "revision"}
-    canonical = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode("utf8")
+    canonical = canonical_json(unsigned).encode("utf8")
     revision = hashlib.sha256(canonical).hexdigest()
     if manifest.get("revision") == revision:
         return False

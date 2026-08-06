@@ -1,0 +1,72 @@
+import {
+  loadCitryScenario,
+  renderCitryScenario,
+} from "../../src/html-adapter.js";
+
+const meta = {
+  title: "Citry UI/Button/Static",
+  argTypes: {
+  "label": {
+    "control": {
+      "type": "text"
+    },
+    "description": "Visible button label."
+  },
+  "loading": {
+    "control": {
+      "type": "boolean"
+    },
+    "description": "Show the loading state."
+  },
+  "disabled": {
+    "control": {
+      "type": "boolean"
+    },
+    "description": "Disable the native button."
+  },
+  "type": {
+    "control": {
+      "type": "select"
+    },
+    "description": "Native button type.",
+    "options": [
+      "button",
+      "submit",
+      "reset"
+    ]
+  }
+},
+  parameters: {
+  "citry": {
+    "catalogSchemaVersion": 1,
+    "clientInteractive": false,
+    "generatorVersion": 1,
+    "scenarioId": "button/static",
+    "sourceDigest": "c9f10faf9dfde05424e3c28e0f08367e202a256fba4b9a51e493ff82d585889b"
+  },
+  "docs": {
+    "description": {
+      "component": "Styled button states rendered by Python."
+    },
+    "source": {
+      "code": "from citry_ui import CButton\n\nbutton = CButton(\n    slots={\"default\": \"Save changes\"},\n)",
+      "language": "python"
+    }
+  }
+},
+  tags: ["autodocs"],
+};
+
+export default meta;
+
+export const Preview = {
+  name: "Preview",
+  args: {
+  "label": "Save changes",
+  "loading": false,
+  "disabled": false,
+  "type": "button"
+},
+  loaders: [loadCitryScenario],
+  render: renderCitryScenario,
+};

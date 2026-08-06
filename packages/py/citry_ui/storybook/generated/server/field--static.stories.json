@@ -1,0 +1,102 @@
+{
+  "title": "Citry UI/Field and Input/Static",
+  "argTypes": {
+    "label": {
+      "control": {
+        "type": "text"
+      },
+      "description": "Visible field label."
+    },
+    "value": {
+      "control": {
+        "type": "text"
+      },
+      "description": "Native input value."
+    },
+    "required": {
+      "control": {
+        "type": "boolean"
+      },
+      "description": "Require the input."
+    },
+    "disabled": {
+      "control": {
+        "type": "boolean"
+      },
+      "description": "Disable the field and input."
+    },
+    "readonly": {
+      "control": {
+        "type": "boolean"
+      },
+      "description": "Make the input read-only."
+    },
+    "invalid": {
+      "control": {
+        "type": "boolean"
+      },
+      "description": "Show invalid semantics and an error."
+    },
+    "orientation": {
+      "control": {
+        "type": "select"
+      },
+      "description": "Field layout direction.",
+      "options": [
+        "vertical",
+        "horizontal"
+      ]
+    },
+    "density": {
+      "control": {
+        "type": "select"
+      },
+      "description": "Field spacing.",
+      "options": [
+        "comfortable",
+        "compact"
+      ]
+    }
+  },
+  "parameters": {
+    "citry": {
+      "catalogSchemaVersion": 1,
+      "clientInteractive": false,
+      "generatorVersion": 1,
+      "scenarioId": "field/static",
+      "sourceDigest": "bce762efe4c949d0709c177725403bc9b0d1b27ad2f5a1e51bcaf194cd22e5d8"
+    },
+    "docs": {
+      "description": {
+        "component": "Field relationships, validation, layout, and Input composition."
+      },
+      "source": {
+        "code": "from citry_ui import CField, CInput\n\nfield = CField(\n    required=True,\n    slots={\n        \"label\": \"Email address\",\n        \"default\": CInput(name=\"email\", type=\"email\"),\n        \"description\": \"Used for account notifications.\",\n    },\n)",
+        "language": "python"
+      }
+    }
+  },
+  "tags": [
+    "autodocs"
+  ],
+  "stories": [
+    {
+      "name": "Preview",
+      "args": {
+        "label": "Email address",
+        "value": "person@example.com",
+        "required": true,
+        "disabled": false,
+        "readonly": false,
+        "invalid": false,
+        "orientation": "vertical",
+        "density": "comfortable"
+      },
+      "parameters": {
+        "server": {
+          "id": "field/static"
+        }
+      }
+    }
+  ]
+}

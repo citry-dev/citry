@@ -1,0 +1,21 @@
+{
+	"name": "@citry/protocol-events-v1",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./issue": "./src/issue.ts"
+	},
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check . ../../../_tooling/conformance.mjs",
+		"test": "node --test",
+		"check": "pnpm run typecheck && pnpm run lint && pnpm run test"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.3",
+		"esbuild": "0.28.1",
+		"typescript": "7.0.2"
+	}
+}

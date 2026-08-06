@@ -29,14 +29,47 @@ lazy_static = "1.5.0"
 # Ruff dependencies
 ruff_annotate_snippets = { path = "third_party/rust/ruff/crates/ruff_annotate_snippets" }
 ruff_cache = { path = "third_party/rust/ruff/crates/ruff_cache" }
+ruff_db = { path = "third_party/rust/ruff/crates/ruff_db", default-features = false }
+ruff_diagnostics = { path = "third_party/rust/ruff/crates/ruff_diagnostics" }
+ruff_formatter = { path = "third_party/rust/ruff/crates/ruff_formatter" }
 ruff_macros = { path = "third_party/rust/ruff/crates/ruff_macros" }
+ruff_memory_usage = { path = "third_party/rust/ruff/crates/ruff_memory_usage" }
+ruff_notebook = { path = "third_party/rust/ruff/crates/ruff_notebook" }
 ruff_python_ast = { path = "third_party/rust/ruff/crates/ruff_python_ast" }
 ruff_python_codegen = { path = "third_party/rust/ruff/crates/ruff_python_codegen" }
+ruff_python_formatter = { path = "third_party/rust/ruff/crates/ruff_python_formatter" }
 ruff_python_literal = { path = "third_party/rust/ruff/crates/ruff_python_literal" }
 ruff_python_parser = { path = "third_party/rust/ruff/crates/ruff_python_parser" }
 ruff_python_trivia = { path = "third_party/rust/ruff/crates/ruff_python_trivia" }
 ruff_source_file = { path = "third_party/rust/ruff/crates/ruff_source_file" }
 ruff_text_size = { path = "third_party/rust/ruff/crates/ruff_text_size" }
+ty_static = { path = "third_party/rust/ruff/crates/ty_static" }
+
+# Used by ruff_python_formatter and its workspace-inherited dependencies
+arc-swap = { version = "1.7.1" }
+camino = { version = "1.1.7" }
+clap = { version = "4.5.3", features = ["derive"] }
+countme = { version = "3.0.1" }
+dashmap = { version = "6.0.1" }
+drop_bomb = { version = "0.1.5" }
+dunce = { version = "1.0.5" }
+etcetera = { version = "0.11.0" }
+ignore = { version = "0.4.24" }
+matchit = { version = "0.9.0" }
+ordermap = { version = "1.0.0" }
+path-slash = { version = "0.2.1" }
+pathdiff = { version = "0.2.1" }
+quick-junit = { version = "0.5.0" }
+rand = { version = "0.9.0" }
+serde_with = { version = "3.6.0", default-features = false, features = ["macros"] }
+similar = { version = "2.4.0", features = ["inline"] }
+smallvec = { version = "1.13.2", features = ["union", "const_generics", "const_new"] }
+supports-hyperlinks = { version = "3.1.0" }
+tempfile = { version = "3.9.0" }
+tracing = { version = "0.1.40" }
+tracing-subscriber = { version = "0.3.18", default-features = false, features = ["env-filter", "fmt", "ansi", "smallvec"] }
+uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics"] }
+zip = { version = "0.6.6", default-features = false }
 
 # Used by ruff_annotate_snippets
 anstream = { version = "0.6.18" }
@@ -73,6 +106,7 @@ salsa = { git = "https://github.com/salsa-rs/salsa.git", rev = "29ab321b45d00daa
 ] }
 schemars = { version = "0.8.16" }
 serde = { version = "1.0.197", features = ["derive"] }
+sha2 = "0.10.9"
 
 # Used by ruff_cache
 filetime = { version = "0.2.23" }

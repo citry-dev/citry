@@ -32,6 +32,68 @@ def _failed_requests(page: Any, url: str) -> list[str]:
     return bad
 
 
+def _wait_for_attribute(locator: Any, name: str, value: str | None) -> None:
+    locator.evaluate(
+        """(element, expected) => new Promise((resolve, reject) => {
+          const deadline = Date.now() + 2_000;
+          const check = () => {
+            if (element.getAttribute(expected.name) === expected.value) {
+              resolve();
+            } else if (Date.now() >= deadline) {
+              reject(new Error(
+                `${expected.name} did not become ${JSON.stringify(expected.value)}`
+              ));
+            } else {
+              requestAnimationFrame(check);
+            }
+          };
+          check();
+        })""",
+        {"name": name, "value": value},
+    )
+
+
+def _wait_for_style_property(locator: Any, name: str, value: str) -> None:
+    locator.evaluate(
+        """(element, expected) => new Promise((resolve, reject) => {
+          const deadline = Date.now() + 2_000;
+          const check = () => {
+            const actual = element.style.getPropertyValue(expected.name);
+            if (actual.includes(expected.value)) {
+              resolve();
+            } else if (Date.now() >= deadline) {
+              reject(new Error(
+                `${expected.name} did not include ${JSON.stringify(expected.value)}`
+              ));
+            } else {
+              requestAnimationFrame(check);
+            }
+          };
+          check();
+        })""",
+        {"name": name, "value": value},
+    )
+
+
+def _wait_for_text(locator: Any, value: str) -> None:
+    locator.evaluate(
+        """(element, expected) => new Promise((resolve, reject) => {
+          const deadline = Date.now() + 2_000;
+          const check = () => {
+            if (element.textContent.includes(expected)) {
+              resolve();
+            } else if (Date.now() >= deadline) {
+              reject(new Error(`Text did not include ${JSON.stringify(expected)}`));
+            } else {
+              requestAnimationFrame(check);
+            }
+          };
+          check();
+        })""",
+        value,
+    )
+
+
 def test_pages_load_with_no_broken_assets(page: Any, docs_site_url: str) -> None:
     # The "missing files" class of bug: a dropped /static, /pagefind, or /citry
     # asset shows up as a 404 here.
@@ -199,6 +261,32 @@ def test_both_resize_handles_present(page: Any, docs_site_url: str) -> None:
     page.goto(docs_site_url + "/reference/component/")
     assert page.locator('.djc-resize-handle[data-target="djc-sidebar"]').count() == 1
     assert page.locator('.djc-resize-handle[data-target="djc-toc"]').count() == 1
+
+
+def test_ui_preview_frame_resizes_only_from_its_own_window(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    page.goto(docs_site_url + "/")
+    page.locator("body").evaluate(
+        """body => {
+            body.innerHTML = '<iframe title="Preview" data-ui-preview-frame '
+                + 'sandbox="allow-scripts" srcdoc="<p>Preview</p>"></iframe>';
+        }"""
+    )
+    page.add_script_tag(path=str(Path("docs_site/static/js/site.js").resolve()))
+    frame = page.locator("[data-ui-preview-frame]")
+    frame_element = frame.element_handle()
+    assert frame_element is not None
+    content = frame_element.content_frame()
+    assert content is not None
+
+    content.evaluate("parent.postMessage({ type: 'citry-ui-preview-height', height: 321 }, '*')")
+    page.wait_for_function("document.querySelector('[data-ui-preview-frame]').style.height === '321px'")
+
+    page.evaluate("window.postMessage({ type: 'citry-ui-preview-height', height: 777 }, '*')")
+    page.wait_for_timeout(50)
+    assert frame.evaluate("element => element.style.height") == "321px"
 
 
 def test_ui_api_table_scrolls_without_covering_the_toc(page: Any, docs_site_url: str) -> None:
@@ -603,6 +691,524 @@ def test_example_recipe_renders_its_live_demo(
     assert tabs_frame.count() == 1
     assert tabs_frame.get_attribute("title") == "Tabs example live demo"
     assert "example-demo-frame--theme-sync" not in (tabs_frame.get_attribute("class") or "")
+
+
+def test_tabs_ui_preview_is_keyboard_operable_at_a_narrow_viewport(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    page.set_viewport_size({"width": 360, "height": 760})
+    page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+    demo = demos.nth(1)
+    frame_element = demo.locator("[data-ui-preview-frame]")
+    preview = demo.frame_locator("[data-ui-preview-frame]")
+    tabs = preview.locator('[role="tab"]')
+
+    demo.wait_for()
+    frame_element.wait_for()
+    assert demo.locator(".citry-ui-demo__source").get_attribute("open") is None
+    assert tabs.count() == 3
+    assert demo.locator("[data-live-activate]").count() == 0
+
+    tabs.first.focus()
+    page.keyboard.press("ArrowRight")
+
+    assert tabs.nth(1).evaluate("element => element === document.activeElement")
+    assert tabs.nth(1).get_attribute("aria-selected") == "true"
+    assert "Finding nebulae" in preview.locator('[role="tabpanel"]:not([hidden])').inner_text()
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    assert preview.locator("html").evaluate("node => node.scrollWidth <= node.clientWidth")
+
+
+def test_tabs_ui_sampler_and_configurator_are_result_first_and_reactive(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 13
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(13))
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    sampler_roots = sampler.locator("[data-citry-tabs-root]")
+    assert sampler_roots.count() == 2
+    assert sampler_roots.nth(0).get_attribute("data-variant") == "underline"
+    assert sampler_roots.nth(1).get_attribute("data-variant") == "pill"
+    assert sampler.locator("button:disabled").count() == 1
+    sampler.locator('[role="tab"]', has_text="Broadcast").click()
+    assert "mixtape" in sampler.locator('[role="tabpanel"]:not([hidden])').first.inner_text()
+
+    configurator_demo = demos.nth(2)
+    controls_panel = configurator_demo.locator("[data-ui-preview-controls]")
+    controls = controls_panel.locator("form")
+    configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
+    configurator_root = configurator.locator(".tabs-configurator")
+    configured_root = configurator.locator("[data-citry-tabs-root]")
+    assert controls_panel.get_attribute("open") == ""
+    assert configurator.locator("form").count() == 0
+    controls_panel.locator("summary").click()
+    assert controls_panel.get_attribute("open") is None
+    controls_panel.locator("summary").click()
+    assert controls_panel.get_attribute("open") == ""
+    controls.get_by_label("Accent").select_option("coral")
+    _wait_for_style_property(configurator_root, "--cui-tabs-accent", "#c2410c")
+    controls.get_by_label("Variant").select_option("pill")
+    _wait_for_attribute(configured_root, "data-variant", "pill")
+    controls.get_by_label("Density").select_option("compact")
+    _wait_for_attribute(configured_root, "data-density", "compact")
+    controls.get_by_label("Orientation").select_option("vertical")
+    _wait_for_attribute(configured_root, "data-orientation", "vertical")
+    controls.get_by_label("Alignment").select_option("end")
+    _wait_for_attribute(configured_root, "data-align", "end")
+    controls.get_by_label("Grow to fill space").check()
+    _wait_for_attribute(configured_root, "data-grow", "")
+    controls.get_by_label("Loop keyboard focus").uncheck()
+    _wait_for_attribute(configured_root, "data-loop", None)
+    controls.get_by_label("Disable all Tabs").check()
+    _wait_for_attribute(configured_root, "data-disabled", "")
+    assert configurator.locator('[role="tab"]:disabled').count() == 3
+    controls.get_by_label("Disable all Tabs").uncheck()
+    _wait_for_attribute(configured_root, "data-disabled", None)
+    configurator.locator('[role="tab"]', has_text="Europa").click()
+    assert configurator.locator(".tabs-configurator__status strong").inner_text() == "europa"
+
+    page.locator('.djc-header__actions [data-theme-value="light"]').first.click()
+    page.wait_for_function("document.documentElement.getAttribute('data-theme') === 'light'")
+    page.wait_for_timeout(50)
+    code_background = page.locator(".prose pre").first.evaluate("element => getComputedStyle(element).backgroundColor")
+    preview_background = (
+        demos.nth(0)
+        .locator(".citry-ui-demo__preview")
+        .evaluate("element => getComputedStyle(element).backgroundColor")
+    )
+    frame_background = sampler.locator("body").evaluate("element => getComputedStyle(element).backgroundColor")
+    assert preview_background == code_background
+    assert frame_background == code_background
+
+    page.locator('.djc-header__actions [data-theme-value="dark"]').first.click()
+    page.wait_for_function("document.documentElement.getAttribute('data-theme') === 'dark'")
+    page.wait_for_timeout(50)
+    dark_code_background = page.locator(".prose pre").first.evaluate(
+        "element => getComputedStyle(element).backgroundColor"
+    )
+    dark_frame_background = sampler.locator("body").evaluate("element => getComputedStyle(element).backgroundColor")
+    assert dark_code_background != code_background
+    assert dark_frame_background == dark_code_background
+
+    page_font_size = float(page.locator("body").evaluate("element => parseFloat(getComputedStyle(element).fontSize)"))
+    preview_font_size = float(
+        sampler.locator("html").evaluate("element => parseFloat(getComputedStyle(element).fontSize)")
+    )
+    assert preview_font_size < page_font_size
+
+
+def test_tabs_ui_focused_examples_cover_remaining_public_behaviors(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(docs_site_url + "/ui-library/components/tabs/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    density_demo = demos.nth(4)
+    density_demo.scroll_into_view_if_needed()
+    density = density_demo.frame_locator("[data-ui-preview-frame]")
+    density_roots = density.locator("[data-citry-tabs-root]")
+    assert density_roots.count() == 3
+    density_demo.get_by_label("Make Tabs equal width").check()
+    for index in range(3):
+        _wait_for_attribute(density_roots.nth(index), "data-grow", "")
+
+    layout_demo = demos.nth(5)
+    layout_demo.scroll_into_view_if_needed()
+    layout = layout_demo.frame_locator("[data-ui-preview-frame]")
+    layout_root = layout.locator("[data-citry-tabs-root]")
+    layout_demo.get_by_label("Orientation").select_option("vertical")
+    _wait_for_attribute(layout_root, "data-orientation", "vertical")
+    layout_demo.get_by_label("Alignment").select_option("end")
+    _wait_for_attribute(layout_root, "data-align", "end")
+
+    controlled_demo = demos.nth(6)
+    controlled_demo.scroll_into_view_if_needed()
+    controlled = controlled_demo.frame_locator("[data-ui-preview-frame]")
+    controlled.get_by_label("Apply requests from Tabs").uncheck()
+    controlled.get_by_role("tab", name="Europa").click()
+    assert controlled.get_by_role("tab", name="Mercury").get_attribute("aria-selected") == "true"
+    assert "europa" in controlled.locator(".tabs-controlled__status").inner_text()
+    controlled.get_by_label("Apply requests from Tabs").check()
+    controlled.get_by_role("tab", name="Titan").click()
+    assert controlled.get_by_role("tab", name="Titan").get_attribute("aria-selected") == "true"
+
+    disabled_demo = demos.nth(7)
+    disabled_demo.scroll_into_view_if_needed()
+    disabled = disabled_demo.frame_locator("[data-ui-preview-frame]")
+    assert disabled.locator('[role="tab"]:disabled').count() == 1
+    disabled_demo.get_by_label("Disable the whole group").check()
+    _wait_for_attribute(disabled.locator("[data-citry-tabs-root]"), "data-disabled", "")
+    assert disabled.locator('[role="tab"]:disabled').count() == 3
+
+    activation_demo = demos.nth(8)
+    activation_demo.scroll_into_view_if_needed()
+    activation = activation_demo.frame_locator("[data-ui-preview-frame]")
+    manual_list = activation.get_by_role("tablist", name="Manual probe data")
+    manual_tabs = manual_list.get_by_role("tab")
+    manual_tabs.first.focus()
+    page.keyboard.press("ArrowRight")
+    assert manual_tabs.nth(1).evaluate("element => element === document.activeElement")
+    assert manual_tabs.first.get_attribute("aria-selected") == "true"
+    page.keyboard.press("Enter")
+    assert manual_tabs.nth(1).get_attribute("aria-selected") == "true"
+
+    overflow_demo = demos.nth(9)
+    overflow_demo.scroll_into_view_if_needed()
+    overflow = overflow_demo.frame_locator("[data-ui-preview-frame]")
+    overflow_list = overflow.get_by_role("tablist", name="Planetary observation programs")
+    assert overflow_list.evaluate("element => element.scrollWidth > element.clientWidth")
+    overflow.get_by_role("tab", name="Outer-system objects").click()
+    assert overflow.get_by_role("tab", name="Outer-system objects").get_attribute("aria-selected") == "true"
+
+    nested_demo = demos.nth(10)
+    nested_demo.scroll_into_view_if_needed()
+    nested = nested_demo.frame_locator("[data-ui-preview-frame]")
+    nested.get_by_role("tab", name="Atmosphere").click()
+    assert nested.get_by_role("tab", name="Jupiter").get_attribute("aria-selected") == "true"
+    assert nested.get_by_role("tab", name="Atmosphere").get_attribute("aria-selected") == "true"
+
+    direction_demo = demos.nth(11)
+    direction_demo.scroll_into_view_if_needed()
+    direction = direction_demo.frame_locator("[data-ui-preview-frame]")
+    rtl_list = direction.get_by_role("tablist", name="الكواكب الداخلية بالعربية")
+    rtl_tabs = rtl_list.get_by_role("tab")
+    rtl_tabs.first.focus()
+    page.keyboard.press("ArrowRight")
+    assert rtl_tabs.nth(2).evaluate("element => element === document.activeElement")
+    assert rtl_tabs.nth(2).get_attribute("aria-selected") == "true"
+
+    theme_demo = demos.nth(12)
+    theme_demo.scroll_into_view_if_needed()
+    theme = theme_demo.frame_locator("[data-ui-preview-frame]")
+    light_card = theme.locator(".tabs-theme__card--light")
+    dark_card = theme.locator(".tabs-theme__card--dark")
+    assert light_card.evaluate("element => getComputedStyle(element).colorScheme") == "light"
+    assert dark_card.evaluate("element => getComputedStyle(element).colorScheme") == "dark"
+    assert light_card.evaluate("element => getComputedStyle(element).backgroundColor") != (
+        dark_card.evaluate("element => getComputedStyle(element).backgroundColor")
+    )
+
+    assert console_errors == []
+
+
+def test_dialog_ui_examples_are_result_first_reactive_and_operable(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/dialog/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 11
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(11))
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    sampler.get_by_role("button", name="Open field note").click()
+    sampler_dialog = sampler.locator('[data-citry-ui-part="dialog"]').first
+    assert sampler_dialog.evaluate("element => element.open") is True
+    sampler_dialog.get_by_role("button", name="Close").click()
+    assert sampler_dialog.evaluate("element => element.open") is False
+
+    configurator_demo = demos.nth(2)
+    controls = configurator_demo.locator("[data-ui-preview-controls] form")
+    configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
+    configured_dialog = configurator.locator('[data-citry-ui-part="dialog"]')
+    controls.get_by_label("Size").select_option("lg")
+    controls.get_by_label("Scroll").select_option("dialog")
+    controls.get_by_label("Allow passive dismissal").uncheck()
+    _wait_for_attribute(configured_dialog, "data-size", "lg")
+    _wait_for_attribute(configured_dialog, "data-scroll", "dialog")
+    configurator.get_by_role("button", name="Preview configuration").click()
+    assert configured_dialog.evaluate("element => element.open") is True
+    assert configured_dialog.get_by_role("button", name="Close").is_hidden()
+    configured_dialog.get_by_role("button", name="Finish preview").click()
+    assert configured_dialog.evaluate("element => element.open") is False
+
+    assert console_errors == []
+
+
+def test_dialog_ui_focused_examples_cover_control_focus_forms_and_nesting(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    page.goto(docs_site_url + "/ui-library/components/dialog/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    controlled = demos.nth(3).frame_locator("[data-ui-preview-frame]")
+    controlled_trigger = controlled.get_by_role("button", name="Request flight plan")
+    controlled_trigger.click()
+    controlled_dialog = controlled.locator('[data-citry-ui-part="dialog"]')
+    assert controlled_dialog.evaluate("element => element.open") is False
+    controlled.get_by_label("Accept Dialog requests").check()
+    controlled_trigger.click()
+    assert controlled_dialog.evaluate("element => element.open") is True
+    controlled_dialog.get_by_role("button", name="Request close").click()
+    assert controlled_dialog.evaluate("element => element.open") is False
+
+    focus = demos.nth(5).frame_locator("[data-ui-preview-frame]")
+    focus.get_by_role("button", name="Name a comet").click()
+    assert focus.locator("#comet-name").evaluate("element => element === document.activeElement") is True
+    focus.get_by_role("dialog", name="Name a comet").get_by_role("button", name="Close").click()
+    focus.get_by_role("button", name="Read eclipse report").click()
+    assert (
+        focus.get_by_role("heading", name="Total eclipse report").evaluate(
+            "element => element === document.activeElement"
+        )
+        is True
+    )
+
+    dialog_form = demos.nth(7).frame_locator("[data-ui-preview-frame]")
+    dialog_form.get_by_role("button", name="Choose constellation").click()
+    dialog_form.get_by_role("dialog", name="Choose a constellation").get_by_role("button", name="Orion").click()
+    _wait_for_text(dialog_form.locator(".dialog-form-demo__result"), "Orion")
+
+    nested = demos.nth(8).frame_locator("[data-ui-preview-frame]")
+    nested.get_by_role("button", name="Open transit report").click()
+    outer = nested.get_by_role("dialog", name="Europa transit report")
+    outer.get_by_role("button", name="Open transit chart").click()
+    inner = nested.locator('[data-citry-ui-part="dialog"]').nth(1)
+    assert inner.evaluate("element => element.open") is True
+    inner.get_by_role("button", name="Return to report").click()
+    assert inner.evaluate("element => element.open") is False
+    assert outer.evaluate("element => element.open") is True
+
+
+def test_combobox_ui_examples_are_result_first_reactive_and_operable(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/combobox/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 9
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(9))
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    sampler_inputs = sampler.get_by_role("combobox")
+    assert sampler_inputs.count() == 3
+    assert sampler_inputs.nth(0).input_value() == "Saturn"
+    assert sampler_inputs.nth(2).is_disabled()
+
+    configurator_demo = demos.nth(2)
+    controls = configurator_demo.locator("[data-ui-preview-controls] form")
+    configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
+    configured = configurator.locator("[data-citry-combobox-root]")
+    controls.get_by_label("Variant").select_option("filled")
+    controls.get_by_label("Size").select_option("lg")
+    controls.get_by_label("Local filter").select_option("starts_with")
+    controls.get_by_label("Open on focus").check()
+    controls.get_by_label("Highlight first match").check()
+    _wait_for_attribute(configured, "data-variant", "filled")
+    _wait_for_attribute(configured, "data-size", "lg")
+    configured.get_by_role("combobox").focus()
+    _wait_for_attribute(configured, "data-open", "")
+    assert configured.locator('[data-citry-ui-part="option"][data-highlighted]').count() == 1
+
+    remote_demo = demos.nth(3)
+    remote_demo.scroll_into_view_if_needed()
+    remote = remote_demo.frame_locator("[data-ui-preview-frame]")
+    remote.get_by_role("combobox").fill("ve")
+    remote.get_by_role("option", name="Vega Blue-white star in Lyra").wait_for(state="visible")
+    remote.get_by_role("combobox").fill("offline")
+    remote.get_by_text("The catalog could not be read.").wait_for(state="visible")
+    remote.get_by_role("combobox").fill("rig")
+    remote.get_by_role("option", name="Rigel Blue supergiant in Orion").wait_for(state="visible")
+
+    controlled_demo = demos.nth(4)
+    controlled_demo.scroll_into_view_if_needed()
+    controlled = controlled_demo.frame_locator("[data-ui-preview-frame]")
+    controlled.get_by_role("combobox").fill("cer")
+    controlled.get_by_role("option", name="Ceres Dwarf planet in the asteroid belt").click()
+    assert "ceres" in controlled.locator(".controlled-target dl").inner_text()
+
+    form_demo = demos.nth(5)
+    form_demo.scroll_into_view_if_needed()
+    form = form_demo.frame_locator("[data-ui-preview-frame]")
+    form.get_by_role("button", name="Submit route").click()
+    assert form.locator(".launch-form__result").inner_text() == "Route: luna"
+
+    assert console_errors == []
+
+
+def test_table_ui_examples_cover_semantics_footer_overflow_theme_and_environment(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/table/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 9
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(9))
+
+    basic = demos.nth(1).frame_locator("[data-ui-preview-frame]")
+    table = basic.get_by_role("table", name="Galilean moons")
+    assert table.locator('th[scope="col"]').count() == 3
+    assert table.locator('th[scope="row"]').count() == 4
+    assert table.locator('[data-column-key="diameter"]').first.get_attribute("data-align") == "end"
+
+    totals = demos.nth(3).frame_locator("[data-ui-preview-frame]")
+    footer = totals.locator('[data-citry-ui-part="footer"]')
+    assert footer.locator('[data-citry-ui-part="footer-cell"]').count() == 3
+    assert footer.get_by_text("84.5").count() == 1
+
+    states = demos.nth(5).frame_locator("[data-ui-preview-frame]")
+    assert states.locator('table[aria-busy="true"]').count() == 1
+    assert states.locator('[data-citry-ui-part="empty"]').get_by_text("No signals match this wavelength.").count() == 1
+    assert (
+        states.locator('[data-citry-ui-part="error"]').get_by_text("The telescope feed is unavailable.").count() == 1
+    )
+
+    demos.nth(6).scroll_into_view_if_needed()
+    sticky = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    bounded = sticky.locator(".sticky-tables article").first.locator('[data-citry-ui-part="root"]')
+    assert bounded.get_attribute("role") == "region"
+    assert bounded.get_attribute("aria-labelledby") == bounded.locator("caption").get_attribute("id")
+    assert bounded.evaluate("element => element.scrollWidth > element.clientWidth") is True
+    assert bounded.evaluate("element => element.scrollHeight > element.clientHeight") is True
+    assert (
+        bounded.locator('[data-citry-ui-part="header-cell"]').first.evaluate(
+            "element => getComputedStyle(element).position"
+        )
+        == "sticky"
+    )
+
+    demos.nth(7).scroll_into_view_if_needed()
+    theme = demos.nth(7).frame_locator("[data-ui-preview-frame]")
+    night = theme.locator(".observatory-tables__night")
+    day = theme.locator(".observatory-tables__day")
+    assert night.evaluate("element => getComputedStyle(element).colorScheme") == "dark"
+    assert day.evaluate("element => getComputedStyle(element).colorScheme") == "light"
+
+    demos.nth(8).scroll_into_view_if_needed()
+    environment = demos.nth(8).frame_locator("[data-ui-preview-frame]")
+    assert environment.locator(".table-environment").get_attribute("dir") == "rtl"
+    assert environment.get_by_role("table", name="نظام نجمي").count() == 1
+
+    assert console_errors == []
+
+
+def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.set_viewport_size({"width": 360, "height": 760})
+    page.goto(docs_site_url + "/ui-library/components/button/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 10
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(10))
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    sampler_buttons = sampler.locator('[data-citry-ui-part="button"]')
+    assert sampler_buttons.count() == 5
+    assert sampler.locator("[data-loading]").count() == 1
+    assert sampler.locator("button:disabled").count() == 1
+    assert sampler.locator("html").evaluate("node => node.scrollWidth <= node.clientWidth")
+
+    configurator_demo = demos.nth(2)
+    configurator_demo.scroll_into_view_if_needed()
+    controls = configurator_demo.locator("[data-ui-preview-controls] form")
+    configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
+    configured_button = configurator.locator('[data-citry-ui-part="button"]')
+
+    controls.get_by_label("Variant").select_option("outline")
+    _wait_for_attribute(configured_button, "data-variant", "outline")
+    controls.get_by_label("Intent").select_option("positive")
+    _wait_for_attribute(configured_button, "data-intent", "positive")
+    controls.get_by_label("Size").select_option("large")
+    _wait_for_attribute(configured_button, "data-size", "large")
+    controls.get_by_label("Loading position").select_option("start")
+    _wait_for_attribute(configured_button, "data-loading-position", "start")
+    controls.get_by_label("Show loading state").check()
+    _wait_for_attribute(configured_button, "data-loading", "")
+    assert (
+        configured_button.locator('[data-citry-ui-part="start"]').evaluate(
+            "element => getComputedStyle(element).opacity"
+        )
+        == "0"
+    )
+    assert (
+        configured_button.locator('[data-citry-ui-part="content"]').evaluate(
+            "element => getComputedStyle(element).opacity"
+        )
+        == "1"
+    )
+    controls.get_by_label("Show loading state").uncheck()
+    controls.get_by_label("Fill available width").check()
+    _wait_for_attribute(configured_button, "data-block", "")
+    controls.get_by_label("Disable Button").check()
+    _wait_for_attribute(configured_button, "data-disabled", "")
+    assert configured_button.is_disabled()
+
+    assert page.evaluate("document.documentElement.scrollWidth <= document.documentElement.clientWidth")
+    assert console_errors == []
+
+
+def test_button_ui_native_form_and_theme_examples_exercise_public_contracts(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    page.set_viewport_size({"width": 1280, "height": 900})
+    page.goto(docs_site_url + "/ui-library/components/button/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    form_demo = demos.nth(8)
+    form_demo.scroll_into_view_if_needed()
+    form = form_demo.frame_locator("[data-ui-preview-frame]")
+    species = form.get_by_label("Species")
+    species.fill("Scarlet tiger moth")
+    form.get_by_role("button", name="Record sighting").click()
+    assert form.locator(".button-form__result").inner_text() == "Recorded with field journal."
+    form.get_by_role("button", name="Reset journal").click()
+    assert species.input_value() == "Silver-washed fritillary"
+    assert form.locator(".button-form__result").inner_text() == "Journal reset."
+
+    theme_demo = demos.nth(9)
+    theme_demo.scroll_into_view_if_needed()
+    theme = theme_demo.frame_locator("[data-ui-preview-frame]")
+    day = theme.locator(".button-theme__card--day")
+    night = theme.locator(".button-theme__card--night")
+    rounded = day.get_by_role("button", name="Open plant index")
+    night_content = night.locator('[data-citry-ui-part="content"]').first
+
+    assert day.evaluate("element => getComputedStyle(element).colorScheme") == "light"
+    assert night.evaluate("element => getComputedStyle(element).colorScheme") == "dark"
+    assert rounded.evaluate("element => getComputedStyle(element).borderRadius") == "999px"
+    assert night_content.evaluate("element => getComputedStyle(element).letterSpacing") != "normal"
 
 
 def test_form_submission_example_receives_the_native_submit_event(

@@ -2,7 +2,7 @@ import itertools
 
 import pytest
 
-collect_ignore_glob = []
+collect_ignore_glob: list[str] = []
 
 # The Django/DJC benchmark scenario files (docs/design/benchmarking.md) need
 # the optional `benchmark` dependency group. Skipping them here (rather than
@@ -36,3 +36,17 @@ def _deterministic_render_ids(monkeypatch):
     """
     counter = itertools.count(1)
     monkeypatch.setattr("citry.component.gen_render_id", lambda: f"c{next(counter)}")
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """
+    Run sync-Playwright E2E cases after tests that call ``asyncio.run``.
+
+    Pytest Playwright's session-scoped sync runtime keeps its asyncio loop
+    active on the main thread until session teardown. If filesystem discovery
+    collects ``tests/e2e`` first, later ordinary tests cannot call
+    ``asyncio.run``. Stable-partitioning the E2E marker to the end preserves
+    order within both groups and lets the two valid test styles share one
+    repository-wide invocation.
+    """
+    items.sort(key=lambda item: item.get_closest_marker("e2e") is not None)

@@ -60,6 +60,8 @@
      "clientBindings": [],
      "invocationId": 1,
      "locationId": 1,
+     "morphKey": null,
+     "morphMode": null,
      "parentRegionId": null,
      "sourceClassId": "Page_df2715",
      "sourceRenderId": "c1",
@@ -141,5 +143,5 @@
  ],
  "mode": "development",
  "protocol": "citry-client-graph/1",
- "revision": "8c7188b102f521702fd50a0b98bd87547549578b3c21e864e6b67c17d73f6077"
+ "revision": "c974cfd3aef80dbcde5e6f04090e9609fada285a363772ff27735becc614f58f"
 }

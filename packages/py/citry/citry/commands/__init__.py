@@ -2,9 +2,11 @@
 The built-in ``citry`` command-line commands and the tree builder.
 
 :func:`build_cli` assembles the root command tree for a resolved ``Citry``
-engine: ``citry ext list`` and ``citry ext run <extension> <command>``. The tree
-is built per invocation because the ``ext run`` subcommands depend on which
-extensions the engine has installed.
+engine: the core ``check``, ``format``, ``list``, ``inspect``, ``create``, and
+``watch`` commands plus ``citry ext list`` and
+``citry ext run <extension> <command>``. The tree is built per invocation
+because the ``ext run`` subcommands depend on which extensions the engine has
+installed.
 """
 
 from __future__ import annotations
@@ -12,9 +14,13 @@ from __future__ import annotations
 from importlib.metadata import PackageNotFoundError, version
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._app_selection import CheckAppSelection
 from citry.command import CommandArg
+from citry.commands.check import build_check_command
 from citry.commands.create import CreateCommand
 from citry.commands.ext_list import ExtListCommand
+from citry.commands.format import FormatCommand
+from citry.commands.inspect import InspectCommand
 from citry.commands.list import ListCommand
 from citry.commands.watch import WatchCommand
 from citry.extension import ExtensionCommand
@@ -69,8 +75,10 @@ def build_ext_run_command(citry: Citry) -> type[ExtensionCommand]:
     return grouping_command("run", "Run a command provided by an extension.", routing)
 
 
-def build_cli(citry: Citry) -> type[ExtensionCommand]:
-    """Build the root ``citry`` command tree for ``citry`` (the engine)."""
+def build_cli(citry: Citry, *, check_selection: CheckAppSelection | None = None) -> type[ExtensionCommand]:
+    """Build the root command tree, binding ``check`` to ``citry`` by default."""
+    if check_selection is None:
+        check_selection = CheckAppSelection(engine=citry)
     ext = grouping_command(
         "ext",
         "Inspect and run extension commands.",
@@ -79,6 +87,14 @@ def build_cli(citry: Citry) -> type[ExtensionCommand]:
     return grouping_command(
         "citry",
         "Fast, simple, and smart frontend framework for Python.",
-        (ListCommand, CreateCommand, WatchCommand, ext),
+        (
+            build_check_command(check_selection),
+            FormatCommand,
+            ListCommand,
+            InspectCommand,
+            CreateCommand,
+            WatchCommand,
+            ext,
+        ),
         arguments=(CommandArg("--version", action="version", version=f"citry {_citry_version()}"),),
     )

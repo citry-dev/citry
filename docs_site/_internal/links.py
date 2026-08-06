@@ -111,20 +111,22 @@ def rewrite_internal_md_links(
     """
     Rewrite internal ``.md`` links in rendered HTML to clean relative URLs.
 
-    Returns the HTML unchanged when the source file is not under ``content_dir``
-    (for example a generated page rendered from outside the content tree).
+    A catalog-backed source may live outside ``content_dir`` when
+    ``source_to_public_path`` or ``current_public_path`` gives it a public route.
     """
     content_root = content_dir.resolve()
     try:
         page_rel = source_path.resolve().relative_to(content_root)
     except ValueError:
-        return html
+        page_rel = None
 
     page_url = current_public_path or _public_url_for_source(
         source_path,
         source_to_public_path=source_to_public_path,
     )
     if not page_url:
+        if page_rel is None:
+            return html
         page_url = "/" + md_to_url(page_rel)  # e.g. "/test/pipeline_test/"
     elif not page_url.startswith("/"):
         page_url = "/" + page_url
@@ -181,13 +183,15 @@ def rewrite_internal_md_links_in_markdown(
     try:
         page_rel = source_path.resolve().relative_to(content_root)
     except ValueError:
-        return source
+        page_rel = None
 
     page_url = current_public_path or _public_url_for_source(
         source_path,
         source_to_public_path=source_to_public_path,
     )
     if not page_url:
+        if page_rel is None:
+            return source
         page_url = "/" + md_to_url(page_rel)
     elif not page_url.startswith("/"):
         page_url = "/" + page_url
@@ -416,17 +420,22 @@ def _rewrite_one(
     else:
         target_abs = (source_dir / parsed.path).resolve()
 
-    # A link that points outside the content tree is left untouched.
-    try:
-        target_rel = target_abs.relative_to(content_root)
-    except ValueError:
-        return href
-
     target_url = _public_url_for_source(
         target_abs,
         source_to_public_path=source_to_public_path,
     )
+
+    # A link outside the content tree needs an explicit catalog route.
+    try:
+        target_rel = target_abs.relative_to(content_root)
+    except ValueError:
+        if not target_url:
+            return href
+        target_rel = None
+
     if not target_url:
+        if target_rel is None:  # pragma: no cover - guarded above
+            return href
         target_url = "/" + md_to_url(target_rel)  # e.g. "/test/other/"
 
     # A cross-scope link from a snapshot must escape to the site root. Links to

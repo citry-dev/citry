@@ -1,0 +1,26 @@
+{
+	"name": "@citry/protocol-client-graph-v1",
+	"version": "0.0.0",
+	"private": true,
+	"type": "module",
+	"exports": {
+		".": "./src/index.ts",
+		"./comments": "./src/comments.ts",
+		"./issue": "./src/issue.ts"
+	},
+	"scripts": {
+		"build": "node build.mjs",
+		"build:initialize": "node build.mjs --initialize",
+		"build:check": "node build.mjs --check",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check . ../../../_tooling/conformance.mjs",
+		"test": "node --test",
+		"prototype": "node prototype.mjs",
+		"check": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build:check && pnpm run prototype"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.3",
+		"esbuild": "0.28.1",
+		"typescript": "7.0.2"
+	}
+}

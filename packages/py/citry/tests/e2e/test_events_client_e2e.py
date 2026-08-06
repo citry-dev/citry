@@ -426,9 +426,9 @@ def test_narrow_model_gates_writes_and_refreshes_on_a_live_descriptor(page: Any,
     assert result["query"] == "hats"
     assert result["count"] == 0
 
-    # Re-processing metadata for one live id must update the Sets closed over
-    # by every live proxy of that class. Descriptors are class-global even
-    # when a fragment carries only one of several sibling instances.
+    # Re-processing graphless metadata moves the listed live anchor onto the
+    # refreshed legacy descriptor. A graph-backed sibling remains tied to its
+    # revision-scoped contract.
     refreshed = page.evaluate(
         """
         async () => {
@@ -505,13 +505,13 @@ def test_narrow_model_gates_writes_and_refreshes_on_a_live_descriptor(page: Any,
     )
 
     assert "writable fields: (none)" in refreshed["rejected"]
-    assert "writable fields: (none)" in refreshed["siblingRejected"]
+    assert refreshed["siblingRejected"] is None
     assert refreshed["settlement"] == "rejected"
     assert refreshed["staleWireUpdates"] is None
     assert refreshed["pending"] == {}
-    assert refreshed["siblingPending"] == {}
+    assert refreshed["siblingPending"] == {"query": "also blocked"}
     assert refreshed["query"] == "hats"
-    assert refreshed["siblingQuery"] == "boots"
+    assert refreshed["siblingQuery"] == "also blocked"
 
 
 # ----- scopes -----

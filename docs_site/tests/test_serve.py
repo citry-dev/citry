@@ -12,7 +12,10 @@ from starlette.testclient import TestClient
 
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
-from docs_site._internal.local_playground_runtime import load_local_playground_runtime
+from docs_site._internal.local_playground_runtime import (
+    LocalPlaygroundRuntime,
+    load_local_playground_runtime,
+)
 from docs_site._internal.serve import create_app
 
 
@@ -42,6 +45,104 @@ def test_serve_renders_clean_url_page(tmp_path: Path) -> None:
     response = _client(tmp_path).get("/guide/intro/")
     assert response.status_code == 200
     assert "The intro." in response.text
+
+
+def test_serve_renders_ui_library_source_directly_from_catalog(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: UI\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "    groups:\n"
+        "      - label: Components\n"
+        "        source: ui_library\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    source = tmp_path / "packages/py/citry_ui/citry_ui/components/button/api.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\ntitle: Button\ndescription: Button docs.\n---\n\n"
+        "# Button\n\n## Use Button\n\nDirect serve marker.\n\n"
+        '<c-ui-demo path="packages/py/citry_ui/citry_ui/components/button/snippets/serve_preview.py" '
+        'title="Serve preview" />\n',
+        encoding="utf-8",
+    )
+    source.with_suffix(".yml").write_text(
+        "schema_version: 1\n"
+        "family: button\n"
+        "components: [CButton]\n"
+        "inputs: []\n"
+        "slots: []\n"
+        "events: []\n"
+        "methods: []\n"
+        "attributes: []\n"
+        "selectors: []\n"
+        "css: []\n"
+        "interfaces: []\n",
+        encoding="utf-8",
+    )
+    snippet = tmp_path / "packages/py/citry_ui/citry_ui/components/button/snippets/serve_preview.py"
+    snippet.parent.mkdir(parents=True, exist_ok=True)
+    snippet.write_text(
+        "from citry import Component\n\n"
+        "class ServePreviewSmoke(Component):\n"
+        "    template = '<p>Rendered serve preview</p>'\n\n"
+        "preview = ServePreviewSmoke()\n"
+        "preview\n",
+        encoding="utf-8",
+    )
+    manifest = tmp_path / "ui_library.yml"
+    manifest.write_text(
+        "components:\n"
+        "  - family: button\n"
+        "    slug: button\n"
+        "    source: packages/py/citry_ui/citry_ui/components/button/api.md\n",
+        encoding="utf-8",
+    )
+    config = DocsConfig(
+        repo_root=tmp_path,
+        content_dir=content,
+        site_dir=tmp_path / "site",
+        ui_library_config=manifest,
+    )
+
+    client = TestClient(create_app(config=config))
+    response = client.get("/ui-library/components/button/")
+    preview = client.get("/ui-library/components/button/_previews/serve-preview/")
+    missing = client.get("/ui-library/components/button/_previews/missing/")
+
+    assert response.status_code == 200
+    assert "Direct serve marker." in response.text
+    assert "API reference" in response.text
+    assert "Interfaces" in response.text
+    assert 'src="/ui-library/components/button/_previews/serve-preview/"' in response.text
+    assert preview.status_code == 200
+    assert preview.headers["x-robots-tag"] == "noindex, nofollow"
+    assert "Rendered serve preview" in preview.text
+    assert missing.status_code == 404
+    assert not (content / "ui-library/components/button.md").exists()
+
+    local_runtime_dir = tmp_path / "local-runtime"
+    local_runtime_dir.mkdir()
+    manifest_path = local_runtime_dir / "runtime.json"
+    manifest_path.write_text("{}", encoding="utf-8")
+    local_runtime = LocalPlaygroundRuntime(
+        directory=local_runtime_dir,
+        manifest_path=manifest_path,
+        wheel_names=frozenset(),
+    )
+    local_response = TestClient(create_app(config=config, local_playground_runtime=local_runtime)).get(
+        "/ui-library/components/button/"
+    )
+
+    assert local_response.status_code == 200
+    assert "data-citry-ui-demo" in local_response.text
+    assert "data-citry-live-code" in local_response.text
+    assert "Try live" in local_response.text
+    assert "data-live-workspace" in local_response.text
+    assert "/static/playground/live_code.js" in local_response.text
 
 
 def test_custom_server_runtime_stays_active_during_example_requests(tmp_path: Path) -> None:
@@ -153,7 +254,6 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
         ),
         encoding="utf-8",
     )
-    (local_dir / "citry-events.js").write_text("// local Events runtime\n", encoding="utf-8")
     config = DocsConfig(
         content_dir=content,
         site_dir=tmp_path / "site",
@@ -171,7 +271,6 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
 
     page = client.get("/")
     runtime_response = client.get("/static/playground/runtime.json")
-    events_response = client.get("/static/playground/citry-events.js")
     wheel_response = client.get(f"/static/playground/local/{ui_wheel.name}")
     missing_wheel_response = client.get("/static/playground/local/not-listed.whl")
 
@@ -179,9 +278,7 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
     assert "data-citry-live-code" in page.text
     assert runtime_response.json()["source"] == "local"
     assert wheel_response.content == b"local Citry UI wheel"
-    assert events_response.text == "// local Events runtime\n"
     assert runtime_response.headers["cache-control"] == "no-store"
-    assert events_response.headers["cache-control"] == "no-store"
     assert wheel_response.headers["cache-control"] == "no-store"
     assert missing_wheel_response.status_code == 404
 

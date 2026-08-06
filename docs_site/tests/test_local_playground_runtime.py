@@ -1,4 +1,4 @@
-"""Local workspace wheels used by the docs authoring server."""
+"""Workspace Citry UI wheel used by the docs authoring server."""
 
 from __future__ import annotations
 
@@ -63,25 +63,22 @@ def _write_wheel(
     return path
 
 
-def test_build_local_runtime_replaces_citry_and_adds_citry_ui(
+def test_build_local_runtime_keeps_published_citry_and_adds_workspace_citry_ui(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
     runtime_dir = tmp_path / "docs_site" / "static" / "playground"
     runtime_dir.mkdir(parents=True)
-    events_source = tmp_path / "packages" / "py" / "citry" / "citry" / "ext" / "events" / "client"
-    events_source.mkdir(parents=True)
-    (events_source / "citry-events.js").write_text("// local Events runtime\n", encoding="utf-8")
     (runtime_dir / "runtime.json").write_text(
         json.dumps(
             {
                 "schema_version": 1,
                 "protocol_version": 1,
                 "pyodide": {"version": "test", "python": "3.14.2"},
-                "citry": {"version": "0.3.0", "core_version": "1.4.0"},
+                "citry": {"version": "0.3.1", "core_version": "1.4.0"},
                 "packages": [
                     {"name": "citry-core", "version": "1.4.0", "url": "https://example.test/core.whl"},
-                    {"name": "citry", "version": "0.3.0", "url": "https://example.test/citry.whl"},
+                    {"name": "citry", "version": "0.3.1", "url": "https://example.test/citry.whl"},
                 ],
             }
         ),
@@ -89,14 +86,7 @@ def test_build_local_runtime_replaces_citry_and_adds_citry_ui(
     )
 
     def fake_build(package_dir: Path, output_dir: Path) -> Path:
-        if package_dir.name == "citry":
-            return _write_wheel(
-                output_dir,
-                distribution="citry",
-                import_name="citry",
-                version="0.3.2",
-                requirements=("citry-core==1.4.0",),
-            )
+        assert package_dir.name == "citry_ui"
         return _write_wheel(
             output_dir,
             distribution="citry-ui",
@@ -115,19 +105,16 @@ def test_build_local_runtime_replaces_citry_and_adds_citry_ui(
     packages = {package["name"]: package for package in manifest["packages"]}
 
     assert manifest["citry"] == {
-        "version": "0.3.2",
+        "version": "0.3.1",
         "core_version": "1.4.0",
         "ui_version": "0.0.1",
     }
     assert packages["citry-core"]["url"] == "https://example.test/core.whl"
-    assert packages["citry"]["version"] == "0.3.2"
-    assert packages["citry"]["url"] == "./local/citry-0.3.2-py3-none-any.whl"
+    assert packages["citry"]["version"] == "0.3.1"
+    assert packages["citry"]["url"] == "https://example.test/citry.whl"
     assert packages["citry-ui"]["version"] == "0.0.1"
     assert packages["citry-ui"]["url"] == "./local/citry_ui-0.0.1-py3-none-any.whl"
-    assert local.wheel_names == {
-        "citry-0.3.2-py3-none-any.whl",
-        "citry_ui-0.0.1-py3-none-any.whl",
-    }
+    assert local.wheel_names == {"citry_ui-0.0.1-py3-none-any.whl"}
 
 
 def test_local_runtime_can_be_loaded_from_its_generated_directory(tmp_path: Path) -> None:
@@ -164,7 +151,6 @@ def test_local_runtime_can_be_loaded_from_its_generated_directory(tmp_path: Path
         ],
     }
     (local_dir / "runtime.json").write_text(json.dumps(manifest), encoding="utf-8")
-    (local_dir / "citry-events.js").write_text("// local Events runtime\n", encoding="utf-8")
 
     loaded = local_playground_runtime.load_local_playground_runtime(local_dir)
 
@@ -199,7 +185,6 @@ def test_local_runtime_rejects_a_manifest_without_local_citry_ui(tmp_path: Path)
         ),
         encoding="utf-8",
     )
-    (local_dir / "citry-events.js").write_text("// local Events runtime\n", encoding="utf-8")
 
     with pytest.raises(
         local_playground_runtime.LocalPlaygroundRuntimeError,

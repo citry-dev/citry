@@ -1,0 +1,69 @@
+{
+  "schema_version": 1,
+  "generated_on": "2026-07-28",
+  "pyodide": {
+    "version": "314.0.3",
+    "index_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/",
+    "abi": "pyemscripten_2026_0_wasm32",
+    "python": "3.14.2",
+    "emscripten": "5.0.3",
+    "rust": "1.93.0",
+    "pyodide_build": "0.37.0",
+    "pyodide_cli": "0.5.0",
+    "artifacts": [
+      {"file": "pyodide.mjs", "bytes": 17880, "sha256": "5cfc46f5dcbaf2a16f26e2363f441873eb424762609cc03db00d6a2ace4d00e5", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs"},
+      {"file": "pyodide.asm.mjs", "bytes": 1249447, "sha256": "1a9775427ef6e8abaa7db88ece0515422d1886915ae5c9093776410c865dfd8d", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.asm.mjs"},
+      {"file": "pyodide.asm.wasm", "bytes": 9596462, "sha256": "e7f8fac36f8bf11085309cbc5c829b3ec3057c18bf1d73b05a6741612d63cdbf", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.asm.wasm"},
+      {"file": "python_stdlib.zip", "bytes": 2545106, "sha256": "444c770dfd75a32097fc0a7d5c1413fd3140601f49c3a1f2e9af0376fcd124b4", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/python_stdlib.zip"},
+      {"file": "pyodide-lock.json", "bytes": 113804, "sha256": "c963d22858f6bcb8f41586a2142f03905ab370c88ea22a86a2736e95fac2a8f3", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide-lock.json"}
+    ]
+  },
+  "custom_wheels": [
+    {"file": "citry_core-1.3.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl", "bytes": 6585067, "sha256": "ed6d3eda67ec57e31a354ecdcc4407fd41c4d4cd94c01facd037594ca74dc6aa", "source": "git tag citry-core@1.3.0", "source_commit": "776eb1e60b1c09f55f335f5c9fd30ac5471ca9cc", "source_date_epoch": 1782839550, "clean_tag_archive": true, "rust_path_prefixes_remapped": true, "sbom_paths_normalized": true},
+    {"file": "citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl", "bytes": 7011715, "sha256": "765e4211b1d333800d9d620c6f310f0a06ddac1574fbfac4af1bd53c9c31c964", "url": "https://files.pythonhosted.org/packages/9b/2e/7e3505ff7c085c3d8eae715976520306c9689bb570909451edf79f8f78de/citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl", "publication": "PyPI, uploaded 2026-07-28T20:33:57.231639Z by trusted-publishing run 30396856106", "source": "git tag citry-core@1.4.0", "source_commit": "9c951efb3e69fb5a5c56295ee6ac84fa1fe5b3f2", "source_date_epoch": 1785157442, "clean_tag_archive": true, "rust_path_prefixes_remapped": true, "sbom_paths_normalized": true}
+  ],
+  "public_package_track": {
+    "citry": {"version": "0.2.0", "file": "citry-0.2.0-py3-none-any.whl", "bytes": 194448, "sha256": "8aa129681714e21278da29cb24d602e61d5a0ad84f246f89586269ab6d1aa6ba", "url": "https://files.pythonhosted.org/packages/ad/a8/63a3b6ac11e870a8b01bbe6c6f040e10b03748b5090d7fcac1414bf6f014/citry-0.2.0-py3-none-any.whl"},
+    "dependencies": [
+      {"name": "citry-core", "version": "1.3.0", "source": "custom_wheels"},
+      {"name": "MarkupSafe", "version": "3.0.3", "file": "markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl", "bytes": 9985, "sha256": "70d3fb95b0946e2b4a2c182b4e10ddff5e498ebe2bb596a0aa179f0844c56c67", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl"},
+      {"name": "typing-extensions", "version": "4.15.0", "file": "typing_extensions-4.15.0-py3-none-any.whl", "bytes": 44613, "sha256": "213fc049fb8bbea5f8369b06c7270cdddd634c2c000f721ce445e22473d66fd5", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/typing_extensions-4.15.0-py3-none-any.whl"},
+      {"name": "wrapt", "version": "2.1.2", "file": "wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl", "bytes": 52188, "sha256": "bd43f0d4fa46879f74ae5bc3630a743640d96dce0ecff70edc46e8d62153c3b1", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl"}
+    ],
+    "install_order": [
+      "citry_core-1.3.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "typing_extensions-4.15.0-py3-none-any.whl",
+      "wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "citry-0.2.0-py3-none-any.whl"
+    ],
+    "resolver_policy": "Verify and load every local wheel in install_order directly. Do not invoke micropip or live dependency resolution."
+  },
+  "current_package_track": {
+    "citry": {"version": "0.3.0", "file": "citry-0.3.0-py3-none-any.whl", "bytes": 532890, "sha256": "953c18c677563ef312416fb2e3c17df29d2e14aad86b96a1be011aaf2f95820e", "url": "https://files.pythonhosted.org/packages/0c/81/0967a9a5737587e73a572bde53878a7a38bfd1907f8f1a9e59c6f08dfbc4/citry-0.3.0-py3-none-any.whl", "publication": "PyPI"},
+    "dependencies": [
+      {"name": "citry-core", "version": "1.4.0", "source": "custom_wheels", "publication": "PyPI; the manifest custom_wheels entry carries the immutable public URL, byte count, and SHA-256"},
+      {"name": "MarkupSafe", "version": "3.0.3", "file": "markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl", "bytes": 9985, "sha256": "70d3fb95b0946e2b4a2c182b4e10ddff5e498ebe2bb596a0aa179f0844c56c67", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl"},
+      {"name": "typing-extensions", "version": "4.15.0", "file": "typing_extensions-4.15.0-py3-none-any.whl", "bytes": 44613, "sha256": "213fc049fb8bbea5f8369b06c7270cdddd634c2c000f721ce445e22473d66fd5", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/typing_extensions-4.15.0-py3-none-any.whl"},
+      {"name": "wrapt", "version": "2.1.2", "file": "wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl", "bytes": 52188, "sha256": "bd43f0d4fa46879f74ae5bc3630a743640d96dce0ecff70edc46e8d62153c3b1", "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl"}
+    ],
+    "install_order": [
+      "citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "typing_extensions-4.15.0-py3-none-any.whl",
+      "wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl",
+      "citry-0.3.0-py3-none-any.whl"
+    ],
+    "resolver_policy": "Verify and load every local wheel in install_order directly. Do not invoke micropip or live dependency resolution."
+  },
+  "observed_unselected_builds": [
+    {"version": "1.3.0", "bytes": 6585664, "sha256": "cf40897014cb71c71a979a0557d95e83ee75bc62731f18c1b9c18d80b12a42df", "reason": "SOURCE_DATE_EPOCH was not set"},
+    {"version": "1.4.0", "bytes": 7104381, "sha256": "32d458c6280688e848f732a698fade4be27a034979a277c26aa39e3c216f4da4", "reason": "SOURCE_DATE_EPOCH was not set"},
+    {"version": "1.4.0", "bytes": 7104347, "sha256": "d9c887b39f81539099b1801b4bc240d19c6c7fec4f46a0f498a7fb19dcbf4d60", "reason": "SOURCE_DATE_EPOCH was not set"},
+    {"version": "1.3.0", "bytes": 6585276, "sha256": "ccde1d646a6fbaf28de787a55102dd15c3c479a5a30bce56ef9e25957fedd178", "reason": "SOURCE_DATE_EPOCH was set but absolute Rust debug paths were not remapped"},
+    {"version": "1.4.0", "bytes": 7104301, "sha256": "5955970d4500fffcbacd9b1088a79c2cee4d1ef7b70e14f255a0e1c978f165a3", "reason": "SOURCE_DATE_EPOCH was set but absolute Rust debug paths were not remapped"},
+    {"version": "1.4.0", "bytes": 7104290, "sha256": "2e52c31860f6e2845b91bb33c2d990ea529f8a5ee2fd1bd40f4cf5dac3b7fe2a", "reason": "SOURCE_DATE_EPOCH was set but absolute Rust debug paths were not remapped"},
+    {"version": "1.3.0", "bytes": 6585133, "sha256": "e07fcf7cb19cfd6ba7b5a89efb2d96821756e3eaadc8cff4e921678e5e25b972", "reason": "Rust debug paths were remapped but generated SBOM workspace paths were not normalized"},
+    {"version": "1.4.0", "bytes": 7104142, "sha256": "50d6c68bfe7c5b0d5a37598925f67a894cce5477df4fda6ebf06bbdc288a196d", "reason": "Built from a dirty live source directory containing untracked Python cache artifacts; generated SBOM paths were also not normalized"}
+  ]
+}

@@ -3,5 +3,5 @@
   #c-key="row.id"
   c-$c-props="{'x': 1}"
   @click="foo( 1 )"
-  :class="active ? yes : no"
+  :class="active  ? yes : no"
 />

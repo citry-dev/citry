@@ -10,10 +10,12 @@ use crate::ast::{
     Token,
 };
 use crate::constants::{
+    citry_component_tag_eq, has_citry_component_prefix, is_dynamic_target_expr_attr,
+    is_dynamic_target_static_attr, is_html_void_element, is_reserved_citry_tag_identity,
     CLIENT_PROPS_ATTR, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELEMENT_TAG,
     C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG,
-    DYNAMIC_CLIENT_PROPS_ATTR, FORBIDDEN_HTML_TAG_NAMES, HTML_VOID_ELEMENTS, META_ATTR_IGNORE,
-    META_ATTR_KEY, RESERVED_TAG_NAMES, TAG_ATTR_RULES, TAG_ORDERING_RULES,
+    DYNAMIC_CLIENT_PROPS_ATTR, FORBIDDEN_HTML_TAG_NAMES, META_ATTR_IGNORE, META_ATTR_KEY,
+    RESERVED_TAG_NAMES, TAG_ATTR_RULES, TAG_ORDERING_RULES,
 };
 use crate::error::{assert_rule, assert_rules, ParseError};
 use crate::grammar::{GrammarParser, Rule};
@@ -256,6 +258,10 @@ fn process_template_element(
             let node = process_html_raw(inner, context)?;
             template.elements.push(TemplateElement::Node(node));
         }
+        Rule::html_text_container => {
+            let (node, attribute_slots) = process_html_text_container(inner, context)?;
+            finalize_node(node, attribute_slots, tag_stack, root_template, context)?;
+        }
         Rule::template_expression => {
             let template = get_current_template(tag_stack, root_template);
             let expr = process_template_expression(inner, context)?;
@@ -282,7 +288,7 @@ fn process_template_element(
                     // Check if this is an HTML void element (br, img, input, etc.)
                     // These don't need closing tags and are treated as self-closing
                     let tag_name = start_tag.name.content.as_str();
-                    if HTML_VOID_ELEMENTS.contains(&tag_name) {
+                    if is_html_void_element(tag_name) {
                         // Collect used_variables from attrs, dropping any
                         // same-element introduced var (shorthand `c-for` loop
                         // target), mirroring the bodied/self-closing paths.
@@ -335,7 +341,12 @@ fn process_template_element(
 
                     // Check if end tag matches the current stack entry
                     let stack_entry = tag_stack.last().unwrap();
-                    if &stack_entry.start_tag.name.content != end_tag_name {
+                    if !stack_entry
+                        .start_tag
+                        .name
+                        .content
+                        .eq_ignore_ascii_case(end_tag_name)
+                    {
                         return Err(context.error_from_local_span(
                             tag_span,
                             format!(
@@ -440,9 +451,22 @@ fn process_template_comment(
 
     // Extract the content (without {# and #})
     // template_comment = "{#" ~ template_comment_content ~ "#}"
-    let template_comment_content: pest::iterators::Pair<'_, _> =
-        unwrap_pair(comment_pair, Rule::template_comment_content)?;
-    let value_token = context.create_token(&template_comment_content);
+    // In a native text-container body's atomicity cascade Pest may suppress
+    // the inner pair even though it keeps the outer template_comment pair.
+    // The ASCII delimiters make the equivalent token safe to derive from the
+    // already absolute outer token in that case.
+    let value_token = match comment_pair.into_inner().next() {
+        Some(template_comment_content) => {
+            assert_rule(&template_comment_content, Rule::template_comment_content)?;
+            context.create_token(&template_comment_content)
+        }
+        None => Token {
+            content: token.content[2..token.content.len() - 2].to_string(),
+            start_index: token.start_index + 2,
+            end_index: token.end_index - 2,
+            line_col: (token.line_col.0, token.line_col.1 + 2),
+        },
+    };
 
     Ok(Comment {
         token,
@@ -634,8 +658,18 @@ fn process_html_start_tag(
             "html_start_tag should contain html_tag_name".to_string(),
         )
     })?;
-    // Accept both html_tag_name and html_raw_tag_name (for <c-raw> tags)
-    assert_rules(&name_pair, &[Rule::html_tag_name, Rule::html_raw_tag_name])?;
+    // Accept ordinary, <c-raw>, and native text-container tag-name rules.
+    assert_rules(
+        &name_pair,
+        &[
+            Rule::html_tag_name,
+            Rule::html_raw_tag_name,
+            Rule::html_script_tag_name,
+            Rule::html_style_tag_name,
+            Rule::html_textarea_tag_name,
+            Rule::html_title_tag_name,
+        ],
+    )?;
 
     let name = context.create_token(&name_pair);
     let name_rule = name_pair.as_rule();
@@ -701,7 +735,17 @@ fn process_html_end_tag(
             format!("{:?} should contain tag name", end_tag_rule),
         )
     })?;
-    assert_rules(&name_pair, &[Rule::html_tag_name, Rule::html_raw_tag_name])?;
+    assert_rules(
+        &name_pair,
+        &[
+            Rule::html_tag_name,
+            Rule::html_raw_tag_name,
+            Rule::html_script_tag_name,
+            Rule::html_style_tag_name,
+            Rule::html_textarea_tag_name,
+            Rule::html_title_tag_name,
+        ],
+    )?;
 
     let name = context.create_token(&name_pair);
     let name_rule = name_pair.as_rule();
@@ -973,7 +1017,7 @@ fn parse_html_attribute(
                     return Err(context.error_from_local_span(
                         attr_span,
                         format!(
-                            "'{}' takes no value. Write the bare marker ('{}') to opt this element and its subtree out of morphing.",
+                            "'{}' takes no value. Write the bare marker ('{}') to opt the element subtree or component range out of morphing.",
                             META_ATTR_IGNORE, META_ATTR_IGNORE
                         ),
                     ));
@@ -1114,7 +1158,7 @@ fn is_tag_bounded_nested_template(content: &str) -> bool {
     };
 
     match last_inner.as_rule() {
-        Rule::html_raw => true,
+        Rule::html_raw | Rule::html_text_container => true,
         Rule::html_tag => {
             let Some(tag) = last_inner.into_inner().next() else {
                 return false;
@@ -1124,7 +1168,7 @@ fn is_tag_bounded_nested_template(content: &str) -> bool {
                 Rule::html_start_tag => tag
                     .into_inner()
                     .find(|pair| pair.as_rule() == Rule::html_tag_name)
-                    .is_some_and(|name| HTML_VOID_ELEMENTS.contains(&name.as_str())),
+                    .is_some_and(|name| is_html_void_element(name.as_str())),
                 _ => false,
             }
         }
@@ -1200,6 +1244,127 @@ fn process_html_raw(
     Ok(node)
 }
 
+/// Process a native HTML text container (`script`, `style`, `textarea`, or
+/// `title`). Tag-looking body text stays text, while Citry expressions and
+/// template comments retain their normal meaning.
+fn process_html_text_container(
+    container_pair: pest::iterators::Pair<Rule>,
+    context: &ParserContext,
+) -> Result<(Node, Vec<StaticNamedSlot>), ParseError> {
+    let container_span = container_pair.as_span();
+    let variant = container_pair.into_inner().next().ok_or_else(|| {
+        context.error_from_local_span(
+            container_span,
+            "html_text_container should contain one tag-specific rule".to_string(),
+        )
+    })?;
+
+    let (container_rule, start_rule, content_rule, end_rule, text_rule) = match variant.as_rule() {
+        Rule::html_script => (
+            Rule::html_script,
+            Rule::html_script_start_tag,
+            Rule::html_script_content,
+            Rule::html_script_end_tag,
+            Rule::html_script_text,
+        ),
+        Rule::html_style => (
+            Rule::html_style,
+            Rule::html_style_start_tag,
+            Rule::html_style_content,
+            Rule::html_style_end_tag,
+            Rule::html_style_text,
+        ),
+        Rule::html_textarea => (
+            Rule::html_textarea,
+            Rule::html_textarea_start_tag,
+            Rule::html_textarea_content,
+            Rule::html_textarea_end_tag,
+            Rule::html_textarea_text,
+        ),
+        Rule::html_title => (
+            Rule::html_title,
+            Rule::html_title_start_tag,
+            Rule::html_title_content,
+            Rule::html_title_end_tag,
+            Rule::html_title_text,
+        ),
+        rule => {
+            return Err(context.error_from_local_span(
+                variant.as_span(),
+                format!("Unexpected HTML text-container rule: {:?}", rule),
+            ));
+        }
+    };
+    assert_rule(&variant, container_rule)?;
+    let variant_span = variant.as_span();
+    let mut inner = variant.into_inner();
+
+    let start_tag_pair = inner.next().ok_or_else(|| {
+        context.error_from_local_span(
+            variant_span,
+            "HTML text container should contain a start tag".to_string(),
+        )
+    })?;
+    assert_rule(&start_tag_pair, start_rule)?;
+    let ProcessedStartTag {
+        start_tag,
+        introduced_variables,
+        attribute_slots,
+    } = process_html_start_tag(start_tag_pair, context)?;
+
+    let content_pair = inner.next().ok_or_else(|| {
+        context.error_from_local_span(
+            variant_span,
+            "HTML text container should contain a body".to_string(),
+        )
+    })?;
+    assert_rule(&content_pair, content_rule)?;
+    let mut body = Template {
+        elements: vec![],
+        comments: vec![],
+        used_variables: vec![],
+        slots: vec![],
+    };
+    for body_pair in content_pair.into_inner() {
+        match body_pair.as_rule() {
+            rule if rule == text_rule => {
+                body.elements
+                    .push(TemplateElement::Text(process_text(body_pair, context)?));
+            }
+            Rule::template_expression => {
+                let expr = process_template_expression(body_pair, context)?;
+                body.used_variables.extend(expr.used_variables.clone());
+                body.comments.extend(expr.comments.clone());
+                body.elements.push(TemplateElement::Expr(expr));
+            }
+            Rule::template_comment => {
+                body.comments
+                    .push(process_template_comment(body_pair, context)?);
+            }
+            rule => {
+                return Err(context.error_from_local_span(
+                    body_pair.as_span(),
+                    format!("Unexpected HTML text-container body rule: {:?}", rule),
+                ));
+            }
+        }
+    }
+
+    let end_tag_pair = inner.next().ok_or_else(|| {
+        context.error_from_local_span(
+            variant_span,
+            "HTML text container should contain an end tag".to_string(),
+        )
+    })?;
+    assert_rule(&end_tag_pair, end_rule)?;
+    let end_tag = process_html_end_tag(end_tag_pair, context)?;
+
+    Ok((
+        Node::from_start_and_end_tags(start_tag, end_tag, body, introduced_variables),
+        attribute_slots,
+    ))
+}
+
 // Decide which template to push items to
 fn get_current_template<'a>(
     tag_stack: &'a mut [TagStackEntry],
@@ -1223,6 +1388,7 @@ fn validate_node(
     tag_stack: &[TagStackEntry],
     context: &ParserContext,
 ) -> Result<(), ParseError> {
+    validate_citry_tag_spelling(node, context)?;
     validate_fill_placement(node, tag_stack, context)?;
     validate_client_props_placement(node, context)?;
     validate_attributes_present(node, context)?;
@@ -1230,6 +1396,62 @@ fn validate_node(
     validate_attribute_conflicts(node, context)?;
     validate_attribute_values(node, context)?;
     validate_fill_names(node, fill_nodes, context)?;
+    Ok(())
+}
+
+/// Enforce the boundary between Citry syntax and ordinary/custom HTML.
+///
+/// The framework prefix is exactly lowercase `c-`. Once that prefix is
+/// present, component-name identity is ASCII-case-insensitive, but reserved
+/// structural tags must be authored in their canonical lowercase spelling so
+/// their grammar and execution semantics remain explicit.
+fn validate_citry_tag_spelling(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
+    validate_citry_tag_name_spelling(&node.start_tag().name, false, context)?;
+    if let Node::WithBody { end_tag, .. } = node {
+        validate_citry_tag_name_spelling(&end_tag.name, true, context)?;
+    }
+    Ok(())
+}
+
+fn validate_citry_tag_name_spelling(
+    name: &Token,
+    is_closing: bool,
+    context: &ParserContext,
+) -> Result<(), ParseError> {
+    let tag_name = name.content.as_str();
+    let bytes = tag_name.as_bytes();
+    let looks_like_citry_prefix =
+        bytes.len() >= 2 && bytes[0].eq_ignore_ascii_case(&b'c') && bytes[1] == b'-';
+    let slash = if is_closing { "/" } else { "" };
+
+    if looks_like_citry_prefix && !has_citry_component_prefix(tag_name) {
+        return Err(context.error_from_token(
+            name,
+            format!(
+                "Citry component tag prefixes are lowercase. Write '<{}c-{}>' instead of '<{}{}>'.",
+                slash,
+                &tag_name[2..],
+                slash,
+                tag_name
+            ),
+        ));
+    }
+
+    if let Some(canonical) = RESERVED_TAG_NAMES
+        .iter()
+        .find(|reserved| tag_name.eq_ignore_ascii_case(reserved))
+    {
+        if tag_name != *canonical {
+            return Err(context.error_from_token(
+                name,
+                format!(
+                    "Reserved Citry structural tags are lowercase. Write '<{}{canonical}>' instead of '<{}{}>'.",
+                    slash, slash, tag_name
+                ),
+            ));
+        }
+    }
+
     Ok(())
 }
 
@@ -1241,14 +1463,7 @@ fn validate_node(
 /// ordinary tags render plain HTML and cannot own the directive.
 fn validate_client_props_placement(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
-    // Component names are case-insensitive and compile to lowercase. Apply
-    // the placement rule to that same identity so `<c-Element>` cannot evade
-    // the `<c-element>` restriction and `<c-IF>` cannot evade the reserved-tag
-    // restriction.
-    let normalized_tag_name = tag_name.to_ascii_lowercase();
-    let is_component_boundary = normalized_tag_name.starts_with("c-")
-        && normalized_tag_name != C_ELEMENT_TAG
-        && !RESERVED_TAG_NAMES.contains(&normalized_tag_name.as_str());
+    let is_component_boundary = is_component_boundary_tag(tag_name);
 
     for attr in node.attrs() {
         let name = attr.key.content.as_str();
@@ -1303,10 +1518,9 @@ fn is_client_props_attr(name: &str) -> bool {
 }
 
 fn is_component_boundary_tag(tag_name: &str) -> bool {
-    let normalized = tag_name.to_ascii_lowercase();
-    normalized.starts_with("c-")
-        && normalized != C_ELEMENT_TAG
-        && !RESERVED_TAG_NAMES.contains(&normalized.as_str())
+    has_citry_component_prefix(tag_name)
+        && !citry_component_tag_eq(tag_name, C_ELEMENT_TAG)
+        && !is_reserved_citry_tag_identity(tag_name)
 }
 
 fn is_component_boundary_handler_attr(name: &str) -> bool {
@@ -1324,18 +1538,16 @@ fn is_component_tag_client_binding_attr(name: &str) -> bool {
 /// the `#c-*` channel (it is framework metadata, never one of the tag's
 /// inputs), so this is the single place its placement is decided:
 ///
-/// - `#c-key` belongs on a plain HTML element (where it is the morph pairing
-///   key) or on a component tag (where it keys the child instance). The
-///   reserved special tags (`<c-if>`, `<c-slot>`, `<c-fill>`, ...) are
-///   neither, so a key there is rejected. `<c-component>` and `<c-element>`
-///   are not in the reserved list on purpose: they behave as component tags.
-/// - `#c-ignore` belongs on a plain HTML element only. On a `<c-*>` tag the
-///   marker would sit on a component instance's root element, which the morph
-///   opt-out does not support (skipping a root desynchronizes the instance
-///   registry from the DOM), so the error points at the supported placements.
+/// - `#c-key` and `#c-ignore` belong on plain HTML elements or component
+///   identity tags. On an element they control ordinary morph behavior; on a
+///   component tag they describe the child's DOM range. `<c-component>` is a
+///   component identity tag, while `<c-element>` keeps ordinary selected-
+///   element semantics.
+/// - The reserved structural tags (`<c-if>`, `<c-for>`, `<c-slot>`,
+///   `<c-fill>`, `<c-raw>`) render no identity of their own, so both metadata
+///   members are rejected there.
 fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
-    let is_c_tag = tag_name.starts_with("c-");
 
     for attr in node.attrs() {
         if attr.kind != HtmlAttrKind::Meta {
@@ -1347,7 +1559,7 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
         let (line, col) = attr.token.line_col;
         match attr.key.content.as_str() {
             META_ATTR_KEY => {
-                if RESERVED_TAG_NAMES.contains(&tag_name) {
+                if is_reserved_citry_tag_identity(tag_name) {
                     return Err(context.error_from_token(
                         &attr.token,
                         format!(
@@ -1358,23 +1570,12 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
                 }
             }
             META_ATTR_IGNORE => {
-                // The reserved special tags render no element of their own, so
-                // the fix differs from the component-tag case below.
-                if RESERVED_TAG_NAMES.contains(&tag_name) {
+                if is_reserved_citry_tag_identity(tag_name) {
                     return Err(context.error_from_token(
                         &attr.token,
                         format!(
-                            "'{}' is not supported on '<{}>' (line {}, column {}). Put it on the HTML element whose subtree should be left alone, or on a wrapper element.",
+                            "'{}' is not supported on '<{}>' (line {}, column {}). It belongs on a plain HTML element (the ignored subtree) or on a component tag (the ignored component range).",
                             META_ATTR_IGNORE, tag_name, line, col
-                        ),
-                    ));
-                }
-                if is_c_tag {
-                    return Err(context.error_from_token(
-                        &attr.token,
-                        format!(
-                            "'{}' is not supported on '<{}>' (line {}, column {}): it would opt out a component instance's root element. Put it on an element inside the child's own template below the template's root element, or on a wrapper element around '<{}>'.",
-                            META_ATTR_IGNORE, tag_name, line, col, tag_name
                         ),
                     ));
                 }
@@ -1407,16 +1608,11 @@ fn validate_meta_attr_placement(node: &Node, context: &ParserContext) -> Result<
 /// value by design (`c-else`, `c-empty`).
 fn validate_attribute_values(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     let tag_name = node.tag_name();
-    // User-facing component names compile to lowercase. The dynamic built-ins
-    // are registered components too, so case variants such as `<c-Component>`
-    // reach the same runtime target and must not bypass their `c-is` contract.
-    let is_dynamic_builtin = tag_name.eq_ignore_ascii_case(C_COMPONENT_TAG)
-        || tag_name.eq_ignore_ascii_case(C_ELEMENT_TAG);
 
     for attr in node.attrs() {
         let attr_name = attr.key.content.as_str();
 
-        if is_dynamic_builtin && attr_name == "is" {
+        if is_dynamic_target_static_attr(tag_name, attr_name) {
             let has_nonempty_value = attr
                 .inner_value
                 .as_ref()
@@ -1450,7 +1646,7 @@ fn validate_attribute_values(node: &Node, context: &ParserContext) -> Result<(),
 
         if attr.kind == HtmlAttrKind::Template {
             let expression_only = attr_name == "c-bind"
-                || (is_dynamic_builtin && attr_name == "c-is")
+                || is_dynamic_target_expr_attr(tag_name, attr_name)
                 || (matches!(tag_name, C_SLOT_TAG | C_FILL_TAG) && attr_name == "c-name")
                 || (tag_name == C_SLOT_TAG && attr_name == "c-required");
             if expression_only {
@@ -1606,7 +1802,7 @@ fn validate_fill_placement(
         }
 
         // If we find a reserved tag, raise error
-        if RESERVED_TAG_NAMES.contains(&parent_tag_name) {
+        if is_reserved_citry_tag_identity(parent_tag_name) {
             return Err(context.error_from_token(
                 start_tag_token,
                 format!(
@@ -1619,7 +1815,7 @@ fn validate_fill_placement(
         // If the tag doesn't start with 'c-', it's a regular HTML tag (e.g. '<div>') - raise error
         // NOTE: Regular HTML tags can be INSIDE `<c-fill>`, but not the other way around,
         // as <c-fill> mark the start of a content block.
-        if !parent_tag_name.starts_with("c-") {
+        if !has_citry_component_prefix(parent_tag_name) {
             return Err(context.error_from_token(
                 start_tag_token,
                 format!(
@@ -2580,25 +2776,31 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
                 && !(is_component_boundary && is_component_boundary_handler_attr(name))
         })
         .collect();
-    let attr_names_set: HashSet<&str> = attr_names.iter().copied().collect();
     let has_c_bind = attrs.iter().any(|attr| attr.key.content == "c-bind");
 
     // Check if this tag has validation rules - first check built-in rules, then user-provided rules.
     // User rules are keyed by lowercase tag name: component tags match case-insensitively
     // everywhere else (the compiler lowercases component names), so `<c-MyCard>` and
     // `<c-mycard>` validate against the same rules.
-    let tag_name_lower = tag_name.to_lowercase();
-    let (allowed_attrs, required_attrs) = if let Some(builtin_rules) = TAG_ATTR_RULES.get(tag_name)
-    {
-        // Use built-in rules directly
-        (&builtin_rules.allowed_attrs, &builtin_rules.required_attrs)
-    } else if let Some(user_rules) = context.user_rules.get(tag_name_lower.as_str()) {
-        // Use user-provided rules
-        (&user_rules.allowed_attrs, &user_rules.required_attrs)
+    let tag_name_lower = tag_name.to_ascii_lowercase();
+    let builtin_tag_name = if citry_component_tag_eq(tag_name, C_COMPONENT_TAG) {
+        C_COMPONENT_TAG
+    } else if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        C_ELEMENT_TAG
     } else {
-        // No rules defined for this tag - allow any attributes (may be set dynamically with c-bind)
-        return Ok(());
+        tag_name
     };
+    let (allowed_attrs, required_attrs) =
+        if let Some(builtin_rules) = TAG_ATTR_RULES.get(builtin_tag_name) {
+            // Use built-in rules directly
+            (&builtin_rules.allowed_attrs, &builtin_rules.required_attrs)
+        } else if let Some(user_rules) = context.user_rules.get(tag_name_lower.as_str()) {
+            // Use user-provided rules
+            (&user_rules.allowed_attrs, &user_rules.required_attrs)
+        } else {
+            // No rules defined for this tag - allow any attributes (may be set dynamically with c-bind)
+            return Ok(());
+        };
 
     // Validate allowed attributes
     // - If `allowed_attrs` is `None`, any attributes are allowed.
@@ -2685,7 +2887,17 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
         for required_group in required_attrs {
             // Check if the tag contains at least one of the attributes from the required group
             let has_any_required = required_group.iter().any(|required_attr_name: &String| {
-                attr_names_set.contains(required_attr_name.as_str())
+                attr_names.iter().any(|attr_name| {
+                    if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+                        match required_attr_name.as_str() {
+                            "is" => is_dynamic_target_static_attr(tag_name, attr_name),
+                            "c-is" => is_dynamic_target_expr_attr(tag_name, attr_name),
+                            _ => required_attr_name == attr_name,
+                        }
+                    } else {
+                        required_attr_name == attr_name
+                    }
+                })
             });
 
             // If none matched, report error.
@@ -2758,9 +2970,8 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
 fn validate_attribute_conflicts(node: &Node, context: &ParserContext) -> Result<(), ParseError> {
     let attrs = node.attrs();
     let tag_name = node.tag_name();
-    let normalized_tag_name = tag_name.to_ascii_lowercase();
     let accumulates_html_attrs =
-        normalized_tag_name == C_ELEMENT_TAG || !normalized_tag_name.starts_with("c-");
+        citry_component_tag_eq(tag_name, C_ELEMENT_TAG) || !has_citry_component_prefix(tag_name);
     let component_boundary = is_component_boundary_tag(tag_name);
 
     // Track full attribute names for duplicate detection (except c-bind)
@@ -2785,7 +2996,12 @@ fn validate_attribute_conflicts(node: &Node, context: &ParserContext) -> Result<
 
         // Case 1: Check for duplicate attribute names
         // E.g. `<div class="x" class="y">` is invalid.
-        if !seen_full_names.insert(attr_name.clone()) {
+        let full_name_identity = if accumulates_html_attrs {
+            attr_name.to_ascii_lowercase()
+        } else {
+            attr_name.clone()
+        };
+        if !seen_full_names.insert(full_name_identity) {
             return Err(context.error_from_token(
                 &attr.token,
                 format!(
@@ -2801,11 +3017,16 @@ fn validate_attribute_conflicts(node: &Node, context: &ParserContext) -> Result<
             .iter()
             .any(|group| group.contains(&attr_name.as_str()));
         if attr.kind != HtmlAttrKind::Meta && !is_control_flow_directive {
-            let logical_name = attr_name.strip_prefix("c-").unwrap_or(attr_name);
+            let authored_logical_name = attr_name.strip_prefix("c-").unwrap_or(attr_name);
+            let logical_name = if accumulates_html_attrs {
+                authored_logical_name.to_ascii_lowercase()
+            } else {
+                authored_logical_name.to_string()
+            };
             let is_accumulator =
-                accumulates_html_attrs && matches!(logical_name, "class" | "style");
+                accumulates_html_attrs && matches!(logical_name.as_str(), "class" | "style");
             if !is_accumulator {
-                if let Some(previous_name) = seen_logical_names.get(logical_name) {
+                if let Some(previous_name) = seen_logical_names.get(&logical_name) {
                     let source_ordered_client_binding = component_boundary
                         && is_component_tag_client_binding_attr(previous_name)
                         && is_component_tag_client_binding_attr(attr_name);
@@ -2819,7 +3040,7 @@ fn validate_attribute_conflicts(node: &Node, context: &ParserContext) -> Result<
                         ));
                     }
                 } else {
-                    seen_logical_names.insert(logical_name.to_string(), attr_name.clone());
+                    seen_logical_names.insert(logical_name, attr_name.clone());
                 }
             }
         }
@@ -2954,8 +3175,8 @@ fn validate_fill_names(
 ) -> Result<(), ParseError> {
     // Only validate component nodes with body
     let tag_name = node.tag_name();
-    let is_component = tag_name == C_COMPONENT_TAG
-        || (tag_name.starts_with("c-") && !RESERVED_TAG_NAMES.contains(&tag_name));
+    let is_component =
+        has_citry_component_prefix(tag_name) && !is_reserved_citry_tag_identity(tag_name);
 
     if !is_component {
         return Ok(());
@@ -2967,9 +3188,16 @@ fn validate_fill_names(
     // validation: component tags match case-insensitively).
     let no_required: Vec<String> = vec![];
     let no_slot_data_fields: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    let tag_name_lower = tag_name.to_lowercase();
+    let tag_name_lower = tag_name.to_ascii_lowercase();
+    let builtin_tag_name = if citry_component_tag_eq(tag_name, C_COMPONENT_TAG) {
+        C_COMPONENT_TAG
+    } else if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) {
+        C_ELEMENT_TAG
+    } else {
+        tag_name
+    };
     let (allowed_slots, required_slots, slot_data_fields) =
-        if let Some(builtin_rules) = TAG_ATTR_RULES.get(tag_name) {
+        if let Some(builtin_rules) = TAG_ATTR_RULES.get(builtin_tag_name) {
             // Built-in rules for built-in tags
             (
                 &builtin_rules.allowed_slots,

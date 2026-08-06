@@ -18,7 +18,7 @@ test-by-test disposition, every applicable Citry behavior has native regression
 coverage, and the temporary `_djc_tests/` staging snapshot was retired with
 maintainer approval. The pinned upstream commit and source/docs reference
 snapshots remain reproducible via
-[`scripts/vendor_djc_reference.sh`](../../scripts/vendor_djc_reference.sh).
+[`scripts/vendor_djc_reference.sh`](#vendor_djc_referencesh).
 
 ---
 
@@ -298,7 +298,7 @@ by reading every citry assertion, not by name-matching.
 
 | Test group / behavior | Status | Notes |
 |---|---|---|
-| `TestFormatAttributes` (8): simple, multiple, escapes special chars, safe-string not escaped, result is `SafeString`, None/False omit, True renders bare | ✅ Already-covered | [`test_attrs.py`](../../packages/py/citry/tests/test_attrs.py) `TestFormatAttrs::{test_simple_attribute, test_multiple_attributes, test_escapes_special_characters, test_does_not_escape_safe_strings, test_result_is_safe_string, test_none_value_omits_attribute, test_false_value_omits_attribute, test_true_value_renders_bare_attribute}`. Same guarantees; citry escapes `'` as the numeric entity `&#39;` where djc emits `&#x27;` (same character, different codec, not a behavior gap). |
+| `TestFormatAttributes` (8): simple, multiple, escapes special chars, trusted markup not escaped, result is `Markup`, None/False omit, True renders bare | ✅ Already-covered | [`test_attrs.py`](../../packages/py/citry/tests/test_attrs.py) `TestFormatAttrs::{test_simple_attribute, test_multiple_attributes, test_escapes_special_characters, test_does_not_escape_markup, test_result_is_markup, test_none_value_omits_attribute, test_false_value_omits_attribute, test_true_value_renders_bare_attribute}`. Same guarantees; citry escapes `'` as the numeric entity `&#39;` where djc emits `&#x27;` (same character, different codec, not a behavior gap). |
 | `TestMergeAttributes` classes and styles (single dict, append, empty, nested list/dict class values, style None-keeps / False-removes / later-wins, first-seen order) | ✅ Already-covered | [`test_attrs.py`](../../packages/py/citry/tests/test_attrs.py) `TestMergeAttrs::{test_single_dict, test_appends_classes_across_dicts, test_merge_with_empty_dict, test_merge_classes, test_merge_styles, test_merge_class_with_none_values, test_merge_class_with_false_values, test_merge_style_with_none_values, test_merge_style_with_false_values}`. `test_merge_classes` and `test_merge_styles` assert the identical inputs and byte-for-byte the djc expected output. |
 | `TestMergeAttributes` overlapping plain (non class/style) keys: djc space-joins (`foo="bar baz"`) | ♻️ Replace (deliberate divergence) | citry resolves plain keys **last-one-wins** (`foo="baz"`); [`test_attrs.py`](../../packages/py/citry/tests/test_attrs.py) `TestMergeAttrs::test_overlapping_keys_last_one_wins` asserts and documents this. Catalogued as [Divergences for djc users](#divergences-for-djc-users-migration-guide-seed) #2. |
 | `TestParseStringStyle` (7): single, multiple, comments, whitespace, empty, no-delimiter, incomplete | ✅ Already-covered | [`test_attrs.py`](../../packages/py/citry/tests/test_attrs.py) `TestParseStringStyle::{test_single_style, test_multiple_styles, test_with_comments, test_with_whitespace, test_empty_string, test_no_delimiters, test_incomplete_style}`. |
@@ -526,7 +526,7 @@ instead of the declaring class's, an absolute `Path` in `Dependencies` was
 emitted as a URL instead of inlined, and the dead-slot check could be bypassed
 by rendering twice. The earlier seeded row was wrong in both directions: it
 called inheritance/merge covered (only single-base leaf cases were) and lumped
-`SafeString`/`PathLike` into Drop (citry supports both).
+trusted markup/`PathLike` into Drop (citry supports both).
 
 <details>
 <summary>Test groups</summary>
@@ -595,7 +595,7 @@ does not port.
 | Default document emission (CSS to `<head>`, JS to `<body>`), child deps bubble, same component emits once, resolve dedupes records | ✅ Already-covered | [`test_deps_emission.py`](../../packages/py/citry/tests/test_deps_emission.py) `TestDocumentEmission::{test_js_and_css_land_in_default_locations, test_child_component_deps_bubble_to_the_page, test_same_component_rendered_twice_emits_once, test_resolve_records_dedupes_duplicate_records}`. |
 | Explicit dependency-tag placement overrides default (djc `{% component_js/css_dependencies %}` to citry `<c-js>` / `<c-css>`) | ✅ Already-covered | `TestPlaceholders::{test_c_js_and_c_css_mark_the_spots, test_first_placeholder_wins_later_ones_render_nothing, test_placeholders_removed_even_without_deps}`. |
 | `deps_strategy='ignore'` opts out; invalid strategy/position raise `ValueError` | ✅ Already-covered | `TestStrategiesAndPositions::{test_ignore_inserts_nothing_and_drops_placeholders, test_invalid_values_raise}`. |
-| `Media`/`Dependencies` url + inline entries, `Script`/`Style` objects, prerendered `SafeString` tags, deps load before component JS | ✅ Already-covered | `TestDependenciesEntries` (6 methods). |
+| `Media`/`Dependencies` url + inline entries, `Script`/`Style` objects, pre-rendered `Markup` tags, deps load before component JS | ✅ Already-covered | `TestDependenciesEntries` (6 methods). |
 | Component-id marker on the root element (single/multiroot/nested/loops) | ✅ Already-covered | [`test_markers.py`](../../packages/py/citry/tests/test_markers.py). |
 | Component inline JS/CSS containing its own end tag raises, naming the component | ✅ Ported this session | [`test_deps_emission.py`](../../packages/py/citry/tests/test_deps_emission.py) `TestComponentAssetEndTagGuard::{test_component_js_containing_its_end_tag_raises, test_component_css_containing_its_end_tag_raises}`. Divergence: citry raises `ValueError` where djc raised `RuntimeError` (catalog #4). |
 | `on_dependencies` hook returning `None` is a no-op (component assets survive) | ✅ Ported this session | `TestOnDependenciesHooks::test_returning_none_keeps_the_component_assets`. |
@@ -1749,7 +1749,7 @@ Chronological record of triage and porting work. Newest entries at the bottom.
 - Triaged all 50 `test_component_media.py` methods: 15 already-covered, 22
   ported, 7 replace, 5 drop, 1 skip-Django. The earlier seeded row was wrong in
   both directions (inheritance/merge was only covered for single-base leaf
-  cases; `SafeString`/`PathLike` are supported, not Django-only).
+  cases; trusted markup/`PathLike` are supported, not Django-only).
 - The audit surfaced three real bugs, each independently probe-confirmed and
   handed to a fixer agent before any porting: an inherited
   `template_file`/`js_file`/`css_file` resolved against the subclass's
@@ -2492,3 +2492,76 @@ first row: install, create a `Citry` instance, register components.
 
 New rows are appended as triage proceeds; keep them numbered so the eventual
 guide can link to a stable id.
+
+## `vendor_djc_reference.sh`
+
+```sh
+#!/usr/bin/env bash
+#
+# Vendor the django-components reference snapshots used during the citry
+# migration. These snapshots are gitignored (they are a large third-party
+# copy); this script is the tracked, reproducible record of WHAT was vendored
+# and from WHERE.
+#
+# Two snapshots are produced under packages/py/citry/ :
+#   _djc_reference/             <- upstream src/django_components/ (engine source)
+#   _djc_reference_docs_site/   <- upstream docs_site/ (the docs-site port basis)
+#
+# The engine snapshot is cited by file:line across docs/design/*.md, so its
+# contents must be reproducible. Re-running this script against the pinned
+# commit reproduces the exact snapshot the design docs were written against.
+# The completed test migration records pinned upstream test links directly in
+# docs/design/migration_djc_tests.md; it no longer keeps a local test copy.
+#
+# Usage:
+#   scripts/vendor_djc_reference.sh [path-to-django-components-checkout]
+#
+# Default checkout path is $DJC_CHECKOUT or /Users/mac/repos/django-components.
+
+set -euo pipefail
+
+# --- Provenance -------------------------------------------------------------
+# Upstream: https://github.com/django-components/django-components
+# Branch at vendor time: jo-docs-mkdocs-migrate (PR #1664, the docs-site work)
+# Pinned commit:
+DJC_COMMIT="5d4d4f5d13dd06c80ba389f30fc63fdbb71cda75"  # 2026-06-20
+# When PR #1664 merges to master, re-pin this to the merge commit on master.
+
+CHECKOUT="${1:-${DJC_CHECKOUT:-/Users/mac/repos/django-components}}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DST="$REPO_ROOT/packages/py/citry"
+
+if [[ ! -d "$CHECKOUT/.git" ]]; then
+  echo "error: '$CHECKOUT' is not a git checkout. Clone django-components there," >&2
+  echo "       or pass the path / set DJC_CHECKOUT." >&2
+  exit 1
+fi
+
+have="$(git -C "$CHECKOUT" rev-parse HEAD)"
+if [[ "$have" != "$DJC_COMMIT" ]]; then
+  echo "warning: checkout is at $have, expected pinned $DJC_COMMIT." >&2
+  echo "         Run: git -C '$CHECKOUT' fetch && git -C '$CHECKOUT' checkout $DJC_COMMIT" >&2
+  echo "         Continuing anyway (Ctrl-C to abort)..." >&2
+fi
+
+# Excludes: generated output and the 1 GB versions/ history are not part of the
+# reference (they are regenerated by the citry builder, not ported from).
+COMMON_EXCLUDES=(--exclude='__pycache__/' --exclude='*.pyc'
+                 --exclude='.pytest_cache/' --exclude='.ruff_cache/'
+                 --exclude='.mypy_cache/')
+
+echo "Vendoring engine source -> _djc_reference/"
+rsync -a --delete "${COMMON_EXCLUDES[@]}" \
+  "$CHECKOUT/src/django_components/" "$DST/_djc_reference/"
+
+echo "Vendoring docs site     -> _djc_reference_docs_site/"
+# versions/ is 1 GB of built HTML history; staticfiles/ is collectstatic output;
+# .cache/ is the generated OpenGraph social-card image cache. All regenerated,
+# none are part of the source to port from.
+rsync -a --delete "${COMMON_EXCLUDES[@]}" \
+  --exclude='versions/' --exclude='staticfiles/' --exclude='.cache/' \
+  "$CHECKOUT/docs_site/" "$DST/_djc_reference_docs_site/"
+
+echo "Done. Engine: $(find "$DST/_djc_reference" -name '*.py' | wc -l | tr -d ' ') py files."
+echo "      Docs:   $(du -sh "$DST/_djc_reference_docs_site" | cut -f1) (versions/ excluded)."
+```

@@ -158,10 +158,10 @@ cross-check against the live workflows, not ground truth.
 - **Nightly Rust toolchain** (edition 2024), pinned in
   [`rust-toolchain.toml`](../../rust-toolchain.toml).
 - **The vendored ruff submodule crates are Cargo workspace members.** Any
-  `cargo test`/`cargo clippy` must scope `-p` to the four first-party crates
-  (`citry_core_py`, `citry_html_transform`, `citry_template_parser`,
-  `python_safe_eval`), or it runs ruff's own suite. Checkout needs
-  `submodules: recursive`.
+  `cargo test`/`cargo clippy` must scope `-p` to the five first-party crates
+  (`citry_core_py`, `citry_html_transform`, `citry_template_formatter`,
+  `citry_template_parser`, `python_safe_eval`), or it runs ruff's own suite.
+  Checkout needs `submodules: recursive`.
 - **`citry` ships non-Python assets** (`py.typed`, the client JS). Its wheel
   and sdist must both contain them.
 - **Independent versions and the new tag scheme** (section 2, decisions 4-5).

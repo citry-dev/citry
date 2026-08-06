@@ -205,7 +205,7 @@ def _collect_event_requests(page: Any) -> list[dict]:
     captured: list[dict] = []
 
     def record(request: Any) -> None:
-        if "/ext/events/" not in request.url or request.url.endswith("/runtime.js"):
+        if "/ext/events/" not in request.url or "/runtime.js" in request.url:
             return
         body = None
         try:

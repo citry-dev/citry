@@ -24,7 +24,7 @@ Run every command in this README from the repository root.
 | `_internal/` | The site builder and its private components |
 | `settings.yml` | Site identity, links, Markdown profiles, and product policy |
 | `reference.yml` | Ordered Reference pages, Python symbols, and authored API anchors |
-| `ui_library.yml` | Ordered Citry UI source-page projections |
+| `ui_library.yml` | Ordered Citry UI source pages and public routes |
 | `redirects.yml` | Published clean-URL redirects |
 | `people_sources.yml` | People-generator repositories, featured people, and ignored bots |
 | `docs_versions.yml` | Version selection and publication policy |
@@ -195,8 +195,8 @@ the browser runtime:
 
 ```html
 <c-live-code
-  path="packages/py/citry_ui/citry_ui/components/ctabs/snippets/account_settings.py"
-  title="Account settings tabs"
+  path="packages/py/citry_ui/citry_ui/components/ctabs/snippets/night_sky_guide.py"
+  title="Night sky guide"
   static
 />
 ```
@@ -233,6 +233,90 @@ example
 
 Python prints the value through the `__main__` block. The final expression is
 otherwise harmless, and it gives the browser executor the value to preview.
+
+### Add a Citry UI component preview
+
+Citry UI component pages use a result-first preview when the reader needs to
+see and operate a component before opening its source. Keep the canonical
+module beside its component and reference it from that family's `api.md`:
+
+```html
+<c-ui-demo
+  path="packages/py/citry_ui/citry_ui/components/ctabs/snippets/night_sky_guide.py"
+  title="Night sky guide"
+/>
+```
+
+The path must stay under the same component directory as the declaring
+`api.md`. The module exposes a component-like value as `preview` and ends with
+that expression:
+
+```python
+preview = NightSkyGuide()
+
+preview
+```
+
+The preview value must use Citry's default instance, matching the browser
+snippet runtime and the standalone preview document that the builder owns.
+
+Add host-owned controls with an optional `preview_controls` tuple:
+
+```python
+preview_controls = (
+    {
+        "name": "variant",
+        "label": "Variant",
+        "type": "select",
+        "default": "underline",
+        "options": (("underline", "Underline"), ("pill", "Pill")),
+    },
+    {
+        "name": "disabled",
+        "label": "Disable all Tabs",
+        "type": "checkbox",
+        "default": False,
+    },
+)
+```
+
+The builder validates control names, labels, defaults, and options. It renders
+the controls in an open, collapsible section between the demo header and
+preview. They are documentation tooling, not rendered component content.
+
+The host sends current values to the sandboxed preview. Handle them on the
+preview root:
+
+```citry-html
+<section
+  x-data="{ variant: 'underline', disabled: false }"
+  @citry-ui-preview-controls.window="Object.assign($data, $event.detail)"
+>
+  ...
+</section>
+```
+
+Controls must map to documented component inputs or CSS variables. The current
+schema supports `select` with `(value, label)` options and `checkbox` with a
+Boolean default.
+
+The docs builder derives
+`/ui-library/components/<slug>/_previews/<module-name>/` from the catalog and
+filename. It renders that private document ahead of deployment and places it
+before a collapsed, highlighted source disclosure. Private preview documents
+are excluded from navigation, search, sitemap and LLM page records, while the
+owning page's Markdown companion and LLM projection retain the canonical source
+and a link to the rendered result.
+
+Rendered content uses a slightly smaller type scale and the same light/dark
+surface as docs code blocks. The parent page sends only the resolved theme name
+to the sandboxed preview; the iframe does not gain same-origin access.
+
+Do not add a second route declaration or a copy under `docs_site/content/`.
+The local authoring server adds **Try live** and loads this exact source into
+the shared inline editor only after activation. Deployed docs omit the action
+until a published `citry-ui` wheel is pinned in the browser runtime; the built
+preview and source remain fully usable without it.
 
 ## Publish a Blog post
 
@@ -515,18 +599,11 @@ pipeline ordering.
 
 To change Reference order or symbol ownership, edit `reference.yml`. Authored
 Reference entries declare their Markdown source and stable anchors there. To
-add or reorder Citry UI pages, edit `ui_library.yml`. Each family also declares
-the API headings its source page must provide, so adding a family does not
-require changing an internal Python registry. Then synchronize the public
-copies:
-
-```bash
-uv run --no-sync python -m docs_site sync-ui-library
-```
-
-The command validates the complete catalog and all source front matter before
-writing, copies every declared page byte-for-byte, and removes stale projected
-Markdown files. The same catalog drives sidebar order and the UI overview.
+add or reorder Citry UI pages, edit `ui_library.yml`. A component-owned
+`api.md` supplies the guide, and its sibling `api.yml` supplies a structured API
+reference. Both files are required. The builder validates and combines them at the catalog
+route. The same catalog drives sidebar order and the UI overview; there is no
+synchronized copy under `docs_site/content`.
 Add a published redirect to `redirects.yml`; redirect chains and unsafe paths
 are rejected.
 

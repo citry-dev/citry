@@ -1,0 +1,22 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Citry attributes inside Python template strings",
+	"scopeName": "citry.html.attributes.injection",
+	"injectionSelector": "L:meta.embedded.block.citry-html meta.tag -comment -string -meta.embedded.inline.python.citry -meta.embedded.inline.javascript.citry -meta.attribute.event.citry -meta.attribute.state-handler.citry -text.plain.citry.raw",
+	"patterns": [
+		{ "include": "citry.html.injection#template-comment" },
+		{ "include": "citry.html.injection#nested-template-attribute" },
+		{ "include": "citry.html.injection#python-attribute" },
+		{ "include": "citry.html.injection#event-attribute" },
+		{ "include": "citry.html.injection#state-handler-attribute" },
+		{ "include": "citry.html.injection#javascript-attribute" },
+		{
+			"match": "(?x)(?<![[:alnum:]_.:-])(?:\\$c-props|\\#c-(?:key|ignore)|:c-[^[:space:]=/>]+|c-(?:\\$c-props|@[^[:space:]=/>]+|class))(?=[[:space:]=/>\\{])",
+			"name": "entity.other.attribute-name.citry"
+		},
+		{
+			"match": "[^\\s=/>\\{]+(?=\\{#)",
+			"name": "entity.other.attribute-name.citry"
+		}
+	]
+}

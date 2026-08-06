@@ -1,0 +1,216 @@
+schema_version: 1
+family: table
+
+components:
+  - CTable
+
+inputs:
+  - id: ctable-server-inputs
+    component: CTable
+    channel: server
+    column_widths: [fit, 13rem, 9rem, auto]
+    entries:
+      - {id: columns, name: columns, type: 'Sequence[CTableColumn]', default: {kind: required}, effect: Defines the structural column schema.}
+      - {id: rows, name: rows, type: 'Sequence[CTableRow]', default: {kind: required}, effect: Defines the keyed server-owned collection.}
+      - id: state
+        name: state
+        type: {display: '"ready" | "loading" | "error"', interfaces: [CTableState]}
+        default: {kind: literal, value: ready}
+        effect: Selects body output. Ready with no rows selects empty output.
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets wrapper and caption identity.}
+      - id: variant
+        name: variant
+        type: {display: '"line" | "outline"', interfaces: [CTableVariant]}
+        default: {kind: literal, value: line}
+        effect: Selects border presentation.
+      - id: density
+        name: density
+        type: {display: '"default" | "comfortable" | "compact"', interfaces: [CTableDensity]}
+        default: {kind: literal, value: comfortable}
+        effect: Selects cell sizing.
+      - {id: striped, name: striped, type: bool, default: {kind: literal, value: false}, effect: Adds alternating ready-row backgrounds.}
+      - {id: hover, name: hover, type: bool, default: {kind: literal, value: false}, effect: Adds pointer hover feedback without adding row behavior.}
+      - {id: sticky-header, name: sticky_header, type: bool, default: {kind: literal, value: false}, effect: Sticks header cells within the scroll ancestor.}
+      - {id: column-borders, name: column_borders, type: bool, default: {kind: literal, value: false}, effect: Adds vertical separators.}
+      - id: layout
+        name: layout
+        type: {display: '"auto" | "fixed"', interfaces: [CTableLayout]}
+        default: {kind: literal, value: auto}
+        effect: Selects native `table-layout`.
+      - id: overflow
+        name: overflow
+        type: {display: '"auto" | "visible"', interfaces: [CTableOverflow]}
+        default: {kind: literal, value: auto}
+        effect: Selects horizontal wrapper behavior.
+      - id: caption-side
+        name: caption_side
+        type: {display: '"top" | "bottom"', interfaces: [CTableCaptionSide]}
+        default: {kind: literal, value: top}
+        effect: Places the native caption.
+      - {id: scroll-label, name: scroll_label, type: 'non-empty str | None', default: {kind: derived, display: Uses the caption or native Table ARIA name when available.}, effect: Names the `overflow="auto"` focusable region.}
+      - {id: loading-label, name: loading_label, type: non-empty str, default: {kind: literal, value: Loading data...}, effect: Sets the loading fallback and persistent polite announcement text.}
+      - {id: empty-label, name: empty_label, type: non-empty str, default: {kind: literal, value: No data.}, effect: Sets the empty fallback and persistent polite announcement text.}
+      - {id: error-label, name: error_label, type: non-empty str, default: {kind: literal, value: Unable to load data.}, effect: Sets the error fallback and persistent polite announcement text.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds wrapper classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds wrapper inline styles from CSS text, a property mapping, or a nested sequence and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed wrapper attributes; prefer the top-level inputs for class and style.}
+      - {id: table-attrs, name: table_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed native table and ARIA attributes.}
+
+slots:
+  - id: ctable-slots
+    component: CTable
+    entries:
+      - {id: caption, name: caption, required: false, data: {display: '{}', interfaces: [CTableCaptionSlotData]}, fallback: No caption.}
+      - id: header
+        name: header
+        required: false
+        data: {display: '{column: CTableColumn, column_index: int}', interfaces: [CTableHeaderSlotData]}
+        fallback: Escaped column label.
+      - id: cell
+        name: cell
+        required: false
+        data: {display: '{row: CTableRow, column: CTableColumn, cell: CTableCell, row_index: int, column_index: int}', interfaces: [CTableCellSlotData]}
+        fallback: Escaped or component-like cell value.
+      - id: footer
+        name: footer
+        required: false
+        data: {display: '{column: CTableColumn, value: object | None, column_index: int}', interfaces: [CTableFooterSlotData]}
+        fallback: Escaped or component-like column footer value.
+      - {id: empty, name: empty, required: false, data: {display: '{}', interfaces: [CTableEmptySlotData]}, fallback: '`empty_label`'}
+      - {id: loading, name: loading, required: false, data: {display: '{}', interfaces: [CTableLoadingSlotData]}, fallback: '`loading_label`'}
+      - {id: error, name: error, required: false, data: {display: '{}', interfaces: [CTableErrorSlotData]}, fallback: '`error_label`'}
+
+events: []
+methods: []
+
+css:
+  - id: ctable-css-variables
+    component: CTable
+    entries:
+      - {id: cui-table-background, name: --cui-table-background, type: color, purpose: Table surface., default: Canvas}
+      - {id: cui-table-foreground, name: --cui-table-foreground, type: color, purpose: Primary text., default: CanvasText}
+      - {id: cui-table-muted-foreground, name: --cui-table-muted-foreground, type: color, purpose: Caption and subdued status text., default: Muted CanvasText mix.}
+      - {id: cui-table-border-color, name: --cui-table-border-color, type: color, purpose: 'Row, outline, footer, and optional column borders.', default: Subtle CanvasText mix.}
+      - {id: cui-table-header-background, name: --cui-table-header-background, type: color, purpose: 'Header surface, including sticky headers.', default: Subtle CanvasText/Canvas mix.}
+      - {id: cui-table-footer-background, name: --cui-table-footer-background, type: color, purpose: Footer surface., default: Subtle CanvasText/Canvas mix.}
+      - {id: cui-table-striped-background, name: --cui-table-striped-background, type: color, purpose: Alternating ready-row surface., default: Subtle CanvasText/Canvas mix.}
+      - {id: cui-table-hover-background, name: --cui-table-hover-background, type: color, purpose: Ready-row pointer hover surface., default: Subtle Highlight/Canvas mix.}
+      - {id: cui-table-error-foreground, name: --cui-table-error-foreground, type: color, purpose: Error status text., default: Scheme-aware negative color.}
+      - {id: cui-table-focus-color, name: --cui-table-focus-color, type: color, purpose: Overflow-region focus ring., default: Highlight}
+      - {id: cui-table-radius, name: --cui-table-radius, type: length, purpose: Outline and wrapper radius., default: 0.625rem}
+      - {id: cui-table-cell-block-padding, name: --cui-table-cell-block-padding, type: length, purpose: Logical block cell padding., default: Density-derived length.}
+      - {id: cui-table-cell-inline-padding, name: --cui-table-cell-inline-padding, type: length, purpose: Logical inline cell padding., default: Density-derived length.}
+      - {id: cui-table-caption-padding, name: --cui-table-caption-padding, type: CSS padding shorthand, purpose: Caption spacing., default: 0.75rem 1rem}
+      - {id: cui-table-min-width, name: --cui-table-min-width, type: length, purpose: Minimum width before horizontal overflow., default: 32rem}
+      - {id: cui-table-sticky-offset, name: --cui-table-sticky-offset, type: length, purpose: Sticky header block offset., default: 0px}
+
+attributes:
+  - id: root
+    component: CTable
+    entries:
+      - {id: data-state, name: data-state, element: Root, type: '"ready" | "loading" | "error"', meaning: Mirrors effective body-output state.}
+      - {id: data-variant, name: data-variant, element: Root, type: '"line" | "outline"', meaning: Mirrors effective border presentation.}
+      - {id: data-density, name: data-density, element: Root, type: '"default" | "comfortable" | "compact"', meaning: Mirrors effective cell density.}
+      - {id: data-striped, name: data-striped, element: Root, type: present | absent, meaning: Mirrors striped-row presentation.}
+      - {id: data-hover, name: data-hover, element: Root, type: present | absent, meaning: Mirrors pointer-hover presentation.}
+      - {id: data-sticky-header, name: data-sticky-header, element: Root, type: present | absent, meaning: Mirrors sticky-header configuration.}
+      - {id: data-column-borders, name: data-column-borders, element: Root, type: present | absent, meaning: Mirrors column-border presentation.}
+      - {id: data-layout, name: data-layout, element: Root, type: '"auto" | "fixed"', meaning: Mirrors effective native table layout.}
+      - {id: data-overflow, name: data-overflow, element: Root, type: '"auto" | "visible"', meaning: Mirrors horizontal overflow behavior.}
+      - {id: data-caption-side, name: data-caption-side, element: Root, type: '"top" | "bottom"', meaning: Mirrors effective caption placement.}
+  - id: row
+    component: CTable
+    entries:
+      - {id: data-row-key, name: data-row-key, element: Ready row, type: string, meaning: Canonical row identity.}
+  - id: cell
+    component: CTable
+    entries:
+      - {id: data-column-key, name: data-column-key, element: 'Header, body, or footer cell', type: string, meaning: Canonical column identity.}
+      - {id: data-align, name: data-align, element: 'Header, body, or footer cell', type: '"start" | "center" | "end"', meaning: Logical cell alignment.}
+
+selectors:
+  - id: root
+    component: CTable
+    entries:
+      - {id: root, anchor: table-selector-root, selector: '[data-citry-ui-part="root"]', element: Root, purpose: 'Wrapper, scroll container, and `attrs` destination.'}
+      - {id: table, anchor: table-selector-table, selector: '[data-citry-ui-part="table"]', element: Native Table, purpose: Table and `table_attrs` destination.}
+      - {id: caption, anchor: table-selector-caption, selector: '[data-citry-ui-part="caption"]', element: Native caption, purpose: Optional caption hook.}
+      - {id: header, anchor: table-selector-header, selector: '[data-citry-ui-part="header"]', element: Header group, purpose: Native header group.}
+      - {id: header-row, anchor: table-selector-header-row, selector: '[data-citry-ui-part="header-row"]', element: Header row, purpose: Native header row.}
+      - {id: header-cell, anchor: table-selector-header-cell, selector: '[data-citry-ui-part="header-cell"]', element: Header cell, purpose: Column-header hook.}
+      - {id: body, anchor: table-selector-body, selector: '[data-citry-ui-part="body"]', element: Body group, purpose: Native body group.}
+      - {id: row, anchor: table-selector-row, selector: '[data-citry-ui-part="row"]', element: Ready row, purpose: Keyed row hook.}
+      - {id: cell, anchor: table-selector-cell, selector: '[data-citry-ui-part="cell"]', element: Body cell, purpose: Ready data-cell or row-header hook.}
+      - {id: state-row, anchor: table-selector-state-row, selector: '[data-citry-ui-part="state-row"]', element: State row, purpose: 'Loading, empty, or error row.'}
+      - {id: state-cell, anchor: table-selector-state-cell, selector: '[data-citry-ui-part="state-cell"]', element: State cell, purpose: Cell spanning every column.}
+      - {id: loading, anchor: table-selector-loading, selector: '[data-citry-ui-part="loading"]', element: Loading region, purpose: Loading status content.}
+      - {id: empty, anchor: table-selector-empty, selector: '[data-citry-ui-part="empty"]', element: Empty region, purpose: Empty status content.}
+      - {id: error, anchor: table-selector-error, selector: '[data-citry-ui-part="error"]', element: Error region, purpose: Error status content.}
+      - {id: footer, anchor: table-selector-footer, selector: '[data-citry-ui-part="footer"]', element: Native footer group, purpose: Optional summary group.}
+      - {id: footer-row, anchor: table-selector-footer-row, selector: '[data-citry-ui-part="footer-row"]', element: Native footer row, purpose: One summary row.}
+      - {id: footer-cell, anchor: table-selector-footer-cell, selector: '[data-citry-ui-part="footer-cell"]', element: Footer cell, purpose: Per-column summary cell.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-ctable-state, name: CTableState, definition: 'Literal["ready", "loading", "error"]'}
+      - {id: input-type-aliases-ctable-variant, name: CTableVariant, definition: 'Literal["line", "outline"]'}
+      - {id: input-type-aliases-ctable-density, name: CTableDensity, definition: 'Literal["default", "comfortable", "compact"]'}
+      - {id: input-type-aliases-ctable-align, name: CTableAlign, definition: 'Literal["start", "center", "end"]'}
+      - {id: input-type-aliases-ctable-layout, name: CTableLayout, definition: 'Literal["auto", "fixed"]'}
+      - {id: input-type-aliases-ctable-overflow, name: CTableOverflow, definition: 'Literal["auto", "visible"]'}
+      - {id: input-type-aliases-ctable-caption-side, name: CTableCaptionSide, definition: 'Literal["top", "bottom"]'}
+  - id: ctable-column
+    kind: record
+    name: CTableColumn
+    entries:
+      - {id: key, name: key, type: non-empty str, default: required, meaning: Unique column identity.}
+      - {id: label, name: label, type: non-empty str, default: required, meaning: Default escaped header content.}
+      - {id: row-header, name: row_header, type: bool, default: 'False', meaning: Renders body cells in this column as `<th scope="row">`.}
+      - {id: align, name: align, type: {display: '"start" | "center" | "end"', interfaces: [CTableAlign]}, default: '"start"', meaning: Sets logical header and cell alignment.}
+      - {id: header-attrs, name: header_attrs, type: 'Mapping[str, object] | None', default: None, meaning: Adds allowed native attributes to the column header.}
+      - {id: cell-attrs, name: cell_attrs, type: 'Mapping[str, object] | None', default: None, meaning: Adds defaults to every body cell in the column; a specific `CTableCell.attrs` value wins while class and style merge.}
+      - {id: footer, name: footer, type: 'object | None', default: None, meaning: Supplies fallback content for the optional footer cell. Any non-None value enables the footer.}
+      - {id: footer-attrs, name: footer_attrs, type: 'Mapping[str, object] | None', default: None, meaning: Adds allowed native attributes to the footer cell.}
+  - id: ctable-row
+    kind: record
+    name: CTableRow
+    entries:
+      - {id: key, name: key, type: non-empty str, default: required, meaning: Unique row and morph identity.}
+      - {id: cells, name: cells, type: 'Mapping[str, object | CTableCell]', default: required, meaning: Supplies exactly one value for every declared column key.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: None, meaning: Adds allowed native attributes to the row.}
+  - id: ctable-cell
+    kind: record
+    name: CTableCell
+    entries:
+      - {id: value, name: value, type: object, default: required, meaning: Default escaped or component-like cell content.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: None, meaning: Adds allowed native cell attributes.}
+  - {id: ctable-caption-slot-data, kind: record, name: CTableCaptionSlotData, entries: []}
+  - id: ctable-header-slot-data
+    kind: record
+    name: CTableHeaderSlotData
+    entries:
+      - {id: column, name: column, type: CTableColumn, meaning: Current column declaration.}
+      - {id: column-index, name: column_index, type: int, meaning: Zero-based column position.}
+  - id: ctable-cell-slot-data
+    kind: record
+    name: CTableCellSlotData
+    entries:
+      - {id: row, name: row, type: CTableRow, meaning: Current row declaration.}
+      - {id: column, name: column, type: CTableColumn, meaning: Current column declaration.}
+      - {id: cell, name: cell, type: CTableCell, meaning: Normalized cell declaration.}
+      - {id: row-index, name: row_index, type: int, meaning: Zero-based row position.}
+      - {id: column-index, name: column_index, type: int, meaning: Zero-based column position.}
+  - id: ctable-footer-slot-data
+    kind: record
+    name: CTableFooterSlotData
+    entries:
+      - {id: column, name: column, type: CTableColumn, meaning: Current column declaration.}
+      - {id: value, name: value, type: 'object | None', meaning: Current column footer value.}
+      - {id: column-index, name: column_index, type: int, meaning: Zero-based column position.}
+  - {id: ctable-empty-slot-data, kind: record, name: CTableEmptySlotData, entries: []}
+  - {id: ctable-loading-slot-data, kind: record, name: CTableLoadingSlotData, entries: []}
+  - {id: ctable-error-slot-data, kind: record, name: CTableErrorSlotData, entries: []}

@@ -81,6 +81,12 @@ self-closing form too:
 
 When rendered, `<span />` becomes `<span></span>`.
 
+Citry component syntax always starts with the exact lowercase `c-` prefix.
+The component name after it is case-insensitive, so `<c-StatusBadge>` and
+`<c-statusbadge>` find the same registration. Structural tags such as
+`<c-if>`, `<c-for>`, and `<c-slot>` must use their lowercase spelling;
+`<c-If>` is an error, not an alias.
+
 ## Expressions
 
 The `{{ ... }}` Python expressions are allowed only

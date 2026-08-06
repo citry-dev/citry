@@ -22,11 +22,11 @@ How the pieces in this module fit together:
   values (``freeze_const`` turns each value into a stable, dict-key-safe
   form).
 - ``ConstBodyCache`` is the cache: one pre-computed template per component
-  class and per combination of ``Const`` values. It keeps a bounded number of
-  entries (least recently used entries are dropped first) and lives on a
-  ``Citry`` instance.
+  class, combination of ``Const`` values, and visible variable-name set. It
+  keeps a bounded number of entries (least recently used entries are dropped
+  first) and lives on a ``Citry`` instance.
 - ``precompute_const_parts`` does the **precomputing** (the name this module and
-  docs/design/constness.md use for this step): it walks the compiled template
+  docs/design/component_constness.md use for this step): it walks the compiled template
   once, replaces everything that depends only on ``Const`` values with its final
   text, and leaves the rest to render normally each time.
 
@@ -89,19 +89,22 @@ from __future__ import annotations
 from collections import OrderedDict
 from threading import RLock
 from typing import TYPE_CHECKING, Any, Final, TypeAlias, TypeVar
+from weakref import ref
 
 import wrapt
 
 from citry.citry_context import CitryContext
 from citry.citry_element import CitryElement
+from citry.component_like import ComponentLike
 from citry.slots import Slot
 from citry.util.html import escape
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection, Mapping
+    from weakref import ReferenceType
 
     from citry.component import Component
-    from citry.nodes import BodyItem, ElementAttrsNode, ExprNode, ForNode, IfNode
+    from citry.nodes import BodyItem, ElementAttrsNode, ElementKeyNode, ExprNode, FillNode, ForNode, IfNode
 
 _T = TypeVar("_T")
 
@@ -180,7 +183,7 @@ def freeze_const(value: Any) -> Any:
     VALUE: two equal values must produce the same key (so a repeat render
     finds the cached entry), and two values that would render differently
     must produce different keys (so a cached result is never reused for the
-    wrong value). The rules, per ``docs/design/constness.md`` section 7.2:
+    wrong value). The rules, per ``docs/design/component_constness.md`` section 7.2:
 
     - Plain containers (``list``, ``tuple``, ``dict``, ``set``, ``frozenset``)
       are converted element by element into a hashable equivalent, tagged
@@ -297,7 +300,7 @@ leaves ample headroom while still capping misuse (see the ``ConstBodyCache``
 docstring).
 """
 
-_CacheKey: TypeAlias = "tuple[type[Component], ConstSignature]"
+_CacheKey: TypeAlias = "tuple[ReferenceType[type[Component]], ConstSignature, frozenset[str]]"
 
 
 class ConstBodyCache:
@@ -309,12 +312,19 @@ class ConstBodyCache:
     been through ``precompute_const_parts``, so the parts depending on those inputs are
     already computed; the entry for a render with no ``Const`` inputs is the
     plain compiled body that all such renders share. Keys are
-    ``(component class, ConstSignature)``.
+    ``(weak component-class reference, ConstSignature, visible variable
+    names)``. The weak reference lets an unregistered component class be
+    collected without waiting for this cache's LRU limit. Variable names
+    participate because Citry binders reject an already-visible name; two
+    otherwise equal renders with different context shapes may therefore need
+    different optimized bodies.
 
-    The cache lives on a ``Citry`` instance (``Citry._const_body_cache``), so
-    deleting the instance or calling ``Citry.clear()`` releases everything.
-    It holds at most ``max_entries`` entries and drops the least recently
-    used one when full; that way, marking ever-changing values ``Const`` (a
+    The cache lives on a ``Citry`` instance (``Citry._const_body_cache``), but
+    holds each component class weakly. A class can therefore be collected
+    after its final registry alias and the caller's references are gone;
+    calling ``Citry.clear()`` releases every entry immediately. The cache
+    holds at most ``max_entries`` entries and drops the least recently used
+    one when full; that way, marking ever-changing values ``Const`` (a
     mistake, but possible) wastes some work instead of growing memory without
     limit.
 
@@ -338,16 +348,20 @@ class ConstBodyCache:
         comp_cls: type[Component],
         signature: ConstSignature,
         build: Callable[[], list[BodyItem]],
+        *,
+        visible_names: Collection[str] = (),
     ) -> list[BodyItem]:
         """
-        Return the cached body for ``(comp_cls, signature)``, building it once.
+        Return the cached body for this const signature and visible-name set.
 
         On a hit the entry is marked most-recently-used. On a miss ``build()``
         runs under the lock and the result is stored; if it raises, nothing is
         cached and the error propagates (so the next render retries).
         """
-        key = (comp_cls, signature)
+        component_ref = ref(comp_cls)
+        key = (component_ref, signature, frozenset(visible_names))
         with self._lock:
+            self._prune_collected_components()
             body = self._entries.get(key)
             if body is not None:
                 self._entries.move_to_end(key)
@@ -359,11 +373,18 @@ class ConstBodyCache:
             return body
 
     def evict_component(self, comp_cls: type[Component]) -> None:
-        """Drop every entry of one component class (hot reload invalidation)."""
+        """Drop every entry of one component class during reset or final unregistration."""
         with self._lock:
-            stale = [key for key in self._entries if key[0] is comp_cls]
+            self._prune_collected_components()
+            stale = [key for key in self._entries if key[0]() is comp_cls]
             for key in stale:
                 self._entries.pop(key, None)
+
+    def _prune_collected_components(self) -> None:
+        """Drop dead weak-reference entries during an ordinary cache operation."""
+        stale = [key for key in self._entries if key[0]() is None]
+        for key in stale:
+            self._entries.pop(key, None)
 
     def clear(self) -> None:
         """Drop all entries."""
@@ -373,10 +394,13 @@ class ConstBodyCache:
     def values(self) -> list[list[BodyItem]]:
         """A snapshot of the cached bodies (mainly for tests and debugging)."""
         with self._lock:
+            self._prune_collected_components()
             return list(self._entries.values())
 
     def __len__(self) -> int:
-        return len(self._entries)
+        with self._lock:
+            self._prune_collected_components()
+            return len(self._entries)
 
     def __repr__(self) -> str:
         return f"ConstBodyCache(entries={len(self._entries)}, max_entries={self._max_entries})"
@@ -405,7 +429,12 @@ normally each time.
 
 
 def precompute_const_parts(
-    body: list[BodyItem], const_vars: dict[str, Any], *, precompute_attrs: bool = True, sandboxed: bool = True
+    body: list[BodyItem],
+    const_vars: dict[str, Any],
+    *,
+    precompute_attrs: bool = True,
+    sandboxed: bool = True,
+    visible_names: Collection[str] | None = None,
 ) -> list[BodyItem]:
     """
     Pre-compute the parts of ``body`` that depend only on ``const_vars``.
@@ -426,6 +455,9 @@ def precompute_const_parts(
       because baking the region would hide it from the extension. A region
       holding a nested-template attribute value also stays live (it renders
       fresh parts each time).
+    - An element ``#c-key`` whose variables are all const is evaluated once.
+      This remains safe even when ordinary attribute precomputation is off,
+      because framework metadata never enters ``on_attrs_resolved``.
     - A ``<c-if>`` whose branch conditions use only const variables is
       decided once: only the matching branch's content remains (itself
       precomputed), the other branches are dropped.
@@ -438,9 +470,9 @@ def precompute_const_parts(
       ``_MAX_UNROLL_ITERATIONS``.
     - A ``<c-for>`` that cannot be pre-run is kept, but constant expressions
       inside its body still precompute: an expression that does not touch the loop
-      variables produces the same text on every iteration. (Loop variables
-      themselves are never const; the parser forbids them from reusing an
-      outer variable's name, so there is no overlap to worry about.)
+      variables produces the same text on every iteration. The loop branch
+      masks its introduced variables while the ``<c-empty>`` branch keeps the
+      surrounding scope.
     - Static strings that end up next to each other are joined.
 
     Everything else stays in place as a normal node and re-evaluates on every
@@ -448,7 +480,7 @@ def precompute_const_parts(
     with the same const values, while their other (non-const) variables
     differ, so anything not pre-computed must still work for all of them.
 
-    What is never pre-computed, and why (docs/design/constness.md sections
+    What is never pre-computed, and why (docs/design/component_constness.md sections
     5, 9, 10):
 
     - ``ComponentNode`` (a child component tag): every render of a child gets
@@ -493,15 +525,27 @@ def precompute_const_parts(
     ``extract_const_vars``. With no const variables the pass still precomputes
     expressions that use no variables at all and joins static strings.
 
+    ``visible_names`` is the complete set of names in the live render context.
+    It lets loop precomputing preserve the runtime no-shadowing rule even when
+    the colliding outer value is not const. Production callers always pass it;
+    direct callers that omit it get the names from ``const_vars``.
+
     The input list and its nodes are not modified; a kept node whose interior
     changed is rebuilt (nodes hold no per-render state, so sharing the
     unchanged ones is safe).
     """
     const_names = frozenset(const_vars)
+    root_visible_names = frozenset(const_vars if visible_names is None else visible_names)
     # Precompute-time evaluation must use the same sandbox mode as the live render, so
     # a node's evaluator is compiled once in the right mode (see _precompute_expr).
     precompute_context = CitryContext(variables=dict(const_vars), sandboxed=sandboxed)
-    return _precompute_into(body, const_names, precompute_context, precompute_attrs=precompute_attrs)
+    return _precompute_into(
+        body,
+        const_names,
+        precompute_context,
+        visible_names=root_visible_names,
+        precompute_attrs=precompute_attrs,
+    )
 
 
 def _precompute_into(
@@ -509,12 +553,20 @@ def _precompute_into(
     const_names: frozenset[str],
     precompute_context: CitryContext,
     *,
+    visible_names: frozenset[str] | None,
     precompute_attrs: bool,
 ) -> list[BodyItem]:
     """Precompute one body list (the recursion step of ``precompute_const_parts``)."""
     precomputed: list[BodyItem] = []
     for item in body:
-        _precompute_item(item, const_names, precompute_context, precomputed, precompute_attrs=precompute_attrs)
+        _precompute_item(
+            item,
+            const_names,
+            precompute_context,
+            precomputed,
+            visible_names=visible_names,
+            precompute_attrs=precompute_attrs,
+        )
     return _merge_static(precomputed)
 
 
@@ -524,6 +576,7 @@ def _precompute_item(
     precompute_context: CitryContext,
     out: list[BodyItem],
     *,
+    visible_names: frozenset[str] | None,
     precompute_attrs: bool,
 ) -> None:
     """Precompute one body item, appending the result(s) to ``out``."""
@@ -531,6 +584,7 @@ def _precompute_item(
     from citry.nodes import (  # noqa: PLC0415
         ComponentNode,
         ElementAttrsNode,
+        ElementKeyNode,
         ExprNode,
         FillNode,
         ForNode,
@@ -553,31 +607,69 @@ def _precompute_item(
             out.append(item)
         return
 
+    if isinstance(item, ElementKeyNode):
+        if set(item.used_vars) <= const_names:
+            out.append(_precompute_element_key(item, precompute_context))
+        else:
+            out.append(item)
+        return
+
     if isinstance(item, ComponentNode):
         # The component tag itself never precomputes (each render makes a fresh
         # child), but its body does: fill bodies and the implicit default
         # slot body render against THIS component's variables (the fill
         # writer's scope), so const expressions inside them precompute like any
-        # other. A fill's own data/fallback variables can never be const
-        # names (the parser rejects reusing an outer variable's name), so
-        # expressions using them stay live.
-        precomputed = _precompute_into(item.body, const_names, precompute_context, precompute_attrs=precompute_attrs)
+        # other. Each FillNode below applies its own binding scope before its
+        # body is precomputed.
+        precomputed = _precompute_into(
+            item.body,
+            const_names,
+            precompute_context,
+            visible_names=visible_names,
+            precompute_attrs=precompute_attrs,
+        )
         if _body_changed(item.body, precomputed):
             item = ComponentNode(
-                item.source, item.position, item.attrs, precomputed, item.used_vars, item.name, item.contains_fills
+                item.source,
+                item.position,
+                item.attrs,
+                precomputed,
+                item.used_vars,
+                item.name,
+                item.contains_fills,
+                item.metadata,
             )
         out.append(item)
         return
 
-    if isinstance(item, (FillNode, SlotNode)):
-        # Same reasoning: the node stays (which fill a slot renders is
-        # per-render state), but a fill's body and a slot's fallback body
-        # render against this component's variables, so their insides precompute.
-        precomputed = _precompute_into(item.body, const_names, precompute_context, precompute_attrs=precompute_attrs)
+    if isinstance(item, FillNode):
+        # A fill's data/fallback names apply only to its body. Direct names
+        # mask matching outer constants. A c-bind that may still supply either
+        # name makes every variable-dependent expression unsafe to precompute.
+        fill_const_names, fill_visible_names = _fill_body_scope(item, const_names, visible_names)
+        precomputed = _precompute_into(
+            item.body,
+            fill_const_names,
+            precompute_context,
+            visible_names=fill_visible_names,
+            precompute_attrs=precompute_attrs,
+        )
         if _body_changed(item.body, precomputed):
-            item = type(item)(
-                item.source, item.position, item.attrs, precomputed, item.used_vars, item.introduced_vars
-            )
+            item = FillNode(item.source, item.position, item.attrs, precomputed, item.used_vars, item.introduced_vars)
+        out.append(item)
+        return
+
+    if isinstance(item, SlotNode):
+        # A slot's fallback body stays in the surrounding component scope.
+        precomputed = _precompute_into(
+            item.body,
+            const_names,
+            precompute_context,
+            visible_names=visible_names,
+            precompute_attrs=precompute_attrs,
+        )
+        if _body_changed(item.body, precomputed):
+            item = SlotNode(item.source, item.position, item.attrs, precomputed, item.used_vars, item.introduced_vars)
         out.append(item)
         return
 
@@ -595,20 +687,47 @@ def _precompute_item(
                 if branch_body is not None:
                     for child in branch_body:
                         _precompute_item(
-                            child, const_names, precompute_context, out, precompute_attrs=precompute_attrs
+                            child,
+                            const_names,
+                            precompute_context,
+                            out,
+                            visible_names=visible_names,
+                            precompute_attrs=precompute_attrs,
                         )
                 return
         # Dynamic (or failing) conditions: keep the node, precompute inside the
         # branch bodies.
-        out.append(_precompute_branch_bodies(item, const_names, precompute_context, precompute_attrs=precompute_attrs))
+        out.append(
+            _precompute_branch_bodies(
+                item,
+                const_names,
+                precompute_context,
+                visible_names=visible_names,
+                precompute_attrs=precompute_attrs,
+            )
+        )
         return
 
     if isinstance(item, ForNode):
-        unrolled = _try_unroll_for(item, const_names, precompute_context, precompute_attrs=precompute_attrs)
+        unrolled = _try_unroll_for(
+            item,
+            const_names,
+            precompute_context,
+            visible_names=visible_names,
+            precompute_attrs=precompute_attrs,
+        )
         if unrolled is not None:
-            out.extend(unrolled)
+            out.append(unrolled)
             return
-        out.append(_precompute_branch_bodies(item, const_names, precompute_context, precompute_attrs=precompute_attrs))
+        out.append(
+            _precompute_branch_bodies(
+                item,
+                const_names,
+                precompute_context,
+                visible_names=visible_names,
+                precompute_attrs=precompute_attrs,
+            )
+        )
         return
 
     out.append(item)
@@ -636,7 +755,7 @@ def _precompute_expr(node: ExprNode, precompute_context: CitryContext) -> BodyIt
         value = const_value(node.evaluate(precompute_context.variables, sandboxed=precompute_context.sandboxed))
         if value is None:
             return ""
-        if isinstance(value, (Slot, CitryElement, CitryRender)):
+        if isinstance(value, (Slot, CitryElement, CitryRender, ComponentLike)):
             return node
         return str(escape(value))
     except Exception:  # noqa: BLE001 (deliberate: defer the error to render, see precompute_const_parts)
@@ -664,9 +783,41 @@ def _precompute_element_attrs(node: ElementAttrsNode, precompute_context: CitryC
     return node
 
 
+def _precompute_element_key(node: ElementKeyNode, precompute_context: CitryContext) -> BodyItem:
+    """Render an all-const element key once, deferring any evaluation error."""
+    try:
+        return str(node.render(precompute_context))
+    except Exception:  # noqa: BLE001 (defer the error to the normal render path)
+        return node
+
+
 def _body_changed(old: list[BodyItem], new: list[BodyItem]) -> bool:
     """True when precomputing produced a different body list (so the node must be rebuilt)."""
     return len(new) != len(old) or any(n is not o for n, o in zip(new, old, strict=True))
+
+
+def _fill_body_scope(
+    node: FillNode,
+    const_names: frozenset[str],
+    visible_names: frozenset[str] | None,
+) -> tuple[frozenset[str], frozenset[str] | None]:
+    """Return the const and visible names in scope inside one fill body."""
+    binding_is_dynamic = {"data": False, "fallback": False}
+    for attr in node.attrs:
+        if attr.key == "c-bind":
+            binding_is_dynamic = {"data": True, "fallback": True}
+        elif attr.key in binding_is_dynamic:
+            binding_is_dynamic[attr.key] = False
+
+    if any(binding_is_dynamic.values()):
+        # A spread may choose any binding name at render time. Variable-free
+        # expressions remain safe, but a nested binder cannot be removed
+        # because its eventual outer-name set is not yet known.
+        return frozenset(), None
+
+    introduced = frozenset(node.introduced_vars)
+    body_visible_names = None if visible_names is None else visible_names | introduced
+    return const_names.difference(introduced), body_visible_names
 
 
 def _precompute_branch_bodies(
@@ -674,26 +825,33 @@ def _precompute_branch_bodies(
     const_names: frozenset[str],
     precompute_context: CitryContext,
     *,
+    visible_names: frozenset[str] | None,
     precompute_attrs: bool,
 ) -> BodyItem:
     """
     Precompute inside a kept ``IfNode``/``ForNode``: same node, precomputed branch bodies.
 
     Each branch is the compiler's ``(position, attrs, body, introduced_vars)``
-    tuple; the body list is precomputed against the same const variables. For a
-    loop this is safe because a const expression that does not use the loop
-    variables produces the same text on every iteration, and a loop variable
-    can never share a name with a const one (the parser rejects a loop
-    variable that reuses an outer variable's name). When nothing inside
-    changed, the original node is returned; otherwise a rebuilt node of the
-    same type takes its place (nodes hold no per-render state, so the swap is
-    safe).
+    tuple. A loop branch masks the variables it introduces before its body is
+    precomputed; its ``<c-empty>`` branch introduces nothing and therefore
+    keeps the surrounding const names. If nothing inside changed, the original
+    node is returned; otherwise a rebuilt node of the same type takes its place
+    (nodes hold no per-render state, so the swap is safe).
     """
     new_branches = []
     changed = False
     for branch in node.branches:
         body: list[BodyItem] = branch[2]
-        precomputed = _precompute_into(body, const_names, precompute_context, precompute_attrs=precompute_attrs)
+        introduced = frozenset(branch[3])
+        branch_const_names = const_names.difference(introduced)
+        branch_visible_names = None if visible_names is None else visible_names | introduced
+        precomputed = _precompute_into(
+            body,
+            branch_const_names,
+            precompute_context,
+            visible_names=branch_visible_names,
+            precompute_attrs=precompute_attrs,
+        )
         if _body_changed(body, precomputed):
             changed = True
             new_branches.append((branch[0], branch[1], precomputed, branch[3]))
@@ -709,10 +867,11 @@ def _try_unroll_for(
     const_names: frozenset[str],
     precompute_context: CitryContext,
     *,
+    visible_names: frozenset[str] | None,
     precompute_attrs: bool,
-) -> list[BodyItem] | None:
+) -> ForNode | None:
     """
-    Run an all-const loop once, ahead of time; return its text, or ``None``.
+    Run an all-const loop once, ahead of time; retain a guarded node, or ``None``.
 
     Requirements, checked before touching the iterable: the loop's ``each``
     clause uses only const variables, and every branch body looks precomputable
@@ -726,40 +885,54 @@ def _try_unroll_for(
     same evaluation a render uses), precomputing each iteration's body with that
     iteration's loop-variable values. Gives up (returns ``None``) when an
     iteration produces anything but text, when evaluation fails, or past
-    ``_MAX_UNROLL_ITERATIONS`` iterations.
+    ``_MAX_UNROLL_ITERATIONS`` iterations. The returned ``ForNode`` keeps a
+    live binding check around the baked text: an earlier expression can mutate
+    the render context after this cache entry was built.
     """
     # Imported lazily to break the import cycle; see the NOTE above precompute_const_parts.
     from citry.nodes import _find_attr  # noqa: PLC0415
 
     loop_branch = node.branches[0]
     targets: tuple[str, ...] = tuple(loop_branch[3])
+    target_names = frozenset(targets)
+    if visible_names is None or target_names & visible_names:
+        return None
+
     each_attr = _find_attr(loop_branch[1], "each")
     each_used = getattr(each_attr, "used_vars", None) if each_attr is not None else None
     if each_used is None or not set(each_used) <= const_names:
         return None
 
-    inner_names = const_names | set(targets)
+    inner_names = const_names | target_names
+    inner_visible_names = visible_names | target_names
     if not all(
         _statically_precomputable(branch[2], inner_names, precompute_attrs=precompute_attrs)
         for branch in node.branches
     ):
         return None
 
-    parts: list[BodyItem] = []
+    parts: list[str] = []
     try:
         for count, (body, body_context) in enumerate(node.iter_bodies(precompute_context), start=1):
             if count > _MAX_UNROLL_ITERATIONS:
                 return None
-            precomputed = _precompute_into(body, inner_names, body_context, precompute_attrs=precompute_attrs)
-            if not all(isinstance(part, str) for part in precomputed):
-                # A value turned out to need per-render rendering (a Slot or
-                # element in a const variable); the static check cannot see
-                # values, so this is found here.
-                return None
-            parts.extend(precomputed)
+            precomputed = _precompute_into(
+                body,
+                inner_names,
+                body_context,
+                visible_names=inner_visible_names,
+                precompute_attrs=precompute_attrs,
+            )
+            for part in precomputed:
+                if not isinstance(part, str):
+                    # A value turned out to need per-render rendering (a Slot
+                    # or element in a const variable); the static check cannot
+                    # see values, so this is found here.
+                    return None
+                parts.append(part)
     except Exception:  # noqa: BLE001 (deliberate: defer the error to render, see precompute_const_parts)
         return None
-    return parts
+    return node._with_precomputed_text("".join(parts))
 
 
 def _statically_precomputable(body: list[BodyItem], names: frozenset[str], *, precompute_attrs: bool) -> bool:
@@ -774,7 +947,7 @@ def _statically_precomputable(body: list[BodyItem], names: frozenset[str], *, pr
     so the body fails.
     """
     # Imported lazily to break the import cycle; see the NOTE above precompute_const_parts.
-    from citry.nodes import ElementAttrsNode, ExprNode, IfNode  # noqa: PLC0415
+    from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprNode, IfNode  # noqa: PLC0415
 
     for item in body:
         if isinstance(item, str):
@@ -782,6 +955,8 @@ def _statically_precomputable(body: list[BodyItem], names: frozenset[str], *, pr
         if isinstance(item, ExprNode) and set(item.used_vars) <= names:
             continue
         if precompute_attrs and isinstance(item, ElementAttrsNode) and set(item.used_vars) <= names:
+            continue
+        if isinstance(item, ElementKeyNode) and set(item.used_vars) <= names:
             continue
         if (
             isinstance(item, IfNode)

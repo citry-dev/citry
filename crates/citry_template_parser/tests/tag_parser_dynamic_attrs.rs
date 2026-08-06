@@ -126,6 +126,7 @@ mod tests {
     fn test_static_and_dynamic_class_style_forms_accumulate_on_elements() {
         for input in [
             r#"<div class="x" c-class="y">hi</div>"#,
+            r#"<div CLASS="x" c-class="y">hi</div>"#,
             r#"<div c-class="y" class="x">hi</div>"#,
             r#"<c-element is="div" style="color: red" c-style="styles" />"#,
             r#"<c-element is="div" c-style="styles" style="color: red" />"#,
@@ -141,6 +142,7 @@ mod tests {
     fn test_static_and_dynamic_form_of_same_logical_attr_rejected() {
         for input in [
             r#"<form id="form" c-id="my_var">hi</form>"#,
+            r#"<form ID="form" c-id="my_var">hi</form>"#,
             r#"<form c-id="my_var" id="form">hi</form>"#,
             r#"<c-card title="static" c-title="dynamic" />"#,
             r#"<c-card c-title="dynamic" title="static" />"#,
@@ -172,6 +174,13 @@ mod tests {
         let err =
             parse_template(r#"<div c-class="x" c-class="y">hi</div>"#, None, None).unwrap_err();
         assert!(format!("{:?}", err).contains("Duplicate attribute"));
+
+        let err = parse_template(r#"<div ID="x" id="y">hi</div>"#, None, None).unwrap_err();
+        assert!(format!("{:?}", err).contains("Duplicate attribute"));
+
+        // Component keyword arguments are Python-facing and remain
+        // case-sensitive even though HTML attribute identity is not.
+        assert!(parse_template(r#"<c-card Foo="x" foo="y" />"#, None, None).is_ok());
     }
 
     #[test]

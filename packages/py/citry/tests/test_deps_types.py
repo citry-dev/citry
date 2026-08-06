@@ -27,6 +27,22 @@ class TestScript:
         script = Script(content="x();", attrs={"type": "text/javascript"})
         assert script.render() == '<script type="text/javascript">(function() {\nx();\n})();</script>'
 
+    @pytest.mark.parametrize(
+        ("script_type", "content", "wrapped"),
+        [
+            ("", "const x = 1;", True),
+            ("application/javascript", "const x = 1;", True),
+            ("importmap", '{"imports": {}}', False),
+            ("speculationrules", '{"prefetch": []}', False),
+            ("application/json", '{"data": true}', False),
+        ],
+    )
+    def test_additional_script_type_wrap_rules(self, script_type, content, wrapped):
+        html = Script(content=content, attrs={"type": script_type}).render()
+        expected_content = f"(function() {{\n{content}\n}})();" if wrapped else content
+
+        assert html == f'<script type="{script_type}">{expected_content}</script>'
+
     def test_extra_attrs_render(self):
         script = Script(url="/a.js", attrs={"defer": True})
         assert script.render() == '<script defer src="/a.js"></script>'

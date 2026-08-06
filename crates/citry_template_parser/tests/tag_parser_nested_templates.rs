@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn test_nested_template_slot_metadata_propagates_from_void_element_attribute() {
-        let input = r#"<img c-fallback="<c-slot name='image' />">"#;
+        let input = r#"<IMG c-fallback="<c-slot name='image' />">"#;
         let template = parse_template(input, None, None).unwrap();
 
         assert_eq!(template.slots.len(), 1);

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Citry playground performance proof</title>
+  </head>
+  <body>
+    <h1>Citry playground performance proof</h1>
+    <script type="module">
+      const workerURL = "/performance_worker.mjs";
+      const wheelURLs = JSON.parse(document.body.dataset.wheelUrls ?? "[]");
+
+      function percentile(values, percentileValue) {
+        const sorted = [...values].sort((left, right) => left - right);
+        const index = Math.max(0, Math.ceil(percentileValue * sorted.length) - 1);
+        return sorted[index];
+      }
+
+      async function userAgentMemory() {
+        if (typeof performance.measureUserAgentSpecificMemory !== "function") {
+          return { supported: false };
+        }
+        try {
+          const result = await performance.measureUserAgentSpecificMemory();
+          return { bytes: result.bytes, supported: true };
+        } catch (error) {
+          return { error: String(error), supported: true };
+        }
+      }
+
+      function startSession() {
+        const started = performance.now();
+        const worker = new Worker(workerURL, { type: "module" });
+        const pending = new Map();
+        let nextSampleId = 1;
+        let nextRunId = 1;
+
+        const ready = new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            worker.terminate();
+            reject(new Error("Performance Worker initialization timed out"));
+          }, 30_000);
+          worker.onerror = (event) => {
+            clearTimeout(timeout);
+            reject(new Error(event.message));
+          };
+          worker.onmessage = ({ data }) => {
+            if (data?.type === "failure") {
+              clearTimeout(timeout);
+              const error = new Error(data.message);
+              error.stack = data.stack;
+              reject(error);
+              for (const request of pending.values()) {
+                request.reject(error);
+              }
+              pending.clear();
+              return;
+            }
+            if (data?.type === "ready") {
+              clearTimeout(timeout);
+              resolve({
+                ...data,
+                elapsed_ms: performance.now() - started,
+              });
+              return;
+            }
+            const key = data?.type === "result"
+              ? `run:${data.runId}`
+              : data?.type === "metrics"
+                ? `metrics:${data.sampleId}`
+                : undefined;
+            const request = key ? pending.get(key) : undefined;
+            if (request) {
+              pending.delete(key);
+              request.resolve(data);
+            }
+          };
+        });
+        worker.postMessage({ type: "initialize", wheelURLs });
+
+        function request(key, message) {
+          return new Promise((resolve, reject) => {
+            pending.set(key, { reject, resolve });
+            worker.postMessage(message);
+          });
+        }
+
+        return {
+          dispose() {
+            worker.terminate();
+            for (const requestValue of pending.values()) {
+              requestValue.reject(new Error("Performance Worker disposed"));
+            }
+            pending.clear();
+          },
+          metrics() {
+            const sampleId = nextSampleId;
+            nextSampleId += 1;
+            return request(
+              `metrics:${sampleId}`,
+              { type: "metrics", sampleId },
+            );
+          },
+          ready,
+          run() {
+            const runId = nextRunId;
+            nextRunId += 1;
+            const runStarted = performance.now();
+            return request(`run:${runId}`, { type: "run", runId }).then((result) => ({
+              ...result,
+              elapsed_ms: performance.now() - runStarted,
+            }));
+          },
+        };
+      }
+
+      window.runPerformanceProbe = async ({ coldRuns, warmupRuns, warmRuns }) => {
+        const cold = [];
+        for (let index = 0; index < coldRuns; index += 1) {
+          const session = startSession();
+          cold.push(await session.ready);
+          session.dispose();
+        }
+
+        const session = startSession();
+        const warmSessionReady = await session.ready;
+        const memoryBeforeRuns = await userAgentMemory();
+        for (let index = 0; index < warmupRuns; index += 1) {
+          await session.run();
+        }
+
+        const initialMetrics = await session.metrics();
+        const metrics = [initialMetrics.metrics];
+        const workerDurations = [];
+        const endToEndDurations = [];
+        let firstHTML;
+        let deterministic = true;
+        for (let index = 0; index < warmRuns; index += 1) {
+          const result = await session.run();
+          firstHTML ??= result.html;
+          deterministic &&= result.html === firstHTML;
+          workerDurations.push(result.duration_ms);
+          endToEndDurations.push(result.elapsed_ms);
+          if ((index + 1) % 20 === 0) {
+            metrics.push((await session.metrics()).metrics);
+          }
+        }
+        const memoryAfterRuns = await userAgentMemory();
+        session.dispose();
+
+        return {
+          cold,
+          cold_summary: {
+            p50_ms: percentile(cold.map((entry) => entry.elapsed_ms), 0.5),
+            p95_ms: percentile(cold.map((entry) => entry.elapsed_ms), 0.95),
+          },
+          cross_origin_isolated: crossOriginIsolated,
+          deterministic,
+          memory_after_runs: memoryAfterRuns,
+          memory_before_runs: memoryBeforeRuns,
+          metric_samples: metrics,
+          warm: {
+            end_to_end_p50_ms: percentile(endToEndDurations, 0.5),
+            end_to_end_p95_ms: percentile(endToEndDurations, 0.95),
+            runs: warmRuns,
+            worker_p50_ms: percentile(workerDurations, 0.5),
+            worker_p95_ms: percentile(workerDurations, 0.95),
+          },
+          warm_session_ready: warmSessionReady,
+          warmups: warmupRuns,
+        };
+      };
+    </script>
+  </body>
+</html>

@@ -126,6 +126,18 @@ class TestDjangoAdapter:
         c.cache.delete("k")
         assert c.cache.get("k") is None
 
+    def test_django_cache_zero_ttl_deletes_and_invalid_ttl_fails(self):
+        from django.core.cache.backends.locmem import LocMemCache
+
+        from citry.contrib.django import DjangoCache
+
+        backend = DjangoCache(LocMemCache("citry-ttl-test", {}))
+        backend.set("k", "old")
+        backend.set("k", "new", ttl=0)
+        assert backend.get("k") is None
+        with pytest.raises(ValueError, match="ttl"):
+            backend.set("k", "value", ttl=True)
+
 
 class _FakeRedis:
     """The slice of redis-py's API the adapter touches; stores bytes like the real one."""
@@ -133,11 +145,13 @@ class _FakeRedis:
     def __init__(self):
         self.data = {}
         self.expiries = {}
+        self.set_calls = []
 
     def get(self, name):
         return self.data.get(name)
 
     def set(self, name, value, ex=None):
+        self.set_calls.append((name, value, ex))
         self.data[name] = value.encode() if isinstance(value, str) else value
         self.expiries[name] = ex
 
@@ -153,12 +167,16 @@ class _FakeDiskCache:
 
     def __init__(self):
         self.data = {}
+        self.expiries = {}
+        self.set_calls = []
 
     def get(self, key, default=None):
         return self.data.get(key, default)
 
     def set(self, key, value, expire=None):
+        self.set_calls.append((key, value, expire))
         self.data[key] = value
+        self.expiries[key] = expire
 
     def delete(self, key):
         self.data.pop(key, None)
@@ -180,14 +198,26 @@ class TestCacheAdapters:
         cache.delete("k")
         assert cache.get("k") is None
 
-    def test_redis_ttl_rounds_up_to_whole_seconds(self):
+    @pytest.mark.parametrize(("ttl", "expected"), [(0.2, 1), (1.2, 2), (2.01, 3), (2.5, 3)])
+    def test_redis_ttl_rounds_up_to_whole_seconds(self, ttl, expected):
         from citry.contrib.caches import RedisCache
 
         client = _FakeRedis()
-        RedisCache(client).set("k", "v", ttl=0.2)
-        assert client.expiries["k"] == 1
+        RedisCache(client).set("k", "v", ttl=ttl)
+        assert client.expiries["k"] == expected
         RedisCache(client).set("k", "v", ttl=None)
         assert client.expiries["k"] is None
+
+    def test_redis_zero_ttl_deletes_instead_of_storing(self):
+        from citry.contrib.caches import RedisCache
+
+        client = _FakeRedis()
+        cache = RedisCache(client)
+        cache.set("k", "old")
+        client.set_calls.clear()
+        cache.set("k", "new", ttl=0)
+        assert "k" not in client.data
+        assert client.set_calls == []
 
     def test_diskcache_adapter_works_as_citry_cache(self):
         from citry.contrib.caches import DiskCache
@@ -198,3 +228,23 @@ class TestCacheAdapters:
         assert c.cache.has("k")
         c.cache.delete("k")
         assert not c.cache.has("k")
+
+    def test_diskcache_zero_ttl_deletes_instead_of_storing(self):
+        from citry.contrib.caches import DiskCache
+
+        client = _FakeDiskCache()
+        cache = DiskCache(client)
+        cache.set("k", "old")
+        client.set_calls.clear()
+        cache.set("k", "new", ttl=0)
+        assert "k" not in client.data
+        assert client.set_calls == []
+
+    @pytest.mark.parametrize("adapter", ["redis", "disk"])
+    @pytest.mark.parametrize("ttl", [True, -1, float("nan"), float("inf"), "1"])
+    def test_cache_adapters_reject_invalid_ttl(self, adapter, ttl):
+        from citry.contrib.caches import DiskCache, RedisCache
+
+        cache = RedisCache(_FakeRedis()) if adapter == "redis" else DiskCache(_FakeDiskCache())
+        with pytest.raises(ValueError, match="ttl"):
+            cache.set("k", "v", ttl=ttl)

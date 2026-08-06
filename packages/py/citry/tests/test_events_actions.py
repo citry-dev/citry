@@ -91,6 +91,8 @@ class TestActionConstructors:
             actions.Data(1, delay=float("nan"))
         with pytest.raises(ValueError, match="delay must be a finite, non-negative number of seconds"):
             actions.Data(1, delay=float("inf"))
+        with pytest.raises(ValueError, match="delay must be a finite, non-negative number of seconds"):
+            actions.Data(1, delay=10**400)
         with pytest.raises(ValueError, match="wait must be True or False"):
             actions.Data(1, wait="yes")
 

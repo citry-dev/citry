@@ -4,7 +4,10 @@ const PROTOCOL_VERSION = 1;
 const MAX_MESSAGE_BYTES = 8 * 1024;
 const MAX_EVENT_ENVELOPE_BYTES = 1024 * 1024;
 const MAX_EVENT_RESULT_BYTES = 2 * 1024 * 1024;
-const RENDER_TIMEOUT_MS = 3_000;
+const MAX_ASSET_PATHS = 32;
+const MAX_ASSET_REQUEST_BYTES = 32 * 1024;
+const MAX_ASSET_RESULT_BYTES = 4 * 1024 * 1024;
+const RENDER_TIMEOUT_MS = 8_000;
 const CONNECT_TIMEOUT_MS = 8_000;
 
 function byteLength(value) {
@@ -45,7 +48,8 @@ function createState(frame, generation) {
 }
 
 export class PreviewBridge {
-  constructor({ iframe, onCommit, onDiagnostic, onEvent, onNavigation }) {
+  constructor({ iframe, onAssets, onCommit, onDiagnostic, onEvent, onNavigation }) {
+    this.onAssets = onAssets;
     this.onCommit = onCommit;
     this.onDiagnostic = onDiagnostic;
     this.onEvent = onEvent;
@@ -124,6 +128,14 @@ export class PreviewBridge {
       state.shellLoaded = true;
       return;
     }
+    if (data.type === "preview-render-failed" && data.runId === state.runId && data.nonce === state.nonce) {
+      const pending = state.pendingRender;
+      if (!pending) return;
+      clearTimeout(pending.timeout);
+      state.pendingRender = null;
+      pending.reject(new Error(String(data.message || "The preview could not prepare its assets.")));
+      return;
+    }
     if (data.type === "citry-event-call") {
       if (
         state !== this.displayState
@@ -136,6 +148,23 @@ export class PreviewBridge {
         || byteLength(data.envelope) > MAX_EVENT_ENVELOPE_BYTES
       ) return;
       void this.forwardEvent(state, data);
+      return;
+    }
+    if (data.type === "citry-assets-call") {
+      const activeState = state === this.displayState || (state === this.candidateState && state.pendingRender);
+      if (
+        !activeState
+        || data.runId !== state.runId
+        || data.nonce !== state.nonce
+        || typeof data.assetId !== "string"
+        || !/^assets-[1-9][0-9]*$/.test(data.assetId)
+        || !Array.isArray(data.paths)
+        || data.paths.length === 0
+        || data.paths.length > MAX_ASSET_PATHS
+        || data.paths.some((path) => typeof path !== "string")
+        || byteLength(data.paths) > MAX_ASSET_REQUEST_BYTES
+      ) return;
+      void this.forwardAssets(state, data);
       return;
     }
     if (data.type === "preview-rendered" && data.runId === state.runId && data.nonce === state.nonce) {
@@ -187,6 +216,42 @@ export class PreviewBridge {
         runId: state.runId,
         nonce: state.nonce,
         eventId: data.eventId,
+        message: String(error?.message || error).slice(0, 4_096),
+      });
+    }
+  }
+
+  async forwardAssets(state, data) {
+    try {
+      const assets = await this.onAssets(data.paths, { runId: state.runId });
+      if (
+        (state !== this.displayState && state !== this.candidateState)
+        || !state.port
+        || state.runId !== data.runId
+        || state.nonce !== data.nonce
+        || !Array.isArray(assets)
+        || byteLength(assets) > MAX_ASSET_RESULT_BYTES
+      ) {
+        throw new Error("The asset response is no longer valid for this preview.");
+      }
+      state.port.postMessage({
+        type: "citry-assets-result",
+        version: PROTOCOL_VERSION,
+        session: state.session,
+        runId: state.runId,
+        nonce: state.nonce,
+        assetId: data.assetId,
+        assets,
+      });
+    } catch (error) {
+      if ((state !== this.displayState && state !== this.candidateState) || !state.port) return;
+      state.port.postMessage({
+        type: "citry-assets-failure",
+        version: PROTOCOL_VERSION,
+        session: state.session,
+        runId: state.runId,
+        nonce: state.nonce,
+        assetId: data.assetId,
         message: String(error?.message || error).slice(0, 4_096),
       });
     }

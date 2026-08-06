@@ -13,7 +13,7 @@ from playwright.sync_api import expect
 pytestmark = pytest.mark.e2e
 
 _CITRY_UI_TABS = (
-    Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/ctabs/snippets/account_settings.py"
+    Path(__file__).parents[3] / "packages/py/citry_ui/citry_ui/components/ctabs/snippets/night_sky_guide.py"
 )
 
 
@@ -90,7 +90,7 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
 
     _run_and_wait(page)
     _run_and_wait(page)
-    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.3.2 · Citry UI 0.0.1")
+    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.3.1 · Citry UI 0.0.1")
 
     preview = page.frame_locator("#citry-playground-preview")
     tabs = preview.locator('[role="tab"]')
@@ -98,20 +98,40 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
     expect(tabs.nth(0)).to_have_attribute("aria-selected", "true")
     tabs.nth(1).click()
     expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
-    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Notifications")
+    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
     assert console_errors == []
 
 
 def test_local_authoring_runtime_activates_inline_citry_ui(page: Any, local_docs_site_url: str) -> None:
     console_errors: list[str] = []
-    page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    page.on(
+        "console",
+        lambda message: console_errors.append(f"{message.location}: {message.text}")
+        if message.type == "error"
+        else None,
+    )
     page.goto(local_docs_site_url + "/ui-library/components/tabs/", wait_until="domcontentloaded")
-    root = page.locator("[data-citry-live-code]")
+    root = page.locator("[data-citry-ui-demo]").nth(1)
+    built_preview = root.locator("[data-ui-preview-frame]")
 
+    expect(built_preview).to_be_visible()
     expect(root.locator("[data-live-activate]")).to_be_visible()
     root.locator("[data-live-activate]").click()
     expect(root.locator(".cm-content")).to_be_attached(timeout=15_000)
-    expect(root.locator("[data-live-status]")).to_contain_text("Rendered in", timeout=120_000)
+    expect(root.locator("[data-live-fallback]")).to_have_value(_CITRY_UI_TABS.read_text(encoding="utf-8"))
+    expect(built_preview).to_be_hidden()
+    page.wait_for_function(
+        """root => {
+          const status = root.querySelector('[data-live-status]')?.textContent || '';
+          return status.includes('Rendered in') || status === 'Runner unavailable';
+        }""",
+        arg=root.element_handle(),
+        timeout=120_000,
+    )
+    if root.locator("[data-live-status]").text_content() == "Runner unavailable":
+        summary = root.locator("[data-live-python-summary]").text_content()
+        details = root.locator("[data-live-python-details]").text_content()
+        pytest.fail(f"Local Citry UI runtime failed: {summary}\n{details}")
 
     run = root.locator("[data-live-run]")
     run.click()
@@ -119,12 +139,15 @@ def test_local_authoring_runtime_activates_inline_citry_ui(page: Any, local_docs
     expect(run).to_be_enabled(timeout=120_000)
 
     root.locator('[data-live-tab="result"]').click()
-    preview = root.frame_locator("iframe:not([aria-hidden])")
+    preview = root.frame_locator(".citry-live-code__preview:not(.citry-playground__preview--candidate)")
     tabs = preview.locator('[role="tab"]')
     expect(tabs).to_have_count(3, timeout=120_000)
     tabs.nth(1).click()
     expect(tabs.nth(1)).to_have_attribute("aria-selected", "true")
-    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Notifications")
+    expect(preview.locator('[role="tabpanel"]:not([hidden])')).to_contain_text("Finding nebulae")
+    root.locator("[data-live-close]").click()
+    expect(built_preview).to_be_visible()
+    expect(root.locator("[data-live-activate]")).to_be_focused()
     assert console_errors == []
 
 
@@ -583,8 +606,11 @@ class SignupForm(Component):
       <section x-data="{ acceptedEmail: '' }" @signup:sent="acceptedEmail = $event.detail.email">
         <form @c-submit.prevent="submit">
           <input name="email" type="email" required />
-          <span id="signup-error" x-show="$error('submit')?.fieldErrors?.email"
-            x-text="$error('submit')?.fieldErrors?.email || ''"></span>
+          <span
+            id="signup-error"
+            x-show="(typeof $error === 'function' ? $error('submit') : $error)?.fieldErrors?.email"
+            x-text="(typeof $error === 'function' ? $error('submit') : $error)?.fieldErrors?.email || ''"
+          ></span>
           <button type="submit">Send request</button>
         </form>
         <output id="accepted-email" x-show="acceptedEmail" x-text="acceptedEmail"></output>

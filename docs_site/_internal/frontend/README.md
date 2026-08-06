@@ -1,9 +1,9 @@
 # Docs playground frontend
 
 This private pnpm package contains the authored JavaScript for Citry's
-full-page playground and inline `<c-live-code>` examples. It bundles the
-shared editor, Worker coordinator, and iframe coordinator into static files
-served by the docs site.
+full-page playground, inline `<c-live-code>` examples, and the opt-in editor in
+`<c-ui-demo>` component previews. It bundles the shared editor, Worker
+coordinator, and iframe coordinator into static files served by the docs site.
 
 The browser runtime files that are maintained directly under
 `docs_site/static/playground/` have their own
@@ -28,9 +28,9 @@ live_code.js
 
 The full-page playground loads its complete bundle immediately. A narrative
 docs page loads the small `live_code.js` activator only when it contains an
-interactive live example. Ordinary pages, publication-static examples, and
-historical pages omit it. CodeMirror and the runtime coordinator stay out of
-the page until a visitor activates an example.
+interactive live example or a locally editable UI preview. Ordinary pages,
+publication-static examples, and historical pages omit it. CodeMirror and the
+runtime coordinator stay out of the page until a visitor activates an example.
 
 Both consumers share the editor and protocol coordinators. A change to one of
 those shared modules must be exercised in both the full-page and inline browser
@@ -44,9 +44,9 @@ tests.
 | [`src/live_code.js`](src/live_code.js) | Finds live examples, keeps one active, saves per-example drafts, and loads the larger runtime on demand. |
 | [`src/live_code_runtime.js`](src/live_code_runtime.js) | Coordinates one activated inline editor, its Python session, preview, tabs, diagnostics, Reset, and disposal. |
 | [`src/citry_editor.js`](src/citry_editor.js) | Configures CodeMirror for Python with nested HTML, JavaScript, CSS, and Citry-specific highlighting. |
-| [`src/worker_session.js`](src/worker_session.js) | Owns Worker generations, Python run IDs, timeouts, size limits, Stop, and pending Events calls. |
-| [`src/preview_bridge.js`](src/preview_bridge.js) | Creates candidate result iframes, authenticates their `MessagePort`, commits acknowledged renders, and forwards diagnostics and Events. |
-| [`scripts/build.mjs`](scripts/build.mjs) | Builds the three docs bundles, checks committed output, and copies the generated Citry Events client. |
+| [`src/worker_session.js`](src/worker_session.js) | Owns Worker generations, Python run IDs, timeouts, size limits, Stop, and pending Events and asset calls. |
+| [`src/preview_bridge.js`](src/preview_bridge.js) | Creates candidate result iframes, authenticates their `MessagePort`, commits acknowledged renders, and forwards diagnostics, Events, and Citry asset requests. |
+| [`scripts/build.mjs`](scripts/build.mjs) | Builds the three docs bundles and checks their committed output. |
 | [`package.json`](package.json) | Owns the package commands and exact CodeMirror, Lezer, and esbuild versions. |
 
 Outside this package,
@@ -67,7 +67,6 @@ The build writes these files under `docs_site/static/playground/`:
 | [`playground.js`](../../static/playground/playground.js) | `src/playground.js` and all three shared modules | Bundled and minified |
 | [`live_code.js`](../../static/playground/live_code.js) | `src/live_code.js` | Minified, not bundled |
 | [`live_code_runtime.js`](../../static/playground/live_code_runtime.js) | `src/live_code_runtime.js` and all three shared modules | Bundled and minified |
-| [`citry-events.js`](../../static/playground/citry-events.js) | The Python package's generated Events client | Copied byte for byte |
 
 `live_code.js` remains unbundled because its dynamic import must continue to
 load `live_code_runtime.js` only after activation. The other two entry points
@@ -75,9 +74,9 @@ bundle their imports so the static docs server does not need to resolve package
 dependencies in the browser.
 
 Every generated docs bundle starts with the authored source path and a warning
-not to edit it. `citry-events.js` carries the equivalent header from the Citry
-client build. Keep these outputs beside `worker.js` and `preview.html` because
-the generated modules resolve both runtime files relative to their own URL.
+not to edit it. Keep these outputs beside `worker.js` and `preview.html`
+because the generated modules resolve both runtime files relative to their own
+URL.
 
 ## Set up the workspace
 
@@ -138,15 +137,10 @@ the inline script in
 [View `preview.html`](../../static/playground/preview.html). Changes to either
 frontend coordinator may alter its paired runtime protocol. Follow
 [the runtime protocol maintenance guide](../../static/playground/README.md#keep-the-protocols-synchronized)
-and update the direct runtime counterpart in the same change.
-
-## Regenerate the Events client
-
-The build copies the generated Events client from the Python package but does
-not compile its TypeScript source. Follow
-[the runtime regeneration guide](../../static/playground/README.md#regenerate-the-events-client)
-when that source changes. If this package's check reports only that the docs
-copy is stale, running this package's `build` command is sufficient.
+and update the direct runtime counterpart in the same change. Render actions
+add a round trip from the iframe through both coordinators to the active Python
+Worker. Preserve the independent iframe and Worker asset IDs, current-run
+checks, cancellation behavior, and response-size limits when changing it.
 
 ## Run the checks
 

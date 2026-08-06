@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from lxml import html as lxml_html
 
+from docs_site._internal.components.live_code import LiveCode
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
 from docs_site._internal.guards import live_code as live_code_guard
@@ -59,6 +60,13 @@ def _guard_context(root: Path, markdown: str) -> GuardContext:
         static_dir=root / "static",
         repo_root=root,
     )
+
+
+def test_live_code_owns_its_dom_as_a_citry_template() -> None:
+    assert "<figure" in LiveCode.template
+    assert "<c-LiveActivationControls" in LiveCode.template
+    assert "<c-LiveWorkspace" in LiveCode.template
+    assert "{{ block }}" not in LiveCode.template
 
 
 def test_live_code_is_static_first_exact_and_source_projected(tmp_path: Path) -> None:

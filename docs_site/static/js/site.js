@@ -32,6 +32,12 @@
     if (resolved === 'auto') {
       resolved = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
+    if (frame.hasAttribute('data-ui-preview-frame')) {
+      if (frame.contentWindow) {
+        frame.contentWindow.postMessage({ type: 'citry-ui-preview-theme', theme: resolved }, '*');
+      }
+      return;
+    }
     try {
       if (frame.contentDocument) {
         frame.contentDocument.documentElement.style.colorScheme = resolved;
@@ -89,6 +95,51 @@
   var exampleColorScheme = window.matchMedia('(prefers-color-scheme: dark)');
   exampleColorScheme.addEventListener('change', function () {
     if (getStoredTheme() === 'auto') syncExampleFrameThemes('auto');
+  });
+
+  // Build-rendered Citry UI previews report their document height from their
+  // sandbox. Match by Window identity before accepting the numeric value, so a
+  // different frame cannot resize a preview card.
+  var uiPreviewFrames = Array.from(document.querySelectorAll('[data-ui-preview-frame]'));
+  if (uiPreviewFrames.length) {
+    window.addEventListener('message', function (event) {
+      if (!event.data || event.data.type !== 'citry-ui-preview-height') return;
+      var frame = uiPreviewFrames.find(function (candidate) {
+        return candidate.contentWindow === event.source;
+      });
+      var height = Number(event.data.height);
+      if (!frame || !Number.isFinite(height)) return;
+      frame.style.height = Math.max(96, Math.min(8192, Math.ceil(height))) + 'px';
+    });
+  }
+
+  // Preview configurators belong to the docs card, not to the rendered
+  // component. Send their current values to the matching sandboxed frame.
+  document.querySelectorAll('[data-ui-preview-controls]').forEach(function (container) {
+    var demo = container.closest('[data-citry-ui-demo]');
+    var form = container.querySelector('form');
+    var frame = demo ? demo.querySelector('[data-ui-preview-frame]') : null;
+    if (!form || !frame) return;
+
+    function publishPreviewControls() {
+      if (!frame.contentWindow) return;
+      var values = {};
+      form.querySelectorAll('[data-ui-preview-control]').forEach(function (control) {
+        values[control.name] = control.type === 'checkbox' ? control.checked : control.value;
+      });
+      frame.contentWindow.postMessage({
+        type: 'citry-ui-preview-controls',
+        values: values,
+      }, '*');
+    }
+
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+    });
+    form.addEventListener('input', publishPreviewControls);
+    form.addEventListener('change', publishPreviewControls);
+    frame.addEventListener('load', publishPreviewControls);
+    publishPreviewControls();
   });
 
   // ----------------------------------------------------------------

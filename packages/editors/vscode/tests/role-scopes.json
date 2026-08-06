@@ -1,0 +1,10 @@
+{
+	"tag": ["entity.name.tag.citry", "entity.name.tag.html"],
+	"attribute": ["entity.other.attribute-name.citry", "entity.other.attribute-name.html"],
+	"python": "meta.embedded.inline.python.citry",
+	"javascript": ["meta.embedded.inline.javascript.citry", "meta.embedded.block.javascript", "source.js"],
+	"css": ["meta.embedded.block.css", "source.css"],
+	"handler": "entity.name.function.handler.citry",
+	"comment": "comment",
+	"text": "text"
+}

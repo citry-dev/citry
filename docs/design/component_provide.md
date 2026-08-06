@@ -387,3 +387,620 @@ inject-in-slot-in-fill); provides reaching Python-channel slot content and
 transparent serialization (no `data-cid` for the provide, correct marker
 stacking through it, transparent-as-root); the reserved-name guard; and the
 README example verbatim.
+
+## 10. Client provide, inject, and unprovide design
+
+**Status: implemented on 2026-07-24.**
+This section owns the public semantics. The client ownership architecture,
+integration points, and abbreviated examples also appear in
+[`alpinejs.md`](alpinejs.md#47-client-ambient-context). The two documents must
+be changed together if this contract changes.
+
+### 10.1 Decision
+
+Citry should expose the same three operations through both client authoring
+surfaces:
+
+```js
+$component(({ provide, inject, unprovide }) => {
+  // Component-wide setup.
+});
+```
+
+```html
+<section x-init="$provide('theme', theme)">
+  <span x-text="$inject('theme').name"></span>
+
+  <div x-init="$unprovide('theme')">
+    <!-- Descendants no longer see the outer theme. -->
+  </div>
+</section>
+```
+
+The public signatures are:
+
+```ts
+declare const contextValueType: unique symbol;
+type InjectionKey<T> = symbol & { readonly [contextValueType]?: T };
+type ContextKey<T = unknown> = string | InjectionKey<T>;
+
+provide<T>(key: ContextKey<T>, value: T): void;
+inject<T = unknown>(key: ContextKey<T>): T;
+inject<T = unknown, D = unknown>(key: ContextKey<T>, defaultValue: D): T | D;
+unprovide(key: ContextKey): void;
+```
+
+This is the intended TypeScript contract, following Vue's phantom generic
+symbol pattern. The current browser runtime is shipped inside the Python
+package and does not yet publish a JavaScript declaration package, so
+`InjectionKey<T>` is not currently an importable public type. Runtime keys are
+ordinary JavaScript strings and symbols. A future published client package
+should export this declaration unchanged.
+
+The Alpine spellings are `$provide`, `$inject`, and `$unprovide`. The
+`$component` context spellings omit `$`, like its existing `effect`,
+`reactive`, `sendEvent`, and `onEvent` helpers. Both surfaces call the same
+ambient-context service. They are not parallel implementations.
+
+The Python and JavaScript forms differ only where each language is most
+ergonomic. Python's `<c-provide key="x" arg1="..." arg2="...">` tag passes
+fields one by one, so `provide(key, arg1=value1, arg2=value2)` mirrors the tag
+and reads more naturally than an explicit dictionary. JavaScript has native
+object literals, reactive objects, functions, and primitives, so
+`provide(key, value)` is the natural spelling there. Citry stores and returns
+the exact JavaScript value without wrapping, cloning, freezing, merging, or
+unwrapping it.
+
+### 10.2 Prior art and what Citry should retain
+
+The archived AlpinUI/Vuetify work contains
+`alpine-provide-inject` 0.3.0. Its complete runtime is small:
+
+- `$provide(key, value)` stores a value in an ad hoc `_provides` object on the
+  current element;
+- `$inject(key, defaultValue)` starts at `el.parentElement`, walks physical
+  ancestors, and returns the first matching value;
+- injection deliberately excludes the current element;
+- the composition adapter forwards its `provide()` and `inject()` helpers to
+  those magics;
+- component code provides symbols and reactive refs or computed values, then
+  injects them through Vuetify-style composables;
+- a private `injectSelf()` helper reads the current instance's own provide
+  object for one defaults-composition case.
+
+Citry should retain the familiar callable names, ancestor-only lookup,
+nearest-provider behavior, `string | symbol` keys, exact value identity, and
+the component-setup forwarding pattern. Those choices worked well and match
+Vue's component-authoring model.
+
+Citry should not copy the old storage or traversal:
+
+- `parentElement` expresses physical DOM ancestry, not Citry's rendered
+  component and slot ancestry;
+- an element property cannot represent a rootless component or one logical
+  component with several roots;
+- raw DOM walking loses the authored route under `x-teleport`, source-linked
+  fills, shared physical roots, and mirrored placements;
+- a plain object coerces numeric keys and makes the old TypeScript acceptance
+  of numeric provide keys disagree with its inject signature;
+- checking `defaultValue !== undefined` cannot distinguish an omitted default
+  from an explicit `undefined` default;
+- the old plugin has no `unprovide`, graph-revision ownership, morph
+  transaction, or tests.
+
+Alpine 3.15.12 does make the magic surface feasible. `Alpine.magic()` receives
+the expression element, and its current implementation supplies memoized
+element-bound utilities with cleanup tied to removal. Alpine's teleport
+implementation also preserves a backlink to the authored template scope.
+Those mechanisms are inputs to a Citry adapter, not permission to make DOM
+ancestry authoritative. The cleanup utility passed to magic callbacks is
+observed in pinned Alpine source but is not fully described by Alpine's public
+magic documentation, so its use requires the private-API adapter and canaries
+already required by [`alpinejs.md`](alpinejs.md#62-private-apis).
+
+The primary upstream references are:
+
+- [Alpine extension and magic documentation](https://alpinejs.dev/advanced/extending);
+- [Alpine 3.15.12 magic source](https://github.com/alpinejs/alpine/blob/v3.15.12/packages/alpinejs/src/magics.js);
+- [Alpine 3.15.12 scope source](https://github.com/alpinejs/alpine/blob/v3.15.12/packages/alpinejs/src/scope.js);
+- [Alpine teleport documentation](https://alpinejs.dev/directives/teleport);
+- [Alpine 3.15.12 teleport source](https://github.com/alpinejs/alpine/blob/v3.15.12/packages/alpinejs/src/directives/x-teleport.js);
+- [Vue provide/inject documentation](https://vuejs.org/guide/components/provide-inject);
+- [Vue runtime provide/inject source](https://github.com/vuejs/core/blob/v3.5.18/packages/runtime-core/src/apiInject.ts).
+
+### 10.3 Core semantics
+
+Client ambient context follows these rules:
+
+1. A provide is visible below the component or HTML element where it was
+   established. For supplied slot content, lookup follows the component's
+   rendered `<c-slot>` position, while ordinary Alpine variables in the fill
+   still come from the caller that authored the fill.
+2. An inject never sees a provide or block established by the same context
+   owner. An element owner starts at its incoming parent route. A shared hook
+   owner starts independently at every live occurrence's incoming parent,
+   then applies the consensus rule in section 10.4.
+3. The nearest provided value for a key wins. Values are replaced as a whole;
+   Citry never merges them.
+4. Different keys compose independently.
+5. An unprovide entry stops lookup for its key and makes the key appear missing
+   below that point. A nearer descendant provide restores the key.
+6. A provided `undefined` is present. `null` and every other JavaScript value
+   are also valid.
+7. A missing key with no default throws a context-rich error. An explicitly
+   supplied default is returned, including an explicit `undefined`. The
+   implementation must test `arguments.length`, not the default's value.
+8. A key is either a non-empty string or a symbol. Numbers are rejected rather
+   than silently coerced to strings.
+9. `provide` and `unprovide` are synchronous initialization operations.
+   `$component` callers use them in `init`; template callers normally use
+   them in `x-init`. Calling either after the owning initialization window has
+   closed throws. `inject` may be called later while its owner route remains
+   live.
+10. When one owner writes the same key more than once during initialization,
+    the last call wins. A later `provide` replaces a block, and a later
+    `unprovide` replaces a value.
+
+The initialization restriction is intentional. Changing context topology
+from a click handler or effect after descendants have initialized would make
+setup-time injections order-dependent and would require implicit descendant
+reinitialization. Dynamic data should instead be carried in one stable
+reactive value that is provided during initialization.
+
+Application code cannot change provider registration after initialization. If
+a component provides an Alpine-reactive object, descendants receive that same
+object and react normally when its properties change. Citry does invalidate a
+live Alpine expression containing `$inject` when a provider declaration is
+installed, replaced, or removed by runtime lifecycle work such as a morph;
+the expression then resolves the current nearest value. This does not mutate
+or wrap the value, and it does not retroactively change a value that component
+setup captured in a plain variable. This matches the useful part of the
+AlpinUI/Vue pattern: provide a stable reactive reference, and keep mutation
+operations with the provider when practical.
+
+`injectSelf` is not public API. A provider already has the value it provided.
+A composition helper that needs both the inherited and replacement values
+injects first, computes the new value, and then provides it. Because own
+writes are invisible to own injection, source order does not change the
+result.
+
+### 10.4 Component hooks and template magics
+
+The `$component` methods cover every root rendered by that component:
+
+```js
+const TabsKey = Symbol.for("citry-ui:tabs");
+
+$component(({ reactive, provide }) => {
+  const tabs = reactive({ active: null, items: [] });
+
+  provide(TabsKey, tabs);
+});
+```
+
+They work for single-root, multi-root, text-only, and empty components. A
+component-wide provide is shared by the logical lifecycle and applies beneath
+every live placement owned by that lifecycle.
+
+The magic methods cover the browser HTML descendants of their expression
+element. Supplied slot content is the exception to a plain `parentElement`
+walk: it uses the receiver's rendered `<c-slot>` position, as section 10.5
+defines.
+
+```html
+<section x-init="$provide('theme', theme)">
+  <c-card />
+</section>
+
+<aside>
+  <!-- This sibling is outside the provider. -->
+</aside>
+```
+
+On a single element root, calling `provide()` in the hook has the same
+descendant effect as calling `$provide()` in `x-init` on that root. On a
+multi-root component, the hook is equivalent in coverage to placing the
+magic on every root. The hook remains preferable for component-wide library
+state because it runs once per logical callback invocation and also works
+without any element root. The magic is preferable for a deliberately narrow
+subtree.
+
+The two forms differ in physical-copy ownership. A `$component` provide is
+shared under Citry's logical mirror policy. A magic called in a mirrored or
+structurally cloned element is placement-local, just like ordinary Alpine
+`x-data` and directive cleanup. Each copy's descendants resolve through that
+copy's ambient frame.
+
+A shared component frame therefore has one occurrence per live placement.
+All occurrences refer to the same provided value or blocked marker, but each
+occurrence has its own incoming rendered route. This lets descendants at two
+slot outlets see the shared component provide while preserving the different
+outer providers at those outlets.
+
+Hook `inject()` is singular even when its logical lifecycle has several
+placements. Citry resolves the requested key independently at every live
+occurrence. It returns a value only when every occurrence has the same lookup
+outcome under `Object.is`. All occurrences being missing is one matching
+outcome, after which the explicit default or missing-key error is applied.
+Found `undefined` remains different from missing. If outcomes disagree, Citry
+throws an ambiguous-context error that identifies the conflicting placements.
+The author must move that lookup into a placement-local magic, arrange
+equivalent outer context, or stop sharing that logical lifecycle. Citry must
+not select the first physical placement as a hidden canonical route.
+
+Hook initialization has to settle in ancestor order. A parent's synchronous
+`provide()` or `unprovide()` calls are committed before a descendant hook may
+call `inject()`. On a compatible render revision, old hook registrations are
+removed and new registrations are installed as part of the same graph and DOM
+adoption transaction. No descendant may observe the temporary gap. If hook
+initialization fails, its ambient writes roll back before the branch is
+retired or diagnosed.
+
+The helpers handed to one hook invocation are bound to that invocation's live
+occurrence set, including each occurrence's current incoming route. Captured
+helpers fail as stale after invocation cleanup rather than silently resolving
+through a replacement component revision.
+
+Mixed hook and template initialization has the same guarantee. An ancestor
+element's synchronous `$provide()` or `$unprovide()` call settles before a
+descendant component hook runs, and an ancestor component hook settles before
+a descendant element evaluates `$inject()`. The rule applies to initial
+documents, inserted fragments, structural copies, teleport origins, and
+reused compatible nodes. It also applies when Alpine's object-form `x-bind`
+creates the provider directive. A provider call after the first asynchronous
+pause is outside the synchronous initialization window and fails.
+
+### 10.5 Slots require two different routes
+
+A supplied fill already has two relevant locations:
+
+- its lexical source, where its Alpine expressions were authored;
+- its rendered site, where the receiver's `<c-slot>` places it.
+
+Ambient context follows the rendered route, just like the server contract in
+sections 3 and 4. Alpine variables, refs, IDs, and ordinary expression lookup
+continue to follow the lexical source rules in
+[`alpinejs.md`](alpinejs.md#65-fill-source-projection). These truths must not
+be collapsed into one parent pointer.
+
+For example:
+
+```html
+<!-- Receiver template -->
+<section x-init="$provide('theme', receiverTheme)">
+  <c-slot />
+</section>
+
+<!-- Caller template -->
+<c-receiver>
+  <button x-text="$inject('theme').buttonLabel"></button>
+</c-receiver>
+```
+
+`receiverTheme` is evaluated in the receiver's Alpine scope. The button's
+`x-text` expression is evaluated in the caller's lexical Alpine scope, but
+its `$inject('theme')` lookup follows the rendered slot route and sees the
+receiver's provided value.
+
+The complete slot rules mirror the server:
+
+- a supplied fill retains the caller-side ambient route captured at its
+  invocation source;
+- the route active at the rendered slot site is laid over that captured
+  route;
+- a slot-site provider or block wins when both routes contain the same key;
+- fallback content uses the receiver's current rendered route directly;
+- detached slot content has its ordinary empty lexical base but still receives
+  ambient context from the rendered slot site;
+- `$provide` or `$unprovide` authored inside a fill uses the caller's lexical
+  scope to evaluate its arguments, then affects descendants at that fill's
+  rendered position.
+
+This route overlay is graph data, not a snapshot of JavaScript values in the
+server manifest. The manifest records how runtime context positions relate;
+all client values remain in browser memory.
+
+### 10.6 The ambient-context graph
+
+The old plugin's element walk must be replaced by a small graph overlay on
+the landed ownership registry. The conceptual model is:
+
+```text
+rendered call-site route
+        |
+        v
+component ambient frame       <- hook provide/unprovide
+        |
+        v
+template element frame        <- magic provide/unprovide
+        |
+        v
+child component or slot site
+```
+
+An ambient frame contains an owner token, one or more placement occurrences,
+and a map from context keys to either a provided value or a private blocked
+marker. Each occurrence has a route to its next outer frame. Lookup walks one
+occurrence's route nearest to farthest and stops on the first value or block.
+The exact storage may use persistent linked frames or an equivalent indexed
+route; this design does not pin the internal representation.
+
+There are two kinds of owners:
+
+- a logical component callback invocation, represented even when `els` is
+  empty;
+- an Alpine expression element and physical placement, created lazily when a
+  magic registers a value or block.
+
+The ownership graph must expose a rendered ambient parent independently from
+the existing lexical source and `Component.parent` relations. At component
+invocations and slot outlets, that route follows the server hand-over rules.
+At ordinary HTML nesting it follows browser `parentElement` ancestry. At a
+teleport it follows Alpine's authored-origin backlink, not the destination's
+`parentElement`. Shared roots use the graph's ordered ownership records.
+Range caps preserve the route for multi-root and rootless components.
+Several logical frames on one shared physical root remain independently
+ordered graph records; an element property cannot collapse them. A mirrored
+logical frame keeps one occurrence per placement as specified in section
+10.4.
+
+The implementation derives this route from the existing exact component,
+fill, and physical-region records, together with ordinary HTML ancestry and
+Alpine's teleport-origin backlink. No additional wire-manifest relation is
+needed. Component and slot transitions still use Citry's recorded ranges and
+fill placement; they never fall back to the nearest marked DOM element.
+
+The graph also resolves the starting point:
+
+- `$inject` on an element begins outside that element's own ambient frame;
+- hook `inject` begins independently at every component-frame occurrence's
+  incoming ambient parent, then applies the section 10.4 consensus rule;
+- descendants begin through the current element or component frame and can
+  therefore observe its provide or block.
+
+This makes descendant-only visibility independent of Alpine directive order
+on one element.
+
+### 10.7 Lifecycle, teleport, morph, and cleanup
+
+A magic frame belongs to one expression element and physical placement. Each
+contribution to that frame is owned by the synchronous Alpine directive
+invocation that called `$provide()` or `$unprovide()`. Repeated magic property
+access during one invocation must not stack cleanup work. Several initializing
+directives on one element contribute in Alpine's deterministic directive
+order; the last completed write for a key wins. When one declaring directive
+is removed or replaced, Citry removes all of that invocation's contributions
+and recomputes the element frame from those that remain before the replacement
+directive and descendant hooks run. Removing the element performs the same
+cleanup through Alpine's element lifetime.
+
+This is stricter than the old plugin and cannot be implemented with the
+public `Alpine.magic()` callback alone: Alpine exposes the expression element
+there, but not the exact directive attribute or its cleanup. At build time,
+Citry narrowly instruments pinned Alpine's `getDirectiveHandler` execution
+path. Every built-in and plugin directive therefore enters the context service
+with its real `(element, originalAttributeName)` identity, independent of
+expression text, attribute order, or plugin priority. The instrumentation
+passes the directive's own `utilities.cleanup` registrar to the context
+service. Cleanup therefore follows Alpine's exact directive lifetime for
+literal attributes, object-form `x-bind`, and programmatic `Alpine.bind()`;
+it is not inferred from later attribute text or element removal alone. Exact
+source replacements and behavior tests are canaries for this pinned private
+integration. Citry does not degrade to element-lifetime registrations.
+
+An Alpine magic value follows Alpine's normal capture rule. Reading `$inject`
+returns a helper bound to that expression element. If code stores the helper
+in `x-data`, the stored function keeps that element's rendered route when it
+is called later, including after `await`; it does not silently rebind to the
+element whose later expression happened to call the stored function. Spell
+`$inject(...)` directly in the later expression when that later element's
+route is wanted. Writes differ deliberately: a stored `$provide` or
+`$unprovide` helper can mutate context only during another directive's
+synchronous initialization, and the exact executing directive owns that
+registration and its cleanup.
+
+Component-owned frames are tied to the `$component` callback invocation.
+They are disposed with managed effects and the callback's returned cleanup.
+The stable logical lifecycle may survive a same-class morph, but the previous
+invocation's registrations do not.
+
+The existing structural policies remain authoritative:
+
+- ordinary `x-if` and `x-for` copies get copy-local magic frames and cleanup;
+- component-active server nodes remain subject to the current structural
+  rejection rules;
+- `x-teleport` keeps ambient lookup at its authored origin while native event
+  propagation remains physical;
+- a complete logical range move preserves its component frame;
+- removing one mirrored placement removes only placement-local magic frames;
+- removing the final placement removes the shared component frame;
+- a compatible atomic morph correlates ambient routes before descendants
+  resume;
+- a class replacement or retired source invalidates captured helpers and
+  removes all owned frames exactly once.
+
+For a preserved element under compatible morph:
+
+- an unchanged declaring directive keeps its registration and receives the
+  incoming rendered route atomically;
+- changing the directive cleans the old registration, evaluates the new
+  declaration once, and then releases descendants;
+- removing the directive removes its registration;
+- moving the element with an unchanged declaration keeps the registered value
+  but retargets its outer route;
+- changing a key or value through a newly evaluated declaration replaces the
+  old invocation's complete registration set, so removed keys cannot linger.
+
+While Alpine initializes a detached incoming morph counterpart, Citry maps
+reads to the live element being cloned. Detached writes are rejected; the
+declaration writes once it is installed on the live element. Provider
+lifecycle changes invalidate existing Alpine `$inject` expressions so they
+re-resolve after the live write or cleanup.
+
+Moving an element or a complete component range under different HTML
+ancestors also invalidates those expressions. The provider frame stays with
+its declaring element or component invocation, while the next lookup uses the
+new browser ancestry together with the same slot and teleport routing rules.
+
+Server `Component.provide()` values are not automatically serialized into
+the client graph. A component that needs the same conceptual service on both
+sides explicitly transfers suitable data through `js_data()`, client props,
+or another declared client channel, then calls client `provide()`. This avoids
+accidental serialization of Python objects, functions, secrets, or mutable
+state.
+
+### 10.8 Diagnostics and supported context
+
+The magics are installed through Citry's pre-start Alpine broker. They are
+valid only when the expression element belongs to a live Citry ownership
+graph. Calling one in unrelated standalone Alpine markup raises a pointed
+error instead of silently switching to DOM-only semantics. A future generic
+Alpine adapter can be designed separately if there is product demand.
+
+The names `$provide`, `$inject`, and `$unprovide` are reserved by Citry on its
+owned Alpine instance. The broker installs all three before running queued
+plugin callbacks. Its extension registration API and its guarded
+`Alpine.magic()` reject attempts to overwrite them. The error names the
+reserved magic and leaves Citry's registrations unchanged. The archived
+standalone plugin is therefore incompatible on the same Alpine instance and
+must not be installed alongside Citry's implementation.
+
+Diagnostics must distinguish:
+
+- invalid key type or empty string;
+- missing injection with no default;
+- use outside a live Citry route;
+- `provide` or `unprovide` after synchronous initialization;
+- a captured helper used after its owner retired;
+- malformed or missing ambient ancestry at a component, fill, teleport, or
+  shared-root transition;
+- duplicate runtime installation or a reserved-magic collision.
+
+Errors name the key and the owner kind or component class when that information
+is available, then give a concrete authoring fix. Symbol diagnostics use
+`String(key)` and never treat two equal descriptions as equal symbols.
+
+The dependency extension must arrange for the client runtime and ownership
+manifest whenever these magics appear in a component template, even if the
+component has no `js` body or Events handlers. Detection is an activation
+signal only. It must not parse arbitrary expressions to infer context keys or
+values.
+
+### 10.9 Tabs and compound-component boundaries
+
+The motivating Citry UI pattern is a compound component that consumes one
+parent context but blocks accidental reuse below itself:
+
+```js
+const TabsKey = Symbol.for("citry-ui:tabs");
+
+// CTabs
+$component(({ reactive, provide }) => {
+  const tabs = reactive({ active: null, tabs: [] });
+  provide(TabsKey, tabs);
+});
+
+// CTab
+$component(({ inject, unprovide }) => {
+  const tabs = inject(TabsKey);
+  unprovide(TabsKey);
+
+  // Register this tab with `tabs`. Descendants now require a nested CTabs.
+});
+```
+
+This permits `CTabs > CTab > CTabs > CTab` and rejects accidental
+`CTabs > CTab > CTab`. The child can inject the inherited Tabs context because
+its own block is outgoing only. A nested CTabs restores the key with its nearer
+provide. The same rule applies when the inner content arrives through a slot.
+
+### 10.10 Rejected alternatives
+
+- **Copy the old `_provides` plus `parentElement` plugin.** Rejected because it
+  cannot preserve Citry ownership and lifetime across the required root and
+  slot shapes.
+- **Use Alpine data scope as the context store.** Rejected because Citry
+  deliberately isolates component data scopes, while ambient context is an
+  explicit channel that must cross those boundaries. It would also conflate
+  user variable shadowing with context-key replacement.
+- **Resolve through lexical fill source.** Rejected because it contradicts the
+  server slot contract and prevents a receiver from providing services to
+  content rendered in its slot.
+- **Resolve through physical DOM only.** Rejected by teleport, rootless
+  components, logical mirrors, shared roots, and range-based morphing.
+- **Expose only magics.** Rejected because a rootless component has no element
+  carrier and multi-root component-wide setup would be duplicated.
+- **Expose only hook methods.** Rejected because authors need a narrow provider
+  or block at an arbitrary subtree, including inside slot content.
+- **Add public `injectSelf`.** Rejected because own provided state is already
+  locally available and descendant-only lookup is easier to reason about.
+- **Automatically bridge server values.** Rejected because value eligibility,
+  serialization, secrecy, identity, and reactivity all require explicit
+  author intent.
+- **Allow late provider topology changes.** Rejected for the first version
+  because setup-time consumers would become order-dependent. Stable reactive
+  provided values cover the legitimate dynamic-state case.
+
+### 10.11 Implementation sequence and acceptance plan
+
+The implementation was divided into independently reviewable stages:
+
+1. Prove ambient-route representation against existing component, range,
+   fill, shared-root, mirror, teleport, and graph-revision records. Decide
+   whether the wire manifest needs one new relation. This proof includes
+   per-placement frame occurrences and ambiguous hook injection.
+2. Add the runtime frame registry, key validation, descendant-only lookup,
+   blocking, defaults, stale-route protection, and lifecycle cleanup without
+   exposing public APIs.
+3. Add `$component` context methods and prove ancestor init ordering,
+   rootless behavior, revision replacement, rollback, and cleanup.
+4. Add the three Alpine magics through the permanent broker, including
+   activation, directive-invocation cleanup, mixed hook/magic init ordering,
+   reserved-name enforcement, and the pinned private-API canary.
+5. Prove slot overlay and the separation of lexical expression source from
+   rendered ambient route.
+6. Close structural and transaction cases, then update public documentation
+   and Citry UI components.
+
+The completion matrix below remains required even though the core API and its
+first browser coverage have landed. Cases not yet named in
+`test_alpine_ambient_context_e2e.py` must not be treated as implicitly proven:
+
+- string and symbol keys, provided `undefined`, omitted versus explicit
+  `undefined` defaults, invalid keys, and missing-key diagnostics;
+- nearest replacement, independent keys, sibling non-leakage, block,
+  restoration, own-injection exclusion, duplicate writes, and failed-init
+  rollback;
+- method/magic parity on a single root, component-wide multi-root and rootless
+  hooks, and narrow element subtrees;
+- ancestor magic to descendant hook, ancestor hook to descendant magic,
+  object-form `x-bind` provider creation, synchronous calls before an
+  asynchronous pause, and rejected late calls;
+- supplied fill, fallback fill, nested fills, detached content, a provider
+  inside a fill, and caller lexical variables combined with receiver ambient
+  context;
+- ordinary user `x-data`, shared physical roots, transparent components,
+  mirrors, structural clones, teleport, complete range moves across different
+  providers, and final removal;
+- mirrored occurrences with equal, missing, and conflicting outer outcomes,
+  including found `undefined` versus missing, plus placement-local magic
+  values;
+- initial document activation, inserted fragments, compatible morph,
+  incompatible replacement, stale callback helpers, and atomic graph
+  rejection;
+- preserved-element morph with an unchanged, changed, removed, or moved
+  provider declaration, including removal of keys no longer declared;
+- literal-attribute, object-form `x-bind`, and programmatic `Alpine.bind()`
+  cleanup without stale registrations;
+- attempted pre-start and late overwrite of each reserved magic name without
+  partial installation;
+- exact value identity and reactive-object updates without automatic
+  provider-value wrapping;
+- Chromium, Firefox, and WebKit behavior plus an Alpine 3.15.12 canary that
+  fails when directive-invocation cleanup, magic utilities, or teleport
+  ancestry changes.
+
+The regression suite includes slot and teleport cases that fail if lookup is
+reduced to `parentElement`, plus a rootless hook case that fails if component
+frames are removed. These tests guard the architecture rather than only the
+public spelling.

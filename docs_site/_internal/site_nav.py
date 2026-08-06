@@ -85,7 +85,6 @@ def load_site_nav_from_paths(
         ui_library_nav_items(
             project.ui_library,
             repo_root=repo_root,
-            content_dir=nav_path.parent,
         )
         if tree.has_source("ui_library") and includes("ui_library")
         else tree.fallback_items_for_source("ui_library")

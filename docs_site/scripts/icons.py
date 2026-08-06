@@ -22,9 +22,12 @@ Browser and phone icons, into ``docs_site/static/img/``:
 
 Everything else that carries the mark:
 
-- ``docs/assets/citry-logo.png`` - the wide mark for the top of the README.
-  GitHub, PyPI, and npm all render the README, and only PyPI needs it as a PNG
-  behind an absolute URL, so a PNG is what they all get.
+- ``docs/assets/citry-wordmark.png`` - the mark with the project's name beside
+  it, for the top of a README. GitHub, PyPI, and the VS Code Marketplace all
+  render a README, and PyPI needs the image as a PNG behind an absolute URL, so
+  a PNG is what they all get.
+- ``docs/assets/citry-mark.png`` - the mark on its own, for anywhere the name is
+  already spelled out next to it.
 - ``docs/assets/citry-avatar.png`` - 512px square for the GitHub organisation
   and repository profile pictures, which have to be uploaded by hand.
 - ``packages/editors/vscode/images/icon.png`` - 256px for the VS Code
@@ -48,6 +51,7 @@ Run it after editing the artwork; it needs Playwright and a Chromium binary::
 
 from __future__ import annotations
 
+import base64
 import shutil
 import sys
 from dataclasses import dataclass
@@ -100,10 +104,10 @@ def _square(path: Path, size: int, *, solid: bool = False) -> IconSpec:
     )
 
 
-# The wide artwork's frame is 81 by 71 units, so a wide PNG keeps that ratio.
+# The wide artwork's frame is 83 by 73 units, so a wide PNG keeps that ratio.
 def _wide(path: Path, width: int) -> IconSpec:
     """A wide lockup cut from the wide artwork, at the artwork's own proportions."""
-    return IconSpec(path=path, width=width, height=round(width * 71 / 81), art=WIDE_ART)
+    return IconSpec(path=path, width=width, height=round(width * 73 / 83), art=WIDE_ART)
 
 
 ICONS = (
@@ -113,11 +117,94 @@ ICONS = (
     _square(IMG_DIR / "apple-touch-icon.png", 180, solid=True),
     _square(REPO_ROOT / "docs" / "assets" / "citry-avatar.png", 512, solid=True),
     _square(REPO_ROOT / "packages" / "editors" / "vscode" / "images" / "icon.png", 256),
-    # Twice the width the README asks for, so it stays sharp on a high-density
-    # screen. Kept modest because PyPI may drop the width attribute and show the
-    # file at its own size, and 240px still reads as a logo rather than a banner.
-    _wide(REPO_ROOT / "docs" / "assets" / "citry-logo.png", 240),
+    _wide(REPO_ROOT / "docs" / "assets" / "citry-mark.png", 240),
 )
+
+# The wordmark: the mark with the project's name beside it, for the top of a
+# README. It is drawn entirely in the brand teal rather than teal-and-ink like
+# the site header, because one flat PNG has to sit on a white page and a dark
+# one without a second version.
+WORDMARK_PATH = REPO_ROOT / "docs" / "assets" / "citry-wordmark.png"
+WORDMARK_FONT = REPO_ROOT / "docs_site" / "static" / "fonts" / "InterVariable.woff2"
+
+# Drawn at three times the width the README asks for so it stays sharp on a
+# high-density screen. The name is set in the same Inter the site uses, loaded
+# from the repository's own copy so the letterforms do not depend on which
+# machine ran this script.
+WORDMARK_SCALE = 3
+WORDMARK_FONT_SIZE = 30 * WORDMARK_SCALE
+
+# Beside the name, the mark sits slightly shorter than the letters rather than
+# towering over them. The site header is the reference: a 1rem mark against a
+# 1.05rem name, spaced 0.5rem apart (`.djc-logo` in site.css). Holding those two
+# proportions here makes the README lockup and the header read as one lockup.
+MARK_TO_NAME = 1 / 1.05
+GAP_TO_NAME = 0.5 / 1.05
+
+WORDMARK_MARK_HEIGHT = round(WORDMARK_FONT_SIZE * MARK_TO_NAME)
+WORDMARK_GAP = round(WORDMARK_FONT_SIZE * GAP_TO_NAME)
+
+# Where the lockup's *ink* is, which is not where its layout box is. A line box
+# is only as tall as the line-height, so the tail of the y hangs below it; the
+# name's negative letter-spacing and the last glyph's side bearing likewise push
+# past the right edge. Cropping to the layout box therefore shaves both. Chromium
+# reports the real ink extent through measureText's actualBoundingBox* values, so
+# the crop is taken from those and from the mark's own box, whichever reaches
+# further on each side.
+INK_BOX_SCRIPT = """() => {
+  const svg = document.querySelector('.lockup svg');
+  const name = document.querySelector('.name');
+  const style = getComputedStyle(name);
+
+  const ctx = document.createElement('canvas').getContext('2d');
+  ctx.font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+  ctx.letterSpacing = style.letterSpacing;
+  const m = ctx.measureText(name.textContent);
+
+  // Half-leading splits the difference between the line box and the font's own
+  // em box, which is what fixes the baseline inside the line.
+  const rect = name.getBoundingClientRect();
+  const leading = (rect.height - (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent)) / 2;
+  const baseline = rect.top + leading + m.fontBoundingBoxAscent;
+
+  const mark = svg.getBoundingClientRect();
+  const left = Math.min(mark.left, rect.left - m.actualBoundingBoxLeft);
+  const top = Math.min(mark.top, baseline - m.actualBoundingBoxAscent);
+  const right = Math.max(mark.right, rect.left + m.actualBoundingBoxRight);
+  const bottom = Math.max(mark.bottom, baseline + m.actualBoundingBoxDescent);
+
+  // Out to whole pixels, so a fractional edge is included rather than sliced.
+  const x = Math.floor(left);
+  const y = Math.floor(top);
+  return { x, y, width: Math.ceil(right) - x, height: Math.ceil(bottom) - y };
+}"""
+
+WORDMARK_PAGE = """<!doctype html>
+<html><head><style>
+  @font-face {{
+    font-family: 'Inter';
+    src: url('data:font/woff2;base64,{font}') format('woff2');
+    font-weight: 100 900;
+  }}
+  html, body {{ margin: 0; background: transparent; }}
+  /* Room on every side so ink that spills past the layout box still lands on
+     the page, and the crop below has something to crop to. */
+  body {{ padding: 60px; }}
+  .lockup {{
+    display: inline-flex; align-items: center; gap: {gap}px;
+    font-family: 'Inter', sans-serif;
+  }}
+  .lockup svg {{ display: block; height: {mark}px; width: auto; }}
+  .lockup svg path {{ stroke: {stroke} !important; }}
+  .name {{
+    color: {stroke};
+    font-size: {size}px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }}
+</style></head>
+<body><span class="lockup">{svg}<span class="name">Citry</span></span></body></html>"""
 
 # The artwork is inlined into this page and screenshotted. Forcing the stroke
 # here overrides the theme rule the SVG carries, so the output is deterministic.
@@ -164,6 +251,8 @@ def main() -> int:
                 spec.path.parent.mkdir(parents=True, exist_ok=True)
                 _shoot(browser, art_source[spec.art], spec)
                 print(f"wrote {spec.describe()}")
+            size = _shoot_wordmark(browser, art_source[WIDE_ART])
+            print(f"wrote {WORDMARK_PATH.relative_to(REPO_ROOT)!s:<48} {size} transparent")
         finally:
             browser.close()
     return 0
@@ -188,6 +277,30 @@ def _shoot(browser: object, svg: str, spec: IconSpec) -> None:
             wait_until="load",
         )
         page.screenshot(path=str(spec.path), omit_background=not spec.ground)
+    finally:
+        page.close()
+
+
+def _shoot_wordmark(browser: object, svg: str) -> str:
+    """Render the mark with the name beside it, cropped to the lockup. Returns its size."""
+    font = base64.b64encode(WORDMARK_FONT.read_bytes()).decode("ascii")
+    page = browser.new_page(viewport={"width": 1200, "height": 400})  # type: ignore[attr-defined]
+    try:
+        page.set_content(
+            WORDMARK_PAGE.format(
+                svg=svg,
+                font=font,
+                gap=WORDMARK_GAP,
+                mark=WORDMARK_MARK_HEIGHT,
+                size=WORDMARK_FONT_SIZE,
+                stroke=BRAND_TEAL,
+            ),
+            wait_until="load",
+        )
+        page.wait_for_function("document.fonts.ready.then(() => true)")
+        box = page.evaluate(INK_BOX_SCRIPT)
+        page.screenshot(path=str(WORDMARK_PATH), clip=box, omit_background=True)
+        return f"{round(box['width']):>4}x{round(box['height']):<4}"
     finally:
         page.close()
 

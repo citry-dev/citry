@@ -1,0 +1,30 @@
+# Ordered Citry UI page catalog. Each component requires a unique
+# non-empty `family`, a unique safe `slug`, and a safe repository-relative `.md`
+# `source`. Every source requires a sibling api.yml containing its
+# schema-validated API reference. `nav_title` is an optional non-empty override. Unknown fields
+# fail validation. See docs_site/_internal/ui_library_projection.py and
+# ui_library_reference.py. The build and development server render each
+# declared source directly; no copy under docs_site/content is required.
+components:
+  - family: button
+    slug: button
+    source: packages/py/citry_ui/citry_ui/components/cbutton/api.md
+  - family: field-input
+    slug: field-input
+    source: packages/py/citry_ui/citry_ui/components/cfield/api.md
+    nav_title: Field and Input
+  - family: form
+    slug: form
+    source: packages/py/citry_ui/citry_ui/components/cform/api.md
+  - family: tabs
+    slug: tabs
+    source: packages/py/citry_ui/citry_ui/components/ctabs/api.md
+  - family: dialog
+    slug: dialog
+    source: packages/py/citry_ui/citry_ui/components/cdialog/api.md
+  - family: combobox
+    slug: combobox
+    source: packages/py/citry_ui/citry_ui/components/ccombobox/api.md
+  - family: table
+    slug: table
+    source: packages/py/citry_ui/citry_ui/components/ctable/api.md

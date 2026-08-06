@@ -18,7 +18,7 @@ questions in section 11 (a `restart` callback, the default watch roots) remain.
 
 For the seam this drives see [`asset_loading.md`](asset_loading.md) section 8.
 For the broader migration context see
-[`citry_migration.md`](citry_migration.md) (the `reload_on_file_change` and
+[`migration_djc.md`](migration_djc.md) (the `reload_on_file_change` and
 `apps.py` rows). For the extension system a watcher can use see
 [`extensions.md`](extensions.md); for the contrib adapters that mount citry into
 a host see [`dependencies.md`](dependencies.md) section 9. For operating rules
@@ -103,7 +103,7 @@ The browser half is tracked separately in
 - The CLI resolves a target engine from `--app module:attribute`
   ([`__main__.py:32-60`](../../packages/py/citry/citry/__main__.py#L32)) and
   dispatches into commands aggregated by `Citry.commands`
-  ([`extension_commands.md`](extension_commands.md)).
+  ([`extensions_commands.md`](extensions_commands.md)).
 - Extensions are per-instance, fire `on_extension_created` at construction
   ([`citry.py:183`](../../packages/py/citry/citry/citry.py#L183)), and can
   expose `urls` and `commands`. There is no shutdown or teardown hook.
@@ -113,7 +113,7 @@ The browser half is tracked separately in
 
 ### Design intent already recorded
 
-- [`citry_migration.md`](citry_migration.md) `reload_on_file_change` row: the
+- [`migration_djc.md`](migration_djc.md) `reload_on_file_change` row: the
   invalidation seam is done in citry; "the file watcher and the hot/restart
   policy are host-specific". `apps.py` row: "Any future citry watcher (e.g. for
   a dev server) would be a separate, host-neutral design."
@@ -227,11 +227,10 @@ Notes:
   [`asset_loading.md`](asset_loading.md) section 11). Always go through the file
   index, never reset a single parent and expect children to follow.
 
-A companion `invalidate_all()` (reset every registered component's template and
-files without wiping the registry) is a possible convenience for the "something
-changed that I cannot map to a path" case. It is lighter than `Citry.clear()`,
-which also re-arms autodiscovery ([`citry.py:485-496`](../../packages/py/citry/citry/citry.py#L485)).
-Left as an open question (section 11) rather than built speculatively.
+The companion `invalidate_all()` resets every component that has loaded a file,
+de-duplicated in first-seen order, without wiping the registry. It covers a
+bulk edit, branch switch, or custom watcher event that cannot be mapped to one
+path. It is lighter than `Citry.clear()`, which also re-arms autodiscovery.
 
 ### Thread-safety: a lock on the reverse index
 
@@ -255,7 +254,7 @@ every host.
 
 A new module `citry/reload.py`. Its watcher library is imported lazily inside
 the module (the same pattern the contrib adapters and the docs-site CLI already
-use, [`docs_site/cli.py:53`](../../docs_site/cli.py#L53)), so plain
+use, [`docs_site/_internal/cli.py:53`](../../docs_site/_internal/cli.py#L53)), so plain
 `import citry` never needs it.
 
 ### 5.1 The `FileWatcher` protocol (the "bring your own" seam)
@@ -272,7 +271,7 @@ class FileWatcher(Protocol):
 Any of "manual", "third-party", and "host-provided" satisfies this one
 interface:
 
-- `WatchfilesWatcher` (default): wraps `watchfiles.watch` / `awatch`. Native
+- `WatchfilesWatcher` (default): wraps synchronous `watchfiles.watch`. Native
   inotify/FSEvents/ReadDirectoryChangesW, with `force_polling` for network and
   Docker mounts.
 - `PollingWatcher` (fallback, no extra): a stdlib `os.stat` mtime loop, the same
@@ -289,7 +288,7 @@ def watch(
     engine: Citry,
     *,
     roots: list[Path] | None = None,      # defaults to engine.settings.dirs
-    watcher: FileWatcher | None = None,   # defaults to watchfiles, else polling
+    watcher: FileWatcher | None = None,   # watchfiles, then watchdog, then polling
     on_reload: Callable[[set[Path], list[type[Component]]], None] | None = None,
 ) -> WatchHandle:                         # .stop() tears it down
     ...
@@ -297,13 +296,16 @@ def watch(
 
 Responsibilities:
 
-- **Debounce.** A single editor save emits several raw events on every platform.
-  `watchfiles` batches already; the poller and `watchdog` need an explicit
-  coalescing window before invalidating.
+- **Coalesce where the backend supports it.** `watchfiles` supplies event
+  batches and the poller reports one changed-path set per scan. `watchdog`
+  supplies one event at a time, which Citry forwards immediately; one editor
+  save may therefore invalidate the same file more than once. Invalidation is
+  an idempotent cache drop, so the extra calls are harmless.
 - **Resolve to match the index key.** Each changed path is resolved with
   `Path.resolve()` so it matches the `str(Path(path).resolve())` keys exactly.
-  Symlinks, macOS case-insensitivity, and relative event paths all cause a miss
-  otherwise.
+  This also de-duplicates aliases before invalidation and ensures `on_reload`
+  receives the same canonical paths. Symlinks and relative paths containing
+  dot segments can otherwise name one file in several ways.
 - **Invalidate.** Call `engine.invalidate_file(p)` per changed path.
 - **Notify.** Invoke the optional `on_reload(paths, reset_classes)` callback,
   the hook a logger or the future browser-refresh feature
@@ -327,7 +329,7 @@ The watcher is started explicitly. The natural place differs per host:
 | Host | How it starts | Mechanism |
 |---|---|---|
 | Standalone / any | `citry watch --app myproj:engine` | new CLI subcommand via `build_cli` + the existing `--app` resolution ([`__main__.py:32`](../../packages/py/citry/citry/__main__.py#L32)) |
-| FastAPI / Starlette / ASGI | `reload_lifespan(engine)` started on `lifespan.startup`, stopped on `lifespan.shutdown` | the lifespan path already exists ([`contrib/asgi.py:50`](../../packages/py/citry/citry/contrib/asgi.py#L50)); async `awatch` runs in the loop |
+| FastAPI / Starlette / ASGI | the root lifespan calls `engine.initialize()`, then enters `reload_lifespan(engine)`; the watcher stops on shutdown | `reload_lifespan` starts the same synchronous watcher on its daemon thread and stops its handle on shutdown ([`contrib/asgi.py`](../../packages/py/citry/citry/contrib/asgi.py)) |
 | Django | `citry.contrib.django.enable_hot_reload(engine)` connects to `file_changed` | piggyback Django's reloader, no second watcher; mirrors [`_djc_reference/apps.py:94`](../../packages/py/citry/_djc_reference/apps.py#L94) |
 | Flask / WSGI | `citry watch` alongside the dev server, or the host's own reloader | WSGI has no startup hook; the CLI covers it |
 
@@ -335,6 +337,10 @@ The Django path is the important asymmetry: it installs **no** `FileWatcher`. It
 registers a `file_changed` receiver that calls `engine.invalidate_file(path)`
 and returns `True` (hot) or `None` (restart), exactly the django-components
 shape, so Django's existing reloader does the watching and citry only invalidates.
+
+`reload_lifespan` owns only the development watcher. It deliberately does not
+initialize Citry. The application's root lifespan owns `engine.initialize()` so
+production and development use the same explicit startup-discovery contract.
 
 ### Why not a constructor argument or a built-in extension
 
@@ -414,10 +420,10 @@ watcher-watchdog   = ["watchdog>=4.0"]     # alternate native backend
   future `citry[ext-storybook]`), which is why the watcher does not claim the
   bare namespace.
 
-Per the repo's mirrored-dependency gotcha, a new pin is added in both the
-package `pyproject.toml` and the mirrored root extras, and the name is grepped
-across `pyproject.toml` files and CI first. (The mirroring goes away with the uv
-workspace conversion, [#8](https://github.com/citry-dev/citry/issues/8).)
+Runtime extras belong only to the package that imports them, here
+`packages/py/citry/pyproject.toml`; the uv workspace lock records their resolved
+packages without a mirrored root declaration. After changing an extra, refresh
+`uv.lock` and inspect CI jobs that explicitly select groups or extras.
 
 ---
 

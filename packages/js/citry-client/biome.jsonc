@@ -1,0 +1,52 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.3/schema.json",
+  // Formatter settings mirror how this package was already written (2-space
+  // indent, double quotes, semicolons, trailing commas); lineWidth 120 tracks
+  // the repo-wide taste (ruff runs Python at 119).
+  "formatter": {
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        // Import order in src is deliberate: alpinejs evaluates before
+        // @alpinejs/morph in the bundle, and the comment above the imports
+        // explains the pairing. Alphabetizing would swap them.
+        "organizeImports": "off"
+      }
+    }
+  },
+  "linter": {
+    "rules": {
+      "preset": "recommended",
+      // The runtime is deliberately written in the same var + function-expression
+      // style as citry.js (the dependency manager client it sits beside), and the
+      // committed bundle is kept byte-stable against that style: arrows, optional
+      // chains, or template literals would all reshape the generated file for zero
+      // behavior gain.
+      "complexity": {
+        "useArrowFunction": "off",
+        "useOptionalChain": "off"
+      },
+      "style": {
+        "useTemplate": "off",
+        // Guard-backed `!` assertions are part of the TypeScript conversion:
+        // each re-states a runtime check the checker cannot carry into a
+        // closure (the comments at each site say which check).
+        "noNonNullAssertion": "off"
+      },
+      "suspicious": {
+        // The es2020 build target predates Object.hasOwn, so the code uses the
+        // Object.prototype.hasOwnProperty.call form this rule dislikes.
+        "noPrototypeBuiltins": "off"
+      },
+      "correctness": {
+        // Proxy traps and DOM callbacks have positional signatures; leading
+        // parameters stay named for readability even when unused.
+        "noUnusedFunctionParameters": "off"
+      }
+    }
+  }
+}

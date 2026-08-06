@@ -503,6 +503,9 @@ multiple-yield processing handles that. If the fallback errors too, the error
 bubbles past this component, which is the right behavior for nested
 boundaries.
 
+The attribute form escapes an ordinary fallback string before returning it.
+Authors who need markup use the fallback fill.
+
 DJC registered the component as `"error_fallback"`; the citry reserved name
 is `"error-fallback"` (the registry's kebab-case convention, like the other
 built-ins).

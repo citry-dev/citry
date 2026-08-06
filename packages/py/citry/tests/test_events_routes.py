@@ -1006,6 +1006,34 @@ class TestBatchRoute:
         assert response.status_code == 200
         assert response.json()["results"][0]["ok"] is True
 
+    def test_missing_request_id_returns_one_schema_valid_edge_error(self):
+        c = _citry()
+        client = _mounted(c)
+        envelope = {
+            "protocol": "citry-events/1",
+            "requestId": None,
+            "calls": [
+                {"componentClassId": "X", "handlerName": "a", "args": {}, "sendSequence": 1},
+                {"componentClassId": "X", "handlerName": "b", "args": {}, "sendSequence": 2},
+            ],
+        }
+        response = client.post("/citry/ext/events/call", json=envelope, headers=RUNTIME_HEADERS)
+        assert response.status_code == 200
+        assert response.json() == {
+            "protocol": "citry-events/1",
+            "requestId": None,
+            "results": [
+                {
+                    "ok": False,
+                    "error": {
+                        "status": 400,
+                        "code": "protocol_mismatch",
+                        "message": "The envelope carries no 'requestId' string.",
+                    },
+                }
+            ],
+        }
+
     def test_flat_shaped_json_answers_the_pointed_mismatch(self):
         # Flat handler fields belong on the per-event route; on the batch
         # route the rejection names the envelope and that alternative.
@@ -1280,6 +1308,7 @@ class TestRuntimeRoute:
         response = client.get("/citry/ext/events/runtime.js")
         assert response.status_code == 200
         assert response.headers["content-type"].startswith("text/javascript")
+        assert response.headers.get_list("cache-control") == ["no-store"]
         # The bundle's generated-file banner is its identifying marker
         # (observed from the built file; the versions behind it may move).
         assert "Citry events client runtime. GENERATED FILE" in response.text
@@ -1290,7 +1319,7 @@ class TestRuntimeRoute:
         client = _mounted(c)
         page = type("Page", (Component,), {"citry": c, "template": "<main><c-greeter /></main>"})
         html = str(page())
-        assert '"/citry/ext/events/runtime.js"' in html or "/citry/ext/events/runtime.js" in html
+        assert '<script src="/citry/ext/events/runtime.js"></script>' in html
         assert client.get("/citry/ext/events/runtime.js").status_code == 200
         del greeter
 

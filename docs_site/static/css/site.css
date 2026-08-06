@@ -211,7 +211,7 @@ body {
   background: var(--c-surface-2);
   padding: 0.7rem 1rem;
   border-radius: 0.5rem;
-  border-left: 3px solid var(--c-link-dim);
+  border-left: 5px solid var(--c-link-dim);
   overflow-x: auto;
   margin: 1rem 0;
   position: relative;
@@ -356,6 +356,49 @@ body {
 
 .prose .table-wrapper table {
   margin: 0;
+}
+
+/* Structured UI API tables keep identifiers compact, constrain metadata
+   columns, and leave explanatory prose to consume the remaining width. */
+.prose .ui-api-table {
+  min-width: 0;
+}
+
+.prose .ui-api-table :is(th, td):nth-child(1) {
+  width: var(--ui-api-column-1-width, auto);
+}
+
+.prose .ui-api-table :is(th, td):nth-child(2) {
+  width: var(--ui-api-column-2-width, auto);
+}
+
+.prose .ui-api-table :is(th, td):nth-child(3) {
+  width: var(--ui-api-column-3-width, auto);
+}
+
+.prose .ui-api-table :is(th, td):nth-child(4) {
+  width: var(--ui-api-column-4-width, auto);
+}
+
+.prose .ui-api-table :is(th, td):nth-child(5) {
+  width: var(--ui-api-column-5-width, auto);
+}
+
+.prose .ui-api-table--fit-column-1 :is(th, td):nth-child(1),
+.prose .ui-api-table--fit-column-2 :is(th, td):nth-child(2),
+.prose .ui-api-table--fit-column-3 :is(th, td):nth-child(3),
+.prose .ui-api-table--fit-column-4 :is(th, td):nth-child(4),
+.prose .ui-api-table--fit-column-5 :is(th, td):nth-child(5) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.prose .ui-api-table--width-column-1 td:nth-child(1) code,
+.prose .ui-api-table--width-column-2 td:nth-child(2) code,
+.prose .ui-api-table--width-column-3 td:nth-child(3) code,
+.prose .ui-api-table--width-column-4 td:nth-child(4) code,
+.prose .ui-api-table--width-column-5 td:nth-child(5) code {
+  white-space: normal;
 }
 
 /* ------------------------------------------------------------------ */
@@ -610,6 +653,143 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
+/* Citry UI result-first component previews                           */
+/* ------------------------------------------------------------------ */
+.citry-ui-demo {
+  margin: 1.5rem 0 2rem;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 0.75rem;
+  background: var(--c-surface);
+}
+
+.citry-ui-demo__title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-fg);
+  font-weight: 650;
+  box-shadow: 0 0.3rem 0.65rem -0.3rem oklch(0% 0 0 / 24%);
+}
+
+.citry-ui-demo__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.prose .citry-ui-demo__controls {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--c-border);
+  border-radius: 0;
+  background: var(--c-surface);
+  box-shadow: 0 0.3rem 0.65rem -0.3rem oklch(0% 0 0 / 24%);
+}
+
+.prose .citry-ui-demo__controls > summary {
+  padding: 0.625rem 1rem;
+  color: var(--c-fg-subtle);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.prose .citry-ui-demo__controls form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+  padding: 0.5rem 1rem;
+}
+
+.citry-ui-demo__control {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  color: var(--c-fg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.citry-ui-demo__control select {
+  min-height: 1.5rem;
+  width: 100%;
+  padding-inline: 0.3rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.375rem;
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font: inherit;
+  font-weight: normal;
+}
+
+.citry-ui-demo__control--checkbox {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  align-self: end;
+  min-height: 2.25rem;
+}
+
+.citry-ui-demo__control--checkbox input {
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin: 0;
+}
+
+.citry-ui-demo__preview {
+  min-width: 0;
+  background: var(--c-surface-2);
+}
+
+.citry-ui-demo__preview iframe {
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  border: 0;
+  background: var(--c-surface-2);
+}
+
+.prose .citry-ui-demo__source {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--c-border);
+  border-radius: 0;
+}
+
+.prose .citry-ui-demo__source > summary {
+  padding: 0.625rem 1rem;
+  color: var(--c-fg-subtle);
+  font-size: 0.875rem;
+}
+
+.prose .citry-ui-demo__source[open] > summary {
+  border-bottom: 1px solid var(--c-border);
+}
+
+.prose .citry-ui-demo__source .highlight {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.prose .citry-ui-demo__source .highlight pre {
+  max-height: 31.25rem;
+  margin: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+/* ------------------------------------------------------------------ */
 /* People page: avatar grid (UserGrid component)                       */
 /* ------------------------------------------------------------------ */
 .user-list {
@@ -674,10 +854,6 @@ body {
   font-weight: 600;
   color: var(--c-fg);
   padding: 0.25rem 0;
-}
-
-.prose details[open] summary {
-  margin-bottom: 0.5rem;
 }
 
 /* ------------------------------------------------------------------ */

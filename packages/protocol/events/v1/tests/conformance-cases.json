@@ -1,0 +1,211 @@
+{
+  "format": "citry-protocol-conformance-cases/1",
+  "cases": [
+    {
+      "id": "call-missing-protocol",
+      "schema": "call.schema.json",
+      "constraint": "/required/0",
+      "seed": "happy_render.call.json",
+      "operations": [{"op": "remove", "path": "/protocol"}],
+      "expected": {"path": "/protocol", "category": "required"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "call-unknown-envelope-field",
+      "schema": "call.schema.json",
+      "constraint": "/additionalProperties",
+      "seed": "happy_render.call.json",
+      "operations": [{"op": "add", "path": "/unexpected", "value": true}],
+      "expected": {"path": "/unexpected", "category": "unknown_field"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "call-invalid-caller-render-id",
+      "schema": "call.schema.json",
+      "constraint": "/$defs/call/properties/callerRenderId/pattern",
+      "seed": "happy_render.call.json",
+      "operations": [{"op": "replace", "path": "/calls/0/callerRenderId", "value": "UPPER"}],
+      "expected": {"path": "/calls/0/callerRenderId", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "call-negative-send-sequence",
+      "schema": "call.schema.json",
+      "constraint": "/$defs/call/properties/sendSequence/minimum",
+      "seed": "happy_render.call.json",
+      "operations": [{"op": "replace", "path": "/calls/0/sendSequence", "value": -1}],
+      "expected": {"path": "/calls/0/sendSequence", "category": "range"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "call-empty-batch",
+      "schema": "call.schema.json",
+      "constraint": "/properties/calls/minItems",
+      "seed": "happy_render.call.json",
+      "operations": [{"op": "replace", "path": "/calls", "value": []}],
+      "expected": {"path": "/calls", "category": "range"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "call-duplicate-capability",
+      "schema": "call.schema.json",
+      "constraint": "/$defs/capabilities/properties/swaps/uniqueItems",
+      "seed": "happy_render.call.json",
+      "operations": [{"op": "add", "path": "/capabilities/swaps/-", "value": "replace"}],
+      "expected": {"path": "/capabilities/swaps", "category": "semantic"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "call-first-issue-follows-field-order",
+      "schema": "call.schema.json",
+      "constraint": "/$defs/call/properties/callerRenderId/pattern",
+      "seed": "happy_render.call.json",
+      "operations": [
+        {"op": "replace", "path": "/calls/0/callerRenderId", "value": "UPPER"},
+        {"op": "replace", "path": "/calls/0/args", "value": []},
+        {"op": "replace", "path": "/calls/0/stateToken", "value": ""}
+      ],
+      "expected": {"path": "/calls/0/callerRenderId", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "descriptor-empty-handler-name",
+      "schema": "descriptor.schema.json",
+      "constraint": "/properties/eventHandlers/propertyNames/minLength",
+      "seed": "descriptors/complete.valid.json",
+      "operations": [
+        {"op": "remove", "path": "/eventHandlers/search"},
+        {
+          "op": "add",
+          "path": "/eventHandlers/",
+          "value": {
+            "httpMethod": "GET",
+            "usesState": true,
+            "debounceMilliseconds": 300,
+            "latestCallWins": true
+          }
+        }
+      ],
+      "expected": {"path": "/eventHandlers", "category": "range"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "descriptor-negative-throttle",
+      "schema": "descriptor.schema.json",
+      "constraint": "/$defs/eventHandler/properties/throttleMilliseconds/minimum",
+      "seed": "descriptors/complete.valid.json",
+      "operations": [{"op": "add", "path": "/eventHandlers/search/throttleMilliseconds", "value": -1}],
+      "expected": {"path": "/eventHandlers/search/throttleMilliseconds", "category": "range"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "descriptor-unknown-handler-field",
+      "schema": "descriptor.schema.json",
+      "constraint": "/$defs/eventHandler/additionalProperties",
+      "seed": "descriptors/complete.valid.json",
+      "operations": [{"op": "add", "path": "/eventHandlers/search/unexpected", "value": true}],
+      "expected": {"path": "/eventHandlers/search/unexpected", "category": "unknown_field"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "descriptor-first-issue-follows-field-order",
+      "schema": "descriptor.schema.json",
+      "constraint": "/$defs/eventHandler/properties/debounceMilliseconds/minimum",
+      "seed": "descriptors/complete.valid.json",
+      "operations": [
+        {"op": "replace", "path": "/eventHandlers/search/debounceMilliseconds", "value": -1},
+        {"op": "replace", "path": "/eventHandlers/search/latestCallWins", "value": false}
+      ],
+      "expected": {"path": "/eventHandlers/search/debounceMilliseconds", "category": "range"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "manifest-invalid-client-graph-revision",
+      "schema": "manifest.schema.json",
+      "constraint": "/properties/clientGraphRevision/pattern",
+      "seed": "manifests/complete.valid.json",
+      "operations": [{"op": "replace", "path": "/clientGraphRevision", "value": "not-a-revision"}],
+      "expected": {"path": "/clientGraphRevision", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "manifest-public-state-must-be-object",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/componentInstance/properties/publicState/type",
+      "seed": "manifests/complete.valid.json",
+      "operations": [{"op": "replace", "path": "/componentInstances/0/publicState", "value": []}],
+      "expected": {"path": "/componentInstances/0/publicState", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-missing-actions",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/okResult/required/1",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "remove", "path": "/results/0/actions"}],
+      "expected": {"path": "/results/0/actions", "category": "required"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-render-html-must-be-string",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/renderAction/properties/html/type",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/0/html", "value": 1}],
+      "expected": {"path": "/results/0/actions/0/html", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-unknown-envelope-field",
+      "schema": "result.schema.json",
+      "constraint": "/additionalProperties",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "add", "path": "/unexpected", "value": true}],
+      "expected": {"path": "/unexpected", "category": "unknown_field"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-unknown-action-kind",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/action/oneOf",
+      "rule": "discriminator",
+      "seed": "happy_render.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/actions/0/action", "value": "unknown"}],
+      "expected": {"path": "/results/0/actions/0/action", "category": "enum"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-error-status-below-http-range",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/error/properties/status/minimum",
+      "seed": "error_generic.result.json",
+      "operations": [{"op": "replace", "path": "/results/0/error/status", "value": 399}],
+      "expected": {"path": "/results/0/error/status", "category": "range"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-action-first-issue-follows-field-order",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/target/minLength",
+      "seed": "happy_render.result.json",
+      "operations": [
+        {"op": "replace", "path": "/results/0/actions/0/target", "value": ""},
+        {"op": "add", "path": "/results/0/actions/0/delay", "value": -1}
+      ],
+      "expected": {"path": "/results/0/actions/0/target", "category": "range"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "result-relationships-follow-field-checks",
+      "schema": "result.schema.json",
+      "constraint": "/$defs/error/properties/message/type",
+      "seed": "error_generic.result.json",
+      "operations": [
+        {"op": "replace", "path": "/results/0/error/code", "value": "handler_error"},
+        {"op": "replace", "path": "/results/0/error/message", "value": 1}
+      ],
+      "expected": {"path": "/results/0/error/message", "category": "type"},
+      "implementations": ["python", "javascript"]
+    }
+  ]
+}

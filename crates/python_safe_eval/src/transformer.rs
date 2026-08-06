@@ -1450,7 +1450,9 @@ impl Transformer for SandboxTransformer {
             }
 
             _ => {
-                panic!("Validation Error: Unsupported expression: {:?}", expr);
+                self.set_error(format!(
+                    "Validation Error: Unsupported expression: {expr:?}"
+                ));
             }
         }
     }

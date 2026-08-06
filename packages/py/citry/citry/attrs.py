@@ -2,7 +2,7 @@
 HTML attribute values: class/style normalization, merging, and formatting.
 
 This module is the value layer of the attribute-rendering design
-(docs/design/html_attrs.md). It knows nothing about templates or nodes; it
+(docs/design/template_html_attrs.md). It knows nothing about templates or nodes; it
 only answers "given these attribute values, what HTML attribute string do
 they make?". The template-side ``ElementAttrsNode`` and user code in
 ``template_data()`` both call into it.
@@ -26,6 +26,11 @@ choices, and parity keeps its test suite portable):
 
 All escaping goes through ``citry.util.html`` (markupsafe): values render
 escaped unless they carry ``__html__``.
+
+HTML attribute identity is ASCII-case-insensitive. Merging therefore treats
+``ID`` and ``id`` as one key while preserving the spelling and position of
+the first occurrence in emitted markup. This is deliberately an HTML-only
+rule; component keyword arguments remain case-sensitive elsewhere.
 """
 
 from __future__ import annotations
@@ -36,7 +41,7 @@ from typing import Any, TypeAlias
 
 import wrapt
 
-from citry.util.html import SafeString, escape_to_str
+from citry.util.html import Markup, escape_to_str
 
 ClassValue: TypeAlias = "str | Mapping[str, bool] | Sequence[ClassValue]"
 """A ``class`` attribute value: string, ``{class_name: bool}`` dict, or a list of those."""
@@ -46,6 +51,39 @@ StyleDict: TypeAlias = Mapping[str, "str | int | float | bool | None"]
 
 StyleValue: TypeAlias = "str | StyleDict | Sequence[StyleValue]"
 """A ``style`` attribute value: inline CSS string, ``StyleDict``, or a list of those."""
+
+_ASCII_LOWER_TRANSLATION = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+
+
+def _html_attr_identity(name: str) -> str:
+    """Return HTML identity without erasing case-sensitive Citry payloads."""
+    folded = name.translate(_ASCII_LOWER_TRANSLATION)
+    if name.startswith(("@c-", ":c-", "#c-")) or folded in ("$c-props", "c-$c-props"):
+        # These names carry a case-sensitive event/State/meta payload or must
+        # survive intact for the directive validator to reject bad casing.
+        return name
+    return folded
+
+
+def validate_html_attr_name(name: Any, *, where: str = "HTML attributes") -> str:
+    """
+    Validate a runtime-produced HTML attribute name.
+
+    Static names already pass through the template grammar. ``c-bind`` and
+    extension hooks can introduce names only at render time, so they must use
+    the same delimiters as ``html_attribute_name`` in ``grammar.pest`` before
+    a name is interpolated into markup.
+    """
+    if not isinstance(name, str):
+        msg = f"{where} must use string attribute names, got {type(name).__name__} key {name!r}."
+        raise TypeError(msg)
+    if not name or any(char in " \t\n\r=/><" for char in name) or "{#" in name:
+        msg = (
+            f"{where} contains invalid HTML attribute name {name!r}. Attribute names must be non-empty and "
+            "cannot contain whitespace, '=', '/', '>', '<', or the template-comment opener '{#'."
+        )
+        raise ValueError(msg)
+    return name
 
 
 def _underlying(value: Any) -> Any:
@@ -223,34 +261,53 @@ def merge_attrs(*attrs_dicts: Mapping[str, Any]) -> dict[str, Any]:
         )
         # -> {"class": "btn active", "id": "second"}
     """
+    return _coalesce_html_attrs(attrs_dicts, normalize_accumulators=True)
+
+
+def _coalesce_html_attrs(
+    attrs_dicts: Sequence[Mapping[str, Any]],
+    *,
+    normalize_accumulators: bool,
+) -> dict[str, Any]:
+    """Fold HTML attribute identities while retaining first spelling/order."""
     result: dict[str, Any] = {}
-    classes: list[ClassValue] = []
-    styles: list[StyleValue] = []
+    identity_to_key: dict[str, str] = {}
+    accumulated: dict[str, list[Any]] = {"class": [], "style": []}
 
     for attrs in attrs_dicts:
-        for key, value in attrs.items():
-            # A `None` class/style contributes nothing (a spread dict often
-            # carries an optional class), but still reserves the key's position.
-            if key == "class":
-                if value is not None:
-                    classes.append(value)
-                result[key] = None  # placeholder, keeps first-seen position
-            elif key == "style":
-                if value is not None:
-                    styles.append(value)
-                result[key] = None  # placeholder, keeps first-seen position
-            else:
-                result[key] = value
+        for authored_key, value in attrs.items():
+            key = validate_html_attr_name(authored_key)
+            identity = _html_attr_identity(key)
+            output_key = identity_to_key.setdefault(identity, key)
 
-    if classes:
-        result["class"] = normalize_class(classes)
-    if styles:
-        result["style"] = normalize_style(styles)
+            if identity in accumulated:
+                # A None class/style contributes nothing (a spread dict often
+                # carries an optional value), but reserves first-seen position
+                # and spelling just like any other HTML attribute.
+                if value is not None:
+                    accumulated[identity].append(value)
+                result[output_key] = None
+            else:
+                # Assignment updates the first key's value without changing
+                # its insertion position or authored spelling.
+                result[output_key] = value
+
+    for identity, values in accumulated.items():
+        if not values:
+            continue
+        output_key = identity_to_key[identity]
+        if normalize_accumulators or len(values) > 1:
+            normalizer = normalize_class if identity == "class" else normalize_style
+            result[output_key] = normalizer(values)
+        else:
+            # format_attrs still normalizes a single structured value below;
+            # retain a lone string verbatim for its existing formatting rules.
+            result[output_key] = values[0]
 
     return result
 
 
-def format_attrs(attrs: Mapping[str, Any]) -> SafeString:
+def format_attrs(attrs: Mapping[str, Any]) -> Markup:
     """
     Format an attribute dict into an HTML attribute string.
 
@@ -258,25 +315,31 @@ def format_attrs(attrs: Mapping[str, Any]) -> SafeString:
       ``None`` omit the attribute entirely.
     - ``class`` and ``style`` values may use the structured forms; they are
       normalized here, so ``merge_attrs`` output and hand-built dicts render
-      the same. When they normalize to an empty string the attribute is
-      omitted (an empty ``class=""`` would read as a boolean attribute under
-      citry's HTML rules).
+      the same. An empty class or style is omitted.
     - Everything else renders ``key="value"``, escaped; values with
       ``__html__`` pass through unescaped.
 
     Example::
 
-        format_attrs({"class": ["btn", {"active": True}], "disabled": True, "data-id": 3})
+        format_attrs({
+            "class": ["btn", {"active": True}],
+            "disabled": True,
+            "data-id": 3,
+        })
         # -> 'class="btn active" disabled data-id="3"'
     """
     parts: list[str] = []
-    for key, value in attrs.items():
-        if key == "class" and value is not None and not isinstance(value, str):
-            value = normalize_class(value)  # noqa: PLW2901
+    coalesced = _coalesce_html_attrs((attrs,), normalize_accumulators=False)
+    for key, value in coalesced.items():
+        identity = _html_attr_identity(key)
+        if identity == "class" and value is not None:
+            if not isinstance(value, str):
+                value = normalize_class(value)  # noqa: PLW2901
             if not value:
                 continue
-        elif key == "style" and value is not None and not isinstance(value, str):
-            value = normalize_style(value)  # noqa: PLW2901
+        elif identity == "style" and value is not None:
+            if not isinstance(value, str):
+                value = normalize_style(value)  # noqa: PLW2901
             if not value:
                 continue
 
@@ -286,8 +349,8 @@ def format_attrs(attrs: Mapping[str, Any]) -> SafeString:
             parts.append(escape_to_str(key))
         else:
             # escape_to_str (not escape): each piece is concatenated into the
-            # joined string that is wrapped as SafeString below, so escaping to
+            # joined string that is wrapped as Markup below, so escaping to
             # a plain str avoids a throwaway Markup per key and per value.
             parts.append(f'{escape_to_str(key)}="{escape_to_str(value)}"')
 
-    return SafeString(" ".join(parts))
+    return Markup(" ".join(parts))  # noqa: S704 - every part is validated or escaped above

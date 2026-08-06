@@ -25,6 +25,7 @@ the discovery mechanics (its only citry dependency is the shared logger).
 from __future__ import annotations
 
 import sys
+from contextlib import nullcontext
 from importlib import import_module
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -32,11 +33,16 @@ from typing import TYPE_CHECKING
 from citry.util.logger import logger
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Sequence
+    from collections.abc import Callable, Iterator, Sequence
+    from contextlib import AbstractContextManager
     from types import ModuleType
 
 
-def import_component_modules(dirs: Sequence[Path]) -> list[str]:
+def import_component_modules(
+    dirs: Sequence[Path],
+    *,
+    registration_transaction: Callable[[], AbstractContextManager[None]] | None = None,
+) -> list[str]:
     """
     Import every component module under ``dirs`` and register its components.
 
@@ -49,6 +55,15 @@ def import_component_modules(dirs: Sequence[Path]) -> list[str]:
     what lets a re-scan after ``Citry.clear()`` rebuild the registry. Safe to
     call more than once.
 
+    ``Citry`` supplies ``registration_transaction`` so each module's changes to
+    that engine commit together. If the module raises after defining a
+    component, its registry changes are restored while earlier successful
+    modules remain committed. Components and aliases registered by dependency
+    modules that imported successfully remain committed too, because Python
+    caches those modules and will not execute them again on retry. The callback
+    intentionally covers Citry-owned registration state, not arbitrary Python
+    import side effects.
+
     Raises ``ValueError`` if a directory contains component modules but is not
     on the Python import path.
     """
@@ -57,9 +72,11 @@ def import_component_modules(dirs: Sequence[Path]) -> list[str]:
     for module_name in module_names:
         already_loaded = module_name in sys.modules
         logger.debug("Importing component module %s", module_name)
-        module = import_module(module_name)
-        if already_loaded:
-            _register_existing_components(module)
+        transaction = registration_transaction() if registration_transaction is not None else nullcontext()
+        with transaction:
+            module = import_module(module_name)
+            if already_loaded:
+                _register_existing_components(module)
     return module_names
 
 
@@ -87,7 +104,7 @@ def _register_existing_components(module: ModuleType) -> None:
             and value is not Component
             and issubclass(value, Component)
             and value.__module__ == module.__name__
-            and not value.citry.registry._has_class(value)
+            and not value.citry._has_component_class(value)
         ):
             value.citry.register(value)
 
@@ -97,7 +114,9 @@ def find_component_modules(dirs: Sequence[Path]) -> list[str]:
     The dotted import paths of every component module under ``dirs``.
 
     Finds the files (see ``_iter_py_files`` for which files count) and maps each
-    to the import name Python would use for it. The result is de-duplicated and
+    to the import name Python would use for it. A file whose real location has
+    no valid import name (a symlink whose target sits behind a dot-prefixed
+    name; see ``_path_to_module``) is skipped. The result is de-duplicated and
     in a stable order, so the same project always discovers the same modules in
     the same sequence. Does not import anything.
 
@@ -108,6 +127,9 @@ def find_component_modules(dirs: Sequence[Path]) -> list[str]:
     for directory in dirs:
         for path in _iter_py_files(directory):
             module_name = _path_to_module(path)
+            if module_name is None:
+                logger.debug("Skipping %s: it has no valid import name", path)
+                continue
             if module_name not in seen:
                 seen.add(module_name)
                 module_names.append(module_name)
@@ -121,6 +143,13 @@ def _iter_py_files(directory: Path) -> Iterator[Path]:
     Files and subdirectories whose name starts with an underscore are skipped
     (so private helpers and dunder-named caches are left alone), with the one
     exception of ``__init__.py`` (a package's init is part of its public path).
+    Also skipped is anything whose name cannot appear in a dotted import name:
+    a file with a dot in its stem (editor/OS junk such as ``.#card.py`` lock
+    files or ``._card.py`` copies, backup copies such as ``card.old.py``) and
+    any subdirectory with a dot anywhere in its name (``.cache/``,
+    ``assets.v2/``), which hides its whole subtree. Matches that are not files
+    (a directory named like ``sub.py``, a symlink to a missing target) are
+    skipped as well.
     A path that is not a directory yields nothing, so an asset-only ``dirs``
     entry simply contributes no modules. Results are sorted for a stable order.
     """
@@ -128,16 +157,31 @@ def _iter_py_files(directory: Path) -> Iterator[Path]:
         return
     for path in sorted(directory.rglob("*.py")):
         rel_parts = path.relative_to(directory).parts
-        # A leading underscore on any parent directory hides the whole subtree.
-        if any(part.startswith("_") for part in rel_parts[:-1]):
+        # A parent directory with a leading underscore (private helpers) or a
+        # dot anywhere in its name (junk like .cache/, and names like assets.v2
+        # that cannot appear in a dotted import name) hides the whole subtree.
+        if any(part.startswith("_") or "." in part for part in rel_parts[:-1]):
             continue
         name = rel_parts[-1]
+        # The stem becomes one piece of the dotted import name, so a file whose
+        # stem contains a dot (editor/OS junk like .#card.py or ._card.py,
+        # backup copies like card.old.py) cannot be imported. Path.stem splits
+        # at the last dot, so it also strips an uppercase .PY suffix (which
+        # rglob matches on Windows, where glob matching is case-insensitive)
+        # and keeps the leading dot of a file named just ".py".
+        if "." in path.stem:
+            continue
         if name.startswith("_") and name != "__init__.py":
+            continue
+        # rglob matches on the name alone, so a directory named like "sub.py"
+        # or a symlink to a missing target also lands here. Only an actual
+        # file (possibly reached through a symlink) can be imported.
+        if not path.is_file():
             continue
         yield path
 
 
-def _path_to_module(path: Path) -> str:
+def _path_to_module(path: Path) -> str | None:
     """
     The dotted import name Python would use for the file at ``path``.
 
@@ -145,6 +189,16 @@ def _path_to_module(path: Path) -> str:
     entry contains it. When more than one entry contains the file, the longest
     (most specific) one wins, which gives the shortest import name. A package's
     ``__init__.py`` maps to the package itself.
+
+    Symlinks are resolved first, so the name describes the file's real
+    location. When the name would contain a dot in one of its pieces, no valid
+    import name exists and this returns ``None`` so the caller can skip the
+    file. That happens for a symlink whose target is a dot-prefixed file or
+    sits under a dot-prefixed directory such as ``.cache/``, and for a dotted
+    directory between the import-path entry and the scanned one. The check
+    runs on the pieces relative to the import-path entry, because dots *above*
+    that entry (say a project under ``~/.config/``) never appear in the import
+    name and are fine.
 
     Raises ``ValueError`` if no import-path entry contains the file, naming the
     fix (put the directory, or a parent, on ``sys.path``/``PYTHONPATH``).
@@ -176,6 +230,12 @@ def _path_to_module(path: Path) -> str:
         raise ValueError(msg)
 
     parts = resolved.relative_to(anchor).with_suffix("").parts
+    # A dot inside any piece would corrupt the dotted name ("pkg..hidden"), so
+    # such a file has no import name at all. The file filter already rejects
+    # dotted names in the scanned tree itself; this catches the rest (symlink
+    # targets, and dotted directories above the scanned one).
+    if any("." in part for part in parts):
+        return None
     if parts and parts[-1] == "__init__":
         parts = parts[:-1]
     if not parts:

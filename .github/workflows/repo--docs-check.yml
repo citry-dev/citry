@@ -20,8 +20,14 @@ on:
       - "packages/py/**"
       - "crates/**"
       - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "uv.lock"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/**"
       - ".gitmodules"
   pull_request:
@@ -33,8 +39,14 @@ on:
       - "packages/py/**"
       - "crates/**"
       - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
       - "pyproject.toml"
       - "uv.lock"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/**"
       - ".gitmodules"
   workflow_dispatch:
@@ -78,13 +90,33 @@ jobs:
       - name: Install the workspace with the docs extra
         run: uv sync --locked --all-packages --extra docs
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install Node tooling
+        run: pnpm install --frozen-lockfile
+
+      - name: Check the generated playground bundle
+        run: pnpm --dir docs_site/_internal/frontend run check
+
       # Build the site and run the post-build guards. Exits non-zero on a render
       # failure or a guard error (add --strict to also fail on warnings).
       - name: Run the docs guard gate
         run: uv run --no-sync python -m docs_site build-check
 
+      # docs_site/examples holds the per-example regression tests
+      # (test_example_*.py), which live beside each example's component.py/page.py;
+      # they are collected here alongside the main docs-site suite. The e2e suite
+      # (docs_site/tests/e2e) is skipped: it importorskips pytest-playwright, which
+      # the `docs` extra does not install. The docs-e2e job below runs it instead.
       - name: Run the docs-site tests
-        run: uv run --no-sync pytest docs_site/tests
+        run: uv run --no-sync pytest docs_site/tests docs_site/examples
 
   # Browser end-to-end tests (docs_site/tests/e2e): build the real site
   # and drive it in a headless browser. Chromium only for PR-time speed.

@@ -3,13 +3,9 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 
 // Build the authored playground modules into the exact static files shipped by
-// the docs site, then copy Citry's generated Events client into the same set.
+// the docs site. Citry's pinned wheel owns its matching Events client.
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const staticRoot = fileURLToPath(new URL("../../../static/playground/", import.meta.url));
-const eventsRuntimeSourcePath = fileURLToPath(
-  new URL("../../../../packages/py/citry/citry/ext/events/client/citry-events.js", import.meta.url),
-);
-const eventsRuntimeOutputPath = `${staticRoot}citry-events.js`;
 const checkOnly = process.argv.includes("--check");
 
 // The full page and deferred inline runtime bundle shared dependencies. The
@@ -40,7 +36,6 @@ async function generate(entry) {
 }
 
 const generatedEntries = await Promise.all(entries.map(async (entry) => [entry, await generate(entry)]));
-const eventsRuntime = await readFile(eventsRuntimeSourcePath);
 
 async function checkFile(path, expected, label) {
   let committed;
@@ -62,15 +57,11 @@ if (checkOnly) {
   for (const [entry, generated] of generatedEntries) {
     await checkFile(`${staticRoot}${entry.output}`, generated, entry.output);
   }
-  await checkFile(eventsRuntimeOutputPath, eventsRuntime, "playground Events runtime");
 } else {
-  // Write the docs bundles, then copy the separately generated Events client.
   // The check command detects any partial output left by an interrupted build.
   for (const [entry, generated] of generatedEntries) {
     const outputPath = `${staticRoot}${entry.output}`;
     await writeFile(outputPath, generated);
     console.log(`Wrote ${outputPath} (${generated.byteLength} bytes)`);
   }
-  await writeFile(eventsRuntimeOutputPath, eventsRuntime);
-  console.log(`Wrote ${eventsRuntimeOutputPath} (${eventsRuntime.byteLength} bytes)`);
 }

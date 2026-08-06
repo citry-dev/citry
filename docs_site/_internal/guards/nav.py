@@ -72,7 +72,6 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
             for item in ui_library_nav_items(
                 project.ui_library,
                 repo_root=ctx.repo_root,
-                content_dir=ctx.content_dir,
             )
         )
 

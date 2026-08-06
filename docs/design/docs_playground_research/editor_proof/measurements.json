@@ -1,0 +1,62 @@
+{
+  "generatedBy": "npm run build && npm run measure",
+  "notes": [
+    "Editor and Worker JavaScript is bundled and minified by esbuild 0.28.1; the small Monaco loader is copied unchanged.",
+    "Shared proof-shell CSS is excluded from both editor totals.",
+    "The Monaco proof eagerly requests its Worker to verify deployment, so proofInitialTotal includes it.",
+    "Monaco worker bytes are also listed separately because production can load that asset on demand."
+  ],
+  "codemirror": {
+    "files": {
+      "dist/codemirror.js": {
+        "brotliBytes": 178063,
+        "gzipBytes": 213087,
+        "rawBytes": 614719
+      }
+    },
+    "initialTotal": {
+      "brotliBytes": 178063,
+      "gzipBytes": 213087,
+      "rawBytes": 614719
+    }
+  },
+  "monaco": {
+    "files": {
+      "dist/monaco-loader.js": {
+        "brotliBytes": 311,
+        "gzipBytes": 372,
+        "rawBytes": 695
+      },
+      "dist/monaco.js": {
+        "brotliBytes": 559328,
+        "gzipBytes": 702100,
+        "rawBytes": 2741908
+      },
+      "dist/monaco.css": {
+        "brotliBytes": 11670,
+        "gzipBytes": 13258,
+        "rawBytes": 82959
+      },
+      "dist/monaco-editor-worker.js": {
+        "brotliBytes": 74794,
+        "gzipBytes": 93805,
+        "rawBytes": 304399
+      }
+    },
+    "initialTotal": {
+      "brotliBytes": 571309,
+      "gzipBytes": 715730,
+      "rawBytes": 2825562
+    },
+    "proofInitialTotal": {
+      "brotliBytes": 646103,
+      "gzipBytes": 809535,
+      "rawBytes": 3129961
+    },
+    "workerTotal": {
+      "brotliBytes": 74794,
+      "gzipBytes": 93805,
+      "rawBytes": 304399
+    }
+  }
+}

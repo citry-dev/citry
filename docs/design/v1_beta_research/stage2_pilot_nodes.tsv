@@ -1,0 +1,43 @@
+node	path	layer	role	scope_kind	B2_state	review_burden	evidence_location
+N01	packages/py/citry/citry/ext/events/actions.py	public_api	ReplaceUrl value, validation, timing contract	slice_specific	untracked	medium	72-112,307-332
+N02	packages/py/citry/citry/ext/events/__init__.py	public_api	exposes the actions module from the Events package	shared_substrate	untracked	low	44-65
+N03	packages/py/citry/citry/ext/events/results.py	server_result	encodes ReplaceUrl as url/replace plus optional timing	slice_specific	untracked	medium	67-128,269-322
+N04	packages/py/citry/citry/ext/events/dispatcher.py	server_result	capability filtering, result hooks, validation, and envelope assembly	shared_substrate	untracked	high	1099-1228,1307-1347
+N05	packages/protocol/events/v1/result.schema.json	protocol	normative url action schema	slice_specific	untracked	high	249-268,388-408
+N06	packages/protocol/events/v1/spec.md	protocol	normative url action meaning and canonical history example	slice_specific	untracked	high	204-219,592-600
+N07	packages/protocol/events/v1/fixtures/history.call.json	protocol_fixture	canonical history call	slice_specific	untracked	low	1-10
+N08	packages/protocol/events/v1/fixtures/history.result.json	protocol_fixture	canonical push and replace result	slice_specific	untracked	medium	1-23
+N09	packages/protocol/events/v1/fixtures/index.json	protocol_fixture	registers the history fixture for replay	shared_substrate	untracked	low	31-36
+N10	packages/protocol/events/v1/fixtures/README.md	protocol_fixture	documents fixture purpose and history case	shared_substrate	untracked	low	80-85
+N11	packages/py/citry/tests/test_events_conformance.py	protocol_test	replays indexed fixtures through the dispatcher, validates schema, and compares exact JSON	shared_substrate	untracked	high	38-112,215-244
+N12	packages/js/citry-client/src/citry-events.ts	browser_source	advertises url support and applies pushState or replaceState	shared_substrate	untracked	high	284-309,1524-1538,4591-4686
+N13	packages/js/citry-client/package.json	browser_build	declares the reproducible TypeScript-to-Python bundle build	shared_substrate	untracked	medium	5-21
+N14	packages/py/citry/citry/ext/events/client/citry-events.js	browser_generated	working-tree generated runtime intended for citry package delivery	shared_substrate	untracked	generated	1,6304-6328
+N15	packages/js/citry-client/test/canary.test.mjs	browser_build_test	proves the working-tree generated bundle exactly matches the TypeScript build	shared_substrate	untracked	medium	46-67
+N16	packages/js/citry-client/README.md	browser_build	documents source ownership, build, checks, and generated output	shared_substrate	untracked	low	1-35
+N17	packages/py/citry/citry/ext/events/routes.py	runtime_delivery	serves the generated bundle at ext/events/runtime.js	shared_substrate	untracked	medium	90-109,204-235
+N18	packages/py/citry/citry/ext/events/emission.py	runtime_delivery	reads the same bundle for inline delivery and emits the runtime route	shared_substrate	untracked	medium	58-67,220-266
+N19	packages/py/citry/tests/test_events_actions.py	python_test	tests constructor validation, defaults, and exact wire encoding	slice_specific	untracked	medium	66-81,125-133,508-526
+N20	packages/py/citry/tests/test_events_routes.py	runtime_delivery_test	proves the emitted runtime path is served and history-only compatibility calls do not redirect	shared_substrate	untracked	medium	1236-1257,1293-1299
+N21	packages/py/citry/tests/test_events_dispatch.py	server_result_test	proves URL actions count as visible results in dispatcher diagnostics	supporting	untracked	low	1817-1840
+N22	packages/py/citry/tests/e2e/test_events_applier_e2e.py	browser_e2e	tests handler-to-browser replace, push/replace semantics, state preservation, invalid input, and Back/Forward behavior	slice_specific	untracked	high	1851-1982
+N23	packages/py/citry/tests/e2e/test_events_transport_e2e.py	browser_e2e	proves a URL action in a timed-out late response is not applied	shared_substrate	untracked	medium	1008-1091
+N24	packages/py/citry/pyproject.toml	artifact_delivery	declares citry wheel package data but omits ext/events/client/*.js	supporting	tracked_modified	high	92-96
+N25	.github/workflows/py--citry--publish.yml	artifact_delivery	builds and smoke-tests the wheel but checks only the dependency runtime	supporting	tracked_clean	high	53-92
+N26	docs/design/events.md	governing_design	current action and browser semantics	slice_specific	tracked_modified	high	1033,1586,4712-4713
+N27	docs/design/events_plan.md	implementation_history	older reservation and later delivery plan for history actions	supporting	tracked_modified	medium	2965-3000
+N28	docs/design/events_research/actions-semantics-report.md	research_evidence	comparative research recommending sibling PushUrl and ReplaceUrl constructors	supporting	untracked	low	293-345
+N29	docs_site/content/guides/server-events.md	public_docs	public return-action table	slice_specific	untracked	medium	553-570
+N30	docs_site/reference_pages.py	public_docs	registers PushUrl and ReplaceUrl API reference symbols	supporting	untracked	low	198-199
+N31	docs_site/content/guides/events-migration-parity.md	public_docs	claims shipped v1.x migration parity	supporting	untracked	medium	165
+N32	docs_site/content/guides/migrate-from-tetra.md	public_docs	maps Tetra history updates to Citry actions	supporting	untracked	low	194
+N33	docs_site/content/guides/migrate-from-livecomponents.md	public_docs	maps livecomponents history updates to Citry actions	supporting	untracked	low	174,193-194
+N34	CHANGELOG.md	release_notes	announces PushUrl and ReplaceUrl as unreleased functionality	slice_specific	tracked_modified	medium	83-87
+N35	packages/protocol/events/v1/call.schema.json	protocol	declares url in the client capability vocabulary	shared_substrate	untracked	medium	32-56
+N36	packages/protocol/events/v1/validate.py	protocol_test	validates schemas, fixtures, call/result alignment, and the fixture index	shared_substrate	untracked	high	259-340
+N37	packages/py/citry/tests/test_events_protocol_package.py	protocol_test	runs the protocol self-check from pytest	shared_substrate	untracked	medium	1-64,122-126
+N38	packages/py/citry/tests/test_events_emission.py	runtime_delivery_test	tests inline and mounted Events runtime injection	shared_substrate	untracked	medium	256-269,430-446
+N39	scripts/check.py	repository_gate	invokes the private citry-client check from the repository gate	supporting	tracked_modified	medium	92-102
+N40	.github/workflows/py--tests.yml	ci	configures full Chromium E2E on changes and compact Firefox/WebKit coverage	supporting	tracked_modified	medium	86-169
+N41	packages/protocol/events/v1/README.md	protocol_docs	claims Python conformance was passing as of Citry 0.2.0	supporting	untracked	medium	9-23
+N42	.github/workflows/py--tests-cross-browser.yml	ci	configures the full E2E suite weekly on Chromium, Firefox, and WebKit	supporting	tracked_clean	medium	1-55

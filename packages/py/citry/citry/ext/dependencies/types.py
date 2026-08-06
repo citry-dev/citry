@@ -23,10 +23,13 @@ Design: docs/design/dependencies.md section 3.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Literal, NamedTuple, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeAlias
 
 from citry.attrs import format_attrs
-from citry.util.html import SafeString
+from citry.util.html import Markup
+
+if TYPE_CHECKING:
+    from citry.component import Component
 
 ScriptType: TypeAlias = Literal["css", "js"]
 
@@ -49,8 +52,10 @@ class DependencyRecord(NamedTuple):
     The dependencies extension appends one of these to the render-scoped
     ``CitryContext.extra`` per component render, and the notes bubble up to
     the root as nested renders are consumed. At serialize time the collected
-    records are resolved into the actual ``Script``/``Style`` tags; the heavy
-    content lives in the cache, keyed by the record's fields.
+    records are resolved into the actual ``Script``/``Style`` tags. The exact
+    class is retained until serialization so hot replacement cannot mix a
+    rendered old body with a new class's assets; heavy content lives in the
+    cache.
     """
 
     class_id: str
@@ -61,6 +66,8 @@ class DependencyRecord(NamedTuple):
     """Hash of the instance's ``js_data()`` result, or ``None`` when it has none."""
     css_vars_hash: str | None = None
     """Hash of the instance's ``css_data()`` result, or ``None`` when it has none."""
+    component_class: type[Component] | None = None
+    """Exact class version that produced the record, retained for delayed serialization."""
 
 
 # JavaScript MIME types that mean "classic script" (subject to IIFE wrapping).
@@ -133,14 +140,16 @@ class Dependency:
         """Return ``(tag_name, all_attrs, content)``. Implemented by subclasses."""
         raise NotImplementedError
 
-    def render(self) -> SafeString:
+    def render(self) -> Markup:
         """Render as an HTML tag string."""
         tag_name, all_attrs, content = self._render()
         attrs_str = format_attrs(all_attrs)
         attrs_prefix = " " + attrs_str if attrs_str else ""
-        return SafeString(f"<{tag_name}{attrs_prefix}>{content}</{tag_name}>")
+        # Inline dependency content is an explicit raw HTML boundary; tag names
+        # are controlled here and attributes were escaped by format_attrs().
+        return Markup(f"<{tag_name}{attrs_prefix}>{content}</{tag_name}>")  # noqa: S704
 
-    def __html__(self) -> SafeString:
+    def __html__(self) -> Markup:
         """The rendered tag; lets a ``Script``/``Style`` stand anywhere a pre-rendered tag is accepted."""
         return self.render()
 
@@ -166,7 +175,7 @@ class Dependency:
         # inside JS content would terminate the tag early in the browser.
         tag_name = type(self).__name__.lower()
         end_tag_substr = f"</{tag_name}"
-        if self.content and end_tag_substr in self.content:
+        if self.content and end_tag_substr in self.content.lower():
             msg = f"{self._err_msg()} contains a '{end_tag_substr}>' end tag. This is not allowed."
             raise ValueError(msg)
 
@@ -305,7 +314,7 @@ class Style(Dependency):
             content = self.content or ""
         return (tag_name, all_attrs, content)
 
-    def render(self) -> SafeString:
+    def render(self) -> Markup:
         tag_name, all_attrs, content = self._render()
         attrs_str = format_attrs(all_attrs)
         attrs_prefix = " " + attrs_str if attrs_str else ""
@@ -313,5 +322,7 @@ class Style(Dependency):
         # A url renders as a void <link/> tag (compact, per citry's HTML
         # rendering rules); inline content renders as <style>...</style>.
         if tag_name == "link":
-            return SafeString(f"<link{attrs_prefix}/>")
-        return SafeString(f"<style{attrs_prefix}>{content}</style>")
+            return Markup("<link{}/>").format(attrs_prefix)
+        # Inline stylesheet content is an explicit raw CSS boundary; the
+        # attributes were escaped by format_attrs().
+        return Markup(f"<style{attrs_prefix}>{content}</style>")  # noqa: S704

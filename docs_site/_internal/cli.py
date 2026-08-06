@@ -12,7 +12,9 @@ The ``citry-docs`` command line.
 - ``versions-check``: validate the committed ``versions/`` tree (manifest,
   aliases, build stamps, cross-version links) without building.
 - ``build-all``: bootstrap / disaster-recovery rebuild of every version selected
-  by ``docs_versions.toml`` (walks the git tags in throwaway worktrees).
+  by ``docs_versions.yml`` (walks the git tags in throwaway worktrees).
+- ``build-tag``: build one release snapshot from its exact git tag in a
+  throwaway worktree, then register it in the committed version tree.
 
 Run via ``python -m docs_site <command>``.
 """

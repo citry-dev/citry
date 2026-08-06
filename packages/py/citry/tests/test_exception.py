@@ -1,6 +1,6 @@
 """
 Tests for the component-path error helpers (``citry/util/exception.py``,
-docs/design/on_render.md section 6): path accumulation on the exception,
+docs/design/component_on_render.md section 6): path accumulation on the exception,
 idempotent message-prefix rewriting, slot frames, and the args-less /
 non-string-args edge cases.
 

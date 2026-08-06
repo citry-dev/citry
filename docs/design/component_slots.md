@@ -116,7 +116,7 @@ citry adaptations:
 - **Calling a Slot returns a `RenderPart`, not a string.** A template-defined
   fill renders to a `CitryRender`, so nested components inside the fill stay
   structural and JS/CSS dependencies keep bubbling through `extra`. A
-  Python-supplied function may return `str | SafeString | CitryElement |
+  Python-supplied function may return `str | Markup | CitryElement |
   ComponentLike | CitryRender`; the result goes through `_render_value`
   ([`citry_render.py`](../../packages/py/citry/citry/citry_render.py)), which
   already coerces all of these.
@@ -133,9 +133,9 @@ citry adaptations:
 - **Escaping:** a string input is escaped at construction with
   [`util/html.escape`](../../packages/py/citry/citry/util/html.py)
   (markupsafe, honors `__html__`), so `Slot("<b>")` renders escaped and
-  `Slot(SafeString(...))` does not; a function result is escaped by
+  `Slot(Markup(...))` does not; a function result is escaped by
   `_render_value` unless it is a
-  `SafeString`/`CitryRender`/`CitryElement`/`ComponentLike`.
+  `Markup`/`CitryRender`/`CitryElement`/`ComponentLike`.
   This matches DJC's `conditional_escape` semantics
   (`test_render_slot_unsafe_content__*`).
 - **Metadata, slim:** `contents`, `component_name` (the receiving component
@@ -583,7 +583,7 @@ three, so only the component-side surface would move.
 
 ### 9.3 Public typing surface
 
-Port the type aliases: `SlotResult` (`str | SafeString` extended with
+Port the type aliases: `SlotResult` (`str | Markup` extended with
 `CitryRender`), `SlotFunc[TSlotData]` (protocol over
 `(SlotContext) -> SlotResult | CitryElement | CitryRender`), and
 `SlotInput[TSlotData]` (`SlotResult | SlotFunc | Slot | CitryElement |
@@ -978,7 +978,7 @@ explicit `name="default"`; duplicate slot sites sharing one fill; scoped data
 required (+ fuzzy hint, + dynamic `c-required`, + untaken-branch no-error);
 dynamic fills (`c-name` in `<c-for>`, runtime duplicate error); passthrough
 slots and the three-level nested-slot override matrix; Python `slots=` with
-str/SafeString/fn/Slot/CitryElement/CitryRender (escaping per 3.1);
+str/Markup/fn/Slot/CitryElement/CitryRender (escaping per 3.1);
 `{{ my_slot }}` and `{{ my_slot({...}) }}`; grandchild-in-fill through the
 queue (incl. the three-level passthrough case from section 8) with deps
 asserted at the root; `on_slot_rendered` replace/raise; `str(Slot(...))`

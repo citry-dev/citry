@@ -1,7 +1,7 @@
 """
 Benchmarks for the Const optimization (citry/constness.py).
 
-Reproduces the measurements recorded in docs/design/constness.md section 13
+Reproduces the measurements recorded in docs/design/component_constness.md section 13
 (the results table) and section 14.5 (the slot-layout profile that parked
 slot-boundary folding). Each scenario renders the same component twice, once
 with Const-marked inputs and once with plain inputs, and reports the

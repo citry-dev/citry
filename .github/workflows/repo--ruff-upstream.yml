@@ -1,0 +1,63 @@
+# Monthly check for stable Ruff changes in the internal crates Citry vendors.
+# Dependabot cannot track path dependencies inside a git submodule, so this
+# opens one issue for maintainers to review instead of updating them blindly.
+name: Check Ruff internal packages
+
+on:
+  schedule:
+    - cron: "30 6 1 * *" # 06:30 UTC on the first day of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: ruff-upstream-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.repository == 'citry-dev/citry'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Check the latest stable Ruff release
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          python scripts/ruff_submodule_updates.py check > report.md 2>&1
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat report.md
+
+      - name: Open a tracking issue for relevant changes
+        if: steps.check.outputs.status == '10'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title="Ruff internal packages have upstream changes"
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
+            --search "\"$title\" in:title" --limit 100 --json title \
+            --jq "map(select(.title == \"$title\")) | length")
+          if [ "$open" -gt 0 ]; then
+            echo "An open tracking issue already exists; nothing to do."
+            exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" \
+            --title "$title" --body-file report.md
+
+      - name: Fail if the upstream check errored
+        if: >-
+          steps.check.outputs.status != '0' &&
+          steps.check.outputs.status != '10'
+        run: |
+          echo "::error::Ruff upstream check could not complete"
+          exit 1

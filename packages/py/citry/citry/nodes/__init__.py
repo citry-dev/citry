@@ -6,15 +6,15 @@ Each class accepts the exact arguments the compiler emits and stores them as
 attributes.
 
 The value nodes ``ExprNode`` and ``TemplateNode`` render against a
-``CitryContext`` (see docs/design/rendering.md), and the attribute nodes
+``CitryContext`` (see docs/design/component_rendering.md), and the attribute nodes
 (``StaticHtmlAttr``, ``ExprHtmlAttr``, ``TemplateHtmlAttr``) ``resolve`` to
 their values. ``ComponentNode`` renders a child component across a context
 boundary: attributes become the child's kwargs, and its body content becomes
 the child's slots (the implicit default slot, or the collected ``<c-fill>``
-tags; see docs/design/slots.md section 4). The control-flow nodes (``IfNode``,
+tags; see docs/design/component_slots.md section 4). The control-flow nodes (``IfNode``,
 ``ForNode``) render their matching branch / per-item body. ``SlotNode``
 renders the fill given for the slot, or its own body as the fallback (see
-docs/design/slots.md section 5). ``FillNode`` is consumed during fill
+docs/design/component_slots.md section 5). ``FillNode`` is consumed during fill
 collection and is never rendered directly, so its inherited ``render``
 raising is intentional.
 
@@ -27,7 +27,7 @@ Example:
 
         from citry_core.template_parser import parse_template, compile_template
         from citry_core.template_parser.nodes import (
-            ExprNode, ComponentNode, IfNode, ForNode,
+            ExprNode, ElementKeyNode, ComponentNode, IfNode, ForNode,
             SlotNode, FillNode, StaticHtmlAttr, ExprHtmlAttr,
             TemplateHtmlAttr, TemplateNode,
         )
@@ -39,6 +39,7 @@ Example:
         ns = {
             "source": source,
             "ExprNode": ExprNode,
+            "ElementKeyNode": ElementKeyNode,
             "TemplateNode": TemplateNode,
             "ComponentNode": ComponentNode,
             "ElementAttrsNode": ElementAttrsNode,
@@ -62,17 +63,49 @@ Example:
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import dataclass
 from difflib import get_close_matches
-from typing import TYPE_CHECKING, Any, TypeAlias, final
+from keyword import iskeyword
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
+from unicodedata import normalize
 
-from typing_extensions import override
+from typing_extensions import Unpack, override
 
-from citry.attrs import format_attrs, merge_attrs
+from citry.attrs import format_attrs, merge_attrs, validate_html_attr_name
 from citry.citry_context import CitryContext
-from citry.citry_element import CitryElement
-from citry.citry_render import CitryRender, DeferredComponent, _render_value
+from citry.citry_element import CitryElement, _ElementMorphMetadata
+from citry.citry_render import (
+    CitryRender,
+    DeferredComponent,
+    PhysicalRegionPart,
+    PhysicalRegionRender,
+    _render_value,
+    unwrap_physical_region,
+)
+from citry.client_directives import (
+    CLIENT_PROPS_ATTR,
+    ComponentTagClientBindingKind,
+    ComponentTagClientBindingSource,
+    apply_client_props_contribution,
+    classify_component_tag_client_binding_key,
+    has_client_props_key,
+    is_client_props_key,
+    resolve_component_tag_client_binding_value,
+)
 from citry.constness import Const, const_value, is_const
-from citry.slots import Slot, normalize_slot_fills
+from citry.ownership import (
+    AlpineHandlerClientBindingPayload,
+    CitryDomEventClientBindingPayload,
+    CitryPollClientBindingPayload,
+    ComponentTagClientBindingPayload,
+    ComponentTagClientBindingRecord,
+    LogicalFillKind,
+    PropsClientBindingPayload,
+    SourceLocationKind,
+    current_ownership_graph,
+    resume_ownership_graph,
+)
+from citry.slots import Slot, SlotData, normalize_slot_fills
 from citry.util.exception import add_slot_to_error_message
 from citry.util.html import escape
 from citry.util.logger import trace_component_msg
@@ -82,6 +115,21 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
     from citry.citry_render import RenderPart
+    from citry.ext.events.extension import EventsExtension
+
+
+_EVENTS_COMPILER_ATTR_PREFIX = "data-cev-"
+
+
+def _reject_dynamic_events_compiler_attr(name: str, *, tag_name: str) -> None:
+    """Keep render-time attributes out of the Events compiler-owned namespace."""
+    if name.lower().startswith(_EVENTS_COMPILER_ATTR_PREFIX):
+        msg = (
+            f"{name!r} arrived on <{tag_name}> through an attribute spread or a dynamic attribute. "
+            "'data-cev-*' attributes are compiler-owned; author State bindings with ':c-*' "
+            "and event bindings with '@c-*' instead."
+        )
+        raise RuntimeError(msg)
 
 
 # NOTE: Not abstract on purpose: the compiler builds the whole node tree up front
@@ -140,11 +188,34 @@ class HtmlAttr:
     """
 
     # Set by every concrete attribute's __init__; declared here so code iterating
-    # a ``tuple[HtmlAttr, ...]`` can read ``.key``.
+    # a ``tuple[HtmlAttr, ...]`` can read the shared source metadata.
     key: str
+    source: Any
+    position: tuple[int, int]
 
     def resolve(self, context: CitryContext) -> Any:
         raise NotImplementedError(f"{type(self).__name__}.resolve is not implemented")
+
+
+@dataclass(frozen=True, slots=True)
+class FillDataBinding:
+    """Compiled one-level destructuring plan for a fill's slot data."""
+
+    fields: tuple[tuple[str, str], ...]
+    rest: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "fields",
+            tuple((source, normalize("NFKC", target)) for source, target in self.fields),
+        )
+        object.__setattr__(self, "rest", normalize("NFKC", self.rest))
+
+    @property
+    def targets(self) -> tuple[str, ...]:
+        field_targets = tuple(target for _, target in self.fields)
+        return (*field_targets, self.rest) if self.rest else field_targets
 
 
 def _find_attr(attrs: tuple[HtmlAttr, ...], key: str) -> HtmlAttr | None:
@@ -153,6 +224,29 @@ def _find_attr(attrs: tuple[HtmlAttr, ...], key: str) -> HtmlAttr | None:
         if attr.key == key:
             return attr
     return None
+
+
+def _validate_introduced_variables(
+    tag_name: str,
+    names: tuple[str, ...],
+    context: CitryContext,
+) -> None:
+    """Reject a Citry binding that would reuse a name already in scope."""
+    introduced: set[str] = set()
+    for name in names:
+        if name in introduced:
+            msg = (
+                f"Cannot define variable {name!r} more than once in tag '<{tag_name}>'. "
+                "Variable shadowing is not allowed, use a different name."
+            )
+            raise RuntimeError(msg)
+        introduced.add(name)
+        if name in context.variables:
+            msg = (
+                f"Cannot define variable {name!r} in tag '<{tag_name}>' - variable name is already taken. "
+                "Variable shadowing is not allowed, use a different name."
+            )
+            raise RuntimeError(msg)
 
 
 class FillSink:
@@ -211,9 +305,13 @@ def _make_body_slot(
     context: CitryContext,
     component_name: str,
     slot_name: str,
-    data_var: str | None,
+    data_binding: str | FillDataBinding | None,
     fallback_var: str | None,
     position: tuple[int, int] | None,
+    *,
+    source: object,
+    kind: LogicalFillKind,
+    fallback_slot_site_location_id: Any = None,
 ) -> Slot:
     """
     Wrap a fill body (or a component's implicit default body) as a ``Slot``.
@@ -221,51 +319,151 @@ def _make_body_slot(
     The Slot closes over ``context``, the scope where the fill was written,
     so the body renders against the writer's variables no matter when or
     how often the child invokes it. When the child passes slot data or the
-    fallback handle, they are overlaid under the fill's ``data``/
-    ``fallback`` variable names; the overlay context shares the captured
-    ``extra`` bag, so dependencies collected while the fill renders reach
-    the fill's lexical owner.
+    fallback handle, they are overlaid under the fill's whole-data variable,
+    destructured field variables, and ``fallback`` variable. The overlay
+    context shares the captured ``extra`` bag, so dependencies collected while
+    the fill renders reach the fill's lexical owner.
 
     Provide/inject entries are the one part of the scope that does NOT come
     from the capture alone: when the body renders at a ``<c-slot>`` site, the
     provides active at that site extend (and on a key collision win over) the
     captured ones, so a component inside the body can inject what the slot's
     owner provides around the slot. Invoked standalone (no slot site), the
-    body keeps the captured provides. See docs/design/provide.md section 4.3.
+    body keeps the captured provides. See docs/design/component_provide.md section 4.3.
     """
     # Imported lazily: component_render imports the node classes, so importing
     # the body walker at module load would be circular.
     from citry.component_render import _render_body  # noqa: PLC0415
 
+    slot: Slot
+
     def content_func(ctx: Any) -> CitryRender:
-        provides = context.provides
-        if ctx.provides is not None and ctx.provides is not provides:
-            provides = {**provides, **ctx.provides} if provides else ctx.provides
+        def render_content() -> CitryRender:
+            provides = context.provides
+            if ctx.provides is not None and ctx.provides is not provides:
+                provides = {**provides, **ctx.provides} if provides else ctx.provides
 
-        if data_var is not None or fallback_var is not None or provides is not context.provides:
-            overlay: dict[str, Any] = {}
-            if data_var is not None:
-                overlay[data_var] = ctx.data
-            if fallback_var is not None:
-                overlay[fallback_var] = ctx.fallback
-            render_context = CitryContext(
-                variables={**context.variables, **overlay},
-                extra=context.extra,
-                component=context.component,
-                provides=provides,
-                sandboxed=context.sandboxed,
-            )
-        else:
-            render_context = context
-        return CitryRender(parts=_render_body(body, render_context), context=render_context)
+            if data_binding is not None or fallback_var is not None or provides is not context.provides:
+                overlay = _bind_fill_data(
+                    data_binding,
+                    ctx.data,
+                    component_name=component_name,
+                    slot_name=slot_name,
+                )
+                if fallback_var is not None:
+                    overlay[fallback_var] = ctx.fallback
+                render_context = CitryContext(
+                    variables={**context.variables, **overlay},
+                    extra=context.extra,
+                    component=context.component,
+                    provides=provides,
+                    sandboxed=context.sandboxed,
+                    ownership=context.ownership,
+                )
+            else:
+                render_context = context
+            return CitryRender(parts=_render_body(body, render_context), context=render_context)
 
-    return Slot(
+        # A stored template Slot may be invoked after its root render has
+        # returned. Resume capture into its original graph without putting a
+        # logical fill ID on the reusable Slot object itself.
+        graph = context.ownership
+        if graph is not None and current_ownership_graph() is None:
+            with resume_ownership_graph(graph):
+                return graph.capture_slot_call(slot, render_content)
+        return render_content()
+
+    slot = Slot(
         body,
         content_func=content_func,
         component_name=component_name,
         slot_name=slot_name,
         source_position=position,
     )
+    if context.ownership is not None and position is not None:
+        context.ownership.record_template_fill(
+            slot,
+            context,
+            kind=kind,
+            slot_name=slot_name,
+            source=source,
+            position=position,
+            fallback_slot_site_location_id=fallback_slot_site_location_id,
+        )
+    return slot
+
+
+def _bind_fill_data(
+    binding: str | FillDataBinding | None,
+    data: SlotData,
+    *,
+    component_name: str,
+    slot_name: str,
+) -> dict[str, Any]:
+    if binding is None:
+        return {}
+    if isinstance(binding, str):
+        return {binding: data}
+
+    overlay: dict[str, Any] = {}
+    consumed: set[str] = set()
+    for source, target in binding.fields:
+        try:
+            overlay[target] = data[source]
+        except KeyError:
+            available = ", ".join(repr(key) for key in data) or "none"
+            msg = (
+                f"Fill for slot {slot_name!r} of component {component_name!r} requested "
+                f"slot-data field {source!r}, but the available fields are: {available}."
+            )
+            raise RuntimeError(msg) from None
+        consumed.add(source)
+    if binding.rest:
+        overlay[binding.rest] = SlotData({key: value for key, value in data.items() if key not in consumed})
+    return overlay
+
+
+def _render_part_ids(part: RenderPart) -> set[str]:
+    """Collect component render IDs reachable through one selected part."""
+    part = unwrap_physical_region(part)
+    if not isinstance(part, CitryRender):
+        return set()
+    render_ids: set[str] = set()
+    pending = [part]
+    seen: set[int] = set()
+    while pending:
+        current = pending.pop()
+        object_id = id(current)
+        if object_id in seen:
+            continue
+        seen.add(object_id)
+        render_id = current.frame.render_id
+        if render_id is not None:
+            render_ids.add(render_id)
+        for child in current.parts:
+            nested_child = unwrap_physical_region(child)
+            if isinstance(nested_child, CitryRender):
+                pending.append(nested_child)
+    return render_ids
+
+
+def _render_part_object_ids(part: RenderPart) -> set[int]:
+    """Collect transient part identities reachable through one part."""
+    if not isinstance(part, CitryRender):
+        return {id(part)}
+    object_ids: set[int] = set()
+    pending: list[RenderPart] = [part]
+    while pending:
+        current = pending.pop()
+        object_id = id(current)
+        if object_id in object_ids:
+            continue
+        object_ids.add(object_id)
+        if isinstance(current, (PhysicalRegionPart, PhysicalRegionRender)):
+            pending.append(current.part)
+        elif isinstance(current, CitryRender):
+            pending.extend(current.parts)
+    return object_ids
 
 
 @final
@@ -315,8 +513,12 @@ class ExprNode(Node):
         value = self.evaluate(context.variables, sandboxed=context.sandboxed)
         # An element or Slot found in the expression renders with the
         # provide/inject entries active here, so it can inject what this
-        # render site provides (docs/design/provide.md section 4.4).
-        return _render_value(value, provides=context.provides)
+        # render site provides (docs/design/component_provide.md section 4.4).
+        return _render_value(
+            value,
+            provides=context.provides,
+            citry=context.component.citry if context.component is not None else None,
+        )
 
     @override
     def collect_fills(self, context: CitryContext, sink: FillSink) -> None:
@@ -377,7 +579,11 @@ class TemplateNode(Node):
             # the rules derived from the registered components' declarations.
             component = context.component
             user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_nested_template(self.expr, user_rules)
+            self._generator = _compile_nested_template(
+                self.expr,
+                user_rules,
+                type(component) if component is not None else None,
+            )
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -400,7 +606,7 @@ class StaticHtmlAttr(HtmlAttr):
     """
 
     def __init__(
-        self, source: Any, position: tuple[int, int], key: str, value: str, used_vars: tuple[str, ...]
+        self, source: Any, position: tuple[int, int], key: str, value: Any, used_vars: tuple[str, ...]
     ) -> None:
         self.source = source
         self.position = position
@@ -417,7 +623,7 @@ class StaticHtmlAttr(HtmlAttr):
         the same on every render"). Attribute values serve double duty: they
         can be slot and fill names, provide keys, or component inputs, and
         only the component-input use benefits from the marker. So the marking
-        happens in ``ComponentNode._resolve_kwargs``, where the value becomes
+        happens in ``ComponentNode._resolve_inputs``, where the value becomes
         a component input, not here.
         """
         return self.value
@@ -463,7 +669,7 @@ class ExprHtmlAttr(HtmlAttr):
         Python object). Escaping happens later, when the child component renders
         the value through an ``ExprNode``. The value is returned without the
         ``Const`` marker; for an expression that uses no variables (a literal
-        written in the template), ``ComponentNode._resolve_kwargs`` adds the
+        written in the template), ``ComponentNode._resolve_inputs`` adds the
         marker where the value becomes a component input.
         """
         # The parser rejects a value-less `c-*` attribute, but node classes
@@ -521,7 +727,11 @@ class TemplateHtmlAttr(HtmlAttr):
             # the rules derived from the registered components' declarations.
             component = context.component
             user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_nested_template(self.template, user_rules)
+            self._generator = _compile_nested_template(
+                self.template,
+                user_rules,
+                type(component) if component is not None else None,
+            )
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -537,9 +747,10 @@ class ElementAttrsNode(Node):
     Generated as: ``ElementAttrsNode(source, (start, end), (attrs...), ("var1", ...))``
 
     Emitted when an HTML element (not a component) has at least one dynamic
-    attribute: a ``c-*`` value or a ``c-bind`` spread. The node covers ALL of
-    the tag's attributes, static ones included, because the set resolves as
-    one unit:
+    attribute—a ``c-*`` value or a ``c-bind`` spread—or a literal extension
+    binding/output name that must remain structurally visible. The node covers
+    ALL of the tag's attributes, static ones included, because the set resolves
+    as one unit:
 
     - Contributions collect left to right in source order; ``c-bind``
       contributes each entry of its mapping (which must be a ``Mapping``).
@@ -551,6 +762,10 @@ class ElementAttrsNode(Node):
 
     Renders to one string like ``' class="btn" disabled'`` (leading space
     included) or ``""`` when every attribute resolved away.
+
+    An ``on_template_compiled`` extension may consume parser-proven literal
+    attributes and collapse an otherwise-static region back to a string before
+    this node reaches rendering. Events uses that path for ``@c-*`` / ``:c-*``.
 
     Example:
         Template ``<div id="x" c-class="cls">hi</div>`` produces::
@@ -590,7 +805,7 @@ class ElementAttrsNode(Node):
 
         # Let extensions rewrite the resolved dict (e.g. class dedup). Fires
         # only when an installed extension implements the hook; the manager
-        # short-cuts otherwise (docs/design/html_attrs.md section 5.5).
+        # short-cuts otherwise (docs/design/template_html_attrs.md section 5.5).
         component = context.component
         if component is not None:
             resolved = component.citry.extensions.on_attrs_resolved(
@@ -598,6 +813,13 @@ class ElementAttrsNode(Node):
                 tag_name=self.tag_name,
                 attrs=resolved,
             )
+            if has_client_props_key(resolved, tag_name=self.tag_name):
+                apply_client_props_contribution(
+                    resolved,
+                    resolved[CLIENT_PROPS_ATTR],
+                    tag_name=self.tag_name,
+                    component_boundary=False,
+                )
 
         return self._format(resolved, context)
 
@@ -626,14 +848,45 @@ class ElementAttrsNode(Node):
                         f"got {type(value).__name__}"
                     )
                     raise TypeError(msg)
-                contributions.append({key: const_value(item) for key, item in value.items()})
+                contribution: dict[str, Any] = {}
+                for key, item in value.items():
+                    resolved_key = validate_html_attr_name(key, where=f"c-bind on <{self.tag_name}>")
+                    _reject_dynamic_events_compiler_attr(resolved_key, tag_name=self.tag_name)
+                    contribution[resolved_key] = const_value(item)
+                contributions.append(contribution)
             else:
-                contributions.append({attr.key.removeprefix("c-"): const_value(attr.resolve(context))})
+                resolved_key = attr.key.removeprefix("c-")
+                if attr.key.startswith("c-"):
+                    _reject_dynamic_events_compiler_attr(resolved_key, tag_name=self.tag_name)
+                contributions.append({resolved_key: const_value(attr.resolve(context))})
         merged = merge_attrs(*contributions)
+        # `#c-*` framework attributes (`#c-key`, `#c-ignore`) are
+        # template-authored only in v1: authored on the tag, the compiler
+        # handles them before this node exists, so one arriving here came
+        # through a spread or a dynamic attribute name and would render as a
+        # meaningless literal attribute. Fail loudly, naming the fix.
+        for merged_key in merged:
+            if merged_key.startswith("#c-"):
+                msg = (
+                    f"{merged_key!r} arrived on <{self.tag_name}> through an attribute spread or a "
+                    "dynamic attribute. '#c-*' framework attributes are template-authored only: "
+                    "write the attribute directly on the tag in the template."
+                )
+                raise RuntimeError(msg)
+        if has_client_props_key(merged, tag_name=self.tag_name):
+            apply_client_props_contribution(
+                merged,
+                merged[CLIENT_PROPS_ATTR],
+                tag_name=self.tag_name,
+                component_boundary=False,
+            )
         return {key: value for key, value in merged.items() if value is not None and value is not False}
 
     def _format(self, resolved: Mapping[str, Any], context: CitryContext) -> RenderPart:
         """Format the merged dict into the output part(s)."""
+        for key in resolved:
+            validate_html_attr_name(key, where=f"attributes resolved for <{self.tag_name}>")
+
         # Common case: no attribute value is a nested-template render, so the
         # whole dict formats in a single pass. Doing it per key (the mixed-case
         # path below) would escape, join, and concatenate once per attribute,
@@ -675,6 +928,44 @@ class ElementAttrsNode(Node):
         return f"ElementAttrsNode(attrs={len(self.attrs)}, used_vars={self.used_vars})"
 
 
+@final
+class ElementKeyNode(Node):
+    """
+    An explicit ``#c-key`` on a plain HTML element.
+
+    Generated as ``ElementKeyNode(ExprHtmlAttr(...))``. The wrapped attribute
+    evaluates in the surrounding template scope. ``None`` emits nothing, which
+    makes the element behave exactly as if ``#c-key`` were absent. Every other
+    value, including ``False``, ``0``, and ``""``, emits the escaped composite
+    key ``data-citry-key=":<value>"``.
+
+    The node owns the complete output attribute so omission cannot leave an
+    empty scope prefix or a dangling quote in the start tag. It stays outside
+    ``ElementAttrsNode`` because framework metadata must not enter ordinary
+    attribute merging or the ``on_attrs_resolved`` extension hook.
+
+    Args:
+        attr: The compiled ``#c-key`` expression and its source metadata.
+
+    """
+
+    def __init__(self, attr: ExprHtmlAttr) -> None:
+        self.attr = attr
+        self.source = attr.source
+        self.position = attr.position
+        self.used_vars = attr.used_vars
+
+    @override
+    def render(self, context: CitryContext) -> RenderPart:
+        value = const_value(self.attr.resolve(context))
+        if value is None:
+            return ""
+        return f' data-citry-key=":{escape(value)}"'
+
+    def __repr__(self) -> str:
+        return f"ElementKeyNode(expr={self.attr.expr!r}, used_vars={self.used_vars})"
+
+
 def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
     """
     Whether a resolved component-input value is the same on every render.
@@ -702,6 +993,36 @@ def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
     return False
 
 
+@dataclass(frozen=True, slots=True)
+class _PendingComponentTagClientBinding:
+    """One winning component-tag client binding before its location is recorded."""
+
+    kind: ComponentTagClientBindingKind
+    key: str
+    value: str
+    source: ComponentTagClientBindingSource
+    attr: HtmlAttr
+    mapping_key: str | None = None
+    mapping_index: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolvedComponentInputs:
+    """The two independent channels resolved from a component start tag."""
+
+    kwargs: dict[str, Any]
+    client_bindings: tuple[ComponentTagClientBindingRecord, ...]
+
+
+ComponentNodeMetadataEntry: TypeAlias = (
+    tuple[Literal["key"], ExprHtmlAttr] | tuple[Literal["morph"], Literal["ignore"]]
+)
+ComponentNodeMetadata: TypeAlias = tuple[
+    Literal["range", "element"],
+    Unpack[tuple[ComponentNodeMetadataEntry, ...]],
+]
+
+
 @final
 class ComponentNode(Node):
     """
@@ -724,6 +1045,11 @@ class ComponentNode(Node):
         Component names are lowercased (``Card`` -> ``card``); kebab names
         are preserved (``my-card`` stays ``my-card``).
 
+    A tag carrying framework metadata appends one trailing tagged tuple. The
+    ``range`` locus records a logical component-range directive; ``element``
+    privately carries directives to the dynamic ordinary-element built-in.
+    Metadata never joins ``attrs`` and can therefore never become a kwarg.
+
     """
 
     def __init__(
@@ -735,6 +1061,7 @@ class ComponentNode(Node):
         used_vars: tuple[str, ...],
         name: str,
         contains_fills: bool,
+        metadata: ComponentNodeMetadata | None = None,
     ) -> None:
         self.source = source
         self.position = position
@@ -743,6 +1070,43 @@ class ComponentNode(Node):
         self.used_vars = used_vars
         self.name = name
         self.contains_fills = contains_fills
+        self.metadata = metadata
+        self._metadata_locus: Literal["range", "element"] | None = None
+        self.key: ExprHtmlAttr | None = None
+        self.morph_mode: Literal["ignore"] | None = None
+
+        if metadata is None:
+            return
+        if not isinstance(metadata, tuple):
+            msg = "ComponentNode metadata must be a tuple."
+            raise TypeError(msg)
+        if not metadata or metadata[0] not in {"range", "element"}:
+            msg = "ComponentNode metadata locus must be 'range' or 'element'."
+            raise TypeError(msg)
+        self._metadata_locus = metadata[0]
+        seen: set[str] = set()
+        for entry in metadata[1:]:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                msg = "ComponentNode metadata entries must be two-item tuples."
+                raise TypeError(msg)
+            entry_name, payload = entry
+            if entry_name not in {"key", "morph"}:
+                msg = f"Unknown ComponentNode metadata entry {entry_name!r}."
+                raise TypeError(msg)
+            if entry_name in seen:
+                msg = f"Duplicate ComponentNode metadata entry {entry_name!r}."
+                raise TypeError(msg)
+            seen.add(entry_name)
+            if entry_name == "key":
+                if not isinstance(payload, ExprHtmlAttr):
+                    msg = "ComponentNode 'key' metadata requires an ExprHtmlAttr payload."
+                    raise TypeError(msg)
+                self.key = payload
+            elif payload != "ignore":
+                msg = "ComponentNode 'morph' metadata must be 'ignore'."
+                raise TypeError(msg)
+            else:
+                self.morph_mode = "ignore"
 
     @override
     def render(self, context: CitryContext) -> DeferredComponent:
@@ -767,16 +1131,58 @@ class ComponentNode(Node):
             msg = "ComponentNode.render requires a component context bound to a Citry instance."
             raise RuntimeError(msg)
 
-        kwargs = self._resolve_kwargs(context)
-        slots = self._collect_slots(context)
+        resolved = self._resolve_inputs(context)
         child_cls = component.citry.get(self.name)
-        element = CitryElement(child_cls, kwargs, slots)
+        slots = self._collect_slots(context)
+        # The key expression evaluates once in the parent's scope. Exactly
+        # None opts out; every other value, including falsey values, is a key.
+        evaluated_key: str | None = None
+        if self.key is not None:
+            key_value = const_value(self.key.resolve(context))
+            evaluated_key = None if key_value is None else str(key_value)
+        range_morph_key = evaluated_key if self._metadata_locus == "range" else None
+        range_morph_mode = self.morph_mode if self._metadata_locus == "range" else None
+        element_morph_metadata = (
+            _ElementMorphMetadata(key=evaluated_key, morph_mode=self.morph_mode)
+            if self._metadata_locus == "element"
+            else None
+        )
+        ownership = context.ownership
+        if ownership is None:
+            msg = "ComponentNode.render requires an active ownership graph."
+            raise RuntimeError(msg)
+        invocation_id = ownership.record_component_invocation(
+            context,
+            authored_tag=self.name,
+            target_class_id=child_cls.class_id,
+            morph_key=range_morph_key,
+            morph_mode=range_morph_mode,
+            source=self.source,
+            position=self.position,
+            client_bindings=resolved.client_bindings,
+        )
+        ownership.bind_template_fill_sources(slots, invocation_id)
+        element = CitryElement(
+            child_cls,
+            resolved.kwargs,
+            slots,
+            component_tag_client_bindings=resolved.client_bindings,
+            ownership_invocation_id=invocation_id,
+            ownership_graph=ownership,
+            element_morph_metadata=element_morph_metadata,
+            forward_ownership_invocation=self.name == "component",
+        )
         # The active provide/inject entries are captured now, like the kwargs:
         # the child renders later (through the queue), when this context is
         # gone, but must still inherit what was provided around its tag.
-        return DeferredComponent(element, component, context.provides)
+        return DeferredComponent(
+            element,
+            component,
+            context.provides,
+            physical_parent_region_id=ownership.current_region_id(),
+        )
 
-    def _resolve_kwargs(self, context: CitryContext) -> dict[str, Any]:
+    def _resolve_inputs(self, context: CitryContext) -> _ResolvedComponentInputs:
         """
         Turn the attribute nodes into the child component's kwargs.
 
@@ -787,7 +1193,7 @@ class ComponentNode(Node):
 
         A value that is the same on every render is marked ``Const`` here, so
         the child component can reuse the work it already did for that input,
-        with no opt-in needed (see docs/design/constness.md). That covers a
+        with no opt-in needed (see docs/design/component_constness.md). That covers a
         literal (``age="30"``, ``c-items="[1, 2]"``) and also an expression
         whose variables are all constant at render time (``c-age="base + 1"``
         when ``base`` is constant): the result of such an expression cannot
@@ -799,6 +1205,70 @@ class ComponentNode(Node):
         every render; equal values still land on the same cache entry.
         """
         kwargs: dict[str, Any] = {}
+        element_attr_contributions: list[Mapping[str, Any]] = []
+        pending_client_bindings: dict[str, _PendingComponentTagClientBinding] = {}
+        tag_name = f"c-{self.name}"
+        component_boundary = self.name != "element"
+        component = context.component
+        if component is None:
+            msg = "Component input resolution requires a component-owned context."
+            raise RuntimeError(msg)
+
+        def apply_kwarg(resolved_key: str, value: Any) -> None:
+            # A dynamic <c-element> is an HTML-attribute boundary, so every
+            # input keeps its source-ordered contribution until the shared
+            # HTML merge can fold case variants and accumulate class/style.
+            # Ordinary components keep exact-case Python-kwarg last-one-wins.
+            if not component_boundary:
+                element_attr_contributions.append({resolved_key: value})
+            else:
+                kwargs[resolved_key] = value
+
+        def reject_component_state_binding(resolved_key: Any) -> None:
+            if component_boundary and isinstance(resolved_key, str) and resolved_key.startswith(":c-"):
+                msg = (
+                    f"State binding {resolved_key!r} is not valid on the <{tag_name}> component boundary. "
+                    "State bindings target HTML elements; pass data down through $c-props or Python kwargs."
+                )
+                raise RuntimeError(msg)
+
+        def apply_client_binding(
+            resolved_key: str,
+            raw_value: Any,
+            attr: HtmlAttr,
+            *,
+            source: ComponentTagClientBindingSource,
+            mapping_key: str | None = None,
+            mapping_index: int | None = None,
+        ) -> bool:
+            if not component_boundary:
+                return False
+            client_binding_kind = classify_component_tag_client_binding_key(resolved_key, tag_name=tag_name)
+            if client_binding_kind is None:
+                return False
+            client_binding_value = resolve_component_tag_client_binding_value(
+                resolved_key,
+                raw_value,
+                tag_name=tag_name,
+                kind=client_binding_kind,
+            )
+            if client_binding_value is None:
+                pending_client_bindings.pop(resolved_key, None)
+            else:
+                # Replacement moves the exact key to this later contribution's
+                # position, matching the accepted source-order contract.
+                pending_client_bindings.pop(resolved_key, None)
+                pending_client_bindings[resolved_key] = _PendingComponentTagClientBinding(
+                    kind=client_binding_kind,
+                    key=resolved_key,
+                    value=client_binding_value,
+                    source=source,
+                    attr=attr,
+                    mapping_key=mapping_key,
+                    mapping_index=mapping_index,
+                )
+            return True
+
         for attr in self.attrs:
             key: str = attr.key
             if key == "c-bind":
@@ -812,20 +1282,156 @@ class ComponentNode(Node):
                 if not isinstance(bound, Mapping):
                     msg = f"c-bind on <{self.name}> must resolve to a mapping of kwargs, got {type(bound).__name__}"
                     raise TypeError(msg)
-                kwargs.update(bound)
+                for mapping_index, (bound_key, bound_value) in enumerate(bound.items()):
+                    if self.name == "element":
+                        resolved_bound_key = validate_html_attr_name(bound_key, where="c-bind on <c-element>")
+                        _reject_dynamic_events_compiler_attr(resolved_bound_key, tag_name="c-element")
+                    elif not isinstance(bound_key, str):
+                        msg = (
+                            f"c-bind on <c-{self.name}> must use string kwarg names, "
+                            f"got {type(bound_key).__name__} key {bound_key!r}"
+                        )
+                        raise TypeError(msg)
+                    else:
+                        resolved_bound_key = bound_key
+                    reject_component_state_binding(resolved_bound_key)
+                    if apply_client_binding(
+                        resolved_bound_key,
+                        bound_value,
+                        attr,
+                        source=ComponentTagClientBindingSource.SPREAD,
+                        mapping_key=resolved_bound_key,
+                        mapping_index=mapping_index,
+                    ):
+                        continue
+                    if is_client_props_key(resolved_bound_key, tag_name=tag_name):
+                        apply_client_props_contribution(
+                            kwargs,
+                            bound_value,
+                            tag_name=tag_name,
+                            component_boundary=False,
+                        )
+                    else:
+                        apply_kwarg(resolved_bound_key, bound_value)
                 continue
             value = attr.resolve(context)
+            resolved_key = key.removeprefix("c-")
+            reject_component_state_binding(resolved_key)
+            client_binding_source = (
+                ComponentTagClientBindingSource.SERVER_DYNAMIC
+                if key.startswith("c-")
+                else ComponentTagClientBindingSource.DIRECT
+            )
+            if not component_boundary and client_binding_source == ComponentTagClientBindingSource.SERVER_DYNAMIC:
+                _reject_dynamic_events_compiler_attr(resolved_key, tag_name="c-element")
+            if apply_client_binding(resolved_key, value, attr, source=client_binding_source):
+                continue
             if _kwarg_is_const(attr, context):
                 value = Const(value)
-            kwargs[key.removeprefix("c-")] = value
-        return kwargs
+            if resolved_key == CLIENT_PROPS_ATTR:
+                apply_client_props_contribution(
+                    kwargs,
+                    value,
+                    tag_name=f"c-{self.name}",
+                    component_boundary=False,
+                )
+            else:
+                apply_kwarg(resolved_key, value)
+
+        if element_attr_contributions:
+            kwargs.update(merge_attrs(*element_attr_contributions))
+        # `#c-*` framework attributes are template-authored only in v1: the
+        # compiler carries an authored `#c-key` as the node's `key` (never a
+        # kwarg), so one arriving here came through a `c-bind` spread or a
+        # dynamic attribute name and would silently become an unusable kwarg.
+        # Fail loudly, naming the fix.
+        for kwarg_key in kwargs:
+            if isinstance(kwarg_key, str) and kwarg_key.startswith("#c-"):
+                msg = (
+                    f"{kwarg_key!r} arrived on <c-{self.name}> through an attribute spread or a "
+                    "dynamic attribute. '#c-*' framework attributes are template-authored only: "
+                    "write the attribute directly on the component tag in the template."
+                )
+                raise RuntimeError(msg)
+        ownership = context.ownership
+        if ownership is None:
+            msg = "Component input resolution requires an active ownership graph."
+            raise RuntimeError(msg)
+        client_bindings: list[ComponentTagClientBindingRecord] = []
+        for pending in pending_client_bindings.values():
+            source_location_id = ownership.record_source_location(
+                context,
+                kind=SourceLocationKind.COMPONENT_TAG_CLIENT_BINDING,
+                source=pending.attr.source,
+                position=pending.attr.position,
+                mapping_key=pending.mapping_key,
+                mapping_index=pending.mapping_index,
+            )
+            location = ownership.source_location(source_location_id)
+            payload: ComponentTagClientBindingPayload
+            if pending.kind == ComponentTagClientBindingKind.PROPS:
+                payload = PropsClientBindingPayload(type="props", expression=pending.value)
+            elif pending.kind == ComponentTagClientBindingKind.ALPINE_HANDLER:
+                payload = AlpineHandlerClientBindingPayload(type="alpine-handler", expression=pending.value)
+            else:
+                # Import lazily: the core node model does not import the Events
+                # extension while built-ins are still being constructed.
+                from citry.ext.events.bindings import (  # noqa: PLC0415
+                    DATA_CEV_ON,
+                    compile_citry_boundary_binding,
+                )
+
+                events = cast("EventsExtension", component.citry.extensions.get_extension("events"))
+                compiled = compile_citry_boundary_binding(
+                    events.resolve(type(component)),
+                    type(component).class_id,
+                    type(component).__name__,
+                    tag_name,
+                    pending.key,
+                    pending.value,
+                    line=location.line,
+                    column=location.column,
+                )
+                spec = compiled.spec
+                if compiled.channel == DATA_CEV_ON:
+                    payload = CitryDomEventClientBindingPayload(
+                        type="citry-dom-event",
+                        class_id=str(spec["cid"]),
+                        event=str(spec["event"]),
+                        handler=str(spec["handler"]),
+                        args=spec["args"] if isinstance(spec["args"], str) else None,
+                        prevent=bool(spec["prevent"]),
+                        stop=bool(spec["stop"]),
+                        self_=bool(spec["self"]),
+                        once=bool(spec["once"]),
+                        key=spec["key"] if isinstance(spec["key"], str) else None,
+                        debounce=spec["debounce"] if isinstance(spec["debounce"], int) else None,
+                        throttle=spec["throttle"] if isinstance(spec["throttle"], int) else None,
+                    )
+                else:
+                    payload = CitryPollClientBindingPayload(
+                        type="citry-poll",
+                        class_id=str(spec["cid"]),
+                        handler=str(spec["handler"]),
+                        args=spec["args"] if isinstance(spec["args"], str) else None,
+                        interval=int(spec["interval"]),
+                    )
+            client_bindings.append(
+                ComponentTagClientBindingRecord(
+                    key=pending.key,
+                    payload=payload,
+                    source=pending.source,
+                    source_location_id=source_location_id,
+                )
+            )
+        return _ResolvedComponentInputs(kwargs=kwargs, client_bindings=tuple(client_bindings))
 
     def _collect_slots(self, context: CitryContext) -> dict[str, Slot]:
         """
         Turn the tag's body into the child component's slots.
 
         Two body modes, split by the compiler's ``contains_fills`` flag (see
-        docs/design/slots.md section 4):
+        docs/design/component_slots.md section 4):
 
         - No fills: the whole body is the implicit default slot, registered
           under ``"default"``. A whitespace-only body is formatting, not
@@ -840,7 +1446,19 @@ class ComponentNode(Node):
         if not self.contains_fills:
             if all(isinstance(item, str) and not item.strip() for item in self.body):
                 return {}
-            return {"default": _make_body_slot(self.body, context, self.name, "default", None, None, self.position)}
+            return {
+                "default": _make_body_slot(
+                    self.body,
+                    context,
+                    self.name,
+                    "default",
+                    None,
+                    None,
+                    self.position,
+                    source=self.source,
+                    kind=LogicalFillKind.IMPLICIT,
+                )
+            }
 
         sink = FillSink(self.name)
         collect_fills_from_body(self.body, context, sink)
@@ -949,10 +1567,22 @@ class ForNode(Node):
         self.source = source
         self.branches = branches
         self.used_vars = used_vars
+        # Const precomputation may evaluate an all-const loop once and retain
+        # only its rendered text. The ForNode itself still survives so its
+        # binding check runs against the live context immediately before that
+        # text is emitted (an earlier expression may have mutated the mapping
+        # since the cache entry was built).
+        self._precomputed_text: str | None = None
         # The generator-expression evaluator for the `each` clause, compiled
         # lazily on first render and reused afterwards (the node is cached across
         # renders, so this compiles once).
         self._iter_eval: Callable[[Any], Any] | None = None
+
+    def _with_precomputed_text(self, text: str) -> ForNode:
+        """Return a fresh runtime guard for text produced by const unrolling."""
+        node = ForNode(self.source, self.branches, self.used_vars)
+        node._precomputed_text = text
+        return node
 
     def iter_bodies(self, context: CitryContext) -> Iterator[tuple[list[BodyItem], CitryContext]]:
         """
@@ -978,6 +1608,10 @@ class ForNode(Node):
         targets: tuple[str, ...] = for_branch[3]
         body: list[BodyItem] = for_branch[2]
 
+        # Validate before evaluating the iterable so an empty loop cannot hide
+        # an invalid binding and no loop expression runs in an invalid scope.
+        _validate_introduced_variables("c-for", targets, context)
+
         if self._iter_eval is None:
             each_attr = _find_attr(for_branch[1], "each")
             if not isinstance(each_attr, ExprHtmlAttr):
@@ -999,6 +1633,7 @@ class ForNode(Node):
                 component=context.component,
                 provides=context.provides,
                 sandboxed=context.sandboxed,
+                ownership=context.ownership,
             )
             yield body, child
 
@@ -1014,6 +1649,11 @@ class ForNode(Node):
         See ``iter_bodies`` for the loop evaluation and scoping rules.
         """
         from citry.component_render import _render_body  # noqa: PLC0415
+
+        if self._precomputed_text is not None:
+            targets: tuple[str, ...] = self.branches[0][3]
+            _validate_introduced_variables("c-for", targets, context)
+            return CitryRender(parts=[self._precomputed_text], context=context)
 
         parts: list[RenderPart] = []
         for body, body_context in self.iter_bodies(context):
@@ -1098,7 +1738,7 @@ class SlotNode(Node):
         fill = fills.get(name)
 
         # No fill passed: fall back to a default on the typed `Slots` field, used
-        # as the slot's fill (docs/design/slots.md section 9.5). `getattr` returns
+        # as the slot's fill (docs/design/component_slots.md section 9.5). `getattr` returns
         # that default here because the caller passed nothing for `name`; a `None`
         # default (or a dynamic name that is not a field) yields no fill, so the
         # in-template body below stays the fallback and a required slot still
@@ -1118,41 +1758,97 @@ class SlotNode(Node):
             slot_fills=fills,
         )
 
-        # The slot's own body, as a Slot: the fallback handle when a fill
-        # exists, the rendered content when none does.
-        body_slot = _make_body_slot(self.body, context, type(component).__name__, name, None, None, self.position)
+        ownership = context.ownership
+        if ownership is None:
+            msg = "SlotNode.render requires an active ownership graph."
+            raise RuntimeError(msg)
+        has_rendered_hook = component.citry.extensions.has_hook("on_slot_rendered")
+        selection_checkpoint = ownership.checkpoint()
 
-        if fill is not None:
-            slot_used = fill
-            # The provides active at this slot site travel into the fill, so
-            # components inside the fill body can inject what this component
-            # provides around the slot (docs/design/provide.md section 4.3).
-            # An error raised by the slot content gets this slot as a path
-            # frame ("Card(slot:body)") in its message.
-            with add_slot_to_error_message(type(component).__name__, name):
-                part = fill(data, fallback=body_slot, provides=context.provides)
-        else:
-            if required:
-                msg = (
-                    f"Slot {name!r} of component {type(component).__name__!r} is marked as "
-                    "required, but no fill was provided."
+        with ownership.slot_site(context, source=self.source, position=self.position) as slot_site_location_id:
+            # The slot's own body, as a Slot: the fallback handle when a fill
+            # exists, the rendered content when none does.
+            body_slot = _make_body_slot(
+                self.body,
+                context,
+                type(component).__name__,
+                name,
+                None,
+                None,
+                self.position,
+                source=self.source,
+                kind=LogicalFillKind.FALLBACK,
+                fallback_slot_site_location_id=slot_site_location_id,
+            )
+
+            if fill is not None:
+                slot_used = fill
+                fill_id = ownership.supplied_fill_id(component, name)
+                if fill_id is None:
+                    fill_id = ownership.bind_typed_default(component, name)
+                # The provides active at this slot site travel into the fill, so
+                # components inside the fill body can inject what this component
+                # provides around the slot (docs/design/component_provide.md section 4.3).
+                # An error raised by the slot content gets this slot as a path
+                # frame ("Card(slot:body)") in its message.
+                with ownership.select_supply(fill, fill_id):
+                    with add_slot_to_error_message(type(component).__name__, name):
+                        part = fill(data, fallback=body_slot, provides=context.provides)
+            else:
+                if required:
+                    msg = (
+                        f"Slot {name!r} of component {type(component).__name__!r} is marked as "
+                        "required, but no fill was provided."
+                    )
+                    close = get_close_matches(name, list(fills), n=1, cutoff=0.7)
+                    if close:
+                        msg += f" Did you mean {close[0]!r}?"
+                    raise RuntimeError(msg)
+                slot_used = body_slot
+                with add_slot_to_error_message(type(component).__name__, name):
+                    part = body_slot(data, provides=context.provides)
+
+        if not has_rendered_hook:
+            return part
+
+        result_checkpoint = ownership.checkpoint()
+        outlet_region_id = ownership.resolve_slot_region(slot_site_location_id)
+        try:
+            with ownership.active_region(outlet_region_id):
+                selected_part = component.citry.extensions.on_slot_rendered(
+                    component=component,
+                    slot=slot_used,
+                    slot_name=name,
+                    slot_node=self,
+                    slot_is_required=required,
+                    result=unwrap_physical_region(part),
                 )
-                close = get_close_matches(name, list(fills), n=1, cutoff=0.7)
-                if close:
-                    msg += f" Did you mean {close[0]!r}?"
-                raise RuntimeError(msg)
-            slot_used = body_slot
-            with add_slot_to_error_message(type(component).__name__, name):
-                part = body_slot(data, provides=context.provides)
-
-        return component.citry.extensions.on_slot_rendered(
-            component=component,
-            slot=slot_used,
-            slot_name=name,
-            slot_node=self,
-            slot_is_required=required,
-            result=part,
+        except Exception:
+            ownership.retire_unselected_after(
+                result_checkpoint,
+                through_order=ownership.checkpoint(),
+                preserved_render_ids=set(),
+            )
+            raise
+        hook_checkpoint = ownership.checkpoint()
+        selected_part = ownership.rebind_slot_region(outlet_region_id, selected_part)
+        selected_render_ids = _render_part_ids(selected_part)
+        selected_region_ids = ownership.selected_region_ids(
+            render_object_ids=_render_part_object_ids(selected_part),
         )
+        ownership.retire_unselected_after(
+            result_checkpoint,
+            through_order=hook_checkpoint,
+            preserved_render_ids=selected_render_ids,
+            preserved_region_ids=selected_region_ids,
+        )
+        ownership.retire_unselected_after(
+            selection_checkpoint,
+            through_order=result_checkpoint,
+            preserved_render_ids={component.id, *selected_render_ids},
+            preserved_region_ids={outlet_region_id, *selected_region_ids},
+        )
+        return selected_part
 
     def _resolve_props(self, context: CitryContext) -> tuple[str, bool, dict[str, Any]]:
         """
@@ -1171,11 +1867,19 @@ class SlotNode(Node):
         for attr in self.attrs:
             key = attr.key
             if key == "c-bind":
-                spread = attr.resolve(context)
+                spread = const_value(attr.resolve(context))
+                if spread is None:
+                    continue
                 if not isinstance(spread, Mapping):
                     msg = f"'c-bind' on <c-slot> must resolve to a mapping, got {type(spread).__name__}."
                     raise RuntimeError(msg)
                 for spread_key, spread_value in spread.items():
+                    if not isinstance(spread_key, str):
+                        msg = (
+                            "'c-bind' on <c-slot> must use string keys, "
+                            f"got {type(spread_key).__name__} key {spread_key!r}."
+                        )
+                        raise TypeError(msg)
                     if spread_key == "name":
                         name = spread_value
                     elif spread_key == "required":
@@ -1245,11 +1949,27 @@ class FillNode(Node):
         (including any loop bindings from an enclosing ``<c-for>``); the body
         stays unrendered until the child component invokes the slot.
         """
-        name, data_var, fallback_var = self._resolve_props(context)
-        slot = _make_body_slot(self.body, context, sink.component_name, name, data_var, fallback_var, self.position)
+        name, data_binding, fallback_var = self._resolve_props(context)
+        data_targets = data_binding.targets if isinstance(data_binding, FillDataBinding) else (data_binding,)
+        bindings = tuple(var for var in (*data_targets, fallback_var) if var is not None)
+        _validate_introduced_variables("c-fill", bindings, context)
+        slot = _make_body_slot(
+            self.body,
+            context,
+            sink.component_name,
+            name,
+            data_binding,
+            fallback_var,
+            self.position,
+            source=self.source,
+            kind=LogicalFillKind.NAMED,
+        )
         sink.add(name, slot)
 
-    def _resolve_props(self, context: CitryContext) -> tuple[str, str | None, str | None]:
+    def _resolve_props(
+        self,
+        context: CitryContext,
+    ) -> tuple[str, str | FillDataBinding | None, str | None]:
         """
         Resolve the fill's attributes to ``(slot_name, data_var, fallback_var)``.
 
@@ -1263,15 +1983,29 @@ class FillNode(Node):
         for attr in self.attrs:
             key = attr.key
             if key == "c-bind":
-                spread = attr.resolve(context)
+                spread = const_value(attr.resolve(context))
+                if spread is None:
+                    continue
                 if not isinstance(spread, Mapping):
                     msg = f"'c-bind' on <c-fill> must resolve to a mapping, got {type(spread).__name__}."
                     raise RuntimeError(msg)
                 for spread_key, spread_value in spread.items():
+                    if not isinstance(spread_key, str):
+                        msg = (
+                            "'c-bind' on <c-fill> must use string keys, "
+                            f"got {type(spread_key).__name__} key {spread_key!r}."
+                        )
+                        raise TypeError(msg)
                     if spread_key not in ("name", "data", "fallback"):
                         msg = (
                             f"'c-bind' on <c-fill> got an unsupported key {spread_key!r}. "
                             "Allowed keys: 'name', 'data', 'fallback'."
+                        )
+                        raise RuntimeError(msg)
+                    if spread_key == "data" and isinstance(spread_value, FillDataBinding):
+                        msg = (
+                            "<c-fill> data destructuring must be written directly in the template; "
+                            "it cannot be supplied dynamically through 'c-bind'."
                         )
                         raise RuntimeError(msg)
                     props[spread_key] = spread_value
@@ -1288,12 +2022,28 @@ class FillNode(Node):
 
         data_var = props.get("data")
         fallback_var = props.get("fallback")
+        if isinstance(data_var, str) and data_var.lstrip().startswith("{"):
+            msg = (
+                "<c-fill> data destructuring must be written directly in the template; "
+                "it cannot be supplied dynamically through 'c-bind'."
+            )
+            raise RuntimeError(msg)
         for label, var in (("data", data_var), ("fallback", fallback_var)):
-            if var is not None and (not isinstance(var, str) or not var.isidentifier()):
+            if label == "data" and isinstance(var, FillDataBinding):
+                continue
+            canonical_var = normalize("NFKC", var) if isinstance(var, str) else var
+            if canonical_var is not None and (
+                not isinstance(canonical_var, str) or not canonical_var.isidentifier() or iskeyword(canonical_var)
+            ):
                 msg = f"<c-fill> {label!r} must be a valid Python identifier, got {var!r}."
                 raise RuntimeError(msg)
-        if data_var is not None and data_var == fallback_var:
-            msg = f"<c-fill name=\"{name}\"> binds 'data' and 'fallback' to the same variable {data_var!r}."
+            if label == "data":
+                data_var = canonical_var
+            else:
+                fallback_var = canonical_var
+        data_targets = data_var.targets if isinstance(data_var, FillDataBinding) else (data_var,)
+        if fallback_var is not None and fallback_var in data_targets:
+            msg = f"<c-fill name=\"{name}\"> binds 'data' and 'fallback' to the same variable {fallback_var!r}."
             raise RuntimeError(msg)
 
         return name, data_var, fallback_var

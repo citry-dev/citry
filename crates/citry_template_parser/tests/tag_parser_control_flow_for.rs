@@ -179,6 +179,16 @@ mod tests {
     }
 
     #[test]
+    fn test_template_comment_and_surrounding_whitespace_between_for_and_empty_are_allowed() {
+        parse_template(
+            "<c-for each=\"i in items\">x</c-for>\n{# empty state #}\n<c-empty>none</c-empty>",
+            None,
+            None,
+        )
+        .expect("a non-rendering template comment must not break a for/empty group");
+    }
+
+    #[test]
     fn test_text_between_for_and_empty_is_rejected() {
         assert_parse_error(
             r#"<c-for each="i in items">x</c-for>text<c-empty>none</c-empty>"#,
@@ -521,5 +531,22 @@ mod tests {
             .map(|t| t.content.as_str())
             .collect();
         assert_eq!(used, vec!["sources"]);
+    }
+
+    #[test]
+    fn test_c_for_accepts_a_trailing_python_comment() {
+        let cases = [
+            "<c-for each=\"item in items  # keep the items\n\">{{ item }}</c-for>",
+            "<c-for each=\"item in items  # keep the items\r\n\">{{ item }}</c-for>",
+            "<li c-for=\"item in items  # keep the items\n\">{{ item }}</li>",
+            "<li c-for=\"item in items  # keep the items\r\n\">{{ item }}</li>",
+        ];
+        for input in cases {
+            let parsed = parse_template(input, None, None);
+            assert!(
+                parsed.is_ok(),
+                "a trailing comment must not swallow the synthetic generator close: {parsed:?}"
+            );
+        }
     }
 }

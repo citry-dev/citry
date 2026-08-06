@@ -84,9 +84,24 @@ This allows clean, namespaced imports:
 ```python
 from citry_core.html_transform import transform_html
 from citry_core.safe_eval import safe_eval
-from citry_core.template_formatter import format_template
+from citry_core.template_formatter import (
+    finish_embedded_format,
+    format_template,
+    prepare_embedded_format,
+    python_expression_provider,
+)
 from citry_core.template_parser import parse_tag
 ```
+
+The formatter includes conservative Citry/HTML structural layout plus the
+vendored, in-process Python expression adapter. The provider identity function
+lets tooling report the exact pinned Ruff implementation used for expression
+output. JavaScript and CSS providers use an opaque two-pass API:
+`prepare_embedded_format()` returns immutable, source-bound requests for safe
+expression-free `<script>` and `<style>` bodies, and
+`finish_embedded_format()` validates every result before composing one atomic
+template result. This package discovers regions and enforces Citry boundaries;
+the caller chooses and invokes the external provider.
 
 **Remember**: When you import <br/>`citry_core.html_transform`,<br/>
 you are directly accessing <br/>`src/citry_core/html_transform/__init__.py`<br/>

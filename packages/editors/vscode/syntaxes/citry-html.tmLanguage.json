@@ -1,0 +1,18 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Citry Template",
+	"scopeName": "text.html.citry",
+	"patterns": [
+		{ "include": "citry.html.injection" },
+		{ "match": "[^<&{\\\"'\\\\]+", "name": "text.html" },
+		{ "match": "\\\\+", "name": "text.html" },
+		{ "match": "\\\"+|'+", "name": "text.html" },
+		{ "match": "\\{", "name": "text.html" },
+		{ "include": "text.html.basic" }
+	],
+	"injections": {
+		"L:text.html.citry meta.tag -comment -string -meta.embedded.inline.python.citry -meta.embedded.inline.javascript.citry -meta.attribute.event.citry -meta.attribute.state-handler.citry -text.plain.citry.raw": {
+			"patterns": [{ "include": "citry.html.attributes.injection" }]
+		}
+	}
+}

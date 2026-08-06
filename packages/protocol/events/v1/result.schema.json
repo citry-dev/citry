@@ -12,7 +12,7 @@
     "requestId": {
       "type": ["string", "null"],
       "minLength": 1,
-      "description": "The echoed request ID. Null only when a transport failure prevented the server from reading one."
+      "description": "The echoed request ID. Null only when the request supplied no usable ID."
     },
     "results": {
       "type": "array",
@@ -95,7 +95,7 @@
         "ok": {"const": false},
         "error": {"$ref": "#/$defs/edgeError"}
       },
-      "description": "The one error returned when the request could not be decoded far enough to read its request ID or calls."
+      "description": "The one error returned when the request supplied no usable request ID."
     },
     "edgeError": {
       "type": "object",
@@ -201,8 +201,7 @@
         "value": {
           "description": "Any JSON application value, including null."
         },
-        "delay": {"$ref": "#/$defs/delay"},
-        "wait": {"$ref": "#/$defs/wait"}
+        "delay": {"$ref": "#/$defs/delay"}
       }
     },
     "stateAction": {

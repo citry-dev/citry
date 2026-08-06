@@ -33,6 +33,16 @@ mod tests {
     }
 
     #[test]
+    fn test_html_tag_closing_identity_is_ascii_case_insensitive() {
+        for input in ["<DIV></div>", "<div></DIV>", "<DiV></dIv>"] {
+            assert!(
+                parse_template(input, None, None).is_ok(),
+                "input: {input:?}"
+            );
+        }
+    }
+
+    #[test]
     fn test_html_void_element() {
         // Void elements like <br>, <img>, <input> don't need closing tags
         // Input: <br>
@@ -48,6 +58,18 @@ mod tests {
         )))]);
 
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_html_void_element_identity_is_ascii_case_insensitive() {
+        for input in ["<BR>", "<IMG src='x'>", "<InPuT>"] {
+            let result = parse_template(input, None, None);
+            assert!(
+                result.is_ok(),
+                "input: {input:?}, error: {:?}",
+                result.err()
+            );
+        }
     }
 
     #[test]

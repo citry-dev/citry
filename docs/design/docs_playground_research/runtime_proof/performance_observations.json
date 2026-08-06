@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "observed_on": "2026-07-28",
+  "environment": {
+    "host": "macOS 26.3.1 arm64",
+    "playwright": "1.61.0",
+    "runtime_manifest_sha256": "6c81111cdb38f1fbb204689ca9dc645f6836c7b9ecde0091b3a6a75101654d73",
+    "artifact_source": "hash-verified loopback files with a warm filesystem cache"
+  },
+  "workload": {
+    "fresh_worker_starts_per_repetition": 5,
+    "warmup_renders_per_repetition": 20,
+    "measured_renders_per_repetition": 200,
+    "repetitions": 2,
+    "component": "representative nested Citry component with CSS and JavaScript"
+  },
+  "artifact_bytes": {
+    "pyodide": 13522699,
+    "historical_public_wheels": 6886301,
+    "total": 20409000
+  },
+  "runs": [
+    {
+      "browser": "chromium",
+      "browser_version": "149.0.7827.55",
+      "repetition": 1,
+      "cold_worker_p50_ms": 1111.035,
+      "cold_worker_p95_ms": 1119.665,
+      "warm_end_to_end_p50_ms": 1.675,
+      "warm_end_to_end_p95_ms": 2.195,
+      "warm_worker_p50_ms": 1.655,
+      "warm_worker_p95_ms": 2.165
+    },
+    {
+      "browser": "firefox",
+      "browser_version": "151.0",
+      "repetition": 1,
+      "cold_worker_p50_ms": 5795.48,
+      "cold_worker_p95_ms": 5827.5,
+      "warm_end_to_end_p50_ms": 9.12,
+      "warm_end_to_end_p95_ms": 10.2,
+      "warm_worker_p50_ms": 9.1,
+      "warm_worker_p95_ms": 10.16
+    },
+    {
+      "browser": "webkit",
+      "browser_version": "26.5",
+      "repetition": 1,
+      "cold_worker_p50_ms": 1093.06,
+      "cold_worker_p95_ms": 1096.46,
+      "warm_end_to_end_p50_ms": 1.7,
+      "warm_end_to_end_p95_ms": 2.68,
+      "warm_worker_p50_ms": 1.62,
+      "warm_worker_p95_ms": 2.58
+    },
+    {
+      "browser": "chromium",
+      "browser_version": "149.0.7827.55",
+      "repetition": 2,
+      "cold_worker_p50_ms": 1141.395,
+      "cold_worker_p95_ms": 1294.355,
+      "warm_end_to_end_p50_ms": 1.72,
+      "warm_end_to_end_p95_ms": 2.305,
+      "warm_worker_p50_ms": 1.705,
+      "warm_worker_p95_ms": 2.265
+    },
+    {
+      "browser": "firefox",
+      "browser_version": "151.0",
+      "repetition": 2,
+      "cold_worker_p50_ms": 5898.2,
+      "cold_worker_p95_ms": 5921.88,
+      "warm_end_to_end_p50_ms": 9.18,
+      "warm_end_to_end_p95_ms": 9.92,
+      "warm_worker_p50_ms": 9.14,
+      "warm_worker_p95_ms": 9.88
+    },
+    {
+      "browser": "webkit",
+      "browser_version": "26.5",
+      "repetition": 2,
+      "cold_worker_p50_ms": 1100.68,
+      "cold_worker_p95_ms": 1106.1,
+      "warm_end_to_end_p50_ms": 1.72,
+      "warm_end_to_end_p95_ms": 2.62,
+      "warm_worker_p50_ms": 1.66,
+      "warm_worker_p95_ms": 2.48
+    }
+  ],
+  "post_warmup_metrics": {
+    "wasm_heap_bytes": 61669376,
+    "sample_count_per_repetition": 11,
+    "sample_interval_renders": 20,
+    "maximum_observed_wasm_heap_delta_bytes": 0,
+    "maximum_observed_gc_object_delta": 0,
+    "maximum_observed_module_delta": 0,
+    "python_allocated_blocks": "unavailable: sys.getallocatedblocks() returned 0",
+    "user_agent_specific_memory": "unavailable in the tested engines/environment"
+  },
+  "candidate_local_engineering_guardrails": {
+    "artifact_payload_bytes_max": 22020096,
+    "cached_desktop_cold_worker_p95_ms_max": 6500,
+    "cached_desktop_warm_end_to_end_p95_ms_max": 15,
+    "post_warmup_wasm_heap_bytes_max": 67108864,
+    "wasm_heap_growth_after_200_renders_bytes_max": 8388608,
+    "gc_object_growth_after_200_renders_max": 500,
+    "module_growth_after_200_renders_max": 5
+  }
+}

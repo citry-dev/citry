@@ -21,7 +21,12 @@ Related: the asset-loading pipeline this sits on
 ([`asset_loading.md`](asset_loading.md)), the dependency system that consumes the
 compiled output ([`dependencies.md`](dependencies.md)), and the extensions
 roadmap that classifies the surrounding tooling
-([`extensions_roadmap.md`](extensions_roadmap.md)).
+([`extensions_roadmap.md`](extensions_roadmap.md)). The runtime component catalog
+is specified in [`component_introspection.md`](component_introspection.md). Its
+first version records primary asset declarations but omits the source-language
+fields because this design is not implemented yet. Implementing this design
+must update the catalog's asset records with resolved language and declaration
+provenance in the same round.
 
 ---
 
@@ -32,7 +37,7 @@ A component carries up to three source bodies, each either inline or in a file:
 ```python
 class Card(Component):
     template = "<div>{{ title }}</div>"   # or template_file = "card.html"
-    js = "$onComponent(({els}) => {...})"  # or js_file = "card.ts"
+    js = "$component(({els}) => {...})"  # or js_file = "card.ts"
     css = ".card { color: red }"           # or css_file = "card.scss"
 ```
 
@@ -355,7 +360,7 @@ on a typo, completion of a component's declared inputs) is variable resolution a
 type flow across those constructs. A grammar cannot do it; only a language service
 that understands citry's AST can. Two more citry-specific behaviors have the same
 requirement: the `css_data()` return values that become CSS custom properties
-should be recognized inside the style block, and the `$onComponent()` magic in the
+should be recognized inside the style block, and the `$component()` magic in the
 script block should be understood by the js tooling.
 
 The parser already tracks what such a service needs: each scope-introducing node
@@ -434,7 +439,7 @@ which is the standard path:
    no server, ships on its own and is already a real improvement.
 3. **Language intelligence (much later).** Add the language server for completion,
    go-to-definition on template variables, diagnostics, `css_data` custom
-   properties, `$onComponent`. The large lift, additive to the previous layers.
+   properties, `$component`. The large lift, additive to the previous layers.
 
 Each layer stands on its own, so the editor work sequences skeleton to
 highlighting to intelligence without rework.
@@ -449,7 +454,7 @@ Translating the three mechanisms of section 4.2 into citry's world:
   `css` block to `vscode-css-languageservice` (so css / scss / less come along
   for free, exactly as in Vue) and the default `js` block to the JS/TS service,
   then layer citry's additions on top (`css_data()` custom properties,
-  `$onComponent`).
+  `$component`).
 - **citry's own service:** the default `html` template is citry's *own* embedded
   language (the `<c-*>` / `{{ }}` / `{# #}` engine). Nobody else provides this;
   it is the whole reason to build the language server and the core of its value.
@@ -475,7 +480,7 @@ Translating the three mechanisms of section 4.2 into citry's world:
 - **The rich-editing set (language server):** curated and closed, grown only by
   deliberate per-language work: the default citry-HTML template (citry's own
   service), the default css (delegated + `css_data`), the default js (delegated +
-  `$onComponent`), and whatever alternative template dialects citry chooses to
+  `$component`), and whatever alternative template dialects citry chooses to
   hand-map.
 
 Writing this down prevents the most likely design mistake: assuming that because a
@@ -489,7 +494,9 @@ The `*_lang` attribute (plus the file suffix) is the single declaration, read by
 
 - the **compiler registry** at build time (js/css) or render time (template md/pug);
 - the **language server** to decide which service or mapping to apply to a block;
-- any **grammar-only highlighter** as a fallback marker.
+- any **grammar-only highlighter** as a fallback marker;
+- the **component-introspection catalog**, which exposes declared and resolved
+  asset languages to local tooling without loading source contents.
 
 One source of truth, several consumers. Contrast with the rejected design, where
 the type annotation would be a highlighting marker that the compiler could not
@@ -539,7 +546,7 @@ plugins, citry's built-ins included.
 | Is the compiler set fixed? | Built-ins plus user-registered; finite but open | Matches Svelte alias dictionary, Eleventy `addExtension`, bundler plugins |
 | When does compilation run, and is there a static export? | Open, needs its own design pass (section 3.3); likely lazy-at-first-render plus a content-hash cache, and a djc-style `collectcomponent` export is likely *not* a citry feature | The prototype's build/export model was Django-shaped |
 | Interim syntax highlighting? | None | A highlight-only stopgap cannot grow into semantic support |
-| What delivers the real editor experience? | A dedicated citry language server / VS Code extension (built incrementally: skeleton, then highlighting grammar, then semantic intelligence) | Only a language service can resolve `{{ }}` variables, `c-*`, `css_data`, `$onComponent` |
+| What delivers the real editor experience? | A dedicated citry language server / VS Code extension (built incrementally: skeleton, then highlighting grammar, then semantic intelligence) | Only a language service can resolve `{{ }}` variables, `c-*`, `css_data`, `$component` |
 | Which languages get rich editing? | A curated first-class set (citry-HTML, delegated css/js) plus hand-written per-language plugins; custom languages get highlight/sourcemap only | Matches how Volar/Svelte scope semantic support |
 | How is dialect support structured? | A plugin system; citry's built-in dialects (compiler and editor) are plugins on the same interface | Volar.js / Svelte / Vue model; no privileged built-in path |
 

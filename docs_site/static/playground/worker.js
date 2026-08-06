@@ -2,6 +2,9 @@
 // thread. The parent identifies every message by Worker generation and run ID.
 const MAX_RESULT_BYTES = 2 * 1024 * 1024;
 const MAX_EVENT_ENVELOPE_BYTES = 1024 * 1024;
+const MAX_ASSET_PATHS = 32;
+const MAX_ASSET_REQUEST_BYTES = 32 * 1024;
+const MAX_ASSET_RESULT_BYTES = 4 * 1024 * 1024;
 
 let generation = 0;
 let pyodide;
@@ -26,10 +29,9 @@ async function initialize(data) {
     send({ type: "phase", phase: "Loading runtime configuration" });
     // Fetch every required input before starting Python so a missing asset
     // fails initialization rather than interrupting a later run.
-    const [runtimeText, executorSource, eventsRuntimeSource] = await Promise.all([
+    const [runtimeText, executorSource] = await Promise.all([
       fetchText("./runtime.json"),
       fetchText("./executor.py"),
-      fetchText("./citry-events.js"),
     ]);
     const runtime = JSON.parse(runtimeText);
     if (runtime.schema_version !== 1 || runtime.protocol_version !== 1 || !Array.isArray(runtime.packages)) {
@@ -47,9 +49,6 @@ async function initialize(data) {
     );
     // executor.py installs the stable functions used by later run and event messages.
     pyodide.runPython(executorSource);
-    pyodide.globals.set("__citry_playground_events_runtime", eventsRuntimeSource);
-    pyodide.runPython("install_events_client_runtime(__citry_playground_events_runtime)");
-    pyodide.globals.delete("__citry_playground_events_runtime");
     send({ type: "phase", phase: "Verifying installed versions" });
     // Fail initialization before accepting source if the installed tuple does
     // not match the manifest the UI reports.
@@ -175,6 +174,46 @@ function dispatchEvent(data) {
   }
 }
 
+function loadAssets(data) {
+  // Python's framework-neutral route handlers remain the only place that
+  // resolves generated asset names into their cached JavaScript or CSS.
+  try {
+    const pathsJson = JSON.stringify(data.paths);
+    if (new TextEncoder().encode(pathsJson).byteLength > MAX_ASSET_REQUEST_BYTES) {
+      throw new Error("The playground asset request exceeds the 32 KiB limit.");
+    }
+    pyodide.globals.set("__citry_playground_asset_paths", pathsJson);
+    pyodide.globals.set("__citry_playground_asset_run_id", data.runId);
+    const serialized = pyodide.runPython(
+      "load_playground_assets_json(__citry_playground_asset_paths, __citry_playground_asset_run_id)",
+    );
+    if (new TextEncoder().encode(serialized).byteLength > MAX_ASSET_RESULT_BYTES) {
+      throw new Error("The playground asset response exceeds the 4 MiB limit.");
+    }
+    send({
+      type: "assets-result",
+      runId: data.runId,
+      assetId: data.assetId,
+      assets: JSON.parse(serialized),
+    });
+  } catch (error) {
+    send({
+      type: "assets-failure",
+      runId: data.runId,
+      assetId: data.assetId,
+      message: String(error?.message || error),
+      details: String(error?.stack || ""),
+    });
+  } finally {
+    try {
+      pyodide.globals.delete("__citry_playground_asset_paths");
+      pyodide.globals.delete("__citry_playground_asset_run_id");
+    } catch {
+      // A failed interpreter may no longer expose its globals proxy.
+    }
+  }
+}
+
 // Keep the Worker protocol closed to known message shapes and the active generation.
 self.onmessage = ({ data }) => {
   if (data?.type === "initialize" && Number.isSafeInteger(data.generation)) {
@@ -196,5 +235,18 @@ self.onmessage = ({ data }) => {
     && data.envelope
   ) {
     dispatchEvent(data);
+  } else if (
+    data?.type === "assets"
+    && data.consumer === "playground"
+    && data.generation === generation
+    && Number.isSafeInteger(data.runId)
+    && typeof data.assetId === "string"
+    && data.assetId.length <= 128
+    && Array.isArray(data.paths)
+    && data.paths.length > 0
+    && data.paths.length <= MAX_ASSET_PATHS
+    && data.paths.every((path) => typeof path === "string")
+  ) {
+    loadAssets(data);
   }
 };

@@ -1,0 +1,148 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Citry component string attributes",
+	"scopeName": "citry.python.injection",
+	"injectionSelector": "L:source.python -comment -string",
+	"patterns": [
+		{ "include": "#template-double" },
+		{ "include": "#template-single" },
+		{ "include": "#javascript-double" },
+		{ "include": "#javascript-single" },
+		{ "include": "#css-double" },
+		{ "include": "#css-single" }
+	],
+	"repository": {
+		"template-double": {
+			"begin": "\\b(template)(\\s*)(?:(:)(\\s*)([^=\\n]+?))?(\\s*)(=)(\\s*)(\"\"\")",
+			"beginCaptures": {
+				"1": { "name": "variable.other.member.citry.python" },
+				"3": { "name": "punctuation.separator.annotation.python" },
+				"5": { "name": "entity.name.type.annotation.python" },
+				"7": { "name": "keyword.operator.assignment.python" },
+				"9": { "name": "punctuation.definition.string.begin.python" }
+			},
+			"end": "(?<!\\\\)(?:\\\\\\\\)*\\K\"\"\"",
+			"endCaptures": { "0": { "name": "punctuation.definition.string.end.python" } },
+			"contentName": "meta.embedded.block.citry-html",
+			"name": "meta.assignment.citry.template.python",
+			"patterns": [{ "include": "#double-escaped-delimiter" }, { "include": "text.html.citry" }]
+		},
+		"template-single": {
+			"begin": "\\b(template)(\\s*)(?:(:)(\\s*)([^=\\n]+?))?(\\s*)(=)(\\s*)(''')",
+			"beginCaptures": {
+				"1": { "name": "variable.other.member.citry.python" },
+				"3": { "name": "punctuation.separator.annotation.python" },
+				"5": { "name": "entity.name.type.annotation.python" },
+				"7": { "name": "keyword.operator.assignment.python" },
+				"9": { "name": "punctuation.definition.string.begin.python" }
+			},
+			"end": "(?<!\\\\)(?:\\\\\\\\)*\\K'''",
+			"endCaptures": { "0": { "name": "punctuation.definition.string.end.python" } },
+			"contentName": "meta.embedded.block.citry-html",
+			"name": "meta.assignment.citry.template.python",
+			"patterns": [{ "include": "#single-escaped-delimiter" }, { "include": "text.html.citry" }]
+		},
+		"javascript-double": {
+			"begin": "\\b(js)(\\s*)(?:(:)(\\s*)([^=\\n]+?))?(\\s*)(=)(\\s*)(\"\"\")",
+			"beginCaptures": {
+				"1": { "name": "variable.other.member.citry.python" },
+				"3": { "name": "punctuation.separator.annotation.python" },
+				"5": { "name": "entity.name.type.annotation.python" },
+				"7": { "name": "keyword.operator.assignment.python" },
+				"9": { "name": "punctuation.definition.string.begin.python" }
+			},
+			"end": "(?<!\\\\)(?:\\\\\\\\)*\\K\"\"\"",
+			"endCaptures": { "0": { "name": "punctuation.definition.string.end.python" } },
+			"contentName": "meta.embedded.block.javascript",
+			"name": "meta.assignment.citry.javascript.python",
+			"patterns": [
+				{ "include": "#double-javascript-line-comment" },
+				{ "include": "#double-escaped-delimiter" },
+				{ "include": "source.js" }
+			]
+		},
+		"javascript-single": {
+			"begin": "\\b(js)(\\s*)(?:(:)(\\s*)([^=\\n]+?))?(\\s*)(=)(\\s*)(''')",
+			"beginCaptures": {
+				"1": { "name": "variable.other.member.citry.python" },
+				"3": { "name": "punctuation.separator.annotation.python" },
+				"5": { "name": "entity.name.type.annotation.python" },
+				"7": { "name": "keyword.operator.assignment.python" },
+				"9": { "name": "punctuation.definition.string.begin.python" }
+			},
+			"end": "(?<!\\\\)(?:\\\\\\\\)*\\K'''",
+			"endCaptures": { "0": { "name": "punctuation.definition.string.end.python" } },
+			"contentName": "meta.embedded.block.javascript",
+			"name": "meta.assignment.citry.javascript.python",
+			"patterns": [
+				{ "include": "#single-javascript-line-comment" },
+				{ "include": "#single-escaped-delimiter" },
+				{ "include": "source.js" }
+			]
+		},
+		"css-double": {
+			"begin": "\\b(css)(\\s*)(?:(:)(\\s*)([^=\\n]+?))?(\\s*)(=)(\\s*)(\"\"\")",
+			"beginCaptures": {
+				"1": { "name": "variable.other.member.citry.python" },
+				"3": { "name": "punctuation.separator.annotation.python" },
+				"5": { "name": "entity.name.type.annotation.python" },
+				"7": { "name": "keyword.operator.assignment.python" },
+				"9": { "name": "punctuation.definition.string.begin.python" }
+			},
+			"end": "(?<!\\\\)(?:\\\\\\\\)*\\K\"\"\"",
+			"endCaptures": { "0": { "name": "punctuation.definition.string.end.python" } },
+			"contentName": "meta.embedded.block.css",
+			"name": "meta.assignment.citry.css.python",
+			"patterns": [
+				{ "include": "#double-css-before-delimiter" },
+				{ "include": "#double-escaped-delimiter" },
+				{ "include": "source.css" }
+			]
+		},
+		"css-single": {
+			"begin": "\\b(css)(\\s*)(?:(:)(\\s*)([^=\\n]+?))?(\\s*)(=)(\\s*)(''')",
+			"beginCaptures": {
+				"1": { "name": "variable.other.member.citry.python" },
+				"3": { "name": "punctuation.separator.annotation.python" },
+				"5": { "name": "entity.name.type.annotation.python" },
+				"7": { "name": "keyword.operator.assignment.python" },
+				"9": { "name": "punctuation.definition.string.begin.python" }
+			},
+			"end": "(?<!\\\\)(?:\\\\\\\\)*\\K'''",
+			"endCaptures": { "0": { "name": "punctuation.definition.string.end.python" } },
+			"contentName": "meta.embedded.block.css",
+			"name": "meta.assignment.citry.css.python",
+			"patterns": [
+				{ "include": "#single-css-before-delimiter" },
+				{ "include": "#single-escaped-delimiter" },
+				{ "include": "source.css" }
+			]
+		},
+		"double-css-before-delimiter": {
+			"captures": { "1": { "patterns": [{ "include": "source.css" }] } },
+			"match": "(.+?)(?=(?<!\\\\)(?:\\\\\\\\)*\"\"\")"
+		},
+		"single-css-before-delimiter": {
+			"captures": { "1": { "patterns": [{ "include": "source.css" }] } },
+			"match": "(.+?)(?=(?<!\\\\)(?:\\\\\\\\)*''')"
+		},
+		"double-escaped-delimiter": {
+			"match": "(?<!\\\\)(?:\\\\\\\\)*\\\\\\x22{3}",
+			"name": "constant.character.escape.python"
+		},
+		"single-escaped-delimiter": {
+			"match": "(?<!\\\\)(?:\\\\\\\\)*\\\\'''",
+			"name": "constant.character.escape.python"
+		},
+		"double-javascript-line-comment": {
+			"begin": "//",
+			"end": "(?=(?<!\\\\)(?:\\\\\\\\)*\"\"\")|$",
+			"name": "comment.line.double-slash.js"
+		},
+		"single-javascript-line-comment": {
+			"begin": "//",
+			"end": "(?=(?<!\\\\)(?:\\\\\\\\)*''')|$",
+			"name": "comment.line.double-slash.js"
+		}
+	}
+}

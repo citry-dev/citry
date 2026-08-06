@@ -4,8 +4,8 @@ The dependencies extension's HTTP routes and URL builders.
 Four endpoints, mounted at the root of the citry prefix (built-in
 extensions own their paths directly; see ``ExtensionManager.urls``)::
 
-    <prefix>/cache/{class_id}.{script_type}                  a class's Component.js / .css
-    <prefix>/cache/{class_id}.{vars_hash}.{script_type}      a variables script
+    <prefix>/cache/{class_id}.{script_type}                  legacy/current class JS or CSS
+    <prefix>/cache/{class_id}.{hash}.{script_type}           a class version or variables script
     <prefix>/asset/{file_name}                               a served Dependencies file (local_files="serve")
     <prefix>/citry.js                                        the client-side dependency manager
 
@@ -24,7 +24,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from citry.ext.dependencies.scripts import gen_asset_cache_key, get_component_script, get_script
+from citry.ext.dependencies.scripts import (
+    component_script_hash,
+    gen_asset_cache_key,
+    get_cached_component_script,
+    get_component_script,
+    get_script,
+)
 from citry.util.routing import RouteResponse, URLRoute
 
 if TYPE_CHECKING:
@@ -49,6 +55,9 @@ def script_url(comp_cls: type[Component], script_type: ScriptType, vars_hash: st
     """
     if vars_hash:
         return comp_cls.citry.build_url(f"cache/{comp_cls.class_id}.{vars_hash}.{script_type}")
+    content_hash = component_script_hash(script_type, comp_cls)
+    if content_hash is not None:
+        return comp_cls.citry.build_url(f"cache/{comp_cls.class_id}.{content_hash}.{script_type}")
     return comp_cls.citry.build_url(f"cache/{comp_cls.class_id}.{script_type}")
 
 
@@ -80,9 +89,16 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
             # Class-level scripts repopulate the cache on a miss.
             script = get_component_script(script_type, comp_cls)  # type: ignore[arg-type]
         else:
-            # Variables scripts exist only if the render that produced them
-            # wrote to a cache this process can read.
-            script = get_script(script_type, comp_cls, vars_hash)  # type: ignore[arg-type]
+            # Hashed URLs cover immutable class versions and per-render
+            # variables. Check the class-version namespace first; variables
+            # retain their existing key scheme and fallback.
+            script = get_cached_component_script(citry, class_id, script_type, vars_hash)  # type: ignore[arg-type]
+            if script is None:
+                current_hash = component_script_hash(script_type, comp_cls)  # type: ignore[arg-type]
+                if current_hash == vars_hash:
+                    script = get_cached_component_script(citry, class_id, script_type, vars_hash)  # type: ignore[arg-type]
+                else:
+                    script = get_script(script_type, comp_cls, vars_hash)  # type: ignore[arg-type]
         if script is None or script.content is None:
             return RouteResponse(status=404)
         return RouteResponse(content=script.content, content_type=content_type)
@@ -103,8 +119,9 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
         return RouteResponse(content=_runtime_js(), content_type=_CONTENT_TYPES["js"])
 
     return [
-        # Component JS/CSS variables from `Component.js_data()`/`Component.css_data()`,
-        # e.g. `cache/abc123.def456.js`.
+        # Content-addressed Component.js/css and variables from
+        # `Component.js_data()`/`Component.css_data()`, e.g.
+        # `cache/abc123.def456.js`.
         # NOTE: The more specific (two-parameter) pattern first: matching is
         # first-wins, and `{class_id}.{script_type}` would also match a
         # vars-script path.

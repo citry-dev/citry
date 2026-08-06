@@ -52,6 +52,7 @@ locked.
 from __future__ import annotations
 
 import json
+import unicodedata
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
@@ -1452,7 +1453,9 @@ def test_content_disposition_response_takes_the_blob_download_path(page: Any, se
     with page.expect_download() as download_info:
         outcome = page.evaluate(_SEND_AND_WAIT, ["save", {}, None])
     download = download_info.value
-    assert download.suggested_filename == "přehled;2026.txt"
+    # WebKit may expose the platform's decomposed Unicode spelling even when
+    # the download attribute used the equivalent composed spelling.
+    assert unicodedata.normalize("NFC", download.suggested_filename) == "přehled;2026.txt"
     assert Path(download.path()).read_text() == "file-bytes"
     assert outcome == ["ok", "__undefined__"]
     log = page.evaluate("window.__log")
@@ -1655,8 +1658,11 @@ def test_failed_and_batched_attachments_reject_without_a_browser_download(page: 
     page.wait_for_timeout(100)
     assert downloads == []
     browser_errors = _citry_errors(messages)
-    assert len(browser_errors) == 1
-    assert "responded with a status of 500" in browser_errors[0]
+    # Chromium reports the intercepted HTTP 500 as a console error; Firefox
+    # and WebKit are allowed to omit that browser-owned network diagnostic.
+    assert len(browser_errors) <= 1
+    if browser_errors:
+        assert "responded with a status of 500" in browser_errors[0]
 
 
 def test_download_action_round_trips_through_the_real_server(page: Any, serve_live: Any) -> None:
@@ -1698,7 +1704,7 @@ def test_download_action_round_trips_through_the_real_server(page: Any, serve_li
         )
     download = download_info.value
     assert result == "__undefined__"
-    assert download.suggested_filename == "přehled.csv"
+    assert unicodedata.normalize("NFC", download.suggested_filename) == "přehled.csv"
     assert Path(download.path()).read_text() == "name\nAda"
     assert _citry_errors(messages) == []
 

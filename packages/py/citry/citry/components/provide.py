@@ -11,7 +11,7 @@ it, which reads the data with ``Component.inject()``::
 The ``key`` attribute names the provided data; every other attribute is a
 provided field (static attributes as strings, ``c-*`` attributes evaluated,
 ``c-bind`` spread). The component is transparent: it adds no markup and no
-``data-cid`` marker of its own. See docs/design/provide.md section 6.
+``data-cid`` marker of its own. See docs/design/component_provide.md section 6.
 
 Each ``Citry`` instance gets its own subclass of the component, created
 lazily by ``make_builtin_components`` (a Component class binds to one Citry
@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 def make_provide_component(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-provide>`` component for one Citry instance."""
 
-    class Provide(Component):
+    class Provide(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
         """
         Provide data to the components rendered inside this tag.
 
@@ -42,12 +42,14 @@ def make_provide_component(citry_instance: Citry) -> type[Component]:
 
         citry = citry_instance
         transparent = True
-        template = "<c-slot />"
+        template = """
+          <c-slot />
+        """.strip()
 
         def template_data(
             self,
             kwargs: Any,
-            slots: Any | None = None,  # noqa: ARG002
+            slots: Any,  # noqa: ARG002
         ) -> dict[str, Any]:
             data = dict(kwargs)
             key = data.pop("key", None)

@@ -22,7 +22,7 @@ cannot mix with other content, so the guarded content then goes into the
         <c-user-table />
       </c-fill>
       <c-fill name="fallback" data="d">
-        <p>Oops: {{ d["error"] }}</p>
+        <p>Oops: {{ d.error }}</p>
       </c-fill>
     </c-error-fallback>
 
@@ -31,8 +31,11 @@ boundary renders nothing when the content fails. Errors raised by the
 fallback content itself are not caught here; they continue to the next
 boundary up, which is the right behavior for nested boundaries.
 
+An ordinary fallback string is escaped before it becomes output. Use the
+fallback fill when the fallback needs markup.
+
 The whole behavior is the ``on_render`` generator hook
-(docs/design/on_render.md sections 3.2 and 7): the yield receives the
+(docs/design/component_on_render.md sections 3.2 and 7): the yield receives the
 rendered content or the error, and returning fallback content swallows the
 error.
 
@@ -46,6 +49,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from citry.component import Component
+from citry.util.html import escape
 
 if TYPE_CHECKING:
     from citry.citry import Citry
@@ -56,18 +60,19 @@ if TYPE_CHECKING:
 def make_error_fallback_component(citry_instance: Citry) -> type[Component]:
     """Create (and thereby register) the ``<c-error-fallback>`` component for one Citry instance."""
 
-    class ErrorFallback(Component):
+    class ErrorFallback(Component, _citry_builtin=citry_instance._registry._builtin_registration_token):
         """
         Catch render errors in the wrapped content and show fallback content instead.
 
         The guarded content is the tag body (the default slot). The fallback
         is the ``fallback`` attribute (a string), or the ``fallback`` fill,
-        which receives the error as slot data (``data["error"]``).
+        which receives the error as slot data (``data.error``). Ordinary
+        fallback strings are escaped; use the fill when the fallback needs
+        markup.
         """
 
         citry = citry_instance
         name = "error-fallback"
-        template = "<c-slot />"
 
         class Kwargs:
             fallback: str | None = None
@@ -95,6 +100,10 @@ def make_error_fallback_component(citry_instance: Citry) -> type[Component]:
                 # narrows away the broader part type).
                 part = fallback_slot({"error": error}, provides=self._provides_inherited)
                 return cast("RenderReplacement", part)
-            return fallback_text if fallback_text is not None else ""
+            return escape(fallback_text) if fallback_text is not None else ""
+
+        template = """
+          <c-slot />
+        """.strip()
 
     return ErrorFallback

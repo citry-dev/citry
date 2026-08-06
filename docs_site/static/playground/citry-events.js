@@ -1,5 +1,9 @@
 /* Citry events client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles AlpineJS 3.15.12 + @alpinejs/morph 3.15.12 (MIT). */
 (() => {
+  var __defProp = Object.defineProperty;
+  var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
+  var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
+
   // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/scheduler.js
   var flushPending = false;
   var flushing = false;
@@ -3423,12 +3427,58 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }
     context.patchChildren(fromBlock, toBlock);
   }
+  function cloneCitryPlanningTree(source, sources) {
+    let clone2 = source.cloneNode(false);
+    sources.set(clone2, source);
+    if (source._x_bindings) clone2._x_bindings = source._x_bindings;
+    Array.from(source.childNodes).forEach((child) => clone2.appendChild(cloneCitryPlanningTree(child, sources)));
+    return clone2;
+  }
+  function planBetween(from, to, options = {}) {
+    let fromSources = /* @__PURE__ */ new WeakMap();
+    let toSources = /* @__PURE__ */ new WeakMap();
+    let fromClone = cloneCitryPlanningTree(from, fromSources);
+    let toClone = cloneCitryPlanningTree(to, toSources);
+    let updating = options.updating || (() => {
+    });
+    let adding = options.adding || (() => {
+    });
+    let removing = options.removing || (() => {
+    });
+    let context = createMorphContext({
+      ...options,
+      planning: true,
+      adding(node, skip) {
+        let source = toSources.get(node);
+        if (source) return adding(source, skip);
+      },
+      added: () => {
+      },
+      removing(node, skip) {
+        let source = fromSources.get(node);
+        if (source) return removing(source, skip);
+      },
+      removed: () => {
+      },
+      updated: () => {
+      },
+      updating(fromNode, toNode, childrenOnly, skip, skipChildren, skipUntil) {
+        let sourceFrom = fromSources.get(fromNode);
+        let sourceTo = toSources.get(toNode);
+        if (!sourceFrom || !sourceTo) return;
+        return updating(sourceFrom, sourceTo, childrenOnly, skip, skipChildren, skipUntil);
+      }
+    });
+    context.patchChildren(fromClone, toClone);
+  }
   function createMorphContext(options = {}) {
     let defaultGetKey = (el) => el.getAttribute("key");
     let noop = () => {
     };
     let context = {
+      planning: options.planning || false,
       key: options.key || defaultGetKey,
+      keyMapFilter: options.keyMapFilter || (() => true),
       lookahead: options.lookahead || false,
       updating: options.updating || noop,
       updated: options.updated || noop,
@@ -3446,21 +3496,25 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       let skipUntil = (predicate) => context.skipUntilCondition = predicate;
       if (shouldSkipChildren(context.updating, () => skipChildren = true, skipUntil, from, to, () => updateChildrenOnly = true))
         return;
-      if (from.nodeType === 1 && window.Alpine) {
+      if (!context.planning && from.nodeType === 1 && window.Alpine) {
         window.Alpine.cloneNode(from, to);
         if (from._x_teleport && to._x_teleport) {
           context.patch(from._x_teleport, to._x_teleport);
         }
       }
       if (textOrComment(to)) {
-        context.patchNodeValue(from, to);
-        context.updated(from, to);
+        if (!context.planning) {
+          context.patchNodeValue(from, to);
+          context.updated(from, to);
+        }
         return;
       }
-      if (!updateChildrenOnly) {
-        context.patchAttributes(from, to);
+      if (!context.planning) {
+        if (!updateChildrenOnly) {
+          context.patchAttributes(from, to);
+        }
+        context.updated(from, to);
       }
-      context.updated(from, to);
       if (!skipChildren) {
         context.patchChildren(from, to);
       }
@@ -3472,7 +3526,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       if (shouldSkip(context.removing, from))
         return;
       let toCloned = to.cloneNode(true);
-      if (shouldSkip(context.adding, toCloned))
+      if (shouldSkip(context.adding, context.planning ? to : toCloned))
         return;
       from.replaceWith(toCloned);
       context.removed(from);
@@ -3657,6 +3711,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     context.keyToMap = function(els) {
       let map = {};
       for (let el of els) {
+        if (!context.keyMapFilter(el)) continue;
         let theKey = context.getKey(el);
         if (theKey) {
           map[theKey] = el;
@@ -3773,13 +3828,1563 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   function src_default2(Alpine2) {
     Alpine2.morph = morph;
     Alpine2.morphBetween = morphBetween;
+    Alpine2._citryPlanBetween = planBetween;
   }
   var module_default = src_default2;
 
-  // src/citry-events.ts
-  var isSafeRenderId = function(value) {
-    return /^[a-z0-9_-]+$/.test(value);
+  // ../../protocol/client_graph/v1/js/src/canonical.ts
+  var MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
+
+  // ../../protocol/client_graph/v1/js/src/comments.ts
+  var OWNERSHIP_COMMENT_PREFIX = "citry:g1";
+  var OWNERSHIP_COMMENT_RE = /^citry:g1:([0-9a-f]{64}):([0-9]+):([ir]):([0-9]+):([se])$/;
+  var matchOwnershipComment = (value) => OWNERSHIP_COMMENT_RE.exec(value.trim());
+  var parseOwnershipComment = (value) => {
+    const match = matchOwnershipComment(value);
+    if (match === null) return null;
+    const [, revision, graphId, kind, recordId, side] = match;
+    return {
+      revision,
+      graphId,
+      kind,
+      recordId,
+      side,
+      key: `${OWNERSHIP_COMMENT_PREFIX}:${revision}:${graphId}:${kind}:${recordId}`
+    };
   };
+
+  // ../../protocol/events/v1/js/src/issue.ts
+  var ProtocolValueError2 = class extends TypeError {
+    constructor(issue) {
+      super(issue.message);
+      __publicField(this, "issue");
+      this.name = "ProtocolValueError";
+      this.issue = issue;
+    }
+  };
+  var hasOwn3 = (value, key) => (
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: The browser bundle targets ES2020, before Object.hasOwn.
+    Object.prototype.hasOwnProperty.call(value, key)
+  );
+  var pointer2 = (parent, member) => {
+    const escaped = String(member).replace(/~/g, "~0").replace(/\//g, "~1");
+    return parent ? `${parent}/${escaped}` : `/${escaped}`;
+  };
+  var isPlainObject2 = (value) => {
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      return false;
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
+  };
+  var firstUnknown2 = (value, allowed) => Object.keys(value).filter((key) => !allowed.has(key)).sort()[0] ?? null;
+  var containerIssue = (value, path) => {
+    if (Object.getOwnPropertySymbols(value).length) {
+      return {
+        path,
+        category: "strict_json",
+        message: "The value contains a symbol-keyed property."
+      };
+    }
+    for (const name of Object.getOwnPropertyNames(value)) {
+      if (Array.isArray(value) && name === "length") continue;
+      const descriptor = Object.getOwnPropertyDescriptor(value, name);
+      if (!descriptor?.enumerable || !("value" in descriptor)) {
+        return {
+          path: pointer2(path, name),
+          category: "strict_json",
+          message: "A JSON property must be an enumerable data property."
+        };
+      }
+    }
+    return null;
+  };
+  var validateStrictJson2 = (value, path = "") => {
+    const stack = [{ value, path, leaving: false }];
+    const ancestors = /* @__PURE__ */ new Set();
+    while (stack.length) {
+      const frame = stack.pop();
+      const current = frame.value;
+      if (frame.leaving) {
+        ancestors.delete(current);
+        continue;
+      }
+      if (current === null || typeof current === "string" || typeof current === "boolean") {
+        continue;
+      }
+      if (typeof current === "number") {
+        if (!Number.isFinite(current)) {
+          return {
+            path: frame.path,
+            category: "strict_json",
+            message: "The value contains a non-finite number."
+          };
+        }
+        continue;
+      }
+      if (typeof current !== "object") {
+        return {
+          path: frame.path,
+          category: "strict_json",
+          message: "The value contains a non-JSON value."
+        };
+      }
+      if (!Array.isArray(current) && !isPlainObject2(current)) {
+        return {
+          path: frame.path,
+          category: "strict_json",
+          message: "The value contains a non-JSON object."
+        };
+      }
+      const ownIssue = containerIssue(current, frame.path);
+      if (ownIssue) return ownIssue;
+      if (ancestors.has(current)) {
+        return {
+          path: frame.path,
+          category: "strict_json",
+          message: "The value contains a cycle."
+        };
+      }
+      ancestors.add(current);
+      stack.push({ value: current, path: frame.path, leaving: true });
+      if (Array.isArray(current)) {
+        const names = Object.keys(current);
+        if (names.length !== current.length || names.some((name, index) => name !== String(index))) {
+          return {
+            path: frame.path,
+            category: "strict_json",
+            message: "A JSON array must be dense and carry no named properties."
+          };
+        }
+        for (let index = current.length - 1; index >= 0; index -= 1) {
+          stack.push({
+            value: current[index],
+            path: pointer2(frame.path, index),
+            leaving: false
+          });
+        }
+        continue;
+      }
+      const keys = Object.keys(current).sort().reverse();
+      for (const key of keys) {
+        stack.push({
+          value: current[key],
+          path: pointer2(frame.path, key),
+          leaving: false
+        });
+      }
+    }
+    return null;
+  };
+  var isJsonValue = (value) => validateStrictJson2(value) === null;
+  var copyJson = (value) => {
+    const issue = validateStrictJson2(value);
+    if (issue) throw new ProtocolValueError2(issue);
+    if (value === null || typeof value !== "object") return value;
+    const copied = Array.isArray(value) ? new Array(value.length) : {};
+    const stack = [
+      {
+        source: value,
+        target: copied
+      }
+    ];
+    while (stack.length) {
+      const { source, target } = stack.pop();
+      for (const key of Object.keys(source)) {
+        const item = source[key];
+        if (item !== null && typeof item === "object") {
+          const child = Array.isArray(item) ? new Array(item.length) : {};
+          Object.defineProperty(target, key, {
+            configurable: true,
+            enumerable: true,
+            value: child,
+            writable: true
+          });
+          stack.push({ source: item, target: child });
+        } else {
+          Object.defineProperty(target, key, {
+            configurable: true,
+            enumerable: true,
+            value: item,
+            writable: true
+          });
+        }
+      }
+    }
+    return copied;
+  };
+
+  // ../../protocol/events/v1/js/src/calls.ts
+  var PROTOCOL2 = "citry-events/1";
+  var CALLS_LIMIT = 16;
+  var ACTION_KINDS = [
+    "render",
+    "data",
+    "state",
+    "event",
+    "redirect",
+    "url"
+  ];
+  var SWAPS = [
+    "morph",
+    "replace",
+    "inner",
+    "append",
+    "prepend",
+    "remove",
+    "none"
+  ];
+  var CAPABILITIES_BASELINE_V1 = {
+    swaps: ["replace", "inner", "append", "prepend", "remove", "none"],
+    actions: ACTION_KINDS
+  };
+  var CARRIER_FIELDS = {
+    callerRenderId: "_citry_caller_render_id",
+    stateToken: "_citry_state_token",
+    sendSequence: "_citry_send_sequence",
+    protocol: "_citry_protocol",
+    requestId: "_citry_request_id",
+    capabilities: "_citry_capabilities"
+  };
+  var ENVELOPE_FIELDS = /* @__PURE__ */ new Set([
+    "protocol",
+    "requestId",
+    "capabilities",
+    "calls"
+  ]);
+  var CALL_FIELDS = /* @__PURE__ */ new Set([
+    "componentClassId",
+    "handlerName",
+    "callerRenderId",
+    "args",
+    "stateToken",
+    "stateUpdates",
+    "sendSequence"
+  ]);
+  var isSafeRenderId = (value) => typeof value === "string" && /^[a-z0-9_-]+$/.test(value);
+  var nonEmptyStringIssue = (value, path, message) => {
+    if (typeof value !== "string") return { path, category: "type", message };
+    if (!value) return { path, category: "range", message };
+    return null;
+  };
+  var integerIssue = (value, path, message) => {
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+      if (typeof value === "number" && !Number.isFinite(value)) {
+        return { path, category: "strict_json", message };
+      }
+      return { path, category: "type", message };
+    }
+    if (value < 0) return { path, category: "range", message };
+    return null;
+  };
+  var validateCall = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return {
+        path,
+        category: "type",
+        message: "Each entry of 'calls' must be a call object."
+      };
+    }
+    for (const required of ["componentClassId", "handlerName", "args"]) {
+      if (!hasOwn3(value, required)) {
+        return {
+          path: pointer2(path, required),
+          category: "required",
+          message: `The call is missing required field '${required}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(value, CALL_FIELDS);
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: `The call carries unknown field '${unknown}'.`
+      };
+    }
+    for (const field of ["componentClassId", "handlerName"]) {
+      const issue = nonEmptyStringIssue(
+        value[field],
+        pointer2(path, field),
+        `The call's '${field}' must be a non-empty string.`
+      );
+      if (issue) return issue;
+    }
+    if (hasOwn3(value, "callerRenderId")) {
+      const issue = nonEmptyStringIssue(
+        value.callerRenderId,
+        pointer2(path, "callerRenderId"),
+        "The call's 'callerRenderId' must be a non-empty string."
+      );
+      if (issue) return issue;
+      if (!isSafeRenderId(value.callerRenderId)) {
+        return {
+          path: pointer2(path, "callerRenderId"),
+          category: "pattern",
+          message: "The call's 'callerRenderId' must use only lowercase ASCII letters, digits, hyphens, and underscores."
+        };
+      }
+    }
+    if (!isPlainObject2(value.args)) {
+      return {
+        path: pointer2(path, "args"),
+        category: "type",
+        message: "The call's 'args' must be an object."
+      };
+    }
+    const argsIssue = validateStrictJson2(value.args);
+    if (argsIssue) {
+      return {
+        path: pointer2(path, "args") + argsIssue.path,
+        category: "strict_json",
+        message: "The call's 'args' must contain only strict JSON values under string keys."
+      };
+    }
+    if (hasOwn3(value, "stateToken")) {
+      const issue = nonEmptyStringIssue(
+        value.stateToken,
+        pointer2(path, "stateToken"),
+        "The call's 'stateToken' must be a non-empty string."
+      );
+      if (issue) return issue;
+    }
+    if (hasOwn3(value, "stateUpdates")) {
+      if (!isPlainObject2(value.stateUpdates)) {
+        return {
+          path: pointer2(path, "stateUpdates"),
+          category: "type",
+          message: "The call's 'stateUpdates' must be an object."
+        };
+      }
+      const stateIssue = validateStrictJson2(value.stateUpdates);
+      if (stateIssue) {
+        return {
+          path: pointer2(path, "stateUpdates") + stateIssue.path,
+          category: "strict_json",
+          message: "The call's 'stateUpdates' must contain only strict JSON values under string keys."
+        };
+      }
+    }
+    if (hasOwn3(value, "sendSequence")) {
+      return integerIssue(
+        value.sendSequence,
+        pointer2(path, "sendSequence"),
+        "The call's 'sendSequence' must be an integer of at least 0."
+      );
+    }
+    return null;
+  };
+  var validateCapabilities = (value, path = "/capabilities") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    const message = "The envelope's 'capabilities' must contain only 'swaps' and 'actions'; each value must be a duplicate-free array of known v1 names.";
+    if (!isPlainObject2(value)) return { path, category: "type", message };
+    const unknown = firstUnknown2(value, /* @__PURE__ */ new Set(["swaps", "actions"]));
+    if (unknown !== null) {
+      return { path: pointer2(path, unknown), category: "unknown_field", message };
+    }
+    for (const [name, known] of [
+      ["swaps", SWAPS],
+      ["actions", ACTION_KINDS]
+    ]) {
+      if (!hasOwn3(value, name)) continue;
+      const items = value[name];
+      const itemPath = pointer2(path, name);
+      if (!Array.isArray(items))
+        return { path: itemPath, category: "type", message };
+      for (let index = 0; index < items.length; index += 1) {
+        if (typeof items[index] !== "string") {
+          return { path: pointer2(itemPath, index), category: "type", message };
+        }
+        if (!known.includes(items[index])) {
+          return { path: pointer2(itemPath, index), category: "enum", message };
+        }
+      }
+      if (new Set(items).size !== items.length) {
+        return { path: itemPath, category: "semantic", message };
+      }
+    }
+    return null;
+  };
+  var validateCallEnvelope = (value) => {
+    const jsonIssue = validateStrictJson2(value);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return {
+        path: "",
+        category: "type",
+        message: "The request body is not a call envelope object."
+      };
+    }
+    for (const required of ["protocol", "requestId", "calls"]) {
+      if (!hasOwn3(value, required)) {
+        return {
+          path: pointer2("", required),
+          category: "required",
+          message: `The envelope requires '${required}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(value, ENVELOPE_FIELDS);
+    if (unknown !== null) {
+      return {
+        path: pointer2("", unknown),
+        category: "unknown_field",
+        message: `The envelope carries unknown field '${unknown}'.`
+      };
+    }
+    if (value.protocol !== PROTOCOL2) {
+      return {
+        path: "/protocol",
+        category: typeof value.protocol === "string" ? "enum" : "type",
+        message: "The envelope protocol must be citry-events/1."
+      };
+    }
+    const requestIssue = nonEmptyStringIssue(
+      value.requestId,
+      "/requestId",
+      "The envelope carries no 'requestId' string."
+    );
+    if (requestIssue) return requestIssue;
+    if (hasOwn3(value, "capabilities")) {
+      const issue = validateCapabilities(value.capabilities);
+      if (issue) return issue;
+    }
+    if (!Array.isArray(value.calls)) {
+      return {
+        path: "/calls",
+        category: "type",
+        message: "The envelope calls must be an array."
+      };
+    }
+    if (!value.calls.length || value.calls.length > CALLS_LIMIT) {
+      return {
+        path: "/calls",
+        category: "range",
+        message: `The envelope must carry 1 to ${CALLS_LIMIT} calls.`
+      };
+    }
+    for (let index = 0; index < value.calls.length; index += 1) {
+      const issue = validateCall(value.calls[index], `/calls/${index}`);
+      if (issue) return issue;
+    }
+    return null;
+  };
+  var buildCall = (input) => {
+    const call = {
+      componentClassId: input.componentClassId,
+      handlerName: input.handlerName,
+      args: copyJson(input.args)
+    };
+    for (const field of [
+      "callerRenderId",
+      "stateToken",
+      "sendSequence"
+    ]) {
+      if (input[field] !== void 0) call[field] = input[field];
+    }
+    if (input.stateUpdates !== void 0) {
+      call.stateUpdates = copyJson(input.stateUpdates);
+    }
+    const issue = validateCall(call);
+    if (issue) throw new ProtocolValueError2(issue);
+    return call;
+  };
+  var buildCallEnvelope = (requestId, calls, capabilities) => {
+    const envelope = {
+      protocol: PROTOCOL2,
+      requestId,
+      calls: copyJson(calls)
+    };
+    if (capabilities !== void 0)
+      envelope.capabilities = copyJson(capabilities);
+    const issue = validateCallEnvelope(envelope);
+    if (issue) throw new ProtocolValueError2(issue);
+    return envelope;
+  };
+  var fullClientCapabilities = () => ({
+    swaps: [...SWAPS],
+    actions: [...ACTION_KINDS]
+  });
+
+  // ../../protocol/events/v1/js/src/manifests.ts
+  var HTTP_METHOD = /^[!#$%&'*+.^_`|~0-9A-Z-]+$/;
+  var REVISION = /^[0-9a-f]{64}$/;
+  var DESCRIPTOR_FIELDS = /* @__PURE__ */ new Set([
+    "componentClassId",
+    "eventHandlers",
+    "writableStateFields"
+  ]);
+  var HANDLER_FIELDS = /* @__PURE__ */ new Set([
+    "httpMethod",
+    "usesState",
+    "debounceMilliseconds",
+    "throttleMilliseconds",
+    "latestCallWins",
+    "allowBatching"
+  ]);
+  var INSTANCE_FIELDS = /* @__PURE__ */ new Set([
+    "renderId",
+    "componentClassId",
+    "stateToken",
+    "publicState"
+  ]);
+  var MANIFEST_FIELDS = /* @__PURE__ */ new Set([
+    "protocol",
+    "clientGraphRevision",
+    "componentClasses",
+    "componentInstances"
+  ]);
+  var prefixed = (base, issue) => ({
+    path: base + issue.path,
+    category: issue.category,
+    message: issue.message
+  });
+  var nonNegativeIntegerIssue = (value, path, name) => {
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+      return {
+        path,
+        category: typeof value === "number" && !Number.isFinite(value) ? "strict_json" : "type",
+        message: `The ${name} hint must be an integer.`
+      };
+    }
+    if (value < 0) {
+      return {
+        path,
+        category: "range",
+        message: `The ${name} hint must be at least 0.`
+      };
+    }
+    return null;
+  };
+  var validateHandlerDescriptor = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return {
+        path,
+        category: "type",
+        message: "Event-handler hints must be an object."
+      };
+    }
+    if (!hasOwn3(value, "httpMethod")) {
+      return {
+        path: pointer2(path, "httpMethod"),
+        category: "required",
+        message: "Handler hints require 'httpMethod'."
+      };
+    }
+    const unknown = firstUnknown2(value, HANDLER_FIELDS);
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: "Handler hints have an unknown field."
+      };
+    }
+    if (typeof value.httpMethod !== "string") {
+      return {
+        path: pointer2(path, "httpMethod"),
+        category: "type",
+        message: "The HTTP method must be a string."
+      };
+    }
+    if (!HTTP_METHOD.test(value.httpMethod)) {
+      return {
+        path: pointer2(path, "httpMethod"),
+        category: "pattern",
+        message: "The HTTP method must be an uppercase token."
+      };
+    }
+    if (hasOwn3(value, "usesState") && value.usesState !== true) {
+      return {
+        path: pointer2(path, "usesState"),
+        category: "enum",
+        message: "The usesState hint has its non-default literal value."
+      };
+    }
+    for (const name of [
+      "debounceMilliseconds",
+      "throttleMilliseconds"
+    ]) {
+      if (!hasOwn3(value, name)) continue;
+      const issue = nonNegativeIntegerIssue(
+        value[name],
+        pointer2(path, name),
+        name
+      );
+      if (issue) return issue;
+    }
+    if (hasOwn3(value, "latestCallWins") && value.latestCallWins !== true) {
+      return {
+        path: pointer2(path, "latestCallWins"),
+        category: "enum",
+        message: "The latestCallWins hint has its non-default literal value."
+      };
+    }
+    if (hasOwn3(value, "allowBatching") && value.allowBatching !== false) {
+      return {
+        path: pointer2(path, "allowBatching"),
+        category: "enum",
+        message: "The allowBatching hint has its non-default literal value."
+      };
+    }
+    return null;
+  };
+  var validateDescriptor = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return {
+        path,
+        category: "type",
+        message: "A component descriptor must be an object."
+      };
+    }
+    for (const required of ["componentClassId", "eventHandlers"]) {
+      if (!hasOwn3(value, required)) {
+        return {
+          path: pointer2(path, required),
+          category: "required",
+          message: `The descriptor requires '${required}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(value, DESCRIPTOR_FIELDS);
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: "The descriptor has an unknown field."
+      };
+    }
+    if (typeof value.componentClassId !== "string") {
+      return {
+        path: pointer2(path, "componentClassId"),
+        category: "type",
+        message: "The component class ID must be a string."
+      };
+    }
+    if (!value.componentClassId) {
+      return {
+        path: pointer2(path, "componentClassId"),
+        category: "range",
+        message: "The component class ID must not be empty."
+      };
+    }
+    if (!isPlainObject2(value.eventHandlers)) {
+      return {
+        path: pointer2(path, "eventHandlers"),
+        category: "type",
+        message: "Event handlers must be an object."
+      };
+    }
+    for (const name of Object.keys(value.eventHandlers).sort()) {
+      if (!name) {
+        return {
+          path: pointer2(path, "eventHandlers"),
+          category: "range",
+          message: "A handler name must not be empty."
+        };
+      }
+      const issue = validateHandlerDescriptor(
+        value.eventHandlers[name],
+        pointer2(pointer2(path, "eventHandlers"), name)
+      );
+      if (issue) return issue;
+    }
+    if (hasOwn3(value, "writableStateFields")) {
+      const fields = value.writableStateFields;
+      const fieldPath = pointer2(path, "writableStateFields");
+      if (!Array.isArray(fields)) {
+        return {
+          path: fieldPath,
+          category: "type",
+          message: "Writable State fields must be an array."
+        };
+      }
+      const seen = /* @__PURE__ */ new Set();
+      for (let index = 0; index < fields.length; index += 1) {
+        const field = fields[index];
+        if (typeof field !== "string") {
+          return {
+            path: pointer2(fieldPath, index),
+            category: "type",
+            message: "A writable State field must be a string."
+          };
+        }
+        if (!field) {
+          return {
+            path: pointer2(fieldPath, index),
+            category: "range",
+            message: "A writable State field must not be empty."
+          };
+        }
+        if (seen.has(field)) {
+          return {
+            path: fieldPath,
+            category: "semantic",
+            message: "Writable State fields must be unique."
+          };
+        }
+        seen.add(field);
+      }
+    }
+    return null;
+  };
+  var validateComponentInstance = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return {
+        path,
+        category: "type",
+        message: "A component instance must be an object."
+      };
+    }
+    for (const required of INSTANCE_FIELDS) {
+      if (!hasOwn3(value, required)) {
+        return {
+          path: pointer2(path, required),
+          category: "required",
+          message: `The instance requires '${required}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(value, INSTANCE_FIELDS);
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: "The component instance has an unknown field."
+      };
+    }
+    if (typeof value.renderId !== "string") {
+      return {
+        path: pointer2(path, "renderId"),
+        category: "type",
+        message: "The render ID must be a string."
+      };
+    }
+    if (!isSafeRenderId(value.renderId)) {
+      return {
+        path: pointer2(path, "renderId"),
+        category: "pattern",
+        message: "The render ID has invalid characters."
+      };
+    }
+    if (typeof value.componentClassId !== "string") {
+      return {
+        path: pointer2(path, "componentClassId"),
+        category: "type",
+        message: "The component class ID must be a string."
+      };
+    }
+    if (!value.componentClassId) {
+      return {
+        path: pointer2(path, "componentClassId"),
+        category: "range",
+        message: "The component class ID must not be empty."
+      };
+    }
+    if (value.stateToken !== null && typeof value.stateToken !== "string") {
+      return {
+        path: pointer2(path, "stateToken"),
+        category: "type",
+        message: "The state token must be a string or null."
+      };
+    }
+    if (value.stateToken === "") {
+      return {
+        path: pointer2(path, "stateToken"),
+        category: "range",
+        message: "The state token must not be empty."
+      };
+    }
+    if (!isPlainObject2(value.publicState)) {
+      return {
+        path: pointer2(path, "publicState"),
+        category: "type",
+        message: "Public State must be an object."
+      };
+    }
+    const issue = validateStrictJson2(value.publicState);
+    return issue ? prefixed(pointer2(path, "publicState"), issue) : null;
+  };
+  var validateManifest = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return {
+        path,
+        category: "type",
+        message: "The Events manifest must be an object."
+      };
+    }
+    for (const required of MANIFEST_FIELDS) {
+      if (!hasOwn3(value, required)) {
+        return {
+          path: pointer2(path, required),
+          category: "required",
+          message: `The manifest requires '${required}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(value, MANIFEST_FIELDS);
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: "The manifest has an unknown field."
+      };
+    }
+    if (value.protocol !== PROTOCOL2) {
+      return {
+        path: pointer2(path, "protocol"),
+        category: typeof value.protocol === "string" ? "enum" : "type",
+        message: "The manifest protocol must be citry-events/1."
+      };
+    }
+    if (value.clientGraphRevision !== null && typeof value.clientGraphRevision !== "string") {
+      return {
+        path: pointer2(path, "clientGraphRevision"),
+        category: "type",
+        message: "The graph revision must be a string or null."
+      };
+    }
+    if (typeof value.clientGraphRevision === "string" && !REVISION.test(value.clientGraphRevision)) {
+      return {
+        path: pointer2(path, "clientGraphRevision"),
+        category: "pattern",
+        message: "The graph revision must be lowercase SHA-256."
+      };
+    }
+    if (!Array.isArray(value.componentClasses)) {
+      return {
+        path: pointer2(path, "componentClasses"),
+        category: "type",
+        message: "Component classes must be an array."
+      };
+    }
+    for (let index = 0; index < value.componentClasses.length; index += 1) {
+      const issue = validateDescriptor(
+        value.componentClasses[index],
+        pointer2(pointer2(path, "componentClasses"), index)
+      );
+      if (issue) return issue;
+    }
+    if (!Array.isArray(value.componentInstances)) {
+      return {
+        path: pointer2(path, "componentInstances"),
+        category: "type",
+        message: "Component instances must be an array."
+      };
+    }
+    for (let index = 0; index < value.componentInstances.length; index += 1) {
+      const issue = validateComponentInstance(
+        value.componentInstances[index],
+        pointer2(pointer2(path, "componentInstances"), index)
+      );
+      if (issue) return issue;
+    }
+    const classes = value.componentClasses;
+    const instances = value.componentInstances;
+    const classIds = /* @__PURE__ */ new Set();
+    for (let index = 0; index < classes.length; index += 1) {
+      const descriptor = classes[index];
+      if (classIds.has(descriptor.componentClassId)) {
+        return {
+          path: pointer2(pointer2(path, "componentClasses"), index),
+          category: "semantic",
+          message: `Duplicate component class ID '${descriptor.componentClassId}'.`
+        };
+      }
+      classIds.add(descriptor.componentClassId);
+    }
+    const renderIds = /* @__PURE__ */ new Set();
+    for (let index = 0; index < instances.length; index += 1) {
+      const instance = instances[index];
+      if (renderIds.has(instance.renderId)) {
+        return {
+          path: pointer2(pointer2(path, "componentInstances"), index),
+          category: "semantic",
+          message: `Duplicate render ID '${instance.renderId}'.`
+        };
+      }
+      renderIds.add(instance.renderId);
+    }
+    for (let index = 0; index < instances.length; index += 1) {
+      const instance = instances[index];
+      if (!classIds.has(instance.componentClassId)) {
+        return {
+          path: pointer2(
+            pointer2(pointer2(path, "componentInstances"), index),
+            "componentClassId"
+          ),
+          category: "semantic",
+          message: "The instance refers to an unknown component class."
+        };
+      }
+    }
+    for (let index = 0; index < instances.length; index += 1) {
+      const instance = instances[index];
+      if (instance.stateToken === null && Object.keys(instance.publicState).length > 0) {
+        return {
+          path: pointer2(
+            pointer2(pointer2(path, "componentInstances"), index),
+            "publicState"
+          ),
+          category: "semantic",
+          message: "A stateless instance must have empty public State."
+        };
+      }
+    }
+    return null;
+  };
+  var assertValidManifest = (value) => {
+    const issue = validateManifest(value);
+    if (issue) throw new ProtocolValueError2(issue);
+    return value;
+  };
+
+  // ../../protocol/events/v1/js/src/results.ts
+  var ERROR_STATUS_BY_CODE = {
+    invalid_args: 422,
+    invalid_state: 403,
+    stale_state: 409,
+    unknown_event: 404,
+    unknown_component: 404,
+    forbidden: 403,
+    not_found: 404,
+    conflict: 409,
+    error: null,
+    csrf_failed: 403,
+    payload_too_large: 413,
+    protocol_mismatch: 400,
+    handler_error: 500
+  };
+  var RESULT_ENVELOPE_FIELDS = /* @__PURE__ */ new Set(["protocol", "requestId", "results"]);
+  var OK_RESULT_FIELDS = /* @__PURE__ */ new Set(["ok", "sendSequence", "actions"]);
+  var ERROR_RESULT_FIELDS = /* @__PURE__ */ new Set(["ok", "sendSequence", "error"]);
+  var ERROR_FIELDS = /* @__PURE__ */ new Set(["status", "code", "message", "fieldErrors"]);
+  var ACTION_FIELDS = {
+    render: /* @__PURE__ */ new Set(["action", "target", "swap", "html", "delay", "wait"]),
+    data: /* @__PURE__ */ new Set(["action", "value", "delay"]),
+    state: /* @__PURE__ */ new Set(["action", "targetRenderId", "stateToken", "delay", "wait"]),
+    event: /* @__PURE__ */ new Set(["action", "eventName", "detail", "target", "delay", "wait"]),
+    redirect: /* @__PURE__ */ new Set(["action", "url", "delay", "wait"]),
+    url: /* @__PURE__ */ new Set(["action", "url", "mode", "delay", "wait"])
+  };
+  var ACTION_REQUIRED = {
+    render: ["action", "target", "swap", "html"],
+    data: ["action", "value"],
+    state: ["action", "targetRenderId", "stateToken"],
+    event: ["action", "eventName"],
+    redirect: ["action", "url"],
+    url: ["action", "url", "mode"]
+  };
+  var prefixed2 = (base, issue) => ({
+    path: base + issue.path,
+    category: issue.category,
+    message: issue.message
+  });
+  var validateNonNegativeInteger = (value, path, message) => {
+    if (typeof value !== "number" || !Number.isInteger(value)) {
+      return {
+        path,
+        category: typeof value === "number" && !Number.isFinite(value) ? "strict_json" : "type",
+        message
+      };
+    }
+    if (value < 0) return { path, category: "range", message };
+    return null;
+  };
+  var validateTiming = (value, path) => {
+    if (hasOwn3(value, "delay")) {
+      const delay = value.delay;
+      if (typeof delay !== "number") {
+        return {
+          path: pointer2(path, "delay"),
+          category: "type",
+          message: "The action delay must be a finite number."
+        };
+      }
+      if (!Number.isFinite(delay)) {
+        return {
+          path: pointer2(path, "delay"),
+          category: "strict_json",
+          message: "The action delay must be finite."
+        };
+      }
+      if (delay < 0) {
+        return {
+          path: pointer2(path, "delay"),
+          category: "range",
+          message: "The action delay must be at least 0."
+        };
+      }
+    }
+    if (hasOwn3(value, "wait") && value.wait !== false) {
+      return {
+        path: pointer2(path, "wait"),
+        category: "enum",
+        message: "The action wait flag, when present, must be false."
+      };
+    }
+    return null;
+  };
+  var validateTarget = (value, path) => {
+    if (typeof value !== "string") {
+      return {
+        path,
+        category: "type",
+        message: "An action target must be a non-empty string."
+      };
+    }
+    if (!value) {
+      return {
+        path,
+        category: "range",
+        message: "An action target must be a non-empty string."
+      };
+    }
+    if (value.startsWith("render:") && !isSafeRenderId(value.slice(7))) {
+      return {
+        path,
+        category: "pattern",
+        message: "A render target must contain a valid render ID."
+      };
+    }
+    return null;
+  };
+  var validateAction = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return { path, category: "type", message: "An action must be an object." };
+    }
+    if (!hasOwn3(value, "action")) {
+      return {
+        path: pointer2(path, "action"),
+        category: "required",
+        message: "The action kind is required."
+      };
+    }
+    if (typeof value.action !== "string") {
+      return {
+        path: pointer2(path, "action"),
+        category: "type",
+        message: "The action kind must be a string."
+      };
+    }
+    if (!ACTION_KINDS.includes(value.action)) {
+      return {
+        path: pointer2(path, "action"),
+        category: "enum",
+        message: `Unknown action kind '${value.action}'.`
+      };
+    }
+    const kind = value.action;
+    for (const required of ACTION_REQUIRED[kind]) {
+      if (!hasOwn3(value, required)) {
+        return {
+          path: pointer2(path, required),
+          category: "required",
+          message: `The ${kind} action requires '${required}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(value, ACTION_FIELDS[kind]);
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: `The ${kind} action has an unknown field.`
+      };
+    }
+    if (kind === "render") {
+      const targetIssue = validateTarget(value.target, pointer2(path, "target"));
+      if (targetIssue) return targetIssue;
+      if (!SWAPS.includes(value.swap)) {
+        return {
+          path: pointer2(path, "swap"),
+          category: typeof value.swap === "string" ? "enum" : "type",
+          message: "The render swap is not a v1 swap."
+        };
+      }
+      if (typeof value.html !== "string") {
+        return {
+          path: pointer2(path, "html"),
+          category: "type",
+          message: "The render HTML must be a string."
+        };
+      }
+    } else if (kind === "data") {
+      const issue = validateStrictJson2(value.value);
+      if (issue) return prefixed2(pointer2(path, "value"), issue);
+    } else if (kind === "state") {
+      if (typeof value.targetRenderId !== "string") {
+        return {
+          path: pointer2(path, "targetRenderId"),
+          category: "type",
+          message: "The state target must be a render ID."
+        };
+      }
+      if (!isSafeRenderId(value.targetRenderId)) {
+        return {
+          path: pointer2(path, "targetRenderId"),
+          category: "pattern",
+          message: "The state target must be a valid render ID."
+        };
+      }
+      if (typeof value.stateToken !== "string") {
+        return {
+          path: pointer2(path, "stateToken"),
+          category: "type",
+          message: "The state token must be a string."
+        };
+      }
+      if (!value.stateToken) {
+        return {
+          path: pointer2(path, "stateToken"),
+          category: "range",
+          message: "The state token must not be empty."
+        };
+      }
+    } else if (kind === "event") {
+      if (typeof value.eventName !== "string") {
+        return {
+          path: pointer2(path, "eventName"),
+          category: "type",
+          message: "The event name must be a string."
+        };
+      }
+      if (!value.eventName) {
+        return {
+          path: pointer2(path, "eventName"),
+          category: "range",
+          message: "The event name must not be empty."
+        };
+      }
+      if (value.eventName.startsWith("citry:")) {
+        return {
+          path: pointer2(path, "eventName"),
+          category: "pattern",
+          message: "The event name is reserved."
+        };
+      }
+      if (hasOwn3(value, "detail")) {
+        const issue = validateStrictJson2(value.detail);
+        if (issue) return prefixed2(pointer2(path, "detail"), issue);
+      }
+      if (hasOwn3(value, "target")) {
+        const issue = validateTarget(value.target, pointer2(path, "target"));
+        if (issue) return issue;
+      }
+    } else if (kind === "redirect") {
+      if (typeof value.url !== "string") {
+        return {
+          path: pointer2(path, "url"),
+          category: "type",
+          message: "The redirect URL must be a string."
+        };
+      }
+      if (!value.url) {
+        return {
+          path: pointer2(path, "url"),
+          category: "range",
+          message: "The redirect URL must not be empty."
+        };
+      }
+    } else {
+      if (typeof value.url !== "string") {
+        return {
+          path: pointer2(path, "url"),
+          category: "type",
+          message: "The URL action URL must be a string."
+        };
+      }
+      if (!value.url) {
+        return {
+          path: pointer2(path, "url"),
+          category: "range",
+          message: "The URL action URL must not be empty."
+        };
+      }
+      if (value.mode !== "push" && value.mode !== "replace") {
+        return {
+          path: pointer2(path, "mode"),
+          category: typeof value.mode === "string" ? "enum" : "type",
+          message: "The URL action mode must be push or replace."
+        };
+      }
+    }
+    return validateTiming(value, path);
+  };
+  var validateError = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return {
+        path,
+        category: "type",
+        message: "The result error must be an object."
+      };
+    }
+    for (const required of ["status", "code", "message"]) {
+      if (!hasOwn3(value, required)) {
+        return {
+          path: pointer2(path, required),
+          category: "required",
+          message: `The error requires '${required}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(value, ERROR_FIELDS);
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: "The result error has an unknown field."
+      };
+    }
+    if (typeof value.status !== "number" || !Number.isInteger(value.status)) {
+      return {
+        path: pointer2(path, "status"),
+        category: typeof value.status === "number" && !Number.isFinite(value.status) ? "strict_json" : "type",
+        message: "The error status must be an integer."
+      };
+    }
+    if (value.status < 400 || value.status > 599) {
+      return {
+        path: pointer2(path, "status"),
+        category: "range",
+        message: "The error status must be from 400 to 599."
+      };
+    }
+    if (typeof value.code !== "string") {
+      return {
+        path: pointer2(path, "code"),
+        category: "type",
+        message: "The error code must be a string."
+      };
+    }
+    if (!hasOwn3(ERROR_STATUS_BY_CODE, value.code)) {
+      return {
+        path: pointer2(path, "code"),
+        category: "enum",
+        message: "The error code is not a v1 code."
+      };
+    }
+    if (typeof value.message !== "string") {
+      return {
+        path: pointer2(path, "message"),
+        category: "type",
+        message: "The error message must be a string."
+      };
+    }
+    if (!value.message) {
+      return {
+        path: pointer2(path, "message"),
+        category: "range",
+        message: "The error message must not be empty."
+      };
+    }
+    if (hasOwn3(value, "fieldErrors")) {
+      if (!isPlainObject2(value.fieldErrors)) {
+        return {
+          path: pointer2(path, "fieldErrors"),
+          category: "type",
+          message: "Field errors must be an object."
+        };
+      }
+      for (const name of Object.keys(value.fieldErrors).sort()) {
+        if (typeof value.fieldErrors[name] !== "string") {
+          return {
+            path: pointer2(pointer2(path, "fieldErrors"), name),
+            category: "type",
+            message: "Field errors map strings."
+          };
+        }
+      }
+    }
+    const expected = ERROR_STATUS_BY_CODE[value.code];
+    if (expected !== null && value.status !== expected) {
+      return {
+        path: pointer2(path, "status"),
+        category: "semantic",
+        message: "The error status does not match its code."
+      };
+    }
+    return null;
+  };
+  var validateResult = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return { path, category: "type", message: "A result must be an object." };
+    }
+    if (!hasOwn3(value, "ok")) {
+      return {
+        path: pointer2(path, "ok"),
+        category: "required",
+        message: "The result requires 'ok'."
+      };
+    }
+    if (typeof value.ok !== "boolean") {
+      return {
+        path: pointer2(path, "ok"),
+        category: "type",
+        message: "The result's 'ok' field must be a boolean."
+      };
+    }
+    const required = value.ok ? ["ok", "actions"] : ["ok", "error"];
+    for (const field of required) {
+      if (!hasOwn3(value, field)) {
+        return {
+          path: pointer2(path, field),
+          category: "required",
+          message: `The result requires '${field}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(
+      value,
+      value.ok ? OK_RESULT_FIELDS : ERROR_RESULT_FIELDS
+    );
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: "The result has an unknown field."
+      };
+    }
+    if (hasOwn3(value, "sendSequence")) {
+      const issue = validateNonNegativeInteger(
+        value.sendSequence,
+        pointer2(path, "sendSequence"),
+        "The send sequence must be an integer."
+      );
+      if (issue) return issue;
+    }
+    if (!value.ok) return validateError(value.error, pointer2(path, "error"));
+    if (!Array.isArray(value.actions)) {
+      return {
+        path: pointer2(path, "actions"),
+        category: "type",
+        message: "The result actions must be an array."
+      };
+    }
+    for (let index = 0; index < value.actions.length; index += 1) {
+      const issue = validateAction(value.actions[index]);
+      if (issue) return prefixed2(pointer2(pointer2(path, "actions"), index), issue);
+    }
+    if (value.actions.filter(
+      (action) => isPlainObject2(action) && action.action === "data"
+    ).length > 1) {
+      return {
+        path: pointer2(path, "actions"),
+        category: "semantic",
+        message: "Each result may carry at most one data action."
+      };
+    }
+    return null;
+  };
+  var validateResultEnvelope = (value, path = "") => {
+    const jsonIssue = validateStrictJson2(value, path);
+    if (jsonIssue) return jsonIssue;
+    if (!isPlainObject2(value)) {
+      return {
+        path,
+        category: "type",
+        message: "The result envelope must be an object."
+      };
+    }
+    for (const required of ["protocol", "requestId", "results"]) {
+      if (!hasOwn3(value, required)) {
+        return {
+          path: pointer2(path, required),
+          category: "required",
+          message: `The result envelope requires '${required}'.`
+        };
+      }
+    }
+    const unknown = firstUnknown2(value, RESULT_ENVELOPE_FIELDS);
+    if (unknown !== null) {
+      return {
+        path: pointer2(path, unknown),
+        category: "unknown_field",
+        message: "The result envelope has an unknown field."
+      };
+    }
+    if (value.protocol !== PROTOCOL2) {
+      return {
+        path: pointer2(path, "protocol"),
+        category: typeof value.protocol === "string" ? "enum" : "type",
+        message: "The result protocol must be citry-events/1."
+      };
+    }
+    if (value.requestId !== null && typeof value.requestId !== "string") {
+      return {
+        path: pointer2(path, "requestId"),
+        category: "type",
+        message: "The result request ID must be a string or null."
+      };
+    }
+    if (value.requestId === "") {
+      return {
+        path: pointer2(path, "requestId"),
+        category: "range",
+        message: "The result request ID must not be empty."
+      };
+    }
+    if (!Array.isArray(value.results)) {
+      return {
+        path: pointer2(path, "results"),
+        category: "type",
+        message: "The results must be an array."
+      };
+    }
+    if (!value.results.length) {
+      return {
+        path: pointer2(path, "results"),
+        category: "range",
+        message: "The results array must not be empty."
+      };
+    }
+    for (let index = 0; index < value.results.length; index += 1) {
+      const issue = validateResult(value.results[index]);
+      if (issue) return prefixed2(pointer2(pointer2(path, "results"), index), issue);
+    }
+    if (value.requestId === null) {
+      if (value.results.length !== 1) {
+        return {
+          path: pointer2(path, "results"),
+          category: "correlation",
+          message: "An edge error has exactly one result."
+        };
+      }
+      const result = value.results[0];
+      const error2 = result.error;
+      if (result.ok !== false || hasOwn3(result, "sendSequence") || error2.code !== "protocol_mismatch" && error2.code !== "payload_too_large" || hasOwn3(error2, "fieldErrors")) {
+        return {
+          path: pointer2(path, "results"),
+          category: "correlation",
+          message: "A null request ID is only for one transport-edge error."
+        };
+      }
+    }
+    return null;
+  };
+  var validateExchange = (callEnvelope, resultEnvelope) => {
+    const issue = validateResultEnvelope(resultEnvelope);
+    if (issue) return issue;
+    const result = resultEnvelope;
+    if (result.requestId !== callEnvelope.requestId) {
+      return {
+        path: "/requestId",
+        category: "correlation",
+        message: "The result request ID does not match the call."
+      };
+    }
+    if (result.results.length !== callEnvelope.calls.length) {
+      return {
+        path: "/results",
+        category: "correlation",
+        message: "The result count does not match the call count."
+      };
+    }
+    const advertised = callEnvelope.capabilities ?? {};
+    const actions = new Set(
+      advertised.actions ?? CAPABILITIES_BASELINE_V1.actions
+    );
+    const swaps = new Set(advertised.swaps ?? CAPABILITIES_BASELINE_V1.swaps);
+    for (let index = 0; index < result.results.length; index += 1) {
+      const call = callEnvelope.calls[index];
+      const answer = result.results[index];
+      if (answer.sendSequence !== call.sendSequence || hasOwn3(answer, "sendSequence") !== hasOwn3(call, "sendSequence")) {
+        return {
+          path: `/results/${index}/sendSequence`,
+          category: "correlation",
+          message: "The result does not echo the call's send sequence."
+        };
+      }
+      if (!answer.ok) continue;
+      for (let actionIndex = 0; actionIndex < answer.actions.length; actionIndex += 1) {
+        const action = answer.actions[actionIndex];
+        if (!actions.has(action.action)) {
+          return {
+            path: `/results/${index}/actions/${actionIndex}/action`,
+            category: "capability",
+            message: "The result uses an action the caller did not advertise."
+          };
+        }
+        if (action.action === "render" && !swaps.has(action.swap)) {
+          return {
+            path: `/results/${index}/actions/${actionIndex}/swap`,
+            category: "capability",
+            message: "The result uses a swap the caller did not advertise."
+          };
+        }
+      }
+    }
+    return null;
+  };
+  var validateActionList = (actions) => validateResult({ ok: true, actions });
+  var buildOkResult = (actions, sendSequence) => {
+    const result = {
+      ok: true,
+      actions: copyJson(actions)
+    };
+    if (sendSequence !== void 0) result.sendSequence = sendSequence;
+    const issue = validateResult(result);
+    if (issue) throw new ProtocolValueError2(issue);
+    return result;
+  };
+  var buildResultEnvelope = (requestId, results) => {
+    const envelope = {
+      protocol: PROTOCOL2,
+      requestId,
+      results: copyJson([...results])
+    };
+    const issue = validateResultEnvelope(envelope);
+    if (issue) throw new ProtocolValueError2(issue);
+    return envelope;
+  };
+  var resultIndex = (path) => {
+    const match = /^\/results\/(\d+)(?:\/|$)/.exec(path);
+    return match ? Number(match[1]) : null;
+  };
+  var preflightResultEnvelope = (reply, sent) => {
+    const structural = validateResultEnvelope(reply);
+    if (structural) {
+      const edge = isPlainObject2(reply) && reply.requestId === null;
+      const index = resultIndex(structural.path);
+      return {
+        ok: false,
+        issue: structural,
+        reason: edge && structural.path.startsWith("/results") ? "edge" : index === null ? "header" : `result ${index}`
+      };
+    }
+    const envelope = reply;
+    if (envelope.requestId === null) {
+      const edge = envelope.results[0];
+      return { ok: true, results: sent.calls.map(() => edge) };
+    }
+    const relationship = validateExchange(sent, envelope);
+    if (relationship) {
+      const index = resultIndex(relationship.path);
+      return {
+        ok: false,
+        issue: relationship,
+        reason: relationship.path === "/requestId" || relationship.path === "/results" && relationship.category === "correlation" ? "correlation" : `result ${index ?? 0}`
+      };
+    }
+    return { ok: true, results: envelope.results };
+  };
+
+  // src/citry-events.ts
   (function() {
     "use strict";
     var C = globalThis.Citry = globalThis.Citry || {};
@@ -3791,7 +5396,37 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     var pointedError = function(message) {
       return new Error("[Citry] " + message);
     };
+    var elementIsInCurrentDocument = function(el) {
+      return Boolean(el && el.isConnected && el.ownerDocument === document);
+    };
     var classes = /* @__PURE__ */ new Map();
+    var descriptorRevisions = /* @__PURE__ */ new Map();
+    var pendingDescriptorRevisionRefs = /* @__PURE__ */ new Map();
+    var pruneDescriptorRevision = function(revision, ownershipReady) {
+      var live = false;
+      anchors.forEach(function(anchor) {
+        if (anchor.descriptorRevision === revision) live = true;
+      });
+      if (live || (pendingDescriptorRevisionRefs.get(revision) || 0) > 0) return false;
+      if (!ownershipReady && globalThis.Citry?.manager?.ownership?.has(revision)) return false;
+      descriptorRevisions.delete(revision);
+      return true;
+    };
+    var scheduleDescriptorPrune = function(revision) {
+      if (revision != null) pruneDescriptorRevision(revision);
+      globalThis.Citry?.manager?.ownership?._schedulePrune();
+    };
+    var retainDescriptorRevisionForCall = function(revision) {
+      if (revision == null) return;
+      pendingDescriptorRevisionRefs.set(revision, (pendingDescriptorRevisionRefs.get(revision) || 0) + 1);
+    };
+    var releaseDescriptorRevisionForCall = function(revision) {
+      if (revision == null) return;
+      var remaining = (pendingDescriptorRevisionRefs.get(revision) || 0) - 1;
+      if (remaining > 0) pendingDescriptorRevisionRefs.set(revision, remaining);
+      else pendingDescriptorRevisionRefs.delete(revision);
+      scheduleDescriptorPrune(revision);
+    };
     var anchors = /* @__PURE__ */ new Map();
     var idToAnchor = /* @__PURE__ */ new Map();
     var anchorCounter = 0;
@@ -3811,17 +5446,25 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         }).join("")
       );
     };
-    var declaredEvents = function(classId) {
-      var descriptor = classes.get(classId);
+    var descriptorFor = function(target) {
+      if (typeof target === "object" && target !== null) {
+        const revision = target.descriptorRevision;
+        if (revision != null) return descriptorRevisions.get(revision)?.get(target.classId);
+        return classes.get(target.classId);
+      }
+      return classes.get(target);
+    };
+    var declaredEvents = function(target) {
+      var descriptor = descriptorFor(target);
       return descriptor && descriptor.eventHandlers ? Object.keys(descriptor.eventHandlers) : [];
     };
-    var eventHttpMethod = function(classId, name) {
-      var descriptor = classes.get(classId);
+    var eventHttpMethod = function(target, name) {
+      var descriptor = descriptorFor(target);
       var options = descriptor && descriptor.eventHandlers ? descriptor.eventHandlers[name] : null;
       return options && typeof options.httpMethod === "string" ? options.httpMethod : "POST";
     };
-    var eventDeclaresState = function(classId, name) {
-      var descriptor = classes.get(classId);
+    var eventDeclaresState = function(target, name) {
+      var descriptor = descriptorFor(target);
       var options = descriptor && descriptor.eventHandlers ? descriptor.eventHandlers[name] : null;
       return Boolean(options && options.usesState === true);
     };
@@ -3831,7 +5474,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           "this component instance was removed or replaced, so '" + name + "' cannot be sent (" + caller + "). Keep an instance across parent re-renders with #c-key (design 5.5)."
         );
       }
-      var declared = declaredEvents(anchor.classId);
+      var declared = declaredEvents(anchor);
       if (declared.indexOf(name) === -1) {
         throw pointedError(
           "component " + anchor.classId + " has no event '" + name + "' (" + caller + "); declared events: " + (declared.join(", ") || "(none)") + "."
@@ -3854,7 +5497,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       anchor.errorBox.current = selected;
     };
     var refreshErrorHandlers = function(anchor, reset) {
-      var declared = new Set(declaredEvents(anchor.classId));
+      var declared = new Set(declaredEvents(anchor));
       var handlers = anchor.errorBox.handlers;
       if (reset) {
         handlers = /* @__PURE__ */ Object.create(null);
@@ -3900,8 +5543,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       }
       return null;
     };
-    var writableFields = function(classId, values) {
-      var descriptor = classes.get(classId);
+    var writableFields = function(target, values) {
+      var descriptor = descriptorFor(target);
       if (descriptor && Array.isArray(descriptor.writableStateFields)) {
         return new Set(descriptor.writableStateFields);
       }
@@ -3923,7 +5566,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
     var refreshWritableFields = function(anchor, dropInvalidPending) {
       if (!anchor.values || !anchor.classId) return;
-      var next = writableFields(anchor.classId, anchor.values);
+      var next = writableFields(anchor, anchor.values);
       if (!anchor.writable) {
         anchor.writable = next;
         return;
@@ -3936,9 +5579,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         dropInvalidPendingFields(anchor, "after a descriptor update");
       }
     };
-    var refreshAnchorsForClasses = function(classIds, dropInvalidPending) {
+    var refreshAnchorsForClasses = function(classIds, dropInvalidPending, descriptorRevision) {
       anchors.forEach(function(anchor) {
-        if (anchor.classId && classIds.has(anchor.classId)) {
+        if (anchor.classId && classIds.has(anchor.classId) && (descriptorRevision === void 0 || anchor.descriptorRevision === descriptorRevision)) {
           refreshWritableFields(anchor, dropInvalidPending);
           refreshErrorHandlers(anchor);
         }
@@ -3974,13 +5617,21 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         snapshot.anchor.errorBox.current = snapshot.current;
       });
     };
-    var installClassDescriptors = function(entries, dropInvalidPending) {
+    var installClassDescriptors = function(entries, dropInvalidPending, descriptorRevision) {
       var classIds = /* @__PURE__ */ new Set();
+      var revisionClasses = descriptorRevision == null ? null : /* @__PURE__ */ new Map();
       entries.forEach(function(entry) {
-        classes.set(entry[0], entry[1]);
+        if (revisionClasses) revisionClasses.set(entry[0], entry[1]);
+        else classes.set(entry[0], entry[1]);
         classIds.add(entry[0]);
       });
-      refreshAnchorsForClasses(classIds, dropInvalidPending);
+      if (descriptorRevision != null)
+        descriptorRevisions.set(descriptorRevision, revisionClasses);
+      refreshAnchorsForClasses(classIds, dropInvalidPending, descriptorRevision);
+    };
+    var restoreDescriptorRevision = function(revision, hadRevision, descriptors) {
+      if (hadRevision) descriptorRevisions.set(revision, descriptors);
+      else descriptorRevisions.delete(revision);
     };
     var makeStateProxy = function(anchor) {
       var values = anchor.values;
@@ -4013,21 +5664,22 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     var adoptStateContract = function(anchor, classId, values) {
       anchor.classId = classId;
       anchor.values = src_default.reactive(Object.assign({}, values));
-      anchor.writable = writableFields(classId, values);
+      anchor.writable = writableFields(anchor, values);
       anchor.stateProxy = makeStateProxy(anchor);
       var handlers = /* @__PURE__ */ Object.create(null);
-      declaredEvents(classId).forEach(function(name) {
+      declaredEvents(anchor).forEach(function(name) {
         handlers[name] = 0;
       });
       anchor.loading.handlers = handlers;
       refreshErrorHandlers(anchor, true);
     };
-    var createAnchor = function(componentId, classId, token, values) {
+    var createAnchor = function(componentId, classId, token, values, descriptorRevision) {
       anchorCounter += 1;
       var anchor = {
         anchorId: "a" + anchorCounter,
         componentId,
         classId,
+        descriptorRevision: descriptorRevision ?? null,
         token: token || "",
         // The out-of-order guard's bookkeeping (design 4.2): the counter and the
         // highest applied epoch live on the anchor, never on the component id,
@@ -4068,6 +5720,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       });
     };
     var retireAnchor = function(anchor, preserveGeneral) {
+      var retiredDescriptorRevision = anchor.descriptorRevision;
       var pendingKeys = Object.keys(anchor.pending);
       var dropped = [];
       if (pendingKeys.length || anchor.loading.any > 0) {
@@ -4091,6 +5744,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       anchors.delete(anchor.anchorId);
       anchor.componentId = null;
       anchor.classId = null;
+      anchor.descriptorRevision = null;
       anchor.token = "";
       anchor.pending = {};
       anchor.values = null;
@@ -4098,6 +5752,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       anchor.writable = /* @__PURE__ */ new Set();
       anchor.errorGeneration += 1;
       refreshErrorHandlers(anchor, true);
+      if (retiredDescriptorRevision != null) scheduleDescriptorPrune(retiredDescriptorRevision);
     };
     var linkRenderedInstance = function(anchor, meta) {
       var oldComponentId = anchor.componentId;
@@ -4108,9 +5763,16 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       if (anchor.clientAnchor) {
         globalThis.Citry?.manager?.ownership?._transitionEvents(anchor.clientAnchor, meta.componentId, meta.classId);
       }
+      var oldDescriptorRevision = anchor.descriptorRevision;
+      anchor.descriptorRevision = meta.descriptorRevision === void 0 ? anchor.descriptorRevision : meta.descriptorRevision;
+      if (oldDescriptorRevision !== anchor.descriptorRevision && oldDescriptorRevision != null) {
+        scheduleDescriptorPrune(oldDescriptorRevision);
+      }
       var branch;
       if (meta.classId === anchor.classId) {
         branch = "reconcile";
+        refreshWritableFields(anchor, false);
+        refreshErrorHandlers(anchor);
         reconcileValues(anchor, meta.values || {});
       } else {
         branch = "adopt";
@@ -4144,162 +5806,53 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         attachBoundaryScope(root);
       });
     };
-    var isPlainObject = function(value) {
-      return value !== null && typeof value === "object" && !Array.isArray(value);
-    };
-    var isJsonValue = function(value, ancestors) {
-      if (value === null || typeof value === "string" || typeof value === "boolean") return true;
-      if (typeof value === "number") return Number.isFinite(value);
-      if (typeof value !== "object") return false;
-      var seen = ancestors || /* @__PURE__ */ new Set();
-      if (seen.has(value)) return false;
-      seen.add(value);
-      var valid;
-      if (Array.isArray(value)) {
-        const keys = Object.keys(value);
-        valid = Object.getOwnPropertySymbols(value).length === 0 && keys.length === value.length && keys.every(function(key, index) {
-          return key === String(index);
-        }) && value.every(function(item) {
-          return isJsonValue(item, seen);
-        });
-      } else {
-        valid = (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) && Object.getOwnPropertySymbols(value).length === 0 && Object.getOwnPropertyNames(value).every(function(key) {
-          return Object.prototype.propertyIsEnumerable.call(value, key) && isJsonValue(value[key], seen);
-        });
-      }
-      seen.delete(value);
-      return valid;
-    };
-    var hasExactKeys = function(value, required, optional) {
-      var allowed = new Set(required.concat(optional || []));
-      return required.every(function(key) {
-        return Object.prototype.hasOwnProperty.call(value, key);
-      }) && Object.keys(value).every(function(key) {
-        return allowed.has(key);
+    var stageEventsManifest = function(value) {
+      var manifest = assertValidManifest(value);
+      var descriptorRevision = manifest.clientGraphRevision || null;
+      var stagedClasses = manifest.componentClasses.map(function(descriptor) {
+        return [descriptor.componentClassId, descriptor];
       });
-    };
-    var stageEventsManifest = function(manifest) {
-      if (!isPlainObject(manifest)) throw new TypeError("events manifest must be an object");
-      if (!hasExactKeys(manifest, ["protocol", "clientGraphRevision", "componentClasses", "componentInstances"])) {
-        throw new TypeError("events manifest must contain exactly the citry-events/1 fields");
-      }
-      if (manifest.protocol !== "citry-events/1") throw new TypeError("events manifest protocol must be citry-events/1");
-      if (manifest.clientGraphRevision !== null && (typeof manifest.clientGraphRevision !== "string" || !/^[0-9a-f]{64}$/.test(manifest.clientGraphRevision))) {
-        throw new TypeError("events manifest clientGraphRevision must be a lowercase 64-character digest or null");
-      }
-      if (!Array.isArray(manifest.componentClasses)) {
-        throw new TypeError("events manifest componentClasses must be an array");
-      }
-      if (!Array.isArray(manifest.componentInstances)) {
-        throw new TypeError("events manifest componentInstances must be an array");
-      }
-      var stagedClasses = [];
-      var classIds = /* @__PURE__ */ new Set();
-      manifest.componentClasses.forEach(function(candidate) {
-        if (!isPlainObject(candidate) || !hasExactKeys(candidate, ["componentClassId", "eventHandlers"], ["writableStateFields"])) {
-          throw new TypeError("events component class must contain exactly its protocol fields");
-        }
-        if (typeof candidate.componentClassId !== "string" || !candidate.componentClassId) {
-          throw new TypeError("events componentClassId must be non-empty text");
-        }
-        if (classIds.has(candidate.componentClassId)) throw new TypeError("events manifest repeats a componentClassId");
-        if (!isPlainObject(candidate.eventHandlers)) {
-          throw new TypeError("events component class eventHandlers must be an object");
-        }
-        Object.keys(candidate.eventHandlers).forEach(function(eventName) {
-          if (!eventName) throw new TypeError("events handler names must be non-empty text");
-          const options = candidate.eventHandlers[eventName];
-          if (!isPlainObject(options)) {
-            throw new TypeError("events handler options must be an object");
-          }
-          if (!hasExactKeys(
-            options,
-            ["httpMethod"],
-            ["usesState", "debounceMilliseconds", "throttleMilliseconds", "latestCallWins", "allowBatching"]
-          )) {
-            throw new TypeError("events handler options contain missing or unknown fields");
-          }
-          if (typeof options.httpMethod !== "string" || !/^[!#$%&'*+.^_`|~0-9A-Z-]+$/.test(options.httpMethod)) {
-            throw new TypeError("events handler httpMethod must be uppercase HTTP-token text");
-          }
-          ["debounceMilliseconds", "throttleMilliseconds"].forEach(function(field) {
-            if (Object.prototype.hasOwnProperty.call(options, field) && (!Number.isInteger(options[field]) || options[field] < 0)) {
-              throw new TypeError("events handler " + field + " must be a non-negative integer");
-            }
-          });
-          if (options.usesState !== void 0 && options.usesState !== true) {
-            throw new TypeError("events handler usesState may only be true");
-          }
-          if (options.latestCallWins !== void 0 && options.latestCallWins !== true) {
-            throw new TypeError("events handler latestCallWins may only be true");
-          }
-          if (options.allowBatching !== void 0 && options.allowBatching !== false) {
-            throw new TypeError("events handler allowBatching may only be false");
-          }
-        });
-        if (candidate.writableStateFields !== void 0 && (!Array.isArray(candidate.writableStateFields) || candidate.writableStateFields.some(function(field) {
-          return typeof field !== "string" || !field;
-        }) || new Set(candidate.writableStateFields).size !== candidate.writableStateFields.length)) {
-          throw new TypeError("events writableStateFields must contain unique, non-empty strings");
-        }
-        var descriptor = candidate;
-        classIds.add(descriptor.componentClassId);
-        stagedClasses.push([descriptor.componentClassId, descriptor]);
-      });
-      var componentIds = /* @__PURE__ */ new Set();
       var stagedInstances = manifest.componentInstances.map(function(candidate) {
-        if (!isPlainObject(candidate) || !hasExactKeys(candidate, ["renderId", "componentClassId", "stateToken", "publicState"])) {
-          throw new TypeError("events component instance must contain exactly its protocol fields");
-        }
-        var componentId = candidate.renderId;
-        if (typeof componentId !== "string" || !componentId)
-          throw new TypeError("events renderId must be non-empty text");
-        if (!isSafeRenderId(componentId)) {
-          throw new TypeError("events renderId must be safe for an HTML attribute name");
-        }
-        if (componentIds.has(componentId)) throw new TypeError("events manifest repeats a renderId");
-        componentIds.add(componentId);
-        if (typeof candidate.componentClassId !== "string" || !candidate.componentClassId) {
-          throw new TypeError("events instance componentClassId must be non-empty text");
-        }
-        if (!classIds.has(candidate.componentClassId)) {
-          throw new TypeError("events instance refers to an unknown componentClassId");
-        }
-        if (candidate.stateToken !== null && (typeof candidate.stateToken !== "string" || !candidate.stateToken)) {
-          throw new TypeError("events stateToken must be non-empty text or null");
-        }
-        if (!isPlainObject(candidate.publicState) || !isJsonValue(candidate.publicState)) {
-          throw new TypeError("events publicState must be a strict JSON object");
-        }
-        if (candidate.stateToken === null && Object.keys(candidate.publicState).length) {
-          throw new TypeError("a stateless events instance cannot carry publicState");
-        }
         return {
-          componentId,
+          componentId: candidate.renderId,
           classId: candidate.componentClassId,
           token: candidate.stateToken,
-          values: candidate.publicState
+          values: candidate.publicState,
+          descriptorRevision
         };
       });
-      return { classes: stagedClasses, instances: stagedInstances };
+      return { manifest, classes: stagedClasses, instances: stagedInstances };
     };
-    var applyEventsManifest = function(manifest) {
-      var staged = stageEventsManifest(manifest);
-      var graphRevision = manifest.clientGraphRevision;
+    var applyEventsManifest = function(staged) {
+      var graphRevision = staged.manifest.clientGraphRevision;
       var ownership = graphRevision ? globalThis.Citry?.manager?.ownership : null;
+      var displacedDescriptorRevisions = /* @__PURE__ */ new Set();
       if (graphRevision) {
         if (!ownership) throw new Error("the ownership graph registry is unavailable");
         ownership._preflightEvents(graphRevision, staged.instances);
       }
-      installClassDescriptors(staged.classes, true);
+      installClassDescriptors(staged.classes, true, graphRevision ?? void 0);
       staged.instances.forEach(function(meta) {
         var existing = idToAnchor.get(meta.componentId);
         var eventsAnchor;
+        var previousDescriptorRevision;
         if (existing) {
           if (meta.token) existing.token = meta.token;
+          previousDescriptorRevision = existing.descriptorRevision;
+          existing.descriptorRevision = meta.descriptorRevision;
+          refreshWritableFields(existing, true);
+          refreshErrorHandlers(existing);
+          if (previousDescriptorRevision !== existing.descriptorRevision && previousDescriptorRevision != null)
+            displacedDescriptorRevisions.add(previousDescriptorRevision);
           eventsAnchor = existing;
         } else {
-          eventsAnchor = createAnchor(meta.componentId, meta.classId, meta.token || "", meta.values);
+          eventsAnchor = createAnchor(
+            meta.componentId,
+            meta.classId,
+            meta.token || "",
+            meta.values,
+            meta.descriptorRevision
+          );
         }
         if (graphRevision && ownership) {
           eventsAnchor.clientAnchor = ownership._attachEvents(
@@ -4311,19 +5864,72 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         }
         attachBoundaryScopes(meta.componentId);
       });
+      return displacedDescriptorRevisions;
     };
     var EVENTS_MANIFEST_SELECTOR = 'script[type="application/json"][data-citry-events]';
     var consumedOwnershipRevisions = /* @__PURE__ */ new Set();
-    var applyEventsManifestTransaction = function(manifest) {
-      var graphRevision = manifest.clientGraphRevision;
+    var applyEventsManifestTransaction = function(staged) {
+      var graphRevision = staged.manifest.clientGraphRevision;
       var ownership = graphRevision ? globalThis.Citry?.manager?.ownership : null;
+      var classIds = new Set(
+        staged.classes.map(function(entry) {
+          return entry[0];
+        })
+      );
+      var priorClasses = staged.classes.map(function(entry) {
+        return { classId: entry[0], had: classes.has(entry[0]), descriptor: classes.get(entry[0]) };
+      });
+      var priorErrorBoxes = snapshotErrorBoxesForClasses(classIds);
+      var hadDescriptorRevision = graphRevision != null && descriptorRevisions.has(graphRevision);
+      var priorDescriptorRevision = graphRevision == null ? void 0 : descriptorRevisions.get(graphRevision);
+      var priorAnchors = staged.instances.map(function(meta) {
+        var anchor = idToAnchor.get(meta.componentId) || null;
+        return {
+          componentId: meta.componentId,
+          anchor,
+          token: anchor?.token,
+          descriptorRevision: anchor?.descriptorRevision,
+          clientAnchor: anchor?.clientAnchor
+        };
+      });
+      var displacedDescriptorRevisions;
       try {
-        applyEventsManifest(manifest);
+        displacedDescriptorRevisions = applyEventsManifest(staged);
         if (graphRevision) {
           consumedOwnershipRevisions.add(graphRevision);
           ownership._finishEvents(graphRevision, null);
         }
+        displacedDescriptorRevisions.forEach(scheduleDescriptorPrune);
       } catch (err) {
+        if (graphRevision != null) {
+          restoreDescriptorRevision(graphRevision, hadDescriptorRevision, priorDescriptorRevision);
+        } else {
+          priorClasses.forEach(function(entry) {
+            if (entry.had) classes.set(entry.classId, entry.descriptor);
+            else classes.delete(entry.classId);
+          });
+        }
+        priorAnchors.slice().reverse().forEach(function(snapshot) {
+          var current = idToAnchor.get(snapshot.componentId) || null;
+          if (snapshot.anchor == null) {
+            if (current) retireAnchor(current);
+            return;
+          }
+          if (current && current !== snapshot.anchor) retireAnchor(current);
+          var failedRevision = snapshot.anchor.descriptorRevision;
+          if (snapshot.anchor.clientAnchor && snapshot.anchor.clientAnchor !== snapshot.clientAnchor) {
+            ownership?._detachEvents(snapshot.anchor.clientAnchor, snapshot.anchor);
+          }
+          snapshot.anchor.clientAnchor = snapshot.clientAnchor;
+          snapshot.anchor.token = snapshot.token;
+          snapshot.anchor.descriptorRevision = snapshot.descriptorRevision;
+          idToAnchor.set(snapshot.componentId, snapshot.anchor);
+          if (failedRevision !== snapshot.anchor.descriptorRevision && failedRevision != null) {
+            scheduleDescriptorPrune(failedRevision);
+          }
+        });
+        refreshAnchorsForClasses(classIds, false, graphRevision ?? void 0);
+        restoreErrorBoxes(priorErrorBoxes);
         if (graphRevision && ownership) ownership._finishEvents(graphRevision, err);
         throw err;
       }
@@ -4334,12 +5940,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       el.dataset.citryEventsProcessed = "";
       try {
         const manifest = JSON.parse(el.textContent);
-        const candidateRevision = isPlainObject(manifest) ? manifest.clientGraphRevision : null;
+        const candidateRevision = isPlainObject2(manifest) ? manifest.clientGraphRevision : null;
         const preceding = el.previousElementSibling;
         let pairedRevision = null;
         if (preceding?.matches('script[type="application/json"][data-citry-graph]')) {
           const graphManifest = JSON.parse(preceding.textContent);
-          if (isPlainObject(graphManifest) && typeof graphManifest.revision === "string" && /^[0-9a-f]{64}$/.test(graphManifest.revision)) {
+          if (isPlainObject2(graphManifest) && typeof graphManifest.revision === "string" && /^[0-9a-f]{64}$/.test(graphManifest.revision)) {
             pairedRevision = graphManifest.revision;
           }
         }
@@ -4357,8 +5963,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           reservedRevision = reservationRevision;
         }
         try {
-          stageEventsManifest(manifest);
-          const graphRevision = manifest.clientGraphRevision;
+          const staged = stageEventsManifest(manifest);
+          const graphRevision = staged.manifest.clientGraphRevision;
           if (reservedRevision && graphRevision !== reservedRevision) {
             throw new TypeError("a graph-backed Events manifest must link to its paired ownership revision");
           }
@@ -4370,7 +5976,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
               ownership.whenReady(graphRevision).then(
                 function() {
                   try {
-                    applyEventsManifestTransaction(manifest);
+                    applyEventsManifestTransaction(staged);
                   } catch (err) {
                     console.error("[Citry] failed to process events manifest:", err);
                   }
@@ -4385,7 +5991,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             }
           }
           handedOff = true;
-          applyEventsManifestTransaction(manifest);
+          applyEventsManifestTransaction(staged);
         } catch (err) {
           if (reservedRevision && ownership && !handedOff) ownership._finishEvents(reservedRevision, err);
           throw err;
@@ -4472,10 +6078,6 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var handlers = anchor.loading.handlers;
       if (typeof handlers[name] === "number" && handlers[name] > 0) handlers[name] -= 1;
     };
-    var PROTOCOL = "citry-events/1";
-    var CLIENT_SWAPS = ["morph", "replace", "inner", "append", "prepend", "remove", "none"];
-    var CLIENT_ACTIONS = ["render", "data", "state", "event", "redirect", "url"];
-    var MAX_CALLS_PER_ENVELOPE = 16;
     var DEFAULT_TIMEOUT_MS = 3e4;
     var CSRF_COOKIE_DEFAULT = "csrftoken";
     var CSRF_HEADER_DEFAULT = "X-CSRFToken";
@@ -4559,12 +6161,16 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         }
         appendValue(name, value);
       });
-      if (call.callerRenderId) query.set("_citry_caller_render_id", call.callerRenderId);
-      if (call.stateToken) query.set("_citry_state_token", call.stateToken);
-      if (typeof call.sendSequence === "number") query.set("_citry_send_sequence", String(call.sendSequence));
-      query.set("_citry_protocol", envelope.protocol);
-      query.set("_citry_request_id", envelope.requestId);
-      if (envelope.capabilities) query.set("_citry_capabilities", JSON.stringify(envelope.capabilities));
+      if (call.callerRenderId) query.set(CARRIER_FIELDS.callerRenderId, call.callerRenderId);
+      if (call.stateToken) query.set(CARRIER_FIELDS.stateToken, call.stateToken);
+      if (typeof call.sendSequence === "number") {
+        query.set(CARRIER_FIELDS.sendSequence, String(call.sendSequence));
+      }
+      query.set(CARRIER_FIELDS.protocol, envelope.protocol);
+      query.set(CARRIER_FIELDS.requestId, envelope.requestId);
+      if (envelope.capabilities) {
+        query.set(CARRIER_FIELDS.capabilities, JSON.stringify(envelope.capabilities));
+      }
       return query.toString();
     };
     var resolveTimeoutMs = function(opts) {
@@ -4613,100 +6219,11 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       };
       return record;
     };
-    var isObj = isPlainObject;
-    var ERROR_STATUSES = {
-      invalid_args: 422,
-      invalid_state: 403,
-      stale_state: 409,
-      unknown_event: 404,
-      unknown_component: 404,
-      forbidden: 403,
-      not_found: 404,
-      conflict: 409,
-      error: null,
-      csrf_failed: 403,
-      payload_too_large: 413,
-      protocol_mismatch: 400,
-      handler_error: 500
-    };
-    var isWireError = function(e) {
-      if (!isObj(e) || !hasExactKeys(e, ["status", "code", "message"], ["fieldErrors"])) return false;
-      if (!Number.isInteger(e.status) || e.status < 400 || e.status > 599) return false;
-      if (typeof e.code !== "string" || !Object.prototype.hasOwnProperty.call(ERROR_STATUSES, e.code)) return false;
-      if (ERROR_STATUSES[e.code] !== null && ERROR_STATUSES[e.code] !== e.status) return false;
-      if (typeof e.message !== "string" || !e.message) return false;
-      return e.fieldErrors === void 0 || isObj(e.fieldErrors) && Object.values(e.fieldErrors).every((value) => typeof value === "string");
-    };
     var badReply = (reason) => clientError("transport_error", "invalid event response (" + reason + ").");
-    var isActionTarget = function(value) {
-      if (typeof value !== "string" || !value) return false;
-      if (value.indexOf("render:") !== 0) return true;
-      return isSafeRenderId(value.slice(7));
-    };
-    var validateWireAction = function(candidate) {
-      if (!isObj(candidate) || typeof candidate.action !== "string") return false;
-      if (candidate.delay !== void 0 && (typeof candidate.delay !== "number" || !Number.isFinite(candidate.delay) || candidate.delay < 0) || candidate.wait !== void 0 && candidate.wait !== false) {
-        return false;
-      }
-      var timing = ["delay", "wait"];
-      if (candidate.action === "render") {
-        return hasExactKeys(candidate, ["action", "target", "swap", "html"], timing) && isActionTarget(candidate.target) && typeof candidate.swap === "string" && CLIENT_SWAPS.indexOf(candidate.swap) !== -1 && typeof candidate.html === "string";
-      }
-      if (candidate.action === "data") {
-        return hasExactKeys(candidate, ["action", "value"], ["delay"]) && isJsonValue(candidate.value);
-      }
-      if (candidate.action === "state") {
-        return hasExactKeys(candidate, ["action", "targetRenderId", "stateToken"], timing) && typeof candidate.targetRenderId === "string" && isSafeRenderId(candidate.targetRenderId) && typeof candidate.stateToken === "string" && !!candidate.stateToken;
-      }
-      if (candidate.action === "event") {
-        return hasExactKeys(candidate, ["action", "eventName"], ["detail", "target"].concat(timing)) && typeof candidate.eventName === "string" && !!candidate.eventName && candidate.eventName.indexOf("citry:") !== 0 && (candidate.detail === void 0 || isJsonValue(candidate.detail)) && (candidate.target === void 0 || isActionTarget(candidate.target));
-      }
-      if (candidate.action === "redirect") {
-        return hasExactKeys(candidate, ["action", "url"], timing) && typeof candidate.url === "string" && !!candidate.url;
-      }
-      if (candidate.action === "url") {
-        return hasExactKeys(candidate, ["action", "url", "mode"], timing) && typeof candidate.url === "string" && !!candidate.url && (candidate.mode === "push" || candidate.mode === "replace");
-      }
-      return false;
-    };
-    var validateOkResult = function(candidate, expectedSequence) {
-      if (!hasExactKeys(candidate, ["ok", "actions"], ["sendSequence"]) || candidate.ok !== true) return false;
-      if (!Array.isArray(candidate.actions) || !candidate.actions.every(validateWireAction)) return false;
-      if (candidate.actions.filter(function(action) {
-        return action.action === "data";
-      }).length > 1)
-        return false;
-      return candidate.sendSequence === expectedSequence;
-    };
-    var validateErrorResult = function(candidate, expectedSequence, checkSequence = true) {
-      if (!hasExactKeys(candidate, ["ok", "error"], ["sendSequence"]) || candidate.ok !== false) return false;
-      if (!isWireError(candidate.error)) return false;
-      if (candidate.sendSequence !== void 0 && (!Number.isInteger(candidate.sendSequence) || candidate.sendSequence < 0)) {
-        return false;
-      }
-      return !checkSequence || candidate.sendSequence === expectedSequence;
-    };
     var preflight = function(reply, sent) {
-      if (!isObj(reply) || !hasExactKeys(reply, ["protocol", "requestId", "results"]) || reply.protocol !== PROTOCOL || !Array.isArray(reply.results) || !reply.results.length) {
-        throw badReply("header");
-      }
-      var results = reply.results;
-      if (reply.requestId === null) {
-        const edge = results[0];
-        if (results.length !== 1 || !isObj(edge) || edge.sendSequence !== void 0 || !validateErrorResult(edge, void 0, false) || !isObj(edge.error) || edge.error.fieldErrors !== void 0 || edge.error.code !== "protocol_mismatch" && edge.error.code !== "payload_too_large") {
-          throw badReply("edge");
-        }
-        return sent.calls.map(() => edge);
-      }
-      if (reply.requestId !== sent.requestId || results.length !== sent.calls.length) throw badReply("correlation");
-      results.forEach((item, slot) => {
-        if (!isObj(item)) throw badReply("result " + slot);
-        var expectedSequence = sent.calls[slot].sendSequence;
-        if (!validateOkResult(item, expectedSequence) && !validateErrorResult(item, expectedSequence)) {
-          throw badReply("result " + slot);
-        }
-      });
-      return results;
+      var checked = preflightResultEnvelope(reply, sent);
+      if (!checked.ok) throw badReply(checked.reason);
+      return checked.results;
     };
     var fireRecordSettled = function(record) {
       var hook = record.onSettled;
@@ -4715,6 +6232,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
     var settleRecordFromResult = function(record, result, slot) {
       var error2;
+      var saveError;
       var dataFired = false;
       var ctx;
       var download;
@@ -4756,8 +6274,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           saveDownload(download);
           record.resolve(void 0);
         } catch (err) {
-          console.error("[Citry] events: saving the download from '" + record.event + "' failed:", err);
-          record.reject(toErrorEnvelope(err));
+          saveError = toErrorEnvelope(err);
+          console.error("[Citry] events: saving the download from '" + record.event + "' failed: " + saveError.message);
+          record.reject(saveError);
         }
         return Promise.resolve();
       }
@@ -4783,14 +6302,13 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     var sendRecordsOverWire = function(records) {
       var impl;
       var dispatched;
-      var envelope = {
-        protocol: PROTOCOL,
-        requestId: mintCorrelationId(),
-        capabilities: { swaps: CLIENT_SWAPS.slice(), actions: CLIENT_ACTIONS.slice() },
-        calls: records.map(function(record) {
+      var envelope = buildCallEnvelope(
+        mintCorrelationId(),
+        records.map(function(record) {
           return record.call;
-        })
-      };
+        }),
+        fullClientCapabilities()
+      );
       try {
         impl = activeTransport();
       } catch (err) {
@@ -4959,14 +6477,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       }
       return response.blob().then(function(blob) {
         var call = envelope.calls[0];
-        var result = { ok: true, actions: [] };
-        if (typeof call.sendSequence === "number") result.sendSequence = call.sendSequence;
-        stagedDownloads.set(result, { blob, filename });
-        return {
-          protocol: PROTOCOL,
-          requestId: envelope.requestId,
-          results: [result]
-        };
+        var result = buildOkResult([], call.sendSequence);
+        var resultEnvelope = buildResultEnvelope(envelope.requestId, [result]);
+        stagedDownloads.set(resultEnvelope.results[0], { blob, filename });
+        return resultEnvelope;
       });
     };
     var fetchTransport = {
@@ -4974,7 +6488,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         var base = eventsBaseUrl();
         var single = envelope.calls.length === 1 ? envelope.calls[0] : null;
         var url = single ? base + "e/" + encodeURIComponent(single.componentClassId) + "/" + encodeURIComponent(single.handlerName) : base + "call";
-        var method = single && eventHttpMethod(single.componentClassId, single.handlerName) === "GET" ? "GET" : "POST";
+        var singleAnchor = single ? idToAnchor.get(single.callerRenderId) || null : null;
+        var method = single && eventHttpMethod(singleAnchor || single.componentClassId, single.handlerName) === "GET" ? "GET" : "POST";
         var request = { method, credentials: "same-origin" };
         if (method === "GET" && single) {
           const encodedQuery = encodeGetCallQuery(envelope, single);
@@ -5039,10 +6554,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       entries.forEach(function(entry) {
         requireDeclaredEvent(entry.anchor, entry.name, "sendEvent");
         const args = entry.args == null ? {} : entry.args;
-        if (!isPlainObject(args) || !isJsonValue(args)) {
+        if (!isPlainObject2(args) || !isJsonValue(args)) {
           throw pointedError("the args for event '" + entry.name + "' must be a strict JSON object.");
         }
-        if (eventHttpMethod(entry.anchor.classId, entry.name) !== "GET" && !isJsonValue(entry.anchor.pending)) {
+        if (eventHttpMethod(entry.anchor, entry.name) !== "GET" && !isJsonValue(entry.anchor.pending)) {
           throw pointedError("the pending State updates for event '" + entry.name + "' must be strict JSON values.");
         }
       });
@@ -5053,6 +6568,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         var outcomeGeneration;
         var record;
         var dispatched;
+        var callDescriptorRevision;
         if (!fireLifecycle("citry:events:before", anchor, name, {}, true)) {
           fireLifecycle("citry:events:after", anchor, name, { ok: false });
           if (entry.onSettled) entry.onSettled();
@@ -5066,25 +6582,29 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           errorSlot.latestStartedIntent = Math.max(errorSlot.latestStartedIntent, entry.intentSequence);
         }
         anchor.epoch += 1;
-        var call = {
-          componentClassId: anchor.classId,
-          handlerName: name,
-          callerRenderId: anchor.componentId,
-          args: entry.args || {},
-          sendSequence: anchor.epoch
-        };
-        if (anchor.token && (eventHttpMethod(anchor.classId, name) !== "GET" || eventDeclaresState(anchor.classId, name))) {
-          call.stateToken = anchor.token;
+        var stateToken;
+        var stateUpdates;
+        if (anchor.token && (eventHttpMethod(anchor, name) !== "GET" || eventDeclaresState(anchor, name))) {
+          stateToken = anchor.token;
         }
-        if (eventHttpMethod(anchor.classId, name) !== "GET") {
+        if (eventHttpMethod(anchor, name) !== "GET") {
           collectPendingTwoWayDrafts(anchor);
           dropInvalidPendingFields(anchor, "before send");
           const pendingKeys = Object.keys(anchor.pending);
           if (pendingKeys.length) {
-            call.stateUpdates = anchor.pending;
+            stateUpdates = anchor.pending;
             anchor.pending = {};
           }
         }
+        var call = buildCall({
+          componentClassId: anchor.classId,
+          handlerName: name,
+          callerRenderId: anchor.componentId,
+          args: entry.args || {},
+          stateToken,
+          stateUpdates,
+          sendSequence: anchor.epoch
+        });
         var viaStub = Boolean(transportImpl);
         if (transportImpl) {
           try {
@@ -5100,7 +6620,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           dispatched = record.promise;
         }
         if (!entry.queueManaged) beginLoading(anchor, name);
-        return dispatched.then(
+        callDescriptorRevision = anchor.descriptorRevision;
+        retainDescriptorRevisionForCall(callDescriptorRevision);
+        var lifecyclePromise = dispatched.then(
           function(result) {
             if (!entry.queueManaged) endLoading(anchor, name);
             var successSlot = anchor.errorBox.handlers[name];
@@ -5147,6 +6669,16 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             throw err;
           }
         );
+        return lifecyclePromise.then(
+          function(result) {
+            releaseDescriptorRevisionForCall(callDescriptorRevision);
+            return result;
+          },
+          function(err) {
+            releaseDescriptorRevisionForCall(callDescriptorRevision);
+            throw err;
+          }
+        );
       });
       if (wireRecords.length) sendRecordsOverWire(wireRecords);
       return promises;
@@ -5167,7 +6699,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       return { wait };
     };
     var eventKnobs = function(anchor, name) {
-      var descriptor = classes.get(anchor.classId);
+      var descriptor = descriptorFor(anchor);
       var options = descriptor && descriptor.eventHandlers ? descriptor.eventHandlers[name] : null;
       return {
         bundle: !options || options.allowBatching !== false,
@@ -5330,7 +6862,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var physicalId;
       if (node.carrierLive && !node.carrierLive()) return "dead";
       if (node.element) {
-        if (!node.element.isConnected) return "dead";
+        if (!elementIsInCurrentDocument(node.element)) return "dead";
         if (!node.ownerLocked) {
           if (node.physicalOwner) {
             physicalId = innermostPhysicalComponentId(node.element);
@@ -5358,7 +6890,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           if (anchor.seenInDom && !document.querySelector("[data-cid-" + anchor.componentId + "]")) return "dead";
         }
       }
-      if (anchor.classId == null || declaredEvents(anchor.classId).indexOf(node.name) === -1) return "dead";
+      if (anchor.classId == null || declaredEvents(anchor).indexOf(node.name) === -1) return "dead";
       if (anchor !== node.anchor) transferGesture(node, anchor);
       addContainmentEdges(node);
       return node.deps.size ? "hold" : "dispatch";
@@ -5369,7 +6901,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       ready.forEach(function(node) {
         if (!node.bundle) return;
         bundled.push(node);
-        if (bundled.length === MAX_CALLS_PER_ENVELOPE) {
+        if (bundled.length === CALLS_LIMIT) {
           chunks.push(bundled);
           bundled = [];
         }
@@ -5538,6 +7070,11 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       );
     };
     var sendFromElement = function(el, name, args, opts, recurringKey) {
+      if (!elementIsInCurrentDocument(el)) {
+        fireStale(null, name, "cancelled");
+        console.debug("[Citry] events: dropped a '" + name + "' send: its element is not live in this document.");
+        return null;
+      }
       var projectedOwner = projectedComponentId(el);
       if (projectedOwner !== void 0) {
         if (projectedOwner === null) {
@@ -5550,7 +7087,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         });
       }
       var anchor = el && el.nodeType === 1 ? anchorForElement(el) : null;
-      if (!anchor || anchor.classId == null || declaredEvents(anchor.classId).indexOf(name) === -1) {
+      if (!anchor || anchor.classId == null || declaredEvents(anchor).indexOf(name) === -1) {
         fireStale(anchor, name, "cancelled");
         console.debug(
           "[Citry] events: dropped a '" + name + "' send: its element resolves to no instance declaring the event."
@@ -5566,7 +7103,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         console.debug("[Citry] events: dropped a source-owned '" + name + "' send: its exact source carrier is retired.");
         return null;
       }
-      if (!anchor || anchor.classId == null || declaredEvents(anchor.classId).indexOf(name) === -1) {
+      if (!anchor || anchor.classId == null || declaredEvents(anchor).indexOf(name) === -1) {
         fireStale(anchor, name, "cancelled");
         console.debug(
           "[Citry] events: dropped a source-owned '" + name + "' send: its authored component instance is no longer live or does not declare the event."
@@ -5627,9 +7164,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
     var sendCalls = function(intents) {
       if (!Array.isArray(intents) || !intents.length) return [];
-      if (intents.length > MAX_CALLS_PER_ENVELOPE) {
+      if (intents.length > CALLS_LIMIT) {
         throw pointedError(
-          "one envelope carries at most " + MAX_CALLS_PER_ENVELOPE + " calls (the protocol cap, design 4.2); split the batch before sending (" + intents.length + " given)."
+          "one envelope carries at most " + CALLS_LIMIT + " calls (the protocol cap, design 4.2); split the batch before sending (" + intents.length + " given)."
         );
       }
       var entries = intents.map(function(intent) {
@@ -5769,18 +7306,32 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         return spec != null && spec.mode === "two" && typeof spec.field === "string" && Object.prototype.hasOwnProperty.call(anchor.pending, spec.field);
       });
     };
+    var applyMultipleSelectValue = function(select, value) {
+      var selectedValues = new Set(Array.isArray(value) ? value.map(String) : []);
+      Array.from(select.options).forEach(function(option) {
+        var selected = selectedValues.has(option.value);
+        if (option.selected !== selected) option.selected = selected;
+      });
+    };
     var keepLiveValue = function(el, toEl, guardKept) {
       var live = el;
       var incoming = toEl;
+      var guardedValue;
+      if (el.tagName === "SELECT" && el.multiple && toEl.tagName === "SELECT" && toEl.multiple) {
+        guardedValue = Array.from(el.selectedOptions, function(option) {
+          return option.value;
+        });
+      } else if (live.type === "checkbox" || live.type === "radio") {
+        guardedValue = live.checked;
+      } else {
+        guardedValue = live.value;
+      }
+      applyValueToControl(toEl, guardedValue);
       if (live.type === "checkbox" || live.type === "radio") {
-        incoming.checked = live.checked;
         if (live.checked) incoming.setAttribute("checked", "");
         else incoming.removeAttribute("checked");
-      } else if (typeof live.value === "string") {
-        incoming.value = live.value;
-        incoming.setAttribute("value", live.value);
-      }
-      guardKept.add(el);
+      } else if (typeof live.value === "string") incoming.setAttribute("value", live.value);
+      guardKept.set(el, guardedValue);
     };
     var morphKeyCallback = function(el) {
       return el.getAttribute && el.getAttribute("data-citry-key");
@@ -5790,13 +7341,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         if (el.nodeType !== 1) return;
         var element = el;
         if (element.getAttribute("data-citry-morph") === "ignore") {
-          if (element.hasAttribute("data-cid")) {
-            console.warn(
-              '[Citry] events: #c-ignore (data-citry-morph="ignore") on a component instance root is unsupported and was not applied; move it onto an element below the root, or onto a wrapper.'
-            );
-          } else {
-            return skip();
-          }
+          return skip();
         }
         if (element === document.activeElement && isTwoWayBound(element) && hasUnsentDraft(element)) {
           keepLiveValue(element, toEl, guardKept);
@@ -5825,7 +7370,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var control = el;
       var nextChecked;
       var next;
-      if (control.type === "checkbox" || control.type === "radio") {
+      if (el.tagName === "SELECT" && el.multiple) {
+        applyMultipleSelectValue(el, value);
+      } else if (control.type === "checkbox" || control.type === "radio") {
         nextChecked = Boolean(value);
         if (control.checked !== nextChecked) control.checked = nextChecked;
       } else if (typeof control.value === "string") {
@@ -5842,8 +7389,14 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           els.push(el);
         });
         els.forEach(function(el) {
-          if (seen.has(el) || guardKept.has(el)) return;
+          var guardedValue;
+          if (seen.has(el)) return;
           seen.add(el);
+          if (guardKept.has(el)) {
+            guardedValue = guardKept.get(el);
+            if (guardedValue !== void 0) applyValueToControl(el, guardedValue);
+            return;
+          }
           var anchor = anchorForElement(el);
           if (!anchor || !anchor.values) return;
           decodeBindSpecs(el).forEach(function(spec) {
@@ -5913,17 +7466,17 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     var readFragmentMetas = function(parsed) {
       var metas = /* @__PURE__ */ new Map();
       if (!parsed.eventsTag) return { manifest: null, staged: null, metas };
-      var manifest = JSON.parse(parsed.eventsTag.textContent);
-      var staged = stageEventsManifest(manifest);
+      var staged = stageEventsManifest(JSON.parse(parsed.eventsTag.textContent));
       staged.instances.forEach(function(meta) {
         metas.set(meta.componentId, {
           componentId: meta.componentId,
           classId: meta.classId,
           token: meta.token || void 0,
-          values: meta.values
+          values: meta.values,
+          descriptorRevision: parsed.graphRevision
         });
       });
-      return { manifest, staged, metas };
+      return { manifest: staged.manifest, staged, metas };
     };
     var fragmentRootMeta = function(parsed, metas) {
       var root = parsed.roots.length ? parsed.roots[0] : null;
@@ -5936,137 +7489,6 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         return Boolean(meta);
       });
       return found;
-    };
-    var collectKeyedRoots = function(containers, classOf, exclude) {
-      var keyedEls = /* @__PURE__ */ new Map();
-      var entries = [];
-      var seenInstances = /* @__PURE__ */ new Set();
-      var consider = function(el) {
-        if (keyedEls.has(el)) return;
-        var composite = el.getAttribute("data-citry-key") || "";
-        var sep = composite.indexOf(":");
-        if (sep <= 0) return;
-        var classId = composite.slice(0, sep);
-        var ids = (el.getAttribute("data-cid") || "").trim().split(/\s+/).filter(Boolean);
-        var instanceId = null;
-        ids.some(function(id) {
-          if (classOf(id) === classId) instanceId = id;
-          return instanceId != null;
-        });
-        if (instanceId == null || exclude.has(instanceId)) return;
-        keyedEls.set(el, instanceId);
-        if (seenInstances.has(instanceId)) return;
-        seenInstances.add(instanceId);
-        entries.push({ el, composite, instanceId });
-      };
-      containers.forEach(function(container) {
-        if (container.hasAttribute("data-citry-key")) consider(container);
-        container.querySelectorAll("[data-citry-key]").forEach(consider);
-      });
-      return entries.filter(function(entry) {
-        var p = entry.el.parentElement;
-        while (p) {
-          if (keyedEls.has(p)) return false;
-          p = p.parentElement;
-        }
-        return true;
-      });
-    };
-    var linkKeyedPair = function(old, fresh, metas, state, newContainers) {
-      var anchor = idToAnchor.get(old.instanceId);
-      var meta = metas.get(fresh.instanceId);
-      var oldEls = Array.prototype.slice.call(document.querySelectorAll("[data-cid-" + old.instanceId + "]"));
-      var freshEls = [];
-      newContainers.forEach(function(container) {
-        if (container.hasAttribute("data-cid-" + fresh.instanceId)) freshEls.push(container);
-        container.querySelectorAll("[data-cid-" + fresh.instanceId + "]").forEach(function(el) {
-          freshEls.push(el);
-        });
-      });
-      if (!anchor || anchor.componentId !== old.instanceId || !meta) {
-        const ownership = globalThis.Citry?.manager?.ownership;
-        if (!ownership || !ownership._correspond(old.instanceId, fresh.instanceId)) return;
-        state.linkedOldIds.add(old.instanceId);
-        state.appliedIds.add(fresh.instanceId);
-        matchKeyedRegion(oldEls, freshEls, metas, state);
-        return;
-      }
-      var link = linkRenderedInstance(anchor, meta);
-      anchor.highestApplied = anchor.epoch;
-      anchor.epochOwner = null;
-      state.linkedOldIds.add(old.instanceId);
-      state.appliedIds.add(fresh.instanceId);
-      state.pendingFinish.push({ anchor, oldComponentId: link.oldComponentId });
-      state.linkedAnchors.push(anchor);
-      matchKeyedRegion(oldEls, freshEls, metas, state);
-    };
-    var matchKeyedRegion = function(oldContainers, newContainers, metas, state) {
-      var oldRoots = collectKeyedRoots(
-        oldContainers,
-        function(id) {
-          var anchor = idToAnchor.get(id);
-          return anchor ? anchor.classId : globalThis.Citry?.manager?.ownership?._classForRender(id) || null;
-        },
-        state.linkedOldIds
-      );
-      var newRoots = collectKeyedRoots(
-        newContainers,
-        function(id) {
-          var meta = metas.get(id);
-          return meta ? meta.classId : globalThis.Citry?.manager?.ownership?._classForRender(id) || null;
-        },
-        state.appliedIds
-      );
-      if (!oldRoots.length || !newRoots.length) return;
-      var oldByKey = /* @__PURE__ */ new Map();
-      oldRoots.forEach(function(root) {
-        var queue2 = oldByKey.get(root.composite);
-        if (!queue2) {
-          queue2 = [];
-          oldByKey.set(root.composite, queue2);
-        }
-        queue2.push(root);
-      });
-      var newCounts = /* @__PURE__ */ new Map();
-      newRoots.forEach(function(root) {
-        newCounts.set(root.composite, (newCounts.get(root.composite) || 0) + 1);
-      });
-      var dupWarned = /* @__PURE__ */ new Set();
-      newRoots.forEach(function(fresh) {
-        var queue2 = oldByKey.get(fresh.composite);
-        if (!queue2 || !queue2.length) return;
-        if ((queue2.length > 1 || (newCounts.get(fresh.composite) || 0) > 1) && !dupWarned.has(fresh.composite)) {
-          dupWarned.add(fresh.composite);
-          console.warn(
-            "[Citry] events: duplicate key '" + fresh.composite + "' within one applied region; matched in document order. Component keys must be unique per class within a region (design 5.3)."
-          );
-        }
-        var old = queue2.shift();
-        linkKeyedPair(old, fresh, metas, state, newContainers);
-      });
-    };
-    var preserveCallerKey = function(oldEls, caller, freshId, parsed) {
-      var oldKey = null;
-      oldEls.some(function(el) {
-        var value = el.getAttribute("data-citry-key");
-        if (value && caller.classId != null && value.indexOf(caller.classId + ":") === 0) oldKey = value;
-        return oldKey != null;
-      });
-      if (oldKey == null) return;
-      parsed.roots.forEach(function(root) {
-        if (root.hasAttribute("data-cid-" + freshId) && !root.hasAttribute("data-citry-key")) {
-          root.setAttribute("data-citry-key", oldKey);
-        }
-      });
-    };
-    var childElementsOf = function(els) {
-      var children = [];
-      els.forEach(function(el) {
-        Array.prototype.slice.call(el.children).forEach(function(child) {
-          children.push(child);
-        });
-      });
-      return children;
     };
     var groupAdjacentRuns = function(els) {
       var runs = [];
@@ -6088,16 +7510,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         el.querySelectorAll("[data-cid]").forEach(record);
       });
     };
-    var OWNERSHIP_COMMENT_PREFIX = "citry:g1";
-    var OWNERSHIP_COMMENT_RE = new RegExp(
-      "^" + OWNERSHIP_COMMENT_PREFIX + ":([0-9a-f]{64}):(\\d+):([ir]):(\\d+):([se])$"
-    );
-    var OWNERSHIP_INSTANCE_START_RE = new RegExp("^(" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:\\d+:i:\\d+):s$");
-    var OWNERSHIP_INSTANCE_CAP_RE = new RegExp("^" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:\\d+:i:\\d+:[se]$");
+    var OWNERSHIP_INSTANCE_START_RE = new RegExp("^(" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:[0-9]+:i:[0-9]+):s$");
+    var OWNERSHIP_INSTANCE_CAP_RE = new RegExp("^" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:[0-9]+:i:[0-9]+:[se]$");
     var rewritePlacementComment = function(comment, placementId) {
-      var match = OWNERSHIP_COMMENT_RE.exec(comment.data.trim());
-      if (!match) return;
-      comment.data = "citry:p1:" + match[1] + ":" + placementId + ":" + match[2] + ":" + match[3] + ":" + match[4] + ":" + match[5];
+      var ownership = parseOwnershipComment(comment.data);
+      if (!ownership) return;
+      comment.data = "citry:p1:" + ownership.revision + ":" + placementId + ":" + ownership.graphId + ":" + ownership.kind + ":" + ownership.recordId + ":" + ownership.side;
     };
     var cloneForPlacement = function(node, placementId) {
       var clone2 = node.cloneNode(true);
@@ -6345,7 +7763,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var targetAnchor = null;
       var rootlessInstanceTarget = false;
       var targetId;
-      var liveTargetId;
+      var liveTargetId = null;
       var matched;
       var removed;
       var caller;
@@ -6418,10 +7836,15 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var parsed = parseFragment(typeof action.html === "string" ? action.html : "");
       var ownership = globalThis.Citry?.manager?.ownership;
       var ownershipTransaction = null;
+      var ownershipPlan = null;
       var adoptionRoot = null;
       var dependencyManifest = null;
       var priorClasses = [];
       var priorErrorBoxes = [];
+      var descriptorRevisionStaged = false;
+      var hadDescriptorRevision = false;
+      var priorDescriptorRevision;
+      var stagedDescriptorClassIds = /* @__PURE__ */ new Set();
       var fragmentEvents;
       try {
         if (parsed.graphTag) {
@@ -6476,87 +7899,22 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           markEpochApplied(run, run.anchor);
         }
         const metas = fragmentEvents.metas;
-        if (fragmentEvents.staged) {
-          const stagedClassIds = /* @__PURE__ */ new Set();
-          fragmentEvents.staged.classes.forEach(function(entry) {
-            priorClasses.push({ classId: entry[0], had: classes.has(entry[0]), descriptor: classes.get(entry[0]) });
-            stagedClassIds.add(entry[0]);
-          });
-          priorErrorBoxes = snapshotErrorBoxesForClasses(stagedClassIds);
-          installClassDescriptors(fragmentEvents.staged.classes);
-        }
         const state = {
           appliedIds: /* @__PURE__ */ new Set(),
           linkedOldIds: /* @__PURE__ */ new Set(),
           pendingFinish: [],
           linkedAnchors: [],
-          guardKept: /* @__PURE__ */ new Set(),
+          guardKept: /* @__PURE__ */ new Map(),
           departedIds: /* @__PURE__ */ new Set(),
           swappedEls: []
         };
         const focusSnapshot = captureFocus(targetEls);
         const graphTargetRegions = isInstanceTarget && !rootlessInstanceTarget && ownership && targetAnchor?.clientAnchor ? ownership._placementRoots(targetAnchor.clientAnchor) : null;
-        if (selfRender && (swap === "morph" || swap === "replace")) {
-          caller = run.anchor;
-          callerMeta = fragmentRootMeta(parsed, metas);
-          if (caller.componentId != null) state.linkedOldIds.add(caller.componentId);
-          if (callerMeta) state.appliedIds.add(callerMeta.componentId);
-          if (!callerMeta && adoptionRoot && caller.clientAnchor && ownership) {
-            if (adoptionRoot.classId === caller.classId) {
-              preserveCallerKey(targetEls, caller, adoptionRoot.componentId, parsed);
-            }
-            const oldComponentId = caller.componentId;
-            ownership._transitionEvents(caller.clientAnchor, adoptionRoot.componentId, adoptionRoot.classId);
-            retireAnchor(caller, true);
-            callerLink = { branch: "general-only", oldComponentId };
-          } else {
-            callerLink = linkRenderedInstance(caller, callerMeta);
-          }
-          if (callerLink.branch === "reconcile" || callerLink.branch === "adopt") {
-            state.pendingFinish.push({ anchor: caller, oldComponentId: callerLink.oldComponentId });
-            state.linkedAnchors.push(caller);
-          }
-          if (callerLink.branch === "reconcile" && callerMeta != null) {
-            preserveCallerKey(targetEls, caller, callerMeta.componentId, parsed);
-          }
-        }
         const regions = rootlessInstanceTarget ? ownership && targetAnchor?.clientAnchor ? ownership._placementIds(targetAnchor.clientAnchor).map(function() {
           return [];
         }) : [] : isInstanceTarget ? graphTargetRegions ? graphTargetRegions : groupAdjacentRuns(targetEls) : targetEls.map(function(el) {
           return [el];
         });
-        regions.forEach(function(regionEls) {
-          if (swap === "inner") collectInstanceIds(regionEls, false, state.departedIds);
-          else if (swap === "morph" || swap === "replace") collectInstanceIds(regionEls, true, state.departedIds);
-          if (rootlessInstanceTarget && liveTargetId != null && (swap === "morph" || swap === "replace")) {
-            state.departedIds.add(liveTargetId);
-          }
-          if (swap === "morph" || swap === "replace" || swap === "inner") {
-            matchKeyedRegion(swap === "inner" ? childElementsOf(regionEls) : regionEls, parsed.roots, metas, state);
-          }
-        });
-        if (ownershipTransaction && ownership) {
-          ownership._expectRetirement(Array.from(state.departedIds));
-        }
-        metas.forEach(function(meta, componentId) {
-          if (state.appliedIds.has(componentId) || idToAnchor.has(componentId)) return;
-          createAnchor(componentId, meta.classId, meta.token || "", meta.values || {});
-          state.appliedIds.add(componentId);
-        });
-        if (parsed.graphRevision != null && fragmentEvents.staged && ownership) {
-          const liveOwnership = ownership;
-          fragmentEvents.staged.instances.forEach(function(meta) {
-            var eventsAnchor = idToAnchor.get(meta.componentId);
-            if (!eventsAnchor) throw new TypeError("a staged Events instance has no prepared anchor");
-            eventsAnchor.clientAnchor = liveOwnership._attachEvents(
-              parsed.graphRevision,
-              meta.componentId,
-              meta.classId,
-              eventsAnchor
-            );
-          });
-        }
-        if (ownershipTransaction && ownership) ownership._activateAdoption(ownershipTransaction);
         const placementIds = [];
         if (parsed.graphRevision != null && ownership) {
           const placementOwnership = ownership;
@@ -6569,14 +7927,139 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             placementIds.push(null);
           });
         }
+        if (ownershipTransaction && ownership) {
+          const explicitRoots = adoptionRoot && isInstanceTarget && liveTargetId != null && (swap === "morph" || swap === "replace") ? [{ fromRenderId: liveTargetId, toRenderId: adoptionRoot.componentId }] : [];
+          ownershipPlan = ownership._planAdoption(ownershipTransaction, explicitRoots, {
+            bypassIgnore: swap === "replace"
+          });
+          if (swap === "morph" && isInstanceTarget && targetAnchor?.clientAnchor && adoptionRoot) {
+            const planningAnchor = targetAnchor.clientAnchor;
+            regions.forEach(function(_region, index) {
+              ownership._planPlacement(
+                ownershipPlan,
+                planningAnchor,
+                index,
+                graphRangeInnerHtml(parsed, placementIds[index]),
+                { key: morphKeyCallback }
+              );
+            });
+          }
+          if (liveTargetId != null && ownershipPlan.retainedRootFromRenderIds.has(liveTargetId)) {
+            ownership._discardAdoption(ownershipTransaction);
+            parsed.tags.forEach(function(tag) {
+              ownership?._claimTag(tag);
+              if (tag.isConnected) tag.remove();
+            });
+            fireLifecycle("citry:events:swapped", run.anchor, run.event, { els: targetEls.slice() });
+            scheduleAnchorSweep();
+            return;
+          }
+          ownership._applyAdoptionPlan(ownershipPlan);
+        }
+        const acceptedIncomingIds = ownershipPlan?.acceptedIncomingRenderIds ?? null;
+        if (fragmentEvents.staged) {
+          const acceptedClassIds = /* @__PURE__ */ new Set();
+          fragmentEvents.staged.instances.forEach(function(meta) {
+            if (!acceptedIncomingIds || acceptedIncomingIds.has(meta.componentId)) acceptedClassIds.add(meta.classId);
+          });
+          const acceptedClasses = fragmentEvents.staged.classes.filter(function(entry) {
+            return acceptedClassIds.has(entry[0]);
+          });
+          stagedDescriptorClassIds = acceptedClassIds;
+          if (parsed.graphRevision != null) {
+            descriptorRevisionStaged = true;
+            hadDescriptorRevision = descriptorRevisions.has(parsed.graphRevision);
+            priorDescriptorRevision = descriptorRevisions.get(parsed.graphRevision);
+          } else {
+            acceptedClasses.forEach(function(entry) {
+              priorClasses.push({ classId: entry[0], had: classes.has(entry[0]), descriptor: classes.get(entry[0]) });
+            });
+          }
+          priorErrorBoxes = snapshotErrorBoxesForClasses(acceptedClassIds);
+          installClassDescriptors(acceptedClasses, false, parsed.graphRevision ?? void 0);
+        }
+        if (selfRender && (swap === "morph" || swap === "replace")) {
+          caller = run.anchor;
+          callerMeta = fragmentRootMeta(parsed, metas);
+          if (caller.componentId != null) state.linkedOldIds.add(caller.componentId);
+          if (callerMeta) state.appliedIds.add(callerMeta.componentId);
+          if (!callerMeta && adoptionRoot && caller.clientAnchor && ownership) {
+            const oldComponentId = caller.componentId;
+            ownership._transitionEvents(caller.clientAnchor, adoptionRoot.componentId, adoptionRoot.classId);
+            retireAnchor(caller, true);
+            callerLink = { branch: "general-only", oldComponentId };
+          } else {
+            callerLink = linkRenderedInstance(caller, callerMeta);
+          }
+          if (callerLink.branch === "reconcile" || callerLink.branch === "adopt") {
+            state.pendingFinish.push({ anchor: caller, oldComponentId: callerLink.oldComponentId });
+            state.linkedAnchors.push(caller);
+          }
+        }
+        if (ownershipPlan) {
+          ownershipPlan.matches.forEach(function(match) {
+            if (state.linkedOldIds.has(match.fromRenderId)) return;
+            state.linkedOldIds.add(match.fromRenderId);
+            state.appliedIds.add(match.toRenderId);
+            var matchedAnchor = idToAnchor.get(match.fromRenderId);
+            var matchedMeta = metas.get(match.toRenderId);
+            if (!matchedAnchor || !matchedMeta) return;
+            var matchedLink = linkRenderedInstance(matchedAnchor, matchedMeta);
+            matchedAnchor.highestApplied = matchedAnchor.epoch;
+            matchedAnchor.epochOwner = null;
+            state.pendingFinish.push({ anchor: matchedAnchor, oldComponentId: matchedLink.oldComponentId });
+            state.linkedAnchors.push(matchedAnchor);
+          });
+        }
+        regions.forEach(function(regionEls) {
+          if (swap === "inner") collectInstanceIds(regionEls, false, state.departedIds);
+          else if (swap === "morph" || swap === "replace") collectInstanceIds(regionEls, true, state.departedIds);
+          if (rootlessInstanceTarget && liveTargetId != null && (swap === "morph" || swap === "replace")) {
+            state.departedIds.add(liveTargetId);
+          }
+        });
+        if (ownershipTransaction && ownership) {
+          ownershipPlan?.retainedOldRenderIds.forEach(function(renderId) {
+            state.departedIds.delete(renderId);
+          });
+          ownership._expectRetirement(Array.from(state.departedIds));
+        }
+        metas.forEach(function(meta, componentId) {
+          if (acceptedIncomingIds && !acceptedIncomingIds.has(componentId)) return;
+          if (state.appliedIds.has(componentId) || idToAnchor.has(componentId)) return;
+          createAnchor(componentId, meta.classId, meta.token || "", meta.values || {}, meta.descriptorRevision);
+          state.appliedIds.add(componentId);
+        });
+        if (parsed.graphRevision != null && fragmentEvents.staged && ownership) {
+          const liveOwnership = ownership;
+          fragmentEvents.staged.instances.forEach(function(meta) {
+            if (acceptedIncomingIds && !acceptedIncomingIds.has(meta.componentId)) return;
+            var eventsAnchor = idToAnchor.get(meta.componentId);
+            if (!eventsAnchor) throw new TypeError("a staged Events instance has no prepared anchor");
+            eventsAnchor.clientAnchor = liveOwnership._attachEvents(
+              parsed.graphRevision,
+              meta.componentId,
+              meta.classId,
+              eventsAnchor
+            );
+          });
+        }
+        if (ownershipTransaction && ownership) ownership._activateAdoption(ownershipTransaction);
         regions.forEach(function(regionEls, index) {
           var stripOuterCaps = parsed.graphRevision != null && isInstanceTarget && (swap === "morph" || swap === "replace");
-          if (rootlessInstanceTarget && ownership && targetAnchor?.clientAnchor) {
-            const physical = ownership._morphPlacement(
-              targetAnchor.clientAnchor,
-              index,
-              graphRangeInnerHtml(parsed, placementIds[index])
-            );
+          if (parsed.graphRevision != null && isInstanceTarget && (swap === "morph" || swap === "replace") && ownership && targetAnchor?.clientAnchor) {
+            const innerHtml = graphRangeInnerHtml(parsed, placementIds[index]);
+            const rootMatch = ownershipPlan?.matches.find(function(match) {
+              return match.fromRenderId === liveTargetId && match.toRenderId === adoptionRoot?.componentId;
+            });
+            const physical = swap === "morph" && rootMatch?.preserveLogical ? ownership._morphPlacement(targetAnchor.clientAnchor, index, innerHtml, {
+              adoptionPlan: ownershipPlan,
+              key: morphKeyCallback,
+              updating: makeUpdatingHook(state.guardKept)
+            }) : ownership._replacePlacement(targetAnchor.clientAnchor, index, innerHtml);
+            physical.roots.forEach(function(root) {
+              state.swappedEls.push(root);
+            });
             if (index === 0) insertManifestTags(parsed, physical.end);
             return;
           }
@@ -6600,21 +8083,31 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         if (fragmentEvents.staged) {
           const committedClassIds = /* @__PURE__ */ new Set();
           fragmentEvents.staged.classes.forEach(function(entry) {
-            committedClassIds.add(entry[0]);
+            if (fragmentEvents.staged?.instances.some(function(meta) {
+              return meta.classId === entry[0] && (!acceptedIncomingIds || acceptedIncomingIds.has(meta.componentId));
+            }))
+              committedClassIds.add(entry[0]);
           });
-          refreshAnchorsForClasses(committedClassIds, true);
+          refreshAnchorsForClasses(committedClassIds, true, parsed.graphRevision ?? void 0);
         }
         fireLifecycle("citry:events:swapped", run.anchor, run.event, { els: state.swappedEls.slice() });
         scheduleAnchorSweep();
         return adoptionReady;
       } catch (err) {
         const restoredClassIds = /* @__PURE__ */ new Set();
+        if (descriptorRevisionStaged && parsed.graphRevision != null) {
+          restoreDescriptorRevision(parsed.graphRevision, hadDescriptorRevision, priorDescriptorRevision);
+        }
         priorClasses.forEach(function(entry) {
           if (entry.had) classes.set(entry.classId, entry.descriptor);
           else classes.delete(entry.classId);
           restoredClassIds.add(entry.classId);
         });
-        refreshAnchorsForClasses(restoredClassIds);
+        if (descriptorRevisionStaged && parsed.graphRevision != null) {
+          refreshAnchorsForClasses(stagedDescriptorClassIds, false, parsed.graphRevision);
+        } else {
+          refreshAnchorsForClasses(restoredClassIds);
+        }
         restoreErrorBoxes(priorErrorBoxes);
         if (ownershipTransaction && ownership) ownership._abortAdoption(ownershipTransaction, err);
         parsed.tags.forEach(function(tag) {
@@ -6823,10 +8316,11 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       }
       return result;
     };
-    var bindingTimingMs = function(spec, field) {
+    var bindingTimingMs = function(el, spec, field) {
       var own = spec[field];
       if (typeof own === "number" && Number.isFinite(own) && own > 0) return own;
-      var descriptor = typeof spec.cid === "string" ? classes.get(spec.cid) : void 0;
+      var anchor = anchorForElement(el);
+      var descriptor = anchor ? descriptorFor(anchor) : void 0;
       var options = descriptor && descriptor.eventHandlers && typeof spec.handler === "string" ? descriptor.eventHandlers[spec.handler] : void 0;
       var fallback = options ? field === "debounce" ? options.debounceMilliseconds : options.throttleMilliseconds : void 0;
       if (typeof fallback === "number" && Number.isFinite(fallback) && fallback > 0) return fallback;
@@ -6851,7 +8345,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var handler4 = typeof spec.handler === "string" ? spec.handler : "";
       if (!handler4) return;
       var args = null;
-      if (el.isConnected && typeof spec.args === "string" && spec.args) {
+      if (elementIsInCurrentDocument(el) && typeof spec.args === "string" && spec.args) {
         args = evaluateBindingArgs(el, "@c-" + (spec.event || ""), handler4, spec.args, event);
       }
       args = mergeSubmitFormArgs(el, event, args);
@@ -6860,8 +8354,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       });
     };
     var scheduleEventBinding = function(el, spec, key, event) {
-      var debounceMs = bindingTimingMs(spec, "debounce");
-      var throttleMs = bindingTimingMs(spec, "throttle");
+      var debounceMs = bindingTimingMs(el, spec, "debounce");
+      var throttleMs = bindingTimingMs(el, spec, "throttle");
       if (debounceMs == null && throttleMs == null) {
         fireEventBinding(el, spec, event);
         return;
@@ -6882,15 +8376,6 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         fireEventBinding(el, spec, event);
       }, debounceMs);
     };
-    var NON_BUBBLING_EVENTS = {
-      focus: true,
-      blur: true,
-      mouseenter: true,
-      mouseleave: true,
-      pointerenter: true,
-      pointerleave: true,
-      scroll: true
-    };
     var KEY_FILTER_VALUES = { enter: "Enter", escape: "Escape" };
     var keyFilterMatches = function(event, filter) {
       var expected = KEY_FILTER_VALUES[filter];
@@ -6898,7 +8383,6 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       return event.key === expected;
     };
     var runElementEventBindings = function(el, event, type) {
-      var stopped = false;
       decodeCevSpecs(el, DATA_CEV_ON).forEach(function(spec, index) {
         var fired;
         if (spec == null || typeof spec !== "object" || spec.event !== type) return;
@@ -6917,38 +8401,14 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         if (spec.prevent === true) event.preventDefault();
         if (spec.stop === true) {
           event.stopPropagation();
-          stopped = true;
         }
         scheduleEventBinding(el, spec, key, event);
       });
-      return stopped;
     };
-    var DELEGATED_SELECTOR = "[" + DATA_CEV_ON + "],[" + DATA_CEV_BIND + "]";
+    var ELEMENT_BINDING_SELECTOR = "[" + DATA_CEV_ON + "],[" + DATA_CEV_BIND + "]";
     var runElementBindings = function(el, event, type) {
-      var stopped = false;
-      if (el.hasAttribute(DATA_CEV_ON)) stopped = runElementEventBindings(el, event, type);
+      if (el.hasAttribute(DATA_CEV_ON)) runElementEventBindings(el, event, type);
       if (el.hasAttribute(DATA_CEV_BIND)) runElementStateBindings(el, event, type);
-      return stopped;
-    };
-    var handleDelegatedEvent = function(event) {
-      var type = event.type;
-      var start2 = event.target && event.target.nodeType === 1 ? event.target : null;
-      if (!start2 || !start2.closest) return;
-      var el = start2.closest(DELEGATED_SELECTOR);
-      if (NON_BUBBLING_EVENTS[type] === true) {
-        if (el === start2) runElementBindings(el, event, type);
-        return;
-      }
-      while (el) {
-        if (runElementBindings(el, event, type)) return;
-        el = el.parentElement ? el.parentElement.closest(DELEGATED_SELECTOR) : null;
-      }
-    };
-    var installedListenerTypes = /* @__PURE__ */ new Set();
-    var installDelegatedListener = function(type) {
-      if (installedListenerTypes.has(type)) return;
-      installedListenerTypes.add(type);
-      document.addEventListener(type, handleDelegatedEvent, NON_BUBBLING_EVENTS[type] === true);
     };
     var polledElements = /* @__PURE__ */ new Set();
     var pollElementSeq = /* @__PURE__ */ new WeakMap();
@@ -6980,7 +8440,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       if (!keep) polledElements.delete(el);
     };
     var pollTick = function(el, spec, recurringKey) {
-      if (!el.isConnected || !el.hasAttribute(DATA_CEV_POLL)) {
+      if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_POLL)) {
         clearPollTimers(el);
         console.debug("[Citry] events: a @c-poll region left the DOM; its timer stopped.");
         return;
@@ -7044,12 +8504,37 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     var readControlValue = function(el) {
       var control = el;
       var numeric;
+      if (el.tagName === "SELECT" && el.multiple) {
+        return Array.from(el.selectedOptions, function(option) {
+          return option.value;
+        });
+      }
       if (control.type === "checkbox" || control.type === "radio") return control.checked;
       if (control.type === "number" || control.type === "range") {
         numeric = control.valueAsNumber;
         return Number.isFinite(numeric) ? numeric : control.value;
       }
       return control.value;
+    };
+    var warnedValuelessControl = /* @__PURE__ */ new WeakSet();
+    var writeControlValueToState = function(proxy, field, el, failure) {
+      var value = readControlValue(el);
+      if (value === void 0) {
+        if (!warnedValuelessControl.has(el)) {
+          warnedValuelessControl.add(el);
+          console.warn(
+            "[Citry] events: <" + el.tagName.toLowerCase() + "> has no value to read, so $state." + field + " was left unchanged."
+          );
+        }
+        return false;
+      }
+      try {
+        proxy[field] = value;
+      } catch (err) {
+        console.error("[Citry] events: " + failure + " $state." + field + ":", err);
+        return false;
+      }
+      return true;
     };
     var twoWayFlushStates = /* @__PURE__ */ new WeakMap();
     var pendingTwoWayFlushes = /* @__PURE__ */ new Set();
@@ -7075,14 +8560,13 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       pendingTwoWayFlushes.delete(state);
       var el = state.el;
       var spec = state.spec;
-      unsentDrafts.delete(el);
-      var anchor = el.isConnected ? anchorForElement(el) : null;
+      var anchor = elementIsInCurrentDocument(el) ? anchorForElement(el) : null;
       if (anchor && anchor.stateProxy != null && typeof spec.field === "string") {
-        try {
-          anchor.stateProxy[spec.field] = readControlValue(el);
-        } catch (err) {
-          console.error("[Citry] events: a two-way binding could not write $state." + spec.field + ":", err);
+        if (writeControlValueToState(anchor.stateProxy, spec.field, el, "a two-way binding could not write")) {
+          unsentDrafts.delete(el);
         }
+      } else {
+        unsentDrafts.delete(el);
       }
       var handler4 = typeof spec.handler === "string" ? spec.handler : "";
       if (!handler4) return;
@@ -7102,8 +8586,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       if (typeof spec.key === "string" && spec.key && !keyFilterMatches(event, spec.key)) return;
       var state = twoWayStateFor(el, key, spec);
       unsentDrafts.add(el);
-      var debounceMs = bindingTimingMs(spec, "debounce");
-      var throttleMs = bindingTimingMs(spec, "throttle");
+      var debounceMs = bindingTimingMs(el, spec, "debounce");
+      var throttleMs = bindingTimingMs(el, spec, "throttle");
       var now = Date.now();
       if (throttleMs != null) {
         if (state.throttleUntil > now) {
@@ -7130,16 +8614,88 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         scheduleTwoWayUpdate(el, spec, "bind:" + index, event);
       });
     };
+    var elementBindingListeners = /* @__PURE__ */ new WeakMap();
+    var bindingListenerElements = /* @__PURE__ */ new Set();
+    var bindingListenerCleanupRegistered = /* @__PURE__ */ new WeakSet();
+    var bindingListenersReady = false;
+    var handleElementBindingEvent = function(event) {
+      var current = event.currentTarget;
+      if (!current || current.nodeType !== 1) return;
+      var el = current;
+      if (!elementIsInCurrentDocument(el)) return;
+      runElementBindings(el, event, event.type);
+    };
+    var releaseElementBindingListeners = function(el) {
+      var record = elementBindingListeners.get(el);
+      if (record) {
+        record.types.forEach(function(type) {
+          el.removeEventListener(type, handleElementBindingEvent);
+        });
+        elementBindingListeners.delete(el);
+      }
+      bindingListenerElements.delete(el);
+    };
+    var ensureElementBindingCleanup = function(el) {
+      if (bindingListenerCleanupRegistered.has(el)) return;
+      bindingListenerCleanupRegistered.add(el);
+      src_default.onElRemoved(el, function() {
+        releaseElementBindingListeners(el);
+        bindingListenerCleanupRegistered.delete(el);
+      });
+    };
+    var expectedElementBindingTypes = function(el) {
+      var expected = /* @__PURE__ */ new Set();
+      decodeCevSpecs(el, DATA_CEV_ON).forEach(function(spec) {
+        if (spec != null && typeof spec === "object" && typeof spec.event === "string" && spec.event) {
+          expected.add(spec.event);
+        }
+      });
+      decodeBindSpecs(el).forEach(function(spec) {
+        if (spec == null || typeof spec !== "object" || spec.mode !== "two") return;
+        var updateType = resolveUpdateEventType(el, spec);
+        if (!updateType) return;
+        expected.add(updateType);
+        var draftType = resolveNaturalDraftEventType(el);
+        if (draftType && draftType !== updateType) expected.add(draftType);
+      });
+      return expected;
+    };
+    var syncElementBindingListeners = function(el) {
+      if (!bindingListenersReady) return;
+      if (!elementIsInCurrentDocument(el)) {
+        releaseElementBindingListeners(el);
+        return;
+      }
+      var expected = expectedElementBindingTypes(el);
+      var record = elementBindingListeners.get(el);
+      if (!expected.size) {
+        if (record) releaseElementBindingListeners(el);
+        return;
+      }
+      ensureElementBindingCleanup(el);
+      if (!record) {
+        record = { types: /* @__PURE__ */ new Set() };
+        elementBindingListeners.set(el, record);
+        bindingListenerElements.add(el);
+      }
+      record.types.forEach(function(type) {
+        if (expected.has(type)) return;
+        el.removeEventListener(type, handleElementBindingEvent);
+        record.types.delete(type);
+      });
+      expected.forEach(function(type) {
+        if (record.types.has(type)) return;
+        el.addEventListener(type, handleElementBindingEvent);
+        record.types.add(type);
+      });
+    };
     var collectPendingTwoWayDrafts = function(anchor) {
       pendingTwoWayFlushes.forEach(function(state) {
         var el = state.el;
-        if (!el.isConnected || anchorForElement(el) !== anchor) return;
+        if (!elementIsInCurrentDocument(el) || anchorForElement(el) !== anchor) return;
         if (anchor.stateProxy == null || typeof state.spec.field !== "string") return;
-        unsentDrafts.delete(el);
-        try {
-          anchor.stateProxy[state.spec.field] = readControlValue(el);
-        } catch (err) {
-          console.error("[Citry] events: could not piggyback the two-way draft of $state." + state.spec.field + ":", err);
+        if (writeControlValueToState(anchor.stateProxy, state.spec.field, el, "could not piggyback the two-way draft of")) {
+          unsentDrafts.delete(el);
         }
       });
     };
@@ -7168,7 +8724,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
     var syncControlBindings = function(el) {
       var raw2 = el.getAttribute(DATA_CEV_BIND) || "";
-      var anchor = el.isConnected ? anchorForElement(el) : null;
+      var anchor = elementIsInCurrentDocument(el) ? anchorForElement(el) : null;
       var record = controlBindings.get(el);
       if (!raw2 || !anchor || anchor.values == null) {
         if (record) releaseControlBindings(el);
@@ -7192,14 +8748,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
     var syncStateBindings = function(el) {
       decodeBindSpecs(el).forEach(function(spec) {
-        var draftType;
         if (spec == null || typeof spec !== "object" || spec.mode !== "two") return;
         var type = resolveUpdateEventType(el, spec);
-        if (type) {
-          installDelegatedListener(type);
-          draftType = resolveNaturalDraftEventType(el);
-          if (draftType && draftType !== type) installDelegatedListener(draftType);
-        } else if (!warnedUnresolvedUpdate.has(el)) {
+        if (!type && !warnedUnresolvedUpdate.has(el)) {
           warnedUnresolvedUpdate.add(el);
           console.warn(
             "[Citry] events: the two-way :c-" + (typeof spec.field === "string" ? spec.field : "?") + " binding has no update event for this control; name one with '.on:<event>' (design 5.1)."
@@ -7209,8 +8760,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       syncControlBindings(el);
     };
     var RESERVED_FORM_FIELDS = {
-      _citry_state_token: true,
-      _citry_caller_render_id: true
+      [CARRIER_FIELDS.stateToken]: true,
+      [CARRIER_FIELDS.callerRenderId]: true
     };
     var coerceFormValue = function(form, name, value) {
       var control = form.elements.namedItem(name);
@@ -7244,26 +8795,27 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       if (!event || event.type !== "submit") return args;
       var target = event.target;
       var form = target && target.nodeType === 1 && target.tagName === "FORM" ? target : element && element.tagName === "FORM" ? element : null;
-      if (!form || !form.isConnected) return args;
+      if (!form || !elementIsInCurrentDocument(form)) return args;
       var collected = collectFormArgs(form);
       return args ? Object.assign(collected, args) : collected;
     };
     var scanBindings = function() {
       bindingScanScheduled = false;
-      document.querySelectorAll("[" + DATA_CEV_ON + "]").forEach(function(el) {
-        decodeCevSpecs(el, DATA_CEV_ON).forEach(function(spec) {
-          if (spec != null && typeof spec === "object" && typeof spec.event === "string" && spec.event) {
-            installDelegatedListener(spec.event);
+      if (bindingListenersReady) {
+        document.querySelectorAll(ELEMENT_BINDING_SELECTOR).forEach(syncElementBindingListeners);
+        bindingListenerElements.forEach(function(el) {
+          if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_ON) && !el.hasAttribute(DATA_CEV_BIND)) {
+            releaseElementBindingListeners(el);
           }
         });
-      });
+      }
       document.querySelectorAll("[" + DATA_CEV_POLL + "]").forEach(syncElementPollTimers);
       polledElements.forEach(function(el) {
-        if (!el.isConnected || !el.hasAttribute(DATA_CEV_POLL)) clearPollTimers(el);
+        if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_POLL)) clearPollTimers(el);
       });
       document.querySelectorAll("[" + DATA_CEV_BIND + "]").forEach(syncStateBindings);
       boundControls.forEach(function(el) {
-        if (!el.isConnected || !el.hasAttribute(DATA_CEV_BIND)) releaseControlBindings(el);
+        if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_BIND)) releaseControlBindings(el);
       });
     };
     var bindingScanScheduled = false;
@@ -7451,12 +9003,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             pointedError("applyActions expects a result's `actions` array (design 4.3), got " + typeof actions + ".")
           );
         }
-        if (!actions.every(validateWireAction) || actions.filter(function(action) {
-          return action.action === "data";
-        }).length > 1) {
+        if (validateActionList(actions)) {
           return Promise.reject(pointedError("applyActions received an invalid citry-events/1 action array."));
         }
-        return applyResult({ ok: true, actions }, null);
+        return applyResult(buildOkResult(actions), null);
       },
       // The hook the $component payload decorator delegates to. The bootstrap
       // stub registers the decorator wrapper with citry.js and routes it here
@@ -7476,13 +9026,19 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       // 5.5): the dependency manager resolves a registration's declared props
       // through this, late-bound like `_decorate`, so prop validation and
       // reactivity live here while the registration shape lives in citry.js.
-      _resolveProps: resolveDeclaredProps
+      _resolveProps: resolveDeclaredProps,
+      // Called by the ownership registry immediately before it retires the
+      // matching graph revision. Active anchors and unsettled calls veto that
+      // retirement; their release paths schedule another ownership prune.
+      _pruneDescriptorRevision: pruneDescriptorRevision
     };
     api._internal = {
       alpineStarted: false,
       anchors,
       idToAnchor,
       classes,
+      descriptorRevisions,
+      pendingDescriptorRevisionRefs,
       config,
       getAnchor: function(componentId) {
         return idToAnchor.get(componentId) || null;
@@ -7518,6 +9074,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       },
       debug: function() {
         var anchorIntervals = 0;
+        var bindingListenerTargets = 0;
         var elementIntervalCount = 0;
         var formEffects = 0;
         anchors.forEach(function(anchor) {
@@ -7531,11 +9088,18 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           var record = controlBindings.get(el);
           if (record) formEffects += record.effects.length;
         });
+        bindingListenerElements.forEach(function(el) {
+          var record = elementBindingListeners.get(el);
+          if (record) bindingListenerTargets += record.types.size;
+        });
         return Object.freeze({
           anchors: anchors.size,
           renderIds: idToAnchor.size,
           classes: classes.size,
-          delegatedListenerTypes: installedListenerTypes.size,
+          descriptorRevisions: descriptorRevisions.size,
+          pendingDescriptorRevisionRefs: pendingDescriptorRevisionRefs.size,
+          bindingListenerElements: bindingListenerElements.size,
+          bindingListenerTargets,
           polledElements: polledElements.size,
           anchorIntervals,
           elementIntervals: elementIntervalCount,
@@ -7583,11 +9147,17 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         return "[data-citry-root],[data-cid]";
       },
       init: function(el) {
-        if (!el.hasAttribute || !el.hasAttribute("data-cid")) return;
-        if (boundaryAttached.has(el)) return;
+        if (!el.hasAttribute) return;
+        var element = el;
+        if (elementIsInCurrentDocument(element) && (element.hasAttribute(DATA_CEV_ON) || element.hasAttribute(DATA_CEV_BIND))) {
+          ensureElementBindingCleanup(element);
+          scheduleBindingScan();
+        }
+        if (!element.hasAttribute("data-cid")) return;
+        if (boundaryAttached.has(element)) return;
         processExistingEventsManifests();
-        if (boundaryAttached.has(el)) return;
-        var ids = (el.getAttribute("data-cid") || "").trim().split(/\s+/).filter(Boolean);
+        if (boundaryAttached.has(element)) return;
+        var ids = (element.getAttribute("data-cid") || "").trim().split(/\s+/).filter(Boolean);
         var known = false;
         ids.forEach(function(id) {
           var anchor = idToAnchor.get(id);
@@ -7596,7 +9166,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             anchor.seenInDom = true;
           }
         });
-        if (known) attachBoundaryScope(el);
+        if (known) attachBoundaryScope(element);
       },
       mutations: function(mutations) {
         if (!mutations.length) processExistingEventsManifests();
@@ -7619,6 +9189,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       },
       afterStart: function() {
         api._internal.alpineStarted = true;
+        bindingListenersReady = true;
+        scanBindings();
       }
     });
     processExistingEventsManifests();

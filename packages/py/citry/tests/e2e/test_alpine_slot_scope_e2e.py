@@ -712,13 +712,14 @@ def test_independent_fragment_revision_cannot_overwrite_document_fill_routes(
     page.wait_for_function(READY)
     page.wait_for_function("document.querySelector('.document-fill')?.textContent === 'document'")
 
+    html = page.evaluate("async () => await fetch('/fragment').then((response) => response.text())")
     page.evaluate(
         """
-        async () => {
-          const html = await fetch('/fragment').then((response) => response.text());
+        (html) => {
           document.getElementById('fragment-target').innerHTML = html;
         }
-        """
+        """,
+        html,
     )
     page.wait_for_function("document.querySelector('.fragment-fill')?.textContent === 'fragment'")
 

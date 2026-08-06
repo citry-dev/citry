@@ -3,7 +3,7 @@ CitryContext - the render-scoped state threaded through one render.
 
 A CitryContext is created at the start of a component's render and passed down
 as the template body is walked. It carries the two distinct kinds of state that
-flow through a render, kept separate on purpose (see docs/design/rendering.md):
+flow through a render, kept separate on purpose (see docs/design/component_rendering.md):
 
 1. ``variables`` - the per-component template variables (the ``template_data``
    output). These do NOT cross a component boundary: a child component gets
@@ -19,12 +19,15 @@ flow through a render, kept separate on purpose (see docs/design/rendering.md):
    party may contribute to live under ``extra["citry"]`` (see
    ``EXTRA_CITRY_KEY`` and ``_add_root_markers`` below).
 3. ``provides`` - the provide/inject entries active at this point of the
-   render (see docs/design/provide.md). Unlike ``extra``, this data only
+   render (see docs/design/component_provide.md). Unlike ``extra``, this data only
    flows DOWN, never back up: a component hands it to its children, and a
    ``<c-slot>`` hands it into the slot content it renders. The mapping is
-   treated as read-only: a component that provides builds a new mapping with
-   its additions instead of changing this one, so contexts can share it
-   freely.
+   treated as read-only: a component that provides or blocks a key builds a
+   new mapping with its changes instead of changing this one, so contexts can
+   share it freely.
+4. ``ownership`` - the core per-root `OwnershipGraph` active while this
+   context rendered. Unlike extension scratch data, it is one explicitly
+   shared collector across deferred components and slot ownership transitions.
 
 ``ComponentNode`` is the boundary: each component render gets its own
 CitryContext.
@@ -40,12 +43,13 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from citry.component import Component
+    from citry.ownership import OwnershipGraph
 
 # Namespace for citry-core data inside ``extra``. The ``extra`` bag is shared
 # across the whole render tree, so top-level keys are namespaced by owner to
 # avoid collisions: each extension uses its own name, and citry-core concepts
 # that several parties may contribute to live under this key. The root-marker
-# seam (``_add_root_markers``) is the first of these.
+# hook (``_add_root_markers``) is the first of these.
 EXTRA_CITRY_KEY: Final = "citry"
 
 # Sub-key under ``extra[EXTRA_CITRY_KEY]`` holding the extra root-element
@@ -69,14 +73,23 @@ class CitryContext:
         extra: Tree-wide scratch space for extensions (for example the
             collected JS/CSS dependency records). Top-level keys are
             namespaced by owner; see the module docstring.
-        provides: The provide/inject entries (key -> immutable payload)
-            active at this point of the render. Read-only by convention;
-            ``Component.provide`` builds a new mapping rather than mutating
-            this one.
+        provides: The provide/inject entries active at this point of the
+            render. Values are immutable payloads or a private blocked marker.
+            Read-only by convention; ``Component.provide`` and
+            ``Component.unprovide`` build a new mapping rather than
+            mutating this one.
 
     """
 
-    __slots__ = ("component", "extra", "provides", "sandboxed", "variables")
+    __slots__ = (
+        "_error_tainted",
+        "component",
+        "extra",
+        "ownership",
+        "provides",
+        "sandboxed",
+        "variables",
+    )
 
     def __init__(
         self,
@@ -85,11 +98,16 @@ class CitryContext:
         component: Component | None = None,
         provides: dict[str, Any] | None = None,
         sandboxed: bool = True,
+        ownership: OwnershipGraph | None = None,
     ) -> None:
         self.variables = variables if variables is not None else {}
         self.extra = extra if extra is not None else {}
         self.component = component
+        self.ownership = ownership
         self.provides = provides if provides is not None else {}
+        # A recovered render error still makes this subtree unsafe to publish
+        # as reusable output. The bit bubbles upward with render metadata.
+        self._error_tainted = False
         # Whether expressions evaluated in this context use the security sandbox.
         self.sandboxed = sandboxed
 
@@ -97,7 +115,7 @@ class CitryContext:
         """
         Add extra HTML attributes to this component's root element(s).
 
-        Internal: the contribution side of the root-marker seam, used by the
+        Internal: the contribution side of the root-marker hook, used by the
         built-in dependencies extension and the serializer. Not public API
         (the exact storage may change); an external extension that needs it
         should treat it as unstable.

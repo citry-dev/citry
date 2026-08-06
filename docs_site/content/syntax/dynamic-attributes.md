@@ -145,7 +145,11 @@ The value of `$c-props` is an Alpine expression (similar to `x-init`). Inside th
 
 The Alpine expression in `$c-props` must return a JavaScript object. This object must match child's `props` declaration. See [Client interactivity](/concepts/client-interactivity#pass-client-props-down).
 
-Only component tags can have `$c-props`. `$c-props` on non-component tags raises an error.
+Only component tags can have `$c-props`. `$c-props` on non-component tags
+raises an error. After dynamic attributes and spreads resolve, the actual
+target component must also register `$component(...)`; this includes the
+selected target of `<c-component>`. A final `None` or `False` removes
+`$c-props` and does not require a registration.
 
 ### `@event`
 
@@ -352,7 +356,7 @@ dynamic attribute loses one `c-` prefix:
 <!-- Result: <button title="My Title"> -->
 ```
 
-The [template flags](#template-flags) `#c-key` and `#c-ignore` cannot arrive
+The [template flags](#c-template-flags) `#c-key` and `#c-ignore` cannot arrive
 through `c-bind`. Write them on the tag instead.
 
 Structural built-in tags such as [`<c-if>`][c-if] and [`<c-for>`][c-for] do not accept an attribute spread. Put `c-bind` on
@@ -439,6 +443,17 @@ spellings of the same logical name, such as `id` with `c-id`. On a plain HTML
 element, `class` with `c-class` and `style` with `c-style` are allowed because
 those values merge. Repeated `c-bind` attributes are allowed too.
 
+HTML attribute names use ASCII-case-insensitive identity. For example, `ID`
+from one spread and `id` from a later spread are one attribute: the later
+value wins, while the first spelling and output position stay in place.
+`CLASS` and `class` contributions merge just like lowercase `class` values.
+Two explicit full-name variants such as `ID` and `id` are a parse error, as
+are `ID` and `c-id`. This rule applies to ordinary HTML and `<c-element>`;
+component input names remain case-sensitive Python kwargs. Because
+`<c-element>` is itself an HTML boundary, this includes its special selector:
+`IS`, `c-IS`, and spread-provided `Is` all resolve the same `is` input.
+`<c-component>` still requires exact lowercase `is` / `c-is`.
+
 Component inputs also resolve from left to right, but every input is
 last-one-wins, including `class` and `style`. Their special merging behavior
 belongs only to HTML output.
@@ -490,7 +505,7 @@ For more details see  [Forward HTML attributes](/advanced/html-attributes/).
 
 ## `:c-*` State bind
 
-A `:c-*` attribute connects an input field on the page (such as `<input>` or `<checkbox>`) to a field of the component's
+A `:c-*` attribute connects an input field on the page (such as `<input>` or `<input type="checkbox">`) to a field of the component's
 server-side [`State`][citry.Component.State]. Citry syncs the two values, so you don't have to.
 
 ### One-way binding
@@ -554,6 +569,17 @@ To enable two-way binding, add a value part to the `:c-` attribute, <br/>eg `:c-
 The `:c-` attribute needs an element that holds a value: an `<input>`, `<textarea>`,
 `<select>`, or a custom element. Anything else is an error when the template
 loads:
+
+`<select multiple>` is supported in both directions. Its State field is a
+`list[str]`; Citry reads every selected option and writes the list back by
+matching option values. This also works when `multiple` or the binding arrives
+through `c-bind`.
+
+Input `type` follows the same phase rule. A type produced by `c-type` or
+`c-bind` is checked against the final rendered attributes; an Alpine-only
+`:type` is checked whenever it changes in the browser. Unsupported or unknown
+types do not leave a half-active binding. See the complete direction matrix in
+[Bind controls to State](/events/bindings/#which-elements-you-can-bind).
 
 ```citry-html
 {# ✅ Binds an HTML control to a State field #}
@@ -628,6 +654,10 @@ write the flag yourself:
 </article>
 ```
 
+When `row_key` is `None`, Citry emits no key, the same as omitting `#c-key`.
+This gives a component an optional key input while keeping the flag explicit
+in the template that owns the markup.
+
 ### `#c-key`
 
 `#c-key` helps to preserve DOM state across re-renders. It addresses following problem:
@@ -642,7 +672,14 @@ write the flag yourself:
 
 `#c-key` takes a non-empty Python expression and tells Citry which node is
 which, so an update can match a node to the one it rendered last time.
-Without a key, Citry matches siblings by position.
+Without a key, Citry matches ordinary elements by position and resets an
+uncorrelated child component under a parent render.
+
+The expression itself must be present, but its result may be `None`. A `None`
+result opts out for that render and emits no key. Other falsy values are real
+keys: `False`, `0`, and `""` do not opt out. For component tags, an unkeyed
+same-class child may still keep positional continuity; `None` opts out of
+key-based movement, not all matching.
 
 Matching by position can lead to errors - reordering a list can
 leave a focused input or a browser-owned widget behind on the wrong item.
@@ -662,9 +699,28 @@ Keys must be unique among the siblings they compete with. For the full
 rules, including how nesting depth affects matching, read
 [Preserve identity when lists or parents re-render](/events/actions/#preserve-identity-when-lists-or-parents-re-render).
 
-`#c-key` needs an element to attach the key to, so structural built-in tags
-such as `<c-if>` and `<c-for>` reject it. Put it on the HTML element or
-component tag whose identity should survive.
+On a plain HTML element, the key becomes that element's `data-citry-key`
+attribute. On a component tag, it belongs to Citry's comment-bounded virtual
+component range and is never stamped onto the child's root elements. The two
+identities are independent, so this is valid and preserves both levels:
+
+```citry-html
+{# Parent template: component identity #}
+<c-TaskRow #c-key="task.id" c-task="task" />
+
+{# TaskRow template: ordinary root-element identity #}
+<article #c-key="layout_variant">
+  {{ task.title }}
+</article>
+```
+
+Component keys match direct logical children top-down by component class and
+key, even across ordinary wrapper changes. After keyed matches are reserved,
+Citry pairs remaining unkeyed component positions and preserves only
+same-class pairs; it never scans ahead. Element keys remain limited to one
+sibling window. Structural built-in tags such as `<c-if>` and `<c-for>` are
+not identity nodes and reject `#c-key`; put it on the HTML element or component
+tag whose identity should survive.
 
 ### `#c-ignore`
 
@@ -682,7 +738,23 @@ While `#c-key` tells Citry how to match the old and the new HTML,
 Use it for third-party libraries such as a charting or
 map libraries, not for content Citry should keep up to date.
 
-Putting the marker on a component
-tag is an error.
+On an HTML element it keeps that element and its descendants. On a component
+tag it keeps the complete logical component range, including multi-root,
+text-only, and empty output:
+
+```citry-html
+<c-BrowserOwnedChart #c-ignore />
+```
+
+The marker belongs to the caller-authored component range; it is never copied
+onto one of the child's root elements. A `#c-ignore` written on a root element
+inside the child's own template is therefore still an ordinary element flag
+and keeps only that physical subtree. Runtime `<c-element>` also keeps ordinary
+element semantics because it produces an HTML element, not a logical child
+component.
+
+Citry reads the old rendered side when deciding whether to keep a matched
+range. Adding the marker takes effect on the next morph; an already-kept old
+range remains kept until it is removed, replaced, or no longer corresponds.
 [Leave a browser-owned subtree alone](/events/actions/#leave-a-browser-owned-subtree-alone)
-covers where the marker may go.
+covers the update behavior in more detail.

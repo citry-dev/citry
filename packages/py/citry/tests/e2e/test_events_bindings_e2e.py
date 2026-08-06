@@ -1,5 +1,5 @@
 """
-Browser e2e for the client bindings runtime, the delegated-listener half of
+Browser e2e for the client bindings runtime, including the element-listener half of
 ``citry/ext/events/client/citry-events.js`` (design contract:
 docs/design/events.md 5.1's vocabulary and modifier tables, 5.5's machinery
 item 5, and 5.6's tick-skip rule; the compiled ``data-cev-*`` attribute
@@ -7,12 +7,13 @@ contract is the one published in ``citry/ext/events/bindings.py``).
 
 What this suite locks, mapped to the design:
 
-- Delegated listeners read the compiled specs at event time: a click binding
+- Element listeners read the compiled specs at event time: a click binding
   sends its handler; one element carrying several event bindings evaluates
   each argument expression against its own ``$event`` (the explicit
   multi-binding case, design 5.1).
 - The modifier table: ``.prevent`` stops the browser default while the send
-  still happens; ``.stop`` keeps ancestors' bindings from firing while the
+  still happens, including for a cancelable synthetic event whose name also
+  belongs to a non-cancelable native event; ``.stop`` keeps ancestors' bindings from firing while the
   element's own binding fires (and an unstopped click fires the ancestor's
   binding too, target first); ``.self`` ignores events bubbling up from
   descendants; ``.once`` fires at most once per element lifetime; ``.enter``
@@ -21,6 +22,8 @@ What this suite locks, mapped to the design:
   (``.debounce.600ms``) overrides the bare default; a handler's
   ``@event(debounce=...)`` default applies to a bare binding; bare
   ``.throttle`` admits the first trigger and drops the rest of the window.
+  Key filters inspect ``event.key`` rather than restricting event names, so
+  an arbitrarily named ``KeyboardEvent`` participates too.
 - Argument expressions are Alpine expressions bound to the owning element:
   they see ``$event``, ``$el``, and ``$state``, and a non-object result
   raises the pointed error naming the binding, with nothing sent.
@@ -115,7 +118,7 @@ def _collect_event_requests(page: Any) -> list[dict]:
     captured: list[dict] = []
 
     def record(request: Any) -> None:
-        if "/ext/events/" not in request.url or request.url.endswith("/runtime.js"):
+        if "/ext/events/" not in request.url or "/runtime.js" in request.url:
             return
         body = None
         try:
@@ -235,8 +238,17 @@ def _make_matrix_app() -> tuple[Citry, str, type[Component]]:
               href="/never"
               @c-click.prevent="tap({kind: 'prevent'})"
             >link</a>
-            <div class="outerbox" @c-click="tap({kind: 'outer'})">
-              <button class="stopbtn" @c-click.stop="tap({kind: 'stopped'})">stop</button>
+            <div
+              class="outerbox"
+              x-data
+              @click="window.__alpineOuter = (window.__alpineOuter || 0) + 1"
+              @c-click="tap({kind: 'outer'})"
+            >
+              <button
+                class="stopbtn"
+                @click="window.__alpineSameTarget = (window.__alpineSameTarget || 0) + 1"
+                @c-click.stop="tap({kind: 'stopped'})"
+              >stop</button>
               <button class="passbtn" @c-click="tap({kind: 'passed'})">pass</button>
             </div>
             <div
@@ -247,6 +259,8 @@ def _make_matrix_app() -> tuple[Citry, str, type[Component]]:
               <span class="inside">child</span>
             </div>
             <button class="oncebtn" @c-click.once="tap({kind: 'once'})">once</button>
+            <div class="synthetic-prevent" @c-scroll.prevent="tap({kind: 'scroll-prevent'})"></div>
+            <div class="custom-key" @c-lol.enter="tap({kind: 'custom-enter'})"></div>
             <input class="keyinput" @c-keyup.enter="tap({kind: 'enter'})" />
             <input class="esckey" @c-keyup.escape="tap({kind: 'escape'})" />
             <input class="deb" @c-input.debounce="tap({q: $event.target.value})" />
@@ -286,6 +300,11 @@ def test_multi_binding_element_sends_each_event_with_its_own_expression(page: An
     c, html, matrix = _make_matrix_app()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
+    debug = page.evaluate("Citry.events._internal.debug()")
+
+    # `.both` is the fixture's only element with two event types. The target
+    # count is listener registrations, not another spelling of element count.
+    assert debug["bindingListenerTargets"] == debug["bindingListenerElements"] + 1
 
     page.hover(".both")
     page.click(".both")
@@ -293,6 +312,90 @@ def test_multi_binding_element_sends_each_event_with_its_own_expression(page: An
 
     assert [args["kind"] for args in _args_of(captured)] == ["mouseover", "click"]
     assert all(r["url"].endswith(f"/e/{matrix.class_id}/tap") for r in captured)
+    assert _citry_errors(messages) == []
+
+
+def test_changing_an_event_type_reconciles_the_native_listener_without_leaking_the_old_type(
+    page: Any, serve_live: Any
+) -> None:
+    c, html, matrix = _make_matrix_app()
+    messages = _goto(page, serve_live, c, html)
+    captured = _collect_event_requests(page)
+    before = page.evaluate("Citry.events._internal.debug()")
+
+    page.evaluate(
+        """
+        () => {
+          const el = document.querySelector('.both');
+          window.__bothListenerOps = [];
+          el.addEventListener = function(type, listener, options) {
+            window.__bothListenerOps.push(['add', type]);
+            return EventTarget.prototype.addEventListener.call(this, type, listener, options);
+          };
+          el.removeEventListener = function(type, listener, options) {
+            window.__bothListenerOps.push(['remove', type]);
+            return EventTarget.prototype.removeEventListener.call(this, type, listener, options);
+          };
+          const raw = el.getAttribute('data-cev-on');
+          const bytes = Uint8Array.from(atob(raw), (character) => character.charCodeAt(0));
+          const specs = JSON.parse(new TextDecoder().decode(bytes));
+          specs.find((spec) => spec.event === 'mouseover').event = 'private-change';
+          const encoded = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(specs))));
+          el.setAttribute('data-cev-on', encoded);
+        }
+        """
+    )
+    page.wait_for_function(
+        """
+        () => JSON.stringify(window.__bothListenerOps) ===
+          JSON.stringify([['remove', 'mouseover'], ['add', 'private-change']])
+        """
+    )
+    after = page.evaluate("Citry.events._internal.debug()")
+
+    page.dispatch_event(".both", "mouseover")
+    page.dispatch_event(".both", "private-change")
+    _wait_requests(page, captured, 1)
+    page.wait_for_timeout(50)
+
+    assert len(captured) == 1
+    assert captured[0]["url"].endswith(f"/e/{matrix.class_id}/tap")
+    assert _args_of(captured) == [{"kind": "private-change"}]
+    assert after["bindingListenerElements"] == before["bindingListenerElements"]
+    assert after["bindingListenerTargets"] == before["bindingListenerTargets"]
+    assert _citry_errors(messages) == []
+
+
+def test_same_type_spec_update_reuses_the_listener_and_runs_only_the_new_handler(page: Any, serve_live: Any) -> None:
+    c, html, matrix = _make_matrix_app()
+    messages = _goto(page, serve_live, c, html)
+    captured = _collect_event_requests(page)
+    before = page.evaluate("Citry.events._internal.debug()")
+
+    page.evaluate(
+        """
+        () => {
+          const el = document.querySelector('.rich');
+          const raw = el.getAttribute('data-cev-on');
+          const bytes = Uint8Array.from(atob(raw), (character) => character.charCodeAt(0));
+          const specs = JSON.parse(new TextDecoder().decode(bytes));
+          specs[0].handler = 'seek';
+          specs[0].args = "{q: 'changed'}";
+          const encoded = btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(specs))));
+          el.setAttribute('data-cev-on', encoded);
+          el.click();
+        }
+        """
+    )
+    _wait_requests(page, captured, 1)
+    page.wait_for_timeout(50)
+    after = page.evaluate("Citry.events._internal.debug()")
+
+    assert len(captured) == 1
+    assert captured[0]["url"].endswith(f"/e/{matrix.class_id}/seek")
+    assert _args_of(captured) == [{"q": "changed"}]
+    assert after["bindingListenerElements"] == before["bindingListenerElements"]
+    assert after["bindingListenerTargets"] == before["bindingListenerTargets"]
     assert _citry_errors(messages) == []
 
 
@@ -312,25 +415,66 @@ def test_prevent_modifier_stops_the_browser_default_and_still_sends(page: Any, s
     assert _citry_errors(messages) == []
 
 
-def test_stop_modifier_ends_the_walk_while_an_unstopped_child_fires_the_ancestor_too(
+def test_prevent_modifier_cancels_a_synthetic_event_with_a_native_noncancelable_name(
     page: Any, serve_live: Any
 ) -> None:
-    # Delegation reads specs target-first (design 5.1): a `.stop` binding
-    # keeps ancestors' bindings from seeing the event, exactly like an
-    # element-level stopPropagation, while an unstopped child's click fires
-    # the child's binding and then the ancestor's.
     c, html, _matrix = _make_matrix_app()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
+
+    result = page.locator(".synthetic-prevent").evaluate(
+        """
+        element => {
+          const event = new CustomEvent('scroll', { cancelable: true });
+          return {
+            dispatched: element.dispatchEvent(event),
+            defaultPrevented: event.defaultPrevented,
+          };
+        }
+        """
+    )
+    _wait_requests(page, captured, 1)
+
+    assert result == {"dispatched": False, "defaultPrevented": True}
+    assert _args_of(captured) == [{"kind": "scroll-prevent"}]
+    assert _citry_errors(messages) == []
+
+
+def test_stop_modifier_uses_native_propagation_while_an_unstopped_child_reaches_the_ancestor(
+    page: Any, serve_live: Any
+) -> None:
+    # The binding runs on the element, so `.stop` keeps Citry, Alpine, and
+    # ordinary DOM listeners on ancestors from seeing the event. It does not
+    # suppress another listener on the same target.
+    c, html, _matrix = _make_matrix_app()
+    messages = _goto(page, serve_live, c, html)
+    captured = _collect_event_requests(page)
+    page.evaluate(
+        """
+        () => {
+          window.__nativeOuter = 0;
+          window.__nativeSameTarget = 0;
+          window.__alpineSameTarget = 0;
+          document.querySelector('.outerbox').addEventListener('click', () => { window.__nativeOuter += 1; });
+          document.querySelector('.stopbtn').addEventListener('click', () => { window.__nativeSameTarget += 1; });
+        }
+        """
+    )
 
     page.click(".stopbtn")
     _wait_requests(page, captured, 1)
     page.wait_for_timeout(150)
     assert [args["kind"] for args in _args_of(captured)] == ["stopped"]
+    assert page.evaluate(
+        "[window.__alpineOuter || 0, window.__nativeOuter, window.__alpineSameTarget, window.__nativeSameTarget]"
+    ) == [0, 0, 1, 1]
 
     page.click(".passbtn")
     _wait_requests(page, captured, 3)
     assert [args["kind"] for args in _args_of(captured)] == ["stopped", "passed", "outer"]
+    assert page.evaluate(
+        "[window.__alpineOuter, window.__nativeOuter, window.__alpineSameTarget, window.__nativeSameTarget]"
+    ) == [1, 1, 1, 1]
     assert _citry_errors(messages) == []
 
 
@@ -381,6 +525,26 @@ def test_key_filter_sends_only_for_the_named_key(page: Any, serve_live: Any) -> 
     page.keyboard.press("Enter")
     _wait_requests(page, captured, 1)
     assert _args_of(captured) == [{"kind": "enter"}]
+    assert _citry_errors(messages) == []
+
+
+def test_key_filter_accepts_an_arbitrarily_named_keyed_event(page: Any, serve_live: Any) -> None:
+    c, html, _matrix = _make_matrix_app()
+    messages = _goto(page, serve_live, c, html)
+    captured = _collect_event_requests(page)
+
+    page.locator(".custom-key").evaluate(
+        "element => element.dispatchEvent(new KeyboardEvent('lol', { key: 'Escape' }))"
+    )
+    page.wait_for_timeout(200)
+    assert captured == []
+
+    page.locator(".custom-key").evaluate(
+        "element => element.dispatchEvent(new KeyboardEvent('lol', { key: 'Enter' }))"
+    )
+    _wait_requests(page, captured, 1)
+
+    assert _args_of(captured) == [{"kind": "custom-enter"}]
     assert _citry_errors(messages) == []
 
 
@@ -594,7 +758,151 @@ def test_debounce_flush_on_a_replaced_region_drops_with_a_debug_log_never_a_thro
     drops = [m for m in messages if "dropped a 'ping' send" in m]
     assert len(drops) == 1
     assert drops[0].startswith("debug:")
-    assert "its element resolves to no instance declaring the event" in drops[0]
+    assert "its element is not live in this document" in drops[0]
+    assert _citry_errors(messages) == []
+
+
+def test_removing_an_event_attribute_keeps_work_already_accepted_by_debounce(page: Any, serve_live: Any) -> None:
+    c, html, _typer = _make_typer_app()
+    messages = _goto(page, serve_live, c, html)
+    captured = _collect_event_requests(page)
+
+    assert page.evaluate("Citry.events._internal.debug().bindingListenerTargets") == 1
+    page.evaluate(
+        """
+        () => {
+          const input = document.querySelector('.q');
+          input.value = 'kept';
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.removeAttribute('data-cev-on');
+        }
+        """
+    )
+    page.wait_for_function("Citry.events._internal.debug().bindingListenerTargets === 0")
+    _wait_requests(page, captured, 1)
+
+    assert _args_of(captured) == [{"q": "kept"}]
+    assert page.evaluate("window.__log.stale") == []
+    assert _citry_errors(messages) == []
+
+
+def test_debounce_flush_drops_after_the_element_moves_to_another_document(page: Any, serve_live: Any) -> None:
+    c, html, _typer = _make_typer_app()
+    messages = _goto(page, serve_live, c, html)
+    captured = _collect_event_requests(page)
+
+    adopted = page.evaluate(
+        """
+        () => {
+          const input = document.querySelector('.q');
+          input.value = 'foreign';
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          const frame = document.createElement('iframe');
+          document.body.append(frame);
+          frame.contentDocument.body.append(frame.contentDocument.adoptNode(input));
+          return input.isConnected && input.ownerDocument === frame.contentDocument;
+        }
+        """
+    )
+    assert adopted is True
+    page.wait_for_timeout(500)
+
+    assert captured == []
+    assert page.evaluate("window.__log.stale") == [{"instance": None, "event": "ping", "reason": "cancelled"}]
+    assert any("its element is not live in this document" in message for message in messages)
+    assert _citry_errors(messages) == []
+
+
+# ----- Alpine structural copies: inert templates and live element listeners -----
+
+
+def _make_dynamic_binding_app() -> tuple[Citry, str]:
+    """An x-for template whose live copies carry custom event bindings."""
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class DynamicState:
+        seen: int = 0
+        _public = ("seen",)
+
+    class Dynamic(Component):
+        citry = c
+        State = DynamicState
+
+        class TapIn:
+            item: int = 0
+
+        class Events:
+            def tap(self, data: TapIn, state):  # noqa: F821
+                return None
+
+        template = """
+          <div class="dynamic" x-data="{ items: [] }">
+            <button class="toggle" @click="items = items.length ? [] : [1, 2]">toggle</button>
+            <template x-for="item in items" :key="item">
+              <button
+                class="dynamic-hit"
+                :data-item="item"
+                @c-private-event="tap({item: item})"
+              >hit</button>
+            </template>
+          </div>
+        """
+
+    class Page(Component):
+        citry = c
+        template = """
+          <html>
+            <head><title>dynamic binding copies</title></head>
+            <body><c-dynamic /></body>
+          </html>
+        """
+
+    return c, str(Page())
+
+
+def test_alpine_template_bindings_activate_only_on_live_copies_without_stacking(page: Any, serve_live: Any) -> None:
+    c, html = _make_dynamic_binding_app()
+    messages = _goto(page, serve_live, c, html)
+    captured = _collect_event_requests(page)
+
+    assert page.evaluate("Citry.events._internal.debug().bindingListenerTargets") == 0
+    assert (
+        page.evaluate(
+            """
+        () => {
+          const template = document.querySelector('template[x-for]');
+          return template.content.querySelector('[data-cev-on]') !== null;
+        }
+        """
+        )
+        is True
+    )
+
+    page.click(".toggle")
+    page.wait_for_function("document.querySelectorAll('.dynamic-hit').length === 2")
+    page.wait_for_function("Citry.events._internal.debug().bindingListenerTargets === 2")
+    page.evaluate(
+        """
+        () => document.querySelectorAll('.dynamic-hit').forEach(
+          (el) => el.dispatchEvent(new CustomEvent('private-event')),
+        )
+        """
+    )
+    _wait_requests(page, captured, 2)
+    assert [args["item"] for args in _args_of(captured)] == [1, 2]
+
+    page.click(".toggle")
+    page.wait_for_function("document.querySelectorAll('.dynamic-hit').length === 0")
+    page.wait_for_function("Citry.events._internal.debug().bindingListenerTargets === 0")
+    page.click(".toggle")
+    page.wait_for_function("document.querySelectorAll('.dynamic-hit').length === 2")
+    page.wait_for_function("Citry.events._internal.debug().bindingListenerTargets === 2")
+    page.evaluate("document.querySelector('.dynamic-hit').dispatchEvent(new CustomEvent('private-event'))")
+    _wait_requests(page, captured, 3)
+    page.wait_for_timeout(150)
+
+    assert [args["item"] for args in _args_of(captured)] == [1, 2, 1]
     assert _citry_errors(messages) == []
 
 

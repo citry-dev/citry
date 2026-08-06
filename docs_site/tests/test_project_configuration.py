@@ -410,15 +410,26 @@ def test_runtime_overrides_use_the_same_url_and_path_policy(runtime: DocsConfig,
 def test_ui_catalog_rejects_parent_path(tmp_path: Path) -> None:
     path = tmp_path / "ui_library.yml"
     path.write_text(
-        "components:\n"
-        "  - family: button\n"
-        "    slug: button\n"
-        "    source: ../button/api.md\n"
-        "    required_headings: ['#### Button']\n",
+        "components:\n  - family: button\n    slug: button\n    source: ../button/api.md\n",
         encoding="utf-8",
     )
 
     with pytest.raises(DocsConfigError, match="safe repository-relative"):
+        load_ui_library_catalog(path)
+
+
+def test_ui_catalog_rejects_legacy_required_headings(tmp_path: Path) -> None:
+    path = tmp_path / "ui_library.yml"
+    path.write_text(
+        "components:\n"
+        "  - family: button\n"
+        "    slug: button\n"
+        "    source: button/api.md\n"
+        "    required_headings: ['#### CButton inputs']\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DocsConfigError, match=r"unknown key.*required_headings"):
         load_ui_library_catalog(path)
 
 

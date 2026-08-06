@@ -16,7 +16,7 @@ from citry.util.misc import snake_to_pascal
 # the real class name. Authored with the same multiline ``template`` string
 # components use in practice.
 _SCAFFOLD = '''\
-"""A citry component."""
+"""A Citry component."""
 
 from citry import Component
 
@@ -25,8 +25,8 @@ class MyComponent(Component):
     class Kwargs:
         title: str
 
-    def template_data(self, kwargs, slots):
-        return {"title": kwargs.title}
+    class Slots:
+        pass
 
     template = """
       <div>

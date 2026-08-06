@@ -66,6 +66,10 @@ mod tests {
             r#"<c-component is="MyComp" c-x="y">hi</c-component>"#,
             r#"[ComponentNode(source, (0, 49,), (ExprHtmlAttr(source, (25, 32,), """c-x""", """y""", ("y",)),), ["""hi""",], ("y",), """mycomp""", False),]"#,
         );
+        assert_compile(
+            r#"<c-Component is="MyComp" c-x="y">hi</c-Component>"#,
+            r#"[ComponentNode(source, (0, 49,), (ExprHtmlAttr(source, (25, 32,), """c-x""", """y""", ("y",)),), ["""hi""",], ("y",), """mycomp""", False),]"#,
+        );
     }
 
     #[test]
@@ -143,6 +147,29 @@ mod tests {
     }
 
     #[test]
+    fn test_element_static_void_identity_is_ascii_case_insensitive() {
+        assert_compile(r#"<c-element is="BR" />"#, r#"["""<BR/>""",]"#);
+        assert_compile(r#"<c-Element is="BR" />"#, r#"["""<BR/>""",]"#);
+        assert_compile(r#"<c-Element IS="BR" />"#, r#"["""<BR/>""",]"#);
+    }
+
+    #[test]
+    fn test_dynamic_builtin_suffix_case_variants_share_required_is_rules() {
+        assert_parse_error(
+            "<c-Element />",
+            "must have one of the following attributes: 'is', 'c-is', 'c-bind'",
+        );
+        assert_parse_error(
+            "<c-Component />",
+            "must have one of the following attributes: 'is', 'c-is', 'c-bind'",
+        );
+        assert_parse_error(
+            r#"<c-Component IS="Card" />"#,
+            "must have one of the following attributes: 'is', 'c-is', 'c-bind'",
+        );
+    }
+
+    #[test]
     fn test_element_static_void_with_whitespace_body_stays_compact() {
         // Whitespace-only body is formatting, not content.
         assert_compile(r#"<c-element is="br">  </c-element>"#, r#"["""<br/>""",]"#);
@@ -191,6 +218,10 @@ mod tests {
             r#"<c-element c-is="tag" class="a">hi</c-element>"#,
             r#"[ComponentNode(source, (0, 46,), (ExprHtmlAttr(source, (11, 21,), """c-is""", """tag""", ("tag",)), StaticHtmlAttr(source, (22, 31,), """class""", """a""", ()),), ["""hi""",], ("tag",), """element""", False),]"#,
         );
+        assert_compile(
+            r#"<c-Element c-IS="tag" />"#,
+            r#"[ComponentNode(source, (0, 24,), (ExprHtmlAttr(source, (11, 21,), """c-IS""", """tag""", ("tag",)),), [], ("tag",), """element""", False),]"#,
+        );
     }
 
     #[test]
@@ -213,6 +244,7 @@ mod tests {
         for input in [
             r#"<c-element is="div" c-is="tag" />"#,
             r#"<c-element c-is="tag" is="div" />"#,
+            r#"<c-Element IS="div" c-IS="tag" />"#,
         ] {
             assert_parse_error(input, "provide the same logical attribute 'is'");
         }
@@ -232,6 +264,10 @@ mod tests {
         assert_parse_error(
             r#"<c-element is="div"><c-fill name="header">X</c-fill></c-element>"#,
             "Tag '<c-element>' does not allow a slot named 'header'.",
+        );
+        assert_parse_error(
+            r#"<c-Element is="div"><c-fill name="header">X</c-fill></c-Element>"#,
+            "Tag '<c-Element>' does not allow a slot named 'header'.",
         );
     }
 

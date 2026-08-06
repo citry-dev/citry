@@ -211,8 +211,57 @@ class template_formatter:
         range: tuple[int, int] | None
         diagnostic: template_parser.ParseDiagnostic | None
 
+    class _EmbeddedFormatPlan:
+        """Opaque source-bound handle for an embedded-formatting pass."""
+
+        @property
+        def id(self) -> str: ...
+        @property
+        def formatted_source(self) -> str: ...
+        @property
+        def requests(
+            self,
+        ) -> list[
+            tuple[
+                str,
+                str,
+                str,
+                str,
+                str,
+                tuple[int, int],
+                int,
+                str,
+            ]
+        ]: ...
+        @property
+        def notices(
+            self,
+        ) -> list[tuple[str, str, str | None, str | None]]: ...
+
     @staticmethod
     def format_template(source: str) -> str: ...
+    @staticmethod
+    def python_expression_provider() -> str: ...
+    @staticmethod
+    def prepare_embedded_format(source: str) -> template_formatter._EmbeddedFormatPlan: ...
+    @staticmethod
+    def finish_embedded_format(
+        plan: template_formatter._EmbeddedFormatPlan,
+        results: list[
+            tuple[
+                str,
+                str,
+                str,
+                str | None,
+                str | None,
+                str | None,
+            ]
+        ],
+    ) -> tuple[
+        str,
+        list[tuple[str, str, str | None, str | None]],
+        list[str],
+    ]: ...
 
 ########################################################
 # Template parser (V3)

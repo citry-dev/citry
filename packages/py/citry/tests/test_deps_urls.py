@@ -2,7 +2,8 @@
 
 import pytest
 
-from citry import Citry, Component, Extension
+from citry import Citry, Component, Extension, InMemoryCache
+from citry.ext.dependencies.routes import script_url
 from citry.util.routing import RouteResponse, URLRoute, match_route
 
 
@@ -61,6 +62,36 @@ class TestCitryUrls:
         matched = match_route(c.urls, "ext/probe/status")
         assert matched is not None
         assert matched.route.handler(None).content == "ok"
+
+    def test_user_extension_route_params_passed_to_handler(self):
+        def greet(_request, user_id, name):
+            return RouteResponse(content=f"Hello {user_id} {name}")
+
+        class Probe(Extension):
+            name = "probe"
+            urls = [URLRoute("greet/{user_id}/{name}", handler=greet)]
+
+        c = Citry(extensions=[Probe])
+        matched = match_route(c.urls, "ext/probe/greet/123/John")
+        assert matched is not None
+        # Captured segments are always plain strings; the route does no type conversion.
+        assert matched.params == {"user_id": "123", "name": "John"}
+        assert matched.route.handler(None, **matched.params).content == "Hello 123 John"
+
+    def test_user_extension_parent_route_serves_children_not_itself(self):
+        def greet(_request, user_id, name):
+            return RouteResponse(content=f"Hello {user_id} {name}")
+
+        class Probe(Extension):
+            name = "probe"
+            urls = [URLRoute("nested-view/", children=(URLRoute("{user_id}/{name}", handler=greet),))]
+
+        c = Citry(extensions=[Probe])
+        # The parent path only groups its children, so requesting it matches nothing.
+        assert match_route(c.urls, "ext/probe/nested-view/") is None
+        child = match_route(c.urls, "ext/probe/nested-view/123/John")
+        assert child is not None
+        assert child.route.handler(None, **child.params).content == "Hello 123 John"
 
     def test_extensions_get_the_citry_back_reference(self):
         class Probe(Extension):
@@ -126,13 +157,43 @@ class TestScriptEndpointLogic:
         # for a class script rebuilds it from the class.
         assert self._serve(c, f"cache/{Widget.class_id}.js").content == "console.log(1);"
 
+    def test_content_addressed_urls_survive_shared_cache_version_overlap(self):
+        cache = InMemoryCache()
+        old_citry = Citry(cache=cache)
+        new_citry = Citry(cache=cache)
+        old_citry.set_mounted_prefix("/citry")
+        new_citry.set_mounted_prefix("/citry")
+
+        def make_widget(engine, content):
+            class Widget(Component):
+                citry = engine
+                js = content
+
+            return Widget
+
+        old_widget = make_widget(old_citry, "console.log('old');")
+        new_widget = make_widget(new_citry, "console.log('new');")
+        assert old_widget.class_id == new_widget.class_id
+
+        new_url = script_url(new_widget, "js")
+        old_url = script_url(old_widget, "js")
+        assert new_url != old_url
+
+        # The old worker wrote the mutable compatibility key last. Hashed URLs
+        # still select the requested immutable payload through either engine.
+        assert self._serve(new_citry, new_url.removeprefix("/citry/")).content == new_widget.js
+        assert self._serve(new_citry, old_url.removeprefix("/citry/")).content == old_widget.js
+
+        cache.clear()
+        assert self._serve(new_citry, new_url.removeprefix("/citry/")).content == new_widget.js
+
     def test_vars_script_served_from_cache(self):
         c = Citry()
 
         class Widget(Component):
             citry = c
             template = "<span>w</span>"
-            js = "$onComponent(() => {});"
+            js = "$component(() => {});"
 
             def js_data(self, kwargs, slots):
                 return {"rows": 3}
@@ -154,6 +215,10 @@ class TestScriptEndpointLogic:
         assert self._serve(c, "cache/Nope_000000.js").status == 404
         assert self._serve(c, f"cache/{Widget.class_id}.aaaaaa.js").status == 404
         assert self._serve(c, f"cache/{Widget.class_id}.html").status == 404
+
+    def test_missing_served_asset_gives_404(self):
+        c = Citry()
+        assert self._serve(c, "asset/000000000000.js").status == 404
 
     def test_serves_the_runtime(self):
         c = Citry()
