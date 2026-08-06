@@ -1,6 +1,9 @@
 # Node packages in this monorepo. The root package.json holds only dev
-# tooling (the pinned pyright the check gate runs); publishable Node
-# packages will live under packages/js/ (nothing there yet, so the glob
-# matches nothing today and future packages slot in without config changes).
+# tooling (the pinned pyright the check gate runs). Shipped JavaScript
+# packages live under packages/js/, editor distributions under
+# packages/editors/, and private contributor tools can join directly.
 packages:
+  - docs_site/_internal/frontend
+  - packages/editors/*
   - packages/js/*
+  - packages/protocol/*/v1/js

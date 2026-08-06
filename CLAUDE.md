@@ -380,6 +380,28 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   clippy with `--no-deps`) because the vendored ruff submodule's crates are
   workspace path-dependencies; a bare `cargo test`/`cargo clippy` would pull in
   ruff's own code (see [`docs/codebase.md`](docs/codebase.md) "Running checks").
+- **Read the gate's own report, not the shell's exit code.** Two things about
+  `scripts/check.py` cost a wasted run every time they are forgotten:
+  - **A failing phase carries its output in its `details` field.** With
+    `--reporter agent` the JSON is `{"status", "phases"}`. A passing phase is
+    just `{"name", "command", "status"}`; a failing one adds `"exitCode"` and
+    `"details"`, and `details` holds the tail of that phase's real output: the
+    failing test names, the mypy errors, the coverage summary. Read it before
+    re-running anything by hand. There is no `output`, `stdout`, or `stderr`
+    key, so looking for one and finding nothing means the key is wrong, not
+    that the report is empty.
+  - **Take the verdict from the JSON's top-level `status`.** Piping the command
+    through `tail`, or following it with an `echo`, makes the shell report that
+    last command's exit status instead, so a failed gate reads as a pass.
+    Redirect to a file and read `status`. Reaching for the pipeline's own
+    status is shell-specific and easy to get wrong: this repo's shell is zsh,
+    where it is `$pipestatus[1]`, while `${PIPESTATUS[0]}` is the bash spelling
+    and expands to nothing here.
+
+  The `pytest` phase also fails when total coverage drops below
+  `fail_under` in [`pyproject.toml`](pyproject.toml), with every test passing.
+  The `details` field distinguishes the two cases; treat a coverage shortfall as
+  a call for tests, and lower the ratchet only as a deliberate, stated decision.
 - **Don't preserve incorrect behavior to keep tests passing.** When a fix makes
   the more correct choice, update the failing tests to match the new contract,
   and call the update out explicitly. A failing test under a deliberate change

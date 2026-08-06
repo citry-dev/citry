@@ -50,6 +50,16 @@ updates:
       interval: weekly
 
   - package-ecosystem: "pip"
+    directory: "packages/py/citry_lsp"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: "pip"
+    directory: "packages/py/citry_ui"
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: "pip"
     directory: "packages/py/pygments_citry"
     schedule:
       interval: weekly
