@@ -59,7 +59,7 @@ citry = "citry.__main__:main"
 [dependency-groups]
 dev = [
     "pytest>=8.3.5",
-    "pytest-cov>=5",   # coverage gate in scripts/check.py
+    "pytest-cov>=7.1.0",   # coverage gate in scripts/check.py
     # test-only: the django contrib adapter tests (test_contrib_django.py) need a
     # real django. A range, not the benchmark group's exact pin: benchmarks need a
     # stable baseline, these tests just need any supported django. py>=3.12 only,
