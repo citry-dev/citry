@@ -85,8 +85,8 @@ importers:
         specifier: 2.5.7
         version: 2.5.7
       '@types/node':
-        specifier: 22.20.1
-        version: 22.20.1
+        specifier: 26.1.2
+        version: 26.1.2
       '@types/vscode':
         specifier: 1.93.0
         version: 1.93.0
@@ -162,10 +162,10 @@ importers:
         version: 10.5.7(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))
       '@storybook/addon-docs':
         specifier: 10.5.7
-        version: 10.5.7(@types/react@19.2.17)(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
+        version: 10.5.7(@types/react@19.2.17)(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
       '@storybook/html-vite':
         specifier: 10.5.7
-        version: 10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
+        version: 10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
       '@storybook/server-webpack5':
         specifier: 10.5.7
         version: 10.5.7(esbuild@0.28.1)(postcss@8.5.22)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(typescript@7.0.2)
@@ -177,7 +177,7 @@ importers:
         version: 10.5.7(@types/react@19.2.17)(react@19.2.8)
       vite:
         specifier: 8.2.1
-        version: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
+        version: 8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
 
 packages:
 
@@ -1490,11 +1490,8 @@ packages:
   '@types/mdx@2.0.14':
     resolution: {integrity: sha512-T48PeuJtvLosNTPVhfnIp3i/n3a4g4Bad7YCq5k64D4u7NwDrAotikQ+5+sjtUvBmxCMlbo3dVL+C2dP0rWHzg==}
 
-  '@types/node@22.20.1':
-    resolution: {integrity: sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q==}
-
-  '@types/node@26.1.1':
-    resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
+  '@types/node@26.1.2':
+    resolution: {integrity: sha512-Vu4a5UFA9rIIFJ7rB/Vaafh9lrCQszopTCx6KjFboXTGQbPNasehVR5TEiithSDGyd1DEiUByggTZsg8jukeIg==}
 
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
@@ -4194,9 +4191,6 @@ packages:
   underscore@1.13.8:
     resolution: {integrity: sha512-DXtD3ZtEQzc7M8m4cXotyHR+FAS18C64asBYY5vqZexfYryNNnDc02W4hKg3rdQuqOYas1jkseX0+nZXjTXnvQ==}
 
-  undici-types@6.21.0:
-    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
-
   undici-types@8.3.0:
     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
 
@@ -5444,10 +5438,10 @@ snapshots:
       axe-core: 4.13.0
       storybook: 10.5.7(@types/react@19.2.17)(react@19.2.8)
 
-  '@storybook/addon-docs@10.5.7(@types/react@19.2.17)(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))':
+  '@storybook/addon-docs@10.5.7(@types/react@19.2.17)(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))':
     dependencies:
       '@mdx-js/react': 3.1.1(@types/react@19.2.17)(react@19.2.8)
-      '@storybook/csf-plugin': 10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
+      '@storybook/csf-plugin': 10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
       '@storybook/icons': 2.1.0(react@19.2.8)
       '@storybook/react-dom-shim': 10.5.7(@types/react@19.2.17)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))
       react: 19.2.8
@@ -5463,12 +5457,12 @@ snapshots:
       - vite
       - webpack
 
-  '@storybook/builder-vite@10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))':
+  '@storybook/builder-vite@10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))':
     dependencies:
-      '@storybook/csf-plugin': 10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
+      '@storybook/csf-plugin': 10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
       storybook: 10.5.7(@types/react@19.2.17)(react@19.2.8)
       ts-dedent: 2.3.0
-      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
+      vite: 8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
     transitivePeerDependencies:
       - esbuild
       - rollup
@@ -5516,24 +5510,24 @@ snapshots:
       storybook: 10.5.7(@types/react@19.2.17)(react@19.2.8)
       ts-dedent: 2.3.0
 
-  '@storybook/csf-plugin@10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))':
+  '@storybook/csf-plugin@10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))':
     dependencies:
       storybook: 10.5.7(@types/react@19.2.17)(react@19.2.8)
       unplugin: 2.3.11
     optionalDependencies:
       esbuild: 0.28.1
       rollup: 4.62.2
-      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
+      vite: 8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
       webpack: 5.109.0(esbuild@0.28.1)(postcss@8.5.22)
 
   '@storybook/global@5.0.0': {}
 
-  '@storybook/html-vite@10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))':
+  '@storybook/html-vite@10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))':
     dependencies:
-      '@storybook/builder-vite': 10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
+      '@storybook/builder-vite': 10.5.7(esbuild@0.28.1)(rollup@4.62.2)(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))(vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0))(webpack@5.109.0(esbuild@0.28.1)(postcss@8.5.22))
       '@storybook/html': 10.5.7(storybook@10.5.7(@types/react@19.2.17)(react@19.2.8))
       storybook: 10.5.7(@types/react@19.2.17)(react@19.2.8)
-      vite: 8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
+      vite: 8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0)
     transitivePeerDependencies:
       - esbuild
       - rollup
@@ -5743,14 +5737,9 @@ snapshots:
 
   '@types/mdx@2.0.14': {}
 
-  '@types/node@22.20.1':
-    dependencies:
-      undici-types: 6.21.0
-
-  '@types/node@26.1.1':
+  '@types/node@26.1.2':
     dependencies:
       undici-types: 8.3.0
-    optional: true
 
   '@types/normalize-package-data@2.4.4': {}
 
@@ -5764,7 +5753,7 @@ snapshots:
 
   '@types/yauzl@2.10.3':
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 26.1.2
     optional: true
 
   '@typescript/typescript-aix-ppc64@7.0.2':
@@ -6324,7 +6313,7 @@ snapshots:
 
   chrome-launcher@0.13.4:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 26.1.2
       escape-string-regexp: 1.0.5
       is-wsl: 2.2.0
       lighthouse-logger: 1.2.0
@@ -6335,7 +6324,7 @@ snapshots:
 
   chrome-launcher@1.2.1:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 26.1.2
       escape-string-regexp: 4.0.0
       is-wsl: 2.2.0
       lighthouse-logger: 2.0.2
@@ -7181,7 +7170,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 26.1.2
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
@@ -8270,7 +8259,7 @@ snapshots:
 
   speedline-core@1.4.3:
     dependencies:
-      '@types/node': 22.20.1
+      '@types/node': 26.1.2
       image-ssim: 0.2.0
       jpeg-js: 0.4.4
 
@@ -8577,10 +8566,7 @@ snapshots:
 
   underscore@1.13.8: {}
 
-  undici-types@6.21.0: {}
-
-  undici-types@8.3.0:
-    optional: true
+  undici-types@8.3.0: {}
 
   undici@7.29.0: {}
 
@@ -8636,7 +8622,7 @@ snapshots:
 
   version-range@4.15.0: {}
 
-  vite@8.2.1(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0):
+  vite@8.2.1(@types/node@26.1.2)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.49.0)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
       picomatch: 4.0.5
@@ -8644,7 +8630,7 @@ snapshots:
       rolldown: 1.2.3
       tinyglobby: 0.2.17
     optionalDependencies:
-      '@types/node': 26.1.1
+      '@types/node': 26.1.2
       esbuild: 0.28.1
       fsevents: 2.3.3
       jiti: 2.7.0
