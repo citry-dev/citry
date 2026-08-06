@@ -13,8 +13,8 @@ source modules elsewhere in the repository.
 
 1. `playground.js` or `live_code_runtime.js` reads the editor and asks
    `worker_session.js` to run it.
-2. `worker.js` loads `runtime.json`, Pyodide, the pinned wheels,
-   `executor.py`, and `citry-events.js`.
+2. `worker.js` loads `runtime.json`, Pyodide, the pinned wheels, and
+   `executor.py`. The pinned Citry wheel supplies its matching Events client.
 3. `executor.py` runs one Python module in a fresh namespace. It normalizes
    the module's final expression into rendered HTML and retains the Citry
    instance so event handlers remain callable.
@@ -27,6 +27,10 @@ source modules elsewhere in the repository.
 6. A Citry event travels from `preview.html` through `preview_bridge.js` and
    `worker_session.js` to `worker.js`. The Worker calls `executor.py`, and the
    response returns along the same path.
+7. Before applying a Render action, `preview.html` asks the same Worker for any
+   new Citry-owned JavaScript and CSS. `executor.py` resolves only its exact
+   built-in asset routes, and the iframe installs the results as reusable Blob
+   URLs before Citry changes the DOM.
 
 Each render uses a candidate iframe. The previous result stays visible until
 the candidate has loaded, connected, received the new HTML, and acknowledged
@@ -46,17 +50,17 @@ beside the error.
 | `preview.html` | Provides the sandboxed result document, ordered script activation, diagnostics, and the Events transport. | This file. |
 | `playground.css` | Styles the full-page editor and result workspace. | This file. |
 | `live_code.css` | Styles inline `<c-live-code>` blocks and their activated workspace. | This file. |
-| `playground.js` | Generated bundle for the full-page playground. | [`../../frontend/src/playground.js`](../../frontend/src/playground.js) and its imports. |
-| `live_code.js` | Generated lightweight activator loaded on pages that contain live examples. | [`../../frontend/src/live_code.js`](../../frontend/src/live_code.js). |
-| `live_code_runtime.js` | Generated deferred bundle containing the inline editor and runtime. | [`../../frontend/src/live_code_runtime.js`](../../frontend/src/live_code_runtime.js) and its imports. |
-| `citry-events.js` | Generated Citry Events client, including pinned Alpine and morph builds. | [`../../../packages/js/citry-client/src/citry-events.ts`](../../../packages/js/citry-client/src/citry-events.ts). |
+| `playground.js` | Generated bundle for the full-page playground. | [`../../_internal/frontend/src/playground.js`](../../_internal/frontend/src/playground.js) and its imports. |
+| `live_code.js` | Generated lightweight activator loaded on pages that contain live examples. | [`../../_internal/frontend/src/live_code.js`](../../_internal/frontend/src/live_code.js). |
+| `live_code_runtime.js` | Generated deferred bundle containing the inline editor and runtime. | [`../../_internal/frontend/src/live_code_runtime.js`](../../_internal/frontend/src/live_code_runtime.js) and its imports. |
 
 The shared authored JavaScript modules live in
-[`../../frontend/src/`](../../frontend/src/):
+[`../../_internal/frontend/src/`](../../_internal/frontend/src/):
 
 - `citry_editor.js` configures CodeMirror and nested Citry syntax.
 - `preview_bridge.js` owns the parent side of the iframe protocol.
-- `worker_session.js` owns Worker lifetime, timeouts, and request matching.
+- `worker_session.js` owns Worker lifetime, timeouts, and run, event, and asset
+  request matching.
 
 Do not edit a generated JavaScript file in this directory. Its next build will
 replace the change.
@@ -70,10 +74,10 @@ pnpm install
 ```
 
 Edit direct files in this directory or authored files under
-`docs_site/frontend/src/`, then rebuild the generated files:
+`docs_site/_internal/frontend/src/`, then rebuild the generated files:
 
 ```bash
-pnpm --dir docs_site/frontend build
+pnpm --dir docs_site/_internal/frontend build
 ```
 
 Start the live docs server:
@@ -83,29 +87,15 @@ uv run --no-sync python -m docs_site serve
 ```
 
 Open `/playground/` for the full workspace. Open any docs page containing
-`<c-live-code>` to exercise the inline consumer. Python source changes restart
-the server. Browser bundle changes require another frontend build and page
-refresh.
+`<c-live-code>` or a component page containing `<c-ui-demo>` to exercise the
+inline consumer. Python source changes restart the server. Browser bundle
+changes require another frontend build and page refresh.
 
-The live server builds temporary wheels from the workspace `citry` and
-`citry-ui` sources. It serves a local `runtime.json`, local wheels, and the
-matching Events client without changing this committed directory. Static
-builds, CI, and deployed docs use the exact versions in the committed
-`runtime.json`.
-
-## Regenerate the Events client
-
-The Events client has two generated copies. Build its TypeScript source first,
-then rebuild the docs frontend so this directory receives the same bytes:
-
-```bash
-pnpm --dir packages/js/citry-client build
-pnpm --dir docs_site/frontend build
-```
-
-The docs frontend check compares `citry-events.js` byte for byte with the
-Python package copy. This prevents the playground and installed Citry package
-from using different client runtimes.
+The live server builds a temporary wheel from the workspace `citry-ui` source
+and adds it to the published Citry tuple in `runtime.json`. It serves that local
+wheel without changing this committed directory. Static builds, CI, and
+deployed docs use only the exact published versions in the committed
+`runtime.json`. The pinned Citry wheel owns the Events client in both cases.
 
 ## Update the pinned Python runtime
 
@@ -130,10 +120,20 @@ The runtime uses two small internal protocols:
 - `preview_bridge.js` and `preview.html` pair protocol version, session, run ID,
   and nonce before accepting a message.
 
-Events cross all four JavaScript modules and `executor.py`. When changing a
-message shape, timeout, byte limit, or lifecycle rule, update both sender and
-receiver and extend the corresponding browser test. Stale messages must remain
-harmless after Stop, Reset, a newer run, iframe replacement, or Worker restart.
+Events and Render asset requests cross all four JavaScript modules and
+`executor.py`. Asset calls have separate iframe-local and Worker-local IDs,
+while both layers bind them to the current run. `preview.html` keeps one Blob
+URL per logical Citry asset and remembers assets already emitted by the initial
+document so later fragments do not execute them twice while they remain
+usable. If Citry collects class CSS after its last instance leaves, the next
+instance reuses the browser asset path to restore that sheet. The preview
+prepares every Render action in an event response before applying any action.
+
+When changing a message shape, timeout, byte limit, or lifecycle rule, update
+both sender and receiver and extend the corresponding browser test. Stale
+messages must remain harmless after Stop, Reset, a newer run, iframe
+replacement, or Worker restart. Asset preparation failure must leave the last
+good candidate or displayed DOM unchanged.
 
 The result iframe intentionally uses only `allow-forms` and `allow-scripts`.
 Keep it on an opaque origin, communicate through the transferred
@@ -144,7 +144,7 @@ Keep it on an opaque origin, communicate through the transferred
 Run the generated-file check and focused unit tests:
 
 ```bash
-pnpm --dir docs_site/frontend check
+pnpm --dir docs_site/_internal/frontend check
 uv run --no-sync pytest \
   docs_site/tests/test_playground_executor.py \
   docs_site/tests/test_local_playground_runtime.py \
@@ -164,9 +164,10 @@ uv run --no-sync pytest \
 Finish with the repository gate:
 
 ```bash
-uv run --no-sync python scripts/check.py
+python scripts/check.py
 ```
 
 The browser tests should cover a successful render, Python and client errors,
-Stop and Reset, stale-result handling, form submission, Citry Events, and at
-least one client-active Citry UI component.
+Stop and Reset, stale-result handling, form submission, Citry Events, a Render
+action with JavaScript, CSS, nested State and Events, asset deduplication, and
+at least one client-active Citry UI component.

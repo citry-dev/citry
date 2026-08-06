@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import contextlib
 import dataclasses
+import inspect
 import io
 import json
 import linecache
@@ -16,21 +17,35 @@ import logging
 import secrets
 import sys
 import traceback
-from pathlib import Path
 from types import ModuleType
 from typing import Any
 
 from citry import CitryElement, CitryRender, citry
-from citry.ext.events import EventRequest, EventsDispatcher, TransportContext, emission
-from citry.util.routing import RouteHeaders, RouteResponse
+from citry.ext.events import EventRequest, EventsDispatcher, TransportContext
+from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
 
 PLAYGROUND_FILENAME = "<playground>"
 PLAYGROUND_MODULE_NAME = "__playground__"
 MAX_STREAM_CHARS = 65_536
 MAX_TRACEBACK_CHARS = 16_384
 MAX_MESSAGE_CHARS = 4_096
+MAX_ASSET_PATHS = 32
+MAX_ASSET_PATH_BYTES = 512
+MAX_ASSET_BYTES = 1024 * 1024
+MAX_ASSET_BATCH_BYTES = 4 * 1024 * 1024
 PLAYGROUND_EVENT_PATH = "/playground/events"
-SUPPORTED_EVENT_ACTIONS = frozenset({"data", "event", "state"})
+PLAYGROUND_ASSET_PREFIX = "/__citry_playground__"
+SUPPORTED_EVENT_ACTIONS = frozenset({"data", "event", "render", "state"})
+_ALLOWED_ASSET_ROUTES = frozenset(
+    {
+        ("cache/{class_id}.{vars_hash}.{script_type}", "citry_cached_script_vars"),
+        ("cache/{class_id}.{script_type}", "citry_cached_script"),
+        ("asset/{file_name}", "citry_asset"),
+        ("citry.js", "citry_client_runtime"),
+        ("ext/events/runtime.js", "citry_events_runtime"),
+    }
+)
+_ALLOWED_ASSET_CONTENT_TYPES = frozenset({"text/css", "text/javascript"})
 
 
 @dataclasses.dataclass
@@ -50,6 +65,7 @@ citry.settings = dataclasses.replace(
     secret=[secrets.token_urlsafe(32)],
     autodiscover=False,
 )
+citry.set_mounted_prefix(PLAYGROUND_ASSET_PREFIX)
 
 # Event exceptions are teaching feedback in this local-only runtime. Debug
 # mode includes the exception type and message in the structured handler error;
@@ -95,6 +111,9 @@ def _bounded(value: str, limit: int) -> tuple[str, bool]:
 
 
 def _normalize_preview(value: object) -> str:
+    # Visitor code may change the default engine. The host prefix remains a
+    # playground contract so every document and event fragment names assets alike.
+    citry.set_mounted_prefix(PLAYGROUND_ASSET_PREFIX)
     if isinstance(value, str):
         return str(value)
     if isinstance(value, CitryElement):
@@ -263,15 +282,6 @@ def _fresh_module(source: str, extra: dict[str, Any]) -> ModuleType:
     return module
 
 
-def install_events_client_runtime(source: str) -> str:
-    """Install the generated Events runtime omitted from the Citry 0.3.0 wheel."""
-    target = Path(emission.__file__).parent / "client" / "citry-events.js"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(source, encoding="utf-8")
-    emission._client_runtime_js.cache_clear()
-    return str(target)
-
-
 def _unsupported_event_result(envelope: object, message: str) -> dict[str, object]:
     if not isinstance(envelope, dict):
         request_id = None
@@ -336,7 +346,7 @@ def _apply_playground_event_policy(envelope: object, response: object) -> dict[s
                 "code": "handler_error",
                 "message": (
                     f"This event returned unsupported playground action(s): {names}. "
-                    "The playground currently supports Data, Dispatch, and State actions."
+                    "The playground currently supports Data, Dispatch, Render, and State actions."
                 ),
             },
         }
@@ -369,16 +379,85 @@ def dispatch_event_json(envelope_json: str, run_id: int) -> str:
         headers=headers,
     )
 
-    # Render actions need Citry's fragment asset routes. Give serialization a
-    # syntactically valid prefix so the dispatcher can finish, then reject the
-    # unsupported action with a pointed playground error below.
-    previous_prefix = citry.mounted_prefix
-    citry.set_mounted_prefix("/__citry_playground__")
-    try:
-        response = _dispatcher.dispatch(envelope, context, request=request)
-    finally:
-        citry._mounted_prefix = previous_prefix
+    # Reassert the host-owned prefix before fragment serialization in case the
+    # visitor changed the default engine while handling an earlier event.
+    citry.set_mounted_prefix(PLAYGROUND_ASSET_PREFIX)
+    response = _dispatcher.dispatch(envelope, context, request=request)
     return json.dumps(_apply_playground_event_policy(envelope, response), allow_nan=False)
+
+
+def load_playground_assets_json(paths_json: str, run_id: int) -> str:
+    """Serve one bounded batch of generated JS and CSS to the active preview."""
+    if _runtime_state.namespace is None or _runtime_state.run_id != run_id:
+        raise RuntimeError("These assets belong to a preview that is no longer active. Run the module again.")
+
+    raw_paths = json.loads(paths_json)
+    if not isinstance(raw_paths, list) or not raw_paths:
+        raise ValueError("A playground asset request must contain at least one path.")
+    if len(raw_paths) > MAX_ASSET_PATHS:
+        raise ValueError(f"A playground asset request may contain at most {MAX_ASSET_PATHS} paths.")
+
+    paths: list[str] = []
+    seen: set[str] = set()
+    prefix = f"{PLAYGROUND_ASSET_PREFIX}/"
+    for path in raw_paths:
+        if not isinstance(path, str) or not path or len(path.encode("utf-8")) > MAX_ASSET_PATH_BYTES:
+            raise ValueError("Each playground asset path must be a short, non-empty string.")
+        relative_path = path.removeprefix(prefix)
+        if (
+            not path.startswith(prefix)
+            or not relative_path
+            or any(character in path for character in ("?", "#", "%", "\\", "\0"))
+            or any(segment in {".", ".."} for segment in relative_path.split("/"))
+        ):
+            raise ValueError(f"Unsupported playground asset path: {path!r}.")
+        if path in seen:
+            raise ValueError(f"Duplicate playground asset path: {path!r}.")
+        seen.add(path)
+        paths.append(path)
+
+    assets: list[dict[str, str]] = []
+    total_bytes = 0
+    routes = citry.urls
+    for path in paths:
+        route_path = path.removeprefix(prefix)
+        matched = match_route(routes, route_path)
+        identity = None if matched is None else (matched.full_path, matched.route.name)
+        if matched is None or identity not in _ALLOWED_ASSET_ROUTES:
+            raise ValueError(f"Unsupported playground asset path: {path!r}.")
+        if "GET" not in matched.route.methods or matched.route.handler is None:
+            raise ValueError(f"The playground asset route cannot serve {path!r}.")
+        handler = matched.route.handler
+        if inspect.iscoroutinefunction(handler):
+            raise ValueError(f"The playground asset route cannot serve {path!r} synchronously.")
+
+        request = RouteRequest(method="GET", path=path)
+        response = handler(request, **matched.params)
+        if not isinstance(response, RouteResponse) or response.status != 200:
+            raise ValueError(f"The playground asset was not found: {path!r}.")
+        content_type = response.content_type.partition(";")[0].strip().lower()
+        if content_type not in _ALLOWED_ASSET_CONTENT_TYPES:
+            raise ValueError(f"The playground asset has an unsupported content type: {path!r}.")
+        if isinstance(response.content, bytes):
+            try:
+                content = response.content.decode("utf-8")
+            except UnicodeDecodeError as error:
+                raise ValueError(f"The playground asset is not valid UTF-8: {path!r}.") from error
+        elif isinstance(response.content, str):
+            content = response.content
+        else:
+            raise TypeError(f"The playground asset returned unsupported content: {path!r}.")
+        content_bytes = len(content.encode("utf-8"))
+        if content_bytes > MAX_ASSET_BYTES:
+            raise ValueError(f"The playground asset exceeds the {MAX_ASSET_BYTES // 1024} KiB limit: {path!r}.")
+        total_bytes += content_bytes
+        if total_bytes > MAX_ASSET_BATCH_BYTES:
+            raise ValueError(
+                f"The playground asset batch exceeds the {MAX_ASSET_BATCH_BYTES // 1024 // 1024} MiB limit."
+            )
+        assets.append({"path": path, "contentType": content_type, "content": content})
+
+    return json.dumps(assets, allow_nan=False)
 
 
 def run_source_json(source: str, run_id: int = 1) -> str:
