@@ -17,7 +17,7 @@ import re
 from typing import Any
 
 from citry import Citry, CitryRender, Component, Extension, Slot
-from citry.util.html import SafeString
+from citry.util.html import Markup
 
 
 def _scrub_ids(html: str) -> str:
@@ -86,11 +86,11 @@ def origin_cases() -> dict[str, Any]:
     assert template_slot.component_name == "box"
 
     escaped = _scrub_ids(str(Box(slots={"x": '<button x-text="bad"></button>'})))
-    raw = _scrub_ids(str(Box(slots={"x": SafeString('<button x-text="raw"></button>')})))
+    raw = _scrub_ids(str(Box(slots={"x": Markup('<button x-text="raw"></button>')})))
     assert "&lt;button" in escaped
     assert raw == '<div><button x-text="raw"></button></div>'
 
-    reusable = Slot(SafeString('<span class="shared" x-text="owner"></span>'))
+    reusable = Slot(Markup('<span class="shared" x-text="owner"></span>'))
 
     class ReusedAtTwoLocations(Component):
         citry = c

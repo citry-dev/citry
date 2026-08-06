@@ -1,126 +1,7 @@
-from citry_setup import citry_app
-
 from citry import Component
 from citry.ext.events import EventError, actions
 
-CHOICE_BATCHES = (
-    ("Ocean", "Forest"),
-    ("History", "Science"),
-)
-
-
-def load_choices_from_database(batch: int) -> list[str]:
-    choices = CHOICE_BATCHES[batch % len(CHOICE_BATCHES)]
-    return list(choices)
-
-
-class ChoiceButton(Component):
-    citry = citry_app
-
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
-
-    template = """
-      <button class="choice-button" type="button">
-        Choose
-        <span
-          class="choice-button__label"
-          x-text="clientProps.label"
-        ></span>
-      </button>
-    """
-
-    js = """
-      $component({
-        props: {
-          label: { type: String, required: true },
-        },
-        init: ({ props, scope }) => {
-          scope.clientProps = props;
-        },
-      });
-    """
-
-
-class ChoicePicker(Component):
-    citry = citry_app
-
-    class Kwargs:
-        batches_loaded: int = 0
-
-    class Slots:
-        pass
-
-    class State(Kwargs):
-        pass
-
-    class Events:
-        def load_choices(self, state):
-            choices = load_choices_from_database(state.batches_loaded)
-            state.batches_loaded += 1
-            return actions.Dispatch(
-                "choice-picker:loaded",
-                {
-                    "choices": choices,
-                    "batches_loaded": state.batches_loaded,
-                },
-            )
-
-    template = """
-      <section
-        class="choice-picker"
-        c-x-data="{
-          'choices': [],
-          'choice': '',
-          'batchesLoaded': batches_loaded,
-        }"
-        @choice-picker:loaded="
-          choices = $event.detail.choices;
-          choice = choices[0];
-          batchesLoaded = $event.detail.batches_loaded;
-        "
-      >
-        <button
-          type="button"
-          :disabled="$loading('load_choices')"
-          @c-click="load_choices"
-        >
-          Load choices
-        </button>
-        <span x-show="$loading('load_choices')">Loading...</span>
-        <p>
-          Sets loaded:
-          <output x-text="batchesLoaded">
-            {{ batches_loaded }}
-          </output>
-        </p>
-
-        <p x-show="choices.length === 0">
-          No choices loaded yet.
-        </p>
-        <div x-show="choices.length > 0">
-          <p>
-            Current choice:
-            <output
-              class="choice-picker__value"
-              x-text="choice"
-            ></output>
-          </p>
-
-          <c-ChoiceButton
-            $c-props="{ label: choice }"
-            @click="
-              choice = choices[
-                (choices.indexOf(choice) + 1) % choices.length
-              ]
-            "
-          />
-        </div>
-      </section>
-    """
+from citry_setup import citry_app
 
 
 # New in this step: describe the named values sent by the form.
@@ -128,7 +9,7 @@ class SignupIn:
     email: str
 
 
-# New in this step: validate the form and return field errors.
+# New in this step: Sign up form with server-side validation
 class SignupForm(Component):
     citry = citry_app
 
@@ -139,6 +20,7 @@ class SignupForm(Component):
         pass
 
     class Events:
+        # Validate the form and return field errors
         def submit(self, data: SignupIn):
             email = data.email.strip()
             if not email.endswith("@example.com"):
@@ -169,8 +51,8 @@ class SignupForm(Component):
             <span
               class="signup-form__error"
               role="alert"
-              x-show="$error?.fieldErrors?.email"
-              x-text="$error?.fieldErrors?.email || ''"
+              x-show="$error('submit')?.fieldErrors?.email"
+              x-text="$error('submit')?.fieldErrors?.email || ''"
             ></span>
           </label>
           <button
@@ -202,12 +84,11 @@ class TutorialPage(Component):
       <html lang="en">
         <head>
           <meta charset="utf-8" />
-          <title>Reading room</title>
+          <title>Join the reading room</title>
         </head>
         <body>
           <main>
-            <h1>Reading room</h1>
-            <c-ChoicePicker />
+            <h1>Join the reading room</h1>
             {# New in this step: place the form on the page. #}
             <c-SignupForm />
           </main>

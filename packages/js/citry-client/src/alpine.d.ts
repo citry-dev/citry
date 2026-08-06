@@ -50,6 +50,8 @@ declare module "alpinejs" {
     evaluate(el: Element, expression: string, extras?: { scope?: object }): unknown;
     /** Wraps the target in Alpine's reactivity proxy. */
     reactive<T extends object>(target: T): T;
+    /** Returns a reactive proxy's original value, or an ordinary value unchanged. */
+    raw<T>(value: T): T;
     /**
      * Runs the callback now and re-runs it (through Alpine's scheduler) when
      * any reactive value it read changes. Returns the handle `release` takes.
@@ -96,9 +98,34 @@ declare module "alpinejs" {
       to: string | Element,
       options?: {
         key?(el: Element): string | null | undefined | false;
+        /** Citry instrumentation: excludes range-internal roots from Alpine's flat keyed sibling index. */
+        keyMapFilter?(el: Element): boolean;
         updating?(from: Node, to: Node, childrenOnly: () => void, skip: () => void, skipChildren: () => void): void;
       },
     ): Element;
+    /**
+     * Citry's build-time instrumentation runs the pinned morph working-sequence
+     * algorithm against inert clones and reports only pairs which reach the
+     * updating hook.
+     */
+    _citryPlanBetween(
+      from: Element,
+      to: Element,
+      options?: {
+        key?(el: Element): string | null | undefined | false;
+        keyMapFilter?(el: Element): boolean;
+        updating?(
+          from: Node,
+          to: Node,
+          childrenOnly: () => void,
+          skip: () => void,
+          skipChildren: () => void,
+          skipUntil: (predicate: (node: Node) => boolean) => void,
+        ): void;
+        adding?(node: Node, skip: () => void): void;
+        removing?(node: Node, skip: () => void): void;
+      },
+    ): void;
   }
 
   const Alpine: AlpineGlobal;

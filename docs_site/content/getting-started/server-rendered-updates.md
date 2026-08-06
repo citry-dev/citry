@@ -1,9 +1,9 @@
 ---
-title: Replace part of the page from Python
+title: Update page from Python
 description: Render a new component into one chosen part of the page, including the component's JavaScript and CSS.
 ---
 
-# Replace part of the page from Python
+# Update page from Python
 
 The form currently reports success by changing a line of text in the browser.
 For the final step, Python will render a new `Confirmation` component into the
@@ -19,11 +19,14 @@ form](/getting-started/forms/). Keep `citry_setup.py` and `app.py` unchanged.
 
 Replace `components.py` with the finished version:
 
-The `New in this step` comments mark the complete change: the new
-`Confirmation` component, the form's new success action and result area, and
-the two places where the page collects component CSS and JavaScript.
+The file stays focused on the form. The `New in this step` comments mark the
+complete change:
 
-<c-include-file path="docs_site/snippets/getting_started/components.py" language="citry" />
+- a new `Confirmation` component
+- form's new success action and result area
+- two places where the page collects component CSS and JavaScript
+
+<c-include-file path="docs_site/snippets/getting_started/components_step12.py" language="citry" />
 
 Open `http://127.0.0.1:8000/`. Try `ada@elsewhere.test` once more to confirm
 that the field error still works. Then submit `ada@example.com`.
@@ -32,7 +35,7 @@ The placeholder inside the result area becomes a bordered confirmation. Its
 status changes to “Confirmation ready for ada@example.com.” The email form
 remains above it.
 
-## Build the component Python will return
+## Confirmation fragment
 
 `Confirmation` is an ordinary component. Focusing only on its input and
 visible HTML, it looks like this:
@@ -55,9 +58,9 @@ class Confirmation(Component):
 
 The complete class above also includes its Citry instance, `Slots`, browser
 data, JavaScript, and CSS. This smaller excerpt shows the first connection:
-`Confirmation(email=email)` supplies the value that `{{ email }}` prints.
+`Confirmation(email=email)` supplies the value that `{{ email }}` inserts.
 
-## Return the component from the handler
+## Render action
 
 The successful handler now returns an
 [`actions.Render`][citry.ext.events.actions.Render] action:
@@ -75,7 +78,7 @@ renders it as a browser update, including the information needed for that
 component's CSS and JavaScript. The validation path still raises the same
 `EventError`; only a successful submission reaches this return statement.
 
-## Choose the part of the page to update
+## Swap target selector
 
 The form contains a stable result area:
 
@@ -95,7 +98,7 @@ technology announce the new confirmation without moving keyboard focus.
 Use a selector that identifies the intended area without matching unrelated
 elements.
 
-## Give the new component browser data
+## Confirmation JS data
 
 The confirmation sends its email address to browser code through
 [`js_data()`][citry.Component.js_data]:
@@ -103,7 +106,6 @@ The confirmation sends its email address to browser code through
 ```python
 class JsData:
     email: str
-
 
 def js_data(self, kwargs: Kwargs, slots: Slots) -> JsData:
     return self.JsData(email=kwargs.email)
@@ -119,10 +121,13 @@ $component(({ els, data }) => {
 ```
 
 When the new component starts, this changes “Preparing confirmation...” to the
-finished status. As with the browser data from the earlier lesson, the value
-returned by `js_data()` must be JSON-serializable.
+finished status.
 
-## Bring the component's styles and script
+!!! note
+
+    The value returned by `js_data()` must be JSON-serializable.
+
+## Confirmation CSS
 
 `Confirmation` also owns the border that makes the new result visible:
 
@@ -134,7 +139,15 @@ returned by `js_data()` must be JSON-serializable.
 }
 ```
 
-The full page provides places for component CSS and JavaScript:
+## Asset loading order
+
+There's two steps when the component CSS and JS scripts are inserted into the page:
+
+### 1. First response - Full page
+
+When you first loaded the entire page `TutorialPage`, Citry automatically collected all CSS and JS assets and inserted them into the HTML.
+
+You can customize where to insert the assets with [`<c-css />`][c-css] and [`<c-js />`][c-js]. Adding the tags makes the positions explicit. Read more about [asset placement](/advanced/asset-placement/).
 
 ```citry-html
 <head>
@@ -147,32 +160,19 @@ The full page provides places for component CSS and JavaScript:
 </body>
 ```
 
-[`<c-css />`][c-css] and [`<c-js />`][c-js] place the assets needed by
-components in the first response. Earlier pages worked without these tags
-because Citry can choose the usual document positions automatically. Adding
-the tags makes the positions explicit.
+### 2. Second response - Fragment
 
-`Confirmation` is created later, so its assets arrive with the rendered
-update, not through the two tags in the first response. Citry loads them before
-the new component starts. That is why the green border appears and the status
-changes after the confirmation enters the page.
+`Confirmation` is created later, its JS/CSS assets arrive in the **second** response when server responds to the form submission. So `Confirmation` never sees the `<c-css />` and `<c-js />`.
+
+The second response inserts the `Confirmation` into the page. Citry is smart enough to notice that and collect JS and CSS assets of the inserted fragment. Citry then loads the JS/CSS assets before
+the new component starts.
+
+That is why the green border appears and the status changes after the confirmation enters the page.
 
 See [Event actions](/events/actions/) for the other results a handler can
 return, and [HTML fragments](/advanced/html-fragments/) for a deeper look at
 rendering and inserting partial HTML.
 
-## Keep building
+## Next steps
 
-You have now used Citry from both sides of the connection. Python rendered the
-first page, browser data handled instant changes, server events called typed
-Python handlers, State continued across calls, form errors came back beside
-their fields, and a final handler replaced one part of the page with a new
-component.
-
-From here:
-
-- use [Examples](/examples/) when you want working code for a specific task;
-- read [Docs](/getting-started/installation/) when you want a concept or guided
-  workflow; or
-- open [Reference](/reference/) when you need the exact API for a class,
-  method, or return action.
+You now know how to build a single page with a view events. Next, let's build a [CRUD admin table](/getting-started/build-crud-pages/) to learn how to manage a page with tens to hundreds of components.

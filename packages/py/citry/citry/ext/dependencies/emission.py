@@ -40,7 +40,7 @@ from citry.ext.dependencies.scripts import (
 from citry.ext.dependencies.types import Dependency, Script, Style
 from citry.ownership_manifest import EXTRA_KEY as OWNERSHIP_MANIFEST_KEY
 from citry.ownership_manifest import OwnershipManifestArtifact
-from citry.util.html import SafeString
+from citry.util.html import Markup
 
 if TYPE_CHECKING:
     from citry.citry import Citry
@@ -104,8 +104,8 @@ class _PrerenderedTag(Dependency):
     ``__html__``): emitted verbatim. ``content`` holds the full tag text.
     """
 
-    def render(self) -> SafeString:
-        return SafeString(self.content or "")
+    def render(self) -> Markup:
+        return Markup(self.content or "")  # noqa: S704 - __html__ declared this entry trusted
 
 
 def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
@@ -239,6 +239,12 @@ class _Resolved:
     # manager can count the class's live instances for the Component.css
     # cleanup (docs/design/dependencies.md 8.4).
     css_instances: list[tuple[str, str]]
+    # Fragment fetch descriptors are deduplicated across component instances,
+    # but adoption still needs to know which incoming branches requested one.
+    # Identity keys distinguish a hook-created equal descriptor from the
+    # component-owned object it happens to duplicate.
+    script_owners: dict[int, set[str]]
+    style_owners: dict[int, set[str]]
 
 
 def _resolve_records(
@@ -289,6 +295,8 @@ def _resolve_records(
     mark_js_urls: list[str] = []
     mark_css_urls: list[str] = []
     css_instances: list[tuple[str, str]] = []
+    script_owner_groups: dict[Dependency, set[str]] = {}
+    style_owner_groups: dict[Dependency, set[str]] = {}
 
     # The class-level entries (a class's Dependencies plus its own JS/CSS) are
     # identical for every instance of the class, so resolve them once per class
@@ -427,16 +435,23 @@ def _resolve_records(
 
         for script in instance_scripts:
             _bucket(script, core_js, extra_js, component_js)
+            script_owner_groups.setdefault(script, set()).add(record.component_id)
         for style in instance_styles:
             _bucket(style, core_css, extra_css, component_css)
+            style_owner_groups.setdefault(style, set()).add(record.component_id)
+
+    deduped_scripts = list(dict.fromkeys([*core_js, *extra_js, *component_js]))
+    deduped_styles = list(dict.fromkeys([*core_css, *extra_css, *component_css]))
 
     return _Resolved(
-        scripts=list(dict.fromkeys([*core_js, *extra_js, *component_js])),
-        styles=list(dict.fromkeys([*core_css, *extra_css, *component_css])),
+        scripts=deduped_scripts,
+        styles=deduped_styles,
         calls=calls,
         mark_js_urls=list(dict.fromkeys(mark_js_urls)),
         mark_css_urls=list(dict.fromkeys(mark_css_urls)),
         css_instances=css_instances,
+        script_owners={id(dependency): set(script_owner_groups[dependency]) for dependency in deduped_scripts},
+        style_owners={id(dependency): set(style_owner_groups[dependency]) for dependency in deduped_styles},
     )
 
 
@@ -493,6 +508,10 @@ def _build_manifest(
     calls: list[_ComponentCall],
     css_instances: list[tuple[str, str]],
     graph_revision: str | None = None,
+    fetch_js_owners: dict[int, set[str]] | None = None,
+    fetch_css_owners: dict[int, set[str]] | None = None,
+    before_manifest: list[Dependency] | None = None,
+    transactional: bool = False,
 ) -> Script:
     """
     The page manifest: a ``<script type="application/json" data-citry>`` tag
@@ -505,14 +524,41 @@ def _build_manifest(
     ``$component`` callback, counted live for the per-class CSS cleanup).
     String fields ride as base64, so no value can break out of the script tag.
     """
+
+    def encode_fetch(
+        dependencies: list[Dependency], owners_by_identity: dict[int, set[str]] | None
+    ) -> list[str] | list[list[str | list[str] | None]]:
+        if not transactional:
+            return [_b64(json.dumps(dep.render_json())) for dep in dependencies]
+
+        # A global hook can append an object equal to a component dependency.
+        # Keep the first descriptor position, union component owners, and let
+        # one truly global occurrence make the deduplicated entry global.
+        grouped: dict[Dependency, tuple[Dependency, set[str], bool]] = {}
+        for dependency in dependencies:
+            owners = None if owners_by_identity is None else owners_by_identity.get(id(dependency))
+            current = grouped.get(dependency)
+            if current is None:
+                grouped[dependency] = (dependency, set(owners or ()), owners is None)
+                continue
+            current[1].update(owners or ())
+            if owners is None and not current[2]:
+                grouped[dependency] = (current[0], current[1], True)
+
+        encoded: list[list[str | list[str] | None]] = []
+        for dependency, owners, global_dependency in grouped.values():
+            encoded_owners = None if global_dependency else [_b64(owner) for owner in sorted(owners)]
+            encoded.append([_b64(json.dumps(dependency.render_json())), encoded_owners])
+        return encoded
+
     manifest = {
         "markLoaded": {
             "js": [_b64(url) for url in dict.fromkeys(mark_js)],
             "css": [_b64(url) for url in dict.fromkeys(mark_css)],
         },
         "fetch": {
-            "js": [_b64(json.dumps(dep.render_json())) for dep in fetch_js],
-            "css": [_b64(json.dumps(dep.render_json())) for dep in fetch_css],
+            "js": encode_fetch(fetch_js, fetch_js_owners),
+            "css": encode_fetch(fetch_css, fetch_css_owners),
         },
         "calls": [
             [_b64(class_id), _b64(component_id), None if vars_hash is None else _b64(vars_hash)]
@@ -521,6 +567,10 @@ def _build_manifest(
         "cssInstances": [[_b64(class_id), _b64(component_id)] for class_id, component_id in css_instances],
         "graph": graph_revision,
     }
+    if transactional:
+        manifest["beforeManifest"] = [
+            _b64(json.dumps(dependency.render_json())) for dependency in before_manifest or []
+        ]
     return Script(kind="core", content=json.dumps(manifest), attrs={"type": "application/json", "data-citry": True})
 
 
@@ -552,7 +602,16 @@ def _emit_fragment(
             raise RuntimeError(fragment_needs_mount_msg)
         resolved = _resolve_records(citry, records, with_client_js=True, as_urls=True)
     else:
-        resolved = _Resolved(scripts=[], styles=[], calls=[], mark_js_urls=[], mark_css_urls=[], css_instances=[])
+        resolved = _Resolved(
+            scripts=[],
+            styles=[],
+            calls=[],
+            mark_js_urls=[],
+            mark_css_urls=[],
+            css_instances=[],
+            script_owners={},
+            style_owners={},
+        )
     scripts, styles = resolved.scripts, resolved.styles
 
     hook_ctx = OnDependenciesContext(
@@ -567,16 +626,31 @@ def _emit_fragment(
     scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
     ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
     graph_revision: str | None = None
+    ownership_tag: Dependency | None = None
     if isinstance(ownership, OwnershipManifestArtifact):
         graph_revision = ownership.revision
-        before_manifest.insert(
-            0,
-            Script(
-                kind="core",
-                content=ownership.json(),
-                attrs={"type": "application/json", "data-citry-graph": True},
-            ),
+        ownership_tag = Script(
+            kind="core",
+            content=ownership.json(),
+            attrs={"type": "application/json", "data-citry-graph": True},
         )
+
+    framework_manifests: list[Dependency] = []
+    staged_before_manifest: list[Dependency] = []
+    for dependency in before_manifest:
+        if (
+            graph_revision is not None
+            and isinstance(dependency, Script)
+            and dependency.attrs.get("type") == "application/json"
+            and dependency.attrs.get("data-citry-events") is True
+        ):
+            framework_manifests.append(dependency)
+        elif graph_revision is not None:
+            staged_before_manifest.append(dependency)
+        else:
+            framework_manifests.append(dependency)
+    if ownership_tag is not None:
+        framework_manifests.insert(0, ownership_tag)
 
     # A fragment that carries nothing at all has nothing to load, so it needs
     # no pre-loader or manifest (and no mounted integration).
@@ -593,12 +667,16 @@ def _emit_fragment(
         calls=resolved.calls,
         css_instances=resolved.css_instances,
         graph_revision=graph_revision,
+        fetch_js_owners=resolved.script_owners,
+        fetch_css_owners=resolved.style_owners,
+        before_manifest=staged_before_manifest,
+        transactional=graph_revision is not None,
     )
     html = _blank(ctx.html, placeholder_texts)
-    # The `before_manifest` entries render as real tags (not fetch
-    # descriptors) directly before the manifest tag, so they are already in
-    # the DOM when the client-side manager processes the manifest.
-    before_html = "".join(str(dep.render()) for dep in before_manifest)
+    # Ownership and Events manifests stay inert top-level JSON. Every other
+    # graph-backed hook entry is a descriptor inside the dependency manifest,
+    # so an ignored incoming branch cannot execute it during fragment parsing.
+    before_html = "".join(str(dep.render()) for dep in framework_manifests)
     return html + str(_preloader_script(citry).render()) + before_html + str(manifest.render())
 
 

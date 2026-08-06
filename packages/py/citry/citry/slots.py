@@ -24,7 +24,7 @@ same path as any other slot value.
 
 Escaping: a plain string (or scalar) is escaped when the Slot is constructed;
 a function's return value is escaped when the Slot is called. A
-``SafeString``, ``CitryElement``, or ``CitryRender`` result is trusted and is
+``Markup``, ``CitryElement``, or ``CitryRender`` result is trusted and is
 not escaped. This matches how ``{{ expr }}`` results are escaped.
 """
 
@@ -39,7 +39,7 @@ from typing_extensions import TypeAliasType
 
 from citry.citry_element import CitryElement
 from citry.component_like import ComponentLike
-from citry.util.html import SafeString, escape
+from citry.util.html import Markup, escape
 
 if TYPE_CHECKING:
     from citry.citry_render import CitryRender, RenderPart
@@ -116,12 +116,12 @@ def _normalize_slot_data(data: Mapping[str, Any] | SlotData | None) -> SlotData:
 
 SlotResult = TypeAliasType(
     "SlotResult",
-    "str | SafeString | CitryRender | ComponentLike",
+    "str | Markup | CitryRender | ComponentLike",
 )
 """
 What a slot function may return.
 
-A plain ``str`` is escaped when the slot renders; a ``SafeString`` or
+A plain ``str`` is escaped when the slot renders; ``Markup`` or a
 ``CitryRender`` is trusted and inlined as-is. A ``ComponentLike`` resolves
 against the Citry instance rendering the slot.
 """
@@ -333,7 +333,7 @@ class Slot(Generic[TSlotData]):
           ``CitryElement``/``CitryRender`` is returned as-is (rendered or
           inlined at call time), and any other value is escaped NOW, so unsafe
           text is neutralized as early as possible. ``escape`` respects
-          ``__html__``, so a ``SafeString`` stays trusted.
+          ``__html__``, so ``Markup`` stays trusted.
         """
         # Imported here, not at module load: citry_render imports this module.
         from citry.citry_render import CitryRender  # noqa: PLC0415
@@ -387,7 +387,7 @@ def normalize_slot_fills(
     - A ``Slot`` that already carries its names is kept as-is; one with
       missing names is copied (not mutated) with the names filled in.
     - A function becomes a ``Slot`` around it.
-    - Anything else (string, ``SafeString``, ``CitryElement``,
+    - Anything else (string, ``Markup``, ``CitryElement``,
       ``CitryRender``, scalar) becomes a static ``Slot``.
     """
     norm_fills: dict[SlotName, Slot] = {}

@@ -24,7 +24,7 @@ ArgValue = str | bool
 ControlKind = Literal["boolean", "select", "text"]
 ScenarioRenderer = Callable[[Mapping[str, ArgValue]], ComponentLike]
 
-CATALOG_SCHEMA_VERSION = 2
+CATALOG_SCHEMA_VERSION = 1
 _SCENARIO_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*/[a-z0-9][a-z0-9-]*$")
 
 
@@ -153,7 +153,6 @@ def _render_field(args: Mapping[str, ArgValue]) -> ComponentLike:
             name="storybook-field",
             type="email",
             value=_str(args, "value"),
-            readonly=_bool(args, "readonly"),
         ),
         "description": "This address is used for account notifications.",
     }
@@ -162,6 +161,7 @@ def _render_field(args: Mapping[str, ArgValue]) -> ComponentLike:
     return CField(
         required=_bool(args, "required"),
         disabled=_bool(args, "disabled"),
+        readonly=_bool(args, "readonly"),
         invalid=invalid,
         orientation=_str(args, "orientation"),
         density=_str(args, "density"),
@@ -210,6 +210,7 @@ def _render_table(args: Mapping[str, ArgValue]) -> ComponentLike:
 def _render_tabs(args: Mapping[str, ArgValue]) -> ComponentLike:
     return CTabs(
         default_value=_str(args, "selected"),
+        aria_label="Account settings",
         orientation=_str(args, "orientation"),
         direction=_str(args, "direction"),
         activation=_str(args, "activation"),
@@ -309,15 +310,15 @@ table = CTable(
     ),
     StorybookScenario(
         id="tabs/server-selected",
-        title="Server-selected",
+        title="Interactive",
         group="Tabs",
-        description="Static ARIA relationships and server-selected state; keyboard behavior is not implemented yet.",
+        description="Server-rendered ARIA relationships with pointer and keyboard selection.",
         usage=(
             "from citry import Component\n\n"
             "class AccountTabs(Component):\n"
             '    template = """\n'
-            '      <c-CTabs default_value="account">\n'
-            "        {# CTabList, CTab, and CTabPanel children #}\n"
+            '      <c-CTabs default_value="account" aria_label="Account settings">\n'
+            "        {# CTab and CTabPanel declarations #}\n"
             "      </c-CTabs>\n"
             '    """'
         ),
@@ -327,7 +328,7 @@ table = CTable(
                 "orientation",
                 "select",
                 "horizontal",
-                "Tab-list orientation metadata.",
+                "Tab-list orientation and keyboard axis.",
                 ("horizontal", "vertical"),
             ),
             Control("direction", "select", "ltr", "Writing direction metadata.", ("ltr", "rtl")),
@@ -335,11 +336,13 @@ table = CTable(
                 "activation",
                 "select",
                 "automatic",
-                "Activation metadata only in this static component.",
+                "Whether focus selects or Enter and Space activate.",
                 ("automatic", "manual"),
             ),
         ),
         renderer=_render_tabs,
+        client_interactive=True,
+        ready_selector="[data-citry-tabs-root][data-citry-tabs-initialized]",
     ),
     StorybookScenario(
         id="readiness/reactive-state",

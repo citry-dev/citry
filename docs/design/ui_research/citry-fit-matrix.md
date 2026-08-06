@@ -1,9 +1,13 @@
 # Phase 5 synthesis: Citry capability fit
 
-**Snapshot:** 2026-07-23; publishing status updated 2026-07-24. **Status:**
+**Snapshot:** 2026-07-23; framework and Phase 7 status updated 2026-07-29. **Status:**
 complete; independent synthesis gate passed 2026-07-23. This report maps the approved component-library evidence
 onto Citry's implemented contracts. It does not select final component APIs or
 an implementation architecture.
+
+The styled/headless comparisons below remain synthesis evidence, not a Phase 7
+commitment. Phase 7 advances the styled library through one `LibraryComponent`
+publishing architecture and parks headless APIs until real application usage.
 
 The product target comes from the [charter](product-charter.md), current
 framework facts come from the [Citry baseline](citry-baseline.md), and external
@@ -19,12 +23,11 @@ prebuilt package assets, interactive components over the graph-first Alpine
 runtime, native server forms, Events, fragments, morphing, teleports, and
 engine-local registration.
 
-It is not yet ready to promise the whole product contract without additional
-work. One framework-level gap is release-critical:
-
-1. client ambient context is not public, so reactive defaults, direction,
-   portal policy, generated-ID policy, and later localization cannot follow
-   logical component ancestry reliably.
+It is not yet ready to promise the whole product contract without component
+specifications and comparative evidence. The formerly release-critical client
+ambient-context gap is closed: the public server and client contracts now
+follow Citry ownership across nested providers, slots, teleports, morphs, and
+cleanup.
 
 Several other gaps are important but do not block comparative prototypes. The
 first package can ship namespaced prebuilt CSS without scoped-CSS rewriting,
@@ -74,9 +77,9 @@ Fit labels mean:
 | Parent-to-child client values | `$c-props` exposes declared reactive values in authored scope | Ready | Controlled state and parent-supplied behavior inputs can cross component boundaries without raw callback strings | [Client props](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
 | State changes and server actions | Events v1 includes state, bindings, forms, transport, queues, preservation, and conformance | Ready with UI conventions | Define family-level event reasons, cancellation, pending, success, error, and stale-result behavior over Events rather than another transport | [Events](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
 | Server ambient context | `Component.provide()`, `Component.inject()`, and `<c-provide>` reach rendered descendants and slot content | Ready for immutable server values | Server theme name, defaults, direction, and future locale inputs can be scoped during rendering | [Server provide/inject](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
-| Client ambient context | No public `$provide`/`$inject` or `$component` provide/inject contract exists | Core prerequisite | Design one reactive registry beneath author-facing and component-facing access. It must follow logical ownership, not only DOM ancestry | [Client context constraint](citry-baseline.md#2-constraints-the-library-must-design-around) |
+| Client ambient context | `$provide`, `$inject`, and `$unprovide` plus matching `$component` hook methods use one reactive registry over Citry ownership | Ready, high-risk verification | Use the public contract for theme, direction, defaults, and overlay policy; test slots, teleports, morphs, updates, cleanup, and diagnostics in the comparative slice | [Client context capability](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
 | Morph and fragment continuity | Stable graph identity, compatible render revisions, fragment assets, and managed cleanup exist | Ready, high-risk verification | Every interactive conformance suite must rerun across initial render, fragment insertion, compatible morph, replacement, removal, and reconnect | [Ownership and assets](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
-| Portals and teleports | Logical lifecycle covers teleported and mirrored placements | Ready, context prerequisite | Overlay ownership can remain logical, but ambient context, focus restoration, CSS ancestry, direction, and portal roots require explicit tests | [Root shapes](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
+| Portals and teleports | Logical lifecycle covers teleported and mirrored placements | Ready, high-risk context verification | Overlay ownership can remain logical, but ambient context, focus restoration, CSS ancestry, direction, and portal roots require explicit tests | [Root shapes](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
 | Stable collection identity | Citry owns stable browser identity, but UI item-value and generated DOM-ID policy are not predefined | Convention needed | Separate logical component ID, collection key, form value, and DOM/ARIA ID. Specify collision and SSR rules | [Client ownership](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
 | Native forms | Events forms and ordinary server handling exist; controls may render native elements | Ready with UI conventions | Prefer native names, values, submit, reset, autocomplete, constraints, and `FormData`; add hidden controls only when rich widgets cannot use a native control directly | [Events and form baseline](citry-baseline.md#1-capabilities-the-library-may-rely-on) |
 | Async behavior | Events owns transport, but client initialization is synchronous | Convention needed | Start async work after readiness, record ownership, cancel on disposal, reject stale results, and never make descendant readiness depend on a Promise initializer | [Synchronous initialization](citry-baseline.md#2-constraints-the-library-must-design-around) |
@@ -101,7 +104,7 @@ shortcomings. Multiple wrappers over one implementation count once.
 | Headless flexibility still needs an owned binding contract | React Aria, Base UI, Reka, Ark/Zag, and stable Vuetify v0 own compound behavior; VU-3 to VU-5 show stable headless code can still ship semantic defects | Share state, focus, keyboard, form, ARIA, ID, and cleanup logic, then expose required native bindings to the author-owned headless assembly | Styled/headless drift or undocumented transfer of accessibility obligations to every author |
 | Compound parts scale better than monolithic kwargs | Repeated across React Aria, Base/Radix, Reka, Ark, Vuetify v0, and local prior art | Use named roots and parts only where the interaction warrants them; preserve caller slot scope and stable part identity | Unbounded props, inaccessible markup replacement, and brittle descendant selectors |
 | Explicit attribute placement is a public contract | Base render composition, React Aria slots, PrimeVue Pass Through, Ant semantic DOM, Web Awesome Parts, and Citry's lack of generic fallthrough | Publish per-part attribute groups with safe merge and handler order | IDs, names, refs, events, and ARIA land on the wrong node or override required behavior |
-| Provider state follows logical ownership across portals | Vuetify defaults/theme, React Aria portals, Chakra providers, Ant static-root limitation AD-2, Base direction/CSP, and multiple overlay complaints | Add logical client context with nested shadowing, live updates, portal continuity, and diagnostics | Portaled controls lose theme, direction, defaults, IDs, or policy; static service roots diverge |
+| Provider state follows logical ownership across portals | Vuetify defaults/theme, React Aria portals, Chakra providers, Ant static-root limitation AD-2, Base direction/CSP, and multiple overlay complaints | Use Citry's logical client context with nested shadowing, live updates, portal continuity, and diagnostics | Portaled controls lose theme, direction, defaults, IDs, or policy; static service roots diverge |
 | Portal correctness includes focus, inertness, and cleanup | BSR-3, M-3, RN-1/RN-2, RA-3/RA-5, and CZA-5 | Centralize overlay stack, focus restoration, outside interaction, Escape, scroll lock, portal target, and disposal policy | Nested overlays deadlock focus, dismiss parents, leak inert state, or become unreachable on touch/AT |
 | Collection identity is distributed state | Combobox, Select, Table, Tabs, Tree, virtualization, autofill, hidden controls, and fragment morphs recur across the corpus | Require explicit item keys and separate active, focused, selected, displayed, and submitted values | Visual state, machine state, hidden form state, and server value disagree |
 | Native forms are the dependable server boundary | Bootstrap, React Aria, Base UI, Web Awesome, Vuetify, PrimeVue, django-formset, Cotton, and local production needs | Build rich controls around native form semantics and server revalidation; test reset, autofill, validation focus, and no-JS paths | Client-only validation or JSON controllers replace reliable browser and server behavior |
@@ -112,15 +115,12 @@ shortcomings. Multiple wrappers over one implementation count once.
 | Accessibility posture is not conformance | Every dossier distinguishes docs claims from independent outcomes; current defects exist in mature suites | Use standards as acceptance baselines, automated scans as gates, browser behavior tests, and manual assistive-technology evidence | Marketing claims or Lighthouse scores substitute for keyboard, focus, touch, screen-reader, zoom, and forced-color behavior |
 | Licensing and paid boundaries affect architecture | PrimeVue 5 changed source and redistribution terms; Web Awesome gates Pro breadth; other work units have explicit open boundaries | Keep core breadth first-party and redistributable, audit every optional dependency, and make companion-package terms visible | Required generic components become procurement, source-continuity, or redistribution risks |
 
-## 4. Client ambient-context prerequisite
+## 4. Client ambient-context contract
 
-The UI library should not choose an API spelling before a focused Citry design,
-but its required semantics are now concrete. One client registry must back both
-component-internal access and any Alpine template magic. Candidate surfaces are
-methods available during `$component.init()` and `$provide`/`$inject` magics;
-they must not become separate state systems.
-
-The initial investigation should cover these values:
+Citry now exposes one client registry through `$provide`, `$inject`, and
+`$unprovide` plus matching methods available during `$component.init()`. The
+two surfaces are views of the same state system. Citry UI should exercise the
+contract with these values:
 
 - theme identifier and resolved mode where CSS inheritance is insufficient;
 - component defaults and density;
@@ -134,9 +134,9 @@ Localization may eventually use the same transport, but translation keys,
 catalogs, locale negotiation, fallback, formatting, and author APIs remain a
 separate research package.
 
-### 4.1 Required semantics
+### 4.1 Production verification matrix
 
-| Question | Required answer before release |
+| Question | Required behavior |
 |---|---|
 | Ancestry | Resolution follows Citry's logical ownership graph, including receiver fallback content and caller-owned supplied slots as explicitly specified, rather than incidental DOM parents |
 | Shadowing | The nearest provider wins; defaults and missing-value behavior are deterministic; merging is limited to named value types that define it |
@@ -151,7 +151,7 @@ separate research package.
 
 ### 4.2 Acceptance scenarios
 
-The prerequisite spike should include nested theme/default providers, a
+The Phase 7 slice should include nested theme/default providers, a
 direction-sensitive Tabs or Combobox, a Dialog teleported outside its visual
 theme subtree, a supplied slot whose caller and receiver have different
 providers, a fragment that replaces one provider value, a morph that preserves
@@ -229,7 +229,7 @@ tests a shared foundation; component count is not the objective.
 | Tabs | Compact compound-part and keyboard probe | named parts, controlled state, generated IDs, orientation, direction, fragments | panel relationships or focus order break across morph and RTL |
 | Semantic Table | Separates useful server HTML from optional grid behavior | static rendering, responsive CSS, row identity, fragments, composed cell actions | broad data behavior forces a domain-heavy grid into core or makes static tables client-active |
 | Dynamic form/collection workflow | Combines the highest-risk contracts in one user job | repeated server rows, Field/Input, async Combobox, add/remove, validation, focus after mutation, morphing, cleanup | item, field, visible selection, submitted value, and server identity diverge after mutation |
-| Theme/default provider | Exercises the missing ambient contract | server provide/inject, proposed client registry, nesting, updates, slots, teleport, diagnostics | provider behavior depends on DOM ancestry or duplicates server/client state |
+| Theme/default provider | Exercises ambient context under production pressure | server and client provide/inject/unprovide, nesting, updates, slots, teleport, diagnostics | provider behavior depends on DOM ancestry or duplicates server/client state |
 
 The comparison must not hide missing framework work inside application globals.
 If a prototype needs private Alpine state, DOM queries for logical ownership,
@@ -254,12 +254,15 @@ connects the highest architectural risks to concrete gates.
 | Assets and payload | dependency manifest, duplicate-load, source-map, wheel-content, and size budgets | cold route and fragment-load measurement | install/upgrade/downgrade/uninstall across supported Citry ranges |
 | Whole-page quality | Lighthouse CI on representative complete pages | real browser performance and accessibility traces | Treat a score of 100 as a regression smoke result, not conformance certification |
 
-## 8. Phase 6 entry conditions
+## 8. Phase 6 entry conditions and outcomes
 
-Phase 6 may begin with these explicit boundaries:
+Phase 6 began with these explicit boundaries. Its first prerequisite is now an
+implemented outcome:
 
-1. The ambient-context design is a named prerequisite work item. Prototypes may
-   compare internal shapes, but no private shape becomes a public UI API.
+1. The ambient-context design became the public server and client
+   provide/inject/unprovide contract. Phase 7 verifies that contract through
+   production component families rather than replacing it with a private UI
+   shape.
 2. Prototypes and the final package use explicit per-Citry
    `register_library()` before initialization. Complete uninstall and live
    replacement remain separate lifecycle work.

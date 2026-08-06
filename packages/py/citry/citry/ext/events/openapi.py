@@ -34,9 +34,9 @@ from types import UnionType
 from typing import TYPE_CHECKING, Any, NamedTuple, Union, cast, get_args, get_origin, get_type_hints
 from uuid import UUID
 
+from citry._protocol.events import PROTOCOL, openapi_error_envelope_schema, openapi_error_schema
 from citry.command import CommandArg, style_success
 from citry.ext.events.csrf import X_CITRY_EVENTS_HEADER
-from citry.ext.events.dispatcher import PROTOCOL
 from citry.ext.events.files import UploadedFile
 from citry.ext.events.handlers import _is_schema_class
 from citry.ext.events.routes import EVENT_PATH
@@ -387,47 +387,12 @@ def _data_response_schema(annotation: Any, registry: _SchemaRegistry) -> dict[st
 
 def _event_error_schema() -> dict[str, Any]:
     """The error object of a failed call: status, code, message, and the per-field map."""
-    return {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "status": {"type": "integer"},
-            "code": {"type": "string"},
-            "message": {"type": "string"},
-            "fieldErrors": {
-                "type": "object",
-                "additionalProperties": {"type": "string"},
-                "description": "One message per failed field, keyed by the data-schema field path.",
-            },
-        },
-        "required": ["status", "code", "message"],
-    }
+    return openapi_error_schema()
 
 
 def _event_error_envelope_schema() -> dict[str, Any]:
     """The result envelope of a failed call, as the per-event route answers it."""
-    return {
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "protocol": {"const": PROTOCOL},
-            "requestId": {"type": "string"},
-            "results": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "properties": {
-                        "ok": {"const": False},
-                        "sendSequence": {"type": "integer", "minimum": 0},
-                        "error": {"$ref": _REF_PREFIX + "EventError"},
-                    },
-                    "required": ["ok", "error"],
-                },
-            },
-        },
-        "required": ["protocol", "requestId", "results"],
-    }
+    return openapi_error_envelope_schema(_REF_PREFIX + "EventError")
 
 
 def _claim_operation_id(used: set[str], base: str) -> str:

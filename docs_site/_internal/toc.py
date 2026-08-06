@@ -17,10 +17,9 @@ from __future__ import annotations
 
 import lxml.html  # type: ignore[import-untyped]
 
-# Heading levels the right-rail TOC tracks: page sections (h2/h3) plus, on
-# reference pages, each symbol's members. h1 (the page title) is kept in the tree
-# but unwrapped by the flattener so it is not listed.
-_HEADING_TAGS = {"h1", "h2", "h3", "h4"}
+# Heading levels the right-rail TOC tracks. H1 (the page title) is kept in the
+# tree but unwrapped by the flattener so it is not listed.
+_HEADING_TAGS = {"h1", "h2", "h3", "h4", "h5", "h6"}
 
 
 def merge_html_headings_into_toc(content_html: str, toc_tokens: list) -> list:
@@ -50,7 +49,7 @@ def merge_html_headings_into_toc(content_html: str, toc_tokens: list) -> list:
 
 
 def _extract_headings(content_html: str) -> list[tuple[int, str, str, str, str]]:
-    """Document-order (level, id, label, class, kind) for every id'd h1-h4 in the HTML."""
+    """Document-order (level, id, label, class, kind) for every id'd h1-h6 in the HTML."""
     if not content_html.strip():
         return []
 

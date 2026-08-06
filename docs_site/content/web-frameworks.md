@@ -47,7 +47,7 @@ lazy.
 Use the host's root startup lifecycle. A mounted ASGI subapplication does not
 provide a reliable startup lifespan, so mounting Citry alone is not a substitute
 for initializing the instance. See
-[Registration and autodiscovery](/concepts/registration/#initialize-before-starting-worker-threads)
+[Component discovery and startup](/advanced/component-discovery/#initialize-before-starting-worker-threads)
 for retry and concurrent-access behavior.
 
 ## One entry point per framework

@@ -34,6 +34,12 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
+from citry._protocol.events import (
+    build_component_instance,
+    build_descriptor,
+    build_handler_descriptor,
+    build_manifest,
+)
 from citry.constness import const_value
 from citry.ext.dependencies.types import Dependency, Script
 from citry.ext.events.handlers import event_options
@@ -53,9 +59,7 @@ if TYPE_CHECKING:
 # ``CitryContext.extra`` (top-level keys there are namespaced by owner).
 EXTRA_KEY = "events"
 
-# Route path of the events client runtime, under the mounted prefix. The path
-# is fixed by design (``events.md`` 3.8), so the emitted URL and the route
-# that serves the file agree without importing each other.
+# Route path of the events client runtime, under the mounted prefix.
 RUNTIME_PATH = "ext/events/runtime.js"
 
 
@@ -73,7 +77,8 @@ def _client_runtime_js() -> str:
 # configuration, listeners, and transport declarations), and registers the
 # context decorator through
 # ``Citry.manager.decorateContext`` so every ``$component`` payload carries
-# ``state`` / ``sendEvent`` / ``onEvent`` members from the first call on. The
+# ``state`` / ``loading`` / ``error`` / ``sendEvent`` / ``onEvent`` members
+# from the first call on. The
 # runtime (citry/ext/events/client/citry-events.js) recognizes the stub by
 # ``_stubQueue``, replaces it, and upgrades ``_decorate`` / ``_onFor`` in
 # place; the member closures below delegate through ``C.events`` at call
@@ -110,6 +115,12 @@ _EVENTS_BOOTSTRAP_STUB = """\
     _onFor: function (id, name, fn) { return listen("onEvent", [id, name, fn]); },
     _decorate: function (ctx) {
       ctx.state = null;
+      ctx.loading = function (name) {
+        return C.events._stubQueue ? false : C.events._loadingFor(ctx.id, name);
+      };
+      ctx.error = function (name) {
+        return C.events._stubQueue ? null : C.events._errorFor(ctx.id, name);
+      };
       ctx.sendEvent = function (name, args, opts) { return C.events.send(ctx.id, name, args, opts); };
       ctx.onEvent = function (name, fn) { return C.events._onFor(ctx.id, name, fn); };
     },
@@ -248,8 +259,8 @@ def emit_events_dependencies(extension: EventsExtension, ctx: OnDependenciesCont
         injected.append(Script(kind="core", content=_EVENTS_BOOTSTRAP_STUB, wrap=False))
     # A3 uses this pinned bundle as the Alpine installer for every client
     # graph, including graphs with no Events entries. Mounted pages use the
-    # cacheable route; zero-configuration documents receive the same bundle
-    # inline so graph-linked callbacks never wait on an unavailable owner.
+    # no-store route; zero-configuration documents receive the same bundle inline
+    # so graph-linked callbacks never wait on an unavailable owner.
     if ctx.citry.mounted_prefix is not None:
         injected.append(Script(kind="core", url=ctx.citry.build_url(RUNTIME_PATH)))
     else:
@@ -281,48 +292,47 @@ def _build_events_manifest(
             # The client-facing hints: the primary HTTP method plus the
             # resolved debounce/throttle defaults (design 3.5). The server
             # stays the authority; this is a client convenience.
-            hints: dict[str, object] = {"httpMethod": handler.methods[0]}
-            if "state" in handler.params:
-                hints["usesState"] = True
-            if handler.debounce is not None:
-                hints["debounceMilliseconds"] = handler.debounce
-            if handler.throttle is not None:
-                hints["throttleMilliseconds"] = handler.throttle
             # The queue knobs the client runtime reads at queue time (design
             # 3.5 and 5.6). They exist per handler only, so the @event record
             # on the handler function is their single source, and only
             # non-default values ride the descriptor (design 4.4).
             options = event_options(handler.func)
-            if options is not None and options.latest_wins:
-                hints["latestCallWins"] = True
-            if options is not None and not options.bundle:
-                hints["allowBatching"] = False
-            event_handlers[handler.name] = hints
-        descriptor: dict[str, object] = {
-            "componentClassId": entry.component_class_id,
-            "eventHandlers": event_handlers,
-        }
+            event_handlers[handler.name] = build_handler_descriptor(
+                handler.methods[0],
+                uses_state="state" in handler.params,
+                debounce_milliseconds=handler.debounce,
+                throttle_milliseconds=handler.throttle,
+                latest_call_wins=options is not None and options.latest_wins,
+                allow_batching=options is None or options.bundle,
+            )
         # Omission is the compact/default wire form: every public value is
         # writable. An explicit list narrows that capability, and an empty
         # list is meaningful (read-only public State), so it must survive.
-        if info.state_meta is not None and info.state_meta.model != info.state_meta.public:
-            descriptor["writableStateFields"] = info.state_meta.model
+        writable = (
+            info.state_meta.model
+            if info.state_meta is not None and info.state_meta.model != info.state_meta.public
+            else None
+        )
+        descriptor = build_descriptor(
+            entry.component_class_id,
+            event_handlers,
+            writable_state_fields=writable,
+        )
         descriptors[entry.component_class_id] = descriptor
 
-    manifest = {
-        "protocol": "citry-events/1",
-        "clientGraphRevision": graph_revision,
-        "componentClasses": list(descriptors.values()),
-        "componentInstances": [
-            {
-                "renderId": entry.render_id,
-                "componentClassId": entry.component_class_id,
-                "stateToken": entry.state_token,
-                "publicState": json.loads(entry.public_state_json),
-            }
+    manifest = build_manifest(
+        graph_revision,
+        list(descriptors.values()),
+        [
+            build_component_instance(
+                entry.render_id,
+                entry.component_class_id,
+                entry.state_token,
+                json.loads(entry.public_state_json),
+            )
             for entry in entries
         ],
-    }
+    )
     return Script(
         kind="core",
         content=json.dumps(manifest, separators=(",", ":"), sort_keys=True, allow_nan=False).replace("<", "\\u003c"),

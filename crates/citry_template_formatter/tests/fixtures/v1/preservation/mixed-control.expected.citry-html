@@ -1,0 +1,1 @@
+<p>Hello <span c-if="foo(1)">{{ bar(2) }}</span>.</p>

@@ -40,7 +40,7 @@
  *
  * 5. Registers the magics (`$state`, `$loading`, `$error`, `$sendEvent`,
  *    `$onEvent`) and decorates every `$component` payload with `state`,
- *    `sendEvent`, and `onEvent`.
+ *    `loading`, `error`, `sendEvent`, and `onEvent`.
  *
  * 6. Applies result envelopes (`applyActions`, design 4.3/5.5): faithful
  *    action order with the `delay`/`wait` timing fields, morph with the
@@ -75,11 +75,11 @@
  *    bypass that joins no graph, busy (`data-citry-busy` plus `$loading`)
  *    from the gesture, and the recurring-binding tick-skip rule.
  *
- * 9. Brings the compiled bindings alive (design 5.1, 5.5, 5.6): one delegated
- *    listener per DOM event type at the document root reads the `data-cev-on`
- *    specs at event time (the modifier table, key filters, debounce and
- *    throttle timing), argument expressions evaluate through Alpine against
- *    the owning element, `@c-poll` intervals ride the element-keyed timer
+ * 9. Brings the compiled bindings alive (design 5.1, 5.5, 5.6): each element
+ *    holds one native listener per DOM event type shared by its `data-cev-on`
+ *    and two-way `data-cev-bind` specs (the modifier table, key filters,
+ *    debounce and throttle timing), argument expressions evaluate through
+ *    Alpine against the owning element, `@c-poll` intervals ride the element-keyed timer
  *    structure of point 6's machinery (hidden-tab pause; the queue's
  *    tick-skip rule via the recurring key), and every `$component` payload
  *    carries `props` (the config form's declared props resolve and validate
@@ -129,6 +129,30 @@
 // biome-ignore lint/correctness/noUnusedImports: Biome binds the file's `Alpine` references to the `declare global` var below instead of this import; tsc resolves the shadowing correctly and the import is what the bundle evaluates.
 import Alpine from "alpinejs/src/index";
 import morphPlugin from "@alpinejs/morph";
+import { OWNERSHIP_COMMENT_PREFIX, parseOwnershipComment } from "@citry/protocol-client-graph-v1";
+import {
+  CALLS_LIMIT,
+  CARRIER_FIELDS,
+  assertValidManifest,
+  buildCall,
+  buildCallEnvelope,
+  buildOkResult,
+  buildResultEnvelope,
+  fullClientCapabilities,
+  isJsonValue,
+  isPlainObject,
+  isSafeRenderId,
+  preflightResultEnvelope,
+  validateActionList,
+  type EventAction as ProtocolResultAction,
+  type EventCall,
+  type EventComponentClass as ClassDescriptor,
+  type EventResult as ResultEntry,
+  type EventsCallEnvelope as ProtocolCallEnvelope,
+  type EventsCapabilities,
+  type EventsManifest,
+  type EventsResultEnvelope as ResultEnvelope,
+} from "@citry/protocol-events-v1";
 
 // ----- the runtime's types (erased at build time; esbuild emits none of this) -----
 
@@ -140,51 +164,33 @@ import morphPlugin from "@alpinejs/morph";
 type StateValues = Record<string | symbol, unknown>;
 
 /**
- * Per-event wire options carried by the class descriptor (design 4.4). The
- * two queue knobs ride only when non-default: `latestCallWins` appears as
- * `true`, and `allowBatching` appears as `false`.
+ * The protocol union plus optional cross-variant reads used by the action
+ * dispatcher after its `action` switch has selected the concrete handler.
  */
-interface EventOptions {
-  httpMethod: string;
-  usesState?: true;
-  debounceMilliseconds?: number;
-  throttleMilliseconds?: number;
-  latestCallWins?: true;
-  allowBatching?: false;
-}
-
-/**
- * The decoded per-class descriptor from the events manifest: which handlers
- * the class declares, plus an optional `writableStateFields` list narrowing
- * which State fields the client may write (design 7.2). Omission means every
- * public value is writable; an explicit empty list means none are.
- */
-interface ClassDescriptor {
-  componentClassId: string;
-  eventHandlers: Record<string, EventOptions>;
-  writableStateFields?: string[];
-}
-
-/**
- * Raw JSON parsed from one `data-citry-events` tag. Every field stays
- * optional and unknown until `stageEventsManifest` validates the complete
- * object. The canonical post-validation shape is documented in the Events
- * protocol spec's "TypeScript view of the JSON."
- */
-interface EventsManifest {
-  protocol?: unknown;
-  clientGraphRevision?: unknown;
-  componentClasses?: unknown;
-  componentInstances?: unknown;
-}
+type ResultAction = ProtocolResultAction & {
+  target?: string;
+  swap?: string;
+  html?: string;
+  value?: unknown;
+  targetRenderId?: string;
+  stateToken?: string;
+  eventName?: string;
+  detail?: unknown;
+  url?: string;
+  mode?: string;
+  delay?: number;
+  wait?: false;
+};
 
 interface StagedEventsManifest {
+  manifest: EventsManifest;
   classes: [string, ClassDescriptor][];
   instances: {
     componentId: string;
     classId: string;
     token: string | null;
     values: StateValues;
+    descriptorRevision: string | null;
   }[];
 }
 
@@ -206,6 +212,30 @@ interface ErrorEnvelope {
   fieldErrors?: Record<string, unknown>;
 }
 
+/** One declared handler's retained error state and call-order guard. */
+interface ErrorSlot {
+  current: ErrorEnvelope | null;
+  /** Newest client intent that actually started for this handler. */
+  latestStartedIntent: number;
+  /** Aggregate ordering, assigned only when an accepted failure lands. */
+  failureOrder: number;
+}
+
+/** Reactive per-handler error state plus the no-argument aggregate. */
+interface ErrorBox {
+  current: ErrorEnvelope | null;
+  handlers: Record<string, ErrorSlot>;
+  failureClock: number;
+}
+
+/** A render transaction's copy of one live anchor's retained error state. */
+interface ErrorBoxSnapshot {
+  anchor: Anchor;
+  current: ErrorEnvelope | null;
+  handlers: Record<string, ErrorSlot>;
+  failureClock: number;
+}
+
 /**
  * A rejection reason as received from a transport or a throw: could be
  * anything, so every member stays unknown until `toErrorEnvelope` checks it.
@@ -222,6 +252,8 @@ interface Anchor {
   anchorId: string;
   componentId: string | null;
   classId: string | null;
+  /** The graph revision whose class contract this anchor accepted. */
+  descriptorRevision: string | null;
   token: string;
   epoch: number;
   highestApplied: number;
@@ -248,7 +280,9 @@ interface Anchor {
   stateProxy: StateValues | null;
   writable: Set<string> | null;
   loading: LoadingBox;
-  errorBox: { current: ErrorEnvelope | null };
+  errorBox: ErrorBox;
+  /** Invalidates outcomes from calls sent under an older component class. */
+  errorGeneration: number;
   /**
    * Interval timer ids registered to this anchor; cleared (and the intervals
    * cancelled) when the anchor retires, so a replaced `@c-poll` region never
@@ -277,52 +311,13 @@ interface RenderMeta {
   classId: string;
   token?: string;
   values?: StateValues;
+  descriptorRevision?: string | null;
 }
 
 /** What `linkRenderedInstance` reports back to its caller. */
 interface RenderLink {
   branch: "plain-html" | "general-only" | "reconcile" | "adopt";
   oldComponentId: string | null;
-}
-
-/**
- * One action from a result envelope (design 4.3's table), as `applyActions`
- * receives it. Every field is optional in this untrusted-data type; the
- * boundary validator checks the complete array before the applier mutates
- * anything.
- */
-interface ResultAction {
-  action?: string;
-  /** render / event: a CSS selector, or the `render:<render id>` form. */
-  target?: string;
-  swap?: string;
-  html?: string;
-  /** data */
-  value?: unknown;
-  /** state */
-  targetRenderId?: string;
-  stateToken?: string;
-  /** event */
-  eventName?: string;
-  detail?: unknown;
-  /** redirect / url */
-  url?: string;
-  mode?: string;
-  /** The timing fields every action carries (design 4.3). */
-  delay?: number;
-  wait?: boolean;
-}
-
-var isSafeRenderId = function (value: string): boolean {
-  return /^[a-z0-9_-]+$/.test(value);
-};
-
-/** Raw result input; validation proves the success or error shape before use. */
-interface ResultEntry {
-  ok?: boolean;
-  sendSequence?: number;
-  actions?: ResultAction[];
-  error?: unknown;
 }
 
 /**
@@ -370,15 +365,12 @@ interface ApplyRun {
  * always have a rendered caller, so `callerRenderId` is required here even
  * though the general protocol also permits calls without one.
  */
-interface TransportCall {
-  componentClassId: string;
-  handlerName: string;
-  callerRenderId: string;
-  args: Record<string, unknown>;
-  stateToken?: string;
-  stateUpdates?: Record<string, unknown>;
-  sendSequence?: number;
-}
+type TransportCall = EventCall & { callerRenderId: string };
+
+type CallEnvelope = ProtocolCallEnvelope & {
+  capabilities: EventsCapabilities;
+  calls: TransportCall[];
+};
 
 /**
  * One send of the batch path (`_internal.sendCalls`): the target instance
@@ -403,32 +395,13 @@ interface SendIntent {
 type TransportStub = (call: TransportCall, opts: unknown) => unknown;
 
 /**
- * The built-in runtime's outgoing envelope. It always advertises explicit
- * capabilities, although the general protocol permits their omission.
- */
-interface CallEnvelope {
-  protocol: string;
-  /** The client-minted correlation id, echoed back by the server. */
-  requestId: string;
-  capabilities: { swaps: string[]; actions: string[] };
-  calls: TransportCall[];
-}
-
-/** Raw transport result; every field stays optional until `preflight` validates it. */
-interface ResultEnvelope {
-  protocol?: string;
-  requestId?: string | null;
-  results?: ResultEntry[];
-}
-
-/**
  * A registered transport (design 5.2/6.1): `send` takes the call envelope
  * and resolves with the matching result envelope; transports carry bytes and
  * never look inside either. `subscribe` is the server-push half (v2), stored
  * untouched until a consumer exists.
  */
 interface TransportImpl {
-  send(envelope: CallEnvelope): Promise<ResultEnvelope> | ResultEnvelope;
+  send(envelope: CallEnvelope): Promise<unknown> | unknown;
   subscribe?: unknown;
 }
 
@@ -492,22 +465,28 @@ interface PollBindingSpec {
 
 /**
  * One decoded `data-cev-bind` spec (same published contract): a state binding
- * from `:c-<field>`. `mode` is `"one"` (apply the State field to the control)
- * or `"two"` (the value named a handler: on the control's update event, one
- * call carries the `$state` write plus that handler). The concrete update
- * event resolves from the live control (design 5.1's table); `lazy` asks for
- * the committed-value event and `on` overrides the event outright.
+ * from `:c-<field>`. `binding_mode` is `"one-way"` (apply the State field to
+ * the control) or `"two-way"` (the value named a handler: on the control's
+ * update event, one call carries the `$state` write plus that handler). The
+ * concrete update event resolves from the live control (design 5.1's table);
+ * `lazy` asks for the committed-value event and `on` overrides the event
+ * outright.
  */
 interface StateBindingSpec {
   cid?: string;
   field?: string;
-  mode?: string;
+  binding_mode?: "one-way" | "two-way";
   handler?: string | null;
   lazy?: boolean;
   on?: string | null;
   key?: string | null;
   debounce?: number | null;
   throttle?: number | null;
+}
+
+/** The property contract a bindable browser custom element exposes. */
+interface CustomValueElement extends Element {
+  value: unknown;
 }
 
 /** Per-binding trigger timing: the pending debounce timer and the open throttle window. */
@@ -555,6 +534,8 @@ interface ComponentPayload {
   state?: StateValues | null;
   /** Declared client props resolved for this instance; an empty object under the bare callback form. */
   props?: Record<string, unknown>;
+  loading?: (name?: string) => boolean;
+  error?: (name?: string) => ErrorEnvelope | null;
   sendEvent?: (name: string, args?: Record<string, unknown>, opts?: unknown) => Promise<unknown>;
   onEvent?: (name: string, fn: EventCallback) => () => void;
 }
@@ -594,6 +575,8 @@ interface EventsInternal {
   anchors: Map<string, Anchor>;
   idToAnchor: Map<string, Anchor>;
   classes: Map<string, ClassDescriptor>;
+  descriptorRevisions: Map<string, Map<string, ClassDescriptor>>;
+  pendingDescriptorRevisionRefs: Map<string, number>;
   config: EventsConfig;
   getAnchor(componentId: string): Anchor | null;
   linkRenderedInstance(anchor: Anchor, meta: RenderMeta | null): RenderLink;
@@ -641,7 +624,11 @@ interface EventsInternal {
     anchors: number;
     renderIds: number;
     classes: number;
-    delegatedListenerTypes: number;
+    descriptorRevisions: number;
+    pendingDescriptorRevisionRefs: number;
+    observedCustomElementDefinitions: number;
+    bindingListenerElements: number;
+    bindingListenerTargets: number;
     polledElements: number;
     anchorIntervals: number;
     elementIntervals: number;
@@ -651,7 +638,7 @@ interface EventsInternal {
     queuedCalls: number;
   };
   /** Strictly validate and stage one manifest without mutating runtime registries. */
-  stageEventsManifest(manifest: EventsManifest): StagedEventsManifest;
+  stageEventsManifest(manifest: unknown): StagedEventsManifest;
   processEventsManifests(): void;
   /** Apply one result envelope entry with its caller context (the transport's path into the applier). */
   applyResult(result: ResultEntry, ctx?: ApplyContext | null): Promise<void>;
@@ -700,6 +687,8 @@ interface CitryEventsApi {
   registerTransport(name: string, impl: TransportImpl): void;
   applyActions(actions: ResultAction[]): Promise<void>;
   _decorate(ctx: ComponentPayload, control?: ComponentInvocationControl | null): void;
+  _loadingFor(componentId: string, name?: string): boolean;
+  _errorFor(componentId: string, name?: string): ErrorEnvelope | null;
   _onFor(componentId: string, name: string, fn: EventCallback): () => void;
   /**
    * The events-runtime half of the `$component` config form (design 5.5):
@@ -709,6 +698,8 @@ interface CitryEventsApi {
    * `_decorate`.
    */
   _resolveProps(classId: string, declarations: Record<string, PropDefinition>): Record<string, unknown>;
+  /** Release one graph-scoped descriptor table once neither runtime has a live reference. */
+  _pruneDescriptorRevision(revision: string, ownershipReady?: boolean): boolean;
   _internal: EventsInternal;
   /**
    * Never present on the real runtime; declared so a plain property check
@@ -736,26 +727,40 @@ interface CitryGlobal {
       _isLive(generalAnchor: unknown): boolean;
       _beginEvents(revision: string): void;
       _finishEvents(revision: string, error: unknown | null): void;
+      _schedulePrune(): void;
       _ownerForElement(el: Element): string | null | undefined;
       _prepareAdoption(manifest: unknown, root: DocumentFragment): unknown;
       _adoptionRoot(transaction: unknown): { componentId: string; classId: string } | null;
+      _planAdoption(
+        transaction: unknown,
+        roots: { fromRenderId: string; toRenderId: string }[],
+        options?: { bypassIgnore?: boolean },
+      ): OwnershipAdoptionPlan;
+      _planPlacement(
+        plan: OwnershipAdoptionPlan,
+        generalAnchor: unknown,
+        index: number,
+        html: string,
+        options?: Record<string, unknown>,
+      ): OwnershipAdoptionPlan;
+      _applyAdoptionPlan(plan: OwnershipAdoptionPlan): OwnershipAdoptionMatch[];
       _activateAdoption(transaction: unknown): void;
       _commitAdoption(transaction: unknown): unknown;
       _abortAdoption(transaction: unknown, error?: unknown): void;
+      _discardAdoption(transaction: unknown): void;
       _rejectAdoption(revision: string, error: unknown): void;
       _mintPlacement(): string;
       _placementIds(generalAnchor: unknown): (string | null)[];
       _placementRoots(generalAnchor: unknown): Element[][];
       _hasPlacements(generalAnchor: unknown): boolean;
       _relatedEvents(generalAnchor: unknown): Anchor[];
-      _classForRender(renderId: string): string | null;
-      _correspond(fromRenderId: string, toRenderId: string): unknown;
       _morphPlacement(
         generalAnchor: unknown,
         index: number,
         html: string,
         options?: Record<string, unknown>,
-      ): { end: Comment };
+      ): { end: Comment; roots: Element[] };
+      _replacePlacement(generalAnchor: unknown, index: number, html: string): { end: Comment; roots: Element[] };
       _expectRetirement(renderIds: string[]): void;
       _claimTag(el: Element): void;
       _preflightDependency(manifest: unknown, revision: string): unknown;
@@ -789,6 +794,27 @@ interface CitryGlobal {
     _start(): void;
     _isStarted(): boolean;
   };
+}
+
+interface OwnershipAdoptionMatch {
+  fromRevision: string;
+  fromRenderId: string;
+  fromKey: string;
+  toRevision: string;
+  toRenderId: string;
+  toKey: string;
+  preserveLogical: boolean;
+  preserveExternalParent: boolean;
+  parentFromRenderId: string | null;
+  parentToRenderId: string | null;
+}
+
+interface OwnershipAdoptionPlan {
+  matches: OwnershipAdoptionMatch[];
+  retainedOldRenderIds: Set<string>;
+  excludedIncomingRenderIds: Set<string>;
+  acceptedIncomingRenderIds: Set<string>;
+  retainedRootFromRenderIds: Set<string>;
 }
 
 type OwnershipBridge = NonNullable<NonNullable<CitryGlobal["manager"]>["ownership"]>;
@@ -853,10 +879,54 @@ declare global {
     return new Error("[Citry] " + message);
   };
 
+  // Element-owned work belongs to this runtime only while the element is in
+  // this document. `isConnected` alone stays true after adoption into an
+  // iframe or another document, where the old page must not keep sending for
+  // it through stale component markers.
+  var elementIsInCurrentDocument = function (el: Element | null | undefined): el is Element {
+    return Boolean(el && el.isConnected && el.ownerDocument === document);
+  };
+
   // classId -> the decoded class descriptor from the manifest
   // ({eventHandlers: {name: {httpMethod, debounceMilliseconds?,
   // throttleMilliseconds?}}}).
   var classes = new Map<string, ClassDescriptor>();
+  var descriptorRevisions = new Map<string, Map<string, ClassDescriptor>>();
+  // Calls retain the descriptor revision they were validated against until
+  // their complete client lifecycle settles. A response may remove or replace
+  // its originating anchor while later actions still need that revision.
+  var pendingDescriptorRevisionRefs = new Map<string, number>();
+  var pruneDescriptorRevision = function (revision: string, ownershipReady?: boolean) {
+    var live = false;
+    anchors.forEach(function (anchor) {
+      if (anchor.descriptorRevision === revision) live = true;
+    });
+    if (live || (pendingDescriptorRevisionRefs.get(revision) || 0) > 0) return false;
+    // A graph revision can still own routes, boundaries, calls, or retained
+    // physical branches after its final Events anchor releases. Only the
+    // ownership registry can certify that those roots are gone.
+    if (!ownershipReady && globalThis.Citry?.manager?.ownership?.has(revision)) return false;
+    descriptorRevisions.delete(revision);
+    return true;
+  };
+  var scheduleDescriptorPrune = function (revision?: string | null) {
+    // A release asks core to re-evaluate every ownership root. Direct pruning
+    // is safe only for graph revisions core no longer knows about (including
+    // provisional revisions being rolled back).
+    if (revision != null) pruneDescriptorRevision(revision);
+    globalThis.Citry?.manager?.ownership?._schedulePrune();
+  };
+  var retainDescriptorRevisionForCall = function (revision: string | null) {
+    if (revision == null) return;
+    pendingDescriptorRevisionRefs.set(revision, (pendingDescriptorRevisionRefs.get(revision) || 0) + 1);
+  };
+  var releaseDescriptorRevisionForCall = function (revision: string | null) {
+    if (revision == null) return;
+    var remaining = (pendingDescriptorRevisionRefs.get(revision) || 0) - 1;
+    if (remaining > 0) pendingDescriptorRevisionRefs.set(revision, remaining);
+    else pendingDescriptorRevisionRefs.delete(revision);
+    scheduleDescriptorPrune(revision);
+  };
   // anchorId -> anchor. An anchor is the stable client identity of one
   // interactive DOM position; see the header and design 5.5.
   var anchors = new Map<string, Anchor>();
@@ -864,6 +934,14 @@ declare global {
   // id and its stable anchor. Re-linked on every render.
   var idToAnchor = new Map<string, Anchor>();
   var anchorCounter = 0;
+  // User-intent order, allocated before queue reordering. Wire sendSequence
+  // is dispatch order and cannot guard handler UI state when wait:false
+  // overtakes an older queued call.
+  var callIntentCounter = 0;
+  var nextCallIntent = function () {
+    callIntentCounter += 1;
+    return callIntentCounter;
+  };
   // Roots whose boundary scope entry is already attached. This is an
   // idempotency guard on live nodes (several manifests can name one root),
   // not the anchor tie: a node that morph swaps out simply leaves the set,
@@ -895,20 +973,28 @@ declare global {
 
   // ----- anchors and the reactive State -----
 
-  var declaredEvents = function (classId: string | null) {
-    // A retired anchor's null class id simply misses the map.
-    var descriptor = classes.get(classId as string);
+  var descriptorFor = function (target: Anchor | string | null) {
+    if (typeof target === "object" && target !== null) {
+      const revision = target.descriptorRevision;
+      if (revision != null) return descriptorRevisions.get(revision)?.get(target.classId as string);
+      return classes.get(target.classId as string);
+    }
+    return classes.get(target as string);
+  };
+
+  var declaredEvents = function (target: Anchor | string | null) {
+    var descriptor = descriptorFor(target);
     return descriptor && descriptor.eventHandlers ? Object.keys(descriptor.eventHandlers) : [];
   };
 
-  var eventHttpMethod = function (classId: string | null, name: string) {
-    var descriptor = classes.get(classId as string);
+  var eventHttpMethod = function (target: Anchor | string | null, name: string) {
+    var descriptor = descriptorFor(target);
     var options = descriptor && descriptor.eventHandlers ? descriptor.eventHandlers[name] : null;
     return options && typeof options.httpMethod === "string" ? options.httpMethod : "POST";
   };
 
-  var eventDeclaresState = function (classId: string | null, name: string) {
-    var descriptor = classes.get(classId as string);
+  var eventDeclaresState = function (target: Anchor | string | null, name: string) {
+    var descriptor = descriptorFor(target);
     var options = descriptor && descriptor.eventHandlers ? descriptor.eventHandlers[name] : null;
     return Boolean(options && options.usesState === true);
   };
@@ -928,7 +1014,7 @@ declare global {
           " Keep an instance across parent re-renders with #c-key (design 5.5).",
       );
     }
-    var declared = declaredEvents(anchor.classId);
+    var declared = declaredEvents(anchor);
     if (declared.indexOf(name) === -1) {
       throw pointedError(
         "component " +
@@ -945,11 +1031,91 @@ declare global {
     }
   };
 
+  var newErrorSlot = function (): ErrorSlot {
+    return { current: null, latestStartedIntent: 0, failureOrder: 0 };
+  };
+
+  var refreshAggregateError = function (anchor: Anchor) {
+    var selected: ErrorEnvelope | null = null;
+    var selectedOrder = 0;
+    Object.keys(anchor.errorBox.handlers).forEach(function (name) {
+      var slot = anchor.errorBox.handlers[name];
+      if (slot.current && slot.failureOrder > selectedOrder) {
+        selected = slot.current;
+        selectedOrder = slot.failureOrder;
+      }
+    });
+    anchor.errorBox.current = selected;
+  };
+
+  // Keep one reactive slot per currently declared handler. Descriptor
+  // refreshes preserve still-valid slots and prune removed handlers; class
+  // adoption passes reset=true and starts a fresh error contract.
+  var refreshErrorHandlers = function (anchor: Anchor, reset?: boolean) {
+    var declared = new Set(declaredEvents(anchor));
+    var handlers = anchor.errorBox.handlers;
+    if (reset) {
+      handlers = Object.create(null) as Record<string, ErrorSlot>;
+      anchor.errorBox.handlers = handlers;
+      anchor.errorBox.failureClock = 0;
+    }
+    Object.keys(handlers).forEach(function (name) {
+      if (!declared.has(name)) delete handlers[name];
+    });
+    declared.forEach(function (name) {
+      if (!handlers[name]) handlers[name] = newErrorSlot();
+    });
+    refreshAggregateError(anchor);
+  };
+
+  var readLoading = function (anchor: Anchor, name: string | undefined, caller: string) {
+    if (name === undefined) return anchor.loading.any > 0;
+    requireDeclaredEvent(anchor, name, caller);
+    return (anchor.loading.handlers[name] || 0) > 0;
+  };
+
+  var readError = function (anchor: Anchor, name: string | undefined, caller: string): ErrorEnvelope | null {
+    if (name === undefined) return anchor.errorBox.current;
+    requireDeclaredEvent(anchor, name, caller);
+    var slot = anchor.errorBox.handlers[name];
+    return slot ? slot.current : null;
+  };
+
+  var readPayloadLoading = function (componentId: string, name?: string) {
+    var anchor = idToAnchor.get(componentId) || null;
+    if (anchor) return readLoading(anchor, name, "loading");
+    if (name !== undefined) {
+      throw pointedError(
+        "component instance '" +
+          componentId +
+          "' declares no events, so loading('" +
+          name +
+          "') cannot inspect a handler; add a `class Events` to the component.",
+      );
+    }
+    return false;
+  };
+
+  var readPayloadError = function (componentId: string, name?: string): ErrorEnvelope | null {
+    var anchor = idToAnchor.get(componentId) || null;
+    if (anchor) return readError(anchor, name, "error");
+    if (name !== undefined) {
+      throw pointedError(
+        "component instance '" +
+          componentId +
+          "' declares no events, so error('" +
+          name +
+          "') cannot inspect a handler; add a `class Events` to the component.",
+      );
+    }
+    return null;
+  };
+
   // Which State fields the client may write (design 7.2, the `_model` gate).
   // Omission is the default where `_model` equals `_public`; an explicit
   // array narrows the public values, including `[]` for read-only State.
-  var writableFields = function (classId: string, values: StateValues) {
-    var descriptor = classes.get(classId);
+  var writableFields = function (target: Anchor | string, values: StateValues) {
+    var descriptor = descriptorFor(target);
     if (descriptor && Array.isArray(descriptor.writableStateFields)) {
       return new Set(descriptor.writableStateFields);
     }
@@ -983,7 +1149,7 @@ declare global {
   // the property and leaving the proxy with stale permissions.
   var refreshWritableFields = function (anchor: Anchor, dropInvalidPending?: boolean) {
     if (!anchor.values || !anchor.classId) return;
-    var next = writableFields(anchor.classId, anchor.values);
+    var next = writableFields(anchor, anchor.values);
     if (!anchor.writable) {
       anchor.writable = next;
       return;
@@ -997,24 +1163,83 @@ declare global {
     }
   };
 
-  var refreshAnchorsForClasses = function (classIds: Set<string>, dropInvalidPending?: boolean) {
+  var refreshAnchorsForClasses = function (
+    classIds: Set<string>,
+    dropInvalidPending?: boolean,
+    descriptorRevision?: string | null,
+  ) {
     anchors.forEach(function (anchor) {
-      if (anchor.classId && classIds.has(anchor.classId)) {
+      if (
+        anchor.classId &&
+        classIds.has(anchor.classId) &&
+        (descriptorRevision === undefined || anchor.descriptorRevision === descriptorRevision)
+      ) {
         refreshWritableFields(anchor, dropInvalidPending);
+        refreshErrorHandlers(anchor);
       }
     });
   };
 
-  // Install decoded class descriptors as one class-global operation. Both
-  // ordinary manifest ingestion and render pre-staging use this path so the
-  // gate is current before Alpine evaluates incoming morph expressions.
-  var installClassDescriptors = function (entries: [string, ClassDescriptor][], dropInvalidPending?: boolean) {
+  var snapshotErrorBoxesForClasses = function (classIds: Set<string>): ErrorBoxSnapshot[] {
+    var snapshots: ErrorBoxSnapshot[] = [];
+    anchors.forEach(function (anchor) {
+      if (!anchor.classId || !classIds.has(anchor.classId)) return;
+      var handlers = Object.create(null) as Record<string, ErrorSlot>;
+      Object.keys(anchor.errorBox.handlers).forEach(function (name) {
+        handlers[name] = Object.assign({}, anchor.errorBox.handlers[name]);
+      });
+      snapshots.push({
+        anchor: anchor,
+        current: anchor.errorBox.current,
+        handlers: handlers,
+        failureClock: anchor.errorBox.failureClock,
+      });
+    });
+    return snapshots;
+  };
+
+  var restoreErrorBoxes = function (snapshots: ErrorBoxSnapshot[]) {
+    snapshots.forEach(function (snapshot) {
+      var handlers = snapshot.anchor.errorBox.handlers;
+      Object.keys(handlers).forEach(function (name) {
+        delete handlers[name];
+      });
+      Object.keys(snapshot.handlers).forEach(function (name) {
+        handlers[name] = Object.assign({}, snapshot.handlers[name]);
+      });
+      snapshot.anchor.errorBox.failureClock = snapshot.failureClock;
+      snapshot.anchor.errorBox.current = snapshot.current;
+    });
+  };
+
+  // Install decoded class descriptors as one atomic registry operation.
+  // Legacy graphless manifests use the class-global table. Graph-backed
+  // manifests are revision-scoped: writing them into `classes` would let an
+  // old retained anchor silently pick up a newer contract.
+  var installClassDescriptors = function (
+    entries: [string, ClassDescriptor][],
+    dropInvalidPending?: boolean,
+    descriptorRevision?: string | null,
+  ) {
     var classIds = new Set<string>();
+    var revisionClasses = descriptorRevision == null ? null : new Map<string, ClassDescriptor>();
     entries.forEach(function (entry) {
-      classes.set(entry[0], entry[1]);
+      if (revisionClasses) revisionClasses.set(entry[0], entry[1]);
+      else classes.set(entry[0], entry[1]);
       classIds.add(entry[0]);
     });
-    refreshAnchorsForClasses(classIds, dropInvalidPending);
+    if (descriptorRevision != null)
+      descriptorRevisions.set(descriptorRevision, revisionClasses as Map<string, ClassDescriptor>);
+    refreshAnchorsForClasses(classIds, dropInvalidPending, descriptorRevision);
+  };
+
+  var restoreDescriptorRevision = function (
+    revision: string,
+    hadRevision: boolean,
+    descriptors: Map<string, ClassDescriptor> | undefined,
+  ) {
+    if (hadRevision) descriptorRevisions.set(revision, descriptors as Map<string, ClassDescriptor>);
+    else descriptorRevisions.delete(revision);
   };
 
   // The `$state` facade over the anchor's reactive values: reads stay
@@ -1071,23 +1296,31 @@ declare global {
   var adoptStateContract = function (anchor: Anchor, classId: string, values: StateValues) {
     anchor.classId = classId;
     anchor.values = Alpine.reactive(Object.assign({}, values));
-    anchor.writable = writableFields(classId, values);
+    anchor.writable = writableFields(anchor, values);
     anchor.stateProxy = makeStateProxy(anchor);
     // Seed a counter per declared handler so `$loading('name')` reads are
     // reactive from the first render on.
-    var handlers: Record<string, number> = {};
-    declaredEvents(classId).forEach(function (name) {
+    var handlers = Object.create(null) as Record<string, number>;
+    declaredEvents(anchor).forEach(function (name) {
       handlers[name] = 0;
     });
     anchor.loading.handlers = handlers;
+    refreshErrorHandlers(anchor, true);
   };
 
-  var createAnchor = function (componentId: string, classId: string, token: string, values: StateValues) {
+  var createAnchor = function (
+    componentId: string,
+    classId: string,
+    token: string,
+    values: StateValues,
+    descriptorRevision?: string | null,
+  ) {
     anchorCounter += 1;
     var anchor: Anchor = {
       anchorId: "a" + anchorCounter,
       componentId: componentId,
       classId: classId,
+      descriptorRevision: descriptorRevision ?? null,
       token: token || "",
       // The out-of-order guard's bookkeeping (design 4.2): the counter and the
       // highest applied epoch live on the anchor, never on the component id,
@@ -1103,8 +1336,16 @@ declare global {
       values: null,
       stateProxy: null,
       writable: null,
-      loading: Alpine.reactive<LoadingBox>({ any: 0, handlers: {} }),
-      errorBox: Alpine.reactive<Anchor["errorBox"]>({ current: null }),
+      loading: Alpine.reactive<LoadingBox>({
+        any: 0,
+        handlers: Object.create(null) as Record<string, number>,
+      }),
+      errorBox: Alpine.reactive<ErrorBox>({
+        current: null,
+        handlers: Object.create(null) as Record<string, ErrorSlot>,
+        failureClock: 0,
+      }),
+      errorGeneration: 0,
       timers: new Set<number>(),
       busyTriggers: new Set<Element>(),
     };
@@ -1136,6 +1377,7 @@ declare global {
   // 3). Instance JS cleanups are not run here; the dependency manager's
   // removal reconciler owns those when the id's elements leave the DOM.
   var retireAnchor = function (anchor: Anchor, preserveGeneral?: boolean) {
+    var retiredDescriptorRevision = anchor.descriptorRevision;
     var pendingKeys = Object.keys(anchor.pending);
     var dropped: string[] = [];
     if (pendingKeys.length || anchor.loading.any > 0) {
@@ -1163,11 +1405,15 @@ declare global {
     anchors.delete(anchor.anchorId);
     anchor.componentId = null;
     anchor.classId = null;
+    anchor.descriptorRevision = null;
     anchor.token = "";
     anchor.pending = {};
     anchor.values = null;
     anchor.stateProxy = null;
     anchor.writable = new Set<string>();
+    anchor.errorGeneration += 1;
+    refreshErrorHandlers(anchor, true);
+    if (retiredDescriptorRevision != null) scheduleDescriptorPrune(retiredDescriptorRevision);
   };
 
   // The anchor-side handling of one incoming render: the three-way state
@@ -1195,11 +1441,22 @@ declare global {
     if (anchor.clientAnchor) {
       globalThis.Citry?.manager?.ownership?._transitionEvents(anchor.clientAnchor, meta.componentId, meta.classId);
     }
+    var oldDescriptorRevision = anchor.descriptorRevision;
+    anchor.descriptorRevision =
+      meta.descriptorRevision === undefined ? anchor.descriptorRevision : meta.descriptorRevision;
+    if (oldDescriptorRevision !== anchor.descriptorRevision && oldDescriptorRevision != null) {
+      scheduleDescriptorPrune(oldDescriptorRevision);
+    }
     var branch: RenderLink["branch"];
     if (meta.classId === anchor.classId) {
       // Same class: reconcile in place. The reactive object and the `$state`
       // facade keep their identity, so subscribers carry across the render.
       branch = "reconcile";
+      // Pre-staging installs the incoming revision before this anchor is tied
+      // to it. Refresh the closed-over gate now, before Alpine evaluates the
+      // incoming bindings during morph.
+      refreshWritableFields(anchor, false);
+      refreshErrorHandlers(anchor);
       reconcileValues(anchor, meta.values || {});
     } else {
       // Different class: the fields do not correspond, so the old state is
@@ -1208,7 +1465,7 @@ declare global {
       // State rebuild succeeds instead of failing on a stale token.
       branch = "adopt";
       anchor.pending = {};
-      anchor.errorBox.current = null;
+      anchor.errorGeneration += 1;
       adoptStateContract(anchor, meta.classId, meta.values || {});
     }
     anchor.token = meta.token || "";
@@ -1253,200 +1510,40 @@ declare global {
 
   // ----- manifest processing -----
 
-  var isPlainObject = function (value: unknown): value is Record<string, unknown> {
-    return value !== null && typeof value === "object" && !Array.isArray(value);
-  };
-
-  var isJsonValue = function (value: unknown, ancestors?: Set<object>): boolean {
-    if (value === null || typeof value === "string" || typeof value === "boolean") return true;
-    if (typeof value === "number") return Number.isFinite(value);
-    if (typeof value !== "object") return false;
-    var seen = ancestors || new Set<object>();
-    if (seen.has(value)) return false;
-    seen.add(value);
-    var valid: boolean;
-    if (Array.isArray(value)) {
-      const keys = Object.keys(value);
-      valid =
-        Object.getOwnPropertySymbols(value).length === 0 &&
-        keys.length === value.length &&
-        keys.every(function (key, index) {
-          return key === String(index);
-        }) &&
-        value.every(function (item) {
-          return isJsonValue(item, seen);
-        });
-    } else {
-      valid =
-        (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) &&
-        Object.getOwnPropertySymbols(value).length === 0 &&
-        Object.getOwnPropertyNames(value).every(function (key) {
-          return (
-            Object.prototype.propertyIsEnumerable.call(value, key) &&
-            isJsonValue((value as Record<string, unknown>)[key], seen)
-          );
-        });
-    }
-    seen.delete(value);
-    return valid;
-  };
-
-  var hasExactKeys = function (value: Record<string, unknown>, required: string[], optional?: string[]): boolean {
-    var allowed = new Set(required.concat(optional || []));
-    return (
-      required.every(function (key) {
-        return Object.prototype.hasOwnProperty.call(value, key);
-      }) &&
-      Object.keys(value).every(function (key) {
-        return allowed.has(key);
-      })
-    );
-  };
-
-  var stageEventsManifest = function (manifest: EventsManifest): StagedEventsManifest {
-    if (!isPlainObject(manifest)) throw new TypeError("events manifest must be an object");
-    if (!hasExactKeys(manifest, ["protocol", "clientGraphRevision", "componentClasses", "componentInstances"])) {
-      throw new TypeError("events manifest must contain exactly the citry-events/1 fields");
-    }
-    if (manifest.protocol !== "citry-events/1") throw new TypeError("events manifest protocol must be citry-events/1");
-    if (
-      manifest.clientGraphRevision !== null &&
-      (typeof manifest.clientGraphRevision !== "string" || !/^[0-9a-f]{64}$/.test(manifest.clientGraphRevision))
-    ) {
-      throw new TypeError("events manifest clientGraphRevision must be a lowercase 64-character digest or null");
-    }
-    if (!Array.isArray(manifest.componentClasses)) {
-      throw new TypeError("events manifest componentClasses must be an array");
-    }
-    if (!Array.isArray(manifest.componentInstances)) {
-      throw new TypeError("events manifest componentInstances must be an array");
-    }
-
-    var stagedClasses: [string, ClassDescriptor][] = [];
-    var classIds = new Set<string>();
-    manifest.componentClasses.forEach(function (candidate) {
-      if (
-        !isPlainObject(candidate) ||
-        !hasExactKeys(candidate, ["componentClassId", "eventHandlers"], ["writableStateFields"])
-      ) {
-        throw new TypeError("events component class must contain exactly its protocol fields");
-      }
-      if (typeof candidate.componentClassId !== "string" || !candidate.componentClassId) {
-        throw new TypeError("events componentClassId must be non-empty text");
-      }
-      if (classIds.has(candidate.componentClassId)) throw new TypeError("events manifest repeats a componentClassId");
-      if (!isPlainObject(candidate.eventHandlers)) {
-        throw new TypeError("events component class eventHandlers must be an object");
-      }
-      Object.keys(candidate.eventHandlers).forEach(function (eventName) {
-        if (!eventName) throw new TypeError("events handler names must be non-empty text");
-        const options = (candidate.eventHandlers as Record<string, unknown>)[eventName];
-        if (!isPlainObject(options)) {
-          throw new TypeError("events handler options must be an object");
-        }
-        if (
-          !hasExactKeys(
-            options,
-            ["httpMethod"],
-            ["usesState", "debounceMilliseconds", "throttleMilliseconds", "latestCallWins", "allowBatching"],
-          )
-        ) {
-          throw new TypeError("events handler options contain missing or unknown fields");
-        }
-        if (typeof options.httpMethod !== "string" || !/^[!#$%&'*+.^_`|~0-9A-Z-]+$/.test(options.httpMethod)) {
-          throw new TypeError("events handler httpMethod must be uppercase HTTP-token text");
-        }
-        (["debounceMilliseconds", "throttleMilliseconds"] as const).forEach(function (field) {
-          if (
-            Object.prototype.hasOwnProperty.call(options, field) &&
-            (!Number.isInteger(options[field]) || (options[field] as number) < 0)
-          ) {
-            throw new TypeError("events handler " + field + " must be a non-negative integer");
-          }
-        });
-        if (options.usesState !== undefined && options.usesState !== true) {
-          throw new TypeError("events handler usesState may only be true");
-        }
-        if (options.latestCallWins !== undefined && options.latestCallWins !== true) {
-          throw new TypeError("events handler latestCallWins may only be true");
-        }
-        if (options.allowBatching !== undefined && options.allowBatching !== false) {
-          throw new TypeError("events handler allowBatching may only be false");
-        }
-      });
-      if (
-        candidate.writableStateFields !== undefined &&
-        (!Array.isArray(candidate.writableStateFields) ||
-          candidate.writableStateFields.some(function (field) {
-            return typeof field !== "string" || !field;
-          }) ||
-          new Set(candidate.writableStateFields).size !== candidate.writableStateFields.length)
-      ) {
-        throw new TypeError("events writableStateFields must contain unique, non-empty strings");
-      }
-      var descriptor = candidate as unknown as ClassDescriptor;
-      classIds.add(descriptor.componentClassId);
-      stagedClasses.push([descriptor.componentClassId, descriptor]);
+  var stageEventsManifest = function (value: unknown): StagedEventsManifest {
+    var manifest = assertValidManifest(value);
+    var descriptorRevision = manifest.clientGraphRevision || null;
+    var stagedClasses: [string, ClassDescriptor][] = manifest.componentClasses.map(function (descriptor) {
+      return [descriptor.componentClassId, descriptor];
     });
-
-    var componentIds = new Set<string>();
     var stagedInstances = manifest.componentInstances.map(function (candidate) {
-      if (
-        !isPlainObject(candidate) ||
-        !hasExactKeys(candidate, ["renderId", "componentClassId", "stateToken", "publicState"])
-      ) {
-        throw new TypeError("events component instance must contain exactly its protocol fields");
-      }
-      var componentId = candidate.renderId;
-      if (typeof componentId !== "string" || !componentId)
-        throw new TypeError("events renderId must be non-empty text");
-      if (!isSafeRenderId(componentId)) {
-        throw new TypeError("events renderId must be safe for an HTML attribute name");
-      }
-      if (componentIds.has(componentId)) throw new TypeError("events manifest repeats a renderId");
-      componentIds.add(componentId);
-      if (typeof candidate.componentClassId !== "string" || !candidate.componentClassId) {
-        throw new TypeError("events instance componentClassId must be non-empty text");
-      }
-      if (!classIds.has(candidate.componentClassId)) {
-        throw new TypeError("events instance refers to an unknown componentClassId");
-      }
-      if (candidate.stateToken !== null && (typeof candidate.stateToken !== "string" || !candidate.stateToken)) {
-        throw new TypeError("events stateToken must be non-empty text or null");
-      }
-      if (!isPlainObject(candidate.publicState) || !isJsonValue(candidate.publicState)) {
-        throw new TypeError("events publicState must be a strict JSON object");
-      }
-      if (candidate.stateToken === null && Object.keys(candidate.publicState).length) {
-        throw new TypeError("a stateless events instance cannot carry publicState");
-      }
       return {
-        componentId: componentId,
+        componentId: candidate.renderId,
         classId: candidate.componentClassId,
         token: candidate.stateToken,
-        values: candidate.publicState,
+        values: candidate.publicState as StateValues,
+        descriptorRevision: descriptorRevision,
       };
     });
-    return { classes: stagedClasses, instances: stagedInstances };
+    return { manifest: manifest, classes: stagedClasses, instances: stagedInstances };
   };
 
-  var applyEventsManifest = function (manifest: EventsManifest) {
-    // Decode and validate every class and instance before mutating either
-    // registry. A bad later entry therefore cannot expose an earlier anchor.
-    var staged = stageEventsManifest(manifest);
-    var graphRevision = manifest.clientGraphRevision as string | null;
+  var applyEventsManifest = function (staged: StagedEventsManifest) {
+    var graphRevision = staged.manifest.clientGraphRevision;
     var ownership = graphRevision ? globalThis.Citry?.manager?.ownership : null;
+    var displacedDescriptorRevisions = new Set<string>();
     if (graphRevision) {
       if (!ownership) throw new Error("the ownership graph registry is unavailable");
       ownership._preflightEvents(graphRevision, staged.instances);
     }
-    // A fragment usually names only its own instances, but descriptors are
-    // class-global, so installation refreshes every live sibling too.
-    installClassDescriptors(staged.classes, true);
+    // Graph-backed descriptors refresh only anchors tied to this revision;
+    // legacy graphless descriptors retain their class-global behavior.
+    installClassDescriptors(staged.classes, true, graphRevision ?? undefined);
 
     staged.instances.forEach(function (meta) {
       var existing = idToAnchor.get(meta.componentId);
       var eventsAnchor: Anchor;
+      var previousDescriptorRevision: string | null;
       if (existing) {
         // The id is already linked: a correlated render reconciled this
         // instance before the morph, and the fragment's own manifest tag
@@ -1454,11 +1551,26 @@ declare global {
         // would replay the server values over newer local writes), so only
         // the token is refreshed.
         if (meta.token) existing.token = meta.token;
+        previousDescriptorRevision = existing.descriptorRevision;
+        existing.descriptorRevision = meta.descriptorRevision;
+        // Descriptor installation happens before correlated anchors change
+        // revision, so refresh this listed anchor after making that move.
+        // Unlisted siblings remain on their own revision contract.
+        refreshWritableFields(existing, true);
+        refreshErrorHandlers(existing);
+        if (previousDescriptorRevision !== existing.descriptorRevision && previousDescriptorRevision != null)
+          displacedDescriptorRevisions.add(previousDescriptorRevision);
         eventsAnchor = existing;
       } else {
         // A component id appearing with no anchor: the initial page load, a
         // server push, or a host-inserted fragment. Mint a fresh anchor.
-        eventsAnchor = createAnchor(meta.componentId, meta.classId, meta.token || "", meta.values);
+        eventsAnchor = createAnchor(
+          meta.componentId,
+          meta.classId,
+          meta.token || "",
+          meta.values,
+          meta.descriptorRevision,
+        );
       }
       if (graphRevision && ownership) {
         eventsAnchor.clientAnchor = ownership._attachEvents(
@@ -1470,21 +1582,79 @@ declare global {
       }
       attachBoundaryScopes(meta.componentId);
     });
+    return displacedDescriptorRevisions;
   };
 
   var EVENTS_MANIFEST_SELECTOR = 'script[type="application/json"][data-citry-events]';
   var consumedOwnershipRevisions = new Set<string>();
 
-  var applyEventsManifestTransaction = function (manifest: EventsManifest) {
-    var graphRevision = manifest.clientGraphRevision as string | null;
+  var applyEventsManifestTransaction = function (staged: StagedEventsManifest) {
+    var graphRevision = staged.manifest.clientGraphRevision;
     var ownership = graphRevision ? globalThis.Citry?.manager?.ownership : null;
+    var classIds = new Set(
+      staged.classes.map(function (entry) {
+        return entry[0];
+      }),
+    );
+    var priorClasses = staged.classes.map(function (entry) {
+      return { classId: entry[0], had: classes.has(entry[0]), descriptor: classes.get(entry[0]) };
+    });
+    var priorErrorBoxes = snapshotErrorBoxesForClasses(classIds);
+    var hadDescriptorRevision = graphRevision != null && descriptorRevisions.has(graphRevision);
+    var priorDescriptorRevision = graphRevision == null ? undefined : descriptorRevisions.get(graphRevision);
+    var priorAnchors = staged.instances.map(function (meta) {
+      var anchor = idToAnchor.get(meta.componentId) || null;
+      return {
+        componentId: meta.componentId,
+        anchor: anchor,
+        token: anchor?.token,
+        descriptorRevision: anchor?.descriptorRevision,
+        clientAnchor: anchor?.clientAnchor,
+      };
+    });
+    var displacedDescriptorRevisions: Set<string>;
     try {
-      applyEventsManifest(manifest);
+      displacedDescriptorRevisions = applyEventsManifest(staged);
       if (graphRevision) {
         consumedOwnershipRevisions.add(graphRevision);
         ownership!._finishEvents(graphRevision, null);
       }
+      // Keep old revision tables available until every fallible transaction
+      // step succeeds so rollback can restore an existing anchor's contract.
+      displacedDescriptorRevisions.forEach(scheduleDescriptorPrune);
     } catch (err) {
+      if (graphRevision != null) {
+        restoreDescriptorRevision(graphRevision, hadDescriptorRevision, priorDescriptorRevision);
+      } else {
+        priorClasses.forEach(function (entry) {
+          if (entry.had) classes.set(entry.classId, entry.descriptor as ClassDescriptor);
+          else classes.delete(entry.classId);
+        });
+      }
+      priorAnchors
+        .slice()
+        .reverse()
+        .forEach(function (snapshot) {
+          var current = idToAnchor.get(snapshot.componentId) || null;
+          if (snapshot.anchor == null) {
+            if (current) retireAnchor(current);
+            return;
+          }
+          if (current && current !== snapshot.anchor) retireAnchor(current);
+          var failedRevision = snapshot.anchor.descriptorRevision;
+          if (snapshot.anchor.clientAnchor && snapshot.anchor.clientAnchor !== snapshot.clientAnchor) {
+            ownership?._detachEvents(snapshot.anchor.clientAnchor, snapshot.anchor);
+          }
+          snapshot.anchor.clientAnchor = snapshot.clientAnchor;
+          snapshot.anchor.token = snapshot.token as string;
+          snapshot.anchor.descriptorRevision = snapshot.descriptorRevision as string | null;
+          idToAnchor.set(snapshot.componentId, snapshot.anchor);
+          if (failedRevision !== snapshot.anchor.descriptorRevision && failedRevision != null) {
+            scheduleDescriptorPrune(failedRevision);
+          }
+        });
+      refreshAnchorsForClasses(classIds, false, graphRevision ?? undefined);
+      restoreErrorBoxes(priorErrorBoxes);
       if (graphRevision && ownership) ownership._finishEvents(graphRevision, err);
       throw err;
     }
@@ -1496,7 +1666,7 @@ declare global {
     el.dataset.citryEventsProcessed = "";
     try {
       // A script tag's textContent is never null; the cast just says so.
-      const manifest = JSON.parse(el.textContent as string) as EventsManifest;
+      const manifest: unknown = JSON.parse(el.textContent as string);
       // A valid-looking graph revision is enough to reserve the ownership
       // gate. Deep validation happens after reservation so a malformed later
       // class or instance cannot let graph-linked callbacks run first.
@@ -1529,10 +1699,10 @@ declare global {
         reservedRevision = reservationRevision;
       }
       try {
-        // applyEventsManifest validates again immediately before registry
-        // mutation so direct internal callers keep the same strict boundary.
-        stageEventsManifest(manifest);
-        const graphRevision = manifest.clientGraphRevision as string | null;
+        // Validate the whole manifest before any registry mutation. The
+        // validated staged value is the only form handed to later callbacks.
+        const staged = stageEventsManifest(manifest);
+        const graphRevision = staged.manifest.clientGraphRevision;
         if (reservedRevision && graphRevision !== reservedRevision) {
           throw new TypeError("a graph-backed Events manifest must link to its paired ownership revision");
         }
@@ -1544,7 +1714,7 @@ declare global {
             ownership.whenReady(graphRevision).then(
               function () {
                 try {
-                  applyEventsManifestTransaction(manifest);
+                  applyEventsManifestTransaction(staged);
                 } catch (err) {
                   console.error("[Citry] failed to process events manifest:", err);
                 }
@@ -1559,7 +1729,7 @@ declare global {
           }
         }
         handedOff = true;
-        applyEventsManifestTransaction(manifest);
+        applyEventsManifestTransaction(staged);
       } catch (err) {
         if (reservedRevision && ownership && !handedOff) ownership._finishEvents(reservedRevision, err);
         throw err;
@@ -1686,19 +1856,9 @@ declare global {
 
   // ----- the wire: envelope, transports, timeout, and version skew (design 4.2, 5.2, 5.6, 6.1, 6.2) -----
 
-  // The protocol identity and what this runtime can apply (the protocol
-  // package's spec, section 5): the client advertises the full v1 vocabulary,
-  // which is `morph` on top of the protocol baseline (the baseline is every
-  // v1 swap except morph, plus all six action kinds). The server never emits
-  // outside the advertised set; it downgrades instead, which is what keeps a
-  // stale cached runtime safe across a deploy (design 4.2).
-  var PROTOCOL = "citry-events/1";
-  var CLIENT_SWAPS = ["morph", "replace", "inner", "append", "prepend", "remove", "none"];
-  var CLIENT_ACTIONS = ["render", "data", "state", "event", "redirect", "url"];
-  // The protocol schema caps one envelope at sixteen calls (design 4.2); a
-  // larger batch must split into successive envelopes before the wire (the
-  // event queue's job).
-  var MAX_CALLS_PER_ENVELOPE = 16;
+  // Protocol identity, capabilities, and the batch cap come from the
+  // executable protocol package imported above. That package is the wire
+  // source of truth shared by construction and validation.
   // The bounded default (design 5.6): a hung request must never hold its
   // queue dependents forever, so an unbounded setting is deliberately not
   // offered; raise the number per call or page-wide for known-slow handlers.
@@ -1709,8 +1869,8 @@ declare global {
   var CSRF_HEADER_DEFAULT = "X-CSRFToken";
 
   // The events routes' base URL, read once at evaluation time from the
-  // runtime script tag's own src (`.../ext/events/runtime.js`, the URL the
-  // serializer emitted): the one breadcrumb every served page carries.
+  // runtime script tag's own src (`.../ext/events/runtime.js`): the one
+  // breadcrumb every served page carries.
   // `configure({url})` overrides it for the rare deployment where the
   // emitted URL is wrong from the browser's viewpoint (a path-rewriting
   // reverse proxy in front of the app).
@@ -1720,9 +1880,9 @@ declare global {
     var src =
       current && typeof (current as HTMLScriptElement).src === "string" ? (current as HTMLScriptElement).src : "";
     if (!/\/runtime\.js([?#]|$)/.test(src)) {
-      // Not evaluating from the served runtime tag (an inlined bundle, a
-      // hand-written page): find the tag by its fixed, design-pinned path.
-      tag = document.querySelector('script[src$="ext/events/runtime.js"]');
+      // Not evaluating from the served runtime tag (an inlined bundle or a
+      // hand-written page): find the fixed runtime route.
+      tag = document.querySelector('script[src*="ext/events/runtime.js"]');
       src = tag ? tag.src : "";
     }
     var match = /^(.*\/)runtime\.js([?#].*)?$/.exec(src);
@@ -1819,12 +1979,16 @@ declare global {
       }
       appendValue(name, value);
     });
-    if (call.callerRenderId) query.set("_citry_caller_render_id", call.callerRenderId);
-    if (call.stateToken) query.set("_citry_state_token", call.stateToken);
-    if (typeof call.sendSequence === "number") query.set("_citry_send_sequence", String(call.sendSequence));
-    query.set("_citry_protocol", envelope.protocol);
-    query.set("_citry_request_id", envelope.requestId);
-    if (envelope.capabilities) query.set("_citry_capabilities", JSON.stringify(envelope.capabilities));
+    if (call.callerRenderId) query.set(CARRIER_FIELDS.callerRenderId, call.callerRenderId);
+    if (call.stateToken) query.set(CARRIER_FIELDS.stateToken, call.stateToken);
+    if (typeof call.sendSequence === "number") {
+      query.set(CARRIER_FIELDS.sendSequence, String(call.sendSequence));
+    }
+    query.set(CARRIER_FIELDS.protocol, envelope.protocol);
+    query.set(CARRIER_FIELDS.requestId, envelope.requestId);
+    if (envelope.capabilities) {
+      query.set(CARRIER_FIELDS.capabilities, JSON.stringify(envelope.capabilities));
+    }
     return query.toString();
   };
 
@@ -1930,163 +2094,12 @@ declare global {
     return record;
   };
 
-  var isObj = isPlainObject;
-  var ERROR_STATUSES: Record<string, number | null> = {
-    invalid_args: 422,
-    invalid_state: 403,
-    stale_state: 409,
-    unknown_event: 404,
-    unknown_component: 404,
-    forbidden: 403,
-    not_found: 404,
-    conflict: 409,
-    error: null,
-    csrf_failed: 403,
-    payload_too_large: 413,
-    protocol_mismatch: 400,
-    handler_error: 500,
-  };
-  var isWireError = function (e: unknown): e is ErrorEnvelope {
-    if (!isObj(e) || !hasExactKeys(e, ["status", "code", "message"], ["fieldErrors"])) return false;
-    if (!Number.isInteger(e.status) || (e.status as number) < 400 || (e.status as number) > 599) return false;
-    if (typeof e.code !== "string" || !Object.prototype.hasOwnProperty.call(ERROR_STATUSES, e.code)) return false;
-    if (ERROR_STATUSES[e.code] !== null && ERROR_STATUSES[e.code] !== e.status) return false;
-    if (typeof e.message !== "string" || !e.message) return false;
-    return (
-      e.fieldErrors === undefined ||
-      (isObj(e.fieldErrors) && Object.values(e.fieldErrors).every((value) => typeof value === "string"))
-    );
-  };
-
   var badReply = (reason: string) => clientError("transport_error", "invalid event response (" + reason + ").");
 
-  var isActionTarget = function (value: unknown): value is string {
-    if (typeof value !== "string" || !value) return false;
-    if (value.indexOf("render:") !== 0) return true;
-    return isSafeRenderId(value.slice(7));
-  };
-
-  var validateWireAction = function (candidate: unknown): candidate is ResultAction {
-    if (!isObj(candidate) || typeof candidate.action !== "string") return false;
-    if (
-      (candidate.delay !== undefined &&
-        (typeof candidate.delay !== "number" || !Number.isFinite(candidate.delay) || candidate.delay < 0)) ||
-      (candidate.wait !== undefined && candidate.wait !== false)
-    ) {
-      return false;
-    }
-    var timing = ["delay", "wait"];
-    if (candidate.action === "render") {
-      return (
-        hasExactKeys(candidate, ["action", "target", "swap", "html"], timing) &&
-        isActionTarget(candidate.target) &&
-        typeof candidate.swap === "string" &&
-        CLIENT_SWAPS.indexOf(candidate.swap) !== -1 &&
-        typeof candidate.html === "string"
-      );
-    }
-    if (candidate.action === "data") {
-      return hasExactKeys(candidate, ["action", "value"], timing) && isJsonValue(candidate.value);
-    }
-    if (candidate.action === "state") {
-      return (
-        hasExactKeys(candidate, ["action", "targetRenderId", "stateToken"], timing) &&
-        typeof candidate.targetRenderId === "string" &&
-        isSafeRenderId(candidate.targetRenderId) &&
-        typeof candidate.stateToken === "string" &&
-        !!candidate.stateToken
-      );
-    }
-    if (candidate.action === "event") {
-      return (
-        hasExactKeys(candidate, ["action", "eventName"], ["detail", "target"].concat(timing)) &&
-        typeof candidate.eventName === "string" &&
-        !!candidate.eventName &&
-        candidate.eventName.indexOf("citry:") !== 0 &&
-        (candidate.detail === undefined || isJsonValue(candidate.detail)) &&
-        (candidate.target === undefined || isActionTarget(candidate.target))
-      );
-    }
-    if (candidate.action === "redirect") {
-      return hasExactKeys(candidate, ["action", "url"], timing) && typeof candidate.url === "string" && !!candidate.url;
-    }
-    if (candidate.action === "url") {
-      return (
-        hasExactKeys(candidate, ["action", "url", "mode"], timing) &&
-        typeof candidate.url === "string" &&
-        !!candidate.url &&
-        (candidate.mode === "push" || candidate.mode === "replace")
-      );
-    }
-    return false;
-  };
-
-  var validateOkResult = function (candidate: Record<string, unknown>, expectedSequence?: number): boolean {
-    if (!hasExactKeys(candidate, ["ok", "actions"], ["sendSequence"]) || candidate.ok !== true) return false;
-    if (!Array.isArray(candidate.actions) || !candidate.actions.every(validateWireAction)) return false;
-    if (
-      candidate.actions.filter(function (action) {
-        return (action as ResultAction).action === "data";
-      }).length > 1
-    )
-      return false;
-    return candidate.sendSequence === expectedSequence;
-  };
-
-  var validateErrorResult = function (
-    candidate: Record<string, unknown>,
-    expectedSequence?: number,
-    checkSequence = true,
-  ): boolean {
-    if (!hasExactKeys(candidate, ["ok", "error"], ["sendSequence"]) || candidate.ok !== false) return false;
-    if (!isWireError(candidate.error)) return false;
-    if (
-      candidate.sendSequence !== undefined &&
-      (!Number.isInteger(candidate.sendSequence) || (candidate.sendSequence as number) < 0)
-    ) {
-      return false;
-    }
-    return !checkSequence || candidate.sendSequence === expectedSequence;
-  };
-
-  var preflight = function (reply: ResultEnvelope, sent: CallEnvelope): ResultEntry[] {
-    if (
-      !isObj(reply) ||
-      !hasExactKeys(reply, ["protocol", "requestId", "results"]) ||
-      reply.protocol !== PROTOCOL ||
-      !Array.isArray(reply.results) ||
-      !reply.results.length
-    ) {
-      throw badReply("header");
-    }
-    var results = reply.results;
-
-    if (reply.requestId === null) {
-      const edge = results[0];
-      if (
-        results.length !== 1 ||
-        !isObj(edge) ||
-        edge.sendSequence !== undefined ||
-        !validateErrorResult(edge, undefined, false) ||
-        !isObj(edge.error) ||
-        edge.error.fieldErrors !== undefined ||
-        (edge.error.code !== "protocol_mismatch" && edge.error.code !== "payload_too_large")
-      ) {
-        throw badReply("edge");
-      }
-      return sent.calls.map(() => edge);
-    }
-
-    if (reply.requestId !== sent.requestId || results.length !== sent.calls.length) throw badReply("correlation");
-
-    results.forEach((item, slot) => {
-      if (!isObj(item)) throw badReply("result " + slot);
-      var expectedSequence = sent.calls[slot].sendSequence;
-      if (!validateOkResult(item, expectedSequence) && !validateErrorResult(item, expectedSequence)) {
-        throw badReply("result " + slot);
-      }
-    });
-    return results;
+  var preflight = function (reply: unknown, sent: CallEnvelope): ResultEntry[] {
+    var checked = preflightResultEnvelope(reply, sent);
+    if (!checked.ok) throw badReply(checked.reason);
+    return checked.results;
   };
 
   // Fire a record's settle hook exactly once (the queue's dependent-release
@@ -2107,6 +2120,7 @@ declare global {
   // the actions finish.
   var settleRecordFromResult = function (record: SendRecord, result: ResultEntry | undefined, slot: number) {
     var error: unknown;
+    var saveError: ErrorEnvelope;
     var dataFired = false;
     var ctx: ApplyContext;
     var download: DownloadPayload | undefined;
@@ -2157,8 +2171,12 @@ declare global {
         saveDownload(download);
         record.resolve(undefined);
       } catch (err) {
-        console.error("[Citry] events: saving the download from '" + record.event + "' failed:", err);
-        record.reject(toErrorEnvelope(err as ErrorLike));
+        saveError = toErrorEnvelope(err as ErrorLike);
+        // Some browsers render an Error argument as only "Error" in the
+        // console. Include the normalized message in Citry's own text so the
+        // diagnostic remains useful everywhere.
+        console.error("[Citry] events: saving the download from '" + record.event + "' failed: " + saveError.message);
+        record.reject(saveError);
       }
       return Promise.resolve();
     }
@@ -2191,15 +2209,14 @@ declare global {
   // (machinery item 4, the batch half).
   var sendRecordsOverWire = function (records: SendRecord[]) {
     var impl: TransportImpl;
-    var dispatched: Promise<ResultEnvelope>;
-    var envelope: CallEnvelope = {
-      protocol: PROTOCOL,
-      requestId: mintCorrelationId(),
-      capabilities: { swaps: CLIENT_SWAPS.slice(), actions: CLIENT_ACTIONS.slice() },
-      calls: records.map(function (record) {
+    var dispatched: Promise<unknown>;
+    var envelope = buildCallEnvelope(
+      mintCorrelationId(),
+      records.map(function (record) {
         return record.call;
       }),
-    };
+      fullClientCapabilities(),
+    ) as CallEnvelope;
     try {
       impl = activeTransport();
     } catch (err) {
@@ -2408,14 +2425,10 @@ declare global {
     }
     return response.blob().then(function (blob) {
       var call = envelope.calls[0];
-      var result: ResultEntry = { ok: true, actions: [] };
-      if (typeof call.sendSequence === "number") result.sendSequence = call.sendSequence;
-      stagedDownloads.set(result, { blob: blob, filename: filename });
-      return {
-        protocol: PROTOCOL,
-        requestId: envelope.requestId,
-        results: [result],
-      };
+      var result = buildOkResult([], call.sendSequence);
+      var resultEnvelope = buildResultEnvelope(envelope.requestId, [result]);
+      stagedDownloads.set(resultEnvelope.results[0], { blob: blob, filename: filename });
+      return resultEnvelope;
     });
   };
 
@@ -2433,7 +2446,11 @@ declare global {
       var url = single
         ? base + "e/" + encodeURIComponent(single.componentClassId) + "/" + encodeURIComponent(single.handlerName)
         : base + "call";
-      var method = single && eventHttpMethod(single.componentClassId, single.handlerName) === "GET" ? "GET" : "POST";
+      var singleAnchor = single ? idToAnchor.get(single.callerRenderId) || null : null;
+      var method =
+        single && eventHttpMethod(singleAnchor || single.componentClassId, single.handlerName) === "GET"
+          ? "GET"
+          : "POST";
       var request: RequestInit = { method: method, credentials: "same-origin" };
       if (method === "GET" && single) {
         const encodedQuery = encodeGetCallQuery(envelope, single);
@@ -2525,6 +2542,8 @@ declare global {
   interface SendEntry {
     anchor: Anchor;
     name: string;
+    /** User/API intent order, independent of actual queue dispatch order. */
+    intentSequence: number;
     args?: Record<string, unknown> | null;
     opts?: unknown;
     queueManaged?: boolean;
@@ -2549,7 +2568,7 @@ declare global {
       if (!isPlainObject(args) || !isJsonValue(args)) {
         throw pointedError("the args for event '" + entry.name + "' must be a strict JSON object.");
       }
-      if (eventHttpMethod(entry.anchor.classId, entry.name) !== "GET" && !isJsonValue(entry.anchor.pending)) {
+      if (eventHttpMethod(entry.anchor, entry.name) !== "GET" && !isJsonValue(entry.anchor.pending)) {
         throw pointedError("the pending State updates for event '" + entry.name + "' must be strict JSON values.");
       }
     });
@@ -2557,8 +2576,10 @@ declare global {
     var promises = entries.map(function (entry) {
       var anchor = entry.anchor;
       var name = entry.name;
+      var outcomeGeneration: number;
       var record: SendRecord;
       var dispatched: Promise<unknown>;
+      var callDescriptorRevision: string | null;
       // Cancellable just before the send (design 5.2): a prevented send
       // never hits the wire and its promise rejects with the client-minted
       // `cancelled` shape. The page performed the cancel itself, so no drop
@@ -2573,26 +2594,24 @@ declare global {
           clientError("cancelled", "a citry:events:before listener stopped the send of '" + name + "'."),
         );
       }
+      // A cancelled call never becomes the newest intent. Once the call is
+      // accepted for sending, however, its user/API order guards the retained
+      // error slot even when wait:false lets it overtake an older queued call.
+      outcomeGeneration = anchor.errorGeneration;
+      var errorSlot = anchor.errorBox.handlers[name];
+      if (errorSlot) {
+        errorSlot.latestStartedIntent = Math.max(errorSlot.latestStartedIntent, entry.intentSequence);
+      }
       // The send-side half of the out-of-order guard (design 4.2): every
       // send from an anchor bumps its counter and echoes it in the call;
       // the apply-side comparison reads the echo.
       anchor.epoch += 1;
-      // The id casts hold because requireDeclaredEvent above already threw
-      // for a retired anchor (its declared list is empty).
-      var call: TransportCall = {
-        componentClassId: anchor.classId as string,
-        handlerName: name,
-        callerRenderId: anchor.componentId as string,
-        args: entry.args || {},
-        sendSequence: anchor.epoch,
-      };
-      if (
-        anchor.token &&
-        (eventHttpMethod(anchor.classId, name) !== "GET" || eventDeclaresState(anchor.classId, name))
-      ) {
-        call.stateToken = anchor.token;
+      var stateToken: string | undefined;
+      var stateUpdates: Record<string, unknown> | undefined;
+      if (anchor.token && (eventHttpMethod(anchor, name) !== "GET" || eventDeclaresState(anchor, name))) {
+        stateToken = anchor.token;
       }
-      if (eventHttpMethod(anchor.classId, name) !== "GET") {
+      if (eventHttpMethod(anchor, name) !== "GET") {
         // The updates piggyback's second stage (design 4.2): a two-way draft
         // whose flush timer is still pending rides this call too, so a poll
         // tick uploads the mid-debounce draft instead of racing it. The flush
@@ -2610,10 +2629,22 @@ declare global {
           // unsent": from here on, incoming server values win these fields
           // again. A rejected call puts them back (the rejection handler
           // below).
-          call.stateUpdates = anchor.pending;
+          stateUpdates = anchor.pending;
           anchor.pending = {};
         }
       }
+      // The id casts hold because requireDeclaredEvent above already threw
+      // for a retired anchor (its declared list is empty). Construction and
+      // the final strict check live in the protocol package.
+      var call = buildCall({
+        componentClassId: anchor.classId as string,
+        handlerName: name,
+        callerRenderId: anchor.componentId as string,
+        args: entry.args || {},
+        stateToken: stateToken,
+        stateUpdates: stateUpdates,
+        sendSequence: anchor.epoch,
+      }) as TransportCall;
 
       // With the stub the promise settles the whole lifecycle, so the settle
       // hook fires in the settlement arms below; on the wire the record
@@ -2640,15 +2671,30 @@ declare global {
       // queue, design 5.6), so a queue-managed entry must not count again
       // here; the direct batch path (`sendCalls`) still counts per flight.
       if (!entry.queueManaged) beginLoading(anchor, name);
-      return dispatched.then(
+      callDescriptorRevision = anchor.descriptorRevision;
+      retainDescriptorRevisionForCall(callDescriptorRevision);
+      var lifecyclePromise = dispatched.then(
         function (result) {
           if (!entry.queueManaged) endLoading(anchor, name);
-          anchor.errorBox.current = null; // cleared on the next successful call
+          var successSlot = anchor.errorBox.handlers[name];
+          if (
+            outcomeGeneration === anchor.errorGeneration &&
+            successSlot &&
+            successSlot.latestStartedIntent === entry.intentSequence
+          ) {
+            // Success belongs only to this handler. If its error was the
+            // aggregate, recomputing exposes the newest failure retained by
+            // another independent handler.
+            successSlot.current = null;
+            successSlot.failureOrder = 0;
+            refreshAggregateError(anchor);
+          }
           fireLifecycle("citry:events:after", anchor, name, { ok: true });
           if (viaStub && entry.onSettled) entry.onSettled();
           return result;
         },
         function (err) {
+          var failureSlot: ErrorSlot | undefined;
           if (!entry.queueManaged) endLoading(anchor, name);
           // A rejected call is treated as undelivered: its snapshotted
           // writes go back into the pending queue so a retry still carries
@@ -2681,11 +2727,31 @@ declare global {
           // failure, an error result, a timeout) sets both (design 5.2's
           // compose-by-reason rule).
           if (structured.code !== "cancelled" && structured.code !== "superseded") {
-            anchor.errorBox.current = structured;
+            failureSlot = anchor.errorBox.handlers[name];
+            if (
+              outcomeGeneration === anchor.errorGeneration &&
+              failureSlot &&
+              failureSlot.latestStartedIntent === entry.intentSequence
+            ) {
+              failureSlot.current = structured;
+              anchor.errorBox.failureClock += 1;
+              failureSlot.failureOrder = anchor.errorBox.failureClock;
+              refreshAggregateError(anchor);
+            }
             fireLifecycle("citry:events:error", anchor, name, { error: structured });
           }
           fireLifecycle("citry:events:after", anchor, name, { ok: false });
           if (viaStub && entry.onSettled) entry.onSettled();
+          throw err;
+        },
+      );
+      return lifecyclePromise.then(
+        function (result) {
+          releaseDescriptorRevisionForCall(callDescriptorRevision);
+          return result;
+        },
+        function (err) {
+          releaseDescriptorRevisionForCall(callDescriptorRevision);
           throw err;
         },
       );
@@ -2713,6 +2779,8 @@ declare global {
   interface QueueNode {
     /** Enqueue order; edges only ever point at lower seqs, so no cycle can form. */
     seq: number;
+    /** Runtime-global order in which the user/API caused this call. */
+    intentSequence: number;
     /** The dispatching anchor (re-resolved from the element at fire time). */
     anchor: Anchor;
     /** Where the gesture's `$loading` count and busy stamp live; follows `anchor` on re-resolution. */
@@ -2777,7 +2845,7 @@ declare global {
   // (design 3.5, carried per 4.4): only non-default values ride the wire, so
   // absence means the defaults (bundling on, latest_wins off).
   var eventKnobs = function (anchor: Anchor, name: string) {
-    var descriptor = classes.get(anchor.classId as string);
+    var descriptor = descriptorFor(anchor);
     var options = descriptor && descriptor.eventHandlers ? descriptor.eventHandlers[name] : null;
     return {
       bundle: !options || options.allowBatching !== false,
@@ -3013,7 +3081,7 @@ declare global {
     var physicalId: string | null;
     if (node.carrierLive && !node.carrierLive()) return "dead";
     if (node.element) {
-      if (!node.element.isConnected) return "dead";
+      if (!elementIsInCurrentDocument(node.element)) return "dead";
       if (!node.ownerLocked) {
         if (node.physicalOwner) {
           physicalId = innermostPhysicalComponentId(node.element);
@@ -3058,7 +3126,7 @@ declare global {
     // A render can swap the surviving position to a class that does not
     // declare this event (the adopt branch, design 5.5); firing it would be
     // a ghost call, so it dies with the position.
-    if (anchor.classId == null || declaredEvents(anchor.classId).indexOf(node.name) === -1) return "dead";
+    if (anchor.classId == null || declaredEvents(anchor).indexOf(node.name) === -1) return "dead";
     if (anchor !== node.anchor) transferGesture(node, anchor);
     addContainmentEdges(node);
     return node.deps.size ? "hold" : "dispatch";
@@ -3074,7 +3142,7 @@ declare global {
     ready.forEach(function (node) {
       if (!node.bundle) return;
       bundled.push(node);
-      if (bundled.length === MAX_CALLS_PER_ENVELOPE) {
+      if (bundled.length === CALLS_LIMIT) {
         chunks.push(bundled);
         bundled = [];
       }
@@ -3091,6 +3159,7 @@ declare global {
         return {
           anchor: node.anchor,
           name: node.name,
+          intentSequence: node.intentSequence,
           args: node.args,
           opts: node.opts,
           queueManaged: true,
@@ -3186,7 +3255,22 @@ declare global {
       endLoading(anchor, name);
       clearGestureBusy(anchor, element, ownerLocked);
     };
-    return sendAll([{ anchor: anchor, name: name, args: args, opts: opts, queueManaged: true, onSettled: finish }])[0];
+    try {
+      return sendAll([
+        {
+          anchor: anchor,
+          name: name,
+          intentSequence: nextCallIntent(),
+          args: args,
+          opts: opts,
+          queueManaged: true,
+          onSettled: finish,
+        },
+      ])[0];
+    } catch (err) {
+      finish();
+      return Promise.reject(err);
+    }
   };
 
   // Enqueue one send (the queue's front door): validate, apply the tick-skip
@@ -3231,6 +3315,7 @@ declare global {
     });
     var node: QueueNode = {
       seq: queueSeq,
+      intentSequence: nextCallIntent(),
       anchor: anchor,
       loadingAnchor: anchor,
       element: element,
@@ -3304,6 +3389,11 @@ declare global {
     opts?: unknown,
     recurringKey?: string | null,
   ): Promise<unknown> | null {
+    if (!elementIsInCurrentDocument(el)) {
+      fireStale(null, name, "cancelled");
+      console.debug("[Citry] events: dropped a '" + name + "' send: its element is not live in this document.");
+      return null;
+    }
     var projectedOwner = projectedComponentId(el);
     if (projectedOwner !== undefined) {
       if (projectedOwner === null) {
@@ -3316,7 +3406,7 @@ declare global {
       });
     }
     var anchor = el && (el as MaybeElement).nodeType === 1 ? anchorForElement(el) : null;
-    if (!anchor || anchor.classId == null || declaredEvents(anchor.classId).indexOf(name) === -1) {
+    if (!anchor || anchor.classId == null || declaredEvents(anchor).indexOf(name) === -1) {
       fireStale(anchor, name, "cancelled");
       console.debug(
         "[Citry] events: dropped a '" + name + "' send: its element resolves to no instance declaring the event.",
@@ -3340,7 +3430,7 @@ declare global {
       console.debug("[Citry] events: dropped a source-owned '" + name + "' send: its exact source carrier is retired.");
       return null;
     }
-    if (!anchor || anchor.classId == null || declaredEvents(anchor.classId).indexOf(name) === -1) {
+    if (!anchor || anchor.classId == null || declaredEvents(anchor).indexOf(name) === -1) {
       fireStale(anchor, name, "cancelled");
       console.debug(
         "[Citry] events: dropped a source-owned '" +
@@ -3383,15 +3473,13 @@ declare global {
         enumerable: true,
         value: function (name?: string) {
           if (!anchor) return false;
-          if (name === undefined) return anchor.loading.any > 0;
-          requireDeclaredEvent(anchor, name, "$loading");
-          return (anchor.loading.handlers[name] || 0) > 0;
+          return readLoading(anchor, name, "$loading");
         },
       },
       $error: {
         enumerable: true,
-        get: function () {
-          return anchor ? anchor.errorBox.current : null;
+        value: function (name?: string) {
+          return anchor ? readError(anchor, name, "$error") : null;
         },
       },
       $sendEvent: {
@@ -3424,10 +3512,10 @@ declare global {
   // shape through it, while user-facing sends ride the event queue above.
   var sendCalls = function (intents: SendIntent[]): Promise<unknown>[] {
     if (!Array.isArray(intents) || !intents.length) return [];
-    if (intents.length > MAX_CALLS_PER_ENVELOPE) {
+    if (intents.length > CALLS_LIMIT) {
       throw pointedError(
         "one envelope carries at most " +
-          MAX_CALLS_PER_ENVELOPE +
+          CALLS_LIMIT +
           " calls (the protocol cap, design 4.2); split the batch before sending (" +
           intents.length +
           " given).",
@@ -3442,7 +3530,13 @@ declare global {
             "; pass an instance id from the events manifest or an element inside one.",
         );
       }
-      return { anchor: anchor, name: intent.name, args: intent.args, opts: intent.opts };
+      return {
+        anchor: anchor,
+        name: intent.name,
+        intentSequence: nextCallIntent(),
+        args: intent.args,
+        opts: intent.opts,
+      };
     });
     return sendAll(entries);
   };
@@ -3613,10 +3707,11 @@ declare global {
     slots.set(key, intervalId);
   };
 
-  // Controls holding an unflushed two-way draft (typed text whose flush
-  // timer is still pending, so the DOM value diverges from `$state`). The
-  // forms runtime marks and clears entries; the patch-time guard below reads
-  // them as one of `hasUnsentDraft`'s two draft stages (design 5.3/5.5).
+  // Controls holding an unflushed two-way draft (natural activity before a
+  // configured later trigger, or a flush timer still pending, so the DOM
+  // value diverges from `$state`). The forms runtime marks and clears entries;
+  // the patch-time guard below reads them as one of `hasUnsentDraft`'s two
+  // draft stages (design 5.3/5.5).
   var unsentDrafts = new WeakSet<Element>();
 
   // ----- the patch-time preservation guard (design 5.3's hook, 5.5's block) -----
@@ -3625,12 +3720,12 @@ declare global {
   // (`decodeCevSpecs`) keeps this a lookup on the hot paths that read it per
   // morph comparison and per DOM event.
   var decodeBindSpecs = function (el: Element): StateBindingSpec[] {
-    return decodeCevSpecs(el, DATA_CEV_BIND) as StateBindingSpec[];
+    return decodeValidBindSpecs(el);
   };
 
   var isTwoWayBound = function (el: Element) {
     return decodeBindSpecs(el).some(function (spec) {
-      return spec != null && spec.mode === "two";
+      return spec.binding_mode === "two-way" && classifyStateBinding(el, spec).active;
     });
   };
 
@@ -3648,31 +3743,59 @@ declare global {
     if (!anchor) return false;
     return decodeBindSpecs(el).some(function (spec) {
       return (
-        spec != null &&
-        spec.mode === "two" &&
+        spec.binding_mode === "two-way" &&
+        classifyStateBinding(el, spec).active &&
         typeof spec.field === "string" &&
         Object.prototype.hasOwnProperty.call(anchor!.pending, spec.field)
       );
     });
   };
 
-  // Keep a focused control's live value through the patch: copy it onto the
-  // incoming element so the attribute sync cannot revert it, and record the
-  // element so the post-patch re-apply skips it (for this control `$state`
-  // still holds the pre-draft value, and re-applying it would clobber
-  // exactly what this guard preserved).
-  var keepLiveValue = function (el: Element, toEl: Element, guardKept: Set<Element>) {
+  var applyMultipleSelectValue = function (select: HTMLSelectElement, value: unknown) {
+    var selectedValues = new Set(Array.isArray(value) ? value.map(String) : []);
+    Array.from(select.options).forEach(function (option) {
+      var selected = selectedValues.has(option.value);
+      if (option.selected !== selected) option.selected = selected;
+    });
+  };
+
+  // Seed the incoming control, then restore the captured value after morph
+  // patches its children; `$state` still holds the pre-draft value here.
+  var keepLiveValue = function (el: Element, toEl: Element, guardKept: Map<Element, unknown>) {
     var live = el as HTMLInputElement;
     var incoming = toEl as HTMLInputElement;
-    if (live.type === "checkbox" || live.type === "radio") {
-      incoming.checked = live.checked;
+    var guardedValue: unknown;
+    var custom = isBindableCustomElement(el.tagName);
+    if (custom) {
+      try {
+        guardedValue = (el as CustomValueElement).value;
+      } catch (err) {
+        reportCustomElementValueError(el, null, "read", err);
+        return;
+      }
+    } else if (
+      el.tagName === "SELECT" &&
+      (el as HTMLSelectElement).multiple &&
+      toEl.tagName === "SELECT" &&
+      (toEl as HTMLSelectElement).multiple
+    ) {
+      guardedValue = Array.from((el as HTMLSelectElement).selectedOptions, function (option) {
+        return option.value;
+      });
+    } else if (live.type === "checkbox" || live.type === "radio") {
+      guardedValue = live.checked;
+    } else {
+      guardedValue = live.value;
+    }
+    applyValueToControl(toEl, guardedValue);
+    if (custom) {
+      // Custom-element values are properties, never reflected into a string
+      // attribute by Citry. The incoming instance was seeded above.
+    } else if (live.type === "checkbox" || live.type === "radio") {
       if (live.checked) incoming.setAttribute("checked", "");
       else incoming.removeAttribute("checked");
-    } else if (typeof live.value === "string") {
-      incoming.value = live.value;
-      incoming.setAttribute("value", live.value);
-    }
-    guardKept.add(el);
+    } else if (typeof live.value === "string") incoming.setAttribute("value", live.value);
+    guardKept.set(el, guardedValue);
   };
 
   // The morph `key` callback: a bare attribute read of the composite key
@@ -3685,25 +3808,12 @@ declare global {
 
   // The pinned `updating` hook (design 5.3's morph call block): the ignore
   // marker's subtree skip, and the pending-draft focused-value guard.
-  var makeUpdatingHook = function (guardKept: Set<Element>) {
+  var makeUpdatingHook = function (guardKept: Map<Element, unknown>) {
     return function (el: Node, toEl: Node, childrenOnly: () => void, skip: () => void) {
       if (el.nodeType !== 1) return;
       var element = el as Element;
       if (element.getAttribute("data-citry-morph") === "ignore") {
-        if (element.hasAttribute("data-cid")) {
-          // Skipping an instance root would leave the old component id in
-          // the DOM while the fragment's manifest introduces a fresh id that
-          // never lands (registry and DOM diverge), so the marker is
-          // unsupported here: warn and patch normally. Put #c-ignore on an
-          // element inside the child's own template below its root, or on a
-          // wrapper element (design 5.3).
-          console.warn(
-            '[Citry] events: #c-ignore (data-citry-morph="ignore") on a component instance root is' +
-              " unsupported and was not applied; move it onto an element below the root, or onto a wrapper.",
-          );
-        } else {
-          return skip();
-        }
+        return skip();
       }
       if (element === document.activeElement && isTwoWayBound(element) && hasUnsentDraft(element)) {
         keepLiveValue(element, toEl as Element, guardKept);
@@ -3711,17 +3821,103 @@ declare global {
     };
   };
 
+  type FocusSnapshot = [HTMLElement, (number | null)?, (number | null)?];
+
+  // Recover focus lost while moving a preserved keyed node.
+  var captureFocus = function (targets: Element[]): FocusSnapshot | null {
+    var active = document.activeElement;
+    if (!(active instanceof HTMLElement)) return null;
+    if (!targets.some((target) => target === active || target.contains(active))) return null;
+    if (active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement) {
+      return [active, active.selectionStart, active.selectionEnd];
+    }
+    return [active];
+  };
+
+  var restoreFocus = function (snapshot: FocusSnapshot | null) {
+    if (!snapshot || !snapshot[0].isConnected || document.activeElement === snapshot[0]) return;
+    if (document.activeElement !== document.body && document.activeElement !== document.documentElement) return;
+    var element = snapshot[0];
+    element.focus({ preventScroll: true });
+    if (
+      document.activeElement === element &&
+      snapshot[1] != null &&
+      snapshot[2] != null &&
+      (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement)
+    ) {
+      element.setSelectionRange(snapshot[1], snapshot[2]);
+    }
+  };
+
   // ----- post-patch preservation: the binding re-apply and the busy re-stamp -----
 
-  var applyValueToControl = function (el: Element, value: unknown) {
+  // A well-behaved custom control follows native controls and does not emit
+  // its user-update event from a programmatic value write. The platform does
+  // not enforce that convention, though, so suppress the State-binding half
+  // of a synchronous event emitted by the custom setter. Ordinary @c-* event
+  // bindings on that same event still observe what the element dispatched.
+  var applyingStateValues = new WeakSet<Element>();
+  var reportedCustomElementValueErrors = new WeakMap<Element, Set<string>>();
+
+  var reportCustomElementValueError = function (
+    el: Element,
+    field: string | null,
+    operation: "read" | "write",
+    error: unknown,
+  ) {
+    var key = operation + ":" + (field || "");
+    var reported = reportedCustomElementValueErrors.get(el);
+    if (!reported) {
+      reported = new Set<string>();
+      reportedCustomElementValueErrors.set(el, reported);
+    }
+    if (reported.has(key)) return;
+    reported.add(key);
+    console.error(
+      "[Citry] events: could not " +
+        operation +
+        " " +
+        (field ? "$state." + field : "the State value") +
+        (operation === "read" ? " from " : " to ") +
+        "<" +
+        el.tagName.toLowerCase() +
+        ">.value:",
+      error,
+    );
+  };
+
+  var applyValueToControl = function (el: Element, value: unknown, field?: string) {
     // Only-when-different writes: assigning an equal string to a focused
     // input's `value` is caret-safe in practice, but the equality guard makes
     // it a guarantee (and keeps the reactive application effects from
-    // touching the DOM on every unrelated `$state` change).
+    // touching the DOM on every unrelated `$state` change). Custom elements
+    // expose a typed property contract instead: assign the State value as-is,
+    // after upgrade, without any native-input coercion.
     var control = el as HTMLInputElement;
+    var custom: CustomValueElement;
     var nextChecked: boolean;
     var next: string;
-    if (control.type === "checkbox" || control.type === "radio") {
+    if (isBindableCustomElement(el.tagName)) {
+      if (!customElements.get(el.tagName.toLowerCase()) || !("value" in el)) return;
+      if (applyingStateValues.has(el)) return;
+      custom = el as CustomValueElement;
+      // Keep the reactive read in makeApplicationEffect, but custom-element
+      // property identity belongs to the application value, not Alpine's
+      // wrapping proxy. This also makes the post-uplink echo compare equal to
+      // the exact object the element supplied.
+      value = Alpine.raw(value);
+      applyingStateValues.add(el);
+      try {
+        if (Object.is(custom.value, value)) return;
+        custom.value = value;
+      } catch (err) {
+        reportCustomElementValueError(el, field || null, "write", err);
+      } finally {
+        applyingStateValues.delete(el);
+      }
+    } else if (el.tagName === "SELECT" && (el as HTMLSelectElement).multiple) {
+      applyMultipleSelectValue(el as HTMLSelectElement, value);
+    } else if (el.tagName === "INPUT" && (control.type === "checkbox" || control.type === "radio")) {
       nextChecked = Boolean(value);
       if (control.checked !== nextChecked) control.checked = nextChecked;
     } else if (typeof control.value === "string") {
@@ -3732,11 +3928,10 @@ declare global {
 
   // After a patch, re-apply `:c-*` bindings from `$state` to bound controls
   // (the application a one-way binding is, design 5.5): for a field with a
-  // pending unsent write, `$state` holds the preserved draft, so this
-  // restores what the patch may have visually reverted; a control the
-  // patch-time guard kept is exempt (its `$state` still holds the pre-draft
-  // value). The re-apply is focus-independent by design.
-  var reapplyBoundControls = function (roots: Element[], guardKept: Set<Element>) {
+  // pending unsent write, `$state` holds the preserved draft, so this restores
+  // what the patch may have visually reverted. A focused guard-kept control
+  // uses its directly captured value. The re-apply is focus-independent.
+  var reapplyBoundControls = function (roots: Element[], guardKept: Map<Element, unknown>) {
     var seen = new Set<Element>();
     roots.forEach(function (root) {
       var els: Element[] = [];
@@ -3745,14 +3940,26 @@ declare global {
         els.push(el);
       });
       els.forEach(function (el) {
-        if (seen.has(el) || guardKept.has(el)) return;
+        var guardedValue: unknown;
+        if (seen.has(el)) return;
         seen.add(el);
+        if (guardKept.has(el)) {
+          if (
+            !decodeBindSpecs(el).some(function (spec) {
+              return spec.binding_mode === "two-way" && classifyStateBinding(el, spec).active;
+            })
+          )
+            return;
+          guardedValue = guardKept.get(el);
+          if (guardedValue !== undefined) applyValueToControl(el, guardedValue);
+          return;
+        }
         var anchor = anchorForElement(el);
         if (!anchor || !anchor.values) return;
         decodeBindSpecs(el).forEach(function (spec) {
-          if (spec == null || typeof spec.field !== "string") return;
+          if (!classifyStateBinding(el, spec).active || typeof spec.field !== "string") return;
           if (!Object.prototype.hasOwnProperty.call(anchor!.values!, spec.field)) return;
-          applyValueToControl(el, anchor!.values![spec.field]);
+          applyValueToControl(el, anchor!.values![spec.field], spec.field);
         });
       });
     });
@@ -3855,17 +4062,17 @@ declare global {
   var readFragmentMetas = function (parsed: ParsedFragment): FragmentEventsStage {
     var metas = new Map<string, RenderMeta>();
     if (!parsed.eventsTag) return { manifest: null, staged: null, metas: metas };
-    var manifest = JSON.parse(parsed.eventsTag.textContent as string) as EventsManifest;
-    var staged = stageEventsManifest(manifest);
+    var staged = stageEventsManifest(JSON.parse(parsed.eventsTag.textContent as string));
     staged.instances.forEach(function (meta) {
       metas.set(meta.componentId, {
         componentId: meta.componentId,
         classId: meta.classId,
         token: meta.token || undefined,
         values: meta.values,
+        descriptorRevision: parsed.graphRevision,
       });
     });
-    return { manifest: manifest, staged: staged, metas: metas };
+    return { manifest: staged.manifest, staged: staged, metas: metas };
   };
 
   // The caller's own metadata inside its self-render fragment: the outermost
@@ -3887,13 +4094,6 @@ declare global {
 
   // ----- keyed linking (design 5.5: the one continuity mechanism on top) -----
 
-  /** One keyed component root: the element, its composite key, and the instance the key belongs to. */
-  interface KeyedRoot {
-    el: Element;
-    composite: string;
-    instanceId: string;
-  }
-
   /** The bookkeeping one render action threads through its regions. */
   interface RenderApplyState {
     /** Fresh ids already linked or minted by this apply (the mirror rule links once). */
@@ -3904,211 +4104,15 @@ declare global {
     pendingFinish: { anchor: Anchor; oldComponentId: string | null }[];
     /** Anchors that carried across this apply (caller + keyed links), for the busy re-stamp. */
     linkedAnchors: Anchor[];
-    /** Controls whose live value the patch-time guard kept (the re-apply exemption). */
-    guardKept: Set<Element>;
+    /** Controls whose live value the patch-time guard kept, keyed to that captured value. */
+    guardKept: Map<Element, unknown>;
     /** Instance ids on or under the old regions, retired synchronously after the swap. */
     departedIds: Set<string>;
     /** Swapped-in root elements, for `citry:events:swapped` and the re-apply pass. */
     swappedEls: Element[];
   }
 
-  // Collect the top-most keyed component roots under `containers`: elements
-  // carrying the composite key attribute with a class-id scope (a plain
-  // element key's empty scope pairs in morph only, never links anchors),
-  // resolved to the instance the key belongs to. Keyed roots nested inside
-  // another keyed root belong to that root's own nested region (the
-  // recursion), so they are filtered out here.
-  var collectKeyedRoots = function (
-    containers: Element[],
-    classOf: (id: string) => string | null,
-    exclude: Set<string>,
-  ): KeyedRoot[] {
-    var keyedEls = new Map<Element, string>();
-    var entries: KeyedRoot[] = [];
-    var seenInstances = new Set<string>();
-    var consider = function (el: Element) {
-      if (keyedEls.has(el)) return;
-      var composite = el.getAttribute("data-citry-key") || "";
-      var sep = composite.indexOf(":");
-      if (sep <= 0) return;
-      var classId = composite.slice(0, sep);
-      var ids = (el.getAttribute("data-cid") || "").trim().split(/\s+/).filter(Boolean);
-      var instanceId: string | null = null;
-      ids.some(function (id) {
-        // The composite's scope segment is the child's class id, so the id
-        // whose class matches picks the instance even on a shared root.
-        if (classOf(id) === classId) instanceId = id;
-        return instanceId != null;
-      });
-      if (instanceId == null || exclude.has(instanceId)) return;
-      keyedEls.set(el, instanceId);
-      if (seenInstances.has(instanceId)) return;
-      // A multi-root child carries its key on every root; one entry per instance.
-      seenInstances.add(instanceId);
-      entries.push({ el: el, composite: composite, instanceId: instanceId });
-    };
-    containers.forEach(function (container) {
-      if (container.hasAttribute("data-citry-key")) consider(container);
-      container.querySelectorAll("[data-citry-key]").forEach(consider);
-    });
-    return entries.filter(function (entry) {
-      var p = entry.el.parentElement;
-      while (p) {
-        if (keyedEls.has(p)) return false;
-        p = p.parentElement;
-      }
-      return true;
-    });
-  };
-
-  // Link one keyed pair: the same-class reconcile carries the anchor (state
-  // identity, pending writes, loading counters, subscriptions) across the
-  // render, and the matched subtrees become a nested region for keyed
-  // grandchildren.
-  var linkKeyedPair = function (
-    old: KeyedRoot,
-    fresh: KeyedRoot,
-    metas: Map<string, RenderMeta>,
-    state: RenderApplyState,
-    newContainers: Element[],
-  ) {
-    var anchor = idToAnchor.get(old.instanceId);
-    var meta = metas.get(fresh.instanceId);
-    // Capture the old instance's roots before the link re-points the index;
-    // they scope the nested region below.
-    var oldEls: Element[] = Array.prototype.slice.call(document.querySelectorAll("[data-cid-" + old.instanceId + "]"));
-    var freshEls: Element[] = [];
-    newContainers.forEach(function (container) {
-      if (container.hasAttribute("data-cid-" + fresh.instanceId)) freshEls.push(container);
-      container.querySelectorAll("[data-cid-" + fresh.instanceId + "]").forEach(function (el) {
-        freshEls.push(el);
-      });
-    });
-    if (!anchor || anchor.componentId !== old.instanceId || !meta) {
-      const ownership = globalThis.Citry?.manager?.ownership;
-      if (!ownership || !ownership._correspond(old.instanceId, fresh.instanceId)) return;
-      state.linkedOldIds.add(old.instanceId);
-      state.appliedIds.add(fresh.instanceId);
-      matchKeyedRegion(oldEls, freshEls, metas, state);
-      return;
-    }
-    var link = linkRenderedInstance(anchor, meta);
-    // The horizon cut (design 5.5): the parent's render replaced this
-    // child's token with a parent-derived one, so actions from the child's
-    // own in-flight calls that would replace its HTML or State token must
-    // drop when their responses
-    // arrive. One assignment covers them all (the guard applies only
-    // strictly greater epochs), and the null owner keeps even an equal-epoch
-    // response out; the calls' `data` still resolves.
-    anchor.highestApplied = anchor.epoch;
-    anchor.epochOwner = null;
-    state.linkedOldIds.add(old.instanceId);
-    state.appliedIds.add(fresh.instanceId);
-    state.pendingFinish.push({ anchor: anchor, oldComponentId: link.oldComponentId });
-    state.linkedAnchors.push(anchor);
-    // A linked child's subtree is itself a region for its keyed grandchildren.
-    matchKeyedRegion(oldEls, freshEls, metas, state);
-  };
-
-  // Match keyed component roots between the old region and the incoming
-  // fragment: same class plus same composite key links (the attribute embeds
-  // the class id, so one comparison covers both). Matching is swap-agnostic
-  // (attributes are read on both sides before any swap), scoped per applied
-  // region, and duplicates match in document order with a debug warning.
-  var matchKeyedRegion = function (
-    oldContainers: Element[],
-    newContainers: Element[],
-    metas: Map<string, RenderMeta>,
-    state: RenderApplyState,
-  ) {
-    var oldRoots = collectKeyedRoots(
-      oldContainers,
-      function (id) {
-        var anchor = idToAnchor.get(id);
-        return anchor ? anchor.classId : globalThis.Citry?.manager?.ownership?._classForRender(id) || null;
-      },
-      state.linkedOldIds,
-    );
-    var newRoots = collectKeyedRoots(
-      newContainers,
-      function (id) {
-        var meta = metas.get(id);
-        return meta ? meta.classId : globalThis.Citry?.manager?.ownership?._classForRender(id) || null;
-      },
-      state.appliedIds,
-    );
-    if (!oldRoots.length || !newRoots.length) return;
-    var oldByKey = new Map<string, KeyedRoot[]>();
-    oldRoots.forEach(function (root) {
-      var queue = oldByKey.get(root.composite);
-      if (!queue) {
-        queue = [];
-        oldByKey.set(root.composite, queue);
-      }
-      queue.push(root);
-    });
-    var newCounts = new Map<string, number>();
-    newRoots.forEach(function (root) {
-      newCounts.set(root.composite, (newCounts.get(root.composite) || 0) + 1);
-    });
-    var dupWarned = new Set<string>();
-    newRoots.forEach(function (fresh) {
-      var queue = oldByKey.get(fresh.composite);
-      if (!queue || !queue.length) return;
-      if ((queue.length > 1 || (newCounts.get(fresh.composite) || 0) > 1) && !dupWarned.has(fresh.composite)) {
-        dupWarned.add(fresh.composite);
-        console.warn(
-          "[Citry] events: duplicate key '" +
-            fresh.composite +
-            "' within one applied region; matched in document order." +
-            " Component keys must be unique per class within a region (design 5.3).",
-        );
-      }
-      var old = queue.shift() as KeyedRoot;
-      linkKeyedPair(old, fresh, metas, state, newContainers);
-    });
-  };
-
-  // A parent's `#c-key` is stamped onto the child's root elements by the
-  // PARENT's render, so the child's own self-render fragment cannot carry it
-  // (the key expression lives in the parent's template, out of the child's
-  // reach). Losing it would wholesale-swap the root under morph (the key
-  // comparison runs before any hook, so a keyed old root against an unkeyed
-  // fresh root never patches in place; caret and focus die) and strip the
-  // key the next parent render links by. The applier therefore carries the
-  // old root's composite key across the caller's same-class render whenever
-  // the fragment's own root has none.
-  var preserveCallerKey = function (oldEls: Element[], caller: Anchor, freshId: string, parsed: ParsedFragment) {
-    var oldKey: string | null = null;
-    oldEls.some(function (el) {
-      var value = el.getAttribute("data-citry-key");
-      // Only the class-id-scoped form belongs to the instance itself (design
-      // 5.3): an element key authored inside the child's own template
-      // re-renders with the fragment and needs no carrying, and a key scoped
-      // to another class must never be re-stamped across a class change.
-      if (value && caller.classId != null && value.indexOf(caller.classId + ":") === 0) oldKey = value;
-      return oldKey != null;
-    });
-    if (oldKey == null) return;
-    parsed.roots.forEach(function (root) {
-      if (root.hasAttribute("data-cid-" + freshId) && !root.hasAttribute("data-citry-key")) {
-        root.setAttribute("data-citry-key", oldKey as string);
-      }
-    });
-  };
-
   // ----- swap application -----
-
-  /** The element children of every region element, flattened in order. */
-  var childElementsOf = function (els: Element[]): Element[] {
-    var children: Element[] = [];
-    els.forEach(function (el) {
-      Array.prototype.slice.call(el.children).forEach(function (child: Element) {
-        children.push(child);
-      });
-    });
-    return children;
-  };
 
   // Group instance-marker elements into runs of adjacent siblings: one run
   // is a multi-root instance's root range (patched pairwise), and several
@@ -4146,18 +4150,25 @@ declare global {
     lastNode: Node | null;
   }
 
-  var OWNERSHIP_COMMENT_PREFIX = "citry:g1";
-  var OWNERSHIP_COMMENT_RE = new RegExp(
-    "^" + OWNERSHIP_COMMENT_PREFIX + ":([0-9a-f]{64}):(\\d+):([ir]):(\\d+):([se])$",
-  );
-  var OWNERSHIP_INSTANCE_START_RE = new RegExp("^(" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:\\d+:i:\\d+):s$");
-  var OWNERSHIP_INSTANCE_CAP_RE = new RegExp("^" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:\\d+:i:\\d+:[se]$");
+  var OWNERSHIP_INSTANCE_START_RE = new RegExp("^(" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:[0-9]+:i:[0-9]+):s$");
+  var OWNERSHIP_INSTANCE_CAP_RE = new RegExp("^" + OWNERSHIP_COMMENT_PREFIX + ":[0-9a-f]{64}:[0-9]+:i:[0-9]+:[se]$");
 
   var rewritePlacementComment = function (comment: Comment, placementId: string) {
-    var match = OWNERSHIP_COMMENT_RE.exec(comment.data.trim());
-    if (!match) return;
+    var ownership = parseOwnershipComment(comment.data);
+    if (!ownership) return;
     comment.data =
-      "citry:p1:" + match[1] + ":" + placementId + ":" + match[2] + ":" + match[3] + ":" + match[4] + ":" + match[5];
+      "citry:p1:" +
+      ownership.revision +
+      ":" +
+      placementId +
+      ":" +
+      ownership.graphId +
+      ":" +
+      ownership.kind +
+      ":" +
+      ownership.recordId +
+      ":" +
+      ownership.side;
   };
 
   var cloneForPlacement = function (node: Node, placementId: string | null): Node {
@@ -4492,7 +4503,7 @@ declare global {
     var targetAnchor: Anchor | null = null;
     var rootlessInstanceTarget = false;
     var targetId: string;
-    var liveTargetId: string | null;
+    var liveTargetId: string | null = null;
     var matched: Element[] | null;
     var removed: Set<string>;
     var caller: Anchor;
@@ -4586,9 +4597,15 @@ declare global {
     var parsed = parseFragment(typeof action.html === "string" ? action.html : "");
     var ownership = globalThis.Citry?.manager?.ownership;
     var ownershipTransaction: unknown = null;
+    var ownershipPlan: OwnershipAdoptionPlan | null = null;
     var adoptionRoot: { componentId: string; classId: string } | null = null;
     var dependencyManifest: unknown = null;
     var priorClasses: { classId: string; had: boolean; descriptor: ClassDescriptor | undefined }[] = [];
+    var priorErrorBoxes: ErrorBoxSnapshot[] = [];
+    var descriptorRevisionStaged = false;
+    var hadDescriptorRevision = false;
+    var priorDescriptorRevision: Map<string, ClassDescriptor> | undefined;
+    var stagedDescriptorClassIds = new Set<string>();
     var fragmentEvents: FragmentEventsStage;
     try {
       if (parsed.graphTag) {
@@ -4646,12 +4663,6 @@ declare global {
       }
 
       const metas = fragmentEvents.metas;
-      if (fragmentEvents.staged) {
-        fragmentEvents.staged.classes.forEach(function (entry) {
-          priorClasses.push({ classId: entry[0], had: classes.has(entry[0]), descriptor: classes.get(entry[0]) });
-        });
-        installClassDescriptors(fragmentEvents.staged.classes);
-      }
       // The outer range stays outside the root list and is transferred by the
       // ownership transaction, including every runtime mirror placement. Nested
       // caps participate in the root morph so compatible keyed child ranges can
@@ -4661,10 +4672,11 @@ declare global {
         linkedOldIds: new Set<string>(),
         pendingFinish: [],
         linkedAnchors: [],
-        guardKept: new Set<Element>(),
+        guardKept: new Map<Element, unknown>(),
         departedIds: new Set<string>(),
         swappedEls: [],
       };
+      const focusSnapshot = captureFocus(targetEls);
       // Capture the currently-live physical placements before the
       // self-render correspondence transfers the stable anchor to the
       // provisional incoming revision. After that transfer the graph lookup
@@ -4674,6 +4686,94 @@ declare global {
         isInstanceTarget && !rootlessInstanceTarget && ownership && targetAnchor?.clientAnchor
           ? ownership._placementRoots(targetAnchor.clientAnchor)
           : null;
+
+      // Resolve every physical destination before correspondence mutates any
+      // ownership or Events state. The mixed planner can then discover an old
+      // ordinary ignore barrier before a nested ComponentRange is linked.
+      const regions = rootlessInstanceTarget
+        ? ownership && targetAnchor?.clientAnchor
+          ? ownership._placementIds(targetAnchor.clientAnchor).map(function () {
+              return [] as Element[];
+            })
+          : []
+        : isInstanceTarget
+          ? graphTargetRegions
+            ? graphTargetRegions
+            : groupAdjacentRuns(targetEls)
+          : targetEls.map(function (el) {
+              return [el];
+            });
+      const placementIds: (string | null)[] = [];
+      if (parsed.graphRevision != null && ownership) {
+        const placementOwnership = ownership;
+        const existingPlacements =
+          isInstanceTarget && targetAnchor?.clientAnchor
+            ? placementOwnership._placementIds(targetAnchor.clientAnchor)
+            : [];
+        regions.forEach(function (_region, index) {
+          placementIds.push(existingPlacements[index] ?? (index === 0 ? null : placementOwnership._mintPlacement()));
+        });
+      } else {
+        regions.forEach(function () {
+          placementIds.push(null);
+        });
+      }
+
+      if (ownershipTransaction && ownership) {
+        const explicitRoots =
+          adoptionRoot && isInstanceTarget && liveTargetId != null && (swap === "morph" || swap === "replace")
+            ? [{ fromRenderId: liveTargetId, toRenderId: adoptionRoot.componentId }]
+            : [];
+        ownershipPlan = ownership._planAdoption(ownershipTransaction, explicitRoots, {
+          bypassIgnore: swap === "replace",
+        });
+        if (swap === "morph" && isInstanceTarget && targetAnchor?.clientAnchor && adoptionRoot) {
+          const planningAnchor = targetAnchor.clientAnchor;
+          regions.forEach(function (_region, index) {
+            ownership!._planPlacement(
+              ownershipPlan as OwnershipAdoptionPlan,
+              planningAnchor,
+              index,
+              graphRangeInnerHtml(parsed, placementIds[index]),
+              { key: morphKeyCallback },
+            );
+          });
+        }
+        if (liveTargetId != null && ownershipPlan.retainedRootFromRenderIds.has(liveTargetId)) {
+          ownership._discardAdoption(ownershipTransaction);
+          parsed.tags.forEach(function (tag) {
+            ownership?._claimTag(tag);
+            if (tag.isConnected) tag.remove();
+          });
+          fireLifecycle("citry:events:swapped", run.anchor, run.event, { els: targetEls.slice() });
+          scheduleAnchorSweep();
+          return;
+        }
+        ownership._applyAdoptionPlan(ownershipPlan);
+      }
+
+      const acceptedIncomingIds = ownershipPlan?.acceptedIncomingRenderIds ?? null;
+      if (fragmentEvents.staged) {
+        const acceptedClassIds = new Set<string>();
+        fragmentEvents.staged.instances.forEach(function (meta) {
+          if (!acceptedIncomingIds || acceptedIncomingIds.has(meta.componentId)) acceptedClassIds.add(meta.classId);
+        });
+        const acceptedClasses = fragmentEvents.staged.classes.filter(function (entry) {
+          return acceptedClassIds.has(entry[0]);
+        });
+        stagedDescriptorClassIds = acceptedClassIds;
+        if (parsed.graphRevision != null) {
+          descriptorRevisionStaged = true;
+          hadDescriptorRevision = descriptorRevisions.has(parsed.graphRevision);
+          priorDescriptorRevision = descriptorRevisions.get(parsed.graphRevision);
+        } else {
+          acceptedClasses.forEach(function (entry) {
+            priorClasses.push({ classId: entry[0], had: classes.has(entry[0]), descriptor: classes.get(entry[0]) });
+          });
+        }
+        priorErrorBoxes = snapshotErrorBoxesForClasses(acceptedClassIds);
+        installClassDescriptors(acceptedClasses, false, parsed.graphRevision ?? undefined);
+      }
 
       // The correlated caller's own render takes the three-way split (design
       // 5.5): same class reconciles, a different class adopts wholesale, plain
@@ -4688,9 +4788,6 @@ declare global {
         if (caller.componentId != null) state.linkedOldIds.add(caller.componentId);
         if (callerMeta) state.appliedIds.add(callerMeta.componentId);
         if (!callerMeta && adoptionRoot && caller.clientAnchor && ownership) {
-          if (adoptionRoot.classId === caller.classId) {
-            preserveCallerKey(targetEls, caller, adoptionRoot.componentId, parsed);
-          }
           const oldComponentId = caller.componentId;
           ownership._transitionEvents(caller.clientAnchor, adoptionRoot.componentId, adoptionRoot.classId);
           retireAnchor(caller, true);
@@ -4702,28 +4799,23 @@ declare global {
           state.pendingFinish.push({ anchor: caller, oldComponentId: callerLink.oldComponentId });
           state.linkedAnchors.push(caller);
         }
-        if (callerLink.branch === "reconcile" && callerMeta != null) {
-          preserveCallerKey(targetEls, caller, callerMeta.componentId, parsed);
-        }
       }
 
-      // One region per selector match (all-matches, design 4.3), or one per
-      // graph physical placement for an instance target. Placement caps,
-      // not sibling adjacency, distinguish adjacent mirror copies from one
-      // multi-root placement; adjacency remains only the legacy fallback.
-      const regions = rootlessInstanceTarget
-        ? ownership && targetAnchor?.clientAnchor
-          ? ownership._placementIds(targetAnchor.clientAnchor).map(function () {
-              return [] as Element[];
-            })
-          : []
-        : isInstanceTarget
-          ? graphTargetRegions
-            ? graphTargetRegions
-            : groupAdjacentRuns(targetEls)
-          : targetEls.map(function (el) {
-              return [el];
-            });
+      if (ownershipPlan) {
+        ownershipPlan.matches.forEach(function (match) {
+          if (state.linkedOldIds.has(match.fromRenderId)) return;
+          state.linkedOldIds.add(match.fromRenderId);
+          state.appliedIds.add(match.toRenderId);
+          var matchedAnchor = idToAnchor.get(match.fromRenderId);
+          var matchedMeta = metas.get(match.toRenderId);
+          if (!matchedAnchor || !matchedMeta) return;
+          var matchedLink = linkRenderedInstance(matchedAnchor, matchedMeta);
+          matchedAnchor.highestApplied = matchedAnchor.epoch;
+          matchedAnchor.epochOwner = null;
+          state.pendingFinish.push({ anchor: matchedAnchor, oldComponentId: matchedLink.oldComponentId });
+          state.linkedAnchors.push(matchedAnchor);
+        });
+      }
 
       regions.forEach(function (regionEls) {
         // Pre-enumerate the ids this swap displaces; they retire synchronously
@@ -4741,22 +4833,24 @@ declare global {
         // The old side of the match is what the swap replaces: the region
         // elements themselves, or under `inner` their content (the container
         // survives an inner swap, so it never departs and never links).
-        if (swap === "morph" || swap === "replace" || swap === "inner") {
-          matchKeyedRegion(swap === "inner" ? childElementsOf(regionEls) : regionEls, parsed.roots, metas, state);
-        }
       });
       if (ownershipTransaction && ownership) {
+        ownershipPlan?.retainedOldRenderIds.forEach(function (renderId) {
+          state.departedIds.delete(renderId);
+        });
         ownership._expectRetirement(Array.from(state.departedIds));
       }
       metas.forEach(function (meta, componentId) {
+        if (acceptedIncomingIds && !acceptedIncomingIds.has(componentId)) return;
         if (state.appliedIds.has(componentId) || idToAnchor.has(componentId)) return;
-        createAnchor(componentId, meta.classId, meta.token || "", meta.values || {});
+        createAnchor(componentId, meta.classId, meta.token || "", meta.values || {}, meta.descriptorRevision);
         state.appliedIds.add(componentId);
       });
 
       if (parsed.graphRevision != null && fragmentEvents.staged && ownership) {
         const liveOwnership = ownership;
         fragmentEvents.staged.instances.forEach(function (meta) {
+          if (acceptedIncomingIds && !acceptedIncomingIds.has(meta.componentId)) return;
           var eventsAnchor = idToAnchor.get(meta.componentId);
           if (!eventsAnchor) throw new TypeError("a staged Events instance has no prepared anchor");
           eventsAnchor.clientAnchor = liveOwnership._attachEvents(
@@ -4769,31 +4863,31 @@ declare global {
       }
       if (ownershipTransaction && ownership) ownership._activateAdoption(ownershipTransaction);
 
-      const placementIds: (string | null)[] = [];
-      if (parsed.graphRevision != null && ownership) {
-        const placementOwnership = ownership;
-        const existingPlacements =
-          isInstanceTarget && targetAnchor?.clientAnchor
-            ? placementOwnership._placementIds(targetAnchor.clientAnchor)
-            : [];
-        regions.forEach(function (_region, index) {
-          placementIds.push(existingPlacements[index] ?? (index === 0 ? null : placementOwnership._mintPlacement()));
-        });
-      } else {
-        regions.forEach(function () {
-          placementIds.push(null);
-        });
-      }
-
       regions.forEach(function (regionEls, index) {
         var stripOuterCaps =
           parsed.graphRevision != null && isInstanceTarget && (swap === "morph" || swap === "replace");
-        if (rootlessInstanceTarget && ownership && targetAnchor?.clientAnchor) {
-          const physical = ownership._morphPlacement(
-            targetAnchor.clientAnchor,
-            index,
-            graphRangeInnerHtml(parsed, placementIds[index]),
-          );
+        if (
+          parsed.graphRevision != null &&
+          isInstanceTarget &&
+          (swap === "morph" || swap === "replace") &&
+          ownership &&
+          targetAnchor?.clientAnchor
+        ) {
+          const innerHtml = graphRangeInnerHtml(parsed, placementIds[index]);
+          const rootMatch = ownershipPlan?.matches.find(function (match) {
+            return match.fromRenderId === liveTargetId && match.toRenderId === adoptionRoot?.componentId;
+          });
+          const physical =
+            swap === "morph" && rootMatch?.preserveLogical
+              ? ownership._morphPlacement(targetAnchor.clientAnchor, index, innerHtml, {
+                  adoptionPlan: ownershipPlan,
+                  key: morphKeyCallback,
+                  updating: makeUpdatingHook(state.guardKept),
+                })
+              : ownership._replacePlacement(targetAnchor.clientAnchor, index, innerHtml);
+          physical.roots.forEach(function (root) {
+            state.swappedEls.push(root);
+          });
           if (index === 0) insertManifestTags(parsed, physical.end);
           return;
         }
@@ -4817,11 +4911,11 @@ declare global {
       });
       retireDepartedIds(state.departedIds);
 
-      // Preservation (design 5.5): re-apply bound controls from `$state`
-      // (guard-kept controls exempt), and re-stamp busy display for linked
-      // anchors still waiting on a call.
+      // Preservation (design 5.5): re-apply controls from `$state` or a guard
+      // capture, and re-stamp busy display for linked waiting anchors.
       reapplyBoundControls(state.swappedEls, state.guardKept);
       restampBusy(state.linkedAnchors);
+      restoreFocus(focusSnapshot);
 
       if (fragmentEvents.staged) {
         // Pre-staging changed the gates before Alpine's morph evaluation but
@@ -4830,21 +4924,34 @@ declare global {
         // before a swapped-event listener can initiate another send.
         const committedClassIds = new Set<string>();
         fragmentEvents.staged.classes.forEach(function (entry) {
-          committedClassIds.add(entry[0]);
+          if (
+            fragmentEvents.staged?.instances.some(function (meta) {
+              return meta.classId === entry[0] && (!acceptedIncomingIds || acceptedIncomingIds.has(meta.componentId));
+            })
+          )
+            committedClassIds.add(entry[0]);
         });
-        refreshAnchorsForClasses(committedClassIds, true);
+        refreshAnchorsForClasses(committedClassIds, true, parsed.graphRevision ?? undefined);
       }
       fireLifecycle("citry:events:swapped", run.anchor, run.event, { els: state.swappedEls.slice() });
       scheduleAnchorSweep();
       return adoptionReady;
     } catch (err) {
       const restoredClassIds = new Set<string>();
+      if (descriptorRevisionStaged && parsed.graphRevision != null) {
+        restoreDescriptorRevision(parsed.graphRevision, hadDescriptorRevision, priorDescriptorRevision);
+      }
       priorClasses.forEach(function (entry) {
         if (entry.had) classes.set(entry.classId, entry.descriptor as ClassDescriptor);
         else classes.delete(entry.classId);
         restoredClassIds.add(entry.classId);
       });
-      refreshAnchorsForClasses(restoredClassIds);
+      if (descriptorRevisionStaged && parsed.graphRevision != null) {
+        refreshAnchorsForClasses(stagedDescriptorClassIds, false, parsed.graphRevision);
+      } else {
+        refreshAnchorsForClasses(restoredClassIds);
+      }
+      restoreErrorBoxes(priorErrorBoxes);
       if (ownershipTransaction && ownership) ownership._abortAdoption(ownershipTransaction, err);
       parsed.tags.forEach(function (tag) {
         ownership?._claimTag(tag);
@@ -5011,15 +5118,19 @@ declare global {
     // the narrowing into the returned closure. Same pattern in the other
     // magics and the payload decorator below.
     return function (name?: string) {
-      if (name === undefined) return anchor!.loading.any > 0;
-      requireDeclaredEvent(anchor!, name, "$loading");
-      return (anchor!.loading.handlers[name] || 0) > 0;
+      return readLoading(anchor!, name, "$loading");
     };
   });
 
   alpineRuntime._magic("error", function (el) {
     var anchor = resolveAnchor(el, "error");
-    return anchor ? anchor.errorBox.current : null;
+    if (!anchor)
+      return function () {
+        return null;
+      };
+    return function (name?: string) {
+      return readError(anchor!, name, "$error");
+    };
   });
 
   alpineRuntime._magic("sendEvent", function (el) {
@@ -5069,7 +5180,7 @@ declare global {
     };
   });
 
-  // ----- the event bindings: delegated listeners and @c-poll timers (design 5.1, 5.5, 5.6) -----
+  // ----- the event bindings: element listeners and @c-poll timers (design 5.1, 5.5, 5.6) -----
 
   // The compiled `data-cev-*` specs this layer reads are the WP12-published
   // contract documented in the Python bindings module
@@ -5099,10 +5210,88 @@ declare global {
     try {
       parsed = JSON.parse(fromBase64(raw));
       if (Array.isArray(parsed)) specs = parsed;
+      else console.error("[Citry] events: ignored a " + attrName + " payload because it is not a JSON array.");
     } catch (err) {
       console.error("[Citry] events: failed to decode a " + attrName + " spec:", err);
     }
     perAttr.set(attrName, { raw: raw, specs: specs });
+    return specs;
+  };
+
+  // `data-cev-bind` is a versioned contract, not an extensible property bag.
+  // Decode it strictly so deploy skew or hand-written attributes cannot leave
+  // only half of a binding alive (for example, an application effect without
+  // its update listener). The server uses the identical exact-key schema.
+  var STATE_BINDING_KEYS = ["binding_mode", "cid", "debounce", "field", "handler", "key", "lazy", "on", "throttle"];
+  var validBindSpecCache = new WeakMap<Element, { raw: string; specs: StateBindingSpec[] }>();
+
+  var isNullableNonnegativeNumber = function (value: unknown) {
+    return value === null || (typeof value === "number" && Number.isInteger(value) && value >= 0);
+  };
+
+  var validateStateBindingSpec = function (value: unknown): string | null {
+    if (value == null || typeof value !== "object" || Array.isArray(value)) return "the entry is not an object";
+    var spec = value as StateBindingSpec;
+    var keys = Object.keys(value as Record<string, unknown>).sort();
+    if (
+      keys.length !== STATE_BINDING_KEYS.length ||
+      keys.some(function (key, index) {
+        return key !== STATE_BINDING_KEYS[index];
+      })
+    ) {
+      return "the entry does not have the exact canonical keys";
+    }
+    if (typeof spec.cid !== "string" || !spec.cid) return "'cid' must be a non-empty string";
+    if (typeof spec.field !== "string" || !spec.field) return "'field' must be a non-empty string";
+    if (spec.binding_mode !== "one-way" && spec.binding_mode !== "two-way") {
+      return "'binding_mode' must be 'one-way' or 'two-way'";
+    }
+    if (typeof spec.lazy !== "boolean") return "'lazy' must be a boolean";
+    if (spec.on !== null && (typeof spec.on !== "string" || !spec.on)) {
+      return "'on' must be null or a non-empty string";
+    }
+    if (spec.key !== null && spec.key !== "enter" && spec.key !== "escape") {
+      return "'key' must be null, 'enter', or 'escape'";
+    }
+    if (!isNullableNonnegativeNumber(spec.debounce)) return "'debounce' must be null or a non-negative integer";
+    if (!isNullableNonnegativeNumber(spec.throttle)) return "'throttle' must be null or a non-negative integer";
+    if (spec.binding_mode === "one-way") {
+      if (
+        spec.handler !== null ||
+        spec.lazy ||
+        spec.on !== null ||
+        spec.key !== null ||
+        spec.debounce !== null ||
+        spec.throttle !== null
+      ) {
+        return "a one-way binding cannot carry update-event or timing fields";
+      }
+    } else if (typeof spec.handler !== "string" || !spec.handler) {
+      return "a two-way binding requires a non-empty 'handler'";
+    } else if (spec.lazy && spec.on !== null) {
+      return "a two-way binding cannot combine 'lazy' with an explicit 'on' event";
+    }
+    return null;
+  };
+
+  var decodeValidBindSpecs = function (el: Element): StateBindingSpec[] {
+    var raw = el.getAttribute(DATA_CEV_BIND) || "";
+    if (!raw) return [];
+    var cached = validBindSpecCache.get(el);
+    if (cached && cached.raw === raw) return cached.specs;
+    var specs: StateBindingSpec[] = [];
+    var invalid = false;
+    decodeCevSpecs(el, DATA_CEV_BIND).forEach(function (value, index) {
+      var error = validateStateBindingSpec(value);
+      if (error) {
+        invalid = true;
+        console.error("[Citry] events: ignored invalid data-cev-bind spec " + index + ": " + error + ".");
+        return;
+      }
+      specs.push(value as StateBindingSpec);
+    });
+    if (invalid) specs = [];
+    validBindSpecCache.set(el, { raw: raw, specs: specs });
     return specs;
   };
 
@@ -5154,12 +5343,14 @@ declare global {
   // the fallback for a spec that carries none. Serves the event channel and
   // the two-way state channel alike (both carry the same timing keys).
   var bindingTimingMs = function (
+    el: Element,
     spec: EventBindingSpec | StateBindingSpec,
     field: "debounce" | "throttle",
   ): number | null {
     var own = spec[field];
     if (typeof own === "number" && Number.isFinite(own) && own > 0) return own;
-    var descriptor = typeof spec.cid === "string" ? classes.get(spec.cid) : undefined;
+    var anchor = anchorForElement(el);
+    var descriptor = anchor ? descriptorFor(anchor) : undefined;
     var options =
       descriptor && descriptor.eventHandlers && typeof spec.handler === "string"
         ? descriptor.eventHandlers[spec.handler]
@@ -5200,13 +5391,14 @@ declare global {
   // time, never from anything captured when the listener or timer was set up
   // (design 5.5 machinery item 5): `sendFromElement` owns the fire-time miss
   // and the undeclared-event drop (the drop event plus a debug line, never a
-  // throw), and a disconnected element skips its argument expression too, so
-  // author code never runs against a detached tree.
+  // throw), and an element outside this document skips its argument
+  // expression too, so author code never runs against a detached or adopted
+  // tree.
   var fireEventBinding = function (el: Element, spec: EventBindingSpec, event: Event | null) {
     var handler = typeof spec.handler === "string" ? spec.handler : "";
     if (!handler) return;
     var args: Record<string, unknown> | null = null;
-    if (el.isConnected && typeof spec.args === "string" && spec.args) {
+    if (elementIsInCurrentDocument(el) && typeof spec.args === "string" && spec.args) {
       args = evaluateBindingArgs(el, "@c-" + (spec.event || ""), handler, spec.args, event);
     }
     // A submit-triggered event collects the form's named controls into the
@@ -5228,8 +5420,8 @@ declare global {
   // been idle that long, carrying the last trigger's event into the argument
   // expression.
   var scheduleEventBinding = function (el: Element, spec: EventBindingSpec, key: string, event: Event) {
-    var debounceMs = bindingTimingMs(spec, "debounce");
-    var throttleMs = bindingTimingMs(spec, "throttle");
+    var debounceMs = bindingTimingMs(el, spec, "debounce");
+    var throttleMs = bindingTimingMs(el, spec, "throttle");
     if (debounceMs == null && throttleMs == null) {
       fireEventBinding(el, spec, event);
       return;
@@ -5251,21 +5443,10 @@ declare global {
     }, debounceMs);
   };
 
-  // DOM events that do not bubble: their delegated listener rides the
-  // capture phase (the capture descent still passes the document root even
-  // for a non-bubbling event), and only the target element's own bindings
-  // fire, matching what an element-level listener would have heard.
-  var NON_BUBBLING_EVENTS: Record<string, boolean> = {
-    focus: true,
-    blur: true,
-    mouseenter: true,
-    mouseleave: true,
-    pointerenter: true,
-    pointerleave: true,
-    scroll: true,
-  };
-
-  // The `.enter` / `.escape` key filters (design 5.1) against KeyboardEvent.key.
+  // The `.enter` / `.escape` filters (design 5.1) inspect `event.key` on any
+  // event type. Event names do not prove event classes: applications may
+  // dispatch a KeyboardEvent under an arbitrary custom type, or provide a
+  // compatible keyed Event subclass.
   var KEY_FILTER_VALUES: Record<string, string> = { enter: "Enter", escape: "Escape" };
 
   var keyFilterMatches = function (event: Event, filter: string) {
@@ -5276,13 +5457,10 @@ declare global {
     return (event as KeyboardEvent).key === expected;
   };
 
-  // Run one element's `data-cev-on` specs for one DOM event (the delegated
-  // walk visits elements target-first). Returns whether a fired binding
-  // carried `.stop`, which ends the walk: ancestors' bindings must not see a
-  // stopped event, while this element's remaining bindings still run, the
-  // same split element-level listeners get from stopPropagation.
-  var runElementEventBindings = function (el: Element, event: Event, type: string): boolean {
-    var stopped = false;
+  // Run one element's `data-cev-on` specs for one native DOM event. Every
+  // matching spec on the element runs; `stopPropagation()` leaves those
+  // same-target bindings alone and lets the browser block ancestor targets.
+  var runElementEventBindings = function (el: Element, event: Event, type: string) {
     (decodeCevSpecs(el, DATA_CEV_ON) as EventBindingSpec[]).forEach(function (spec, index) {
       var fired: Set<string> | undefined;
       if (spec == null || typeof spec !== "object" || spec.event !== type) return;
@@ -5303,56 +5481,22 @@ declare global {
       if (spec.prevent === true) event.preventDefault();
       if (spec.stop === true) {
         event.stopPropagation();
-        stopped = true;
       }
       scheduleEventBinding(el, spec, key, event);
     });
-    return stopped;
   };
 
-  // The elements the delegated walk visits: one element can carry an `@c-*`
-  // event binding, a `:c-*` state binding, or both channels at once.
-  var DELEGATED_SELECTOR = "[" + DATA_CEV_ON + "],[" + DATA_CEV_BIND + "]";
+  // One element can carry an `@c-*` event binding, a `:c-*` state binding,
+  // or both channels at once. The native listener registry below combines
+  // both attributes into one listener per event type.
+  var ELEMENT_BINDING_SELECTOR = "[" + DATA_CEV_ON + "],[" + DATA_CEV_BIND + "]";
 
-  // Run both channels of one element for one DOM event. The on-channel's
-  // `.stop` verdict ends the ancestor walk, but the element's own state
-  // bindings still run first, the same split element-level listeners get
-  // from stopPropagation (design 5.1).
-  var runElementBindings = function (el: Element, event: Event, type: string): boolean {
-    var stopped = false;
-    if (el.hasAttribute(DATA_CEV_ON)) stopped = runElementEventBindings(el, event, type);
+  // Run both channels from one native callback. Keep the established channel
+  // order: an `@c-*` binding runs first, then the same element's `:c-*`
+  // binding, even when the event binding called `stopPropagation()`.
+  var runElementBindings = function (el: Element, event: Event, type: string) {
+    if (el.hasAttribute(DATA_CEV_ON)) runElementEventBindings(el, event, type);
     if (el.hasAttribute(DATA_CEV_BIND)) runElementStateBindings(el, event, type);
-    return stopped;
-  };
-
-  var handleDelegatedEvent = function (event: Event) {
-    var type = event.type;
-    var start: Element | null =
-      event.target && (event.target as MaybeElement).nodeType === 1 ? (event.target as Element) : null;
-    if (!start || !start.closest) return;
-    var el: Element | null = start.closest(DELEGATED_SELECTOR);
-    if (NON_BUBBLING_EVENTS[type] === true) {
-      // Non-bubbling: only the target's own bindings (see the set above).
-      if (el === start) runElementBindings(el as Element, event, type);
-      return;
-    }
-    while (el) {
-      if (runElementBindings(el, event, type)) return;
-      el = el.parentElement ? el.parentElement.closest(DELEGATED_SELECTOR) : null;
-    }
-  };
-
-  // One delegated listener per DOM event type at the document root (design
-  // 5.1): installed when a scan first sees the type in a spec, then kept for
-  // the page's lifetime. The spec is data on the element and the listener
-  // re-reads it at event time, so bindings survive morphs with nothing bound
-  // per element.
-  var installedListenerTypes = new Set<string>();
-
-  var installDelegatedListener = function (type: string) {
-    if (installedListenerTypes.has(type)) return;
-    installedListenerTypes.add(type);
-    document.addEventListener(type, handleDelegatedEvent, NON_BUBBLING_EVENTS[type] === true);
   };
 
   // `@c-poll` timers are keyed to the element, one timer per binding slot
@@ -5398,7 +5542,7 @@ declare global {
   };
 
   var pollTick = function (el: Element, spec: PollBindingSpec, recurringKey: string) {
-    if (!el.isConnected || !el.hasAttribute(DATA_CEV_POLL)) {
+    if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_POLL)) {
       // The region this timer polled for is gone (replaced, removed, or its
       // binding dropped by a morph): the timer dies with it (design 5.5
       // machinery item 5), so a replaced region never leaves a dead interval
@@ -5448,60 +5592,276 @@ declare global {
 
   // ----- the state bindings: two-way flushes, one-way effects, and form collection (design 5.1, 5.5, 5.6) -----
 
-  // The client half of design 5.1's update-event table: which DOM event a
-  // two-way binding listens to, resolved from the live control. `.on:` wins
-  // outright; `.lazy` asks for the committed-value event. The server-side
-  // rewrite already rejected the statically-decidable errors (`.lazy` on a
-  // committed-value control, a two-way file input, an unknown control with no
-  // `.on:`), so a null here is a dynamically-typed control the runtime cannot
-  // bind; the scan warns about it below.
-  var resolveUpdateEventType = function (el: Element, spec: StateBindingSpec): string | null {
+  var TWO_WAY_INPUT_TYPES = new Set([
+    "checkbox",
+    "color",
+    "date",
+    "datetime-local",
+    "email",
+    "month",
+    "number",
+    "password",
+    "radio",
+    "range",
+    "search",
+    "tel",
+    "text",
+    "time",
+    "url",
+    "week",
+  ]);
+  // These input states differ in validation/UI affordances but preserve the
+  // same unconstrained string value and input/change event semantics. Keeping
+  // one activation identity is what makes password-visibility toggles retain
+  // an accepted draft and its timer.
+  var TEXTUAL_INPUT_TYPES = new Set(["email", "password", "search", "tel", "text", "url"]);
+  var UNSUPPORTED_INPUT_TYPES = new Set(["button", "file", "image", "reset", "submit"]);
+  var RESERVED_HYPHENATED_TAGS = new Set([
+    "annotation-xml",
+    "color-profile",
+    "font-face",
+    "font-face-format",
+    "font-face-name",
+    "font-face-src",
+    "font-face-uri",
+    "missing-glyph",
+  ]);
+
+  var isBindableCustomElement = function (tag: string) {
+    var normalized = tag.toLowerCase();
+    return (
+      /^[a-z]/.test(normalized) &&
+      normalized.includes("-") &&
+      !normalized.startsWith("c-") &&
+      !RESERVED_HYPHENATED_TAGS.has(normalized)
+    );
+  };
+
+  // A definition can arrive after Citry's initial binding scan, and browser
+  // upgrade itself is not a DOM mutation. Observe each bound tag name once,
+  // capture no elements, and route resolution back through the ordinary live
+  // document scan. Removed/replaced/adopted elements then need no special
+  // promise cleanup and can never receive a stale retry.
+  var observedCustomElementDefinitions = new Set<string>();
+
+  var observeCustomElementDefinition = function (name: string) {
+    if (customElements.get(name) || observedCustomElementDefinitions.has(name)) return;
+    observedCustomElementDefinitions.add(name);
+    customElements.whenDefined(name).then(
+      function () {
+        scheduleBindingScan();
+      },
+      function (err) {
+        console.error("[Citry] events: could not observe the <" + name + "> custom-element definition:", err);
+      },
+    );
+  };
+
+  interface StateBindingActivation {
+    active: boolean;
+    /** Changes whenever the control's value/event semantics change. */
+    signature: string;
+    updateType: string | null;
+    draftType: string | null;
+    error: string | null;
+  }
+
+  var inactiveStateBinding = function (signature: string, error: string): StateBindingActivation {
+    return { active: false, signature: signature, updateType: null, draftType: null, error: error };
+  };
+
+  // The one live-element classifier shared by effects, listeners, event
+  // dispatch, morph preservation, and delayed flushes. In particular it reads
+  // the authored `type` attribute: the DOM `input.type` property normalizes an
+  // unknown keyword to `text`, which would silently turn unsupported markup
+  // into an active textual binding.
+  var classifyStateBinding = function (el: Element, spec: StateBindingSpec): StateBindingActivation {
+    var tag = el.tagName;
+    var mode = spec.binding_mode as string;
+    var updateType: string | null = null;
+    var draftType: string | null = null;
+    var signature: string;
+    var customName: string;
+    var rawType: string | null;
     var inputType: string;
-    if (typeof spec.on === "string" && spec.on) return spec.on;
-    var tag = el.tagName;
-    if (tag === "SELECT") return "change";
-    if (tag === "TEXTAREA") return spec.lazy === true ? "change" : "input";
     if (tag === "INPUT") {
-      // The `type` property is the browser-normalized effective type (an
-      // unknown authored type reads as "text"), matching what the control
-      // actually does.
-      inputType = (el as HTMLInputElement).type;
-      if (inputType === "file") return null; // files cannot live in State (design 5.1)
-      if (inputType === "checkbox" || inputType === "radio") return "change";
-      return spec.lazy === true ? "change" : "input";
+      rawType = el.getAttribute("type");
+      inputType = rawType == null || rawType === "" ? "text" : rawType.toLowerCase();
+      signature = "input:" + inputType + ":" + mode;
+      if (!TWO_WAY_INPUT_TYPES.has(inputType)) {
+        if (inputType === "hidden") {
+          if (mode !== "one-way") {
+            return inactiveStateBinding(signature, '<input type="hidden"> supports one-way State bindings only');
+          }
+          return { active: true, signature: signature, updateType: null, draftType: null, error: null };
+        }
+        if (inputType === "file") {
+          return inactiveStateBinding(signature, '<input type="file"> cannot be bound to State');
+        }
+        if (UNSUPPORTED_INPUT_TYPES.has(inputType)) {
+          return inactiveStateBinding(
+            signature,
+            '<input type="' + inputType + '"> is an action control and cannot be bound to State',
+          );
+        }
+        return inactiveStateBinding(
+          signature,
+          '<input type="' + (rawType || "") + '"> is not a recognized input type in this Citry version',
+        );
+      }
+      signature = "input:" + (TEXTUAL_INPUT_TYPES.has(inputType) ? "textual" : inputType) + ":" + mode;
+      if (mode === "two-way") {
+        if (spec.lazy && (inputType === "checkbox" || inputType === "radio")) {
+          return inactiveStateBinding(
+            signature,
+            "'.lazy' has no effect because this input already commits on 'change'",
+          );
+        }
+        updateType =
+          spec.on || (inputType === "checkbox" || inputType === "radio" ? "change" : spec.lazy ? "change" : "input");
+        draftType = inputType === "checkbox" || inputType === "radio" ? "change" : "input";
+      }
+    } else if (tag === "SELECT") {
+      signature = "select:" + ((el as HTMLSelectElement).multiple ? "multiple" : "single") + ":" + mode;
+      if (mode === "two-way") {
+        if (spec.lazy) {
+          return inactiveStateBinding(signature, "'.lazy' has no effect because <select> already commits on 'change'");
+        }
+        updateType = spec.on || "change";
+        draftType = "change";
+      }
+    } else if (tag === "TEXTAREA") {
+      signature = "textarea:" + mode;
+      if (mode === "two-way") {
+        updateType = spec.on || (spec.lazy ? "change" : "input");
+        draftType = "input";
+      }
+    } else if (isBindableCustomElement(tag)) {
+      customName = tag.toLowerCase();
+      signature = "custom:" + customName + ":" + mode + ":" + (spec.on || "");
+      if (mode === "two-way" && !spec.on) {
+        return inactiveStateBinding(signature, "a two-way custom-element binding requires '.on:<event>'");
+      }
+      if (!customElements.get(customName)) {
+        return {
+          active: false,
+          signature: signature + ":pending-definition",
+          updateType: null,
+          draftType: null,
+          error: null,
+        };
+      }
+      if (!("value" in el)) {
+        return inactiveStateBinding(signature + ":defined", "<" + customName + "> has no 'value' property");
+      }
+      signature += ":defined";
+      if (mode === "two-way") updateType = spec.on || null;
+    } else {
+      signature = tag.toLowerCase() + ":" + mode;
+      return inactiveStateBinding(signature, "<" + tag.toLowerCase() + "> holds no value to bind");
     }
-    return null;
+    return {
+      active: true,
+      signature: signature + ":" + (updateType || "") + ":" + (draftType || ""),
+      updateType: updateType,
+      draftType: draftType,
+      error: null,
+    };
   };
 
-  // The earliest browser event that proves the live control has diverged
-  // from server state, independent of `.lazy` or an `.on:` override. Those
-  // modifiers choose when the value flushes; they must not leave the draft
-  // unprotected before that later trigger (design 5.5's preservation pole).
-  var resolveNaturalDraftEventType = function (el: Element): string | null {
-    var tag = el.tagName;
-    if (tag === "SELECT") return "change";
-    if (tag === "TEXTAREA") return "input";
-    if (tag !== "INPUT") return null;
-    var inputType = (el as HTMLInputElement).type;
-    if (inputType === "file") return null;
-    if (inputType === "checkbox" || inputType === "radio") return "change";
-    return "input";
-  };
-
-  // A control's current value, typed for the wire: checkboxes and radios are
-  // their checked state (the write model `applyValueToControl` applies in
-  // reverse), and numeric controls produce numbers because a State field
-  // declared `int`/`float` takes JSON numbers and the server checks types
-  // without coercing (design 7.2). Everything else is the value string.
+  // Wire values: multi-select lists, check/radio booleans, number/range JSON
+  // numbers, strings for the other native controls, and the uncoerced value
+  // property of a defined custom element (design 7.2).
   var readControlValue = function (el: Element): unknown {
     var control = el as HTMLInputElement;
     var numeric: number;
-    if (control.type === "checkbox" || control.type === "radio") return control.checked;
-    if (control.type === "number" || control.type === "range") {
+    if (isBindableCustomElement(el.tagName)) return (el as CustomValueElement).value;
+    if (el.tagName === "SELECT" && (el as HTMLSelectElement).multiple) {
+      return Array.from((el as HTMLSelectElement).selectedOptions, function (option) {
+        return option.value;
+      });
+    }
+    if (el.tagName === "INPUT" && (control.type === "checkbox" || control.type === "radio")) {
+      return control.checked;
+    }
+    if (el.tagName === "INPUT" && (control.type === "number" || control.type === "range")) {
       numeric = control.valueAsNumber;
       return Number.isFinite(numeric) ? numeric : control.value;
     }
     return control.value;
+  };
+
+  // Write one control's live value into `$state`, unless the value is absent,
+  // throws while being read, or is not strict JSON. Native valueless targets
+  // are rejected by the server; for a custom element these are the runtime
+  // backstops for a class that changed or broke its declared `value` property
+  // after activation. Validate before the proxy assignment: an invalid custom
+  // value must never poison State/pending and fail only later at serialization.
+  // One warning per element, matching `warnedUnresolvedUpdate` below: a binding
+  // that updates on `input` would otherwise warn on every keystroke.
+  var warnedValuelessControl = new WeakSet<Element>();
+  var reportedNonJsonControlValues = new WeakMap<Element, Set<string>>();
+
+  var reportNonJsonControlValue = function (el: Element, field: string, error?: unknown) {
+    var reported = reportedNonJsonControlValues.get(el);
+    if (!reported) {
+      reported = new Set<string>();
+      reportedNonJsonControlValues.set(el, reported);
+    }
+    if (reported.has(field)) return;
+    reported.add(field);
+    var message =
+      "[Citry] events: <" +
+      el.tagName.toLowerCase() +
+      ">.value is not JSON-compatible, so $state." +
+      field +
+      " was left unchanged and the binding's handler was not sent.";
+    if (error === undefined) console.error(message);
+    else console.error(message, error);
+  };
+
+  var writeControlValueToState = function (proxy: StateValues, field: string, el: Element, failure: string): boolean {
+    var value: unknown;
+    try {
+      value = readControlValue(el);
+    } catch (err) {
+      if (isBindableCustomElement(el.tagName)) reportCustomElementValueError(el, field, "read", err);
+      else console.error("[Citry] events: " + failure + " $state." + field + " because the control value threw:", err);
+      return false;
+    }
+    if (value === undefined) {
+      if (!warnedValuelessControl.has(el)) {
+        warnedValuelessControl.add(el);
+        // The remediation lives in the server-side load error this backstops,
+        // so the browser line only has to name the element and the field.
+        console.warn(
+          "[Citry] events: <" +
+            el.tagName.toLowerCase() +
+            "> has no value to read, so $state." +
+            field +
+            " was left unchanged.",
+        );
+      }
+      return false;
+    }
+    var jsonCompatible = false;
+    try {
+      jsonCompatible = isJsonValue(value);
+    } catch (err) {
+      reportNonJsonControlValue(el, field, err);
+      return false;
+    }
+    if (!jsonCompatible) {
+      reportNonJsonControlValue(el, field);
+      return false;
+    }
+    try {
+      proxy[field] = value;
+    } catch (err) {
+      console.error("[Citry] events: " + failure + " $state." + field + ":", err);
+      return false;
+    }
+    return true;
   };
 
   /**
@@ -5512,7 +5872,9 @@ declare global {
    */
   interface TwoWayFlushState {
     el: Element;
+    key: string;
     spec: StateBindingSpec;
+    activationSignature: string;
     flushTimer: number;
     throttleUntil: number;
   }
@@ -5527,15 +5889,60 @@ declare global {
   // these drafts before its pending-writes snapshot.
   var pendingTwoWayFlushes = new Set<TwoWayFlushState>();
 
-  var twoWayStateFor = function (el: Element, key: string, spec: StateBindingSpec): TwoWayFlushState {
+  var clearDraftIfNoPendingFlush = function (el: Element) {
+    var perEl = twoWayFlushStates.get(el);
+    if (
+      perEl &&
+      Array.from(perEl.values()).some(function (state) {
+        return pendingTwoWayFlushes.has(state);
+      })
+    )
+      return;
+    unsentDrafts.delete(el);
+  };
+
+  var cancelTwoWayState = function (state: TwoWayFlushState) {
+    if (state.flushTimer) window.clearTimeout(state.flushTimer);
+    state.flushTimer = 0;
+    pendingTwoWayFlushes.delete(state);
+    var perEl = twoWayFlushStates.get(state.el);
+    if (perEl && perEl.get(state.key) === state) {
+      perEl.delete(state.key);
+      if (!perEl.size) twoWayFlushStates.delete(state.el);
+    }
+    clearDraftIfNoPendingFlush(state.el);
+  };
+
+  var twoWayStateFor = function (
+    el: Element,
+    key: string,
+    spec: StateBindingSpec,
+    activation: StateBindingActivation,
+  ): TwoWayFlushState {
     var perEl = twoWayFlushStates.get(el);
     if (!perEl) {
       perEl = new Map<string, TwoWayFlushState>();
       twoWayFlushStates.set(el, perEl);
     }
     var state = perEl.get(key);
+    if (state && state.activationSignature !== activation.signature) {
+      cancelTwoWayState(state);
+      perEl = twoWayFlushStates.get(el);
+      if (!perEl) {
+        perEl = new Map<string, TwoWayFlushState>();
+        twoWayFlushStates.set(el, perEl);
+      }
+      state = undefined;
+    }
     if (!state) {
-      state = { el: el, spec: spec, flushTimer: 0, throttleUntil: 0 };
+      state = {
+        el: el,
+        key: key,
+        spec: spec,
+        activationSignature: activation.signature,
+        flushTimer: 0,
+        throttleUntil: 0,
+      };
       perEl.set(key, state);
     }
     state.spec = spec;
@@ -5545,7 +5952,9 @@ declare global {
   // Flush one two-way binding now: the draft stops being a draft (the mark
   // clears), the control's value writes into `$state` (which queues it as a
   // pending update), and the named handler sends, so one call carries the
-  // field update and the event together (design 5.1). The anchor resolves
+  // field update and the event together (design 5.1). If the value cannot be
+  // read or carried as JSON, neither half proceeds: the handler must never run
+  // against stale State. The anchor resolves
   // from the element at fire time, never from anything captured when the
   // timer was armed (design 5.5 machinery item 5); `sendFromElement` owns
   // the fire-time miss surface (the drop event plus a debug line).
@@ -5557,17 +5966,24 @@ declare global {
     pendingTwoWayFlushes.delete(state);
     var el = state.el;
     var spec = state.spec;
-    unsentDrafts.delete(el);
-    var anchor = el.isConnected ? anchorForElement(el) : null;
+    var activation = classifyStateBinding(el, spec);
+    if (spec.binding_mode !== "two-way" || !activation.active || activation.signature !== state.activationSignature) {
+      cancelTwoWayState(state);
+      return;
+    }
+    var anchor = elementIsInCurrentDocument(el) ? anchorForElement(el) : null;
     if (anchor && anchor.stateProxy != null && typeof spec.field === "string") {
-      try {
-        anchor.stateProxy[spec.field] = readControlValue(el);
-      } catch (err) {
-        // The server-side rewrite only compiles two-way bindings to writable
-        // fields, so a throw here means the page and the descriptor disagree
-        // (a deploy skew); surface it without breaking the walk.
-        console.error("[Citry] events: a two-way binding could not write $state." + spec.field + ":", err);
-      }
+      // The server-side rewrite only compiles two-way bindings to writable
+      // fields, so a throw inside means the page and the descriptor disagree
+      // (a deploy skew); it is surfaced without breaking the walk.
+      // The draft mark clears only once the value actually reaches `$state`.
+      // Clearing it after a skipped or failed write would tell the morph guard
+      // the server has seen a value it never received, and the next patch would
+      // overwrite what the user typed.
+      if (!writeControlValueToState(anchor.stateProxy, spec.field, el, "a two-way binding could not write")) return;
+      unsentDrafts.delete(el);
+    } else {
+      unsentDrafts.delete(el);
     }
     var handler = typeof spec.handler === "string" ? spec.handler : "";
     if (!handler) return;
@@ -5595,15 +6011,21 @@ declare global {
   // burst still delivers its final value while the rate stays at one send
   // per window (a two-way binding must never silently drop the user's last
   // input; the preservation contract of design 5.5 is built on that).
-  var scheduleTwoWayUpdate = function (el: Element, spec: StateBindingSpec, key: string, event: Event) {
+  var scheduleTwoWayUpdate = function (
+    el: Element,
+    spec: StateBindingSpec,
+    activation: StateBindingActivation,
+    key: string,
+    event: Event,
+  ) {
     if (typeof spec.key === "string" && spec.key && !keyFilterMatches(event, spec.key)) return;
-    var state = twoWayStateFor(el, key, spec);
+    var state = twoWayStateFor(el, key, spec, activation);
     // From this trigger until a flush hands the value over, the DOM diverges
     // from `$state`: the patch-time guard reads this mark as the unflushed
     // draft stage of `hasUnsentDraft` (design 5.3/5.5).
     unsentDrafts.add(el);
-    var debounceMs = bindingTimingMs(spec, "debounce");
-    var throttleMs = bindingTimingMs(spec, "throttle");
+    var debounceMs = bindingTimingMs(el, spec, "debounce");
+    var throttleMs = bindingTimingMs(el, spec, "throttle");
     var now = Date.now();
     if (throttleMs != null) {
       if (state.throttleUntil > now) {
@@ -5620,17 +6042,111 @@ declare global {
     armTwoWayFlush(state, debounceMs, throttleMs);
   };
 
-  // Run one element's two-way specs for one DOM event (the delegated walk's
-  // state-channel half).
+  // Run one element's two-way specs for one native DOM event.
   var runElementStateBindings = function (el: Element, event: Event, type: string) {
+    if (applyingStateValues.has(el)) return;
     decodeBindSpecs(el).forEach(function (spec, index) {
-      if (spec == null || typeof spec !== "object" || spec.mode !== "two") return;
-      var updateType = resolveUpdateEventType(el, spec);
-      if (updateType !== type) {
-        if (resolveNaturalDraftEventType(el) === type) unsentDrafts.add(el);
+      if (spec.binding_mode !== "two-way") return;
+      var activation = classifyStateBinding(el, spec);
+      if (!activation.active) return;
+      if (activation.updateType !== type) {
+        if (activation.draftType === type) unsentDrafts.add(el);
         return;
       }
-      scheduleTwoWayUpdate(el, spec, "bind:" + index, event);
+      scheduleTwoWayUpdate(el, spec, activation, "bind:" + index, event);
+    });
+  };
+
+  /** The native event types currently registered on one element. */
+  interface ElementBindingListenerRecord {
+    types: Set<string>;
+  }
+
+  // Direct native ingress gives ordinary HTML bindings the same event
+  // placement as Alpine's x-on: non-bubbling and custom events reach their
+  // element, currentTarget is honest, and the browser owns propagation.
+  // The strong set exists only so scans can sweep removed or adopted nodes;
+  // the WeakMap remains the owner of each element's record.
+  var elementBindingListeners = new WeakMap<Element, ElementBindingListenerRecord>();
+  var bindingListenerElements = new Set<Element>();
+  var bindingListenerCleanupRegistered = new WeakSet<Element>();
+  var bindingListenersReady = false;
+
+  var handleElementBindingEvent = function (event: Event) {
+    var current = event.currentTarget as MaybeElement | null;
+    if (!current || current.nodeType !== 1) return;
+    var el = current as Element;
+    if (!elementIsInCurrentDocument(el)) return;
+    runElementBindings(el, event, event.type);
+  };
+
+  var releaseElementBindingListeners = function (el: Element) {
+    var record = elementBindingListeners.get(el);
+    if (record) {
+      record.types.forEach(function (type) {
+        el.removeEventListener(type, handleElementBindingEvent);
+      });
+      elementBindingListeners.delete(el);
+    }
+    bindingListenerElements.delete(el);
+  };
+
+  var ensureElementBindingCleanup = function (el: Element) {
+    if (bindingListenerCleanupRegistered.has(el)) return;
+    bindingListenerCleanupRegistered.add(el);
+    Alpine.onElRemoved(el, function () {
+      releaseElementBindingListeners(el);
+      bindingListenerCleanupRegistered.delete(el);
+    });
+  };
+
+  var expectedElementBindingTypes = function (el: Element): Set<string> {
+    var expected = new Set<string>();
+    (decodeCevSpecs(el, DATA_CEV_ON) as EventBindingSpec[]).forEach(function (spec) {
+      if (spec != null && typeof spec === "object" && typeof spec.event === "string" && spec.event) {
+        expected.add(spec.event);
+      }
+    });
+    decodeBindSpecs(el).forEach(function (spec) {
+      if (spec.binding_mode !== "two-way") return;
+      var activation = classifyStateBinding(el, spec);
+      if (!activation.active || !activation.updateType) return;
+      expected.add(activation.updateType);
+      if (activation.draftType && activation.draftType !== activation.updateType) expected.add(activation.draftType);
+    });
+    return expected;
+  };
+
+  var syncElementBindingListeners = function (el: Element) {
+    // Scans can run while the parser is still building the document. Waiting
+    // for Alpine keeps ordinary same-target Alpine handlers ahead of Citry on
+    // the normal initialization path and avoids binding detached morph input.
+    if (!bindingListenersReady) return;
+    if (!elementIsInCurrentDocument(el)) {
+      releaseElementBindingListeners(el);
+      return;
+    }
+    var expected = expectedElementBindingTypes(el);
+    var record = elementBindingListeners.get(el);
+    if (!expected.size) {
+      if (record) releaseElementBindingListeners(el);
+      return;
+    }
+    ensureElementBindingCleanup(el);
+    if (!record) {
+      record = { types: new Set<string>() };
+      elementBindingListeners.set(el, record);
+      bindingListenerElements.add(el);
+    }
+    record.types.forEach(function (type) {
+      if (expected.has(type)) return;
+      el.removeEventListener(type, handleElementBindingEvent);
+      record!.types.delete(type);
+    });
+    expected.forEach(function (type) {
+      if (record!.types.has(type)) return;
+      el.addEventListener(type, handleElementBindingEvent);
+      record!.types.add(type);
     });
   };
 
@@ -5645,13 +6161,19 @@ declare global {
   var collectPendingTwoWayDrafts = function (anchor: Anchor) {
     pendingTwoWayFlushes.forEach(function (state) {
       var el = state.el;
-      if (!el.isConnected || anchorForElement(el) !== anchor) return;
+      if (!elementIsInCurrentDocument(el) || anchorForElement(el) !== anchor) return;
+      var activation = classifyStateBinding(el, state.spec);
+      if (!activation.active || activation.signature !== state.activationSignature) {
+        cancelTwoWayState(state);
+        return;
+      }
       if (anchor.stateProxy == null || typeof state.spec.field !== "string") return;
-      unsentDrafts.delete(el);
-      try {
-        anchor.stateProxy[state.spec.field] = readControlValue(el);
-      } catch (err) {
-        console.error("[Citry] events: could not piggyback the two-way draft of $state." + state.spec.field + ":", err);
+      // The mark clears only on a write that lands, so a skipped read leaves
+      // the draft protected until its own flush runs.
+      if (
+        writeControlValueToState(anchor.stateProxy, state.spec.field, el, "could not piggyback the two-way draft of")
+      ) {
+        unsentDrafts.delete(el);
       }
     });
   };
@@ -5663,6 +6185,8 @@ declare global {
     values: StateValues;
     /** The raw attribute string the record was built from (the spec identity). */
     raw: string;
+    /** Live element semantics (notably Alpine-mutated input type/select multiple). */
+    activationKey: string;
     effects: object[];
   }
 
@@ -5670,9 +6194,22 @@ declare global {
   // set for the release sweep (a WeakMap alone cannot be iterated).
   var controlBindings = new WeakMap<Element, ControlBindingRecord>();
   var boundControls = new Set<Element>();
-  // Two-way controls whose update event cannot be resolved (a dynamically
-  // typed control without `.on:`); warned once per element.
-  var warnedUnresolvedUpdate = new WeakSet<Element>();
+  var reportedStateBindingErrors = new WeakMap<Element, Set<string>>();
+
+  var reportStateBindingError = function (el: Element, spec: StateBindingSpec, activation: StateBindingActivation) {
+    if (!activation.error) return;
+    var key = activation.signature + ":" + activation.error;
+    var reported = reportedStateBindingErrors.get(el);
+    if (!reported) {
+      reported = new Set<string>();
+      reportedStateBindingErrors.set(el, reported);
+    }
+    if (reported.has(key)) return;
+    reported.add(key);
+    console.error(
+      "[Citry] events: ignored the :c-" + (spec.field || "?") + " binding because " + activation.error + ".",
+    );
+  };
 
   var releaseControlBindings = function (el: Element) {
     var record = controlBindings.get(el);
@@ -5692,14 +6229,22 @@ declare global {
   // unflushed two-way draft is left alone: the DOM value is newer than
   // `$state` until the flush hands it over (the same exemption the
   // patch-time guard enforces during morphs).
-  var makeApplicationEffect = function (el: Element, anchor: Anchor, field: string) {
+  var makeApplicationEffect = function (
+    el: Element,
+    anchor: Anchor,
+    spec: StateBindingSpec,
+    activationSignature: string,
+  ) {
     return Alpine.effect(function () {
       var values = anchor.values;
       if (values == null) return; // retired mid-scan: the next binding scan rebinds this control
+      var activation = classifyStateBinding(el, spec);
+      if (!activation.active || activation.signature !== activationSignature) return;
+      var field = spec.field as string;
       if (!Object.prototype.hasOwnProperty.call(values, field)) return;
       var value = values[field]; // the reactive read this effect subscribes to
       if (unsentDrafts.has(el)) return;
-      applyValueToControl(el, value);
+      applyValueToControl(el, value, field);
     });
   };
 
@@ -5712,50 +6257,93 @@ declare global {
   // again; the identity checks below catch exactly that.
   var syncControlBindings = function (el: Element) {
     var raw = el.getAttribute(DATA_CEV_BIND) || "";
-    var anchor = el.isConnected ? anchorForElement(el) : null;
+    var anchor = elementIsInCurrentDocument(el) ? anchorForElement(el) : null;
     var record = controlBindings.get(el);
-    if (!raw || !anchor || anchor.values == null) {
+    var activeSpecs: { spec: StateBindingSpec; activation: StateBindingActivation }[] = [];
+    decodeBindSpecs(el).forEach(function (spec) {
+      var activation = classifyStateBinding(el, spec);
+      if (activation.active) activeSpecs.push({ spec: spec, activation: activation });
+    });
+    var activationKey = activeSpecs
+      .map(function (entry) {
+        return entry.activation.signature;
+      })
+      .join("|");
+    if (!raw || !anchor || anchor.values == null || !activeSpecs.length) {
       if (record) releaseControlBindings(el);
       return;
     }
-    if (record && record.anchor === anchor && record.values === anchor.values && record.raw === raw) return;
+    if (
+      record &&
+      record.anchor === anchor &&
+      record.values === anchor.values &&
+      record.raw === raw &&
+      record.activationKey === activationKey
+    )
+      return;
     if (record) releaseControlBindings(el);
     var effects: object[] = [];
     var liveAnchor = anchor;
-    decodeBindSpecs(el).forEach(function (spec) {
-      if (spec == null || typeof spec !== "object" || typeof spec.field !== "string") return;
-      effects.push(makeApplicationEffect(el, liveAnchor, spec.field));
+    activeSpecs.forEach(function (entry) {
+      effects.push(makeApplicationEffect(el, liveAnchor, entry.spec, entry.activation.signature));
     });
     controlBindings.set(el, {
       anchor: liveAnchor,
       values: liveAnchor.values as StateValues,
       raw: raw,
+      activationKey: activationKey,
       effects: effects,
     });
     boundControls.add(el);
   };
 
-  // The scan's per-element entry for the bind channel: make sure the update
-  // events' delegated listeners exist, warn once for a two-way control the
-  // table cannot resolve, and sync the application effects.
-  var syncStateBindings = function (el: Element) {
-    decodeBindSpecs(el).forEach(function (spec) {
-      var draftType: string | null;
-      if (spec == null || typeof spec !== "object" || spec.mode !== "two") return;
-      var type = resolveUpdateEventType(el, spec);
-      if (type) {
-        installDelegatedListener(type);
-        draftType = resolveNaturalDraftEventType(el);
-        if (draftType && draftType !== type) installDelegatedListener(draftType);
-      } else if (!warnedUnresolvedUpdate.has(el)) {
-        warnedUnresolvedUpdate.add(el);
-        console.warn(
-          "[Citry] events: the two-way :c-" +
-            (typeof spec.field === "string" ? spec.field : "?") +
-            " binding has no update event for this control; name one with '.on:<event>' (design 5.1).",
-        );
+  var reconcilePendingTwoWayStates = function (el: Element) {
+    var perEl = twoWayFlushStates.get(el);
+    if (!perEl) return;
+    var hasCompiledBinding = Boolean(el.getAttribute(DATA_CEV_BIND));
+    var hasAnyValidSpec = decodeBindSpecs(el).length > 0;
+    Array.from(perEl.values()).forEach(function (state) {
+      var activation = classifyStateBinding(el, state.spec);
+      if (
+        !activation.active ||
+        activation.signature !== state.activationSignature ||
+        (hasCompiledBinding && !hasAnyValidSpec)
+      ) {
+        cancelTwoWayState(state);
       }
     });
+  };
+
+  // The scan's per-element entry for the bind channel: report live semantic
+  // failures, cancel drafts whose control semantics changed, and sync the
+  // application effects. Native event ingress is reconciled once per element
+  // by `syncElementBindingListeners` below.
+  var syncStateBindings = function (el: Element) {
+    var specs = decodeBindSpecs(el);
+    if (specs.length && isBindableCustomElement(el.tagName)) {
+      observeCustomElementDefinition(el.tagName.toLowerCase());
+    }
+    var activeTwoWaySignatures: string[] = [];
+    specs.forEach(function (spec) {
+      var activation = classifyStateBinding(el, spec);
+      if (!activation.active) reportStateBindingError(el, spec, activation);
+      else if (spec.binding_mode === "two-way") activeTwoWaySignatures.push(activation.signature);
+    });
+    var priorRecord = controlBindings.get(el);
+    var activeTwoWayKey = activeTwoWaySignatures.join("|");
+    if (
+      !activeTwoWaySignatures.length ||
+      (priorRecord &&
+        priorRecord.activationKey
+          .split("|")
+          .filter(function (signature) {
+            return signature.includes(":two-way:");
+          })
+          .join("|") !== activeTwoWayKey)
+    ) {
+      unsentDrafts.delete(el);
+    }
+    reconcilePendingTwoWayStates(el);
     syncControlBindings(el);
   };
 
@@ -5765,8 +6353,8 @@ declare global {
   // posts carry the token and the instance in these, and the runtime's
   // envelope already carries both, so they never enter the args payload.
   var RESERVED_FORM_FIELDS: Record<string, boolean> = {
-    _citry_state_token: true,
-    _citry_caller_render_id: true,
+    [CARRIER_FIELDS.stateToken]: true,
+    [CARRIER_FIELDS.callerRenderId]: true,
   };
 
   // The one type coercion in the collection: a numeric control's single
@@ -5792,7 +6380,8 @@ declare global {
   // selected option): a field sent once arrives as its value, a repeated
   // field as the list of its values, matching the urlencoded codec's shape.
   // File entries are skipped: files cannot ride the JSON envelope (no
-  // multipart in v1, design 6.2); collect a file through event args instead.
+  // multipart in v1, design 6.2). Use an ordinary upload endpoint or custom
+  // transport instead.
   var collectFormArgs = function (form: HTMLFormElement): Record<string, unknown> {
     var entries = new Map<string, string[]>();
     new FormData(form).forEach(function (value, name) {
@@ -5825,40 +6414,49 @@ declare global {
         : element && element.tagName === "FORM"
           ? (element as HTMLFormElement)
           : null;
-    if (!form || !form.isConnected) return args;
+    if (!form || !elementIsInCurrentDocument(form)) return args;
     var collected = collectFormArgs(form);
     return args ? (Object.assign(collected, args) as Record<string, unknown>) : collected;
   };
 
-  // One scan pass: install the delegated listener for every DOM event type
-  // the page's `data-cev-on` specs name, and bring each `data-cev-poll`
-  // element's timers in line with its specs. Runs at boot and again
-  // (microtask debounced) after every DOM mutation batch, so bindings
-  // inserted with a fragment come alive with no per-element wiring.
+  // One scan pass: reconcile every element's native event types and bring
+  // each `data-cev-poll` element's timers in line with its specs. Runs at
+  // boot and again (microtask debounced) after every DOM mutation batch. The
+  // mutation scan runs after Alpine initializes added nodes, so both systems
+  // attach in their normal order.
   var scanBindings = function () {
     bindingScanScheduled = false;
-    document.querySelectorAll("[" + DATA_CEV_ON + "]").forEach(function (el) {
-      (decodeCevSpecs(el, DATA_CEV_ON) as EventBindingSpec[]).forEach(function (spec) {
-        if (spec != null && typeof spec === "object" && typeof spec.event === "string" && spec.event) {
-          installDelegatedListener(spec.event);
+    if (bindingListenersReady) {
+      document.querySelectorAll(ELEMENT_BINDING_SELECTOR).forEach(syncElementBindingListeners);
+      bindingListenerElements.forEach(function (el) {
+        if (!elementIsInCurrentDocument(el) || (!el.hasAttribute(DATA_CEV_ON) && !el.hasAttribute(DATA_CEV_BIND))) {
+          releaseElementBindingListeners(el);
         }
       });
-    });
+    }
     document.querySelectorAll("[" + DATA_CEV_POLL + "]").forEach(syncElementPollTimers);
     // Elements that no longer poll (removed with their region, or their
     // binding gone after a morph) release their timers here; the tick's own
     // liveness check is the backstop between scans.
     polledElements.forEach(function (el) {
-      if (!el.isConnected || !el.hasAttribute(DATA_CEV_POLL)) clearPollTimers(el);
+      if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_POLL)) clearPollTimers(el);
     });
-    // The bind channel: update-event listeners plus the application effects,
-    // rebound (never stacked) when a render moved the instance under a
-    // control. This scan is the rebind walk of design 5.5's one-way rule; it
+    // The bind channel's application effects are rebound (never stacked)
+    // when a render moved the instance under a control. This scan is the
+    // rebind walk of design 5.5's one-way rule; it
     // covers the whole document, which subsumes "under the applied region"
     // and stays idempotent through the reuse check.
     document.querySelectorAll("[" + DATA_CEV_BIND + "]").forEach(syncStateBindings);
+    // Pending accepted work survives binding-attribute removal, but not a
+    // later live change to the control's value/event semantics. Such an
+    // element is no longer in the selector walk above, so revalidate the
+    // iterable pending set independently.
+    pendingTwoWayFlushes.forEach(function (state) {
+      var activation = classifyStateBinding(state.el, state.spec);
+      if (!activation.active || activation.signature !== state.activationSignature) cancelTwoWayState(state);
+    });
     boundControls.forEach(function (el) {
-      if (!el.isConnected || !el.hasAttribute(DATA_CEV_BIND)) releaseControlBindings(el);
+      if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_BIND)) releaseControlBindings(el);
     });
   };
 
@@ -5997,6 +6595,12 @@ declare global {
     var anchor = idToAnchor.get(ctx.id) || null;
     if (anchor) {
       ctx.state = anchor.stateProxy;
+      ctx.loading = function (name) {
+        return readLoading(anchor!, name, "loading");
+      };
+      ctx.error = function (name) {
+        return readError(anchor!, name, "error");
+      };
       ctx.sendEvent = function (name, args, opts) {
         // The payload member keeps the promise contract even for a bad name.
         // (anchor! as in the magics: the if-guard does not reach in here.)
@@ -6014,6 +6618,12 @@ declare global {
       // Not an interactive instance (no Events declared): the members exist
       // on every payload, and say plainly why they cannot do more here.
       ctx.state = null;
+      ctx.loading = function (name) {
+        return readPayloadLoading(ctx.id, name);
+      };
+      ctx.error = function (name) {
+        return readPayloadError(ctx.id, name);
+      };
       ctx.sendEvent = function (name) {
         return Promise.reject(
           pointedError(
@@ -6120,21 +6730,22 @@ declare global {
           pointedError("applyActions expects a result's `actions` array (design 4.3), got " + typeof actions + "."),
         );
       }
-      if (
-        !actions.every(validateWireAction) ||
-        actions.filter(function (action) {
-          return action.action === "data";
-        }).length > 1
-      ) {
+      if (validateActionList(actions)) {
         return Promise.reject(pointedError("applyActions received an invalid citry-events/1 action array."));
       }
-      return applyResult({ ok: true, actions: actions }, null);
+      return applyResult(buildOkResult(actions), null);
     },
 
     // The hook the $component payload decorator delegates to. The bootstrap
     // stub registers the decorator wrapper with citry.js and routes it here
     // the moment this runtime replaces the stub.
     _decorate: decorateComponentContext,
+
+    // Late-bound payload readers used by the bootstrap stub. A component
+    // callback that ran before this bundle arrived keeps synchronous
+    // loading/error functions which begin reading the live anchor now.
+    _loadingFor: readPayloadLoading,
+    _errorFor: readPayloadError,
 
     // Instance-scoped subscribe by component id. Payloads the bootstrap stub
     // decorated before this runtime arrived hold `onEvent` closures that
@@ -6147,6 +6758,11 @@ declare global {
     // through this, late-bound like `_decorate`, so prop validation and
     // reactivity live here while the registration shape lives in citry.js.
     _resolveProps: resolveDeclaredProps,
+
+    // Called by the ownership registry immediately before it retires the
+    // matching graph revision. Active anchors and unsettled calls veto that
+    // retirement; their release paths schedule another ownership prune.
+    _pruneDescriptorRevision: pruneDescriptorRevision,
   } as CitryEventsApi;
 
   // Internal contract for the transport and actions layer (and for tests).
@@ -6157,6 +6773,8 @@ declare global {
     anchors: anchors,
     idToAnchor: idToAnchor,
     classes: classes,
+    descriptorRevisions: descriptorRevisions,
+    pendingDescriptorRevisionRefs: pendingDescriptorRevisionRefs,
     config: config,
     getAnchor: function (componentId: string) {
       return idToAnchor.get(componentId) || null;
@@ -6192,6 +6810,7 @@ declare global {
     },
     debug: function () {
       var anchorIntervals = 0;
+      var bindingListenerTargets = 0;
       var elementIntervalCount = 0;
       var formEffects = 0;
       anchors.forEach(function (anchor) {
@@ -6205,11 +6824,19 @@ declare global {
         var record = controlBindings.get(el);
         if (record) formEffects += record.effects.length;
       });
+      bindingListenerElements.forEach(function (el) {
+        var record = elementBindingListeners.get(el);
+        if (record) bindingListenerTargets += record.types.size;
+      });
       return Object.freeze({
         anchors: anchors.size,
         renderIds: idToAnchor.size,
         classes: classes.size,
-        delegatedListenerTypes: installedListenerTypes.size,
+        descriptorRevisions: descriptorRevisions.size,
+        pendingDescriptorRevisionRefs: pendingDescriptorRevisionRefs.size,
+        observedCustomElementDefinitions: observedCustomElementDefinitions.size,
+        bindingListenerElements: bindingListenerElements.size,
+        bindingListenerTargets: bindingListenerTargets,
         polledElements: polledElements.size,
         anchorIntervals: anchorIntervals,
         elementIntervals: elementIntervalCount,
@@ -6264,11 +6891,20 @@ declare global {
       return "[data-citry-root],[data-cid]";
     },
     init: function (el: MaybeElement) {
-      if (!el.hasAttribute || !el.hasAttribute("data-cid")) return;
-      if (boundaryAttached.has(el as Element)) return;
+      if (!el.hasAttribute) return;
+      var element = el as Element;
+      if (
+        elementIsInCurrentDocument(element) &&
+        (element.hasAttribute(DATA_CEV_ON) || element.hasAttribute(DATA_CEV_BIND))
+      ) {
+        ensureElementBindingCleanup(element);
+        scheduleBindingScan();
+      }
+      if (!element.hasAttribute("data-cid")) return;
+      if (boundaryAttached.has(element)) return;
       processExistingEventsManifests();
-      if (boundaryAttached.has(el as Element)) return;
-      var ids = ((el as Element).getAttribute("data-cid") || "").trim().split(/\s+/).filter(Boolean);
+      if (boundaryAttached.has(element)) return;
+      var ids = (element.getAttribute("data-cid") || "").trim().split(/\s+/).filter(Boolean);
       var known = false;
       ids.forEach(function (id) {
         var anchor = idToAnchor.get(id);
@@ -6277,7 +6913,7 @@ declare global {
           anchor.seenInDom = true;
         }
       });
-      if (known) attachBoundaryScope(el as Element);
+      if (known) attachBoundaryScope(element);
     },
     mutations: function (mutations: MutationRecord[]) {
       if (!mutations.length) processExistingEventsManifests();
@@ -6300,6 +6936,8 @@ declare global {
     },
     afterStart: function () {
       api._internal.alpineStarted = true;
+      bindingListenersReady = true;
+      scanBindings();
     },
   });
 

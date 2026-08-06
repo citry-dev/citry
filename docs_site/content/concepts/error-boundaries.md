@@ -1,132 +1,137 @@
 ---
 title: Error boundaries
-description: Wrap a section in c-error-fallback so a render error shows a fallback instead of breaking the page.
+description: Keep one server-rendered failure from replacing an otherwise useful page.
 ---
 
 # Error boundaries
 
-One widget throws while rendering, and instead of a graceful fallback the whole
-page turns into a 500. An error boundary contains that blast radius: wrap the
-risky section, and if it fails, the reader sees fallback content while the rest
-of the page renders as normal.
+Use an error boundary when one server-rendered part of a page may fail but the
+rest can still be useful. The boundary catches a render error from that part
+and inserts a fallback in its place. Content outside the boundary continues to
+render.
 
-Citry ships one built-in boundary, the `<c-error-fallback>` component. You do
-not register or import anything to use it.
+Citry provides the
+[`<c-error-fallback>` built-in](/reference/builtins/#c-error-fallback). It
+handles errors raised while Citry renders HTML. It does not catch JavaScript
+errors in the browser or errors from a separate HTTP request.
 
 ## Wrap a section
 
-Put the content you want to guard inside `<c-error-fallback>` and give it a
-`fallback` string to show on error.
+Put the risky content inside `<c-error-fallback>` and give it a short fallback
+message:
 
-```citry
-from citry import Component
+```citry-html
+<main>
+  <h1>Account</h1>
 
-class Page(Component):
-    template = """
-      <c-error-fallback fallback="Could not load widget">
-        <c-Widget />
-      </c-error-fallback>
-    """
+  <c-error-fallback fallback="Recent activity is unavailable">
+    <c-recent-activity />
+  </c-error-fallback>
+
+  <c-account-settings />
+</main>
 ```
 
-If `<c-Widget>` raises while rendering, the boundary shows
-`Could not load widget` in its place. Anything outside the boundary is
-untouched, so the page still loads.
+If `<c-recent-activity>` raises during rendering, the reader still sees the
+heading, the fallback message, and the account settings. If it succeeds, Citry
+inserts the activity and never renders the fallback.
 
-The guarded content is just the tag body (its default slot), so it can be a
-single component, a whole block of markup, or several components together.
+The boundary guards its whole body, so it can contain one component, several
+components, or ordinary template markup.
 
 ## What happens on error
 
-When the guarded content raises, the boundary catches the error and swaps in the
-fallback. When it renders cleanly, the boundary is invisible: you get exactly
-the guarded content, and no fallback runs.
+The boundary is transparent on success: it adds no wrapper and keeps the
+rendered content unchanged. On failure, it discards the guarded content and
+inserts the fallback.
 
-With no fallback at all, the boundary renders nothing (an empty string) on error
-and keeps its neighbours:
+With no fallback, the boundary inserts nothing for the failed section:
 
-```citry
-template = """
-  <main>
-    before
-    <c-error-fallback>
-      <c-failing />
-    </c-error-fallback>
-    after
-  </main>
-"""
-
-# When <c-failing> raises, the output is "beforeafter": the boundary
-# contributes nothing, and the surrounding text still renders.
+```citry-html
+<p>
+  before
+  <c-error-fallback>
+    <c-failing />
+  </c-error-fallback>
+  after
+</p>
 ```
+
+The surrounding `before` and `after` text still renders.
+
+Fallback attributes are text. Citry escapes ordinary strings before inserting
+them, including values supplied with `c-fallback`:
+
+```citry-html
+<c-error-fallback c-fallback="unavailable_message">
+  <c-risky-widget />
+</c-error-fallback>
+```
+
+If `unavailable_message` contains `<strong>Unavailable</strong>`, the reader
+sees those characters as text; they do not become an element. This makes a
+plain or computed message safe by default.
+
+For trusted rich markup, use a fallback fill. Never turn text from a user or
+another untrusted source into trusted HTML.
 
 ## Show the error in the fallback
 
-For a richer fallback, fill the `fallback` slot instead of passing the
-attribute. The slot receives the raised exception as slot data under the key
-`error`.
+Use a `fallback` fill when the fallback needs markup. Because explicit fills
+cannot sit beside direct body content, put the guarded content in a `default`
+fill:
 
-A fill cannot sit next to other content, so when you use the `fallback` fill the
-guarded content moves into an explicit `default` fill:
+```citry-html
+<c-error-fallback>
+  <c-fill name="default">
+    <c-recent-activity />
+  </c-fill>
 
-```citry
-template = """
-  <main>
-    <c-error-fallback>
-      <c-fill name="default">
-       <c-failing />
-      </c-fill>
-      <c-fill name="fallback" data="d">
-        <p>Caught: {{ d.error }}</p>
-      </c-fill>
-    </c-error-fallback>
-  </main>
-"""
-
-# When the default content fails, the fallback fill renders and d.error
-# is the actual raised exception object (renders e.g. "Caught: boom").
+  <c-fill name="fallback" data="failure">
+    <section role="alert">
+      <h2>Recent activity is unavailable</h2>
+      <p>Try again in a moment.</p>
+    </section>
+  </c-fill>
+</c-error-fallback>
 ```
 
-Give only one of the two. Passing both the `fallback` attribute and a
-`fallback` fill raises a `RuntimeError`.
+The fill receives the raised exception as `failure.error`. That is the actual
+exception object, not only its message. It can help the fallback choose a
+response, but do not expose raw exception details to readers in production.
+
+Choose one fallback form. Supplying both the `fallback` attribute and a
+`fallback` fill raises `RuntimeError`.
 
 ## Boundaries nest, nearest wins
 
-You can put a boundary inside another boundary. When content fails, the nearest
-boundary above it handles the error, and boundaries further out never see it.
+The nearest boundary handles an error from its guarded content:
 
-```citry
-template = """
-  <main>
-    <c-error-fallback fallback="outer">
-      <c-error-fallback fallback="inner">
-        <c-failing />
-      </c-error-fallback>
-    </c-error-fallback>
-  </main>
-"""
-
-# The inner boundary catches the error, so the output contains "inner",
-# not "outer".
+```citry-html
+<c-error-fallback fallback="The page section failed">
+  <c-error-fallback fallback="The chart failed">
+    <c-sales-chart />
+  </c-error-fallback>
+</c-error-fallback>
 ```
 
-One case does travel outward: if the fallback content itself raises, the
-boundary that produced it does not catch its own fallback. That error bubbles up
-to the next boundary above, which is where you would put a plainer, safer
-fallback.
+If the chart raises, the reader sees `The chart failed`. The outer boundary
+does not handle an error that the inner one already caught.
+
+A boundary does not catch an error raised by its own fallback. That error
+moves outward to the next boundary. Keep the outer fallback small and
+dependable when it serves as a final safety net.
 
 ## Things to know
 
-- The tag is `<c-error-fallback>` (kebab-case). The name `error-fallback` is
-  reserved, so registering your own [Component][citry.Component] under it raises
-  [AlreadyRegistered][citry.AlreadyRegistered].
-- The only attribute is `fallback` (a plain string). Any other attribute, such
-  as `<c-error-fallback bogus="x">`, is rejected.
-- The value delivered to the `fallback` slot under `error` is the real
-  exception object, not a message string, so you can branch on its type.
-- With no boundary anywhere above it, a render error escapes to your view as
-  usual, and its message names the failing child so you can find it.
+- The only accepted component kwarg is `fallback`; `c-fallback` is its dynamic
+  expression form.
+- A fallback fill may omit `data` when it does not need the exception.
+- Without any boundary above it, a render error escapes to the host view. Its
+  message includes the failing component path.
+- `error-fallback` is a reserved built-in name, so an application cannot
+  register another component under it.
 
-Boundaries pair well with the rendering model in
-[Rendering](/concepts/rendering/) and with [Slots](/concepts/slots/), since the
-fallback is itself a slot.
+For the composition rules behind the two fills, see
+[Slots](/concepts/slots/). For the wider server render lifecycle, see
+[Rendering](/concepts/rendering/).

@@ -353,7 +353,7 @@ class TestCacheKeyScopeAndCompatibility:
         class FirstV2(Extension):
             name = "first"
             render_cache_mode = "stateless"
-            render_cache_version = 2
+            render_cache_version = 9
 
         class Second(Extension):
             name = "second"

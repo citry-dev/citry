@@ -1030,7 +1030,7 @@ the fix round implemented the package in full. Built: `emission.py`
 under `citry/ext/events/` (per-instance capture with WP8 mint and the
 `_public`-gated values map; the `data-citry-events` tag per design 4.4,
 emitted before the sibling `data-citry` tag; the runtime script tag on
-the fixed `ext/events/runtime.js` URL asserted before the WP13 route
+the stable `ext/events/runtime.js` route asserted before the WP13 route
 exists; the `_EVENTS_BOOTSTRAP_STUB` constant WP15 will fill; the
 fixed-name `data-cid` root marker), hook registration in the events
 `extension.py` alongside the WP12 hooks, and the two lifecycle
@@ -1039,6 +1039,10 @@ additions in the dependencies emission path
 presence record in the shape the landed `citry.js` consumer pins).
 Review: approve, one low (a comment overclaim on the Const-proxy
 unwrap in `capture_instance`).
+
+**Runtime-route amendment, accepted 2026-08-05:** the runtime keeps the stable
+unversioned route `ext/events/runtime.js` and answers `Cache-Control: no-store`.
+There is no runtime query-version compatibility protocol.
 
 **Amendment due (2026-07-16, the client-model round; owned by WP22):**
 the per-class descriptor gained the `latest_wins`/`bundle` carriage
@@ -1083,9 +1087,9 @@ served, for the runtime.js precedent WP13 will mirror),
   format, not part of the manifest's base64 armoring.)
 - Inject the events runtime script tag via the `on_dependencies` emit
   hook whenever the page or fragment contains an Events-declaring
-  component. The `src` is `citry.build_url("ext/events/runtime.js")`:
-  the route path is fixed by design 3.8, so nothing is imported from
-  WP13, and the test asserts the emitted URL before the route exists.
+  component. The route path is
+  `citry.build_url("ext/events/runtime.js")`. The route path remains fixed by
+  design 3.8, and the test asserts the emitted URL before the route exists.
 - Emit the inline bootstrap stub through the manifest (design 5.2 "Load
   ordering"): this WP wires the emission with the stub body held in
   `_EVENTS_BOOTSTRAP_STUB` in the events manifest-emission module;
@@ -1208,11 +1212,9 @@ the escape-hatch plumbing are WP13's (route-level) concern.
 **Status: landed 2026-07-13, review-approved.** Landed in two passes:
 the binding rewrite (2026-07-08, `bindings.py` plus the extension
 hooks) and a follow-up fix pass (2026-07-13) closing its review
-findings. Two of those were maintainer decisions: bare `.throttle` is
-valid at a 250 ms default, mirroring bare `.debounce` (design 5.1
-modifier table updated first), and the design's file-input row now
-carries the "where the type is statically known" qualifier the code
-already honored. The rest: the unbalanced-parentheses load error now
+findings. Bare `.throttle` is valid at a 250 ms default, mirroring bare
+`.debounce` (design 5.1 modifier table updated first). The rest: the
+unbalanced-parentheses load error now
 names the binding and carries the standard template-location suffix
 like every other load error; every load-error test asserts that
 suffix; and two inline comments were corrected against the actual
@@ -1227,6 +1229,16 @@ component-target Citry handlers. It also treats `<c-element>` as its selected
 HTML element, so both `@c-*` and `:c-*` use the ordinary element path there.
 WP12 is not rerun independently.
 
+**Input-direction amendment, accepted 2026-08-05:** input binding support now follows
+the complete 22-type matrix in `events.md` 5.1. Sixteen editable types support
+both directions, `hidden` supports one-way only, and file/action inputs support
+neither; unknown keywords fail distinctly. Validation runs at template load,
+after Python-resolved final attributes, and against Alpine-mutated live types.
+The compiled State-binding object has one exact direction discriminant and is
+decoded strictly on both server and client. This is a hard cut with no alias
+decoder; the pre-1.0 rendered-cache payload stays at version 1 and the client
+runtime URL remains unversioned.
+
 **Goal:** `@c-*` and `:c-*` attributes rewrite to `data-cev-*` specs at
 template load (stage one) and via `on_attrs_resolved` (stage two), with
 the design's hard validation.
@@ -1234,22 +1246,21 @@ the design's hard validation.
 **Read first:** `events.md` 5.1 in full (vocabulary, modifier table,
 update-event table, arguments-are-Alpine-expressions, the two-stage
 rewrite paragraph, the validation paragraph), 7.2 (binding-driven checks
-against `_public`/`_model`); code: WP7 (handler and State metadata),
-`citry/ext/dependencies/scripts.py` (the `$component` textual-rewrite
-precedent and its documented sharp edges), the `on_template_loaded` /
-`on_attrs_resolved` hook signatures in `citry/extension.py`,
-`citry/nodes/__init__.py:430-441` (the `c-*` channel the rewrite must
-not touch).
+against `_public`/`_model`); code: WP7 (handler and State metadata), the
+`on_template_compiled` / `on_attrs_resolved` hook signatures in
+`citry/extension.py`, the compiler's structured element-attribute regions, and
+`citry/nodes/__init__.py` (the `c-*` channel the rewrite must not touch).
 
 **Build:**
 
-- Stage one, `on_template_loaded` (string level): find `@c-*` / `:c-*`
-  attributes, parse name/modifiers/value, build the per-element spec
-  (owner class id, handler wire name, raw arg expression when present,
-  modifiers, merged timing config), replace with `data-cev-*`
-  attribute(s). Accept the known `<c-raw>` textual caveat and document
-  it in code (design 5.1); do not attempt the node-level transform
-  (v1.x).
+- Stage one, `on_template_compiled` (structured-node level): recursively
+  transform only parser-proven `@c-*` / `:c-*` attributes, build the
+  per-element spec (owner class id, handler wire name, raw arg expression when
+  present, modifiers, merged timing config), and replace them with
+  `data-cev-*` attributes. Preserve authored source for diagnostics and
+  introspection, and collapse otherwise-static attribute regions back to
+  text. Binding-shaped text in `<c-raw>`, comments, and native text-container
+  bodies never enters the transform.
 - Stage two, `on_attrs_resolved`: the same recognition and rewrite for
   attributes contributed at render time (spreads); validation errors here
   are render-time, same wording.
@@ -1257,8 +1268,11 @@ not touch).
   part only); `:c-*` keys name public State fields, `_model` members
   when two-way; modifier legality (the full load-error list: unknown
   modifiers, second poll time segment, `.lazy`+`.on:`, any update-timing
-  modifier on a one-way binding, `.lazy` on statically-known committed
-  controls, key filters on non-keyboard events, file inputs two-way);
+  modifier on a one-way binding, `.lazy` on committed controls, and the
+  complete input direction matrix); key filters inspect the concrete event's
+  `key` and do not restrict custom event names; literal types
+  validate here, Python-resolved types against final attributes, and
+  browser-only dynamic types in WP17.2;
   any `@c-*` or `:c-*` attribute on a `<c-*>` component tag was a
   template-load error in this landed batch; WP23's amendment above replaces
   the `@c-*` half with a parent-owned client binding on semantic component targets and
@@ -1280,13 +1294,14 @@ not touch).
 **Tests:** observe-then-lock rewritten template output for a
 representative template (every vocabulary form); each validation error
 with location and message content; stage-two rewrite through a spread
-(`attrs` kwarg + `c-bind` spread); `<c-raw>` caveat documented by a test
-that pins the current (imperfect) behavior explicitly as such; plain
+(`attrs` kwarg + `c-bind` spread); `<c-raw>` coverage that proves
+binding-shaped text remains literal; plain
 `@click`/`:class` pass through untouched.
 
-**Boundaries:** no client runtime, no expression evaluation (that is
-Alpine's, client-side), no grammar or compiler changes (the textual
-approach is the v1 decision).
+**Boundaries:** no client runtime and no expression evaluation (that is
+Alpine's, client-side). The parser/compiler supply structured attribute nodes
+and native text-container boundaries; the extension owns the binding
+transformation.
 
 ---
 
@@ -1617,12 +1632,14 @@ report has already validated the acquisition.
   real magics as this WP lands (design 16.1's deferred item).
 - Magics: `$state` (reactive over public values; writes to `_model`
   fields queue updates, non-model writes throw the pointed error),
-  `$loading` (callable, per-handler variant), `$error` (last envelope or
-  null, cleared on success), `$sendEvent`, `$onEvent`. `$loading` and
-  `$sendEvent` validate handler/event names against the class
-  descriptor and throw the pointed error naming the declared handlers.
-  `$component` payload gains `state`, `sendEvent`, `onEvent` via the
-  decorator.
+  `$loading` (callable, per-handler variant), `$error` (callable, retained
+  per handler, with a no-argument newest-retained aggregate), `$sendEvent`,
+  `$onEvent`. A successful call clears only its own handler's error.
+  `$loading`, `$error`, and `$sendEvent` validate handler/event names against
+  the class descriptor and throw the pointed error naming the declared
+  handlers.
+  `$component` payload gains `state`, `loading`, `error`, `sendEvent`, and
+  `onEvent` via the decorator.
 - The reconcile rule on incoming values (the same-class branch of the
   three-way split above): server wins per field except pending unsent
   local writes.
@@ -1634,13 +1651,14 @@ reconcile keeps `$state` identity, a different class rebuilds it, a
 plain-HTML render discards it, driven by stubbed incoming render
 metadata, no real morph); the faithful component id updates on the
 registry entry through a re-render while the anchor's `$state` identity
-persists; `$loading`/`$error` transitions driven by a stubbed
-transport; magic availability inside user `x-data` within a component;
+persists; `$loading`/`$error` transitions driven by a stubbed transport,
+including independent retained handler errors and intent-ordered overlapping
+calls; magic availability inside user `x-data` within a component;
 user `x-data` on the instance root itself coexists with the scope (its
 checked on the scope stack, since Alpine's merged proxy hides keys
 from `Object.keys`, spike F6); an element carrying two
 instance ids resolves magics to the innermost; unknown names in
-`$loading`/`$sendEvent` throw the pointed errors.
+`$loading`/`$error`/`$sendEvent` throw the pointed errors.
 
 **Boundaries:** no transport (WP16.2 owns it, stubbed here), no
 bindings (WP17.1/WP17.2), no morph application logic beyond what
@@ -1683,11 +1701,11 @@ requirements, the three-way split through real morph, keyed linking
 with the horizon cut, the preservation opt-ins, and the R3 surfacing
 are e2e-proven: 16 new tests including all 19 protocol fixtures
 replayed through the applier, five mutation rounds proving every test
-bites. `preserveCallerKey` is ratified as designed behavior
-(2026-07-17): the same-class reconcile branch re-stamps the
-parent-authored key the fragment cannot re-emit, forced by morph
-comparing root keys before any hook, and it is captured in design 5.3
-and 5.5.
+bites. `preserveCallerKey` was ratified as designed behavior on 2026-07-17.
+It was superseded on 2026-08-04 by keyed component ranges: the same-class
+reconcile retains the parent-authored `morphKey` and external logical parent
+on the stable range, so no root key needs re-stamping. Design 5.3 and 5.5 carry
+the current rule.
 
 **WP26 disposition:** graph physical-placement caps now distinguish adjacent
 mirror copies from a multi-root placement, with a legacy adjacency fallback
@@ -1717,7 +1735,7 @@ rule), 4.2 (epoch mechanics; this WP owns the
 apply-iff-strictly-greater comparison), 5.2 (the drop event's
 `reason` contract, the lifecycle DOM events and their `detail`
 contract, the `applyActions` public-surface row), 5.3 (morph rules
-incl. the composite key attribute and its callback, the manifest-tag
+including element-key attributes, component-range keys, the manifest-tag
 carriage, busy attributes, the ignore marker and its instance-root
 warning), 5.5 in
 full (the preservation block and its pending-writes re-apply rule, the
@@ -2087,18 +2105,23 @@ them).
 Split 2026-07-17 into two sub-packages, because the single package was
 overloaded; each is sized for one coding agent, same as every other
 WP. **WP17.1** is the
-bindings runtime (delegated listeners, expressions, `@c-poll`, and the
-`$component` props form) and **WP17.2** is forms, two-way and
+event/props binding runtime (element listeners, expressions, `@c-poll`, and
+the `$component` props form) and **WP17.2** is forms, two-way and
 one-way bindings, and the preservation wiring. They land in that
 order. Both carry the 2026-07-16 rewrite for the ratified client-model
 round (events.md 14.3): bindings ride the queue and the
 uncorrelated-id lifecycle, and binding state respects anchor
 lifecycles instead of capturing anchors.
 
-#### ✅ WP17.1: client bindings: delegated listeners, expressions, `@c-poll`, and client props
+#### ✅ WP17.1: client bindings: element listeners, expressions, `@c-poll`, and client props
+
+**Current-runtime amendment:** this section records the implementation that
+landed in WP17.1. Later per-element listener work moved ordinary HTML-element
+bindings to native listeners on each element. The current contract lives in
+[`events.md`](events.md), section 5.1.
 
 **Status: landed 2026-07-17, review-approved (one fix round;
-re-review: approve, zero findings).** The delegated listener layer
+re-review: approve, zero findings).** The original delegated listener layer
 over the data-cev-* specs with the full modifier matrix (bare
 debounce and throttle at 250 ms, keyboard filters, explicit timings),
 Alpine-expression args, `@c-poll` riding the timer-retirement
@@ -2121,7 +2144,7 @@ the spike verdict, and the accepted managed context helpers. HTML-element
 bindings and the landed props declaration/resolution remain WP17.1's
 historical scope.
 
-**Goal:** the compiled `data-cev-*` event specs come alive: delegated
+**Goal:** the compiled `data-cev-*` event specs come alive: per-element
 listeners with the full modifier table, Alpine-expression args, poll
 timers that respect anchor lifecycles, and multi-binding elements;
 plus `$component`'s config-object form with declared props.
@@ -2143,8 +2166,9 @@ registration this WP extends, in its style), WP13's events routes
 
 **Build:**
 
-- Delegated listeners per DOM event type at the document root, reading
-  `data-cev-*` specs; modifier semantics per the 5.1 table (prevent,
+- One native listener per bound HTML element and event type, shared by that
+  element's event and State ingress and reading its live `data-cev-*` specs;
+  modifier semantics per the 5.1 table (prevent,
   stop, self, once, key filters, debounce with the 250 ms bare default,
   throttle) with the `_debounce`/`_throttle` descriptor defaults from
   the manifest. Every send resolves its anchor at fire time from the
@@ -2209,6 +2233,29 @@ source-aware typed binding, and the preservation poles both proven in
 e2e with real held-response races: the mid-typing draft survives
 patches at every unsent-draft stage while a legitimate server clear
 still lands on unfocused controls.
+
+**Amended 2026-08-03:** `<select multiple>` now uses `list[str]` in both
+directions. The client reads every selected option in document order and
+writes lists by setting each option's selected state; empty lists clear all
+options. Because the live `multiple` property is authoritative, literal,
+dynamic, and `c-bind`-supplied forms use the existing binding wire shape. The
+browser suite covers direct and spread bindings, empty selection, one-way
+application (including non-list clearing), two-way updates, self-render
+re-application, a pending-draft/reordered-option morph race, server reset,
+single-select scalar regression, and standard `FormData` collection.
+
+**Live input-type amendment, accepted 2026-08-05:** the browser strictly decodes the
+canonical State-binding object, then uses one raw-attribute input classifier
+for effects, direct listeners, dispatch, morph preservation, pending timers,
+and update piggyback. A live type becoming invalid or changing value/event
+semantics cancels stale drafts and timing state; a later valid type rebuilds
+exactly one effect/listener set. The committed browser bundle is paired with
+rendered HTML through the stable unversioned runtime route, whose response is
+`Cache-Control: no-store`.
+Tests cover invalid-type cancellation and recovery, text-to-checkbox event and
+value-shape replacement, malformed compiled-spec suppression, and hidden
+one-way application while preserving the separate accepted-work rule for
+attribute removal.
 
 **WP26 disposition:** known controls now mark an unsent draft on their
 natural `input`/`change` event even when `.on:` or `.lazy` selects a later
@@ -2275,7 +2322,7 @@ keeps the draft, whose debounce flush then delivers it with the fresh
 token; the two preservation poles as live typing (fast typing over a
 patch loses nothing, whether the draft sits in `$state` or is still
 mid-debounce; submit-then-clear clears a still-focused flushed
-field); form 422 -> `$error.fieldErrors`
+field); form 422 -> `$error('submit')?.fieldErrors`
 inline display; one-way re-application
 after a self-render (reactivity alone) and after a parent render (the
 rebind walk, exactly one live effect and one timer per control);
@@ -2492,13 +2539,23 @@ evaluation, and rendered HTML carries the class-id-scoped composite
 key attribute and the morph-ignore marker per the keyed-morph spike
 verdict. The Mechanism 4 enumeration is in the workflow record: no
 LangImpl method, PyO3 surface, or `.pyi` change was needed beyond the
-enumerated updates; placement errors carry the offset-adjusted
-template location, and the transparent-component `#c-key` error names
-the tag the way registration derives it. WP26 corrected
+enumerated updates; placement errors carry the offset-adjusted template
+location. Transparent component invocations accept `#c-key` as
+range-owned metadata without projecting it onto a rendered root. WP26 corrected
 `_apply_valued_markers` to describe the shared innermost-last convention
 without claiming client root resolution uses `data-citry-key`, and extended
 the mirrored `HtmlAttr` stub docstring to include `#c-*` metadata. Original
 section follows.
+
+**Amended 2026-08-03 and superseded in part 2026-08-04:** a non-empty
+`#c-key` expression may evaluate to `None`. On a plain element that emits no
+`data-citry-key`; on a component invocation it records a null `morphKey` in the
+client ownership graph. `False`, `0`, and the empty string remain key values.
+Plain-element compiler output uses `ElementKeyNode(ExprHtmlAttr(...))`; a
+component key remains the component-node trailing expression but is never
+stamped on child roots. The component-node shape, grammar, AST, PyO3 surface,
+and `LangImpl` trait are unchanged.
+
 Added 2026-07-16 by the client-model round
 (events.md 14.3.1). This is the one package in this plan that touches
 the Rust contract, so CLAUDE.md Mechanisms 1, 2, and 4 apply in full
@@ -2508,21 +2565,21 @@ name. Sequenced before the client wave: WP16.1 consumes its emitted
 attributes.
 
 **Goal:** `#c-key` and `#c-ignore` parse, validate, compile, and
-render. A template authoring `#c-key="item.id"` on a plain element or
-a `<c-*>` tag produces the composite `data-citry-key` attribute on the
-rendered element (on every root marker element for a component child),
-`#c-ignore` produces the runtime ignore marker, and the load-error
-rules of design 5.1 are enforced with template locations.
+render. A template authoring `#c-key="item.id"` on a plain element produces
+`data-citry-key`; on a `<c-*>` tag it produces ownership-graph invocation
+`morphKey` without changing the child's root attributes. `#c-ignore` produces
+the runtime ignore marker, and the load-error
+rules of design 5.1 are enforced with template locations. The amendment above
+defines the optional-key case when the expression produces `None`.
 
 **Read first:** /CLAUDE.md in full (the high-risk list names every
 file this WP touches), `crates/citry_template_parser/AGENTS.md` and
 that crate's deep agent INDEX (the Pest atomicity gotcha before any
 grammar edit); `events.md` 5.1 (the `#c-*` block: the two members, the
-validation rules, the template-authored-only v1 rule for spreads), 5.3
-(the composite attribute: its name, the class-id-scoped value form and
-the empty scope segment for plain elements, all-roots stamping for
-multi-root children, and the rule that the plain `key` attribute is
-never touched), 14.3.1 (the decision record), and the keyed-morph
+validation rules, the template-authored rule for spreads), 5.3
+(the element attribute and component-range representations, the empty scope
+segment for plain elements, and the rule that the plain `key` attribute is
+never touched), 14.3.1 (the decision record), and the keyed-component-range
 spike's verdict (`spike-keyed-morph.md`: the class-id-scoped pin, and
 F-KM-7, never a per-render id inside a key); code:
 `crates/citry_template_parser/src/grammar.pest`, `src/ast.rs`,
@@ -2537,8 +2594,11 @@ consumers the emission lands in (the nodes layer under
 - Grammar: `#c-*` attribute names parse as their own channel (a new
   rule; check the atomicity cascade against every rule the change
   touches before editing). Unknown `#c-*` names, a valued `#c-ignore`,
-  a valueless `#c-key`, and `#c-ignore` on a component tag are
+  a valueless `#c-key`, and either flag on a structural built-in tag are
   parse-time errors carrying the template location, per design 5.1.
+  Bare `#c-ignore` is valid on ordinary elements, user components,
+  `<c-component>`, and `<c-element>`; those loci have different runtime
+  representations as specified by `component_ranges.md`.
 - AST and compiler: `#c-key`'s value rides the same server-evaluated
   expression machinery as `c-*`. On a plain element the compiler emits
   the composite `data-citry-key` attribute inline (empty scope segment
@@ -2550,13 +2610,13 @@ consumers the emission lands in (the nodes layer under
   five `LangImpl` surfaces, noting which need real work versus a stub
   update; the PyO3 registration; the `.pyi` stub; the Python wrapper;
   the Rust and Python tests).
-- Python side: the nodes layer hands the evaluated component-tag key
-  to the serializer; serialize stamps the class-id-scoped composite
-  value onto every root marker element of the child (multi-root
-  children key all roots); `#c-ignore` emits
+- Python side: the nodes layer records evaluated component-tag morph metadata
+  on the ownership invocation; the client graph emits nullable `morphKey` and
+  required nullable `morphMode`, and serialization never stamps either onto
+  child roots. Ordinary-element `#c-ignore` emits
   `data-citry-morph="ignore"`. A `#c-*` key arriving through an
   attribute spread or dynamic attributes is a render-time error naming
-  the fix (the template-authored-only v1 rule, design 5.1).
+  the fix (the template-authored rule, design 5.1).
 - Determinism: emitted attributes are byte-deterministic given fixed
   inputs (never iterate a set into output; the standing rule).
 
@@ -2565,9 +2625,9 @@ consumers the emission lands in (the nodes layer under
 the output, lock it; the established throwaway-harness discipline; run
 the suite twice to catch non-determinism, per the crate's AGENTS.md).
 The load-error cases assert message content, not just the error type.
-Python render tests lock the emitted HTML for: `#c-key` on a plain
-element, on a single-root child, on a multi-root child (all roots
-stamped), and inside `<c-for>` (per-item evaluation); `#c-ignore` on
+Python render tests lock the emitted HTML and graph for: `#c-key` on a plain
+element, on single-root, multi-root, transparent, rootless, and empty children,
+and inside `<c-for>` (per-item evaluation); `#c-ignore` on
 an element; the spread and dynamic-attrs render errors; and a guard
 test that plain `key` and `c-key` behave exactly as before (the
 ordinary-attribute contract, including `key=""` normalizing to the
@@ -3013,7 +3073,7 @@ Forward.
 
 Deferred by the design to v1.x: multipart codec and the client file
 auto-switch, the postMessage transport and bridge, served `openapi.json`, Django
-`form_class` sugar, token encryption, node-level binding rewrite.
+`form_class` sugar, and token encryption.
 Deferred to v2:
 WebSocket transport (`WSRoute`, `asgi_ws_app`), server push (the
 consumers of the stored-but-inert `_topics`), client-side same-tick

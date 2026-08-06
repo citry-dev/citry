@@ -73,6 +73,46 @@ def test_loads_areas_with_direct_items_groups_and_sources(
     assert tree.areas[2].entry_path == "/reference/"
 
 
+def test_review_state_and_area_badge_are_structured_metadata(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        "areas:\n"
+        "  - label: Citry UI\n"
+        "    badge: alpha\n"
+        "    items:\n"
+        "      - { title: Overview, path: /ui-library/, needs_review: true }\n",
+        encoding="utf-8",
+    )
+
+    area = load_nav(nav).areas[0]
+
+    assert area.badge == "alpha"
+    assert area.items[0].title == "Overview"
+    assert area.items[0].needs_review
+    assert area.entry_path == "/ui-library/"
+
+
+@pytest.mark.parametrize(
+    ("line", "message"),
+    [
+        ("badge: ''", "badge must be a non-empty string"),
+        ("items: [{ title: Overview, path: /x/, needs_review: later }]", "needs_review must be true or false"),
+        ("items: [{ title: 🚧 Overview, path: /x/ }]", "use needs_review: true"),
+    ],
+)
+def test_invalid_navigation_status_is_rejected(tmp_path: Path, line: str, message: str) -> None:
+    nav = tmp_path / "_nav.yml"
+    body = "areas:\n  - label: Docs\n"
+    if line.startswith("badge"):
+        body += f"    {line}\n    items: [{{ title: Overview, path: /x/ }}]\n"
+    else:
+        body += f"    {line}\n"
+    nav.write_text(body, encoding="utf-8")
+
+    with pytest.raises((TypeError, ValueError), match=message):
+        load_nav(nav)
+
+
 def test_flat_pages_follow_area_and_sidebar_order(tmp_path: Path) -> None:
     paths = [page.path for page in _tree(tmp_path).flat_pages()]
     assert paths == [
@@ -85,6 +125,48 @@ def test_flat_pages_follow_area_and_sidebar_order(tmp_path: Path) -> None:
         "/examples/card/",
         "/reference/",
     ]
+
+
+def test_site_home_owns_root_without_becoming_a_primary_area(tmp_path: Path) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        "home:\n"
+        "  title: Citry\n"
+        "  path: /\n"
+        "  scope: site\n"
+        "areas:\n"
+        "  - label: Docs\n"
+        "    items: [{ title: Overview, path: /docs/ }]\n",
+        encoding="utf-8",
+    )
+
+    tree = load_nav(nav)
+
+    assert tree.home == NavItem(title="Citry", path="/", scope=SCOPE_SITE)
+    assert [item.path for item in tree.flat_pages()] == ["/docs/"]
+    assert tree.scope_for_url("/") == SCOPE_SITE
+    assert tree.find_title("/") == "Citry"
+    assert tree.find_area("/") is None
+    assert tree.areas[0].entry_path == "/docs/"
+
+
+@pytest.mark.parametrize(
+    ("home", "message"),
+    [
+        ("{ title: Citry, path: / }", "missing required key"),
+        ("{ title: Citry, path: /home/, scope: site }", "path must be '/'"),
+        ("{ title: Citry, path: /, scope: versioned }", "must use scope 'site'"),
+    ],
+)
+def test_invalid_site_home_is_rejected(tmp_path: Path, home: str, message: str) -> None:
+    nav = tmp_path / "_nav.yml"
+    nav.write_text(
+        f"home: {home}\nareas:\n  - label: Docs\n    items: [{{ title: Overview, path: /docs/ }}]\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=message):
+        load_nav(nav)
 
 
 def test_prev_next_is_scoped_to_the_current_area(tmp_path: Path) -> None:
@@ -221,6 +303,30 @@ areas:
     items: [{ title: '', path: /x/ }]
 """,
             "titles may not be empty",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: Encoded, path: /old/%2e%2e/new/ }]
+""",
+            "safe clean URL",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: Spaced, path: '/bad path/' }]
+""",
+            "safe clean URL",
+        ),
+        (
+            """\
+areas:
+  - label: Docs
+    items: [{ title: Spaced, path: '/bad\N{NO-BREAK SPACE}path/' }]
+""",
+            "safe clean URL",
         ),
     ],
 )

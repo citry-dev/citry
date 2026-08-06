@@ -1,9 +1,11 @@
 # Python scenario catalog for Citry UI
 
-**Status (2026-07-24): accepted contract for the Phase 7 entry program.** This
-document defines the authored source for isolated component states, composed
-workflows, Storybook stories, standalone quality pages, and browser tests. It
-does not implement the runner or select the Storybook adapter.
+**Status (2026-07-29): accepted quality-scenario contract for Phase 7.** This
+document defines reusable isolated component states, composed workflows,
+standalone quality pages, direct browser tests, and documentation examples.
+Storybook is an optional projection described in
+[`../extensions_storybook.md`](../extensions_storybook.md), not a prerequisite
+for this catalog or for Citry UI.
 
 The controlling roadmap is
 [`../ui_library_plan.md`](../ui_library_plan.md). Quality consumers and release
@@ -12,34 +14,24 @@ evidence are defined in
 
 ## 1. Decision
 
-Citry UI will own one adapter-neutral Python scenario catalog. Storybook is the
-planned maintainer state browser after its feasibility gate passes. Standalone
-scenario URLs exist for tests, assistive-technology review, performance work,
-and debugging. They are not a second browsable gallery.
+Citry UI will own one Python scenario catalog for repeatable quality work.
+Standalone scenario URLs exist for tests, assistive-technology review,
+performance work, and debugging. Public browsing and editable examples belong
+to the docs site's UI catalog and live-component host.
 
 ```text
 Python scenario catalog
-  |-- Storybook adapter and generated stories
   |-- standalone complete-page routes
   |-- Playwright interactions and screenshots
   |-- axe and Lighthouse inputs
   |-- manual keyboard and assistive-technology tasks
-  `-- documentation examples
+  |-- documentation examples and live components
+  `-- optional preview-tool projections
 ```
 
 Python remains the source of component composition, fixture data, lifecycle,
-requirements, and expected behavior. Generated Storybook files are disposable
-projections. A scenario must not be re-authored in JavaScript to make it work
-in Storybook.
-
-Storybook consumes only the preview projection: identity, rendering, Args,
-Controls, profiles, layout, and preview diagnostics. It does not consume or run
-Playwright journeys, assertions, performance measurements, or manual review
-tasks. Those remain direct quality-tool consumers of the same Python scenario.
-
-Node may be required to develop or build the Storybook integration. It is not
-a dependency of the `citry-ui` wheel, its import path, an application's Citry
-UI runtime, or the standalone Python runner.
+requirements, and expected behavior. An optional tool projection must not
+require the same scenario to be re-authored in JavaScript.
 
 The catalog and runner are opt-in contributor and test tooling. Importing or
 registering `citry-ui` never mounts scenario routes. A production host must not
@@ -73,10 +65,9 @@ Component introspection and the scenario catalog have different jobs:
 | Tool-safe allowlisted projection | Host, transport, profile, and manual-review requirements |
 
 A scenario may involve several components or an entire application page.
-Scenarios therefore do not live under a `Component.Storybook` declaration and
-are not discovered by scanning component subclasses. An eventual generic
-Storybook extension may offer convenience declarations, but it must project to
-this independent catalog model.
+Scenarios therefore do not live under a tool-specific nested declaration and
+are not discovered by scanning component subclasses. An optional projection
+may offer convenience declarations, but it must map to this independent model.
 
 ## 3. Goals and non-goals
 
@@ -86,8 +77,8 @@ The catalog must:
 - render through the exact Citry engine and host under test;
 - support server-only, client-interactive, Events-backed, fragment, morph,
   form, and teleport cases;
-- give Storybook useful Args, Controls, grouping, profiles, and diagnostics;
-- provide complete standalone documents without Storybook chrome;
+- expose selected serializable inputs to optional preview tools;
+- provide complete standalone documents without preview-tool chrome;
 - share portable actions, waits, and semantic assertions with direct browser
   tests where that sharing remains clear;
 - isolate concurrent runs and clean up after success or failure;
@@ -97,13 +88,12 @@ The catalog must:
 
 This contract does not yet define:
 
-- a public third-party Storybook extension;
 - a custom standalone gallery or catalog-navigation UI;
 - arbitrary package discovery or aggregation across installed distributions;
 - a general workflow programming language;
 - automatic Controls for every possible Python annotation;
 - a localization API;
-- hosted Storybook, Chromatic, or another visual-review service; or
+- a hosted visual-review service; or
 - static deployment of live Events scenarios.
 
 ## 4. Terminology
@@ -120,8 +110,8 @@ This contract does not yet define:
   task.
 - **Standalone page:** a complete Citry document for one scenario and run. It
   has no catalog navigation or control UI.
-- **Storybook projection:** deterministic generated metadata and adapter code
-  that exposes Python scenarios in Storybook.
+- **Tool projection:** deterministic generated metadata and adapter code that
+  exposes selected Python scenarios in an optional preview tool.
 
 Do not call the standalone runner headless. Citry UI already uses *headless*
 for components that own behavior without owning HTML.
@@ -149,7 +139,7 @@ class CComboboxRemoteResults(Scenario):
     title = "Remote results"
     group = "Combobox"
     subjects = (CCombobox,)
-    tags = ("a11y", "deep-host", "storybook", "visual")
+    tags = ("a11y", "deep-host", "preview", "visual")
 
     class Args:
         query: str = ""
@@ -218,7 +208,7 @@ The records are immutable and ordered:
 - `ScenarioRequirements` declares capabilities such as JavaScript, Events,
   morph, fragment insertion, teleport, database access, CSRF, and supported
   hosts. An ordinary Events scenario does not require one transport. The
-  adapter environment chooses safe HTTP or an allowed fallback. A scenario
+  host environment chooses safe HTTP or an allowed fallback. A scenario
   names a transport only when that transport is the subject under test.
 - `ScenarioProfile` carries explicit viewport, theme, direction, motion,
   forced-color, locale, timezone, clock, and seed selections. Browser locale
@@ -229,8 +219,8 @@ The records are immutable and ordered:
 - `ManualTask` carries instructions and expected results for keyboard, touch,
   and assistive-technology review.
 
-Every scenario ID is unique within the catalog, stable across generated
-Storybook files and standalone URLs, and safe to serialize in a path. Moving a
+Every scenario ID is unique within the catalog, stable across generated tool
+projections and standalone URLs, and safe to serialize in a path. Moving a
 scenario between display groups must not silently change its ID. Renaming or
 removing a released documentation URL follows the docs redirect policy.
 
@@ -243,11 +233,11 @@ run's Citry instance.
 
 The authored scenario owns its kwargs, slots, initial component state, and
 fixture data. It may expose a useful subset through `Scenario.Args`. Incoming
-values from Storybook or a standalone URL are validated before setup or
+values from a preview tool or a standalone URL are validated before setup or
 rendering.
 
 Args defaults must be JSON-portable and safe to expose. Non-serializable or
-sensitive data belongs in run-local setup data, not the generated Storybook
+sensitive data belongs in run-local setup data, not a generated preview
 manifest, URL, or browser controls. The generator may consult allowlisted
 component introspection for names, types, descriptions, Events, and asset
 provenance, but it must not publish every component field automatically.
@@ -262,7 +252,7 @@ options, colors, booleans, or text. It does not contain Python render logic.
 Changing Controls creates a fresh run and tears down the previous run. It does
 not mutate a workflow that the maintainer has already exercised.
 
-Tags select scenarios for Storybook, docs, visual review, accessibility,
+Tags select scenarios for docs, optional previews, visual review, accessibility,
 performance, host smoke, deep host coverage, or other named jobs. Profiles
 select reviewed environment combinations. A release matrix may add further
 browser permutations without multiplying authored scenarios.
@@ -285,7 +275,7 @@ the runner owns an explicit run:
 4. The scenario renders with the exact Citry dependency and Events manifests.
 5. Later Event, fragment, form, and transport requests resolve to the same run
    without changing the Events envelope.
-6. Story navigation, a Control update, or a direct test reset requests a fresh
+6. Preview replacement, a Control update, or a direct test reset requests a fresh
    generation. Only the newest requested generation may activate. A stale
    setup or render result is discarded and torn down exactly once. The current
    run remains coherent until its replacement is ready; replacement activation
@@ -308,7 +298,7 @@ not to the Events protocol envelope.
 
 The page exposes a stable machine-readable marker containing the scenario ID,
 run ID, and `loading`, `ready`, or `error` status. It becomes `ready` only after
-Citry assets and scenario initialization finish. Storybook and Playwright wait
+Citry assets and scenario initialization finish. Preview tools and Playwright wait
 for that marker or an explicit scenario wait, never generic `networkidle`.
 
 ## 8. Playwright journeys and manual tasks
@@ -344,8 +334,8 @@ A stable `data-citry-ui-part` locator is appropriate only when that public part
 is itself under test. Arbitrary sleeps are forbidden. Timeouts are outer
 failure limits, not synchronization.
 
-Storybook does not receive these journeys and no generated story contains a
-`play` function. Direct Playwright is their only automated browser runner. A
+Preview tools do not receive these journeys. Direct Playwright is their only
+automated browser runner. A
 complex host-specific assertion may remain in a Python test beside the catalog
 instead of introducing arbitrary callbacks into the journey vocabulary.
 
@@ -355,16 +345,15 @@ scenario evidence even though they are not automatically executable.
 
 ## 9. Rendering surfaces and assets
 
-Every scenario declares support for standalone rendering, Storybook embedding,
-or both. Component states intended for Storybook normally support both.
-Complete pages may be standalone-only when Storybook chrome or canvas sizing
-would invalidate the test.
+Every scenario declares whether it supports standalone rendering and any
+optional preview-tool projection. Complete pages may be standalone-only when
+preview chrome or canvas sizing would invalidate the test.
 
 The standalone route renders a complete document with the same components,
 dependency discovery, CSS, JavaScript, Events manifest, and setup data used by
-the Storybook preview. It includes no scenario list, controls, or custom
-state-browser UI. It provides an "Open standalone" target from Storybook and a
-stable input for Playwright, axe, Lighthouse, browser traces, and manual review.
+any preview projection. It includes no scenario list, controls, or custom
+state-browser UI. It provides a stable input for Playwright, axe, Lighthouse,
+browser traces, manual review, and links from optional preview tools.
 
 The renderer uses Citry's dependency and asset contracts. Scenarios declare
 capability requirements, not duplicate script and stylesheet URLs. Assertions
@@ -373,31 +362,31 @@ loads, repeated initialization, and absence of client assets for server-only
 scenarios.
 
 Static-safe scenarios may be pre-rendered with their required assets. An
-interactive static Storybook deployment either has a reachable Citry scenario
+interactive static preview deployment either has a reachable Citry scenario
 service or explicitly contains frozen, non-interactive output. A build must not
 quietly present dead Events controls as a live scenario.
 
-## 10. Events, CSRF, morphing, and preview origin
+## 10. Events, CSRF, morphing, and preview origins
 
 Same-origin standalone pages use the ordinary HTTP Events transport and the
-host's real cookie and CSRF behavior. The Storybook feasibility spike first
-tests same-origin mounting and reverse proxying. Sandboxed or cross-origin
-previews that cannot use authenticated HTTP may use the planned `postMessage`
-transport and a parent-side HTTP bridge.
+host's real cookie and CSRF behavior. An optional embedded preview should
+prefer same-origin mounting or reverse proxying. Sandboxed or cross-origin
+previews that cannot use authenticated HTTP may use a separately designed
+`postMessage` transport and parent-side HTTP bridge.
 
 The bridge forwards the unchanged Events envelope. It validates parent and
 child origin, `window.source`, an opaque channel/run nonce, scenario identity,
 and allowed Event routes. It does not use wildcard origins with credentials,
 place CSRF tokens in generated stories, or weaken application CORS policy.
 
-Story replacement and Control updates dispose old component roots, listeners,
+Preview replacement and Control updates dispose old component roots, listeners,
 observers, transport subscriptions, portal output, and run-local data before
 the replacement becomes active. Morph journeys wait for Citry lifecycle
 signals, then verify focus, selection, edits, component identity, state, and
 cleanup.
 
-Static and server-only Storybook scenarios do not depend on `postMessage`.
-Failure of that optional transport is not failure of Storybook unless an
+Static and server-only preview scenarios do not depend on `postMessage`.
+Failure of that optional transport is not failure of the catalog unless an
 Events-backed requirement has no safe same-origin or proxied alternative.
 
 ## 11. Host contract
@@ -417,77 +406,25 @@ real request lifecycle and run environment.
   Host-specific tests may add assertions but do not replace the common
   contract.
 
-## 12. Storybook projection and adapter gate
+## 12. Optional preview-tool projections
 
-The next roadmap step compares two candidates against the same catalog:
+A preview tool may consume an allowlisted subset of the catalog: stable
+identity, rendering inputs, serializable controls, selected profiles, layout,
+source examples, and preview diagnostics. It does not consume or run
+Playwright journeys, performance measurements, screenshots, or manual-review
+tasks.
 
-1. [`@storybook/server-webpack5`](https://www.npmjs.com/package/@storybook/server-webpack5)
-   with server-rendered HTML and story metadata;
-2. [`@storybook/html-vite`](https://www.npmjs.com/package/@storybook/html-vite)
-   with an async Citry loader and synchronous HTML render for static cases,
-   followed by a lifecycle-aware `renderToCanvas` adapter for interactive
-   cases.
+Generated projections contain no fixture implementation, authored HTML
+snapshot, credential, State content, absolute source path, or hand-written
+browser behavior. Output is deterministic, overwriteable, and rejected when
+its schema version or source digest is stale. A projection that cannot
+represent a Python value omits that control with a diagnostic rather than
+stringifying the value.
 
-The server-static tranche and first private reactive slice are complete and
-recorded in
-[`storybook-adapter-exploration.md`](storybook-adapter-exploration.md). Both
-candidates advance to the remaining interactive readiness set; no adapter has
-been selected.
-
-The spike must record the exact Storybook and package versions. Continued
-support of the server framework is itself a gate because the current Storybook
-documentation emphasizes its supported client frameworks. The comparison
-therefore verifies the exact installed package versions rather than assuming
-either adapter remains supported.
-
-Generated Storybook files contain only:
-
-- title, story name, group, and stable scenario ID;
-- args and `argTypes`;
-- tags, layout, globals, and profile mappings;
-- the adapter-specific renderer or fetch call;
-- catalog schema version, generator version, and source digest.
-
-They contain no Python fixture implementation, authored HTML snapshots,
-credentials, secrets, absolute source paths, or hand-written behavior. Output
-is deterministic, sorted, overwriteable, and rejected by a build check when
-stale. Small hand-authored `.storybook` adapter configuration is allowed, but
-it is not duplicated per scenario.
-
-The gate has two stages. Current server-static pressure scenarios first prove
-catalog projection, rendering, controls, and basic preview operation without
-selecting a winner. Both candidates then preview every interactive
-browser-readiness scenario. Direct Playwright runs the behavioral journeys
-against standalone routes; Storybook is not the automation runner. Selection
-happens only from the combined preview and direct-test evidence.
-
-Both candidates must prove or classify:
-
-- useful Args and Controls with validated errors;
-- docs and source/example display;
-- accessibility inspection and whether addons inspect the actual preview;
-- manual interaction with rendered previews and useful state inspection;
-- Citry CSS, JavaScript, Events, fragment, and morph activation;
-- cleanup and run disposal on navigation and Control updates;
-- nested components and composed workflows;
-- server errors plus authorized and redacted diagnostics;
-- same-origin, reverse-proxy, and fallback transport behavior;
-- direct standalone URLs;
-- regeneration and live reload after adding, editing, or removing a Python
-  scenario; and
-- development, static-build, generated-file, and contributor maintenance
-  cost.
-
-Direct Playwright remains canonical for cross-browser behavior, Events,
-morphing, hosts, and lifecycle. Lighthouse runs complete standalone pages.
-Pinned local Playwright screenshots remain the default visual-regression
-record unless a later decision deliberately adopts a hosted service. A
-Storybook addon supplements those gates but does not silently replace them.
-
-Failure of one addon does not automatically fail an adapter if the same
-scenario still works in direct quality tooling. Failure to browse, control,
-activate, isolate, or reliably clean up realistic Citry scenarios is an
-adapter failure.
+The optional Storybook design, adapter comparison, deployment constraints,
+and maintainer workflow now live in
+[`../extensions_storybook.md`](../extensions_storybook.md). Neither that
+extension nor another preview tool can replace the direct quality suite.
 
 ## 13. Validation and security
 
@@ -497,7 +434,7 @@ Catalog validation fails before a host starts when it finds:
 - Args defaults that do not match their schema or cannot be serialized;
 - control metadata that refers to an unknown Arg;
 - a required profile, capability, transport, or host with no harness;
-- a Storybook-tagged scenario that cannot render in a preview;
+- a scenario selected for a tool projection that cannot render there;
 - a journey with an unknown action, wait, assertion, or ambiguous locator;
 - mutable catalog records or nondeterministic ordering; or
 - generated output whose schema version or source digest is stale.
@@ -548,14 +485,18 @@ bridge allowlist.
 
 ## 14. Initial catalog and readiness coverage
 
-The existing Button, Field/Input, semantic Table, and server-static Tabs
-pressure cases seed the Storybook adapter comparison. They are not production
-specifications.
+Button, Field/Input, Form, Tabs, Dialog, Combobox, and semantic Table now have
+Phase 7 production specifications, direct styled implementations, and focused
+browser evidence. Tabs also has a docs live example. The repeatable contact
+workflow and the public-site form plus dashboard compositions close the
+required cross-family implementation probes. Their remaining per-state
+accessibility, visual-profile, manual assistive-technology, complete-page,
+coexistence, and released-host scenarios still belong in the shared catalog.
 
-Disposable browser-readiness scenarios then cover:
+The implemented browser-readiness scenarios cover:
 
 1. reactive `LibraryComponent` client-state and asset activation;
-2. client ambient context over logical ancestry before dependent cases;
+2. client ambient context over logical ancestry across dependent cases;
 3. stateful Tabs keyboard, focus, selection, morph, and dynamic removal;
 4. Overlay/Dialog teleport, focus, document listeners, stacking, and cleanup;
 5. remote Combobox or MultiSelect cancellation, stale-result, loading, and
@@ -563,73 +504,64 @@ Disposable browser-readiness scenarios then cover:
 6. Form child registration, unregistration, validation, and submission; and
 7. one composed repeatable-form workflow.
 
-The first item now has a private counter probe in the Storybook spike. It
-proves real fragment CSS and JavaScript activation, browser-local reactive
-state, successful, delayed, failed, and stale Controls replacements, basic
+The first item now has a private counter probe in the optional Storybook
+spike. It proves real fragment CSS and JavaScript activation, browser-local
+reactive state, successful, delayed, failed, and stale Controls replacements, basic
 story-navigation cleanup, exact component cleanup, Alpine tree disposal, and
 one remaining window listener through both adapters. A hidden connected
 candidate preserves the current visible generation until readiness, and a
-failed candidate retains that DOM while Storybook displays an error. The hidden
-root does not isolate global client effects: Citry and Alpine initialization
+failed candidate retains that DOM while the preview displays an error. The
+hidden root does not isolate global client effects: Citry and Alpine initialization
 already runs there. A two-phase activation protocol or narrower readiness
 contract remains required before complex cases can claim an atomic transition.
 This is the first slice of the list, not evidence for the compound, morph,
 teleport, remote, form, or composed-workflow requirements.
 
-These scenarios and supporting components stay outside the public `citry_ui`
-manifest. Formal Phase 7 begins only after the entry results freeze production
-component specifications, the final scenario set and fixture profiles,
-reconfirm or revise the drafted budgets, and confirm the advancing
-architectures.
+Disposable supporting components stay outside the public `citry_ui` manifest.
+The required production families themselves use the public manifest. New
+families still freeze their state matrix, fixtures, budgets, and acceptance
+evidence before implementation.
 
 ## 15. Falsifiers
 
-The contract or adapter choice must change if:
+The catalog contract must change if:
 
-1. The same Python scenario needs adapter-specific render markup or fixture
-   implementation.
-2. Storybook cannot replace a scenario or change Controls without leaking
-   Citry roots, listeners, assets, portals, transport state, or setup data.
-3. Citry scripts, CSS, or Events cannot activate reliably after
+1. A consumer requires behavior or fixture implementation to be copied out of
+   the Python scenario.
+2. Citry scripts, CSS, or Events cannot activate reliably after
    server-rendered HTML insertion.
-4. Neither candidate exposes useful Controls and interaction for realistic
-   server-rendered output.
-5. A required addon silently skips the actual Citry preview.
-6. Run identity cannot survive render, Event, form, fragment, and morph
+3. Run identity cannot survive render, Event, form, fragment, and morph
    requests without changing the Events envelope.
-7. Cross-origin operation requires weakened CORS or CSRF rules, wildcard
-   messaging, or credentials in the preview.
-8. Setup data leaks or crosses runs during concurrency, cancellation, or
+4. Setup data leaks or crosses runs during concurrency, cancellation, or
    failure.
-9. The Playwright journey vocabulary cannot express Tabs, Dialog, Combobox,
-   and form workflows without adapter-specific test implementations or
+5. The Playwright journey vocabulary cannot express Tabs, Dialog, Combobox,
+   and form workflows without preview-specific test implementations or
    component behavior copied into test code.
-10. Standalone and Storybook rendering produce different assets, semantics,
-    state, or interaction results.
-11. Importing the catalog requires a host framework, Node, network access, or a
-    running server.
-12. Storybook becomes a runtime dependency of `citry-ui`.
+6. Standalone and projected rendering produce different assets, semantics,
+   state, or interaction results.
+7. Importing the catalog requires a host framework, Node, network access, or a
+   running server.
+8. A preview tool becomes a runtime dependency of `citry-ui`.
 
-A server-framework failure advances the HTML/Vite candidate. Failure of both
-candidates against the frozen requirements is the point at which a custom
-Storybook adapter or separate maintainer state browser becomes justified.
+Preview-tool-specific falsifiers and adapter decisions belong to that tool's
+design. Storybook's are tracked in
+[`../extensions_storybook.md`](../extensions_storybook.md).
 
 ## 16. Implementation work packages
 
-The catalog, standalone document and fragment routes, the provisional static
-two-adapter comparison, and the first reactive readiness probe now exist. They
-do not select an adapter or preempt the remaining interactive readiness and
-production-component work.
+The catalog contract, docs live-component host, standalone rendering
+mechanisms, and first reactive readiness probe now exist. The optional
+Storybook spike does not preempt the remaining production-component work.
 
 The remaining work packages are:
 
 1. run storage, setup/teardown, concurrency, failure, and TTL cleanup;
 2. host adapters, beginning with Django and FastAPI;
 3. Playwright actions, waits, assertions, and direct executor;
-4. both adapters previewing the complete interactive readiness set, direct
-   Playwright journeys against standalone routes, a recorded comparison, and
-   adapter selection;
-5. selected Storybook adapter, generator, diagnostics, and standalone links;
-6. Events origin strategy and any required `postMessage` bridge;
-7. docs embedding, static-safe export, and quality-tool consumers; and
-8. final host, security, lifecycle, and generated-file conformance.
+4. direct Playwright journeys against standalone routes;
+5. Events origin strategy for standalone and embedded consumers;
+6. docs embedding, static-safe export, and quality-tool consumers; and
+7. final host, security, lifecycle, and generated-file conformance.
+
+Storybook adapter selection, generation, and deployment are separate optional
+work in [`../extensions_storybook.md`](../extensions_storybook.md).

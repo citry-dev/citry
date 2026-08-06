@@ -1,0 +1,794 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://citry.dev/schemas/ui-component-api-v1.json",
+  "title": "Citry UI component API reference",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "family",
+    "components",
+    "inputs",
+    "slots",
+    "events",
+    "methods",
+    "css",
+    "attributes",
+    "selectors",
+    "interfaces"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "family": {
+      "$ref": "#/$defs/id"
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/componentName"
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/serverInputTable"
+          },
+          {
+            "$ref": "#/$defs/clientInputTable"
+          }
+        ]
+      }
+    },
+    "slots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/slotTable"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/eventTable"
+      }
+    },
+    "methods": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/methodTable"
+      }
+    },
+    "css": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/cssTable"
+      }
+    },
+    "attributes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/attributeTable"
+      }
+    },
+    "selectors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/selectorTable"
+      }
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/aliasTable"
+          },
+          {
+            "$ref": "#/$defs/recordTable"
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "componentName": {
+      "type": "string",
+      "pattern": "^C[A-Za-z0-9]+$"
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\r\\n]+$"
+    },
+    "columnWidth": {
+      "oneOf": [
+        {
+          "enum": [
+            "auto",
+            "fit"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:ch|rem|%)$"
+        }
+      ]
+    },
+    "twoColumnWidths": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "$ref": "#/$defs/columnWidth"
+      }
+    },
+    "threeColumnWidths": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "$ref": "#/$defs/columnWidth"
+      }
+    },
+    "fourColumnWidths": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/columnWidth"
+      }
+    },
+    "fiveColumnWidths": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/columnWidth"
+      }
+    },
+    "displayValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "display",
+            "interfaces"
+          ],
+          "properties": {
+            "display": {
+              "$ref": "#/$defs/nonEmptyString"
+            },
+            "interfaces": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/componentName"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "defaultValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "required",
+                "generated"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "literal"
+            },
+            "value": {
+              "type": [
+                "string",
+                "number",
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "display"
+          ],
+          "properties": {
+            "kind": {
+              "const": "derived"
+            },
+            "display": {
+              "$ref": "#/$defs/nonEmptyString"
+            }
+          }
+        }
+      ]
+    },
+    "serverInputTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "channel",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "channel": {
+          "const": "server"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/fourColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/serverInputEntry"
+          }
+        }
+      }
+    },
+    "serverInputEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "default",
+        "effect"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "type": {
+          "$ref": "#/$defs/displayValue"
+        },
+        "default": {
+          "$ref": "#/$defs/defaultValue"
+        },
+        "effect": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "clientInputTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "channel",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "channel": {
+          "const": "client"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/fourColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/clientInputEntry"
+          }
+        }
+      }
+    },
+    "clientInputEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "omitted",
+        "effect"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "type": {
+          "$ref": "#/$defs/displayValue"
+        },
+        "omitted": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "effect": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "slotTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/fourColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/slotEntry"
+          }
+        }
+      }
+    },
+    "slotEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "required",
+        "data",
+        "fallback"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "data": {
+          "$ref": "#/$defs/displayValue"
+        },
+        "fallback": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "eventTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/fiveColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/eventEntry"
+          }
+        }
+      }
+    },
+    "eventEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "signature",
+        "trigger",
+        "detail",
+        "behavior"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "signature": {
+          "$ref": "#/$defs/displayValue"
+        },
+        "trigger": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "detail": {
+          "$ref": "#/$defs/displayValue"
+        },
+        "behavior": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "methodTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/threeColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/methodEntry"
+          }
+        }
+      }
+    },
+    "methodEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "signature",
+        "effect"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "signature": {
+          "$ref": "#/$defs/displayValue"
+        },
+        "effect": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "attributeTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/fourColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/attributeEntry"
+          }
+        }
+      }
+    },
+    "attributeEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "element",
+        "type",
+        "meaning"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "element": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "type": {
+          "$ref": "#/$defs/displayValue"
+        },
+        "meaning": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "selectorTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/threeColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/selectorEntry"
+          }
+        }
+      }
+    },
+    "selectorEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "selector",
+        "element",
+        "purpose"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "anchor": {
+          "$ref": "#/$defs/id"
+        },
+        "selector": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "element": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "purpose": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "cssTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/fourColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/cssEntry"
+          }
+        }
+      }
+    },
+    "cssEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "purpose",
+        "default"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "type": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "purpose": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "default": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "aliasTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "aliases"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/twoColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/aliasEntry"
+          }
+        }
+      }
+    },
+    "aliasEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "definition"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/componentName"
+        },
+        "definition": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "recordTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "kind",
+        "name",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "const": "record"
+        },
+        "name": {
+          "$ref": "#/$defs/componentName"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/fourColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/recordField"
+          }
+        }
+      }
+    },
+    "recordField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "meaning"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "name": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "type": {
+          "$ref": "#/$defs/displayValue"
+        },
+        "default": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "meaning": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    }
+  }
+}

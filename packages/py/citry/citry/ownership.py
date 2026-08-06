@@ -35,6 +35,7 @@ SourceLocationId = NewType("SourceLocationId", int)
 ComponentInvocationId = NewType("ComponentInvocationId", int)
 LogicalFillId = NewType("LogicalFillId", int)
 PhysicalRegionId = NewType("PhysicalRegionId", int)
+MorphMode: TypeAlias = Literal["ignore"]
 
 
 class SourceLocationKind(str, Enum):
@@ -204,6 +205,8 @@ class ComponentInvocationRecord:
     source_location_id: SourceLocationId
     authored_tag: str
     target_class_id: str
+    morph_key: str | None
+    morph_mode: MorphMode | None
     target_render_id: str | None
     physical_parent_region_id: PhysicalRegionId | None
     client_bindings: tuple[ComponentTagClientBindingRecord, ...]
@@ -760,6 +763,8 @@ class OwnershipGraph:
         *,
         authored_tag: str,
         target_class_id: str,
+        morph_key: str | None,
+        morph_mode: MorphMode | None,
         source: object,
         position: tuple[int, int],
         client_bindings: tuple[ComponentTagClientBindingRecord, ...],
@@ -788,6 +793,8 @@ class OwnershipGraph:
             source_location_id=source_location_id,
             authored_tag=authored_tag,
             target_class_id=target_class_id,
+            morph_key=morph_key,
+            morph_mode=morph_mode,
             target_render_id=None,
             physical_parent_region_id=parent_region,
             client_bindings=client_bindings,
@@ -1494,7 +1501,13 @@ class OwnershipGraph:
             and region.receiver_render_id is not None
         }
         preserved_render_ids = self._with_ownership_ancestors(direct_preserved_render_ids | region_receiver_ids)
-        retired_render_ids = set(descendant_render_ids or ()) - preserved_render_ids
+        # Slot-fill renders carry the lexical owner's frame through the
+        # receiver's physical output. That owner can be a logical ancestor of
+        # the component whose output is being replaced, so it is not a
+        # discardable descendant even when `_render_ids()` finds its frame in
+        # the old physical subtree.
+        ownership_ancestors = self._with_ownership_ancestors({render_id})
+        retired_render_ids = set(descendant_render_ids or ()) - preserved_render_ids - ownership_ancestors
         retired_region_ids: set[PhysicalRegionId] = set()
         retired_invocation_ids: set[ComponentInvocationId] = set()
 
@@ -1723,6 +1736,7 @@ __all__ = [
     "LogicalFillKind",
     "LogicalFillRecord",
     "LogicalInstanceRecord",
+    "MorphMode",
     "OwnershipGraph",
     "OwnershipSnapshot",
     "OwnershipState",

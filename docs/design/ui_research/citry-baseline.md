@@ -1,6 +1,6 @@
 # Citry baseline for the UI library
 
-**Snapshot: 2026-07-24.** This report separates implemented Citry capabilities
+**Snapshot: 2026-07-29.** This report separates implemented Citry capabilities
 from proposals and parked work. The component library may rely on the first
 group. It must design around the second group or make a missing capability an
 explicit prerequisite.
@@ -9,6 +9,7 @@ explicit prerequisite.
 
 | Capability | Current contract | Evidence |
 |---|---|---|
+| Released floor | `citry 0.3.1` and `citry_core 1.4.0` are published and contain the Python, browser ownership, and corrected Events asset contracts needed by Citry UI. | [`../../../packages/py/citry/pyproject.toml`](../../../packages/py/citry/pyproject.toml); [`../../../packages/py/citry_core/pyproject.toml`](../../../packages/py/citry_core/pyproject.toml) |
 | Events | The v1 server, protocol, client applier, transport, dependency queue, bindings, forms, preservation, conformance, docs, and migration guides are implemented. | [`../events_plan.md`](../events_plan.md) lines 3-25 |
 | Client ownership | Graph-first Alpine is the landed source of truth. Citry owns logical component, slot-source, physical-region, and stable browser identity while pinned Alpine supplies expressions, directives, reactivity, and morphing. | [`../alpinejs.md`](../alpinejs.md) lines 3-32 |
 | Client component context | `$component` receives live roots, inert render data, Events State, reactive props, stable scope, managed effects/reactivity, graph data, and event helpers. Cleanup runs across compatible render revisions. | [`../alpinejs.md`](../alpinejs.md) lines 124-198 |
@@ -23,6 +24,7 @@ explicit prerequisite.
 | Initialization | `Citry.initialize()` completes discovery, built-in registration, and tag-rule construction before request concurrency. Asset files remain lazy. | [`../component_initialization.md`](../component_initialization.md) lines 74-103 |
 | Component libraries | A package declares inert `LibraryComponent` classes and one explicit `ComponentLibrary`; `register_library()` atomically materializes fresh classes and a Citry-owned installation record for each receiving engine. | [`../component_publishing.md`](../component_publishing.md) |
 | Server provide/inject | Python components can provide immutable named payloads to rendered descendants through `Component.provide()`, `Component.inject()`, and `<c-provide>`, including content rendered through slots. | [`../component_provide.md`](../component_provide.md) sections 2-6 |
+| Client ambient context | `$provide`, `$inject`, and `$unprovide` plus matching `$component` hook methods share one reactive registry that follows Citry ownership, including caller-owned slots, teleports, morphs, cleanup, and diagnostics. | [`../component_provide.md`](../component_provide.md); [`../alpinejs.md`](../alpinejs.md) |
 | Introspection | The engine exposes deterministic component metadata for schemas, assets, identities, and extension-owned data. The CLI can emit a component catalog as JSON. | [`../component_introspection.md`](../component_introspection.md) sections 1-3 and implementation phases |
 | Hosts | Core routes and assets work through the shipped Django, FastAPI, Flask, ASGI, and WSGI integrations. | [`../dependencies.md`](../dependencies.md) section 16 |
 | Workspace | A new Python package under `packages/py/*` joins the uv workspace. Package dependencies belong to the package that imports them. | [`../../../pyproject.toml`](../../../pyproject.toml) lines 53-69; [`../../../CLAUDE.md`](../../../CLAUDE.md) "Python dependencies have one owner" |
@@ -41,7 +43,6 @@ explicit prerequisite.
 | No browser instantiation of rendered server components | Alpine `x-for` and `x-if` may clone ordinary DOM inside a component, but not a client-active server component. Repeated component families use server `<c-for>` or client-owned DOM within one existing component. | [`../alpinejs/a9_client_instantiation.md`](../alpinejs/a9_client_instantiation.md) lines 1-42 |
 | Detached Python slot content has no caller client scope | Rich interactive slot composition should use template-authored fills. Detached Python slot objects receive an isolated empty client base inside an active graph. | [`../alpinejs.md`](../alpinejs.md) lines 381-414 |
 | Static and interactive costs differ | Static primitives should remain server-only. Making every visual component client-active would pay Alpine and graph startup costs unnecessarily. | [`../alpinejs.md`](../alpinejs.md) lines 112-120 and 1013-1020 |
-| Client ambient context is not yet a public contract | The graph-first design names provide/inject as the intentional deep-context channel, but the shipped client exposes no `$provide`/`$inject` magic or `$component` provide/inject methods. Theme and later localization state need a dedicated design and conformance work. | [`../alpinejs.md`](../alpinejs.md) lines 24-48; current client source and public context contract |
 | Package contents are fixed | Each wheel has one fixed file inventory. `citry-ui` therefore carries its own Python modules and prebuilt assets rather than adding files to the `citry` distribution. | Python packaging dependency and wheel specifications |
 
 ## 3. Packaging baseline
@@ -51,7 +52,7 @@ The leading package shape is:
 ```text
 Distribution: citry-ui
 Import:       citry_ui
-Dependency:   a tested compatible range of citry
+Dependency:   citry>=0.3.1,<0.4.0
 Assets:       templates and prebuilt CSS/JS inside the citry-ui wheel
 Registration: explicit engine-local installation before app.initialize()
 ```
@@ -87,11 +88,11 @@ distributions writing files into the same `citry/` directory.
 7. **Avoid private browser contracts.** Component code uses `$component`, its
    managed helpers, public Alpine directives, and Events. Citry's own canaries
    remain the only code coupled to Alpine internals.
-8. **Design client ambient context before relying on it.** The server-side
-   provide/inject model is implemented, but a theme needs reactive values in
-   the browser as well. A focused design must compare `$component` methods
-   with `$provide`/`$inject` magics and define graph ancestry, slot ownership,
-   teleport, morph continuity, updates, defaults, cleanup, and diagnostics.
+8. **Use the public ambient-context contract.** Server components use
+   `provide`, `inject`, and `unprovide`; client code uses the matching
+   `$provide`, `$inject`, and `$unprovide` magics or `$component` hook methods.
+   Theme and direction tests still need to cover slots, teleports, morphs,
+   updates, defaults, cleanup, and diagnostics in each production family.
 
 ## 5. Conflicts and stale status text
 

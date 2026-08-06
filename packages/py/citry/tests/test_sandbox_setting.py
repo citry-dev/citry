@@ -12,14 +12,19 @@ import re
 
 import pytest
 
-from citry import Citry, Component
-from citry_core.safe_eval import SecurityError, compile_expr
+from citry import Citry, Component, SecurityError
+from citry_core.safe_eval import SecurityError as CoreSecurityError
+from citry_core.safe_eval import compile_expr
 
 
 def _norm(html: str) -> str:
     # Render ids are a per-render counter in the test suite; normalize them so
     # two separate renders compare on everything except the ids themselves.
     return re.sub(r"c\d+", "cN", html)
+
+
+def test_security_error_is_the_exact_citry_core_class():
+    assert SecurityError is CoreSecurityError
 
 
 def _render_tricky(c: Citry) -> str:

@@ -172,7 +172,6 @@ mod tests {
     fn test_both_forms_reject_reserved_citry_tags() {
         for input in [
             r#"<c-if cond="ok" $c-props="{ count: 1 }"></c-if>"#,
-            r#"<c-IF cond="ok" $c-props="{ count: 1 }"></c-IF>"#,
             r#"<c-slot c-$c-props="expr" />"#,
             r#"<c-child><c-fill name="x" $c-props="{ count: 1 }"></c-fill></c-child>"#,
             r#"<c-raw $c-props="{ count: 1 }">x</c-raw>"#,
@@ -182,6 +181,11 @@ mod tests {
                 "is a client props directive and belongs on a Citry component tag",
             );
         }
+
+        assert_parse_error(
+            r#"<c-IF cond="ok" $c-props="{ count: 1 }"></c-IF>"#,
+            "Reserved Citry structural tags are lowercase. Write '<c-if>'",
+        );
     }
 
     #[test]

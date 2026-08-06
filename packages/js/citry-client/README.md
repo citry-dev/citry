@@ -15,6 +15,12 @@ TypeScript (`src/citry-events.ts`); its build output is committed at
 which the `ext/events/runtime.js` route serves, so Python packaging and
 serving never run node.
 
+Fixed `citry-events/1` records are not redefined here. The private
+[`@citry/protocol-events-v1`](../../protocol/events/v1/js/) workspace package
+builds outgoing calls and envelopes and validates incoming manifests, result
+envelopes, and public action lists. esbuild includes those helpers in the same
+IIFE, so this creates no browser request, global, or runtime package lookup.
+
 ## Working on it
 
 The package is part of the repo's pnpm workspace; install from the repo root:
@@ -37,6 +43,10 @@ Commit the rebuilt bundle together with the source change; the two files are
 one change. The repo-wide gate (`python scripts/check.py`) runs `pnpm run
 check` here as its `citry-client` phase, so a stale type error or lint issue
 fails the same command CI runs.
+
+Run `pnpm --dir ../../protocol/events/v1/js run check` when changing a wire
+boundary. It replays the shared Python/JavaScript conformance mutations against
+the actual protocol validators.
 
 ## TypeScript and the bundle
 

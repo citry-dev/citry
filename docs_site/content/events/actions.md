@@ -1,9 +1,9 @@
 ---
-title: Update the page from a handler
+title: Event actions
 description: Return Citry event actions in order, render into page targets, and preserve browser state across updates.
 ---
 
-# Update the page from a handler
+# Event actions
 
 An event handler can replace its own component, render somewhere else, return
 data, dispatch a browser event, change browser history, or navigate. Return one
@@ -52,6 +52,70 @@ Event names are exact strings. Prefix application events with the component
 name, such as `MyCard:submit` or `AddToCart:updated`. Names beginning with
 `citry:` belong to the runtime.
 
+String-based listeners such as `$onEvent` preserve that exact case. HTML
+attribute names are lowercased, so use lowercase event names when listening
+with an Alpine `@name` attribute.
+
+## Choose where to listen for Dispatch
+
+[`actions.Dispatch`][citry.ext.events.actions.Dispatch] sends its browser
+event back to the component instance whose handler returned it. It does not
+fire from the button or form that started the call.
+
+The delivery path is:
+
+1. The server puts the calling component's render ID on the action.
+2. The browser finds that instance's current first root.
+3. It dispatches a bubbling DOM `CustomEvent` from that root.
+
+For a single-root component, this makes a listener on the root straightforward:
+
+```citry-html
+<section @signup:sent="email = $event.detail.email">
+  ...
+</section>
+```
+
+The event moves upward through the DOM. It never moves down into the root's
+children. A component with several roots still dispatches only once, from its
+first live root, so the same logical event does not reach page-wide listeners
+several times.
+
+| Listener | What receives the event |
+|---|---|
+| `@name` on the first root | The root receives it directly. |
+| `@name` on a DOM ancestor | The event bubbles to the ancestor. |
+| `@name` inside the first root | Nothing; events do not bubble downward. |
+| `@name` on another root of the same component | Nothing; only the first root dispatches. |
+| [`$onEvent(name, fn)`][$onEvent] | Only events targeting this component instance. |
+| `$component`'s `onEvent(name, fn)` | The same instance-scoped events, with component cleanup. |
+| [`Citry.events.on(name, fn)`](/reference/browser-apis/#citry-events-on) | Matching events from every instance, plus instance-less events. |
+
+A plain DOM listener on an ancestor also hears same-named events from nested
+components. The instance-scoped `$onEvent` and `onEvent` helpers normally
+filter those out, so they are the safer default for reusable and multi-root
+components. If two nested components share the very same root element, that
+element belongs to both instances and both subscriptions receive the event.
+When Citry connects a newly rendered component to the same logical instance,
+these subscriptions keep following it even though its render ID changed. Their
+callbacks receive the event's `detail` value directly, rather than the whole
+DOM event.
+
+`$onEvent` returns a function that removes its subscription. The `onEvent`
+member provided to [`$component`][$component] ties the subscription to that
+component initializer's cleanup automatically.
+
+Both instance-scoped helpers listen through `document`. A DOM listener that
+stops propagation before the event reaches `document` also prevents those
+helpers, and `Citry.events.on`, from receiving it.
+
+If the calling instance has been removed or has no live root by the time the
+action runs, Citry drops the event instead of silently dispatching it from
+`document`. Calls with no component instance are the exception: their
+`Dispatch` events start at `document`. [`Citry.events.on`][citry-events-on]
+receives them, but component-local DOM listeners, `$onEvent`, and
+`$component`'s `onEvent` do not.
+
 ## Return actions in the order they must happen
 
 A handler can return one result. It can combine ordinary actions in a list,
@@ -62,13 +126,44 @@ result of an unbundled handler.
 |---|---|
 | `MyComponent(...)` | Render and morph over the calling instance. |
 | [`actions.Render(...)`][citry.ext.events.actions.Render] | Render into an explicit target with the selected swap. |
-| `dict` or [`actions.Data(value)`][citry.ext.events.actions.Data] | Resolve the caller's promise with JSON data. |
+| `dict` or [`actions.Data(value)`][citry.ext.events.actions.Data] | Resolve an imperative caller's Promise with JSON data. |
 | [`actions.Dispatch(name, detail)`][citry.ext.events.actions.Dispatch] | Dispatch a bubbling browser `CustomEvent`. |
 | [`actions.Redirect(url)`][citry.ext.events.actions.Redirect] | Navigate the page. |
 | [`actions.PushUrl(url)`][citry.ext.events.actions.PushUrl] | Add a browser history entry without navigating. |
 | [`actions.ReplaceUrl(url)`][citry.ext.events.actions.ReplaceUrl] | Replace the current browser history URL without navigating. |
 | [`actions.Download(...)`][citry.ext.events.actions.Download] | Download a file by itself. See [dedicated download responses](/events/http/#download-a-file-from-one-event). |
 | `None` | Acknowledge the call without a visible action. |
+
+### Choose Data or Dispatch for browser code
+
+[`actions.Data`][citry.ext.events.actions.Data] is a one-call return value.
+Browser code receives it only when it owns the Promise from an imperative
+call:
+
+```js
+const result = await sendEvent("preview");
+```
+
+A declarative binding such as `@c-click="preview"` starts the same handler,
+but the template does not receive that Promise or its Data value. Return
+[`actions.Dispatch`][citry.ext.events.actions.Dispatch] when browser code must
+react to the result of a declarative call. A handler may return both when it
+supports both callers:
+
+```python
+return [
+    actions.Data({"preview_id": preview.id}),
+    actions.Dispatch(
+        "Preview:ready",
+        {"previewId": preview.id},
+    ),
+]
+```
+
+`Data` must settle the caller before later actions continue, so
+`actions.Data(value, wait=False)` is rejected. A Data wire action does not
+carry `wait`; receiving that field with either value is invalid. `delay`
+remains available when the Promise should resolve later.
 
 Order matters when one action removes the audience of another. This version
 may remove the listener before it receives the event:
@@ -159,14 +254,15 @@ key, so its client State follows the same domain object:
 <c-for each="item in items">
   <c-todo-row
     #c-key="item.id"
-    item="item"
+    c-item="item"
   />
 </c-for>
 ```
 
-An element key only matches within one sibling window. The same key cannot move
-a node between parents or nesting depths. This conditional changes depth, so
-the input is recreated:
+Element and component keys operate at different levels. An element key only
+matches within one sibling window. The same element key cannot move a node
+between parents or nesting depths. This conditional changes depth, so the
+input is recreated:
 
 ```citry-html
 <c-if cond="editing">
@@ -187,8 +283,102 @@ Keep the keyed node at the same tree position in every branch:
 </div>
 ```
 
-Keys must be unique among the siblings that can compete. A component key must
-also be unique for that component class within the rendered update region.
+Component tags are virtual nodes bounded by Citry's ownership comments. Citry
+matches their direct logical children top-down. It reserves keyed children by
+`(component class, key)`, then pairs the remaining unkeyed positions. An
+unkeyed pair keeps identity only when both positions hold the same component
+class; Citry does not scan ahead for another same-class child. A keyed child
+can therefore move across ordinary wrappers or change between single-root,
+multi-root, text-only, and empty output while its component State remains
+attached to that child. Use a key for insertion, deletion, or reorder. An
+unmatched component is opaque: an equal key deeper inside it cannot leak out
+and match elsewhere.
+
+Element keys must be unique among the siblings that can compete. Component
+keys must be unique among direct children of the same logical parent and
+component class. If duplicate component keys occur, Citry warns and matches
+them in invocation order.
+
+`#c-key` needs a non-empty Python expression. You may put it directly on an
+HTML element or component tag. An element key becomes `data-citry-key` on that
+element. A component key stays on the component's virtual ownership range and
+is never copied onto its rendered roots, so a child's own root may carry an
+independent element `#c-key`. When the expression evaluates to `None`, Citry
+records no key, exactly as if the flag were absent. This lets a component
+expose an optional key as an ordinary input. `False`, `0`, and `""` remain
+keys.
+
+With `swap="morph"`, a matched component range keeps both logical State and
+the physical DOM wherever the morph can preserve it. With `swap="replace"`,
+the logical component and State still match by key, but all physical nodes and
+range comments are replaced.
+
+The flag cannot arrive through `c-bind`, and structural built-in tags such as
+`<c-if>` reject it. Transparent component tags such as `<c-provide>` may carry
+it: the key identifies their virtual comment-bounded range just like any other
+component range. Equivalent caller-supplied slot regions inside a matched
+component also morph their contents, so ordinary element keys keep working
+there; an added, removed, or otherwise uncorrelated slot region is replaced
+atomically. Put the key on the HTML or component node whose identity should
+survive. For why a key belongs on the tag, read
+[Template flags](/syntax/dynamic-attributes/#c-template-flags).
+
+## Leave a browser-owned subtree alone
+
+Some browser libraries take complete ownership of an element's descendants.
+Put the bare `#c-ignore` marker on that element to keep a morph update from
+changing it or anything inside it:
+
+```citry-html
+<div class="chart" #c-ignore>
+  <canvas></canvas>
+</div>
+```
+
+When an event response morphs an ancestor, Citry leaves this `<div>` and its
+subtree as they are in the browser. Use this for a widget that has its own
+rendering lifecycle, not for content that Citry should keep up to date.
+
+`#c-ignore` takes no value and cannot be passed through `c-bind`. It may belong
+to either an ordinary element subtree or a logical component range.
+
+Write it on a component tag when the complete component should remain exactly
+as it is in the browser:
+
+```citry-html
+<c-BrowserOwnedChart #c-ignore />
+```
+
+Citry retains the old comment-delimited range rather than copying the flag to
+a rendered root. This works for single-root, multi-root, text-only, and empty
+components and keeps their old DOM, State, props, callbacks, bindings, fills,
+and dependencies together. Surrounding ranges and elements may still update.
+
+A flag written on an HTML root inside the component's own template remains an
+ordinary element flag. It keeps only that root subtree; sibling roots from the
+same component can still update:
+
+```citry-html
+<div #c-ignore>
+  <canvas></canvas>
+</div>
+<output>{{ status }}</output>
+```
+
+Citry uses the old rendered side as the policy source. Adding `#c-ignore` in a
+new response takes effect on the following morph. Removing it from an already
+ignored range is sticky—the old range is still retained—until the range is
+removed, explicitly replaced, or stops corresponding because its class or key
+changed. `swap="replace"` is explicit replacement and bypasses ignore.
+
+If the caller only wants one physical wrapper kept, ordinary element ignore is
+still appropriate:
+
+```citry-html
+<div #c-ignore>
+  <c-BrowserOwnedChart />
+</div>
+```
 
 For manually fetched HTML rather than an event result, see
 [HTML fragments](/advanced/html-fragments/).

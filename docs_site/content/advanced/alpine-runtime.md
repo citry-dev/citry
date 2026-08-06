@@ -1,23 +1,48 @@
 ---
 title: Alpine runtime
-description: Configure Citry's owned Alpine runtime, register plugins, deploy client graphs safely, and understand CSP and structural-directive limits.
+description: Use Alpine with Citry, add plugins before startup, and keep client-active HTML intact in production.
 ---
 
 # Alpine runtime
 
-Citry ships Alpine and the Alpine morph plugin as part of its browser runtime.
-Citry owns plugin registration order, graph adoption, scope isolation, and the
-single call to `Alpine.start()`.
+Use Alpine when part of a component should respond immediately in the browser:
+open a menu, switch a tab, or update text while someone types. Citry includes
+Alpine, so you can write its normal attributes without installing or starting
+another browser runtime.
 
-Do not add another Alpine `<script>` tag or declare Alpine as a component
-dependency. A foreign Alpine global produces a warning and Citry restores its
-owned runtime. Evaluating Citry's own bundle twice preserves the first runtime
-and its registrations instead of stacking permanent hooks.
+This page covers the less common jobs around that setup: adding an Alpine
+plugin, deploying through HTML optimizers, and understanding which DOM
+operations can safely move Citry components.
 
-## Register a plugin before startup
+## Use Alpine normally
+
+Standard Alpine attributes activate Citry's browser runtime. That includes
+attributes beginning with `x-`, `@`, and `:`:
+
+```citry-html
+<div x-data="{ open: false }">
+  <button type="button" @click="open = !open">
+    Toggle details
+  </button>
+  <p x-show="open">Ships within two working days.</p>
+</div>
+```
+
+Citry also activates the runtime for its own browser features, including
+[`$component`][$component], client props, event handlers, and Events state.
+The same rules apply whether you render a whole document or an
+[HTML fragment](/advanced/html-fragments/).
+
+Do not add a separate Alpine `<script>` tag. Citry ships Alpine and the morph
+plugin, registers its own browser features, and calls `Alpine.start()` once.
+If Citry finds a foreign Alpine global, it warns and restores its own runtime.
+If its own bundle runs twice, the first runtime and its registrations remain
+in place.
+
+## Add an Alpine plugin
 
 Use [`Citry.alpine.beforeStart`][Citry.alpine.beforeStart] to register a plugin
-before startup:
+before Citry starts Alpine:
 
 ```js
 Citry.alpine.beforeStart((Alpine) => {
@@ -25,102 +50,83 @@ Citry.alpine.beforeStart((Alpine) => {
 });
 ```
 
-The callback runs after Citry has installed its pinned Alpine object and
-before Citry starts it. Register the callback in a script that executes before
-the end of initial startup. A late `beforeStart` call throws a pointed error.
+Run this code during initial page loading. Calling `beforeStart` after Alpine
+has started raises an error, because installing a plugin at that point would
+leave existing components in an inconsistent state.
 
-A plugin that assumes physical DOM ancestry is the only scope authority may
-not work with source-linked slot content. Test plugins against nested
-components, fills, fragments, and morphs before adopting them.
+Some plugins assume that a value always comes from the nearest physical DOM
+parent. Slotted content can keep the Alpine scope of the template that wrote
+it, even when Citry renders it elsewhere. Test a plugin with nested
+components, slots, fragments, and server-rendered updates before relying on it
+across an application.
 
-## Content Security Policy
+## Plan for Content Security Policy
 
-A nonce can authorize Citry's inline script tags, but it does not remove
-Alpine's expression evaluator requirement. The standard Alpine build used by
-Citry currently requires `unsafe-eval` in `script-src` on pages that execute
-Alpine expressions.
+The standard Alpine build evaluates Alpine expressions in the browser. Pages
+that use those expressions currently need `unsafe-eval` in `script-src`.
+Citry does not ship Alpine's CSP build.
 
-Citry does not currently support Alpine's CSP build. If your policy cannot
-allow `unsafe-eval`, treat client-side Alpine expressions as unsupported for
-that page. The Python expression sandbox is a separate server-side security
-boundary; see [Security](/security/).
+Citry can also emit inline executable scripts for client-active output. There
+is currently no page-wide Citry setting that adds a CSP nonce to every such
+script. A nonce on one application script therefore does not, by itself,
+authorize every script Citry may emit.
 
-## Documents and fragments use the same graph
+If your policy cannot allow `unsafe-eval` or the required inline execution,
+treat Alpine and other Citry browser behavior as unavailable on that page.
+This is separate from the server-side Python expression sandbox described in
+[Security](/security/).
 
-Any of these can activate Citry's client ownership graph:
+## Preserve client-active HTML
 
-- `Component.js` and [`$component`][$component];
-- Alpine directives or component-tag Alpine handlers;
-- component-tag client bindings, such as `$c-props="{ theme }"`,
-  `@click="select()"`, or `@c-poll.5s="refresh()"` on a nested component tag;
-- Events State, handlers, and bindings;
-- active template fills whose client scope must be preserved.
-
-For a component-tag client binding, the parent owns the expression or server
-handler and the child supplies the component boundary where the browser
-applies it.
-
-Activation is not limited to components with JavaScript or CSS files. A
-fragment carrying client-active ownership still needs the Citry routes mounted
-so its graph, dependencies, and callbacks can be adopted atomically. See
-[HTML fragments](/advanced/html-fragments/).
-
-## Preserve client graph markers
-
-Client-active output contains an inert ownership manifest and paired comments
-similar to `<!--citry:g1:...:s-->` and `<!--citry:g1:...:e-->`. These pairs own
-single-root, multi-root, and rootless ranges. They also let Citry reject a
-partial graph before any callback observes it.
+Citry adds small comments, attributes, and JSON manifests to client-active
+HTML. They tell the browser which rendered nodes belong to each component,
+including components with several root nodes or no element root.
 
 Configure HTML minifiers, CDN optimizers, sanitizers, streaming transforms,
-and client DOM libraries to preserve:
+and DOM libraries to preserve:
 
-- Citry ownership comments beginning with `citry:g1`, exactly and in order;
-- `<script type="application/json" data-citry-graph>` and other Citry manifest tags;
-- Citry `data-cid`, `data-cid-*`, `data-citry-*`, and compiled `data-cev-*` attributes.
+- Citry ownership comments beginning with `citry:g1`, in order;
+- Citry JSON manifest `<script>` elements;
+- `data-cid`, `data-cid-*`, `data-citry-*`, and `data-cev-*`
+  attributes.
 
-Do not move a cap independently from its range, merge comments, or strip
-comments as "unnecessary." Missing caps fail before graph activation with a
-deployment diagnostic. Caps changed after activation cause the affected range
-to retire rather than continue with ambiguous ownership.
+Do not move or merge the ownership comments independently of the HTML between
+them. If a tool strips or rearranges these markers, Citry rejects the affected
+client graph instead of attaching behavior to the wrong nodes.
 
-## Structural Alpine directives
+## Choose the right kind of loop or condition
 
-Stock Alpine `x-if`, `x-for`, and `x-teleport` work inside an already active
-Citry component, including slot-source propagation and exact clone cleanup.
-They cannot clone a server-rendered client-active Citry component. Such a
-clone would need new graph IDs, Events anchors, state, props suppliers,
-lifecycle resources, and physical cap ownership, which stock Alpine does not
-mint.
+Use Alpine's `x-if`, `x-for`, and `x-teleport` for ordinary browser-owned DOM
+inside a component. For example, Alpine can repeat plain HTML that does not
+contain another client-active Citry component.
 
-Use server-side `<c-if>` and `<c-for>` around Citry component instances. Keep
-native Alpine structural directives inside the component when their cloned
-content does not contain another server-rendered client-active component.
+Use server-side `<c-if>` and `<c-for>` when the repeated or conditional content
+contains Citry component instances. Cloning already-rendered, client-active
+component HTML would also clone its identity, state, event anchors, and
+lifecycle resources. Stock Alpine directives cannot create fresh versions of
+those values.
 
-## Debug browser failures
+## Diagnose a browser failure
 
-Read the first `[Citry]` browser-console error. Diagnostics identify the
-component or render ID, the failed directive or handler when applicable, and
-the required author or deployment fix. Common causes are:
+Start with the first `[Citry]` error in the browser console. Later errors are
+often consequences of the first one. Common causes include:
 
-- a second Alpine build on the page;
-- invalid or asynchronous `$c-props` supply;
-- stripped or moved graph comments;
-- a fragment inserted without mounted Citry routes;
-- a native Alpine structural directive cloning an active Citry component.
+- another Alpine build on the page;
+- invalid or asynchronous `$c-props` data;
+- ownership comments removed or moved during deployment;
+- a fragment inserted without Citry's routes and runtime available;
+- `x-if` or `x-for` cloning a client-active Citry component.
 
-The [Debug extension][citry.ext.debug.Debug] visualizes server component and
-slot boundaries, while [Troubleshooting](/guides/troubleshooting/) covers
-render traces and browser symptoms.
-
-## Browser support
-
-The client conformance suite runs in Chromium, Firefox, and WebKit. The full
-suite runs across all three engines on a schedule, with a compact graph and
-resource-growth gate used for changes to the browser runtime.
+The [Debug extension][citry.ext.debug.Debug] can draw component and slot
+boundaries. [Troubleshooting](/guides/troubleshooting/) covers the wider
+server and browser investigation workflow.
 
 ## See also
 
-- [Client interactivity](/concepts/client-interactivity/) for props, handlers, scopes, and lifecycle APIs.
-- [JS and CSS dependencies](/advanced/js-and-css-dependencies/) for non-Alpine assets.
-- [Compatibility](/about/compatibility/) for server and browser coverage.
+- [Client interactivity](/concepts/client-interactivity/) for Alpine data,
+  props, handlers, and component lifecycles.
+- [HTML fragments](/advanced/html-fragments/) for inserting client-active
+  output into an existing page.
+- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for
+  non-Alpine assets.
+- [Compatibility](/about/compatibility/) for supported browsers.

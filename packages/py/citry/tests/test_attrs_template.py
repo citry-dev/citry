@@ -115,6 +115,11 @@ class TestCBindSpread:
         tpl = """<div c-bind="{'id': 'first'}" c-bind="{'id': 'second'}">y</div>"""
         assert _html(tpl) == '<div id="second">y</div>'
 
+    def test_spread_case_variants_share_html_identity(self):
+        tpl = '<div c-bind="attrs">y</div>'
+        attrs = {"ID": "first", "id": "second", "CLASS": "base", "class": "active"}
+        assert _html(tpl, attrs=attrs) == '<div ID="second" CLASS="base active">y</div>'
+
     def test_source_order_decides_against_static_attrs(self):
         # A static attr after a dynamic one wins; static vs dynamic makes no
         # difference, only source order does.
@@ -345,6 +350,22 @@ class TestOnAttrsResolvedHook:
         # Only the <p> has a dynamic attribute; the static <div> never
         # resolves attributes at render time.
         assert calls == ["p"]
+
+    def test_hook_output_is_coalesced_by_html_identity(self):
+        class Rewriter(Extension):
+            name = "rewriter"
+
+            def on_attrs_resolved(self, ctx):
+                return {**ctx.attrs, "ID": "first", "id": "second", "CLASS": "from-hook"}
+
+        c = Citry(extensions=[Rewriter])
+
+        class Comp(Component):
+            citry = c
+            template = "<div c-class=\"'base'\">y</div>"
+
+        out = _CID_RE.sub("", Comp().render().serialize())
+        assert out == '<div class="base from-hook" ID="second">y</div>'
 
 
 class TestConstPrecomputing:

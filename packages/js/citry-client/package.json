@@ -12,6 +12,8 @@
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test"
   },
   "dependencies": {
+    "@citry/protocol-client-graph-v1": "workspace:*",
+    "@citry/protocol-events-v1": "workspace:*",
     "@alpinejs/morph": "3.15.12",
     "alpinejs": "3.15.12"
   },

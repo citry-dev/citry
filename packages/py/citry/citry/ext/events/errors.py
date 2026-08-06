@@ -19,6 +19,8 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
+from citry._protocol.events import build_error
+
 if TYPE_CHECKING:
     from citry.ext.events.schemas import ValidationResult
 
@@ -48,7 +50,8 @@ class EventError(Exception):
     The client receives the ``status``, a stable string ``code`` derived from
     it, the ``message`` as the human summary (a toast or banner), and
     ``fieldErrors`` as the per-field error map surfaced next to inputs
-    (``$error.fieldErrors``). Raising it anywhere in a handler, a guard, or the
+    (for example, ``$error('submit')?.fieldErrors``). Raising it anywhere in a
+    handler, a guard, or the
     ``_context`` hook turns the call into that error response; it never
     becomes a host 500.
 
@@ -155,7 +158,4 @@ def wire_error(error: EventError) -> dict[str, Any]:
         The JSON-ready error object.
 
     """
-    encoded: dict[str, Any] = {"status": error.status, "code": error.code, "message": error.message}
-    if error.fields:
-        encoded["fieldErrors"] = dict(error.fields)
-    return encoded
+    return build_error(error.status, error.code, error.message, error.fields)

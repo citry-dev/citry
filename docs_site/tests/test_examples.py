@@ -22,6 +22,7 @@ def test_registry_discovers_card_example() -> None:
     assert info.page_cls.__name__ == "CardPage"
     assert info.example_dir.name == "card"
     assert info.public_slug == "card"
+    assert info.canonical_source == "examples/card.md"
     assert get_example_by_slug("control-flow").name == "control_flow"
 
 
@@ -34,6 +35,7 @@ def test_example_card_renders_tabs_iframe_and_source() -> None:
     assert "data-pagefind-ignore" in html
     assert 'src="/examples/card/demo/"' in html
     assert 'title="Card example live demo"' in html
+    assert 'sandbox="allow-forms allow-scripts allow-same-origin"' in html
     assert "example-demo-frame--theme-sync" in html
     assert "Live demo" in html
     assert "Component" in html

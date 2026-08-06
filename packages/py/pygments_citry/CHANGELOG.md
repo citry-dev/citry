@@ -4,6 +4,13 @@ All notable changes to `pygments-citry` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-08-06
+
+### Fixed
+
+- Stop Python comments inside `{{ ... }}` before the host `}}` delimiter even
+  when the comment text contains apostrophes, quotes, or braces.
+
 ## [0.1.1] - 2026-07-30
 
 ### Added
@@ -52,5 +59,7 @@ All notable changes to `pygments-citry` are documented here. The format follows
 - Built-in Citry tag names now receive the same tag styling as HTML and user
   component tags, including in dark themes.
 
+[Unreleased]: https://github.com/citry-dev/citry/compare/pygments-citry@0.1.2...HEAD
+[0.1.2]: https://github.com/citry-dev/citry/compare/pygments-citry@0.1.1...pygments-citry@0.1.2
 [0.1.1]: https://github.com/citry-dev/citry/compare/pygments-citry@0.1.0...pygments-citry@0.1.1
 [0.1.0]: https://github.com/citry-dev/citry/releases/tag/pygments-citry@0.1.0

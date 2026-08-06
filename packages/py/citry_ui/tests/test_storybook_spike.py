@@ -8,6 +8,7 @@ import importlib
 import json
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -27,12 +28,17 @@ def _trusted_request(**kwargs):
 
 @pytest.fixture(scope="module")
 def spike_modules():
+    default_components_before = {
+        "cbutton": default_citry.components.get("cbutton"),
+        "creactivecounterprobe": default_citry.components.get("creactivecounterprobe"),
+    }
     sys.path.insert(0, str(_STORYBOOK_DIR))
     try:
         yield {
             "app": importlib.import_module("backend.app"),
             "catalog": importlib.import_module("backend.catalog"),
             "generate": importlib.import_module("backend.generate"),
+            "default_components_before": default_components_before,
         }
     finally:
         sys.path.remove(str(_STORYBOOK_DIR))
@@ -87,30 +93,27 @@ def _assert_control_effect(scenario_id, control_name, default_content, changed_c
             assert 'aria-invalid="true"' in input_tag
             assert "Enter a valid email address." in changed_content
         elif control_name == "orientation":
-            assert "cui-field--horizontal" in changed_content
+            assert 'data-orientation="horizontal"' in changed_content
         else:
             assert control_name == "density"
-            assert "cui-field--compact" in changed_content
+            assert 'data-density="compact"' in changed_content
         return
     if scenario_id == "table/static":
-        root_match = re.search(r'<div\s+class="([^"]*\bcui-table-wrap\b[^"]*)"', changed_content)
-        assert root_match is not None
-        root_classes = root_match.group(1).split()
         if control_name == "state":
             assert "Unable to load projects" in changed_content
         elif control_name == "density":
-            assert "cui-table-wrap--compact" in root_classes
+            assert 'data-density="compact"' in changed_content
         elif control_name == "striped":
-            assert "cui-table-wrap--striped" not in root_classes
+            assert " data-striped" not in changed_content
         elif control_name == "hover":
-            assert "cui-table-wrap--hover" not in root_classes
+            assert " data-hover" not in changed_content
         else:
             assert control_name == "sticky_header"
-            assert "cui-table-wrap--sticky-header" in root_classes
+            assert " data-sticky-header" in changed_content
         return
     assert scenario_id == "tabs/server-selected"
     expected = {
-        "selected": 'data-selected-value="security"',
+        "selected": 'data-value="security"',
         "orientation": 'data-orientation="vertical"',
         "direction": 'dir="rtl"',
         "activation": 'data-activation="manual"',
@@ -141,7 +144,17 @@ def _asgi_get(asgi_app, path, *, headers=()):
         "client": ("127.0.0.1", 50000),
         "server": ("127.0.0.1", 8123),
     }
-    asyncio.run(asgi_app(scope, receive, send))
+
+    def run_asgi():
+        asyncio.run(asgi_app(scope, receive, send))
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        run_asgi()
+    else:
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            executor.submit(run_asgi).result()
     start = next(message for message in messages if message["type"] == "http.response.start")
     body = b"".join(message.get("body", b"") for message in messages if message["type"] == "http.response.body")
     return start, body
@@ -170,7 +183,10 @@ def test_every_static_scenario_renders_each_control_independently(spike_modules)
         default_response = extension.render(_trusted_request(), family=family, state=state)
         assert default_response.status == 200
         assert "<style" in str(default_response.content)
-        assert "<script" not in str(default_response.content)
+        if scenario.id in {"button/static", "field/static", "table/static"}:
+            assert "<script" in str(default_response.content)
+        else:
+            assert "<script" not in str(default_response.content)
         assert f'data-scenario-id="{scenario.id}"' in str(default_response.content)
         for control in scenario.controls:
             changed_response = extension.render(
@@ -222,11 +238,36 @@ def test_interactive_scenario_uses_fragment_assets_and_control_input(spike_modul
     assert manifest_match is not None
     manifest = json.loads(manifest_match.group(1))
     descriptors = {
-        kind: [json.loads(base64.b64decode(value).decode()) for value in manifest["fetch"][kind]]
+        kind: [json.loads(base64.b64decode(value[0]).decode()) for value in manifest["fetch"][kind]]
         for kind in ("css", "js")
     }
     assert any(descriptor["attrs"].get("href", "").startswith("/citry/cache/") for descriptor in descriptors["css"])
     assert any(descriptor["attrs"].get("src", "").startswith("/citry/cache/") for descriptor in descriptors["js"])
+
+
+def test_tabs_scenario_uses_fragment_assets_and_each_control(spike_modules):
+    app_module = spike_modules["app"]
+    scenario = spike_modules["catalog"].SCENARIOS_BY_ID["tabs/server-selected"]
+    extension = app_module.engine.extensions.get_extension("storybook_scenarios")
+    default_response = extension.render(_trusted_request(), family="tabs", state="server-selected")
+    default_content = str(default_response.content)
+
+    assert scenario.client_interactive is True
+    assert scenario.ready_selector == "[data-citry-tabs-root][data-citry-tabs-initialized]"
+    assert "/citry/citry.js" in default_content
+    for control in scenario.controls:
+        changed_response = extension.render(
+            _trusted_request(query={control.name: (_query_value(control),)}),
+            family="tabs",
+            state="server-selected",
+        )
+        assert changed_response.status == 200
+        _assert_control_effect(
+            scenario.id,
+            control.name,
+            default_content,
+            str(changed_response.content),
+        )
 
 
 def test_runner_exposes_catalog_standalone_pages_and_visible_errors(spike_modules):
@@ -247,14 +288,14 @@ def test_runner_exposes_catalog_standalone_pages_and_visible_errors(spike_module
         state="static",
     )
     unexpected_response = extension.render(
-        _trusted_request(query={"module": ("citry_ui.components.cbutton",)}),
+        _trusted_request(query={"module": ("citry_ui.components.cbutton.cbutton",)}),
         family="button",
         state="static",
     )
 
     assert catalog_response is not None
     catalog = json.loads(str(catalog_response.content))
-    assert catalog["schemaVersion"] == 2
+    assert catalog["schemaVersion"] == 1
     assert catalog["scenarios"][-1]["standaloneUrl"] == (
         "/citry/ext/storybook_scenarios/page/readiness/reactive-state"
     )
@@ -350,7 +391,7 @@ def test_story_projections_are_deterministic_current_and_adapter_equivalent(spik
 
         projection = generator._projection(scenario)
         citry_parameters = projection["parameters"]["citry"]
-        assert citry_parameters["catalogSchemaVersion"] == 2
+        assert citry_parameters["catalogSchemaVersion"] == 1
         assert citry_parameters["generatorVersion"] == 1
         assert re.fullmatch(r"[0-9a-f]{64}", citry_parameters["sourceDigest"])
         assert server_story == {
@@ -377,5 +418,8 @@ def test_story_projections_are_deterministic_current_and_adapter_equivalent(spik
 def test_storybook_engine_does_not_register_ui_components_globally(spike_modules):
     assert spike_modules["app"].engine.get("CButton") is not None
     assert spike_modules["app"].engine.get("CReactiveCounterProbe") is not None
-    assert default_citry.components.get("cbutton") is None
-    assert default_citry.components.get("creactivecounterprobe") is None
+    assert default_citry.components.get("cbutton") is spike_modules["default_components_before"]["cbutton"]
+    assert (
+        default_citry.components.get("creactivecounterprobe")
+        is spike_modules["default_components_before"]["creactivecounterprobe"]
+    )

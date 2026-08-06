@@ -1,14 +1,18 @@
+<!-- Absolute URL so the logo also renders on PyPI, which serves this README from
+     outside the repository and cannot resolve a repo-relative path. -->
+<img src="https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/citry-wordmark.png" alt="Citry" width="170">
+
 # Citry - Refreshingly simple UI
 
 [![PyPI - Version](https://img.shields.io/pypi/v/citry)](https://pypi.org/project/citry/)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/citry)](https://pypi.org/project/citry/)
-[![License](https://img.shields.io/pypi/l/citry)](./LICENSE)
+[![License](https://img.shields.io/pypi/l/citry)](https://github.com/citry-dev/citry/blob/main/LICENSE)
 [![CI](https://github.com/citry-dev/citry/actions/workflows/repo--check.yml/badge.svg)](https://github.com/citry-dev/citry/actions/workflows/repo--check.yml)
 [![Docs](https://img.shields.io/badge/docs-citry.dev-8a2be2)](https://citry.dev)
 [![Discord](https://img.shields.io/badge/Discord-join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/NaQ8QPyHtD)
 
 Citry is a **fast**, **simple**, and **smart** **frontend framework** for Python that brings the best of **Vue**, **React**,
-**Django**, and **Jinja**.
+**Django**, **Jinja**, and **LiveWire**.
 
 Compatible with FastAPI, Django, and [other web servers](#use-with-web-framework).
 
@@ -200,7 +204,7 @@ is as expressive as Vue or React.
 
 ## How templates look
 
-A short tour. The [template syntax reference](docs/template-syntax.md) covers
+A short tour. The [template syntax reference](https://github.com/citry-dev/citry/blob/main/docs/template-syntax.md) covers
 every feature in depth.
 
 ### Expressions
@@ -487,7 +491,7 @@ rows = [
 - Extension system;
 - Dynamic components/HTML tags with `<c-component>` / `<c-element>`
 
-See the [changelog](CHANGELOG.md) for the full list.
+See the [changelog](https://github.com/citry-dev/citry/blob/main/CHANGELOG.md) for the full list.
 
 ## Use with web framework
 
@@ -539,12 +543,17 @@ You get a ready-to-edit starting point:
 
 ```python
 # my_button.py
+"""A Citry component."""
+
+from citry import Component
+
+
 class MyButton(Component):
     class Kwargs:
         title: str
 
-    def template_data(self, kwargs, slots):
-        return {"title": kwargs.title}
+    class Slots:
+        pass
 
     template = """
       <div>
@@ -553,13 +562,27 @@ class MyButton(Component):
     """
 ```
 
+Run the limited static check over literal component templates under the current
+directory without importing project code:
+
+```bash
+citry check --static
+```
+
 The other commands act on a Citry engine. Point them at the one you configured
 with `--app`, given as `module:attribute`:
 
 ```bash
 citry --app myproject.app:engine list        # components registered on that engine
+citry --app myproject.app:engine check       # templates plus registered component contracts
 citry --app myproject.app:engine ext list    # extensions installed on it
 ```
+
+The explicit engine lets `check` validate registered component names, inputs,
+and slots. If the engine cannot import or finish discovery, the command reports
+that failure, continues with syntax-only checking, and returns a nonzero status.
+Checking always requires one of these explicit modes; bare `citry check` is a
+usage error.
 
 Extensions can ship their own commands; run one with `citry --app ... ext run
 <extension> <command> [args]`. Run `citry --help` to see everything, and `citry
@@ -567,16 +590,16 @@ Extensions can ship their own commands; run one with `citry --app ... ext run
 
 ## Documentation
 
-- [Template syntax reference](docs/template-syntax.md) - every template feature
+- [Template syntax reference](https://github.com/citry-dev/citry/blob/main/docs/template-syntax.md) - every template feature
   in depth.
-- [Codebase and development setup](docs/codebase.md) - how to build, test, and
+- [Codebase and development setup](https://github.com/citry-dev/citry/blob/main/docs/codebase.md) - how to build, test, and
   contribute.
 
 ## Performance
 
 Rendering a large page (~325 component instances, ~205 KB of HTML):
 
-![Citry vs Django vs django-components rendering a large page. Lower is better.](docs/assets/benchmark.png)
+![Citry vs Django vs django-components rendering a large page. Lower is better.](https://raw.githubusercontent.com/citry-dev/citry/main/docs/assets/benchmark.png)
 
 - **Versus django-components** (the fair component-to-component comparison),
   Citry is about **1.7x faster** on first render and **3.4x faster** on repeat
@@ -589,8 +612,8 @@ Rendering a large page (~325 component instances, ~205 KB of HTML):
   library at once.
 
 These are relative numbers from a single machine. See
-[`benchmarks/`](benchmarks/README.md) for the methodology and how to reproduce
-them, and the [performance notes](docs/design/performance.md) for where the
+[`benchmarks/`](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md) for the methodology and how to reproduce
+them, and the [performance notes](https://github.com/citry-dev/citry/blob/main/docs/design/performance.md) for where the
 remaining time goes.
 
 ## Help bring Citry to your language
@@ -611,7 +634,7 @@ repo to follow along, and open an issue if you would like to help port it.
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE) for details.
+MIT License - see [LICENSE](https://github.com/citry-dev/citry/blob/main/LICENSE) for details.
 
 ## Acknowledgments
 

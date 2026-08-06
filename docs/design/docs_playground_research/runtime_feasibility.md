@@ -1,11 +1,19 @@
 # Playground runtime feasibility
 
 **Status (2026-07-28): Direct runtime, real Pyodide Worker, opaque preview,
-bounded cross-origin broker, deterministic wheel-build, sealed historical
-package, and cached-desktop performance proofs passed. Mobile performance, a
-production-origin deployment test, release-workflow integration, and the exact
-published package gate remain open. Product implementation is not yet
-authorized by Stage 1.**
+bounded cross-origin broker, deterministic wheel-build, sealed current
+package, exact-package, and cached-desktop performance proofs passed. Mobile
+performance, a production-origin deployment test, release-workflow
+integration for future versions, and runtime-bundle deployment remain rollout
+work. The tested PyEmscripten core 1.4.0 wheel is now published on PyPI, and a
+fresh exact-package smoke passed from the public bytes. Stage 1 authorizes
+iterative product implementation.**
+
+**Shipping override (2026-07-29):** The separate-origin and mirrored-bundle
+recommendations below remain risk research, not v1 requirements. V1 uses a
+same-origin Worker, existing docs static hosting, the pinned Pyodide CDN, and
+exact PyPI wheel URLs. The accepted risks and triggers for future hardening are
+recorded in the current Stage 7 plan.
 
 ## Outcome
 
@@ -18,6 +26,17 @@ rewrite. Both custom wheels imported in an otherwise unmodified Pyodide
 - `citry_core==1.3.0` plus published `citry==0.2.0` passed a public API render
   covering static markup, expressions, control flow, a nested component, CSS,
   plain JavaScript, and `$component` JavaScript;
+- published `citry==0.3.0` declares the intended exact
+  `citry-core==1.4.0` dependency. The published pair passed a native Python
+  smoke, including the `#c-key` case that breaks 0.2.0 over core 1.4.0;
+- published `citry==0.3.0` plus the deterministic tagged 1.4.0 PyEmscripten
+  wheel passed the complete minified playground matrix in Chromium 149,
+  Firefox 151, and WebKit 26.5. Each engine asserted the installed versions
+  and rendered a keyed nested component through the public API;
+- that exact 7,011,715-byte core wheel was subsequently published on PyPI.
+  Its public SHA-256 matches the matrix input, and a fresh Pyodide 314.0.3
+  package smoke loaded the files.pythonhosted.org bytes together with
+  `citry==0.3.0`, rendered the starter, and exercised a keyed nested component;
 - the public-package proof repeated one module 100 times with a syntax failure
   and a render failure between successes. A fixed test render-id generator
   produced byte-identical output without a registry collision. Determinism
@@ -29,11 +48,12 @@ rewrite. Both custom wheels imported in an otherwise unmodified Pyodide
   SBOM, while remapping the source, Cargo target, and Cargo home prefixes
   stabilized Rust debug paths. Two independent clean builds of both core
   versions were then byte-identical and contained no local build paths;
-- one manifest now records every Pyodide runtime artifact and historical
-  public-package wheel by exact name, byte count, and SHA-256. The Node proof
-  verifies all bytes before initialization, installs only local wheels in the
-  recorded order, rejects HTTP(S) access, and passed with zero network
-  attempts;
+- one manifest now records every Pyodide runtime artifact and the historical
+  and current public-package tracks by exact name, byte count, and SHA-256. The
+  Node loader verifies and consumes local bytes in the recorded order without
+  live package resolution. The browser prototype preflighted those bytes but
+  Pyodide then re-fetched URL inputs, so verified-buffer consumption remains an
+  explicit implementation proof;
 - a rebuilt 1.4.0 wheel passed the direct API matrix inside a real module
   Worker in Chromium 149, Firefox 151, and WebKit 26.5. Terminating an
   infinite-loop Worker and bootstrapping a fresh Worker restored a working
@@ -62,13 +82,13 @@ rewrite. Both custom wheels imported in an otherwise unmodified Pyodide
   loaded-module count did not grow across either 200-render sample window.
 
 The technical result rules out a wasm-bindgen rewrite as the next step and
-accepts the credential-free runner topology for continued design. The local
-build and historical loader uncertainties are closed. Stage 1 remains open
-because the accepted topology has not run on the production origin, the
-deterministic build contract is not wired into release CI, representative
-physical-mobile evidence is absent, and the exact published 0.3.0 package pair
-does not exist yet. Continue the PyO3/Emscripten path, but do not start product
-implementation until those gates pass.
+accepts a credential-free, different-site runner topology for continued
+design. The build, public package availability, and exact package compatibility
+uncertainties are closed. The production browser loader must still prove that
+Pyodide consumes the buffers whose hashes were checked rather than re-fetching
+their URLs. Stage 1 accepts the PyO3/Emscripten path for iterative
+implementation. Production-origin, permanent release-CI, and physical-mobile
+work remains explicit rollout validation.
 
 ## Verified scope
 
@@ -87,6 +107,11 @@ The following claims were executed locally rather than inferred:
 | Repeat a module 100 times | Passed with explicit Citry cleanup and a fresh namespace |
 | Prove complete cleanup | Failed as expected; non-Citry state remained |
 | Reproduce 0.2.0 plus 1.4.0 incompatibility | Passed; `#c-key` raised the known 8-versus-9 argument `TypeError` |
+| Install published `citry==0.3.0` with its exact published core 1.4.0 dependency | Passed in native Python 3.14 |
+| Render the 0.3.0/1.4.0 keyed-component regression case | Passed natively and in all three Pyodide browser engines |
+| Run the complete playground against published Citry 0.3.0 and tagged core 1.4.0 | Passed after preflighting five exact local wheels in Chromium, Firefox, and WebKit; the prototype then re-fetched their URLs, so this does not prove verified-buffer consumption |
+| Obtain the 1.4.0 PyEmscripten wheel from PyPI | Passed; the public file has the manifest name, 7,011,715-byte size, and SHA-256 |
+| Run the exact 0.3.0/1.4.0 package smoke from public core bytes | Passed in Pyodide 314.0.3, including starter and keyed nested-component renders |
 | Load and call core 1.4.0 in Chromium, Firefox, and WebKit module Workers | Passed |
 | Terminate an infinite Python loop and recover with a fresh Worker in all three engines | Passed |
 | Keep docs-origin credentials out of a same-origin Worker | Failed in all three engines; the Worker fetch sent the test cookie |
@@ -108,14 +133,19 @@ The scripts and observed artifact record are in
 in because the proof directory should stay small. Their observed hashes are in
 [`runtime_manifest.json`](runtime_proof/runtime_manifest.json).
 
-This is executable feasibility evidence, not yet a published release proof.
-The Node and browser proof loaders consume the same manifest and verify their
-selected inputs before startup. Every upstream artifact has an exact URL; the
-two locally built core wheels instead record tagged source commits, source
-epochs, names, sizes, and hashes because no matching PyPI files exist. The
-historical public track performs no live resolution or HTTP(S) access. Release
-CI must now reproduce this contract, publish the future platform wheel, and
-promote the resulting public URLs into the manifest.
+This is executable feasibility evidence and an all-public package-input proof,
+not yet a deployed production-runner proof.
+The Node and browser proofs read the same manifest. The Node proof consumes its
+verified local files. The browser vertical proof verified each fetched body,
+then imported only `pyodide.mjs` from that body; Pyodide re-fetched its WASM,
+standard library, lock, and wheel URLs. Every selected current-track artifact
+has an exact public URL, but a preflight hash does not bind a later fetch. The
+production browser loader must pass verified buffers through a supported
+Pyodide boundary and include a mutation-between-fetches test. The historical
+1.3.0 core remains a local research wheel; the 1.4.0 core entry records both
+its tagged build source and immutable PyPI URL. Permanent release CI must
+reproduce the exact artifact set for future core versions, and runtime
+deployment must promote those bytes into the immutable docs wheelhouse.
 
 ## Pinned build tuple
 
@@ -314,6 +344,7 @@ same-origin, or navigation sandbox permissions.
 | deterministic core 1.3.0 wheel | 6,585,067 | `ed6d3eda67ec` |
 | deterministic core 1.4.0 wheel | 7,011,715 | `765e4211b1d3` |
 | published Citry 0.2.0 wheel | 194,448 | `8aa129681714` |
+| published Citry 0.3.0 wheel | 532,890 | `953c18c67756` |
 
 The two core wheels are already zip-compressed. Gzip reduced the selected
 1.4.0 wheel only from 7,011,715 to 6,936,924 bytes. Payload size is therefore a
@@ -340,6 +371,11 @@ The complete historical track is 20,409,000 fetched bytes: 13,522,699 bytes of
 Pyodide runtime files and 6,886,301 bytes of core, pure-Python package, and
 transitive wheels. This is a fetched-file baseline, not a cold-network or
 post-cache transfer measurement.
+
+The current 0.3.0/1.4.0 vertical track is 21,174,090 fetched bytes. Its exact
+current-package matrix records first results of about 1.38 seconds in Chromium,
+7.18 seconds in Firefox, and 1.38 seconds in WebKit on the local cached-desktop
+host. Warm explicit edits were 47 to 63 milliseconds through the complete UI.
 
 One local Node run measured 0.76 seconds to initialize Pyodide, 0.14 seconds to
 load core 1.4.0, and 0.10 seconds for the direct smoke. The public track
@@ -481,15 +517,18 @@ plus core in Chromium, 4.55 seconds in Firefox, and 0.92 seconds in WebKit.
 The sizes, rate, and timeout are deliberately small proof constants, not
 accepted product values. The session value correlates messages; it does not
 authenticate code in a compromised runner artifact. The lightweight modes and
-real Pyodide mode share the broker, but the proof still uses fixed smoke code
-rather than the final AST runner and complete `citry` package.
+real Pyodide mode share the broker. The later Stage 6 vertical proof replaces
+the fixed core smoke with the final AST runner and complete exact Citry
+package through the same topology.
 
 Loopback is a potentially trustworthy browser context and only approximates
-distinct deployed sites. Production must use a genuinely credential-free
-origin, avoid shared-domain cookies, expose no sensitive endpoints, and set a
-runner CSP that permits only immutable runtime assets. The proof allowed one
-docs endpoint in `connect-src` solely to test cookie behavior; production
-must not carry that allowance.
+distinct deployed sites. Production must use a credential-free origin on a
+different schemeful site, not merely another hostname under the docs
+registrable domain. It must avoid shared Domain cookies, expose no sensitive
+endpoints, and set a runner CSP that permits only immutable runtime assets and
+frames only from the exact docs origin. The proof allowed one docs endpoint in
+`connect-src` solely to test cookie behavior; production must not carry that
+allowance.
 
 ## Distribution and release policy
 
@@ -511,16 +550,15 @@ Sources, checked 2026-07-28:
 - [Publishing Wasm wheels](https://pyodide-build.readthedocs.io/en/latest/how-to/publishing.html)
 - [Python package formats](https://packaging.python.org/en/latest/discussions/package-formats/)
 
-It is technically possible to add the unique PyEmscripten wheel to the current
-`citry-core==1.4.0` release. PyPI creates a release one file at a time, core
-1.4.0 was first uploaded on 2026-07-27, and PyPI currently accepts additional
-files during a release's first 14 days. This is not the recommended release
-path. A late file changes what the same version can install according to date,
-cache, and mirror state; it cannot update the metadata stored from the first
-file; and the existing tag and GitHub Release already identify a completed
-artifact set. PyPI introduced the 14-day limit specifically to bound late file
-addition and reports ecosystem agreement that a new version is acceptable for
-new platform support.
+The unique PyEmscripten wheel was added to the current
+`citry-core==1.4.0` release on 2026-07-28 through GitHub Actions Trusted
+Publishing. PyPI accepted the file during the release's 14-day addition
+window. The exact Citry 0.3.0 dependency made this the practical repair: its
+immutable metadata pins core 1.4.0, and the uploaded bytes are identical to
+the tagged 1.4.0 browser wheel that passed the full local matrix. A late file
+still changes what the same version can install according to date, cache, and
+mirror state, so future releases must assemble their complete platform
+inventory before upload.
 
 Sources, checked 2026-07-28:
 
@@ -529,13 +567,18 @@ Sources, checked 2026-07-28:
 - [PyPI's 14-day release-file policy](https://blog.pypi.org/posts/2026-07-22-releases-now-reject-new-files-after-14-days/)
 - [`citry-core==1.4.0` release](https://pypi.org/project/citry-core/1.4.0/)
 
-The recommended policy is therefore:
+The selected policy and completed repair are therefore:
 
-1. Publish `citry-core==1.4.1` with its sdist, complete native wheel set, and
-   PyEmscripten wheel assembled and tested before one publishing job.
-2. Publish `citry==0.3.0` afterward with an exact
-   `citry-core==1.4.1` dependency.
-3. Keep PyPI as the public package source of truth. Promote the exact browser
+1. Completed on 2026-07-28: during PyPI's 14-day file-addition window for
+   `citry-core==1.4.0`, upload the exact tested PyEmscripten wheel and verify
+   its filename, 7,011,715-byte size, and SHA-256 from PyPI.
+2. Treat that late platform addition as a one-time repair. Future core
+   releases must collect the sdist, native wheels, and PyEmscripten wheel in
+   one tested inventory before the publishing job.
+3. The fallback was not needed. If a similar late upload is declined for a
+   future repair, release a new core version and a new Citry patch that exactly
+   pins it, then repeat this matrix.
+4. Keep PyPI as the public package source of truth. Promote the exact browser
    wheel and runtime files into a content-addressed, immutable docs wheelhouse
    only after their names, sizes, and SHA-256 hashes match the release
    manifest. The page must not resolve packages from live PyPI on startup.
@@ -558,21 +601,69 @@ ComponentNode.__init__() takes 8 positional arguments but 9 were given
 ```
 
 The exact 0.2.0 plus 1.3.0 pair renders correctly. This distinguishes a package
-compatibility defect from a Pyodide or PyO3 failure. The playground acceptance
-target remains the exact published Citry 0.3.0 and compatible core pair. The
-recommended release plan above makes that core 1.4.1; if release management
-deliberately chooses another exact version, the manifest and acceptance matrix
-must use that version consistently.
+compatibility defect from a Pyodide or PyO3 failure. Published Citry 0.3.0
+fixes the dependency contract by pinning core 1.4.0. That pair passed the
+native regression smoke, and the published Citry wheel plus deterministic
+tagged core browser wheel passed the three-engine playground matrix. The exact
+core browser bytes are now public on PyPI.
+
+## Current package acceptance on 2026-07-28
+
+PyPI reports `citry==0.3.0` with `citry-core==1.4.0` in `Requires-Dist`. The
+published pure-Python wheel is 532,890 bytes with SHA-256
+`953c18c677563ef312416fb2e3c17df29d2e14aad86b96a1be011aaf2f95820e`.
+The core release now includes
+`citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl`, uploaded at
+`2026-07-28T20:33:57.231639Z`, with 7,011,715 bytes and SHA-256
+`765e4211b1d333800d9d620c6f310f0a06ddac1574fbfac4af1bd53c9c31c964`.
+
+Sources, checked 2026-07-28:
+
+- [`citry==0.3.0` JSON metadata](https://pypi.org/pypi/citry/0.3.0/json)
+- [`citry-core==1.4.0` JSON metadata](https://pypi.org/pypi/citry-core/1.4.0/json)
+
+An isolated native Python 3.14 run installed the published pair and passed the
+starter output contract plus string, `CitryElement`, `CitryRender`, and
+`#c-key` cases. The browser wheelhouse then combined that exact published
+Citry wheel with the deterministic tagged core wheel and the three pinned
+transitive wheels. The minified vertical build emitted bundle
+`b724f52d9cbd5ebcb2fa`; two builds produced build-manifest SHA-256
+`59d9d325d41f2a3226b2ccd359b0009d4d5281cd9a6574b736ce02d109f266cd`.
+
+The complete matrix passed in Chromium 149.0.7827.55, Firefox 151.0, and WebKit
+26.5. Every engine asserted the installed package versions and rendered a
+keyed nested component. The result record is
+[`browser-results.json`](vertical_proof/results/browser-results.json). This
+closes the exact-package compatibility question. The public PyPI wheel is
+byte-identical to that matrix input. A fresh Node-hosted Pyodide 314.0.3 smoke
+then downloaded the public core file, verified its size and hash, loaded it
+with the four other public current-track wheels, asserted both package
+versions, and rendered the starter plus a keyed nested component. The
+all-public package-input question is therefore closed; immutable docs
+wheelhouse promotion remains deployment work.
 
 ## Threat model and boundaries
 
 The assets to protect are the editor source buffer, the parent docs DOM,
 docs-origin cookies and storage, authenticated or state-changing endpoints,
 visitor data in other tabs, the visitor's device resources, and the integrity
-of diagnostics shown by the parent page. The initial privacy hypothesis is
-that source stays in the browser and is excluded from analytics, telemetry,
-and server logs; the final design must either prove that path or disclose every
-exception.
+of diagnostics shown by the parent page. The playground application excludes
+source from its analytics, telemetry, and logs while the full docs and runner
+application, dependency, build, and hosting chain is trusted. This includes the
+editor dependencies, Pyodide, and every wheel. Pins and hashes detect byte
+substitution but do not make selected code trustworthy. Visitor Python retains
+runner-origin network APIs, and preview self-navigation and download activation
+remain possible, so visitor code can construct URLs that enter hosting logs.
+The runner document and broker can also read the
+source and forge results, so a compromised runner is outside the application
+privacy claim and is part of the trusted computing base.
+
+Visitor Python can also create runner-origin IndexedDB and Cache Storage data
+that survives Worker termination and may be visible to another runner-origin
+tab. Preview download activation, like self-navigation, can issue a docs-origin
+request even when the sandbox prevents a completed download. These capabilities
+are accepted only for the locally edited v1 model and must be disclosed and
+probed on the production origins.
 
 The actors are locally typed code, future copied or shared code, rendered HTML
 and JavaScript, compromised runtime artifacts, and accidental infinite or
@@ -590,36 +681,44 @@ The proposed boundaries have deliberately limited claims:
 - A same-origin Worker is rejected for production containment because every
   tested engine sent the docs cookie. The docs page also cannot directly
   create a Worker from a dedicated cross-origin entry, and a blob Worker would
-  inherit its creator's origin. The locally accepted topology is a
-  cross-origin runner iframe on a credential-free origin with only the sandbox
+  inherit its creator's origin. The selected production topology is a runner
+  iframe on a credential-free, different-site origin with only the sandbox
   flags needed to retain that origin and create its same-origin module Worker.
   The bounded broker passed in all three desktop engines. Runtime artifacts
   must be self-hosted there, with no secrets or sensitive endpoints and a
-  response CSP limited to immutable runner assets. Visitor Python retains
-  every channel that static allowlist permits. A stricter post-bootstrap
+  response CSP limited to immutable runner assets and the exact docs
+  `frame-ancestors` origin. The runner document, broker, and hosting account are
+  trusted for source confidentiality and result integrity. Visitor Python retains
+  every channel that static allowlist permits; same-origin requests can put
+  visitor-created paths or queries in runner logs. A stricter post-bootstrap
   denial would require a separately designed lifecycle that moves preverified
   bytes into a new connect-blocked context; CSP does not change dynamically
   for an existing document or Worker. Combined-Pyodide verification passed
   locally; production-origin verification remains open.
 - `sandbox="allow-scripts"` without `allow-same-origin` is the candidate result
   frame policy. It should block direct parent DOM access, but it does not by
-  itself promise network isolation.
+  itself promise network isolation. Self-navigation and download activation can
+  still issue requests and may carry docs cookies in some engines.
 - Every iframe message must be treated as hostile. A nonce is correlation, not
   authentication, because visitor JavaScript can read and spoof it.
 - v1 may automatically run only the built-in trusted starter and code edited
   locally by the visitor. Automatically loading code from a share link remains
   out of scope until the threat model is revisited.
 
-## Tests not yet run
+## Iterative rollout validation
 
-The following Stage 1 requirements remain proposed tests, not verified facts:
+The following tests and release tasks remain. Stage 7 makes the IndexedDB,
+Cache Storage, preview-navigation, and download probes production-activation
+requirements while keeping broader capability and performance work iterative:
 
-- exercise actual WebSocket, Cache Storage, and IndexedDB operations and
-  deliberate Worker self-shutdown. The browser proof checked availability but
-  did not use those capabilities;
+- exercise real Cache Storage and IndexedDB write/read/delete operations across
+  Worker restart and a second runner-origin tab, then clean up the test keys.
+  WebSocket operations remain a broader follow-up because the production
+  runner exposes no WebSocket endpoint;
 - repeat the broker and preview matrix on the production runner origin with
   its real headers, cookie domain, cache behavior, immutable asset paths, and
-  no deliberate docs `connect-src` test exception;
+  no deliberate docs `connect-src` test exception. Include both preview
+  self-navigation and download-triggered requests;
 - derive product message sizes, rate limits, timeouts, and concurrent-session
   limits from measured source/output distributions and abuse tests. The proof
   constants only establish enforcement mechanics;
@@ -631,14 +730,12 @@ The following Stage 1 requirements remain proposed tests, not verified facts:
 - integrate the deterministic build wrapper and repeated-build comparison into
   release CI on its publishing host. The local proof is byte-reproducible, but
   the release workflow does not yet enforce it;
-- publish future core and Citry wheels, add their public immutable URLs to the
-  manifest, and verify that the promoted docs wheelhouse exactly matches PyPI;
-- run the exact published 0.3.0 public package and transitive dependency
-  manifest, which cannot happen before that release exists.
+- promote the published core 1.4.0 PyEmscripten wheel into the docs
+  wheelhouse and verify that the promoted bytes exactly match PyPI;
 
-The local runner topology is accepted for continued design, not yet as a
-production containment claim. Promote it only after the deployed tests have
-executable evidence.
+The local runner topology is accepted for implementation. Deployment promotes
+it only after the public-origin smoke confirms the configured headers and
+credential boundary.
 
 ## CI and release sketch
 
@@ -661,18 +758,20 @@ executable evidence.
    `pyemscripten_2026_0_wasm32` tags. Validate its metadata, `RECORD`, byte
    size, and SHA-256 before upload.
 4. Install the wheel in stock Pyodide 314.0.3 and run `core_smoke.py`.
-5. After Citry 0.3.0 exists, install only manifest-listed wheels with dependency
-   resolution disabled and run the public matrix plus browser Worker tests.
-6. Collect the sdist, native wheels, and PyEmscripten wheel before the sole
-   Trusted Publishing job. Check the expected artifact inventory before
-   requesting publishing credentials, then attest and upload the set.
-7. Verify that PyPI reports the expected filename and hash before publishing
-   the paired Citry release.
+5. Install only manifest-listed wheels with dependency resolution disabled and
+   run the exact 0.3.0/1.4.0 public matrix plus browser Worker tests.
+6. Completed for the 1.4.0 repair: verify the existing PyPI inventory, attest
+   the tested PyEmscripten wheel, and upload only that missing platform
+   artifact through controlled Trusted Publishing. For every later release,
+   collect the full sdist and wheel inventory before the sole publishing job.
+7. Completed for the 1.4.0 repair: verify that PyPI reports the expected
+   filename, size, and hash, then run the current-package smoke from the public
+   bytes before promoting the browser bundle.
 8. Promote the exact browser artifacts and manifest to the immutable docs
    wheelhouse, then make the docs build fail if its requested runtime version
    or hashes differ from that manifest.
 
-The next Stage 1 work is to prove the production origin, enforce the proven
-build contract in the release workflow, measure physical-mobile and uncached
-network behavior, and test the eventual published package pair, not to design
-a new binding architecture.
+The next Stage 1 rollout work is to prove the production origin, enforce the
+proven build contract in the permanent release workflow, measure
+physical-mobile and uncached network behavior, and promote the exact public
+artifacts into the docs wheelhouse, not to design a new binding architecture.

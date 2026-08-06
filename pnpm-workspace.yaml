@@ -1,7 +1,10 @@
 # Node packages in this monorepo. The root package.json holds only dev
-# tooling (the pinned pyright the check gate runs). Publishable Node
-# packages will live under packages/js/, while private contributor tools
-# such as the Citry UI Storybook spike can join the workspace directly.
+# tooling (the pinned pyright the check gate runs). Shipped JavaScript
+# packages live under packages/js/, editor distributions under
+# packages/editors/, and private contributor tools can join directly.
 packages:
+  - docs_site/_internal/frontend
+  - packages/editors/*
   - packages/js/*
+  - packages/protocol/*/v1/js
   - packages/py/citry_ui/storybook

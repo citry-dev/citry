@@ -84,8 +84,14 @@ Python wrapper together (CLAUDE.md Mechanism 4).
 `parse_template(input, lang, user_rules)` builds the tree:
 
 - An HTML tag stack assembles `WithBody` nodes; a closing tag pops and must
-  match the open tag's name, else a mismatched-tags error.
-- Void elements (`constants::HTML_VOID_ELEMENTS`) are treated as self-closing.
+  match the open tag's name under ASCII-case-insensitive HTML identity, else a
+  mismatched-tags error. Authored spelling stays in the AST.
+- Void elements (`constants::HTML_VOID_ELEMENTS`) are treated as self-closing
+  through the same ASCII-case-insensitive identity.
+- Citry's `c-` prefix is exact lowercase. Component suffix identity is
+  ASCII-case-insensitive, including the dynamic built-ins, while structural
+  tags require their exact lowercase spelling. The shared helpers in
+  `constants.rs` keep parser and compiler dispatch aligned.
 - `c-*` attributes are classified: a value whose trimmed content starts with a
   real tag and whose last grammar element is a closing, self-closing, raw, or
   HTML void tag becomes `Template`, as does a value wholly enclosed by
@@ -115,6 +121,9 @@ attributes on raw tags. Attribute and slot rules per tag are data-driven in
 carry optional per-slot data-field names. A direct destructuring source is
 checked only when the effective fill name and data provider are both static;
 dynamic providers keep the runtime check.
+Ordinary HTML elements and `<c-element>` compare explicit attribute identities
+with ASCII folding (`ID`/`id` duplicate, `ID`/`c-id` logical conflict,
+`CLASS`/`c-class` accumulation). Component kwargs remain exact-case.
 
 ## Compiler (`compiler.rs`) and the output-format contract
 
@@ -143,10 +152,12 @@ contract):
   merging resolve as one unit at render time (`compile_html_node`). A purely
   static tag flattens to literal strings instead.
 - `#c-*` framework metadata never joins that attribute set: on an element it
-  compiles to its own output fragments after the ordinary attributes
-  (`#c-key` as ` data-citry-key=":` + `ExprNode` + `"`, `#c-ignore` as the
-  literal morph marker), and on a component tag `#c-key` rides as the
-  `ComponentNode`'s trailing key argument, emitted only when present.
+  compiles after the ordinary attributes (`#c-key` as an `ElementKeyNode`
+  wrapping its `ExprHtmlAttr`, `#c-ignore` as the literal morph marker). The
+  key node emits the complete `data-citry-key` attribute for every evaluated
+  value except `None`, which emits nothing. On a component tag `#c-key` rides
+  as the `ComponentNode`'s trailing key argument, emitted only when authored;
+  the Python runtime likewise treats an evaluated `None` as no key.
 - Expression content retains its trailing whitespace from `{{ expr }}`.
 - `<c-raw>` compiles its body to a single literal text part (an `UnsafeString`
   that `coalesce_strings` may merge with adjacent static text); the inner

@@ -98,7 +98,9 @@ Render actions in the same result still apply in their listed order.
 Inside a template, the equivalent is
 `$sendEvent("increment", { amount: 1 })`. Prefer `@c-click="increment(...)"`
 when the return value is not needed because the declarative binding also owns
-loading and modifier behavior.
+loading and modifier behavior. A declarative `@c-*` binding does not expose
+the Promise or its Data value. Return `actions.Dispatch(...)` when browser code
+must observe a declarative call's result.
 
 ## Replace the callback proxy with closed actions
 

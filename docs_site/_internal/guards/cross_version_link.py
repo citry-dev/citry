@@ -26,7 +26,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
-from docs_site._internal.guards.site_index import SiteIndex
+from docs_site._internal.guards.site_index import SiteIndex, strip_base_path
 from docs_site._internal.nav import SCOPE_SITE, load_nav
 from docs_site._internal.versioning import BUILD_INFO_NAME, is_frozen_import
 
@@ -107,7 +107,7 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         for link in page.links:
             if link.is_external or link.is_anchor_only or not link.target:
                 continue
-            target_path = _strip_base_path(link.target, ctx.base_path)
+            target_path = strip_base_path(link.target, ctx.base_path)
             if _is_non_page_asset(target_path):
                 continue
             if target_path.startswith("/v/"):
@@ -141,14 +141,6 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
                     message=f"Broken link {link.href!r}: target not found on disk",
                     source=page.label,
                 )
-
-
-def _strip_base_path(target: str, base_path: str) -> str:
-    base = "/" + base_path.strip("/") if base_path.strip("/") else ""
-    if base and (target == base or target.startswith(f"{base}/")):
-        stripped = target[len(base) :]
-        return stripped or "/"
-    return target
 
 
 def _matches_site_route(target: str, patterns: tuple[str, ...]) -> bool:

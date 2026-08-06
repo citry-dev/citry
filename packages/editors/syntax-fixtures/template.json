@@ -130,6 +130,17 @@
       ]
     },
     {
+      "name": "dynamic attributes on HTML tags in Python templates",
+      "language": "citry",
+      "source": "class Controls(Component):\n    template = \"\"\"\n      <input c-checked=\"control.default\" />\n      <option c-selected=\"option.value == control.default\">{{ option.label }}</option>\n    \"\"\"\n",
+      "allow_errors": false,
+      "assertions": [
+        {"text": "control", "role": "python"},
+        {"text": "value", "role": "python"},
+        {"text": "label", "role": "python"}
+      ]
+    },
+    {
       "name": "double quoted embeds retain triple single text",
       "language": "citry",
       "source": "class DoubleQuoted(Component):\n    template = \"\"\"<p>''' {{ double_template }}</p>\"\"\"\n    js = \"\"\"const doubleJs = 1; /* ''' */\"\"\"\n    css = \"\"\"a { /* ''' */ border-color: rebeccapurple; }\"\"\"\n",

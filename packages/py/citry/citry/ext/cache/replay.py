@@ -14,7 +14,7 @@ from citry.citry_render import (
     Placeholder,
     RenderFrame,
 )
-from citry.client_directives import ComponentTagClientBindingSource
+from citry.client_directives import ComponentTagClientBindingSource, validate_client_props_target
 from citry.extension import OnRenderCacheExportContext, RenderCacheInstance, StagedRenderCacheContribution
 from citry.ownership import (
     AlpineHandlerClientBindingPayload,
@@ -29,6 +29,7 @@ from citry.ownership import (
     LogicalFillKind,
     LogicalFillRecord,
     LogicalInstanceRecord,
+    MorphMode,
     OwnershipSnapshot,
     OwnershipState,
     PhysicalRegionId,
@@ -138,10 +139,7 @@ def _export_boundary_artifact(render: CitryRender, *, component_root: bool) -> C
         region_local_by_id=region_local_by_id,
     )
 
-    artifact_frames = tuple(
-        _detach_frame(live_frame, exported_ownership.local_by_id, boundary_id=boundary_id)
-        for live_frame in live_frames
-    )
+    artifact_frames = tuple(_detach_frame(live_frame, exported_ownership.local_by_id) for live_frame in live_frames)
     boundary = render.context.component
     if boundary is None:
         raise CacheArtifactError("A render-cache artifact requires a live boundary component.")
@@ -645,6 +643,8 @@ def _export_ownership(
                     "authored_tag": record.authored_tag,
                     "id": invocation_local_by_id[record.id],
                     "location": location_local_by_id[record.source_location_id],
+                    "morph_key": record.morph_key,
+                    "morph_mode": record.morph_mode,
                     "order": order_rank[record.order],
                     "parent_region": region_ref(record.physical_parent_region_id),
                     "client_bindings": [
@@ -803,18 +803,13 @@ def _client_binding_to_wire(
 def _detach_frame(
     live: _LiveFrame,
     local_by_id: dict[str, int],
-    *,
-    boundary_id: str,
 ) -> ArtifactFrame:
     frame = live.render.frame
     render_id = frame.render_id
     instance = local_by_id.get(render_id) if render_id is not None else None
     class_id = frame.class_id if instance is not None else None
     class_name = frame.class_name if instance is not None else None
-    markers = _detached_markers(
-        (*frame.root_markers, *live.render.context._get_root_markers()),
-        is_boundary=render_id == boundary_id and frame.is_component_root,
-    )
+    markers = _detached_markers((*frame.root_markers, *live.render.context._get_root_markers()))
     return ArtifactFrame(
         instance=instance,
         class_id=class_id,
@@ -825,13 +820,11 @@ def _detach_frame(
     )
 
 
-def _detached_markers(markers: tuple[str, ...], *, is_boundary: bool) -> tuple[str, ...]:
-    """Strip render-ID markers and current-call boundary keys before storage."""
+def _detached_markers(markers: tuple[str, ...]) -> tuple[str, ...]:
+    """Strip render-ID markers before detached storage."""
     detached: list[str] = []
     for marker in markers:
         if marker.startswith('data-cid="'):
-            continue
-        if is_boundary and marker.startswith('data-citry-key="'):
             continue
         if marker not in detached:
             detached.append(marker)
@@ -931,6 +924,21 @@ def _replay_boundary_artifact(
         graph=graph,
         preserve_unmatched_writer_locations=not component_root,
     )
+    for invocation in ownership_snapshot.component_invocations:
+        try:
+            target_class = boundary.citry.get_component_by_class_id(invocation.target_class_id)
+        except KeyError as err:
+            raise CacheArtifactError(
+                "Artifact component invocation refers to a target class_id with no registered component."
+            ) from err
+        try:
+            validate_client_props_target(
+                target_class,
+                (binding.key for binding in invocation.client_bindings),
+                tag_name=f"c-{invocation.authored_tag}",
+            )
+        except RuntimeError as err:
+            raise CacheArtifactError(str(err)) from err
     staged = boundary.citry.extensions._stage_render_cache(
         artifact.extensions,
         instance_ids=tuple(id_by_instance),
@@ -1467,6 +1475,8 @@ def _decode_ownership_snapshot(
                 "authored_tag",
                 "id",
                 "location",
+                "morph_key",
+                "morph_mode",
                 "order",
                 "parent_region",
                 "client_bindings",
@@ -1503,6 +1513,8 @@ def _decode_ownership_snapshot(
                 source_location_id=cast("SourceLocationId", location_id(record["location"], f"{path}.location")),
                 authored_tag=_nonempty_string(record["authored_tag"], f"{path}.authored_tag"),
                 target_class_id=_nonempty_string(record["target_class"], f"{path}.target_class"),
+                morph_key=_optional_string(record["morph_key"], f"{path}.morph_key"),
+                morph_mode=_morph_mode(record["morph_mode"], f"{path}.morph_mode"),
                 target_render_id=target,
                 physical_parent_region_id=region_id(record["parent_region"], f"{path}.parent_region", optional=True),
                 client_bindings=tuple(
@@ -1828,6 +1840,15 @@ def _nonempty_string(value: object, path: str) -> str:
 
 def _optional_string(value: object, path: str) -> str | None:
     return None if value is None else _string(value, path)
+
+
+def _morph_mode(value: object, path: str) -> MorphMode | None:
+    if value is None:
+        return None
+    mode = _string(value, path)
+    if mode == "ignore":
+        return "ignore"
+    raise CacheArtifactError(f"{path} contains unknown value {mode!r}.")
 
 
 def _optional_nonempty_string(value: object, path: str) -> str | None:

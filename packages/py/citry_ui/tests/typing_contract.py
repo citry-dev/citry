@@ -21,8 +21,6 @@ from citry import (
 from citry_ui import (
     CButton,
     CButtonDefaultSlotData,
-    CButtonHeadless,
-    CButtonHeadlessDefaultSlotData,
     CField,
     CInput,
     CTable,
@@ -40,22 +38,15 @@ def styled_content(ctx: SlotContext[CButtonDefaultSlotData], /) -> str:
     return "Save"
 
 
-def headless_content(ctx: SlotContext[CButtonHeadlessDefaultSlotData], /) -> str:
-    assert_type(ctx.data, CButtonHeadlessDefaultSlotData)
-    return str(ctx.data.loading)
-
-
 app = Citry(autodiscover=False)
 ui: LibraryInstallation = app.register_library(citry_ui)
 CButtonCall = cast("Callable[..., LibraryComponentInvocation]", CButton)
-CButtonHeadlessCall = cast("Callable[..., LibraryComponentInvocation]", CButtonHeadless)
 CFieldCall = cast("Callable[..., LibraryComponentInvocation]", CField)
 CInputCall = cast("Callable[..., LibraryComponentInvocation]", CInput)
 CTableCall = cast("Callable[..., LibraryComponentInvocation]", CTable)
 CTabsCall = cast("Callable[..., LibraryComponentInvocation]", CTabs)
 
 button = CButtonCall(slots={"default": styled_content})
-headless_button = CButtonHeadlessCall(slots={"default": headless_content})
 field = CFieldCall(slots={"label": "Name", "default": CInputCall(name="name")})
 table = CTableCall(
     columns=(CTableColumn("name", "Name"),),
@@ -66,7 +57,6 @@ raw_class: type[Component] = ui[CButton]
 component_like: ComponentLike = button
 
 assert_type(button, LibraryComponentInvocation)
-assert_type(headless_button, LibraryComponentInvocation)
 assert_type(field, LibraryComponentInvocation)
 assert_type(table, LibraryComponentInvocation)
 assert_type(tabs, LibraryComponentInvocation)

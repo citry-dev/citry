@@ -63,8 +63,9 @@ stable anchors, ownership revisions and states, client bindings, fill sources,
 RootGroups, root bindings, Citry-owned native listener targets, props effects,
 managed effects and resources, client context magic frames, class-data owners,
 dependency claims, the replay ledger, graph failures, and pending calls. The Events snapshot covers
-anchors, render IDs, class records, delegated listener types, polled elements,
-intervals, controls, form effects, pending flushes, and queued calls.
+anchors, render IDs, class records, elements with native binding listeners,
+element/event-type listener registrations, polled elements, intervals,
+controls, form effects, pending flushes, and queued calls.
 
 Hook counters have a different expected shape: installation, root-selector,
 init-interceptor, and startup counts remain fixed; the coordinated morph count

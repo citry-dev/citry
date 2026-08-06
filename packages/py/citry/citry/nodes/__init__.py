@@ -27,7 +27,7 @@ Example:
 
         from citry_core.template_parser import parse_template, compile_template
         from citry_core.template_parser.nodes import (
-            ExprNode, ComponentNode, IfNode, ForNode,
+            ExprNode, ElementKeyNode, ComponentNode, IfNode, ForNode,
             SlotNode, FillNode, StaticHtmlAttr, ExprHtmlAttr,
             TemplateHtmlAttr, TemplateNode,
         )
@@ -39,6 +39,7 @@ Example:
         ns = {
             "source": source,
             "ExprNode": ExprNode,
+            "ElementKeyNode": ElementKeyNode,
             "TemplateNode": TemplateNode,
             "ComponentNode": ComponentNode,
             "ElementAttrsNode": ElementAttrsNode,
@@ -65,14 +66,14 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from difflib import get_close_matches
 from keyword import iskeyword
-from typing import TYPE_CHECKING, Any, TypeAlias, cast, final
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias, cast, final
 from unicodedata import normalize
 
-from typing_extensions import override
+from typing_extensions import Unpack, override
 
 from citry.attrs import format_attrs, merge_attrs, validate_html_attr_name
 from citry.citry_context import CitryContext
-from citry.citry_element import CitryElement
+from citry.citry_element import CitryElement, _ElementMorphMetadata
 from citry.citry_render import (
     CitryRender,
     DeferredComponent,
@@ -115,6 +116,20 @@ if TYPE_CHECKING:
 
     from citry.citry_render import RenderPart
     from citry.ext.events.extension import EventsExtension
+
+
+_EVENTS_COMPILER_ATTR_PREFIX = "data-cev-"
+
+
+def _reject_dynamic_events_compiler_attr(name: str, *, tag_name: str) -> None:
+    """Keep render-time attributes out of the Events compiler-owned namespace."""
+    if name.lower().startswith(_EVENTS_COMPILER_ATTR_PREFIX):
+        msg = (
+            f"{name!r} arrived on <{tag_name}> through an attribute spread or a dynamic attribute. "
+            "'data-cev-*' attributes are compiler-owned; author State bindings with ':c-*' "
+            "and event bindings with '@c-*' instead."
+        )
+        raise RuntimeError(msg)
 
 
 # NOTE: Not abstract on purpose: the compiler builds the whole node tree up front
@@ -564,7 +579,11 @@ class TemplateNode(Node):
             # the rules derived from the registered components' declarations.
             component = context.component
             user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_nested_template(self.expr, user_rules)
+            self._generator = _compile_nested_template(
+                self.expr,
+                user_rules,
+                type(component) if component is not None else None,
+            )
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -708,7 +727,11 @@ class TemplateHtmlAttr(HtmlAttr):
             # the rules derived from the registered components' declarations.
             component = context.component
             user_rules = component.citry._tag_rules() if component is not None else None
-            self._generator = _compile_nested_template(self.template, user_rules)
+            self._generator = _compile_nested_template(
+                self.template,
+                user_rules,
+                type(component) if component is not None else None,
+            )
         parts = _render_body(self._generator(), context)
         return CitryRender(parts=parts, context=context)
 
@@ -724,9 +747,10 @@ class ElementAttrsNode(Node):
     Generated as: ``ElementAttrsNode(source, (start, end), (attrs...), ("var1", ...))``
 
     Emitted when an HTML element (not a component) has at least one dynamic
-    attribute: a ``c-*`` value or a ``c-bind`` spread. The node covers ALL of
-    the tag's attributes, static ones included, because the set resolves as
-    one unit:
+    attribute—a ``c-*`` value or a ``c-bind`` spread—or a literal extension
+    binding/output name that must remain structurally visible. The node covers
+    ALL of the tag's attributes, static ones included, because the set resolves
+    as one unit:
 
     - Contributions collect left to right in source order; ``c-bind``
       contributes each entry of its mapping (which must be a ``Mapping``).
@@ -738,6 +762,10 @@ class ElementAttrsNode(Node):
 
     Renders to one string like ``' class="btn" disabled'`` (leading space
     included) or ``""`` when every attribute resolved away.
+
+    An ``on_template_compiled`` extension may consume parser-proven literal
+    attributes and collapse an otherwise-static region back to a string before
+    this node reaches rendering. Events uses that path for ``@c-*`` / ``:c-*``.
 
     Example:
         Template ``<div id="x" c-class="cls">hi</div>`` produces::
@@ -823,10 +851,14 @@ class ElementAttrsNode(Node):
                 contribution: dict[str, Any] = {}
                 for key, item in value.items():
                     resolved_key = validate_html_attr_name(key, where=f"c-bind on <{self.tag_name}>")
+                    _reject_dynamic_events_compiler_attr(resolved_key, tag_name=self.tag_name)
                     contribution[resolved_key] = const_value(item)
                 contributions.append(contribution)
             else:
-                contributions.append({attr.key.removeprefix("c-"): const_value(attr.resolve(context))})
+                resolved_key = attr.key.removeprefix("c-")
+                if attr.key.startswith("c-"):
+                    _reject_dynamic_events_compiler_attr(resolved_key, tag_name=self.tag_name)
+                contributions.append({resolved_key: const_value(attr.resolve(context))})
         merged = merge_attrs(*contributions)
         # `#c-*` framework attributes (`#c-key`, `#c-ignore`) are
         # template-authored only in v1: authored on the tag, the compiler
@@ -896,6 +928,44 @@ class ElementAttrsNode(Node):
         return f"ElementAttrsNode(attrs={len(self.attrs)}, used_vars={self.used_vars})"
 
 
+@final
+class ElementKeyNode(Node):
+    """
+    An explicit ``#c-key`` on a plain HTML element.
+
+    Generated as ``ElementKeyNode(ExprHtmlAttr(...))``. The wrapped attribute
+    evaluates in the surrounding template scope. ``None`` emits nothing, which
+    makes the element behave exactly as if ``#c-key`` were absent. Every other
+    value, including ``False``, ``0``, and ``""``, emits the escaped composite
+    key ``data-citry-key=":<value>"``.
+
+    The node owns the complete output attribute so omission cannot leave an
+    empty scope prefix or a dangling quote in the start tag. It stays outside
+    ``ElementAttrsNode`` because framework metadata must not enter ordinary
+    attribute merging or the ``on_attrs_resolved`` extension hook.
+
+    Args:
+        attr: The compiled ``#c-key`` expression and its source metadata.
+
+    """
+
+    def __init__(self, attr: ExprHtmlAttr) -> None:
+        self.attr = attr
+        self.source = attr.source
+        self.position = attr.position
+        self.used_vars = attr.used_vars
+
+    @override
+    def render(self, context: CitryContext) -> RenderPart:
+        value = const_value(self.attr.resolve(context))
+        if value is None:
+            return ""
+        return f' data-citry-key=":{escape(value)}"'
+
+    def __repr__(self) -> str:
+        return f"ElementKeyNode(expr={self.attr.expr!r}, used_vars={self.used_vars})"
+
+
 def _kwarg_is_const(attr: HtmlAttr, context: CitryContext) -> bool:
     """
     Whether a resolved component-input value is the same on every render.
@@ -944,6 +1014,15 @@ class _ResolvedComponentInputs:
     client_bindings: tuple[ComponentTagClientBindingRecord, ...]
 
 
+ComponentNodeMetadataEntry: TypeAlias = (
+    tuple[Literal["key"], ExprHtmlAttr] | tuple[Literal["morph"], Literal["ignore"]]
+)
+ComponentNodeMetadata: TypeAlias = tuple[
+    Literal["range", "element"],
+    Unpack[tuple[ComponentNodeMetadataEntry, ...]],
+]
+
+
 @final
 class ComponentNode(Node):
     """
@@ -966,13 +1045,10 @@ class ComponentNode(Node):
         Component names are lowercased (``Card`` -> ``card``); kebab names
         are preserved (``my-card`` stays ``my-card``).
 
-    A tag carrying the ``#c-key`` framework attribute appends one trailing
-    argument, the key expression as an ``ExprHtmlAttr``; unkeyed tags emit
-    no argument and ``key`` defaults to ``None``. The key never joins
-    ``attrs`` (so it can never become a kwarg); its evaluated value travels
-    as ``CitryElement.morph_key`` and is stamped onto the child's root
-    element(s) as the ``data-citry-key`` attribute (see
-    docs/design/events.md section 5.3).
+    A tag carrying framework metadata appends one trailing tagged tuple. The
+    ``range`` locus records a logical component-range directive; ``element``
+    privately carries directives to the dynamic ordinary-element built-in.
+    Metadata never joins ``attrs`` and can therefore never become a kwarg.
 
     """
 
@@ -985,7 +1061,7 @@ class ComponentNode(Node):
         used_vars: tuple[str, ...],
         name: str,
         contains_fills: bool,
-        key: ExprHtmlAttr | None = None,
+        metadata: ComponentNodeMetadata | None = None,
     ) -> None:
         self.source = source
         self.position = position
@@ -994,7 +1070,43 @@ class ComponentNode(Node):
         self.used_vars = used_vars
         self.name = name
         self.contains_fills = contains_fills
-        self.key = key
+        self.metadata = metadata
+        self._metadata_locus: Literal["range", "element"] | None = None
+        self.key: ExprHtmlAttr | None = None
+        self.morph_mode: Literal["ignore"] | None = None
+
+        if metadata is None:
+            return
+        if not isinstance(metadata, tuple):
+            msg = "ComponentNode metadata must be a tuple."
+            raise TypeError(msg)
+        if not metadata or metadata[0] not in {"range", "element"}:
+            msg = "ComponentNode metadata locus must be 'range' or 'element'."
+            raise TypeError(msg)
+        self._metadata_locus = metadata[0]
+        seen: set[str] = set()
+        for entry in metadata[1:]:
+            if not isinstance(entry, tuple) or len(entry) != 2:
+                msg = "ComponentNode metadata entries must be two-item tuples."
+                raise TypeError(msg)
+            entry_name, payload = entry
+            if entry_name not in {"key", "morph"}:
+                msg = f"Unknown ComponentNode metadata entry {entry_name!r}."
+                raise TypeError(msg)
+            if entry_name in seen:
+                msg = f"Duplicate ComponentNode metadata entry {entry_name!r}."
+                raise TypeError(msg)
+            seen.add(entry_name)
+            if entry_name == "key":
+                if not isinstance(payload, ExprHtmlAttr):
+                    msg = "ComponentNode 'key' metadata requires an ExprHtmlAttr payload."
+                    raise TypeError(msg)
+                self.key = payload
+            elif payload != "ignore":
+                msg = "ComponentNode 'morph' metadata must be 'ignore'."
+                raise TypeError(msg)
+            else:
+                self.morph_mode = "ignore"
 
     @override
     def render(self, context: CitryContext) -> DeferredComponent:
@@ -1020,17 +1132,21 @@ class ComponentNode(Node):
             raise RuntimeError(msg)
 
         resolved = self._resolve_inputs(context)
-        slots = self._collect_slots(context)
         child_cls = component.citry.get(self.name)
-        # The `#c-key` expression evaluates now, in the parent's scope (so a
-        # loop variable from an enclosing <c-for> has the right per-item
-        # value). The value is stringified the way expression output is
-        # (None becomes the empty string); escaping happens where the marker
-        # attribute is built, in the render pipeline.
-        morph_key: str | None = None
+        slots = self._collect_slots(context)
+        # The key expression evaluates once in the parent's scope. Exactly
+        # None opts out; every other value, including falsey values, is a key.
+        evaluated_key: str | None = None
         if self.key is not None:
             key_value = const_value(self.key.resolve(context))
-            morph_key = "" if key_value is None else str(key_value)
+            evaluated_key = None if key_value is None else str(key_value)
+        range_morph_key = evaluated_key if self._metadata_locus == "range" else None
+        range_morph_mode = self.morph_mode if self._metadata_locus == "range" else None
+        element_morph_metadata = (
+            _ElementMorphMetadata(key=evaluated_key, morph_mode=self.morph_mode)
+            if self._metadata_locus == "element"
+            else None
+        )
         ownership = context.ownership
         if ownership is None:
             msg = "ComponentNode.render requires an active ownership graph."
@@ -1039,6 +1155,8 @@ class ComponentNode(Node):
             context,
             authored_tag=self.name,
             target_class_id=child_cls.class_id,
+            morph_key=range_morph_key,
+            morph_mode=range_morph_mode,
             source=self.source,
             position=self.position,
             client_bindings=resolved.client_bindings,
@@ -1048,10 +1166,10 @@ class ComponentNode(Node):
             child_cls,
             resolved.kwargs,
             slots,
-            morph_key=morph_key,
             component_tag_client_bindings=resolved.client_bindings,
             ownership_invocation_id=invocation_id,
             ownership_graph=ownership,
+            element_morph_metadata=element_morph_metadata,
             forward_ownership_invocation=self.name == "component",
         )
         # The active provide/inject entries are captured now, like the kwargs:
@@ -1097,11 +1215,11 @@ class ComponentNode(Node):
             raise RuntimeError(msg)
 
         def apply_kwarg(resolved_key: str, value: Any) -> None:
-            # A dynamic <c-element> is an HTML-attribute boundary, so class
-            # and style follow the same contribution merge as a static
-            # element. Ordinary components keep Python-kwarg last-one-wins.
-            if not component_boundary and resolved_key in ("class", "style"):
-                kwargs.setdefault(resolved_key, None)
+            # A dynamic <c-element> is an HTML-attribute boundary, so every
+            # input keeps its source-ordered contribution until the shared
+            # HTML merge can fold case variants and accumulate class/style.
+            # Ordinary components keep exact-case Python-kwarg last-one-wins.
+            if not component_boundary:
                 element_attr_contributions.append({resolved_key: value})
             else:
                 kwargs[resolved_key] = value
@@ -1167,6 +1285,7 @@ class ComponentNode(Node):
                 for mapping_index, (bound_key, bound_value) in enumerate(bound.items()):
                     if self.name == "element":
                         resolved_bound_key = validate_html_attr_name(bound_key, where="c-bind on <c-element>")
+                        _reject_dynamic_events_compiler_attr(resolved_bound_key, tag_name="c-element")
                     elif not isinstance(bound_key, str):
                         msg = (
                             f"c-bind on <c-{self.name}> must use string kwarg names, "
@@ -1203,6 +1322,8 @@ class ComponentNode(Node):
                 if key.startswith("c-")
                 else ComponentTagClientBindingSource.DIRECT
             )
+            if not component_boundary and client_binding_source == ComponentTagClientBindingSource.SERVER_DYNAMIC:
+                _reject_dynamic_events_compiler_attr(resolved_key, tag_name="c-element")
             if apply_client_binding(resolved_key, value, attr, source=client_binding_source):
                 continue
             if _kwarg_is_const(attr, context):

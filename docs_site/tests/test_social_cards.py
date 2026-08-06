@@ -39,7 +39,7 @@ def _record(url: str, **kw: Any) -> PageRecord:
     return PageRecord(url=url, **fields)
 
 
-def _fake_render(cards: list, cache_dir: Path, _log: Any) -> tuple[int, str]:
+def _fake_render(cards: list, cache_dir: Path, _log: Any, _site_name: str) -> tuple[int, str]:
     """Stand in for the headless-browser render by writing a placeholder PNG per card."""
     for card in cards:
         (cache_dir / f"{card.digest}.png").write_bytes(b"\x89PNG placeholder")
@@ -132,7 +132,14 @@ def test_skips_cleanly_without_a_browser(tmp_path: Path, monkeypatch: Any) -> No
     page = out / "index.html"
     page.write_text(_doc_html(default), encoding="utf-8")
 
-    outcome = generate_social_cards(out, [_record("")], NavTree(), site_url=_SITE, cache_dir=tmp_path / "cache")
+    outcome = generate_social_cards(
+        out,
+        [_record("")],
+        NavTree(),
+        site_url=_SITE,
+        site_name="Citry",
+        cache_dir=tmp_path / "cache",
+    )
 
     # Playwright/Chromium is not available here, so nothing is placed and the
     # page keeps its default OG image.
@@ -149,13 +156,47 @@ def test_places_card_and_rewrites_og_image(tmp_path: Path, monkeypatch) -> None:
     page.write_text(_doc_html(default), encoding="utf-8")
     monkeypatch.setattr(social_cards, "_render_cards", _fake_render)
 
-    outcome = generate_social_cards(out, [_record("guide/")], NavTree(), site_url=_SITE, cache_dir=tmp_path / "cache")
+    outcome = generate_social_cards(
+        out,
+        [_record("guide/")],
+        NavTree(),
+        site_url=_SITE,
+        site_name="Citry",
+        cache_dir=tmp_path / "cache",
+    )
 
     assert outcome.placed == 1
     assert (out / "og" / "guide.png").is_file()
     html = page.read_text(encoding="utf-8")
     assert f"{_SITE}/og/guide.png" in html  # og:image and twitter:image rewritten
     assert default not in html
+
+
+def test_configured_site_name_reaches_the_card_renderer(tmp_path: Path, monkeypatch) -> None:
+    out = tmp_path / "site"
+    out.mkdir()
+    page = out / "index.html"
+    page.write_text(_doc_html(default_og_image_url(_SITE)), encoding="utf-8")
+    captured: dict[str, str] = {}
+
+    def render(cards: list, cache_dir: Path, _log: Any, site_name: str) -> tuple[int, str]:
+        captured["site_name"] = site_name
+        captured["title"] = cards[0].title
+        for card in cards:
+            (cache_dir / f"{card.digest}.png").write_bytes(b"\x89PNG placeholder")
+        return len(cards), ""
+
+    monkeypatch.setattr(social_cards, "_render_cards", render)
+    generate_social_cards(
+        out,
+        [_record("", title="")],
+        NavTree(),
+        site_url=_SITE,
+        site_name="Configured docs",
+        cache_dir=tmp_path / "cache",
+    )
+
+    assert captured == {"site_name": "Configured docs", "title": "Configured docs"}
 
 
 def test_custom_og_image_page_is_left_untouched(tmp_path: Path) -> None:
@@ -165,7 +206,14 @@ def test_custom_og_image_page_is_left_untouched(tmp_path: Path) -> None:
     page = out / "index.html"
     page.write_text(_doc_html(custom), encoding="utf-8")
 
-    outcome = generate_social_cards(out, [_record("")], NavTree(), site_url=_SITE, cache_dir=tmp_path / "cache")
+    outcome = generate_social_cards(
+        out,
+        [_record("")],
+        NavTree(),
+        site_url=_SITE,
+        site_name="Citry",
+        cache_dir=tmp_path / "cache",
+    )
 
     assert outcome.eligible == 0  # the default URL is absent, so the page is skipped
     assert custom in page.read_text(encoding="utf-8")
@@ -178,7 +226,12 @@ def test_noindex_page_is_skipped(tmp_path: Path) -> None:
     page.write_text(_doc_html(default_og_image_url(_SITE)), encoding="utf-8")
 
     outcome = generate_social_cards(
-        out, [_record("", noindex=True)], NavTree(), site_url=_SITE, cache_dir=tmp_path / "cache"
+        out,
+        [_record("", noindex=True)],
+        NavTree(),
+        site_url=_SITE,
+        site_name="Citry",
+        cache_dir=tmp_path / "cache",
     )
 
     assert outcome.eligible == 0
@@ -195,6 +248,13 @@ def test_prune_drops_unused_cache_entries(tmp_path: Path, monkeypatch) -> None:
     stale.write_bytes(b"old")
     monkeypatch.setattr(social_cards, "_render_cards", _fake_render)
 
-    generate_social_cards(out, [_record("")], NavTree(), site_url=_SITE, cache_dir=cache)
+    generate_social_cards(
+        out,
+        [_record("")],
+        NavTree(),
+        site_url=_SITE,
+        site_name="Citry",
+        cache_dir=cache,
+    )
 
     assert not stale.exists()  # the unreferenced card was pruned

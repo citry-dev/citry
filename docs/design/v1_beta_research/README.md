@@ -71,3 +71,31 @@ the sensitive-evidence rules in the charter.
   contract nodes.
 - [`stage2_pilot_edges.tsv`](stage2_pilot_edges.tsv): observed, verified, and
   missing relationships between those nodes.
+
+## Focused implementation baselines
+
+- [`protocol_runtime_ownership_baseline.md`](protocol_runtime_ownership_baseline.md):
+  moving, scope-limited evidence for the executable protocol ownership work in
+  GitHub issue #39.
+- [`protocol_runtime_stage1.md`](protocol_runtime_stage1.md): bounded schema
+  inventory, explicit conformance-case foundation, commands, and opening
+  coverage for issue #39.
+- [`protocol_runtime_stage2.md`](protocol_runtime_stage2.md): Events Python
+  runtime ownership, shipped-copy rules, focused compatibility evidence, and
+  work held for the cross-language stage.
+- [`protocol_runtime_stage3.md`](protocol_runtime_stage3.md): Events JavaScript
+  runtime ownership, browser boundary migration, focused compatibility
+  evidence, and the approved moving payload guard.
+- [`protocol_runtime_stage4.md`](protocol_runtime_stage4.md): client-graph
+  Python runtime ownership, server-writer migration, focused compatibility and
+  Chromium evidence, and the bounded performance comparison.
+- [`protocol_runtime_stage5.md`](protocol_runtime_stage5.md): client-graph
+  JavaScript runtime ownership, generated core boundary, shared browser issue
+  checks, DOM-only product boundary, and the approved payload guard.
+- [`protocol_runtime_stage6.md`](protocol_runtime_stage6.md): complete schema
+  constraint ownership, producer/consumer audit, distribution proof,
+  cross-browser and performance evidence, release ordering, and the current
+  repository-gate blockers.
+- [`protocol_mutation_coverage_exploration.md`](protocol_mutation_coverage_exploration.md):
+  bounded evaluation of issue #54's proposed exhaustive mutation expansion and
+  the recommended change-driven coverage policy.

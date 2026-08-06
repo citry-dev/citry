@@ -182,9 +182,10 @@ a token (a save/restore stack):
 ## 6. Interactions and gotchas
 
 - **Typed `TemplateData`.** Globals are merged **after** a component's own
-  `template_data()` is validated against its declared `TemplateData` schema, so
-  a global key does not have to appear in that schema and never trips its
-  unexpected-field check.
+  `template_data()` is validated and normalized through its declared
+  `TemplateData` schema, so schema defaults and coercions are materialized
+  before the merge. A global key does not have to appear in that schema and
+  never trips its unexpected-field check.
 - **The "computed once" cache.** Globals are plain values, not wrapped in
   `Const()`, so a template part that reads a global is recomputed each render
   rather than cached. Changing a global between renders shows up in the next

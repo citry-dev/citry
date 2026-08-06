@@ -15,6 +15,33 @@ Run every corpus with:
 python -S packages/protocol/events/v1/validate.py
 ```
 
+[`conformance-cases.json`](conformance-cases.json) is the cross-language
+structural mutation set. Each entry starts from one valid file in this
+directory, changes one small thing, and records the expected issue path and
+category. Check it with:
+
+```bash
+uv run python -m packages.protocol._tooling.check packages/protocol/events/v1
+pnpm --dir packages/protocol/events/v1/js run check
+```
+
+When a handwritten protocol rule gives a more useful deterministic issue than
+the schema wrapper, the case names that rule too. For example, an unknown
+action reports its `action` field with category `enum`, not the enclosing
+`oneOf` object with a generic category.
+
+The coverage report shows which schema rules have their own surgical mutation.
+The invalid descriptor, manifest, and exchange examples own relationship and
+transport behavior.
+
+[`constraint-ownership.json`](constraint-ownership.json) is the complete
+structural assignment. It groups every schema constraint under the Python and
+JavaScript validator functions and test files responsible for it. Each group
+stores its expected constraint count and content fingerprint, so adding or
+changing a schema rule requires an intentional registry update. This is
+separate from mutation coverage: the registry covers every rule, while the
+mutation file holds the smaller set of exact cross-language examples.
+
 ## Golden exchanges
 
 Each exchange has a call file and the result a conforming server returns. A

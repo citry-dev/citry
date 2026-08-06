@@ -49,10 +49,10 @@ jobs:
       - name: Install the workspace
         run: uv sync --locked --all-packages
 
-      # Node runs the gate's pyright phase (scripts/check.py invokes the pinned
-      # pyright from node_modules). Only this full-gate workflow runs check.py,
-      # so Node is set up here and not in the per-language test workflows
-      # (rust--tests.yml, py--tests.yml).
+      # Node runs the gate's pinned pyright and package-local checks for the
+      # protocol packages, client, docs playground, and VS Code extension. Only
+      # this full-gate workflow runs check.py, so Node is set up here rather
+      # than in each per-language test workflow.
       # pnpm goes first: setup-node's pnpm cache needs the pnpm binary. The
       # action reads the pinned pnpm version from package.json's packageManager
       # field, so the pin lives in one place.
@@ -62,16 +62,16 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          # A current LTS line; pyright 1.1.411 runs on it.
+          # A current LTS line supported by the pinned workspace tools.
           node-version: "22"
           cache: "pnpm"
 
-      - name: Install Node tooling (pinned pyright)
+      - name: Install the Node workspace
         run: pnpm install --frozen-lockfile
 
       # The whole gate in one command: cargo fmt/clippy/test, ruff check/format,
-      # mypy, pyright, pytest, and the custom validators. Runs every phase then
-      # reports.
+      # mypy, pyright, package-local Node checks, pytest, and the custom
+      # validators. Runs every phase then reports.
       - name: Run the check suite
         run: python scripts/check.py
 
@@ -85,3 +85,9 @@ jobs:
       - name: Validate the Events protocol package directly
         if: always()
         run: python -S packages/protocol/events/v1/validate.py
+
+      - name: Check protocol conformance data directly
+        if: always()
+        run: >-
+          uv run --no-sync python -m packages.protocol._tooling.check
+          packages/protocol/events/v1 packages/protocol/client_graph/v1

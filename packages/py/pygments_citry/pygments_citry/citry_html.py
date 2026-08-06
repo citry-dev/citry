@@ -41,10 +41,11 @@ def _interpolation(_lexer: Any, match: re.Match[str], ctx: Any) -> Iterator[tupl
     Tokenise a ``{{ ... }}`` interpolation, handing the expression to Python.
 
     The closing ``}}`` is found by scanning for one at brace depth zero and
-    skipping Python string literals along the way, so a ``}}`` inside a string
-    (``{{ "}}" }}``) or a nested dict literal (``{{ {"a": {1: 2}} }}``) does not
-    end the block early. This mirrors how the engine's grammar finds the
-    boundary; a plain regex cannot, because it cannot count nesting.
+    skipping Python strings and line comments along the way. A ``}}`` inside a
+    string (``{{ "}}" }}``) or a nested dict literal
+    (``{{ {"a": {1: 2}} }}``) does not end the block early, while quotes and
+    braces after ``#`` cannot hide the host delimiter. This mirrors how the
+    engine's grammar finds the boundary; a plain regex cannot count nesting.
 
     Surrounding whitespace stays plain text and only the expression in the
     middle is highlighted, matching how the rest of the lexer treats a value.
@@ -58,6 +59,16 @@ def _interpolation(_lexer: Any, match: re.Match[str], ctx: Any) -> Iterator[tupl
     close = None
     while i < length:
         char = text[i]
+        if char == "#":
+            i += 1
+            while i < length and text[i] not in "\r\n":
+                if depth == 0 and text.startswith("}}", i):
+                    close = i
+                    break
+                i += 1
+            if close is not None:
+                break
+            continue
         if char in "\"'":  # skip a Python string literal, honouring backslash escapes
             quote = char
             delimiter = quote * 3 if text.startswith(quote * 3, i) else quote

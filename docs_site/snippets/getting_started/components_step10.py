@@ -58,7 +58,7 @@ class ChoicePicker(Component):
     class Slots:
         pass
 
-    # New in this step: set and carry the counter for Python calls.
+    # New in this step: carry the counter between Python calls.
     class State:
         batches_loaded: int = 0
 

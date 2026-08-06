@@ -29,9 +29,6 @@ class LiveSearch(Component):
     class Kwargs:
         query: str = ""
 
-    class Slots:
-        pass
-
     class State(Kwargs):
         pass
 
@@ -39,7 +36,11 @@ class LiveSearch(Component):
         def refresh(self, state):
             return LiveSearch(query=state.query)
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         results = find_products(kwargs.query) if kwargs.query else []
         return {"results": results}
 
@@ -72,15 +73,16 @@ class Rating(Component):
     class Kwargs:
         value: int = 0
 
-    class Slots:
-        pass
-
     class Events:
         def rate(self, data: RatingIn):
             save_rating(data.stars)
             return Rating(value=data.stars)
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         return {"value": kwargs.value}
 
     template = """
@@ -101,12 +103,6 @@ class ContactIn:
 class ContactForm(Component):
     citry = citry_app
 
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
-
     class Events:
         def submit(self, data: ContactIn):
             if "@" not in data.email:
@@ -119,7 +115,7 @@ class ContactForm(Component):
     template = """
       <form @c-submit.prevent="submit">
         <input name="email">
-        <span x-text="$error?.fieldErrors.email"></span>
+        <span x-text="$error('save')?.fieldErrors.email"></span>
         <button type="submit">Send</button>
       </form>
     """
@@ -131,12 +127,6 @@ class ContactForm(Component):
 # --8<-- [start:browser-event]
 class Preferences(Component):
     citry = citry_app
-
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
 
     class Events:
         def save(self):

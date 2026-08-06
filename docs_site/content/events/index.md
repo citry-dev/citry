@@ -83,7 +83,7 @@ Clicking the button calls `increment` on the server. Returning a component
 element renders a fresh component tree and morphs it over the calling instance,
 so the button text changes without a page reload.
 
-Every public method declared on the component's own `Events` class is callable.
+Every public method declared on the component's own [`Events`][citry.Component.Events] class is callable.
 An underscore-prefixed method is a private helper or configuration hook.
 
 ## Choose your next step
@@ -94,7 +94,7 @@ An underscore-prefixed method is a private helper or configuration hook.
   typed Python data.
 - [Bind events in templates](/events/bindings/) for `@c-*`, `:c-*`, polling,
   loading feedback, and errors.
-- [Update the page from a handler](/events/actions/) for renders, browser
+- [Event actions](/events/actions/) for renders, browser
   events, history changes, and stable update targets.
 - [Use event routes directly](/events/http/) for GET handlers, native forms,
   htmx, downloads, and endpoint security.

@@ -1,108 +1,142 @@
 ---
-title: Nested templates in attributes
-description: How a c-* attribute can hold a nested template instead of an expression, and how citry decides which one you meant.
+title: Markup in attributes
+description: Pass a small rendered block through a c-* attribute and make the boundary between markup and Python explicit.
 ---
 
-# Nested templates in attributes
+# Markup in attributes
 
-A `c-*` attribute usually holds an expression: citry evaluates the value as
-Python and uses the result, as shown in
-[Dynamic attributes](/syntax/dynamic-attributes/). But sometimes you want to
-pass a chunk of markup instead of a computed value. For that, a `c-*` attribute
-can hold a nested template: a small piece of HTML that citry renders and passes
-along.
+A dynamic `c-*` attribute usually contains a Python expression. It may also
+contain a small Citry template:
 
-```html
+```citry-html
 <c-Card
-  title="My Card"
-  c-footer="
+  c-footer="<>
     <footer>
-      <p>Made with care</p>
+      <a c-href="archive_url">Read the archive</a>
     </footer>
-  "
-/>
-```
-
-Here `c-footer` does not evaluate as an expression. Its value is markup, so
-citry treats it as a nested template, renders it against the surrounding
-component's data, and hands the result to the `<c-Card>` tag. Whitespace around
-the tag is fine.
-
-## Wrapping several roots or plain text
-
-A single root tag works on its own, as above. When you want to pass plain text,
-or a leading or trailing piece that is not a tag, wrap the value in a fragment,
-`<>...</>`. The `<>` and `</>` delimiters are stripped before the inside is
-parsed.
-
-```html
-<c-Card
-  c-body="<>
-    <p>First paragraph</p>
-    <p>Second paragraph</p>
   </>"
-  c-footer="<>Just some text</>"
 />
 ```
 
-A nested template can contain expressions and other component tags, just like a
-normal template. It runs against the same data as the component it sits on.
+The fragment markers `<>` and `</>` tell Citry that `c-footer` contains
+markup, not Python. Citry renders that markup using the surrounding template's
+data and passes the result to the `Card` component as its `footer` input.
 
-```html
-<c-my-tag c-body="<>Hello {{ name }}</>" />
+Use a fragment when you write new code. It makes the choice between markup and
+Python visible, and it works for one tag, several tags, or plain text.
+
+## The surrounding component renders the value
+
+Markup in an attribute can use the same expressions and component tags as the
+template around it:
+
+```citry-html
+<c-Card
+  c-footer="<>
+    <p>Prepared for {{ user.name }}</p>
+    <c-HelpLink c-topic="help_topic" />
+  </>"
+/>
 ```
 
-```html
-<c-my-tag c-body="<c-icon />" />
+Here `user` and `help_topic` belong to the component whose template contains
+`<c-Card>`. They do not come from `Card`.
+
+The receiving component gets a [`CitryRender`][citry.CitryRender], not a plain
+string. Inserting it with an expression preserves its markup and any JS or CSS
+collected while it rendered:
+
+```citry
+from citry import CitryRender, Component
+
+
+class Card(Component):
+    class Kwargs:
+        footer: CitryRender
+
+    template = """
+      <article>
+        <c-slot />
+        <footer>{{ footer }}</footer>
+      </article>
+    """
 ```
 
-## How citry decides: expression or template
+The attribute does not become a slot automatically. The receiving component
+decides what the input means and where to render it.
 
-citry looks at the trimmed attribute value and treats it as a nested template
-only when one of these is true:
+For ordinary caller-provided content, a component body and
+[`<c-fill>`](/reference/builtins/#c-fill) are usually clearer. Use markup in an
+attribute when the component deliberately models that piece of content as an
+input.
 
-- It is a fragment: it starts with `<>` and ends with `</>`.
-- It starts with `<` immediately followed by an ASCII letter, and it ends with
-  either `/>` (a self-closing tag) or a matching `</tag>`.
+## When the fragment markers are optional
 
-Anything else is treated as an ordinary expression. The check is strict, and a
-few natural-looking values fall through to expression handling:
+Citry also recognizes markup without `<>...</>` when the trimmed value:
 
-- Leading or trailing text outside the tag: `hello <span>A</span>` or
-  `<span>A</span> world`.
-- A space right after the opening `<`: `< THIS IS TEXT >`.
-- A doubled `<<`.
+1. begins with `<` followed immediately by an ASCII letter, and
+2. ends at a complete tag boundary.
 
-These are then parsed as Python, and usually fail because they are not valid
-Python. If you meant markup, wrap it in `<>...</>` to force the template path.
+These all take the markup path:
 
-## HTML comments inside a value
-
-An HTML comment starts with `<!`, not `<` plus a letter, so a value like
-`<!-- x -->` on its own is not recognized as a template. citry treats it as an
-expression, and `<!-- x -->` is not valid Python, so it is a parse error. To
-include an HTML comment, put it inside a real nested template:
-
-```html
-<c-Card c-body="<div><!-- keep me --></div>" />
+```citry-html
+<c-Card c-body="<p>One element</p>" />
+<c-Card c-body="<p>One</p><p>Two</p>" />
+<c-Card c-body="<p>Hello</p> between <strong>tags</strong>" />
+<c-Card c-body="<br>" />
+<c-Card c-body="<c-Icon />" />
 ```
 
-Inside a nested template, a `#` is plain text, not a Python comment. See
-[Comments](/syntax/comments/) for where each comment kind applies.
+A closing tag, self-closing tag, `<c-raw>` block, or unclosed-form HTML void
+element such as `<br>` can provide the final boundary. The markup still has to
+be structurally valid when Citry parses it.
 
-## Good to know
+Leading or trailing plain text does not meet this rule:
 
-- The nested template renders against the data of the component it is written
-  on (the parent), not the component receiving the attribute.
-- citry does not require a nested template to have a single root tag; several
-  root tags parse without error. Use a fragment when you need plain text or a
-  non-tag piece at the start or end, and prefer a single root or a fragment for
-  clarity.
-- The template is compiled the first time it renders and reused after that, so
-  repeated renders do not re-parse the markup.
+```citry-html
+<c-Card c-body="Hello <strong>{{ name }}</strong>" />
+```
 
-Attribute names like `c-body` and `c-footer` above are ordinary `c-*`
-attributes; nothing about the names is special. What makes them nested
-templates is that their values are markup. Whether the receiving component
-treats them as slots or as plain props is up to that component's API; see
-[Components](/concepts/components/) and [Slots](/concepts/slots/).
+Citry tries to read that value as Python, which fails. A fragment fixes it:
+
+```citry-html
+<c-Card c-body="<>Hello <strong>{{ name }}</strong></>" />
+```
+
+The fragment must wrap the entire non-whitespace value. A space after the
+opening `<`, a doubled `<<`, or a standalone HTML comment also needs a
+fragment.
+
+For example, a standalone comment without a fragment takes the Python path and
+fails to parse:
+
+```citry-html
+<c-Card c-body="<!-- Keep this comment. -->" />
+```
+
+Wrap it to make the markup boundary explicit:
+
+```citry-html
+<c-Card c-body="<><!-- Keep this comment. --></>" />
+```
+
+## Some attributes always expect an expression
+
+The following syntax has a fixed structural meaning and never accepts a nested
+template value:
+
+- `c-bind`, `c-if`, `c-elif`, and `c-for`
+- the dynamic `c-is` input on a built-in dynamic component
+- dynamic `c-name` on `<c-slot>` and `<c-fill>`
+- dynamic `c-required` on `<c-slot>`
+
+Pass Python to those attributes. If the Python expression needs to produce
+rendered content, prepare that value in the component instead.
+
+These restrictions belong to the built-in syntax, not to the normalized input
+name alone. A user component may still define an ordinary `c-name` or
+`c-required` input that accepts markup.
+
+Read [Attributes](/syntax/dynamic-attributes/) for expression-valued inputs and
+[Slots](/concepts/slots/) for the usual way to pass flexible content into a
+component.

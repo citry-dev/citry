@@ -952,7 +952,7 @@ The rest of the accepted journey was authored in order:
 - Serve the page with FastAPI;
 - Call Python from a click;
 - Events state;
-- Handle and validate a form; and
+- Handle and validate forms; and
 - Replace part of the page from Python.
 
 The first three pages were rendered from their complete copyable files. Their

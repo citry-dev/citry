@@ -86,6 +86,11 @@ mod tests {
     }
 
     #[test]
+    fn test_unsupported_await_expression_returns_an_error() {
+        assert_parse_error("{{ await fn() }}", "Unsupported expression");
+    }
+
+    #[test]
     fn test_django_block_delimiter_is_literal_text() {
         // V3 has no `{% ... %}` block-tag language. Even an unterminated DTL
         // opener is ordinary text rather than a half-recognized directive.

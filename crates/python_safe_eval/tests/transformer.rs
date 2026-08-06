@@ -2348,6 +2348,12 @@ mod tests {
     }
 
     #[test]
+    fn test_forbid_await_expression_without_panicking() {
+        let error = transform_expression_string("await fn()").unwrap_err();
+        assert!(error.contains("Unsupported expression"), "{error}");
+    }
+
+    #[test]
     fn test_forbid_async_for() {
         _test_forbidden_syntax("async for x in y");
     }

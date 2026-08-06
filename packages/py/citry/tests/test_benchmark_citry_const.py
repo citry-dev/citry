@@ -35,7 +35,7 @@ from typing import Any, Callable, Iterable, Literal, NamedTuple, TypeAlias, Type
 import wrapt
 
 from citry import Citry, Component, Const
-from citry.util.html import SafeString, escape
+from citry.util.html import Markup, escape
 
 # ----------- IMPORTS END ------------ #
 
@@ -1826,7 +1826,7 @@ class Table(Component):
             for header in prepare_row_headers(row, headers):
                 cell = row.cols.get(header.key)
                 cell = NULL_CELL if cell is None else cell
-                display = SafeString(linebreaksbr(cell.value)) if cell.linebreaks else cell.value
+                display = Markup(linebreaksbr(cell.value)) if cell.linebreaks else cell.value
                 cells.append((cell, display))
             rows_out.append((row, cells))
 
@@ -1930,7 +1930,7 @@ def construct_btn_onclick(model: str, btn_on_click: "str | None") -> Any:
     on_click_cb = f"{model} = false;"
     if btn_on_click:
         on_click_cb = f"{btn_on_click}; {on_click_cb}"
-    return SafeString(on_click_cb)
+    return Markup(on_click_cb)
 
 
 class Dialog(Component):
@@ -2523,7 +2523,7 @@ class TabItem(Component):
         result, error = yield
         if error is not None:
             return None
-        content = SafeString(str(result).strip()) if result is not None else SafeString("")
+        content = Markup(str(result).strip()) if result is not None else Markup("")
         self._parent_tabs.append(TabEntry(header=self._header, content=content, disabled=self._disabled))
         return None
 
@@ -2731,7 +2731,7 @@ class ProjectUsers(Component):
 
         role_choices = [(r, r) for r in kwargs.available_roles] if kwargs.available_roles else []
         user_choices = [(str(u["id"]), u["name"]) for u in kwargs.available_users] if kwargs.available_users else []
-        add_user_form = SafeString(
+        add_user_form = Markup(
             _render_choice_field("user_id", "User", user_choices) + _render_choice_field("role", "Role", role_choices)
         )
 

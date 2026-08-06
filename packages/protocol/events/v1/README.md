@@ -26,8 +26,13 @@ defining the exact fields and checks.
   `data-citry-events` JSON block.
 - [`validate.py`](validate.py) checks the package without third-party
   dependencies.
+- [`python/`](python/) contains the canonical, standard-library-only Python
+  builders and validators embedded in the Citry distribution.
+- [`js/`](js/) contains the private JavaScript protocol package.
 - [`tests/`](tests/) contains golden call/result exchanges plus valid and
-  deliberately invalid descriptor and manifest examples.
+  deliberately invalid descriptor and manifest examples. Its
+  [`constraint-ownership.json`](tests/constraint-ownership.json) assigns every
+  schema rule to the Python and JavaScript validators responsible for it.
 
 ## Who follows this contract
 
@@ -41,6 +46,10 @@ their actions.
 
 The shared examples keep both sides honest:
 
+- [`test_events_protocol_runtime.py`](../../../py/citry/tests/test_events_protocol_runtime.py)
+  replays every shared issue through the embedded Python validators, checks
+  structural call failures at the real dispatcher boundary, and verifies the
+  canonical and shipped packages are byte-identical.
 - [`test_events_conformance.py`](../../../py/citry/tests/test_events_conformance.py)
   renders the conformance component and replays every golden exchange through
   the real Python dispatcher.
@@ -52,6 +61,24 @@ The shared examples keep both sides honest:
   checks browser-created calls, strict result validation, HTTP transport, and
   full live round trips.
 
+The tooling reports two different facts. A shared mutation starts with valid
+JSON, breaks one field, and proves both implementations report the same path
+and issue category. The ownership registry groups every schema rule by the
+runtime functions and test family responsible for it. Its stored counts and
+fingerprints make a changed schema fail until that assignment is reviewed.
+The registry proves that no rule is forgotten; the smaller mutation set gives
+exact cross-language examples at representative boundaries.
+
+Mutation coverage is change-driven, not a quota of one case per schema
+pointer. Add a shared mutation when a change introduces a new schema keyword
+or distinct validator branch, when a drift bug needs a regression case, or
+when an exact first issue path and category matter. Do not add hundreds of
+cases that only repeat the same required-field, type, constant, or
+closed-object helper. If repeated drift shows that this policy is too weak,
+revisit broader generation with evidence from those failures. The analysis
+behind this policy is in
+[`protocol_mutation_coverage_exploration.md`](../../../../docs/design/v1_beta_research/protocol_mutation_coverage_exploration.md).
+
 ## Running the checks
 
 From the repository root:
@@ -60,8 +87,13 @@ From the repository root:
 # Language-neutral package check.
 python -S packages/protocol/events/v1/validate.py
 
+# Exact shared mutations plus complete validator ownership.
+uv run python -m packages.protocol._tooling.check \
+  packages/protocol/events/v1
+
 # Server writer and dispatcher conformance.
 python -m pytest \
+  packages/py/citry/tests/test_events_protocol_runtime.py \
   packages/py/citry/tests/test_events_protocol_package.py \
   packages/py/citry/tests/test_events_conformance.py
 
@@ -107,7 +139,11 @@ A wire change is not done until all of these move together:
    express it clearly.
 4. Update the Python writer or dispatcher and the TypeScript browser reader.
 5. Add a golden exchange or valid/invalid corpus case that proves the rule.
-6. Run the server and browser conformance suites.
+6. Update [`tests/constraint-ownership.json`](tests/constraint-ownership.json)
+   for the changed validator family. Follow the change-driven mutation policy
+   above when deciding whether the change needs an exact cross-language
+   path/category example.
+7. Run the server and browser conformance suites.
 
 When the protocol is changed, every producer, consumer, schema, example, test,
 and current document must change together.

@@ -199,7 +199,7 @@ def test_live_inventory_includes_nested_snippet_modules(tmp_path: Path) -> None:
     (snippets / "getting_started" / "app.py").write_text("APP = True\n", encoding="utf-8")
     internal = tmp_path / "docs_site" / "_internal"
     internal.mkdir()
-    (internal / "reference_pages.py").write_text("", encoding="utf-8")
+    (tmp_path / "docs_site" / "reference.yml").write_text("categories: []\n", encoding="utf-8")
     (internal / "release_notes.py").write_text("EXCLUDED_RELEASES = ()\n", encoding="utf-8")
     (tmp_path / "docs_site" / "static" / "img").mkdir(parents=True)
     (tmp_path / "README.md").write_text("# Project\n", encoding="utf-8")

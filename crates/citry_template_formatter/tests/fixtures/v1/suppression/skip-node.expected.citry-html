@@ -1,0 +1,4 @@
+<main>
+  {# fmt: skip #}<section  class = "x" ></section>
+  <footer id="y"></footer>
+</main>

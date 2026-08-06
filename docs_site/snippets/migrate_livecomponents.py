@@ -18,9 +18,6 @@ class ServerCounter(Component):
     class Kwargs:
         count: int = 0
 
-    class Slots:
-        pass
-
     class State(Kwargs):
         _storage = "server"
         _public = ("count",)
@@ -30,7 +27,11 @@ class ServerCounter(Component):
             state.count += 1
             return ServerCounter(count=state.count)
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         return {"count": kwargs.count}
 
     template = """
@@ -50,9 +51,6 @@ class SignedCounter(Component):
     class Kwargs:
         count: int = 0
 
-    class Slots:
-        pass
-
     class State(Kwargs):
         pass
 
@@ -61,7 +59,11 @@ class SignedCounter(Component):
             state.count += 1
             return SignedCounter(count=state.count)
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         return {"count": kwargs.count}
 
     template = """
@@ -85,10 +87,11 @@ class TaskSummary(Component):
     class Kwargs:
         task_id: int
 
-    class Slots:
-        pass
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         return {"task_id": kwargs.task_id}
 
     template = """
@@ -98,12 +101,6 @@ class TaskSummary(Component):
 
 class TaskEditor(Component):
     citry = citry_app
-
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
 
     class Events:
         def save(self, data: TaskIn):

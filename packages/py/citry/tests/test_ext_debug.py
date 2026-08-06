@@ -9,11 +9,10 @@ from threading import Event, Thread
 
 import pytest
 
-from citry import Citry, CitryContext, CitryRender, Component
+from citry import Citry, CitryContext, CitryRender, Component, Markup
 from citry.citry_render import Placeholder
 from citry.ext.debug import Debug
 from citry.extension import Extension
-from citry.util.html import SafeString
 
 
 def _debug_app(*, components: bool = False, slots: bool = False) -> Citry:
@@ -285,7 +284,7 @@ class TestComponentHighlighting:
                 <c-slot />
             """
 
-        document = SafeString("\ufeff<!DoCtYpE HTML><HTML><head></head><body>page</body></HTML>")
+        document = Markup("\ufeff<!DoCtYpE HTML><HTML><head></head><body>page</body></HTML>")
         html = str(DocumentShell(slots={"default": document}))
         assert "citry-debug" not in html
         assert html.lstrip().startswith("\ufeff<!DoCtYpE HTML>")
@@ -315,7 +314,7 @@ class TestSlotHighlighting:
                 <article><c-slot name="body">fallback</c-slot></article>
             """
 
-        passed = str(Card(slots={"body": SafeString("<span>passed</span>")}))
+        passed = str(Card(slots={"body": Markup("<span>passed</span>")}))
         fallback = str(Card())
         assert "Card - body:" in passed
         assert "<span>passed</span></div>" in passed
@@ -468,7 +467,8 @@ class TestSerialization:
         assert 'data-cid-c2=""' in section.group()
         assert 'data-cid="c2"' in section.group()
         assert "data-ccss-" in section.group()
-        assert f'data-citry-key="{Widget.class_id}:stable"' in section.group()
+        assert "data-citry-key" not in section.group()
+        assert '"morphKey":"stable"' in html
         assert not re.search(r"citry-debug-component[^>]*data-(?:cid|ccss|citry-key)", html)
         assert '<script type="application/json" data-citry-graph>' in html
         assert '<script type="application/json" data-citry-events>' in html

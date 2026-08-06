@@ -22,9 +22,6 @@ class Counter(Component):
     class Kwargs:
         count: int = 0
 
-    class Slots:
-        pass
-
     class State(Kwargs):
         pass
 
@@ -37,7 +34,11 @@ class Counter(Component):
                 actions.Data({"count": state.count}),
             ]
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         return {"count": kwargs.count}
 
     template = """
@@ -71,10 +72,11 @@ class TaskSummary(Component):
         task_id: int
         status: str
 
-    class Slots:
-        pass
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         return {"task_id": kwargs.task_id, "status": kwargs.status}
 
     template = """
@@ -84,12 +86,6 @@ class TaskSummary(Component):
 
 class TaskEditor(Component):
     citry = citry_app
-
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
 
     class Events:
         def complete(self, data: TaskIn):

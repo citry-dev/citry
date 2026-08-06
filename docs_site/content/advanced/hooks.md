@@ -1,50 +1,28 @@
 ---
 title: Component hooks
-description: Use on_render to replace, post-process, or recover a component's output, and on_dependencies to adjust the JS and CSS tags it contributes.
+description: Replace a component render or adjust the JavaScript and CSS tags it contributes.
 ---
 
 # Component hooks
 
-A component hook lets you step into a single component's render. Hooks are
-methods you add to your [Component][citry.Component] subclass, and each one runs
-as part of that component's own render, for that component only. (For hooks that
-span the whole app, reach for an [Extension][citry.Extension]; see
-[Extensions](/advanced/extensions/).)
+Hooks let one component change its own render or asset tags. Use them when a
+normal data method or template cannot express the job clearly.
 
-There are two:
+Citry provides two component hooks:
 
-- `on_render` replaces or post-processes what the component renders.
-- `on_dependencies` adjusts the JS and CSS tags the component contributes to the
-  page.
+- `on_render()` can replace a render or recover from an error.
+- `on_dependencies()` can adjust the component's scripts and styles.
 
-## Replace or post-process output with `on_render`
+For behavior that spans an application, use an
+[`Extension`][citry.Extension] instead.
 
-`on_render` runs on every render of the component, after `template_data` and
-just before the template renders. Return `None` (the default) to render the
-template as usual, or return content to use that as the component's whole output
-instead. When you return content, the template is not rendered at all.
+## Replace output with `on_render()`
 
-Everything the hook needs is on `self`: `self.kwargs`, `self.slots`,
-`self.parent`, and `self.inject(...)`. To feed values into the template, use
-`template_data`; `on_render` is for replacing or wrapping the output, not for
-passing template variables.
+On an uncached render, `on_render()` runs after Citry has prepared the
+component's data and before it renders the template. Return `None` to continue
+with the template. Return content to use it as the component's whole output.
 
-The content you return can be any of:
-
-- a string, used exactly as given (it is your component's own output, so it is
-  not autoescaped)
-- a composed element like `OtherComponent(title="hi")`, the
-  [CitryElement][citry.CitryElement] you get from calling a component
-- an already-rendered [CitryRender][citry.CitryRender]
-- a [Slot][citry.Slot], invoked with no data
-
-Because `None` means "no replacement", return an empty string to output nothing
-at all.
-
-### Replace the output
-
-The simplest form returns a value directly. Here a table shows a placeholder
-when it has no rows, and otherwise renders its template as usual:
+This table shows a placeholder instead of an empty table:
 
 ```citry
 from citry import Component
@@ -54,6 +32,18 @@ class Table(Component):
     class Kwargs:
         rows: list[str] | None = None
 
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, list[str]]:
+        return {"rows": kwargs.rows or []}
+
+    def on_render(self):
+        if not self.kwargs.rows:
+            return "<p>No data yet</p>"
+        return None
+
     template = """
       <table>
         <tr c-for="row in rows">
@@ -61,229 +51,143 @@ class Table(Component):
         </tr>
       </table>
     """
-
-    def template_data(self, kwargs: Kwargs, slots):
-        return {"rows": kwargs.rows or []}
-
-    def on_render(self):
-        if not self.kwargs.rows:
-            return "<p>No data yet</p>"
-        return None
 ```
 
-`Table()` renders `<p>No data yet</p>`, while `Table(rows=["Ada", "Alan"])`
-renders the table.
+`Table()` inserts the placeholder. `Table(rows=["Ada", "Alan"])` continues
+to the template.
 
-### See the finished output
+The replacement may be:
 
-Add a `yield` and `on_render` becomes a generator with two phases. The code
-before the yield runs just before the template renders; the code after it runs
-once the component and everything inside it has finished:
+- a string;
+- a composed element such as `Message(text="Hello")`;
+- an existing [`CitryRender`][citry.CitryRender];
+- a [`Slot`][citry.Slot], called without data; or
+- a [`ComponentLike`][citry.ComponentLike].
+
+Because `None` means “continue,” return an empty string to insert nothing.
+
+!!! warning
+
+    Citry trusts a string returned from `on_render()` as component markup. It
+    is not escaped. Never build that string by joining untrusted input. Put
+    user-controlled values in a template, component inputs, or another API
+    that escapes them.
+
+Values needed by the template belong in
+[`template_data()`][citry.Component.template_data]. The hook already has
+access to `self.kwargs`, `self.slots`, `self.parent`, and
+[`self.inject()`][citry.Component.inject].
+
+### Component caching skips the hook
+
+A successful component-cache hit reuses the completed output. Citry does not
+run data methods, the template, slots, or `on_render()` again.
+
+If a hook's result depends on something outside the declared component inputs,
+that value must also vary the cache key. Otherwise a cached result can outlive
+the condition that produced it. See [Caching](/advanced/caching/).
+
+## Observe completion or recover from an error
+
+Add `yield` to make `on_render()` a two-phase generator. Code before the yield
+runs before the template. Once the component and its children settle, the
+yield receives `(result, error)`:
 
 ```python
 def on_render(self):
-    # Before: runs just before the template renders.
     result, error = yield
 
-    # After: the whole subtree has settled.
-    ...
+    if error is not None:
+        return "<p>Could not load this section.</p>"
+    return None
 ```
 
-The yield hands back a `(result, error)` pair once the output has settled:
+Exactly one value is present:
 
-- On success, `result` is the finished [CitryRender][citry.CitryRender] and
-  `error` is `None`.
-- On failure, `result` is `None` and `error` is the exception that was raised.
+- on success, `result` is the live
+  [`CitryRender`][citry.CitryRender] and `error` is `None`;
+- on failure, `result` is `None` and `error` is the exception.
 
-Exactly one of the two is set. After the yield you have three choices:
+After the yield, you may:
 
-1. Return new content, and it becomes the final output. If the render had
-   failed, that error is dropped.
-2. Raise, and your exception becomes the component's error.
-3. Return `None` (or a bare `return`), and the current result stands: a success
-   keeps its output, a failure keeps bubbling up.
+- return new content to replace the current result;
+- raise an exception; or
+- return `None` to keep a successful result or let an error continue upward.
 
-You can also `yield` more than once. Each `yield <content>` swaps in that
-content, renders it, and hands back a fresh `(result, error)` pair, so you can
-build the output in stages.
+Do not call `str(result)` merely to inspect it. The render still carries live
+relationships between components and slot content, and it may not be safe to
+serialize from inside this hook. If you return serialized HTML, you also take
+responsibility for replacing the live result with that string.
 
-### Post-process the finished HTML
+You can yield replacement content and receive another `(result, error)` pair,
+which supports multi-stage rendering. The generated
+[`on_render()` reference][citry.Component.on_render] contains the complete
+generator protocol.
 
-`result` is a [CitryRender][citry.CitryRender], not a string. Call `str(result)`
-to read the finished HTML, then decide what to output. This feed inspects its
-rendered output and shows a placeholder when nothing came through:
+For ordinary error recovery, prefer the built-in `<c-error-fallback>` tag.
+See [Error boundaries](/concepts/error-boundaries/). A custom hook is useful
+when recovery itself needs Python logic.
 
-```citry
-class Feed(Component):
-    class Kwargs:
-        posts: list[str] | None = None
+## Adjust a component's asset tags
 
-    template = """
-      <ul class="feed">
-        <li c-for="post in posts">{{ post }}</li>
-      </ul>
-    """
+`on_dependencies()` is a classmethod. At serialization time, Citry calls it
+once for each rendered instance with that instance's scripts and styles. The
+lists include:
 
-    def template_data(self, kwargs: Kwargs, slots):
-        return {"posts": kwargs.posts or []}
+- the component's own `js` and `css`;
+- entries from its nested `Dependencies` class; and
+- values generated from `js_data()` and `css_data()`.
 
-    def on_render(self):
-        # Before: runs just before the template renders.
-        result, error = yield
+Mutate the lists, or return a `(scripts, styles)` pair to replace them. Return
+`None` to leave them unchanged.
 
-        # After: the whole subtree has settled.
-        if error is not None:
-            return None
-        if "<li" not in str(result):
-            return '<p class="feed-empty">Nothing here yet.</p>'
-        return None
-```
-
-`Feed()` renders the placeholder, while `Feed(posts=["hi", "yo"])` renders the
-list.
-
-Build the replacement from fresh markup, as above, or return `None` to keep what
-rendered. Handing your component's own serialized HTML straight back as its
-output would repeat the marker on its root element, so prefer new markup or
-`None`.
-
-### Catch a failing child
-
-The after phase fires even when a child failed to render, so `on_render` can
-contain the error and show a fallback in its place:
-
-```citry
-class Profile(Component):
-    template = """
-      <b>{{ user.name }}</b>
-    """
-
-
-class Card(Component):
-    template = """
-      <section>
-        {{ body }}
-      </section>
-    """
-
-    def template_data(self, kwargs, slots):
-        return {"body": Profile()}
-
-    def on_render(self):
-        result, error = yield
-        if error is not None:
-            return "<p>Could not load this card.</p>"
-        return None
-```
-
-If `Profile` raises while rendering (here `user` is never provided), `Card`
-catches it and renders `Could not load this card.` instead of failing the whole
-page.
-
-This is the idea behind an error boundary, and citry already ships one as the
-`<c-error-fallback>` component. Reach for
-[Error boundaries](/concepts/error-boundaries/) first, and drop to `on_render`
-only when you need custom recovery logic.
-
-### Route to another component
-
-Because `on_render` can return a composed element, it can pick which component
-to render based on the inputs:
-
-```citry
-class OldChart(Component):
-    template = """
-      <div>old chart</div>
-    """
-
-
-class NewChart(Component):
-    template = """
-      <div>new chart</div>
-    """
-
-
-class Chart(Component):
-    class Kwargs:
-        beta: bool = False
-
-    def on_render(self):
-        if self.kwargs.beta:
-            return NewChart()
-        return OldChart()
-```
-
-`Chart()` renders `OldChart`, while `Chart(beta=True)` renders `NewChart`.
-
-## Adjust JS and CSS with `on_dependencies`
-
-`on_dependencies` is a classmethod hook that adjusts the JS and CSS tags this
-component contributes, and only this component's. It runs when the page is
-serialized, once for each rendered instance of the component.
-
-```python
-@classmethod
-def on_dependencies(
-    cls,
-    scripts: list[Script],
-    styles: list[Style],
-) -> tuple[list[Script], list[Style]] | None:
-    ...
-```
-
-The two lists hold this component's [Script][citry.ext.dependencies.Script] and
-[Style][citry.ext.dependencies.Style] entries: its own `js` and `css`, anything in its
-`Dependencies` class, and the per-instance variables generated from `js_data`
-and `css_data`. Return a `(scripts, styles)` pair to replace the lists, mutate
-them in place, or return `None` (the default) to leave them untouched.
-
-Use it to add attributes, reorder entries, or drop ones you know are already
-loaded elsewhere. Removing a component's own entries can stop it working in the
-browser, so this hook is for adjusting tags rather than removing behavior.
-
-For example, add a CSP nonce to every tag this component emits (`get_nonce()` is
-your own helper that returns the current request's nonce):
+This component adds `crossorigin` to the external scripts it contributes:
 
 ```citry
 from citry import Component
 from citry.ext.dependencies import Script, Style
 
 
-class Panel(Component):
-    template = """
-      <div class="panel"></div>
-    """
-    js = """
-      console.log("panel ready");
-    """
-    css = """
-      .panel {
-        color: red;
-      }
-    """
+class Chart(Component):
+    class Dependencies:
+        js = ["https://cdn.example.com/chart.js"]
 
     @classmethod
-    def on_dependencies(cls, scripts: list[Script], styles: list[Style]):
-        # Add a CSP nonce to every tag this component emits.
-        for dep in [*scripts, *styles]:
-            dep.attrs["nonce"] = get_nonce()
+    def on_dependencies(
+        cls,
+        scripts: list[Script],
+        styles: list[Style],
+    ):
+        for script in scripts:
+            if script.url:
+                script.attrs["crossorigin"] = "anonymous"
         return (scripts, styles)
+
+    template = """
+      <div class="chart"></div>
+    """
 ```
 
-Each rendered `Panel` now emits its `<style>` and `<script>` tags with a `nonce`
-attribute.
+This hook runs before Citry removes duplicates across components. When two
+entries share a URL or inline content, the first one wins, including any
+attributes the hook added.
 
-To adjust the whole page's tags at once (every component's, after duplicates are
-removed) rather than one component's, write an [Extension][citry.Extension] with
-an `on_dependencies` method instead. See [Extensions](/advanced/extensions/).
+Removing a component's own script can stop its browser behavior. Drop an
+entry only when the same behavior is supplied somewhere else.
 
-## Where to go next
+An extension `on_dependencies()` hook can adjust the collected component
+lists after duplicates are removed. Citry may add its required browser
+runtime and initialization tags afterward, so this hook is not a complete
+document-level CSP surface. See [Extensions](/advanced/extensions/) for the
+application-wide hook.
 
-- [Error boundaries](/concepts/error-boundaries/) for the built-in, no-code way
-  to catch render errors.
-- [Rendering](/concepts/rendering/) for the compose, render, and serialize model
-  that `on_render` plugs into.
-- [JS and CSS dependencies](/advanced/js-and-css-dependencies/) for how the
-  [Script][citry.ext.dependencies.Script] and [Style][citry.ext.dependencies.Style] entries are collected and
-  placed.
-- [Extensions](/advanced/extensions/) for hooks that run across the whole app.
+## Next steps
+
+- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) covers
+  primary assets and per-render data.
+- [Dependency files](/advanced/dependency-files/) covers libraries, shared
+  files, and custom tags.
+- [Place JavaScript and CSS](/advanced/asset-placement/) controls where the
+  collected tags go.
+- [Rendering](/concepts/rendering/) explains the larger compose, render, and
+  serialize process.

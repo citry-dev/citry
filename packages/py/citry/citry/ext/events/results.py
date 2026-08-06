@@ -36,6 +36,13 @@ import logging
 from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
+from citry._protocol.events import (
+    build_data_action,
+    build_event_action,
+    build_redirect_action,
+    build_render_action,
+    build_url_action,
+)
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender
 from citry.ext.events.actions import (
@@ -281,28 +288,32 @@ def _encode_action(action: Action, *, instance_id: str | None, handler: str) -> 
             )
             raise ValueError(msg)
         rendered = action.element.render() if isinstance(action.element, CitryElement) else action.element
-        encoded = {
-            "action": "render",
-            "target": target,
-            "swap": action.swap,
-            "html": rendered.serialize(deps_strategy="fragment"),
-        }
+        encoded = build_render_action(
+            target,
+            action.swap,
+            rendered.serialize(deps_strategy="fragment"),
+            delay=action.delay,
+            wait=action.wait,
+        )
     elif isinstance(action, Data):
-        encoded = {"action": "data", "value": action.value}
+        encoded = build_data_action(action.value, delay=action.delay)
     elif isinstance(action, Dispatch):
-        encoded = {"action": "event", "eventName": action.name}
-        if action.detail is not None:
-            encoded["detail"] = action.detail
         # Self-addressed at encode time; an instance-less call dispatches on
         # document, which the wire spells as "no target" (design events.md 4.3).
-        if instance_id is not None:
-            encoded["target"] = f"render:{instance_id}"
+        encoded = build_event_action(
+            action.name,
+            detail=action.detail,
+            include_detail=action.detail is not None,
+            target=f"render:{instance_id}" if instance_id is not None else None,
+            delay=action.delay,
+            wait=action.wait,
+        )
     elif isinstance(action, Redirect):
-        encoded = {"action": "redirect", "url": action.url}
+        encoded = build_redirect_action(action.url, delay=action.delay, wait=action.wait)
     elif isinstance(action, PushUrl):
-        encoded = {"action": "url", "url": action.url, "mode": "push"}
+        encoded = build_url_action(action.url, "push", delay=action.delay, wait=action.wait)
     elif isinstance(action, ReplaceUrl):
-        encoded = {"action": "url", "url": action.url, "mode": "replace"}
+        encoded = build_url_action(action.url, "replace", delay=action.delay, wait=action.wait)
     else:
         msg = (
             f"Cannot encode {type(action).__name__} from event handler {handler!r}: the action"
@@ -313,12 +324,6 @@ def _encode_action(action: Action, *, instance_id: str | None, handler: str) -> 
         # return-channel error matrix.
         raise ValueError(msg)  # noqa: TRY004
 
-    # The timing fields are optional on the wire; the defaults (apply now,
-    # hold the queue) ride as absence.
-    if action.delay:
-        encoded["delay"] = action.delay
-    if not action.wait:
-        encoded["wait"] = False
     return encoded
 
 

@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "citry-lsp"
+version = "0.1.0"
+requires-python = ">=3.10, <4.0"
+description = "Language server for Citry component templates"
+readme = "README.md"
+keywords = ["citry", "language server", "lsp", "templates", "html"]
+authors = [{ name = "Juro Oravec", email = "juraj.oravec.josefson@gmail.com" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Plugins",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+]
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["citry>=0.3.2,<0.4", "pygls==2.1.1"]
+
+[project.scripts]
+citry-lsp = "citry_lsp.__main__:main"
+
+[dependency-groups]
+dev = ["pytest>=8.3.5", "pytest-lsp>=0.4.3"]
+
+[project.urls]
+Homepage = "https://citry.dev"
+Repository = "https://github.com/citry-dev/citry"
+Changelog = "https://github.com/citry-dev/citry/blob/main/packages/py/citry_lsp/CHANGELOG.md"
+Issues = "https://github.com/citry-dev/citry/issues"
+
+[tool.setuptools.packages.find]
+include = ["citry_lsp*"]
+
+[tool.setuptools.package-data]
+citry_lsp = ["py.typed"]

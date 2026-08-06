@@ -1,375 +1,347 @@
 ---
 title: Extensions
-description: How to hook into Citry's lifecycle, install extensions on a Citry instance, and add extension-provided CLI commands.
+description: Add cross-cutting behavior, settings, routes, and metadata to Citry.
 ---
 
 # Extensions
 
-An extension is a plugin that hooks into Citry's component lifecycle. You can watch or change what happens when a component receives input, computes its data, renders, or loads its template, JS, and CSS. Extensions can also add per-component config, HTTP routes, and their own CLI commands.
+An extension can apply one behavior across many components. It can observe or
+change rendering, give components new settings, expose HTTP routes, publish
+metadata to tools, or add a command to the Citry CLI.
 
-Extensions are installed per Citry instance, not globally. A component is bound to a [Citry][citry.Citry] instance (via `citry = app` in its class body, or the default instance), and only that instance's extensions fire for it.
+Extensions belong to one [`Citry`][citry.Citry] instance. Only components
+registered with that instance use them.
 
-## Writing an extension
+## Install an extension
 
-An extension subclasses [Extension][citry.Extension], sets a `name`, and overrides one or more `on_*` hooks. Each hook receives a single frozen dataclass context.
+Pass extension classes to `Citry` when you create the engine:
+
+```python
+from citry import Citry
+from citry.ext.debug import Debug
+
+app = Citry(extensions=[Debug])
+```
+
+A class is the usual choice. Citry creates a fresh extension instance and
+gives it access to the engine through `self.citry`.
+
+You may also pass a dotted import path or a ready instance:
+
+```python
+app = Citry(
+    extensions=[
+        "acme_citry.Tracing",
+        preconfigured_extension,
+    ],
+)
+```
+
+A ready instance can belong to only one engine. Create a fresh instance for
+each engine, or pass its class and let Citry do that for you.
+
+An extension name must be a lowercase Python identifier. Built-in extension
+names and names that would collide with the public `Component` API are
+reserved. Citry derives the component config class name from it, so
+`audit_log` becomes `AuditLog`. Set `class_name` explicitly only when a package
+needs another valid Python class name.
+
+Citry always installs its built-in `cache`, `dependencies`, and `events`
+extensions. Other bundled extensions, such as [`Debug`][citry.ext.debug.Debug],
+are opt-in. See [Troubleshooting](/guides/troubleshooting/) for using `Debug`
+while investigating rendered output.
+
+## Add behavior with a lifecycle hook
+
+Subclass [`Extension`][citry.Extension], give it a lowercase `name`, and
+override only the hooks you need:
 
 ```citry
 from citry import Citry, Component, Extension
 
-class TimingExtension(Extension):
-    name = "timing"
+
+class RenderLog(Extension):
+    name = "render_log"
 
     def on_component_rendered(self, ctx):
-        print(f"{type(ctx.component).__name__} rendered")
-        return None  # keep the original render
+        component_name = type(ctx.component).__name__
+        print(f"Rendered {component_name}")
 
-app = Citry(extensions=[TimingExtension])
+
+app = Citry(extensions=[RenderLog])
+
 
 class Card(Component):
     citry = app
-    template = """
-      <p>hi</p>
-    """
 
-str(Card())  # triggers on_component_rendered
+    template = """
+      <article>A card</article>
+    """
 ```
 
-The `name` must be a lowercase, valid Python identifier. This is checked the moment the class body runs (in `__init_subclass__`), so a bad name raises `ValueError` even if you never install the extension. The name also becomes a `component.<name>` attribute, so it must not collide with the [Component][citry.Component] API. The built-in `cache`, `dependencies`, and `events` names are reserved.
-
-## Installing extensions
-
-Pass extensions to [Citry][citry.Citry] when you construct it. Each entry can be an extension class, an instance, or a dotted import-path string.
+The context object tells you what is happening and which engine owns the
+operation. Context dataclasses are frozen, so their fields cannot be replaced.
+Some fields deliberately contain mutable dictionaries or lists. Input and data
+hooks change those collections in place:
 
 ```python
-c = Citry(extensions=[E1, E2(), "my_pkg.my_module.MyExtension"])
+class Tracking(Extension):
+    name = "tracking"
+
+    def on_component_data(self, ctx):
+        ctx.template_data["tracking_enabled"] = True
 ```
 
-Every Citry instance also auto-prepends the built-in `cache`, `dependencies`, and `events` extensions. They power render caching, JS/CSS dependency collection, and server event handling. Bundled developer tools such as [Debug][citry.ext.debug.Debug] remain opt-in, so applications pay their render-hook cost only when they install them.
+Hooks that transform a value return its replacement. Returning `None` keeps
+the current value:
 
-Use [Server events](/events/) to declare and call component
-handlers. The rest of this page is for authors building their own extensions.
+```python
+class UppercaseOutput(Extension):
+    name = "uppercase_output"
 
-The installed extensions are managed by an [ExtensionManager][citry.ExtensionManager], reachable as `app.extensions`. It only calls extensions that actually override a given hook, so hooks you do not override cost nothing.
+    def on_serialize(self, ctx):
+        return ctx.html.upper()
+```
 
-### Bundled Debug extension
+When several extensions transform the same value, Citry passes each result to
+the next extension in installation order.
 
-The opt-in [Debug][citry.ext.debug.Debug] extension draws blue labeled boundaries around component output and red labeled boundaries around slot output. Install it and enable either boundary type through extension defaults:
+`on_component_rendered` also runs when rendering fails. In that case
+`ctx.render` is `None` and `ctx.error` holds the exception. Returning a render
+recovers from the error; raising replaces it. Returning `None` lets the current
+result or error continue.
+
+The hook catalog covers component classes, registration, component input and
+data, rendered components and slots, resolved attributes, nested render
+contexts, serialization, templates, JavaScript, and CSS. See the
+[`Extension` reference][citry.Extension] for every hook and its context.
+
+For an application-specific hook, emit a name through the manager:
+
+```python
+app.extensions.emit(
+    "on_message_sent",
+    message_context,
+)
+```
+
+Installed extensions that define `on_message_sent` receive the context in
+order. Prefer the documented lifecycle hooks when one already describes the
+job.
+
+The default `result="none"` ignores returned values. `result="first"` stops at
+the first non-`None` result. `result="map"` threads replacements through a
+named context field. See
+[`ExtensionManager.emit()`][citry.ExtensionManager.emit] for the exact
+contract.
+
+## Give components extension settings
+
+An extension can define defaults and let each component override them. The
+extension's `name` determines the nested class name: `audit_log` becomes
+`AuditLog`.
 
 ```citry
-from citry import Citry, Component
-from citry.ext.debug import Debug
+from citry import Citry, Component, Extension, ExtensionConfig
+
+
+class AuditConfig(ExtensionConfig):
+    enabled = True
+    category = "general"
+
+
+class AuditLog(Extension):
+    name = "audit_log"
+    Config = AuditConfig
+
+    def validate_config_fields(self, fields, *, component=None):
+        allowed = {"enabled", "category"}
+        for field in fields:
+            if field not in allowed:
+                raise ValueError(f"Unknown audit setting: {field}")
+
 
 app = Citry(
-    extensions=[Debug],
+    extensions=[AuditLog],
     extensions_defaults={
-        "debug": {
-            "highlight_components": True,
-            "highlight_slots": True,
-        },
+        "audit_log": {"category": "storefront"},
     },
 )
 
-class Card(Component):
+
+class Checkout(Component):
+    class AuditLog:
+        category = "checkout"
+
     citry = app
+
     template = """
-      <article><c-slot name="body" /></article>
+      <button>Pay</button>
     """
 ```
 
-A component can override the defaults with a nested `class Debug` containing the same two boolean fields. See [Visualize component and slot boundaries](/guides/troubleshooting/#visualize-component-and-slot-boundaries) for examples and the DOM-layout warning.
+Inside a hook, read the resolved settings from the component:
 
-## Hooks
-
-Each hook takes one frozen dataclass context. Every context carries `citry`; component-scoped ones also carry `component`. Some hooks watch, some mutate, and some replace a value.
-
-Mutation hooks such as `on_component_input` and `on_component_data` change a dict on the context in place. This example injects a template variable:
-
-```citry
-class E(Extension):
-    name = "e"
-
-    def on_component_data(self, ctx):
-        ctx.template_data["who"] = "world"
-
-app = Citry(extensions=[E])
-
-class Card(Component):
-    citry = app
-    template = """
-      <p>Hello {{ who }}</p>
-    """
-
-# render output includes "Hello world"
-str(Card())
+```python
+def on_component_rendered(self, ctx):
+    config = ctx.component.audit_log
+    if config.enabled:
+        record_render(category=config.category)
 ```
 
-Other hooks thread a value through the extensions: returning a non-None value replaces it for the next extension, and returning `None` keeps the current value. These include `on_component_rendered`, `on_slot_rendered`, `on_attrs_resolved`, `on_serialize`, `on_template_loaded`, `on_template_compiled`, `on_js_loaded`, and `on_css_loaded`.
+Values are chosen in this order:
 
-The full set of hooks (roughly sixteen) covers extension setup, component class creation and deletion, registration, input, data, rendering, slots, attribute resolution, context merging, serialization, and template, JS, and CSS loading and compilation. See the Extensions reference category for each hook and its context fields.
+1. The component's nested extension class.
+2. `extensions_defaults` on the engine.
+3. The extension's `Config` class.
 
-## Per-component config
+Override `validate_config_fields()` to reject misspelled or unsupported fields
+when the engine or component class is created. The base implementation accepts
+any field.
 
-An extension can provide config that lives on each component. Define a nested `Config` class subclassing `Extension.Config`. For an extension named `view`, it is reachable as `component.view`.
+## Carry data between hooks
 
-```citry
-class ViewExt(Extension):
-    name = "view"
+Each component gets a fresh instance of every installed extension's config.
+That config is a safe place to keep temporary data for the component render:
 
-    class Config(Extension.Config):
-        def title(self):
-            return type(self.component).__name__
+```python
+class Timing(Extension):
+    name = "timing"
 
-app = Citry(extensions=[ViewExt])
+    def on_component_input(self, ctx):
+        ctx.component.timing.started_at = monotonic()
 
-class Page(Component):
-    citry = app
-    template = """
-      <p>hi</p>
-    """
-
-    def template_data(self, kwargs, slots):
-        # reachable as component.<extension name>
-        assert self.view.title() == "Page"
-        return {}
-
-str(Page())
+    def on_component_rendered(self, ctx):
+        started_at = ctx.component.timing.started_at
+        observe_duration(monotonic() - started_at)
 ```
 
-Inside an [ExtensionConfig][citry.ExtensionConfig], `self.component` is a weak reference back to the owning component. Accessing it raises `RuntimeError` if it runs outside a component lifecycle or the component was already garbage-collected.
+Use this instead of a dictionary on the extension instance. A single extension
+instance serves many renders and may be called from several threads. Also
+remember that a later hook does not run if an earlier stage raises.
 
-## Extension defaults
+The config is available as `component.<extension name>`, together with its
+resolved settings. It belongs to that component instance and render.
 
-Setting the same nested config class on every component gets repetitive. To configure an extension once for all components, pass `extensions_defaults` to [Citry][citry.Citry]. It maps each extension's name to the config every component should get for it:
+## Keep component caching correct
 
-```citry
-from citry import Citry, Component, Extension
+An extension that participates in rendering must say whether its work can be
+replayed from a component cache entry. The safe default is:
 
-class AccessExt(Extension):
-    name = "access"
+```python
+class RequestStamp(Extension):
+    name = "request_stamp"
+    render_cache_mode = "deny"
+```
 
-    class Config(Extension.Config):
-        public = False
+`deny` does not disable rendering. It prevents Citry from storing a cache entry
+for a render affected by that extension.
 
-app = Citry(
-    extensions=[AccessExt],
-    extensions_defaults={"access": {"public": True}},
+Use `stateless` only when the rendered output already contains everything the
+extension contributed and replay needs no extension state:
+
+```python
+class StaticWrapper(Extension):
+    name = "static_wrapper"
+    render_cache_mode = "stateless"
+    render_cache_version = 1
+```
+
+Use `payload` when replay must restore extension-owned state. Set a positive
+`render_cache_version`, return strict JSON data from `export_render_cache()`,
+and validate it without mutation in `stage_render_cache()`. The staging result
+describes changes for Citry to apply only after every extension accepts the
+cached entry.
+
+Treat a cache-mode change or version change as a compatibility decision. See
+[Caching](/advanced/caching/) and the extension cache methods in the
+[`Extension` reference][citry.Extension].
+
+## Publish metadata to tools
+
+Extension metadata is opt-in so ordinary component inspection stays small and
+side-effect free. Set a positive schema version and implement
+`inspect_component()`:
+
+```python
+class AuditLog(Extension):
+    name = "audit_log"
+    introspection_version = 1
+
+    def inspect_component(self, ctx):
+        config = ctx.component_class.AuditLog
+        return {"category": config.category}
+```
+
+Callers must request the extension by name:
+
+```python
+catalog = app.inspect_components(
+    include_extensions=["audit_log"],
 )
-
-class Page(Component):
-    citry = app
-    template = """
-      <p>hi</p>
-    """
-
-    def template_data(self, kwargs, slots):
-        # every component now defaults to public
-        assert self.access.public is True
-        return {}
-
-str(Page())
 ```
 
-As the name says, these are defaults, so a component can still override any of them with its own nested config class:
+Return an exact built-in `dict` containing only strict JSON values, or `None`
+when the component has no entry. Inspection must be deterministic and
+observational: do not render, load assets, change registration, or depend on a
+request.
 
-```citry
-class Secret(Component):
-    citry = app
-    template = """
-      <p>hi</p>
-    """
+## Serve extension routes
 
-    class Access:
-        public = False  # overrides the default here
-
-    def template_data(self, kwargs, slots):
-        assert self.access.public is False
-        return {}
-
-str(Secret())
-```
-
-A config value given as a function becomes a method on the config class, exactly as if you had written it in the nested class. The defaults are held on the instance as `app.settings.extensions_defaults` (see [CitrySettings][citry.CitrySettings]).
-
-## Storing state during a render
-
-An extension often needs to carry a value from one hook to a later one in the same render. Citry gives you two places to keep it, each living on the thing it describes: a slot's own `extra` dictionary, and the per-component config object. Both are cleaner than a dictionary you keep on the extension and manage by hand.
-
-### Per-slot metadata
-
-Every [Slot][citry.Slot] carries an `extra` dictionary, the place for an extension to attach per-slot metadata. Citry copies `extra` whenever it copies a slot, so whatever you attach travels with the slot to wherever it renders. Set it when the component receives its input, then read it back when the slot renders:
-
-```citry
-from citry import Citry, Component, Extension
-
-class SlotTagExt(Extension):
-    name = "slottag"
-
-    def on_component_input(self, ctx):
-        for slot in ctx.slots.values():
-            slot.extra["tag"] = "hello"
-
-    def on_slot_rendered(self, ctx):
-        print(ctx.slot_name, "->", ctx.slot.extra.get("tag"))
-        return None  # keep the rendered output
-
-app = Citry(extensions=[SlotTagExt])
-
-class Panel(Component):
-    citry = app
-    template = """
-      <div>
-        <c-slot name="body" />
-      </div>
-    """
-
-str(Panel(slots={"body": "content"}))  # prints: body -> hello
-```
-
-### Per-render state
-
-For state tied to one component's render, keep it on the component's config object rather than in a dictionary on the extension keyed by `id(component)`. That side dictionary leaks: you would clear each entry in `on_component_rendered`, but citry skips that hook when a render fails before it settles (for example, a `template_data` method raises), so a stale entry is left behind on every failed render.
+An extension can expose framework-neutral HTTP routes. User extension routes
+are mounted under `ext/<extension name>/` beneath the application's Citry URL
+prefix.
 
 ```python
-import time
+from citry import Extension, RouteResponse, URLRoute
 
-# Tempting, but leaks when a render fails (see below).
-class TimingExt(Extension):
-    name = "timing"
 
-    def __init__(self):
-        self.started = {}
+class Health(Extension):
+    name = "health"
 
-    def on_component_input(self, ctx):
-        self.started[id(ctx.component)] = time.perf_counter()
-
-    def on_component_rendered(self, ctx):
-        # skipped on a failed render, so never removed
-        start = self.started.pop(id(ctx.component))
-        ...
-```
-
-Store the value on the component's config object instead. Every component has one per extension, reachable as `component.<extension name>` (the same object from [Per-component config](#per-component-config)). It lives only for that one render, so nothing accumulates on the extension, even when `on_component_rendered` is skipped:
-
-```citry
-import time
-
-class TimingExt(Extension):
-    name = "timing"
-
-    def on_component_input(self, ctx):
-        # ctx.component.timing is this component's config object
-        ctx.component.timing.started = time.perf_counter()
-
-    def on_component_rendered(self, ctx):
-        elapsed = time.perf_counter() - ctx.component.timing.started
-        print(f"{type(ctx.component).__name__} took {elapsed:.4f}s")
-        return None
-
-app = Citry(extensions=[TimingExt])
-
-class Card(Component):
-    citry = app
-    template = """
-      <p>hi</p>
-    """
-
-str(Card())  # prints: Card took 0.0003s
-```
-
-## CLI commands
-
-An extension can ship CLI commands by listing [ExtensionCommand][citry.ExtensionCommand] subclasses in `commands`. A command sets a `name`, declares [CommandArg][citry.CommandArg] arguments, and defines a `handle` method. The arguments map straight to argparse.
-
-```python
-from citry import Citry, Extension, ExtensionCommand, CommandArg
-from citry.command import run
-
-class Greet(ExtensionCommand):
-    name = "greet"
-    help = "Greet someone"
-    arguments = [
-        CommandArg("name"),
-        CommandArg(["--shout", "-s"], action="store_true"),
-    ]
-
-    def handle(self, **kwargs):
-        text = f"Hello {kwargs['name']}"
-        print(text.upper() if kwargs["shout"] else text)
-
-class Greeter(Extension):
-    name = "greeter"
-    commands = [Greet]
-
-app = Citry(extensions=[Greeter])
-assert app.commands == {"greeter": (Greet,)}
-
-# Run it in-process (the CLI does the same):
-run(Greet, ["world", "--shout"])  # prints HELLO WORLD, returns 0
-```
-
-From the terminal, the same command runs as:
-
-```sh
-citry ext run greeter greet
-```
-
-See the [CLI](/cli/) page for the command-line entry points.
-
-A few things to keep in mind:
-
-- `handle` receives every parsed option as a keyword, including options declared on a parent command, so it should accept `**kwargs`.
-- A command that has only subcommands (via `subcommands`) and no `handle` prints its help instead of running.
-- Arguments can be grouped with [CommandArgGroup][citry.CommandArgGroup], and subcommand behavior tuned with [CommandSubcommand][citry.CommandSubcommand].
-
-## Extension URLs
-
-An extension can serve its own HTTP endpoints. Citry cannot listen on a port itself, so it describes each endpoint as a framework-neutral [URLRoute][citry.URLRoute] and a thin adapter mounts them into your web app (see [Web frameworks](/web-frameworks/)). List an extension's routes in its `urls`:
-
-```python
-from citry import Citry, Extension, RouteResponse, URLRoute
-
-def status(request):
-    return RouteResponse(content="ok")
-
-def greet(request, who):
-    return RouteResponse(content=f"Hi {who}")
-
-class ApiExt(Extension):
-    name = "api"
-
-    urls = [
-        URLRoute("status", handler=status, name="status"),
-        URLRoute("greet/{who}", handler=greet, name="greet"),
-    ]
-
-app = Citry(extensions=[ApiExt])
-```
-
-A route's handler takes the request plus any path parameters and returns a [RouteResponse][citry.RouteResponse]. Path parameters are written as `{name}` and arrive as keyword arguments, so the `greet` handler above receives `who`.
-
-Every extension's routes are gathered into `app.urls`. A user extension's routes are namespaced under `ext/<extension name>/`, so they can never collide with citry's own endpoints or another extension's. The `greet` route is therefore served at:
-
-```text
-ext/api/greet/{who}
-```
-
-under wherever the adapter mounts the instance. With the default prefix `/citry`, that is `/citry/ext/api/greet/ada`.
-
-When a handler needs to reach engine state, define `urls` as a property so each handler can close over the extension and read `self.citry`:
-
-```python
-class InfoExt(Extension):
-    name = "info"
+    def status(self, request):
+        return RouteResponse(
+            content='{"status":"ok"}',
+            content_type="application/json",
+        )
 
     @property
     def urls(self):
-        def info(request):
-            count = len(set(self.citry.components.values()))
-            return RouteResponse(content=f"{count} components")
-
-        return [URLRoute("info", handler=info, name="info")]
+        return [URLRoute("status", handler=self.status)]
 ```
 
-## Reference
+The handler receives a [`RouteRequest`][citry.RouteRequest] and returns a
+[`RouteResponse`][citry.RouteResponse]. A route accepts `GET` by default. Pass
+`methods=("POST",)` or another tuple to change it. `{name}` path segments are
+passed to the handler as keyword arguments.
 
-For the complete list of hooks, context dataclasses, and command building blocks, see the Extensions reference category, including [Extension][citry.Extension], [ExtensionManager][citry.ExtensionManager], [ExtensionConfig][citry.ExtensionConfig], [ExtensionCommand][citry.ExtensionCommand], [CommandArg][citry.CommandArg], [CommandArgGroup][citry.CommandArgGroup], and [CommandSubcommand][citry.CommandSubcommand].
+A plain `def` handler works with every host adapter. An `async def` handler
+passed as `handler` works only with the direct ASGI adapter. To support both
+async and sync hosts without blocking the event loop, provide a plain
+`handler` and its async twin through `handler_async`.
+
+See [Web frameworks](/web-frameworks/) for mounting `app.urls` in your
+host application.
+
+## Add CLI commands
+
+Extensions may expose command classes through their `commands` attribute.
+Citry namespaces them beneath the extension name, so packages cannot collide:
+
+```bash
+citry --app myproject.engine:app ext list
+citry --app myproject.engine:app ext run events openapi
+```
+
+See [Command line](/cli/) for defining arguments and running
+extension commands.
+
+## Related reference
+
+- [`Extension`][citry.Extension]
+- [`ExtensionManager`][citry.ExtensionManager]
+- [`ExtensionConfig`][citry.ExtensionConfig]
+- [`ExtensionCommand`][citry.ExtensionCommand]
+- [`URLRoute`][citry.URLRoute]
+- [`RouteRequest`][citry.RouteRequest]
+- [`RouteResponse`][citry.RouteResponse]

@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol, runtime_checkable
 
 from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
+from citry._inline_assets import normalize_inline_asset
 from citry.citry_template import CitryTemplate
 from citry.util.logger import logger
 from citry.util.misc import get_module_info
@@ -242,15 +243,15 @@ def _load_pair(
     """
     Resolve an asset pair to ``(content, filepath)``.
 
-    Inline content is returned as-is with ``filepath=None``. A file declaration
-    is resolved (section 5.2 chain), read with explicit utf8 encoding
+    Inline content has its common indentation removed and is returned with
+    ``filepath=None``. A file declaration is resolved (section 5.2 chain), read with explicit utf8 encoding
     (django-components #1074), and registered in the Citry file index for hot
     reload. ``(None, None)`` when the pair declares no asset.
     """
     owner, inline_val, file_val = _find_pair_declaration(comp_cls, inline_attr, file_attr)
 
     if inline_val is not None:
-        return inline_val, None
+        return normalize_inline_asset(inline_val), None
 
     if file_val is not None:
         path = resolve_asset_file(file_val, owner, search_dirs=comp_cls.citry.settings.dirs)

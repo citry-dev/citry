@@ -23,7 +23,7 @@ A citry template *is* HTML. The grammar's whole job is to recognize, inside
 otherwise ordinary HTML, the few citry-specific pieces and pass everything else
 through unchanged. Those pieces are: `{{ expr }}` expressions, `{# comment #}`
 comments, `<c-*>` tags (components and the built-in control-flow tags), `c-*`
-dynamic attributes, and `<c-raw>` verbatim blocks.
+dynamic attributes, `#c-*` template flags, and `<c-raw>` verbatim blocks.
 
 Two rules cover the whole syntax:
 
@@ -38,8 +38,15 @@ On top of those, the template body may use:
 - `{{ expr }}` in text (a Python expression, evaluated and escaped).
 - `{# comment #}` anywhere (in text and inside tags); it is dropped from output.
 - `c-bind="mapping"` to spread a dict of attributes onto a tag or component.
+- `#c-key="expr"` and bare `#c-ignore` to describe node identity and morphing.
 - A nested template as a `c-*` value, if the value starts with an HTML tag or a
   `<>` fragment, e.g. `c-body="<span>Hello {{ name }}</span>"`.
+
+The grammar parses the source it receives without changing whitespace. The
+component asset loader removes common indentation from inline Python
+`template` declarations before parsing, while `template_file` content remains
+exact. Direct parser calls and standalone Citry files are also exact. See
+[`asset_loading.md`](asset_loading.md#34-inline-source-normalization).
 
 Three naming constraints hold for every tag and attribute:
 
@@ -150,8 +157,27 @@ Pest rules cannot refer back to text they already matched, so the grammar
 cannot say "the closing tag must repeat this start tag's name". It therefore
 matches start and end tags *flat*, as a stream, and the parser builds the tree
 afterwards with a tag stack: each start tag is pushed, each end tag pops and is
-checked against the tag on top (a mismatch is a parse error), and text,
+checked against the tag on top using HTML's ASCII-case-insensitive tag identity
+(a different name is a parse error), and text,
 expressions, and self-closing tags are appended to the current open tag's body.
+The AST and renderer preserve the opening and closing spellings the author
+wrote. HTML void-element recognition uses the same case-insensitive identity,
+so `<BR>` and `<br>` are equally void.
+
+Citry syntax has a narrower casing contract. The framework prefix is exactly
+lowercase `c-`; a Citry-looking `<C-Card>` is an error. After that prefix, a
+component name is ASCII-case-insensitive (`<c-Card>` and `<c-card>` select the
+same component). Reserved structural tags are different: they execute only in
+their canonical lowercase spelling. A spelling such as `<c-If>` receives a
+pointed “write `<c-if>`” parse error rather than being treated as either the
+control tag or a user component. The dynamic built-ins follow component-name
+identity, so `<c-Element>` and `<c-Component>` are equivalent to their
+lowercase spellings. Attribute identity still follows the selected boundary:
+`<c-element>` accepts ASCII-case variants of its HTML-style `is` / `c-is`
+selector, while `<c-component>` keeps those component-input names exact.
+Only HTML identities use ASCII case folding. Component kwargs, slot and fill
+names, State fields, handler names, and custom event names remain
+case-sensitive.
 
 ## Raw blocks (`<c-raw>`)
 
@@ -167,6 +193,22 @@ Rust then rejects them, which is how it produces a clear error message instead
 of a confusing grammar failure. The same "recognize in the grammar, reject in
 Rust for a good error" approach is used for attributes on end tags.
 
+## Native text containers
+
+`<script>`, `<style>`, `<textarea>`, and `<title>` follow HTML's text-container
+shape: tag-looking body text does not become nested template nodes. The grammar
+uses a tag-specific rule for each one so an opening `<script>` can close only
+with `</script>` (ASCII-case-insensitively), not with another container's end
+tag.
+
+Citry interpolation remains intentionally active in these bodies. `{{ expr }}`
+still compiles to an expression and `{# comment #}` is still removed, while
+everything else, including `<button @c-click="save">`-shaped text, stays text.
+This differs from `<c-raw>`, which disables expressions and template comments
+as well. Keeping the distinction in the grammar means extensions that inspect
+compiled nodes cannot mistake text inside a native container for a real HTML
+element or attribute.
+
 ## Expression boundaries
 
 Inside `{{ ... }}`, only whitespace is allowed around the expression, not
@@ -177,6 +219,8 @@ handles this by understanding just enough Python to find the real end:
 
 - string literals (`'...'`, `"..."`, `'''...'''`, `"""..."""`) are skipped
   whole, so a `}}` inside a string does not end the expression;
+- Python `#` comments are skipped to a newline or the host `}}` delimiter, so
+  quotes and braces in comment text do not change the expression boundary;
 - curly braces are counted, so the expression ends only when every `{` opened
   inside it has been closed.
 
@@ -196,8 +240,9 @@ bounds:
   Rust strips them before parsing the payload. They are not template nodes and
   cannot be mixed with sibling roots (`<>a</><div>b</div>` is invalid).
 - Otherwise, a value that starts with an HTML tag (`<tag...`) and whose last
-  grammar element is a closing tag, self-closing tag, `<c-raw>` block, or HTML
-  void element is a **nested template**. It may contain one or more adjacent
+  grammar element is a closing tag (including a native text container),
+  self-closing tag, `<c-raw>` block, or HTML void element is a **nested
+  template**. It may contain one or more adjacent
   root tags, with text, expressions, or comments between them. After trimming
   outer whitespace, leading or trailing non-tag content requires the
   whole-value fragment form.
@@ -223,6 +268,30 @@ The selection/metadata expressions `c-is` on `<c-component>`/`<c-element>`,
 `c-name` on `<c-slot>`/`<c-fill>`, and `c-required` on `<c-slot>` likewise
 reject nested-template values on those special tags. The same spellings remain
 ordinary template-capable kwargs on a user component.
+
+## Template flags
+
+An attribute name beginning with `#c-` enters the framework-metadata channel.
+The grammar uses `html_meta_attribute_name` before the ordinary attribute-name
+rule so Rust can distinguish that channel without inspecting string prefixes
+later. The parser accepts exactly two members:
+
+- `#c-key="expr"` evaluates a non-empty host-language expression and identifies
+  an HTML element or component invocation across updates. If the expression
+  evaluates to Python `None`, Citry emits no key for that render. `False`, `0`,
+  and the empty string remain key values.
+- bare `#c-ignore` leaves an ordinary element subtree or a logical component
+  range out of morph updates. On runtime `<c-element>` it retains ordinary
+  element semantics; structural tags still reject it.
+
+The parser rejects unknown members, a valueless `#c-key`, a valued `#c-ignore`,
+and placements on `<c-if>`, `<c-elif>`, `<c-else>`, `<c-for>`, `<c-empty>`,
+`<c-raw>`, `<c-fill>`, or `<c-slot>`. This placement check uses the same
+reserved-tag identity described above. HTML void elements remain ordinary
+identity nodes and may carry `#c-key`. Template flags must be written
+explicitly on the tag. A `#c-*` mapping key arriving through `c-bind` is a
+render-time error, even when its value is `None`; callers pass an ordinary
+component input and the component writes `#c-key` on the markup it owns.
 
 ## Parse-time validation
 

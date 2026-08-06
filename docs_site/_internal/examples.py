@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING, Any, cast
 from markupsafe import Markup, escape
 
 from citry import Component
-from docs_site._internal.config import config as default_config
+from docs_site._internal.project import current_docs_project
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,11 +42,16 @@ class ExampleInfo:
 
     @property
     def public_slug(self) -> str:
-        """The kebab-case URL segment shared by the recipe and its demo."""
+        """The kebab-case URL segment used by the standalone demo routes."""
         return self.name.replace("_", "-")
 
+    @property
+    def canonical_source(self) -> str:
+        """The content-relative Markdown file that owns this example card."""
+        return f"examples/{self.public_slug}.md"
 
-_registry: dict[str, ExampleInfo] | None = None
+
+_registries: dict[Path, dict[str, ExampleInfo]] = {}
 _PROJECTION_BLOCK_RE = re.compile(
     r"<!-- docs-example:(?P<name>[a-z0-9_-]+):start -->.*?"
     r"<!-- docs-example:(?P=name):end -->",
@@ -54,12 +59,12 @@ _PROJECTION_BLOCK_RE = re.compile(
 )
 
 
-def get_example_registry() -> dict[str, ExampleInfo]:
-    """Return the cached example registry, discovering on first call."""
-    global _registry  # noqa: PLW0603
-    if _registry is None:
-        _registry = _discover_examples(default_config.examples_dir)
-    return _registry
+def get_example_registry(examples_dir: Path | None = None) -> dict[str, ExampleInfo]:
+    """Return the registry for an explicit or active-project example directory."""
+    examples_dir = (examples_dir or current_docs_project().runtime.examples_dir).resolve()
+    if examples_dir not in _registries:
+        _registries[examples_dir] = _discover_examples(examples_dir)
+    return _registries[examples_dir]
 
 
 def get_example_by_slug(slug: str) -> ExampleInfo | None:
@@ -92,7 +97,12 @@ def _discover_examples(examples_dir: Path) -> dict[str, ExampleInfo]:
         if page_cls is not None:
             # A fragment demo declares `FRAGMENTS = {variant: <component element>}`.
             fragments = dict(getattr(component_module, "FRAGMENTS", {}) or {})
-            registry[name] = ExampleInfo(name=name, page_cls=page_cls, example_dir=example_dir, fragments=fragments)
+            registry[name] = ExampleInfo(
+                name=name,
+                page_cls=page_cls,
+                example_dir=example_dir,
+                fragments=fragments,
+            )
 
     return registry
 

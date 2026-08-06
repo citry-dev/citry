@@ -11,9 +11,8 @@ from typing import get_args, get_origin, get_type_hints
 
 import pytest
 
-from citry import Citry, CitryRender, Component, Extension, Slot, SlotContext, SlotData, SlotInput
+from citry import Citry, CitryRender, Component, Extension, Markup, Slot, SlotContext, SlotData, SlotInput
 from citry.slots import normalize_slot_fills
-from citry.util.html import SafeString
 
 
 def test_slot_input_is_runtime_subscriptable_and_preserves_its_shape() -> None:
@@ -33,8 +32,8 @@ class TestSlotConstruction:
         slot = Slot("<b>hi</b> & 'quotes'")
         assert slot() == "&lt;b&gt;hi&lt;/b&gt; &amp; &#39;quotes&#39;"
 
-    def test_safestring_contents_pass_through(self):
-        slot = Slot(SafeString("<b>hi</b>"))
+    def test_markup_contents_pass_through(self):
+        slot = Slot(Markup("<b>hi</b>"))
         assert slot() == "<b>hi</b>"
 
     def test_scalar_contents(self):
@@ -98,8 +97,8 @@ class TestSlotCall:
         slot = Slot(lambda _ctx: "<b>unsafe</b>")
         assert slot() == "&lt;b&gt;unsafe&lt;/b&gt;"
 
-    def test_function_safestring_result_not_escaped(self):
-        slot = Slot(lambda _ctx: SafeString("<b>safe</b>"))
+    def test_function_markup_result_not_escaped(self):
+        slot = Slot(lambda _ctx: Markup("<b>safe</b>"))
         assert slot() == "<b>safe</b>"
 
     def test_function_none_result_renders_empty(self):
@@ -144,10 +143,10 @@ class TestSlotFromComponents:
             citry = c
             template = '<div><c-slot name="item" kind="static">FB</c-slot></div>'
 
-        def item(ctx: SlotContext) -> SafeString:
+        def item(ctx: SlotContext) -> Markup:
             seen["data"] = ctx.data
             seen["fallback"] = ctx.fallback
-            return SafeString(f"{ctx.data.kind}:{ctx.fallback}")
+            return Markup("{}:{}").format(ctx.data.kind, ctx.fallback)
 
         assert str(Card(slots={"item": item})) == '<div data-cid-c1="">static:FB</div>'
         assert isinstance(seen["data"], SlotData)

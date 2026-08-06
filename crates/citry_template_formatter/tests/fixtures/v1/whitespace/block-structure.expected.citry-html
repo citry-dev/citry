@@ -1,0 +1,6 @@
+<main>
+  <section>
+    <h2>{{ title }}</h2>
+  </section>
+  <footer></footer>
+</main>

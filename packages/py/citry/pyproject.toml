@@ -1,12 +1,13 @@
 [build-system]
-requires = ["setuptools"]
+# PEP 639 license metadata and license-files support need setuptools 77.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "citry"
-version = "0.3.1"
+version = "0.3.2"
 requires-python = ">=3.10, <4.0"
-description = "Fast, simple, and smart frontend framework for Python that brings the best of Vue, React, Django, and Jinja"
+description = "Fast, simple, and smart frontend framework for Python that brings the best of Vue, React, Django, Jinja, and LiveWire"
 # Symlink to the repo-root README; setuptools refuses a readme outside the
 # package dir, so the link makes the root README local to this package.
 readme = "README.md"
@@ -29,7 +30,8 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
 ]
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     # Pinned to one exact version, not a range. The runtime node classes in
     # `citry.nodes` read the source citry-core's compiler emits, so the two

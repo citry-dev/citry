@@ -87,11 +87,11 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
                     )
                 slug_owners[slug] = name
 
-                recipe = ctx.content_dir / "examples" / f"{slug}.md"
+                recipe = ctx.content_dir / info.canonical_source
                 if not recipe.is_file():
                     yield GuardResult.error(
                         guard="example_contract",
-                        message=(f"Example {name!r} has no recipe page at content/examples/{slug}.md."),
+                        message=(f"Example {name!r} has no canonical page at content/{info.canonical_source}."),
                         source=source,
                     )
                 else:
@@ -135,13 +135,13 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
             uses[name].append((label, line))
 
     for name, info in registry.items():
-        canonical = f"examples/{info.public_slug}.md"
+        canonical = info.canonical_source
         for label, line in uses[name]:
             if label == canonical:
                 continue
             yield GuardResult.error(
                 guard="example_contract",
-                message=(f"Example {name!r} may only be embedded on its canonical recipe page, {canonical}."),
+                message=(f"Example {name!r} may only be embedded in its canonical recipe, {canonical}."),
                 source=label,
                 line=line,
             )

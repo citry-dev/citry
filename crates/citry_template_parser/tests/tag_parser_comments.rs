@@ -487,6 +487,43 @@ mod tests {
     }
 
     #[test]
+    fn test_python_comment_text_does_not_change_expression_boundary() {
+        let cases = [
+            (
+                "{{ x # show the person's name }}",
+                "# show the person's name ",
+                None,
+            ),
+            ("{{ x # } note }}", "# } note ", None),
+            ("{{ x # { note }}", "# { note ", None),
+            (
+                r#"{{ x # say "}}" then stop }}"#,
+                r#"# say ""#,
+                Some(r#"" then stop }}"#),
+            ),
+        ];
+
+        for (input, expected_comment, expected_tail) in cases {
+            let template = parse_template(input, None, None).unwrap();
+
+            assert_eq!(template.comments.len(), 1, "input: {input:?}");
+            assert_eq!(template.comments[0].token.content, expected_comment);
+            assert!(matches!(template.elements[0], TemplateElement::Expr(_)));
+
+            match expected_tail {
+                Some(tail) => {
+                    assert_eq!(template.elements.len(), 2);
+                    let TemplateElement::Text(text) = &template.elements[1] else {
+                        panic!("expected trailing text for {input:?}");
+                    };
+                    assert_eq!(text.token.content, tail);
+                }
+                None => assert_eq!(template.elements.len(), 1),
+            }
+        }
+    }
+
+    #[test]
     fn test_template_comment_before_expression() {
         // {# comment #} is not allowed inside {{ }}
         let input = "{{ {# before #} x }}";

@@ -134,6 +134,37 @@ class TestJsCssDataSchemas:
         str(Card())
         assert captured[-1].js_data == {"rows": 5}
 
+    def test_validated_schema_defaults_become_the_normalized_data(self):
+        captured: list = []
+        c = Citry(extensions=[_data_probe(captured)])
+
+        class Card(Component):
+            citry = c
+            template = "<p>{{ title }}</p>"
+
+            class TemplateData:
+                title: str = "default title"
+
+            class JsData:
+                rows: int = 3
+
+            class CssData:
+                color: str = "red"
+
+            def template_data(self, kwargs, slots):
+                return {}
+
+            def js_data(self, kwargs, slots):
+                return {}
+
+            def css_data(self, kwargs, slots):
+                return {}
+
+        assert str(Card()) == '<p data-cid-c1="">default title</p>'
+        assert captured[-1].template_data == {"title": "default title"}
+        assert captured[-1].js_data == {"rows": 3}
+        assert captured[-1].css_data == {"color": "red"}
+
     def test_declared_schema_requires_the_method_to_supply_it(self):
         # A schema with required fields makes the default js_data() (which
         # returns None, normalized to {}) fail validation: declaring the

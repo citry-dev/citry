@@ -237,14 +237,14 @@ harness observed:
 <div>&lt;button x-text=&#34;bad&#34;&gt;&lt;/button&gt;</div>
 ```
 
-Active programmatic HTML requires a trusted `SafeString`, a callable that
+Active programmatic HTML requires trusted `Markup`, a callable that
 returns trusted/renderable output, a `CitryElement`, or a `CitryRender`. The
 old report's "Python string element root" origin does not exist for a plain
 string.
 
 ### 5.4 Construction origin is not a browser source location
 
-A reusable `Slot(SafeString(...))` was rendered under two different `x-data`
+A reusable `Slot(Markup(...))` was rendered under two different `x-data`
 locations, A and B. It produced two active copies, but the Slot had no source
 position and the final HTML had no provenance. The two copies must later use
 A and B respectively. Therefore:

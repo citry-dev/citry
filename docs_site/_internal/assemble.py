@@ -20,15 +20,22 @@ derive it from their own URL and are left alone).
 
 from __future__ import annotations
 
-import re
 import shutil
+import tempfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from docs_site._internal._vendor.mike_versions import Versions
-from docs_site._internal.build import build_site
-from docs_site._internal.config import DocsConfig
-from docs_site._internal.config import config as default_config
+from docs_site._internal.base_path import apply_base_path
+from docs_site._internal.build import _is_unsafe_output, _replace_output_directory, build_site
+from docs_site._internal.html_rewrite import (
+    StartTag,
+    append_attribute,
+    rewrite_attribute_values,
+    rewrite_start_tags,
+)
+from docs_site._internal.project import DocsProject, current_docs_project, docs_project_scope
 from docs_site._internal.versioning import (
     load_manifest,
     select_indexed_versions,
@@ -37,7 +44,7 @@ from docs_site._internal.versioning import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
+    from docs_site._internal.config import DocsConfig
 
 
 @dataclass
@@ -53,16 +60,31 @@ class AssembleOutcome:
     search_message: str = ""
     published: list[str] = field(default_factory=list)
     picker_pages: int = 0
+    # Mounted snapshot pages pointed at the root build's configured Pagefind bundle.
+    pagefind_pages: int = 0
+    # Mounted snapshot pages rewritten for a project-Pages deployment prefix.
+    mounted_base_path_pages: int = 0
     # Old-version HTML pages rewritten to noindex + a canonical to the current release.
     noindexed_pages: int = 0
 
 
+@docs_project_scope
 def assemble_site(
-    *, config: DocsConfig | None = None, output_dir: Path | None = None, build: bool = True
+    *,
+    config: DocsConfig | None = None,
+    output_dir: Path | None = None,
+    build: bool = True,
+    project: DocsProject | None = None,
 ) -> AssembleOutcome:
     """Build the current version into the site root and mount the committed versions under ``/v/``."""
-    config = config or default_config
-    site_dir = (output_dir or config.site_dir).resolve()
+    if project is None:  # pragma: no cover - supplied by @docs_project_scope
+        raise RuntimeError("docs project scope was not initialized")
+    requested_site_dir = output_dir or config.site_dir
+    if requested_site_dir.is_symlink():
+        raise ValueError(f"Refusing to use symlink assembly output dir: {requested_site_dir}")
+    site_dir = requested_site_dir.resolve()
+    if _is_unsafe_output(site_dir, config.content_dir, config):
+        raise ValueError(f"Refusing to use unsafe assembly output dir: {site_dir}")
     outcome = AssembleOutcome(output_dir=site_dir)
 
     if build:
@@ -78,104 +100,132 @@ def assemble_site(
             return outcome
 
     dest_v = site_dir / "v"
-    if (config.versions_dir / "versions.json").is_file():
-        outcome.published = _publish_versions(config.versions_dir, dest_v, config.publish_window)
+    outcome.published = _publish_versions(config.versions_dir, dest_v, project.versions.publish_window)
 
     if (dest_v / "versions.json").is_file():
         # Hide the old mounted versions from search (noindex + canonical to the
-        # current release), then point the root pages' picker at the manifest.
-        outcome.noindexed_pages = _noindex_old_versions(site_dir, dest_v, site_url=config.site_url)
+        # current release), point their search UI at the root build's configured
+        # index, then point the root pages' picker at the manifest.
+        if config.base_path:
+            outcome.mounted_base_path_pages = apply_base_path(dest_v, config.base_path)
+        outcome.noindexed_pages = _noindex_old_versions(site_dir, dest_v, site_url=project.site_url)
+        outcome.pagefind_pages = _rewrite_mounted_pagefind_path(
+            dest_v,
+            f"{config.base_path}{project.settings.pagefind_path}",
+        )
         outcome.picker_pages = _enable_root_version_picker(site_dir, config.base_path)
     return outcome
 
 
 def _publish_versions(versions_root: Path, dest_v: Path, window: int) -> list[str]:
-    """Copy the published subset of committed versions into ``dest_v`` and write a trimmed manifest."""
-    manifest = load_manifest(versions_root)
+    """Replace ``dest_v`` with the exact published subset and its trimmed manifest."""
+    has_manifest = (versions_root / "versions.json").is_file()
+    manifest = load_manifest(versions_root) if has_manifest else Versions()
     published = select_published_versions(manifest, window)
     published_set = set(published)
 
-    trimmed = Versions()
-    for info in manifest:
-        version = str(info.version)
-        if version not in published_set:
-            continue
-        shutil.copytree(versions_root / version, dest_v / version, dirs_exist_ok=True)
-        trimmed.add(version, title=info.title, aliases=list(info.aliases))
-        # Copy each alias dir (e.g. latest/) whose target version is published.
-        for alias in info.aliases:
-            alias_dir = versions_root / alias
-            if alias_dir.is_dir():
-                shutil.copytree(alias_dir, dest_v / alias, dirs_exist_ok=True)
-    write_manifest(dest_v, trimmed)
+    dest_v.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".v.publish-", dir=dest_v.parent) as temporary:
+        staged_v = Path(temporary)
+        trimmed = Versions()
+        for info in manifest:
+            version = str(info.version)
+            if version not in published_set:
+                continue
+            shutil.copytree(versions_root / version, staged_v / version)
+            trimmed.add(version, title=info.title, aliases=list(info.aliases))
+            # Copy each alias dir (e.g. latest/) whose target version is published.
+            for alias in info.aliases:
+                alias_dir = versions_root / alias
+                if alias_dir.is_dir():
+                    shutil.copytree(alias_dir, staged_v / alias)
+        if has_manifest:
+            write_manifest(staged_v, trimmed)
+        _replace_output_directory(staged_v, dest_v)
     return published
 
 
 def _enable_root_version_picker(site_dir: Path, base: str) -> int:
-    """Add ``data-versions-root`` to the root pages' picker so site.js fetches the manifest there."""
-    needle = "data-version-picker"
-    replacement = f'data-version-picker data-versions-root="{base}/v/"'
+    """
+    Add ``data-versions-root`` to the root pages' picker so site.js fetches the manifest there.
+
+    A page without a picker is skipped rather than treated as a problem: the
+    project home uses the landing layout, which carries no docs chrome, so
+    versions are switched from the documentation pages instead.
+    """
+
+    def add_versions_root(tag: StartTag) -> str:
+        attrs = dict(tag.attrs)
+        if "data-version-picker" not in attrs or "data-versions-root" in attrs:
+            return tag.source
+        return append_attribute(tag.source, f'data-versions-root="{base}/v/"')
+
     v_dir = site_dir / "v"
     changed = 0
     for html in site_dir.rglob("*.html"):
         if v_dir in html.parents:
             continue  # /v/<version>/ pages derive the manifest path from their own URL
         text = html.read_text(encoding="utf-8")
-        if needle in text and "data-versions-root" not in text:
-            html.write_text(text.replace(needle, replacement), encoding="utf-8")
-            changed += 1
+        rewritten = rewrite_start_tags(text, add_versions_root)
+        if rewritten == text:
+            continue
+        html.write_text(rewritten, encoding="utf-8")
+        changed += 1
     return changed
 
 
-# A whole <meta ...> / <link ...> start tag, so an attribute can be rewritten
-# without assuming any particular attribute order.
-_META_TAG_RE = re.compile(r"<meta\b[^>]*>", re.IGNORECASE)
-_LINK_TAG_RE = re.compile(r"<link\b[^>]*>", re.IGNORECASE)
+def _rewrite_mounted_pagefind_path(root: Path, pagefind_path: str) -> int:
+    """Point copied snapshots at the Pagefind bundle emitted by the root build."""
 
-# One attribute's value, matching a double-quoted, single-quoted, or bare value.
-# Both forms occur because the minify pass drops quotes and reorders attributes
-# (``name="robots" content="index,follow"`` -> ``content=index,follow name=robots``).
-_ATTR_RE = {
-    name: re.compile(rf'\b{name}=("[^"]*"|\'[^\']*\'|[^\s>]*)', re.IGNORECASE)
-    for name in ("name", "rel", "content", "href")
-}
+    def rewrite_overlay(tag: StartTag) -> str:
+        attrs = dict(tag.attrs)
+        classes = (attrs.get("class") or "").split()
+        if tag.name != "div" or "djc-search__overlay" not in classes or "data-pagefind-path" not in attrs:
+            return tag.source
+        return rewrite_attribute_values(
+            tag.source,
+            lambda name, value: pagefind_path if name == "data-pagefind-path" else value,
+        )
 
-
-def _attr_value(tag: str, name: str) -> str:
-    """The (unquoted) value of the first ``name=...`` attribute in ``tag``, or "" if absent."""
-    match = _ATTR_RE[name].search(tag)
-    return match.group(1).strip("\"'") if match else ""
-
-
-def _set_attr(tag: str, name: str, value: str) -> str:
-    """Replace the first ``name=...`` attribute's value with ``name="value"`` (unchanged if absent)."""
-    # A function replacement inserts the value verbatim, so a URL with backslashes
-    # or ``\1``-looking text is not read as a regex replacement template.
-    return _ATTR_RE[name].sub(lambda _match: f'{name}="{value}"', tag, count=1)
+    changed = 0
+    for html_path in root.rglob("*.html"):
+        source = html_path.read_text(encoding="utf-8")
+        rewritten = rewrite_start_tags(source, rewrite_overlay)
+        if rewritten == source:
+            continue
+        html_path.write_text(rewritten, encoding="utf-8")
+        changed += 1
+    return changed
 
 
 def _rewrite_meta_robots(html: str) -> str:
     """Force every ``<meta name="robots">`` in ``html`` to ``noindex,follow``."""
 
-    def repl(match: re.Match[str]) -> str:
-        tag = match.group(0)
-        if _attr_value(tag, "name").lower() != "robots":
-            return tag
-        return _set_attr(tag, "content", "noindex,follow")
+    def rewrite_meta(tag: StartTag) -> str:
+        attrs = dict(tag.attrs)
+        if tag.name != "meta" or (attrs.get("name") or "").casefold() != "robots":
+            return tag.source
+        return rewrite_attribute_values(
+            tag.source,
+            lambda name, value: "noindex,follow" if name == "content" else value,
+        )
 
-    return _META_TAG_RE.sub(repl, html)
+    return rewrite_start_tags(html, rewrite_meta)
 
 
 def _rewrite_canonical(html: str, target: str) -> str:
     """Point every ``<link rel="canonical">`` in ``html`` at ``target``."""
 
-    def repl(match: re.Match[str]) -> str:
-        tag = match.group(0)
-        if _attr_value(tag, "rel").lower() != "canonical":
-            return tag
-        return _set_attr(tag, "href", target)
+    def rewrite_link(tag: StartTag) -> str:
+        attrs = dict(tag.attrs)
+        if tag.name != "link" or (attrs.get("rel") or "").casefold() != "canonical":
+            return tag.source
+        return rewrite_attribute_values(
+            tag.source,
+            lambda name, value: target if name == "href" else value,
+        )
 
-    return _LINK_TAG_RE.sub(repl, html)
+    return rewrite_start_tags(html, rewrite_link)
 
 
 def _clean_url(rel: Path) -> str:
@@ -207,7 +257,12 @@ def _noindex_old_versions(site_dir: Path, dest_v: Path, *, site_url: str) -> int
     """
     base = site_url.rstrip("/")
     manifest = load_manifest(dest_v)
-    kept = set(select_indexed_versions(manifest))
+    kept = set(
+        select_indexed_versions(
+            manifest,
+            keep_recent=current_docs_project().versions.index_keep_recent,
+        )
+    )
     old_versions = [str(info.version) for info in manifest if str(info.version) not in kept]
 
     changed = 0

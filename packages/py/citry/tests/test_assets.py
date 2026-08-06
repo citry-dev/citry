@@ -131,6 +131,25 @@ class TestTemplateFile:
         assert template.filepath is None
         assert template.origin.endswith("::Card")
 
+    def test_inline_template_removes_only_common_indentation(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = """
+              <article>
+                <p>Nested content</p>
+              </article>
+            """
+
+        declared = Card.template
+        template = Card.get_template()
+
+        assert template is not None
+        assert template.source == "\n<article>\n  <p>Nested content</p>\n</article>\n"
+        assert declared is Card.template
+        assert declared != template.source
+
     def test_no_template_returns_none(self):
         c = Citry()
 
@@ -247,6 +266,50 @@ class TestJsCssFiles:
 
         assert Card.get_js() == "console.log(1)"
         assert Card.get_css() == ".a {}"
+
+    def test_inline_js_and_css_remove_common_indentation_before_hooks(self):
+        seen: list[tuple[str, str]] = []
+
+        class Recorder(Extension):
+            name = "recorder"
+
+            def on_js_loaded(self, ctx):
+                seen.append(("js", ctx.content))
+                return ctx.content
+
+            def on_css_loaded(self, ctx):
+                seen.append(("css", ctx.content))
+                return ctx.content
+
+        c = Citry(extensions=[Recorder])
+
+        class Card(Component):
+            citry = c
+            js = """
+              const card = {
+                ready: true,
+              };
+            """
+            css = """
+              .card {
+                display: block;
+              }
+            """
+
+        assert Card.get_js() == "\nconst card = {\n  ready: true,\n};\n"
+        assert Card.get_css() == "\n.card {\n  display: block;\n}\n"
+        assert seen == [("js", Card.get_js()), ("css", Card.get_css())]
+
+    def test_file_assets_preserve_authored_indentation(self, tmp_path):
+        authored = "  .card {\n    display: block;\n  }\n"
+        (tmp_path / "card.css").write_text(authored)
+        c = Citry(dirs=[tmp_path])
+
+        class Card(Component):
+            citry = c
+            css_file = "card.css"
+
+        assert Card.get_css() == authored
 
     def test_fields_stay_raw_declarations(self, tmp_path):
         (tmp_path / "x.js").write_text("var x;")

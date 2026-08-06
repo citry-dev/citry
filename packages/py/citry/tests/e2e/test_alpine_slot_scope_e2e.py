@@ -8,8 +8,7 @@ import pytest
 
 pytest.importorskip("pytest_playwright")
 
-from citry import Citry, Component
-from citry.util.html import SafeString
+from citry import Citry, Component, Markup
 
 pytestmark = pytest.mark.e2e
 
@@ -454,7 +453,7 @@ def test_detached_python_fill_gets_an_empty_base_and_can_define_only_local_data(
             def noop(self):
                 return None
 
-    detached = SafeString(
+    detached = Markup(
         '<span class="python-fill" '
         "x-data=\"{ localOnly: 'local' }\" "
         "x-text=\"localOnly + ':' + typeof receiverOnly\"></span>"
@@ -713,13 +712,14 @@ def test_independent_fragment_revision_cannot_overwrite_document_fill_routes(
     page.wait_for_function(READY)
     page.wait_for_function("document.querySelector('.document-fill')?.textContent === 'document'")
 
+    html = page.evaluate("async () => await fetch('/fragment').then((response) => response.text())")
     page.evaluate(
         """
-        async () => {
-          const html = await fetch('/fragment').then((response) => response.text());
+        (html) => {
           document.getElementById('fragment-target').innerHTML = html;
         }
-        """
+        """,
+        html,
     )
     page.wait_for_function("document.querySelector('.fragment-fill')?.textContent === 'fragment'")
 

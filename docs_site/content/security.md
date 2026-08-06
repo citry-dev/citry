@@ -169,7 +169,7 @@ An expression passes through two layers before it produces a value.
 - A Python layer runs at evaluation time. It rewrites every variable read,
   attribute access, subscript, and call into a checked version, and those
   checks enforce the actual access rules against your render context. A blocked
-  access raises `SecurityError`.
+  access raises [`SecurityError`][citry.SecurityError].
 
 The two layers fail at different times. Forbidden syntax fails when the
 expression is compiled; a blocked access fails only when the expression is
@@ -193,7 +193,8 @@ The sandbox is modeled on Jinja's sandbox. It blocks the known escape routes:
 Here is the private-attribute rule in action:
 
 ```python
-from citry_core.safe_eval import safe_eval, SecurityError
+from citry import SecurityError
+from citry_core.safe_eval import safe_eval
 
 # Dunder / private attribute access is blocked at eval time
 compiled = safe_eval("obj.__class__")
@@ -206,7 +207,8 @@ except SecurityError as e:
 And the identity-based callable check, which catches a renamed builtin:
 
 ```python
-from citry_core.safe_eval import safe_eval, SecurityError
+from citry import SecurityError
+from citry_core.safe_eval import safe_eval
 
 # eval() is blocked even when smuggled in under a harmless-looking name
 compiled = safe_eval("totally_no_e_val('1+1')")
@@ -250,7 +252,8 @@ function, decorate it with `unsafe`. Django-style methods with
 `alters_data=True` are blocked the same way.
 
 ```python
-from citry_core.safe_eval import safe_eval, unsafe, SecurityError
+from citry import SecurityError
+from citry_core.safe_eval import safe_eval, unsafe
 
 @unsafe
 def dangerous_function():
@@ -291,7 +294,7 @@ currently ships Alpine's standard build, whose expression evaluator requires
 it cannot replace that evaluator permission.
 
 Citry does not currently support Alpine's CSP build. See
-[Alpine runtime](/advanced/alpine-runtime/#content-security-policy) for the
+[Alpine runtime](/advanced/alpine-runtime/#plan-for-content-security-policy) for the
 client-side loading and policy contract.
 
 ### Turning the sandbox off

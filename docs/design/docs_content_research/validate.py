@@ -15,6 +15,8 @@ from collections import Counter
 from datetime import date
 from pathlib import Path
 
+import yaml
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RESEARCH_DIR = Path(__file__).resolve().parent
 INVENTORY_FILE = RESEARCH_DIR / "content_inventory.tsv"
@@ -205,7 +207,6 @@ EVIDENCE_ID_RE = re.compile(r"^EV-\d{3}$")
 JOB_ID_RE = re.compile(r"^JOB-\d{3}$")
 FACT_ID_RE = re.compile(r"^FACT-\d{3}$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-REFERENCE_SLUG_RE = re.compile(r'Category\(\s*"([^"]+)"')
 HEADING_RE = re.compile(r"^(#{1,2})\s+(.+?)\s*$")
 RELEASE_HEADING_RE = re.compile(r"^##\s+(.+?)\s*$")
 FENCE_RE = re.compile(r"^\s*(```+|~~~+)")
@@ -435,8 +436,8 @@ def _expected_live_ids(repo_root: Path) -> dict[str, set[str]]:
         if source_file.name != "__init__.py"
     }
     reference = {"reference:overview"}
-    reference_source = (repo_root / "docs_site/_internal/reference_pages.py").read_text(encoding="utf-8")
-    reference.update(f"reference:{slug}" for slug in REFERENCE_SLUG_RE.findall(reference_source))
+    reference_source = yaml.safe_load((repo_root / "docs_site/reference.yml").read_text(encoding="utf-8"))
+    reference.update(f"reference:{item['slug']}" for item in reference_source["categories"])
     assets = {
         f"asset:{source_file.name.replace('.', '-')}"
         for source_file in (repo_root / "docs_site/static/img").iterdir()

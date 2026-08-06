@@ -1,16 +1,16 @@
 # Playground execution and learning contract
 
 **Date:** 2026-07-28
-**Status:** Stage 3 recommendation
+**Status:** Stage 3 recommendation accepted
 **Scope:** preview-value semantics, Python diagnostics, the first starter, and
 the already accepted Run plus Auto-run control model
 
 This record settles how one Python module produces the HTML shown by the Citry
-playground. It also recommends the module visitors should see first. It does
-not authorize production page work while the runtime and containment gate in
-[`runtime_feasibility.md`](runtime_feasibility.md) remains open.
+playground. It also recommends the module visitors should see first. Later
+stages accepted its contract, published the tested browser wheel, and moved the
+remaining production-origin checks into iterative rollout.
 
-The recommendation is:
+The accepted contract is:
 
 1. Preview the module's final expression.
 2. Accept only `str` and its `Markup` subclass, `CitryElement`, and
@@ -270,27 +270,21 @@ The control shape has already been accepted:
 - Run is always visible and `Ctrl+Enter` or `Cmd+Enter` invokes it immediately.
 - Auto-run is a user-toggleable debounced run after edits.
 
-The following is a separate policy hypothesis. It is not approved by the
-preview-value decision and needs browser performance and first-reader evidence:
+The later stages settled the separate run policy as follows:
 
-1. Run the built-in starter once after the pinned runtime is ready, even if a
-   returning visitor previously disabled Auto-run.
-2. Start Auto-run enabled for a first visit so the page behaves like the live
-   editor promised by the top-level Try it link.
-3. Remember an explicit toggle choice in a versioned browser-local setting.
-4. Use a 500 ms idle debounce as the starting value, replace queued cold-start
+1. Do not load the runtime or run the starter until the visitor selects Run.
+2. Start Auto-run disabled. Remember only an explicit toggle choice in a
+   versioned browser-local setting.
+3. Use a 500 ms idle debounce as the initial value, replace queued cold-start
    edits with the newest source, and let Run bypass the debounce.
-5. Turn Auto-run off after a hard timeout or Worker crash and explain how to
+4. Turn Auto-run off after a hard timeout or Worker crash and explain how to
    retry. Do not turn it off for syntax, validation, or render errors, which are
    normal while editing.
-6. Keep the previous successful result visibly stale while a run is pending or
+5. Keep the previous successful result visibly stale while a run is pending or
    has failed.
 
-The 500 ms value is a measurement candidate, not a performance fact or accepted
-default. Stage 5 must specify the candidates, behavior, and measurement hooks.
-Stage 6 must approve or replace the default, persistence, debounce, and
-failure-pause rules using browser performance and first-reader evidence,
-without reopening the final-expression contract.
+The 500 ms value is an accepted initial default, not a performance fact. It is
+instrumented and may be tuned after rollout.
 
 ## Starter comparison
 
@@ -393,15 +387,15 @@ WebAssembly can terminate before it constructs a structured result.
 
 ## Gate result and falsifiers
 
-Stage 3 recommends approval of:
+Stage 3 was accepted with:
 
 - final-expression preview with the strict normalization table above;
 - no injected `render(value)`, named global, or stdout-as-HTML fallback;
 - the typed welcome card as the only initial starter;
 - no initial preset selector;
 - a direct handoff from the playground to Your first component; and
-- the accepted Run plus toggleable Auto-run control shape, separately from the
-  still-unvalidated defaults and timing hypothesis above.
+- the accepted Run plus toggleable Auto-run control shape and the later Stage 5
+  defaults recorded above.
 
 Reopen this decision if the exact pinned Pyodide runner cannot preserve future
 imports or `<playground>` source positions, if current Citry release artifacts

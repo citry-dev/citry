@@ -199,6 +199,71 @@ class safe_eval:
         """
 
 ########################################################
+# Template formatter
+########################################################
+
+class template_formatter:
+    class TemplateFormatError(ValueError):
+        """A structured refusal to format authored Citry template text."""
+
+        code: str
+        message: str
+        range: tuple[int, int] | None
+        diagnostic: template_parser.ParseDiagnostic | None
+
+    class _EmbeddedFormatPlan:
+        """Opaque source-bound handle for an embedded-formatting pass."""
+
+        @property
+        def id(self) -> str: ...
+        @property
+        def formatted_source(self) -> str: ...
+        @property
+        def requests(
+            self,
+        ) -> list[
+            tuple[
+                str,
+                str,
+                str,
+                str,
+                str,
+                tuple[int, int],
+                int,
+                str,
+            ]
+        ]: ...
+        @property
+        def notices(
+            self,
+        ) -> list[tuple[str, str, str | None, str | None]]: ...
+
+    @staticmethod
+    def format_template(source: str) -> str: ...
+    @staticmethod
+    def python_expression_provider() -> str: ...
+    @staticmethod
+    def prepare_embedded_format(source: str) -> template_formatter._EmbeddedFormatPlan: ...
+    @staticmethod
+    def finish_embedded_format(
+        plan: template_formatter._EmbeddedFormatPlan,
+        results: list[
+            tuple[
+                str,
+                str,
+                str,
+                str | None,
+                str | None,
+                str | None,
+            ]
+        ],
+    ) -> tuple[
+        str,
+        list[tuple[str, str, str | None, str | None]],
+        list[str],
+    ]: ...
+
+########################################################
 # Template parser (V3)
 ########################################################
 
@@ -217,6 +282,18 @@ class template_parser:
     ) -> str: ...
 
     # AST types
+
+    class ParseDiagnostic:
+        """Machine-readable details attached to a template parse exception."""
+
+        code: str
+        message: str
+        start_index: int | None
+        end_index: int | None
+        start_line: int | None
+        start_column: int | None
+        end_line: int | None
+        end_column: int | None
 
     class Token:
         """A span in the template source with position information."""
@@ -290,6 +367,7 @@ class template_parser:
         value: template_parser.Token | None
         inner_value: template_parser.Token | None
         quote_char: str | None
+        kind: template_parser.HtmlAttrKind
         used_variables: list[template_parser.Token]
         comments: list[template_parser.Comment]
         fill_data_pattern: template_parser.FillDataPattern | None

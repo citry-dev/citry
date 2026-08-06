@@ -8,7 +8,12 @@ disposable Storybook integrations:
 - `@storybook/html-vite`, using generated CSF, an async loader, and the same
   Citry-owned Canvas lifecycle.
 
-It is an adapter comparison, not a public `citry-ui` package surface. The
+It is an optional adapter comparison, not a Citry UI phase gate or public
+`citry-ui` package surface. The controlling extension design is
+[`extensions_storybook.md`](../../../../docs/design/extensions_storybook.md),
+and the detailed evidence is in
+[`adapter-exploration.md`](../../../../docs/design/extensions_storybook/adapter-exploration.md).
+The
 directory is outside the `citry_ui` Python package and is excluded from the
 wheel. Storybook previews components; direct Playwright checks verify the
 adapters but are not authored as Storybook stories or journeys.
@@ -78,8 +83,9 @@ Storybook.
 
 ## Deliberate limits
 
-Button, Field/Input, Table, and Tabs remain server-static, and Tabs is
-explicitly labelled server-selected. A private reactive counter is a
+Button, Field/Input, and Table remain server-static. Tabs now has its first
+production browser interaction, although this spike's Tabs story still authors
+only a server-selected initial scenario and no Storybook journey. A private reactive counter is a
 disposable framework probe, not a proposed public component. It proves Citry
 fragment activation, CSS and JS readiness, component-local Alpine state,
 browser-local events, hidden candidate staging, failed-candidate recovery,
@@ -89,8 +95,9 @@ owned window listener, and both adapter lifecycles.
 It does not prove Events transport, morph focus preservation, ambient context
 inside a production compound component, teleports, remote requests, form
 registration, stale server-run disposal, or the later complex readiness
-scenarios. Those remain required before adapter selection and production
-component specifications.
+scenarios. Those remain required before Storybook adapter selection. Citry UI
+production specifications proceed independently through their direct quality
+cases.
 
 The hidden connected candidate is not a transaction boundary. Citry and Alpine
 initialize it before promotion, so a real component could affect global

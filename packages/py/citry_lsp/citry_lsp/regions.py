@@ -1,0 +1,185 @@
+"""Conservative Citry template-region discovery and coordinate adapters."""
+
+from __future__ import annotations
+
+from bisect import bisect_left, bisect_right
+from dataclasses import dataclass
+from typing import Protocol
+
+from citry import LspPosition, LspRange, discover_python_templates
+
+
+class TemplateSourceMap(Protocol):
+    """Coordinate behavior consumed by diagnostics and editor features."""
+
+    template_source: str
+
+    def map_range(self, start_index: int, end_index: int) -> LspRange: ...
+
+    def parser_index_at(self, position: LspPosition) -> int | None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateRegion:
+    """One definite authored template region in a host document."""
+
+    key: str
+    component_name: str | None
+    source_map: TemplateSourceMap
+    ast_proven: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class RegionDiscovery:
+    """Current regions and whether Python parsed completely."""
+
+    regions: tuple[TemplateRegion, ...]
+    valid_python: bool
+
+
+class StandaloneTemplateSourceMap:
+    """Map a complete `citry-html` document directly to LSP positions."""
+
+    __slots__ = ("_byte_boundaries", "_line_starts", "template_source")
+
+    def __init__(self, source: str) -> None:
+        self.template_source = source
+        boundaries = [0]
+        for char in source:
+            boundaries.append(boundaries[-1] + len(char.encode("utf-8")))
+        self._byte_boundaries = tuple(boundaries)
+        self._line_starts = _line_starts(source)
+
+    def map_range(self, start_index: int, end_index: int) -> LspRange:
+        start = _byte_boundary(self._byte_boundaries, start_index)
+        end = _byte_boundary(self._byte_boundaries, end_index)
+        if end < start:
+            msg = "end_index precedes start_index"
+            raise ValueError(msg)
+        return LspRange(
+            _offset_to_lsp(self.template_source, self._line_starts, start),
+            _offset_to_lsp(self.template_source, self._line_starts, end),
+        )
+
+    def parser_index_at(self, position: LspPosition) -> int | None:
+        offset = _lsp_to_offset(self.template_source, self._line_starts, position)
+        return self._byte_boundaries[offset]
+
+
+def standalone_region(source: str) -> TemplateRegion:
+    """Return the whole document as one explicit Citry template region."""
+    return TemplateRegion("standalone", None, StandaloneTemplateSourceMap(source))
+
+
+def discover_python_regions(source: str) -> RegionDiscovery:
+    """Adapt Citry's shared conservative discovery for interactive editing."""
+    discovery = discover_python_templates(source, recover_incomplete=True)
+    return RegionDiscovery(
+        tuple(
+            TemplateRegion(
+                region.component_name,
+                region.component_name,
+                region.source_map,
+                ast_proven=discovery.valid_python,
+            )
+            for region in discovery.regions
+        ),
+        valid_python=discovery.valid_python,
+    )
+
+
+def region_at_position(regions: tuple[TemplateRegion, ...], position: LspPosition) -> TemplateRegion | None:
+    """Return the authored template region containing an LSP position."""
+    for region in regions:
+        try:
+            if region.source_map.parser_index_at(position) is not None:
+                return region
+        except ValueError:
+            continue
+    return None
+
+
+def parser_char_index(source: str, byte_index: int) -> int:
+    """Convert a UTF-8 parser boundary into a Python character index."""
+    encoded = source.encode("utf-8")
+    if byte_index < 0 or byte_index > len(encoded):
+        msg = "parser byte index is outside the template"
+        raise ValueError(msg)
+    try:
+        return len(encoded[:byte_index].decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        msg = "parser byte index splits a UTF-8 code point"
+        raise ValueError(msg) from exc
+
+
+def document_offset_at(source: str, position: LspPosition) -> int:
+    """Convert one UTF-16 LSP position to a Python string offset."""
+    return _lsp_to_offset(source, _line_starts(source), position)
+
+
+def document_range_for_offsets(source: str, start: int, end: int) -> LspRange:
+    """Convert one half-open Python string-offset range to LSP coordinates."""
+    if start < 0 or end < start or end > len(source):
+        msg = "document offsets form an invalid range"
+        raise ValueError(msg)
+    starts = _line_starts(source)
+    return LspRange(
+        _offset_to_lsp(source, starts, start),
+        _offset_to_lsp(source, starts, end),
+    )
+
+
+def _line_starts(source: str) -> tuple[int, ...]:
+    starts = [0]
+    for index, char in enumerate(source):
+        if char == "\n":
+            starts.append(index + 1)
+    return tuple(starts)
+
+
+def _byte_boundary(boundaries: tuple[int, ...], byte_index: int) -> int:
+    index = bisect_left(boundaries, byte_index)
+    if index == len(boundaries) or boundaries[index] != byte_index:
+        msg = "parser byte index is outside the template or splits a UTF-8 code point"
+        raise ValueError(msg)
+    return index
+
+
+def _offset_to_lsp(source: str, line_starts: tuple[int, ...], offset: int) -> LspPosition:
+    line = bisect_right(line_starts, offset) - 1
+    prefix = source[line_starts[line] : offset]
+    return LspPosition(line, len(prefix.encode("utf-16-le")) // 2)
+
+
+def _lsp_to_offset(source: str, line_starts: tuple[int, ...], position: LspPosition) -> int:
+    if position.line < 0 or position.character < 0 or position.line >= len(line_starts):
+        msg = "LSP position is outside the document"
+        raise ValueError(msg)
+    start = line_starts[position.line]
+    end = line_starts[position.line + 1] if position.line + 1 < len(line_starts) else len(source)
+    units = 0
+    for offset in range(start, end):
+        if units == position.character:
+            return offset
+        units += 2 if ord(source[offset]) > 0xFFFF else 1
+        if units > position.character:
+            msg = "LSP position splits a UTF-16 surrogate pair"
+            raise ValueError(msg)
+    if units == position.character:
+        return end
+    msg = "LSP position is outside the document line"
+    raise ValueError(msg)
+
+
+__all__ = [
+    "RegionDiscovery",
+    "StandaloneTemplateSourceMap",
+    "TemplateRegion",
+    "TemplateSourceMap",
+    "discover_python_regions",
+    "document_offset_at",
+    "document_range_for_offsets",
+    "parser_char_index",
+    "region_at_position",
+    "standalone_region",
+]

@@ -3,6 +3,8 @@ Citry template parser - parse and compile Citry templates.
 
 This module exposes the V3 template parser (Rust-powered) to Python.
 It provides two main functions and the AST types they produce.
+Parser failures retain their built-in exception types; ``parse_diagnostic``
+returns their stable code and UTF-8 byte range.
 
 Quick start::
 
@@ -32,9 +34,10 @@ from typing import TypeAlias
 
 from citry_core import _rust
 from citry_core.template_parser.compile import compile_template
-from citry_core.template_parser.parse import parse_template
+from citry_core.template_parser.parse import parse_diagnostic, parse_template
 
 # AST types (re-exported from Rust)
+ParseDiagnostic: TypeAlias = _rust.template_parser.ParseDiagnostic
 Token: TypeAlias = _rust.template_parser.Token
 Comment: TypeAlias = _rust.template_parser.Comment
 HtmlAttrKind: TypeAlias = _rust.template_parser.HtmlAttrKind
@@ -63,8 +66,10 @@ RESERVED_TAG_NAMES: frozenset[str] = _rust.template_parser.RESERVED_TAG_NAMES
 __all__ = [
     # Functions
     "parse_template",
+    "parse_diagnostic",
     "compile_template",
     # AST types
+    "ParseDiagnostic",
     "Token",
     "Comment",
     "HtmlAttrKind",

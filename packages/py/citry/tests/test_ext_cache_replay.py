@@ -160,6 +160,9 @@ class TestCoreArtifactReplay:
 
         class Child(Component):
             citry = app
+            js = """
+              $component(() => {});
+            """
             template = """
             <span>child</span>
             """
@@ -177,6 +180,7 @@ class TestCoreArtifactReplay:
             template = """
             <div>
               <c-child
+                #c-key="cache_key"
                 $c-props="{ count: localCount }"
                 @click="select()"
                 @c-save.prevent.stop.once.debounce.50ms="save({value: 1})"
@@ -185,7 +189,50 @@ class TestCoreArtifactReplay:
             </div>
             """
 
-        artifact = _decode_artifact(_encode_artifact(_export_component_artifact(Cached().render())))
+            def template_data(self, kwargs, slots):
+                return {"cache_key": kwargs.get("cache_key", "")}
+
+        encoded = _encode_artifact(_export_component_artifact(Cached(cache_key="</script>π").render()))
+        wire = json.loads(encoded)
+        assert wire["artifact_version"] == 1
+        assert wire["ownership"]["invocations"][0]["morph_key"] == "</script>π"
+        assert wire["ownership"]["invocations"][0]["morph_mode"] is None
+
+        missing = json.loads(encoded)
+        missing["ownership"]["invocations"][0].pop("morph_mode")
+        missing_artifact = _decode_artifact(json.dumps(missing))
+        missing_boundary, missing_context, _missing_graph = _boundary(Cached())
+        with pytest.raises(CacheArtifactError, match="invalid field set"):
+            _replay_component_artifact(
+                missing_artifact,
+                boundary=missing_boundary,
+                context=missing_context,
+            )
+
+        wrong_type = json.loads(encoded)
+        wrong_type["ownership"]["invocations"][0]["morph_mode"] = False
+        wrong_artifact = _decode_artifact(json.dumps(wrong_type))
+        wrong_boundary, wrong_context, _wrong_graph = _boundary(Cached())
+        with pytest.raises(CacheArtifactError, match="morph_mode must be an exact string"):
+            _replay_component_artifact(
+                wrong_artifact,
+                boundary=wrong_boundary,
+                context=wrong_context,
+            )
+
+        unknown = json.loads(encoded)
+        unknown["ownership"]["invocations"][0]["morph_mode"] = "replace"
+        unknown_artifact = _decode_artifact(json.dumps(unknown))
+        unknown_boundary, unknown_context, _unknown_graph = _boundary(Cached())
+        with pytest.raises(CacheArtifactError, match="morph_mode contains unknown value"):
+            _replay_component_artifact(
+                unknown_artifact,
+                boundary=unknown_boundary,
+                context=unknown_context,
+            )
+
+        wire["ownership"]["invocations"][0]["morph_mode"] = "ignore"
+        artifact = _decode_artifact(json.dumps(wire))
         boundary, context, graph = _boundary(Cached())
         _replay_component_artifact(artifact, boundary=boundary, context=context)
         invocation = next(
@@ -193,6 +240,8 @@ class TestCoreArtifactReplay:
             for record in graph.snapshot().component_invocations
             if record.authored_tag == "child" and record.state == OwnershipState.ACTIVE
         )
+        assert invocation.morph_key == "</script>π"
+        assert invocation.morph_mode == "ignore"
         props, alpine, event, poll = (client_binding.payload for client_binding in invocation.client_bindings)
 
         assert isinstance(props, PropsClientBindingPayload)
@@ -217,6 +266,42 @@ class TestCoreArtifactReplay:
             None,
             5000,
         )
+
+    def test_replay_rejects_props_when_current_target_lost_its_registration(self, monkeypatch):
+        app = Citry()
+
+        class Child(Component):
+            citry = app
+            js = """
+              $component(() => {});
+            """
+            template = """
+              child
+            """
+
+        class Cached(Component):
+            citry = app
+            template = """
+              <c-child $c-props="{ value: 1 }" />
+            """
+
+        artifact = _export_component_artifact(Cached().render())
+        Child.js = "console.log('registration removed');"
+        Child.reset_files()
+        boundary, context, graph = _boundary(Cached())
+        before = graph.snapshot()
+
+        def unexpected_stage(*args, **kwargs):
+            pytest.fail("invalid client props reached render-cache extension staging")
+
+        monkeypatch.setattr(app.extensions, "_stage_render_cache", unexpected_stage)
+        with pytest.raises(
+            CacheArtifactError,
+            match=r"\$c-props.*target component 'Child'.*no \$component\(\.\.\.\) registration",
+        ):
+            _replay_component_artifact(artifact, boundary=boundary, context=context)
+
+        assert graph.snapshot() == before
 
     def test_concurrent_replays_do_not_mutate_the_shared_artifact(self):
         app = Citry()

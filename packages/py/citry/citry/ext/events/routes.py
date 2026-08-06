@@ -48,14 +48,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._protocol.events import (
+    ProtocolValueError,
+    add_route_identity,
+    build_edge_error_envelope,
+    build_rejected_call_envelope,
+    validate_result_envelope,
+)
 from citry.ext.events.codecs import decode_request
 from citry.ext.events.csrf import build_csrf_check
-from citry.ext.events.dispatcher import (
-    PROTOCOL,
-    EventRequest,
-    EventsDispatcher,
-    TransportContext,
-)
+from citry.ext.events.dispatcher import EventRequest, EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError, wire_error
 from citry.util.misc import format_url
 from citry.util.routing import RouteResponse, URLRoute
@@ -205,8 +207,12 @@ def events_routes(citry: Citry) -> list[URLRoute]:
     """The extension's route table, with handlers bound to one ``Citry`` instance."""
     dispatcher = EventsDispatcher()
 
-    def serve_runtime(request: RouteRequest) -> RouteResponse:  # noqa: ARG001 - route handler signature
-        return RouteResponse(content=_runtime_js(), content_type="text/javascript")
+    def serve_runtime(_request: RouteRequest) -> RouteResponse:
+        return RouteResponse(
+            content=_runtime_js(),
+            content_type="text/javascript",
+            headers=(_NO_STORE,),
+        )
 
     # Each dispatch route is a sync/async pair: the plain handler is what the
     # sync hosts (WSGI, sync Django) mount and run, and the async twin rides
@@ -358,23 +364,7 @@ def _prepare_dispatch(
         if url_component is None or url_event is None:  # pragma: no cover - these codecs are per-event only
             message = "A synthesized event payload requires the per-event route's component and handler."
             return _parsed_edge_response(decoded.envelope, 400, "protocol_mismatch", message, compat=compat)
-        synthesized_calls = decoded.envelope.get("calls")
-        if isinstance(synthesized_calls, list):
-            decoded = decoded._replace(
-                envelope={
-                    **decoded.envelope,
-                    "calls": [
-                        {
-                            "componentClassId": url_component,
-                            "handlerName": url_event,
-                            **call,
-                        }
-                        if isinstance(call, dict)
-                        else call
-                        for call in synthesized_calls
-                    ],
-                }
-            )
+        decoded = decoded._replace(envelope=add_route_identity(decoded.envelope, url_component, url_event))
 
     calls = decoded.envelope.get("calls")
     if not batch and isinstance(calls, list) and len(calls) != 1:
@@ -443,10 +433,12 @@ def _encode_envelope(envelope: Mapping[str, Any]) -> tuple[str, Mapping[str, Any
     """
     Encode a result envelope as strict JSON: the body text, plus the envelope it carries.
 
-    The dispatcher has already replaced any result that strict JSON cannot
-    represent, for every transport. ``allow_nan=False`` keeps this HTTP
-    encoder aligned with that boundary.
+    The protocol package checks the final wire value before serialization.
+    ``allow_nan=False`` keeps this HTTP encoder aligned with that boundary.
     """
+    issue = validate_result_envelope(envelope)
+    if issue is not None:
+        raise ProtocolValueError(issue)
     return json.dumps(envelope, separators=(",", ":"), allow_nan=False), envelope
 
 
@@ -490,18 +482,14 @@ def _edge_response(status: int, code: str, message: str, *, batch: bool, compat:
     """
     A rejection raised before dispatch could run (size cap, codec failure).
 
-    Envelope consumers still get a result envelope (one mirrored slot; there
-    is no parsed ``calls`` array to mirror into, and no request ID to echo,
-    so ``requestId`` is null). The compatibility mode gets
-    the plain-text status it gets for any error.
+    Envelope consumers still get a result envelope. There is no parsed
+    ``calls`` array or request ID at this boundary, so the result is the one
+    uncorrelated transport-edge error permitted with a null ``requestId``.
+    The compatibility mode gets the plain-text status it gets for any error.
     """
     if compat:
         return RouteResponse(content=message, content_type="text/plain", status=status)
-    envelope = {
-        "protocol": PROTOCOL,
-        "requestId": None,
-        "results": [{"ok": False, "error": {"status": status, "code": code, "message": message}}],
-    }
+    envelope = build_edge_error_envelope(status, code, message)
     return RouteResponse(
         # allow_nan=False for uniformity with the other envelope encoders;
         # this envelope is built from strings and ints, so it cannot trip.
@@ -519,24 +507,11 @@ def _parsed_edge_response(
     *,
     compat: bool,
 ) -> RouteResponse:
-    """Reject a decoded envelope while preserving its result-slot correspondence."""
+    """Reject a decoded envelope, correlating slots only when its request ID permits it."""
     if compat:
         return RouteResponse(content=message, content_type="text/plain", status=status)
 
-    raw_id = envelope.get("requestId")
-    envelope_id = raw_id if isinstance(raw_id, str) and raw_id else None
-    calls = envelope.get("calls")
-    usable_calls = calls if isinstance(calls, list) and calls else [None]
-    results = []
-    for call in usable_calls:
-        result: dict[str, Any] = {"ok": False}
-        if isinstance(call, dict):
-            send_sequence = call.get("sendSequence")
-            if isinstance(send_sequence, int) and not isinstance(send_sequence, bool) and send_sequence >= 0:
-                result["sendSequence"] = send_sequence
-        result["error"] = {"status": status, "code": code, "message": message}
-        results.append(result)
-    rejected = {"protocol": PROTOCOL, "requestId": envelope_id, "results": results}
+    rejected = build_rejected_call_envelope(envelope, status=status, code=code, message=message)
     return RouteResponse(
         content=json.dumps(rejected, separators=(",", ":"), allow_nan=False),
         content_type=_JSON_CONTENT_TYPE,

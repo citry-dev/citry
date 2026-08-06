@@ -1,0 +1,627 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Citry playground preview</title>
+    <style data-citry-preview-shell>
+      html { min-height: 100%; font-size: 90%; }
+      body { min-height: 100%; }
+      body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; }
+    </style>
+  </head>
+  <body>
+    <script data-citry-preview-shell>
+      (() => {
+        "use strict";
+        // This sandbox receives rendered HTML over a private MessagePort,
+        // activates it, and forwards diagnostics and Citry Events to its parent.
+        const VERSION = 1;
+        const MAX_HTML_BYTES = 2 * 1024 * 1024;
+        const MAX_EVENT_ENVELOPE_BYTES = 1024 * 1024;
+        const MAX_PENDING_EVENTS = 16;
+        const MAX_ASSET_PATHS = 32;
+        const MAX_PENDING_ASSETS = 8;
+        const MAX_MESSAGES_PER_SECOND = 10;
+        const PLAYGROUND_ASSET_PREFIX = "/__citry_playground__/";
+        // Session, run, and nonce identify the one parent and render allowed to
+        // control this document after the initial window-message handshake.
+        let session = "";
+        let hostPort;
+        let runId = 0;
+        let nonce = "";
+        let messageTimes = [];
+        let eventMessageTimes = [];
+        let nextEventId = 0;
+        let eventsEnabled = false;
+        let eventsDisabledMessage = "";
+        let transportInstalled = false;
+        let nextAssetId = 0;
+        const pendingEvents = new Map();
+        const pendingAssets = new Map();
+        const queuedEvents = [];
+        const assetBlobUrls = new Map();
+        const initiallyLoadedAssets = { js: new Set(), css: new Set() };
+        // DOMParser makes scripts inert. These MIME types identify the scripts
+        // that must be recreated after their nodes enter this live document.
+        const JAVASCRIPT_MIME_TYPES = new Set([
+          "application/ecmascript",
+          "application/javascript",
+          "application/x-ecmascript",
+          "application/x-javascript",
+          "text/ecmascript",
+          "text/javascript",
+          "text/javascript1.0",
+          "text/javascript1.1",
+          "text/javascript1.2",
+          "text/javascript1.3",
+          "text/javascript1.4",
+          "text/javascript1.5",
+          "text/jscript",
+          "text/livescript",
+          "text/x-ecmascript",
+          "text/x-javascript",
+        ]);
+        const CITRY_MANIFEST_SELECTOR = [
+          'script[type="application/json"][data-citry-graph]',
+          'script[type="application/json"][data-citry-events]',
+          'script[type="application/json"][data-citry]',
+        ].join(", ");
+
+        const byteLength = (value) => new TextEncoder().encode(value).byteLength;
+        const ready = () => parent.postMessage({ type: "preview-ready", version: VERSION }, "*");
+
+        function needsScriptActivation(script) {
+          let type = script.getAttribute("type");
+          if (type === null) {
+            const language = script.getAttribute("language");
+            if (language === null || language === "") return true;
+            type = `text/${language}`;
+          } else if (type === "") {
+            return true;
+          } else {
+            type = type.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, "");
+          }
+          type = type.toLowerCase();
+          return type === "module"
+            || type === "importmap"
+            || type === "speculationrules"
+            || JAVASCRIPT_MIME_TYPES.has(type);
+        }
+
+        function send(kind, value) {
+          if (!hostPort) return;
+          const now = performance.now();
+          messageTimes = messageTimes.filter((time) => now - time < 1_000);
+          if (messageTimes.length >= MAX_MESSAGES_PER_SECOND) return;
+          messageTimes.push(now);
+          let message;
+          try {
+            message = typeof value === "string" ? value : String(value?.message ?? value);
+          } catch {
+            message = "Unprintable client error";
+          }
+          hostPort.postMessage({
+            type: "citry-preview-diagnostic",
+            version: VERSION,
+            session,
+            runId,
+            nonce,
+            kind,
+            message: message.slice(0, 4_096),
+          });
+        }
+
+        function transportError(message, code = "playground_transport") {
+          const error = new Error(message);
+          error.status = 0;
+          error.code = code;
+          return error;
+        }
+
+        function rejectEvents(message) {
+          const error = transportError(message, "stale_preview");
+          eventsDisabledMessage = message;
+          eventsEnabled = false;
+          for (const queued of queuedEvents.splice(0)) queued.reject(error);
+          for (const pending of pendingEvents.values()) {
+            clearTimeout(pending.timeout);
+            pending.reject(error);
+          }
+          pendingEvents.clear();
+          for (const pending of pendingAssets.values()) {
+            clearTimeout(pending.timeout);
+            pending.reject(error);
+          }
+          pendingAssets.clear();
+        }
+
+        function decodeBase64(value) {
+          const bytes = Uint8Array.from(atob(value), (character) => character.charCodeAt(0));
+          return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        }
+
+        function encodeBase64(value) {
+          const bytes = new TextEncoder().encode(value);
+          let binary = "";
+          for (const byte of bytes) binary += String.fromCharCode(byte);
+          return btoa(binary);
+        }
+
+        function isPlaygroundAsset(path) {
+          return typeof path === "string" && path.startsWith(PLAYGROUND_ASSET_PREFIX);
+        }
+
+        function requestAssetBatch(paths) {
+          if (!hostPort || !paths.length) return Promise.reject(transportError("The asset bridge is unavailable."));
+          if (pendingAssets.size >= MAX_PENDING_ASSETS) {
+            return Promise.reject(transportError("Too many playground asset requests are pending."));
+          }
+          nextAssetId += 1;
+          const assetId = `assets-${nextAssetId}`;
+          return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              pendingAssets.delete(assetId);
+              reject(transportError("The Python asset loader did not answer in time.", "timeout"));
+            }, 7_000);
+            pendingAssets.set(assetId, { paths: new Set(paths), resolve, reject, timeout });
+            hostPort.postMessage({
+              type: "citry-assets-call",
+              version: VERSION,
+              session,
+              runId,
+              nonce,
+              assetId,
+              paths,
+            });
+          });
+        }
+
+        async function ensureAssetBlobs(paths) {
+          const missing = [...new Set(paths)].filter((path) => !assetBlobUrls.has(path));
+          for (let index = 0; index < missing.length; index += MAX_ASSET_PATHS) {
+            const batch = missing.slice(index, index + MAX_ASSET_PATHS);
+            const assets = await requestAssetBatch(batch);
+            for (const asset of assets) {
+              const blobUrl = URL.createObjectURL(
+                new Blob([asset.content], { type: `${asset.contentType};charset=utf-8` }),
+              );
+              assetBlobUrls.set(asset.path, blobUrl);
+            }
+          }
+        }
+
+        function dependencyManifestTags(root) {
+          return [...root.querySelectorAll('script[type="application/json"][data-citry]')];
+        }
+
+        function recordInitiallyLoadedAssets(root) {
+          for (const tag of dependencyManifestTags(root)) {
+            const manifest = JSON.parse(tag.textContent);
+            for (const kind of ["js", "css"]) {
+              for (const encoded of manifest.markLoaded?.[kind] || []) {
+                const path = decodeBase64(encoded);
+                if (isPlaygroundAsset(path)) initiallyLoadedAssets[kind].add(path);
+              }
+            }
+          }
+        }
+
+        function initialCssAssetIsStillUsable(descriptor) {
+          const classId = descriptor.attrs?.["data-citry-css-class"];
+          // Only class CSS participates in Citry's last-instance collection.
+          // Variables and served dependency sheets remain live once inlined.
+          if (typeof classId !== "string") return true;
+          return [...document.querySelectorAll("[data-citry-css-class]")]
+            .some((element) => element.getAttribute("data-citry-css-class") === classId);
+        }
+
+        function collectDirectAssetReferences(root) {
+          const references = [];
+          for (const element of root.querySelectorAll('script[src], link[rel~="stylesheet"][href]')) {
+            const attribute = element.tagName === "SCRIPT" ? "src" : "href";
+            const path = element.getAttribute(attribute);
+            if (isPlaygroundAsset(path)) references.push({ element, attribute, path });
+          }
+          return references;
+        }
+
+        function collectManifestAssetReferences(root) {
+          const manifests = [];
+          const references = [];
+          for (const tag of dependencyManifestTags(root)) {
+            const manifest = JSON.parse(tag.textContent);
+            manifests.push({ tag, manifest });
+            for (const kind of ["js", "css"]) {
+              const entries = manifest.fetch?.[kind] || [];
+              entries.forEach((encoded, index) => {
+                const descriptor = JSON.parse(decodeBase64(encoded));
+                const attribute = kind === "js" ? "src" : "href";
+                const path = descriptor.attrs?.[attribute];
+                const initialAssetIsStillUsable = initiallyLoadedAssets[kind].has(path)
+                  && (kind === "js" || initialCssAssetIsStillUsable(descriptor));
+                if (isPlaygroundAsset(path) && !initialAssetIsStillUsable) {
+                  references.push({ entries, index, descriptor, attribute, path });
+                }
+              });
+            }
+          }
+          return { manifests, references };
+        }
+
+        async function hydrateInitialAssets(root) {
+          recordInitiallyLoadedAssets(root);
+          const direct = collectDirectAssetReferences(root);
+          const manifests = collectManifestAssetReferences(root);
+          await ensureAssetBlobs([
+            ...direct.map((reference) => reference.path),
+            ...manifests.references.map((reference) => reference.path),
+          ]);
+          for (const reference of direct) {
+            reference.element.setAttribute(reference.attribute, assetBlobUrls.get(reference.path));
+          }
+          rewriteManifestAssets(manifests);
+        }
+
+        function rewriteManifestAssets({ manifests, references }) {
+          for (const reference of references) {
+            reference.descriptor.attrs[reference.attribute] = assetBlobUrls.get(reference.path);
+            reference.entries[reference.index] = encodeBase64(JSON.stringify(reference.descriptor));
+          }
+          for (const { tag, manifest } of manifests) tag.textContent = JSON.stringify(manifest);
+        }
+
+        async function hydrateRenderActions(result) {
+          const prepared = [];
+          const paths = [];
+          for (const entry of result?.results || []) {
+            if (entry?.ok !== true || !Array.isArray(entry.actions)) continue;
+            for (const action of entry.actions) {
+              if (
+                action?.action !== "render"
+                || typeof action.html !== "string"
+                || action.swap === "none"
+                || action.swap === "remove"
+              ) continue;
+              const template = document.createElement("template");
+              template.innerHTML = action.html;
+              const manifests = collectManifestAssetReferences(template.content);
+              prepared.push({ action, template, manifests });
+              paths.push(...manifests.references.map((reference) => reference.path));
+            }
+          }
+          await ensureAssetBlobs(paths);
+          for (const item of prepared) {
+            rewriteManifestAssets(item.manifests);
+            item.action.html = item.template.innerHTML;
+          }
+          return result;
+        }
+
+        function sendEventEnvelope(envelope) {
+          let envelopeBytes;
+          try {
+            envelopeBytes = byteLength(JSON.stringify(envelope));
+          } catch {
+            return Promise.reject(transportError("The event envelope is not serializable."));
+          }
+          if (envelopeBytes > MAX_EVENT_ENVELOPE_BYTES) {
+            return Promise.reject(transportError("The event envelope exceeds the 1 MiB playground limit."));
+          }
+          if (pendingEvents.size >= MAX_PENDING_EVENTS) {
+            return Promise.reject(
+              transportError(`The playground allows at most ${MAX_PENDING_EVENTS} pending event requests.`),
+            );
+          }
+          const now = performance.now();
+          eventMessageTimes = eventMessageTimes.filter((time) => now - time < 1_000);
+          if (eventMessageTimes.length >= 32) {
+            return Promise.reject(transportError("The preview is sending event requests too quickly."));
+          }
+          eventMessageTimes.push(now);
+          nextEventId += 1;
+          const eventId = `event-${nextEventId}`;
+          return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              pendingEvents.delete(eventId);
+              const error = transportError("The Python event handler did not answer in time.", "timeout");
+              send("event_error", error);
+              reject(error);
+            }, 7_000);
+            pendingEvents.set(eventId, { resolve, reject, timeout });
+            hostPort.postMessage({
+              type: "citry-event-call",
+              version: VERSION,
+              session,
+              runId,
+              nonce,
+              eventId,
+              envelope,
+            });
+          });
+        }
+
+        function playgroundTransportSend(envelope) {
+          if (eventsDisabledMessage) return Promise.reject(transportError(eventsDisabledMessage, "stale_preview"));
+          if (eventsEnabled) return sendEventEnvelope(envelope);
+          if (queuedEvents.length >= MAX_PENDING_EVENTS) {
+            return Promise.reject(transportError("Too many event requests were queued while Result was loading."));
+          }
+          return new Promise((resolve, reject) => queuedEvents.push({ envelope, resolve, reject }));
+        }
+
+        function enableEvents() {
+          if (eventsDisabledMessage) return;
+          eventsEnabled = true;
+          for (const queued of queuedEvents.splice(0)) {
+            sendEventEnvelope(queued.envelope).then(queued.resolve, queued.reject);
+          }
+        }
+
+        function ensurePlaygroundTransport() {
+          if (transportInstalled || !globalThis.Citry?.events?.registerTransport) return;
+          globalThis.Citry.events.registerTransport("playground", { send: playgroundTransportSend });
+          globalThis.Citry.events.configure({ transport: "playground", timeout: 6_000 });
+          transportInstalled = true;
+        }
+
+        // Surface visitor-code failures without giving the iframe direct access
+        // to the parent document.
+        addEventListener("error", (event) => {
+          if (event.target && event.target !== window) {
+            send("resource_error", event.target.currentSrc || event.target.src || event.target.href || event.target.tagName);
+          } else {
+            send("error", event.error || event.message);
+          }
+        }, true);
+        addEventListener("unhandledrejection", (event) => send("unhandled_rejection", event.reason));
+        const originalConsoleError = console.error.bind(console);
+        console.error = (...values) => {
+          originalConsoleError(...values);
+          send("console_error", values.join(" "));
+        };
+
+        async function activateScripts(scripts, afterActivation) {
+          for (const oldScript of scripts) {
+            // Data blocks retain their original node identity. Citry
+            // manifests are staged separately; the rest are already live.
+            if (!needsScriptActivation(oldScript)) continue;
+            const script = document.createElement("script");
+            for (const attribute of oldScript.attributes) script.setAttribute(attribute.name, attribute.value);
+            script.textContent = oldScript.textContent;
+            let externalCompletion = null;
+            if (script.hasAttribute("src") && !oldScript.hasAttribute("async")) {
+              // Dynamically created scripts default to force-async. Restore
+              // parser-style ordering for authored non-async external code.
+              script.async = false;
+              externalCompletion = new Promise((resolve) => {
+                script.addEventListener("load", resolve, { once: true });
+                script.addEventListener("error", resolve, { once: true });
+              });
+            }
+            oldScript.replaceWith(script);
+            afterActivation();
+            ensurePlaygroundTransport();
+            if (externalCompletion) {
+              await externalCompletion;
+              afterActivation();
+              ensurePlaygroundTransport();
+            }
+          }
+        }
+
+        function stageCitryManifests(scripts) {
+          return scripts
+            .filter((script) => script.matches(CITRY_MANIFEST_SELECTOR))
+            .map((manifest) => {
+              const placeholder = manifest.ownerDocument.createComment("citry-manifest");
+              manifest.replaceWith(placeholder);
+              return { manifest, placeholder };
+            });
+        }
+
+        async function restoreCitryManifests(stagedManifests) {
+          for (const { manifest, placeholder } of stagedManifests) placeholder.replaceWith(manifest);
+          // One observer batch preserves graph/Events adjacency. Citry's
+          // manager processes graphs, extension consumers, then dependencies.
+          if (stagedManifests.length) {
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            // Graph-linked dependency callbacks run in the following task.
+            // They must attach component and Events scopes before Alpine starts.
+            await new Promise((resolve) => setTimeout(resolve, 0));
+          }
+        }
+
+        async function render(message) {
+          if (
+            !Number.isSafeInteger(message.runId)
+            || typeof message.nonce !== "string"
+            || typeof message.html !== "string"
+            || byteLength(message.html) > MAX_HTML_BYTES
+          ) return;
+          runId = message.runId;
+          nonce = message.nonce;
+          messageTimes = [];
+          let prepared;
+          try {
+            // Full documents contribute head and body attributes. Fragments are
+            // inserted into the shell body while preserving the shell head.
+            const isDocument = /^\s*(?:<!doctype\s+html\b|<html\b)/i.test(message.html);
+            let bodyAttributes = [];
+            let bodyNodes;
+            let headNodes = [];
+            let visitorScripts;
+            let stagedManifests;
+            if (isDocument) {
+              const parsed = new DOMParser().parseFromString(message.html, "text/html");
+              await hydrateInitialAssets(parsed);
+              visitorScripts = [...parsed.querySelectorAll("script")];
+              stagedManifests = stageCitryManifests(visitorScripts);
+              headNodes = [...parsed.head.childNodes];
+              bodyAttributes = [...parsed.body.attributes];
+              bodyNodes = [...parsed.body.childNodes];
+            } else {
+              const template = document.createElement("template");
+              template.innerHTML = message.html;
+              await hydrateInitialAssets(template.content);
+              visitorScripts = [...template.content.querySelectorAll("script")];
+              stagedManifests = stageCitryManifests(visitorScripts);
+              bodyNodes = [...template.content.childNodes];
+            }
+            prepared = { bodyAttributes, bodyNodes, headNodes, stagedManifests, visitorScripts };
+          } catch (error) {
+            send("render_error", error);
+            hostPort.postMessage({
+              type: "preview-render-failed",
+              version: VERSION,
+              session,
+              runId,
+              nonce,
+              message: String(error?.message || error).slice(0, 4_096),
+            });
+            return;
+          }
+          try {
+            const { bodyAttributes, bodyNodes, headNodes, stagedManifests, visitorScripts } = prepared;
+            // The preview document has already loaded. If Citry manifests are
+            // inserted with the rest of the DOM, the dependency manager drains
+            // the ownership graph before the later Events runtime installs
+            // Alpine. Keep the original nodes and positions, but expose them
+            // only after executable scripts have run.
+            for (const node of document.head.querySelectorAll("[data-citry-preview-content]")) node.remove();
+            for (const node of headNodes) {
+              if (node.nodeType === Node.ELEMENT_NODE) node.setAttribute("data-citry-preview-content", "");
+              document.head.append(node);
+            }
+            for (const attribute of [...document.body.attributes]) document.body.removeAttribute(attribute.name);
+            for (const attribute of bodyAttributes) document.body.setAttribute(attribute.name, attribute.value);
+            document.body.replaceChildren(...bodyNodes);
+            let releaseAlpineStart = null;
+            const holdAlpineStart = () => {
+              if (releaseAlpineStart || !stagedManifests.length) return;
+              const hold = globalThis.Citry?.alpine?._holdStart;
+              if (typeof hold === "function") releaseAlpineStart = hold();
+            };
+            try {
+              await activateScripts(visitorScripts, holdAlpineStart);
+              await restoreCitryManifests(stagedManifests);
+            } finally {
+              releaseAlpineStart?.();
+            }
+            ensurePlaygroundTransport();
+          } catch (error) {
+            send("render_error", error);
+          }
+          // Activation errors still acknowledge delivery. The parent commits
+          // this candidate and shows its diagnostic beside the partial result.
+          hostPort.postMessage({ type: "preview-rendered", version: VERSION, session, runId, nonce });
+        }
+
+        // Window messages establish the channel only. The transferred port owns
+        // rendering, lifecycle commands, event calls, and their responses.
+        addEventListener("message", (event) => {
+          if (event.source !== parent) return;
+          if (event.data?.type === "preview-probe" && event.data?.version === VERSION) {
+            ready();
+            return;
+          }
+          if (
+            hostPort
+            || event.data?.type !== "preview-connect"
+            || event.data?.version !== VERSION
+            || typeof event.data?.session !== "string"
+            || !event.data.session
+            || event.ports.length !== 1
+          ) return;
+          session = event.data.session;
+          hostPort = event.ports[0];
+          hostPort.onmessage = ({ data }) => {
+            if (data?.type === "render" && data?.version === VERSION && data?.session === session) {
+              void render(data);
+              return;
+            }
+            if (
+              data?.version !== VERSION
+              || data?.session !== session
+              || data?.runId !== runId
+              || data?.nonce !== nonce
+            ) return;
+            if (data.type === "citry-events-enabled") {
+              enableEvents();
+              return;
+            }
+            if (data.type === "citry-events-disabled") {
+              rejectEvents(String(data.message || "This preview is no longer active."));
+              return;
+            }
+            if (data.type === "citry-assets-result" || data.type === "citry-assets-failure") {
+              const pending = pendingAssets.get(data.assetId);
+              if (!pending) return;
+              clearTimeout(pending.timeout);
+              pendingAssets.delete(data.assetId);
+              if (data.type === "citry-assets-failure") {
+                pending.reject(transportError(String(data.message || "The Python asset loader failed.")));
+                return;
+              }
+              if (!Array.isArray(data.assets) || data.assets.length !== pending.paths.size) {
+                pending.reject(transportError("The Python asset loader returned an incomplete response."));
+                return;
+              }
+              const returned = new Set();
+              for (const asset of data.assets) {
+                if (
+                  !asset
+                  || typeof asset.path !== "string"
+                  || !pending.paths.has(asset.path)
+                  || returned.has(asset.path)
+                  || !["text/css", "text/javascript"].includes(asset.contentType)
+                  || typeof asset.content !== "string"
+                ) {
+                  pending.reject(transportError("The Python asset loader returned an invalid response."));
+                  return;
+                }
+                returned.add(asset.path);
+              }
+              pending.resolve(data.assets);
+              return;
+            }
+            if (data.type !== "citry-event-result" && data.type !== "citry-event-failure") return;
+            const pending = pendingEvents.get(data.eventId);
+            if (!pending) return;
+            clearTimeout(pending.timeout);
+            pendingEvents.delete(data.eventId);
+            if (data.type === "citry-event-failure") {
+              const error = transportError(String(data.message || "The Python event handler failed."));
+              send("event_error", error);
+              pending.reject(error);
+              return;
+            }
+            const failed = data.result?.results?.find((result) => result?.ok === false);
+            if (failed) send("event_error", failed.error?.message || "The Python event handler failed.");
+            hydrateRenderActions(data.result).then(
+              pending.resolve,
+              (error) => {
+                send("event_error", `The event result could not be prepared: ${error?.message || error}`);
+                pending.reject(transportError("The event result could not be prepared."));
+              },
+            );
+          };
+          hostPort.start();
+          hostPort.postMessage({ type: "preview-connected", version: VERSION, session });
+          if (document.readyState === "complete") {
+            hostPort.postMessage({ type: "preview-loaded", version: VERSION, session });
+          }
+        });
+
+        addEventListener("load", () => {
+          hostPort?.postMessage({ type: "preview-loaded", version: VERSION, session });
+        });
+        addEventListener("pagehide", () => {
+          for (const url of assetBlobUrls.values()) URL.revokeObjectURL(url);
+          assetBlobUrls.clear();
+        });
+        ready();
+      })();
+    </script>
+  </body>
+</html>

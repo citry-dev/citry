@@ -32,7 +32,6 @@ if TYPE_CHECKING:
 
 
 BLOG_INDEX_PATH = "/blog/"
-BLOG_FEED_PATH = "/blog/feed.xml"
 BLOG_LIST_START = "<!-- docs-blog-list:start -->"
 BLOG_LIST_END = "<!-- docs-blog-list:end -->"
 
@@ -81,8 +80,6 @@ _MONTHS = (
     "Dec",
 )
 _ATOM_NS = "http://www.w3.org/2005/Atom"
-_FEED_LIMIT = 20
-_WORDS_PER_MINUTE = 200
 
 
 class BlogCatalogError(ValueError):
@@ -309,19 +306,31 @@ def project_blog_list_for_text(source: str, catalog: BlogCatalog) -> str:
     return _BLOG_LIST_BLOCK_RE.sub(blog_list_markdown(catalog), source)
 
 
-def serialize_atom_feed(catalog: BlogCatalog, *, site_url: str, base_path: str = "") -> str:
+def serialize_atom_feed(
+    catalog: BlogCatalog,
+    *,
+    site_url: str,
+    base_path: str = "",
+    feed_path: str | None = None,
+    feed_limit: int | None = None,
+) -> str:
     """Serialize the newest Blog posts as an Atom 1.0 summary feed."""
     if not catalog.posts:
         return ""
 
+    from docs_site._internal.project import current_docs_project  # noqa: PLC0415
+
+    policy = current_docs_project().settings.blog
+    feed_path = feed_path or policy.feed_path
+    feed_limit = feed_limit or policy.feed_limit
     public_root = _feed_public_root(site_url, base_path)
-    feed_url = f"{public_root}{BLOG_FEED_PATH}"
+    feed_url = f"{public_root}{feed_path}"
     index_url = f"{public_root}{BLOG_INDEX_PATH}"
-    entries = catalog.posts[:_FEED_LIMIT]
+    entries = catalog.posts[:feed_limit]
 
     ET.register_namespace("", _ATOM_NS)
     root = ET.Element(_atom("feed"))
-    ET.SubElement(root, _atom("title")).text = "Citry blog"
+    ET.SubElement(root, _atom("title")).text = f"{current_docs_project().settings.name} blog"
     ET.SubElement(root, _atom("id")).text = feed_url
     ET.SubElement(root, _atom("link"), {"rel": "self", "href": feed_url})
     ET.SubElement(root, _atom("link"), {"rel": "alternate", "href": index_url})
@@ -749,7 +758,7 @@ def _validation_markdown(source: str) -> str:
     )
 
 
-def _reading_minutes(body: str) -> int:
+def _reading_minutes(body: str, *, words_per_minute: int | None = None) -> int:
     rendered = _validation_markdown(body)
     document = lxml_html.fragment_fromstring(rendered, create_parent="div")
     # Fenced and indented code render beneath <pre>. Script/style bodies are
@@ -759,7 +768,11 @@ def _reading_minutes(body: str) -> int:
         hidden.drop_tree()
     prose = document.text_content()
     words = _WORD_RE.findall(prose)
-    return max(1, math.ceil(len(words) / _WORDS_PER_MINUTE))
+    if words_per_minute is None:
+        from docs_site._internal.project import current_docs_project  # noqa: PLC0415
+
+        words_per_minute = current_docs_project().settings.blog.words_per_minute
+    return max(1, math.ceil(len(words) / words_per_minute))
 
 
 def _nav_item(title: str, path: str, *, date_iso: str = "", date_label: str = "") -> NavItem:

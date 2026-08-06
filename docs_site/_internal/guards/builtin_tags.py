@@ -11,8 +11,8 @@ from citry.component_registry import (
     STRUCTURAL_TAG_NAMES,
 )
 from docs_site._internal.guards.base import GuardResult
+from docs_site._internal.project import current_docs_project
 from docs_site._internal.reference import extract_builtin
-from docs_site._internal.reference_pages import category
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -93,12 +93,13 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
                 line=_line(source, offset),
             )
 
-    builtins = category("builtins")
+    project = ctx.project or current_docs_project()
+    builtins = project.reference.category("builtins")
     expected = BUILTIN_COMPONENT_NAMES | STRUCTURAL_TAG_NAMES
     configured = set(builtins.symbols) if builtins is not None else set()
     if configured != expected:
         yield GuardResult.error(
             guard="builtin_tags",
             message=("The Built-in tags Reference category does not match Citry's reserved public tag names."),
-            source="reference_pages.py",
+            source="reference.yml",
         )

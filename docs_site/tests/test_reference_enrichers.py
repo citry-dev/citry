@@ -126,11 +126,11 @@ def test_union_signature_links_left_and_keeps_none_plain() -> None:
 
 
 def test_function_signature_still_reads_plainly() -> None:
-    # The existing contract: the call form and an unlinked return type survive.
+    # The call form and the linked return type survive extraction.
     data = extract_symbol("citry.format_attrs")
     sig = str(data.signature)
     assert sig.startswith("format_attrs(")
-    assert sig.endswith("-> SafeString")  # SafeString is not documented, so it stays plain
+    assert sig.endswith('-> <a class="doc-type-link" href="/reference/rendering/#citry-markup">Markup</a>')
 
 
 # --- docstring example / admonition blocks (4.39 + 4.40, previously dropped) ---

@@ -1,56 +1,97 @@
 ---
 title: Client interactivity
-description: Use Citry's Alpine runtime, component scopes, client props, boundary handlers, slots, and lifecycle APIs without breaking component isolation.
+description: Understand which component owns browser data, handlers, props, slot content, and lifecycle work.
 ---
 
 # Client interactivity
 
-Citry includes and starts a pinned Alpine runtime when a rendered page needs
-client behavior. Components remain the ownership boundary: each active
-component has its own reactive scope, and nested components do not inherit the
-child-local variables of their parents merely because their elements are
-nested in the DOM.
+When a page becomes interactive, Citry keeps browser behavior attached to the
+component that authored it. This matters whenever components are nested: DOM
+elements may sit inside one another, but a child's private Alpine variables do
+not automatically become part of the parent's scope.
 
-This page covers the author-facing contract. For loading, plugins, CSP, and
-deployment, see [Alpine runtime](/advanced/alpine-runtime/).
+Use this ownership map when deciding where code belongs:
+
+- Markup inside a component's own template uses that component's scope.
+- A handler written on a `<c-child>` tag belongs to the parent that wrote it.
+- A fill keeps the scope of the template that supplied it.
+- A slot fallback uses the scope of the component that defined the slot.
+
+This page explains the component boundary. For Alpine directives and magics,
+see [Alpine in components](/syntax/alpine/). For runtime loading, plugins, CSP,
+and deployment, see [Alpine runtime](/advanced/alpine-runtime/).
 
 ## Initialize a component once per live render
 
-Define client behavior with `Component.js` and
-[`$component`][$component]. Citry registers the callback once per component
-class, then calls it for every live instance after the ownership graph,
-props, and parent initialization are ready.
+Return initial browser data from
+[`Component.js_data()`][citry.Component.js_data], then receive it in the
+[`$component` hook][$component]. `$component(...)` registers browser setup for
+the component class. Citry calls that setup once for each live rendered
+instance:
 
 ```citry
-from citry import Component
+from citry import Citry, Component
+
+c = Citry()
 
 
 class Counter(Component):
+    citry = c
+
+    class Kwargs:
+        start: int = 0
+
+    def js_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, int]:
+        return {"start": kwargs.start}
+
     template = """
-      <button @click="count += 1" x-text="count"></button>
+      <button
+        type="button"
+        @click="increment()"
+        x-text="count"
+      ></button>
     """
+
     js = """
-      $component(({ scope }) => {
-        scope.count = 0;
+      $component(({ data, scope }) => {
+        scope.count = data.start;
+        scope.increment = () => {
+          scope.count += 1;
+        };
       });
     """
 ```
 
-The callback receives:
+The value returned by `js_data()` must be JSON-serializable. Use strings,
+numbers, booleans, `null`-equivalent `None`, lists, and dictionaries with
+serializable contents. Convert dates, model instances, and other Python
+objects before returning them. Browser `data` is an initial inert value; put
+changing values on `scope` or in a reactive object.
 
-- `id`: the current server render ID;
-- `els`: one stable array containing every current element root;
-- `data`: the inert value returned by `js_data()`;
-- `graph`: the current ownership route and source metadata;
-- `state`: the Events State facade, or `null`;
-- `props`: the reactive read-only declared props;
+The setup callback receives:
+
+- `data`: the value returned by `js_data()`, or `null`;
 - `scope`: the stable component-local Alpine scope;
-- `effect` and `reactive`: lifecycle-managed Alpine helpers;
-- `provide`, `inject`, and `unprovide`: rendered descendant context;
-- `sendEvent` and `onEvent`: instance-scoped Events helpers.
+- `props`: reactive read-only values accepted from the parent;
+- `els`: the component's current root elements;
+- `state`: the Events State facade, or `null`;
+- `reactive` and `effect`: Alpine reactivity managed by Citry;
+- `provide`, `inject`, and `unprovide`: descendant context helpers;
+- `sendEvent` and `onEvent`: instance-scoped Events helpers;
+- `loading` and `error`: read-only accessors for the instance's handler calls;
+- `id` and `graph`: render and ownership information.
 
-Initialization is synchronous. Return a cleanup function for resources that
-are not registered through a managed helper:
+`reactive(object)` returns a reactive proxy. An `effect(callback)` runs its
+callback immediately, tracks reactive values read during that run, and runs it
+again when those values change. Citry stops managed effects when that live
+render is replaced or removed.
+
+Setup must finish synchronously. Return a cleanup function for resources you
+create outside Citry's managed helpers:
 
 ```js
 $component(({ els }) => {
@@ -59,27 +100,38 @@ $component(({ els }) => {
 });
 ```
 
-On a compatible rerender, Citry stops managed effects, runs the cleanup, and
-calls the initializer with fresh render data while preserving the logical
-component scope and the `els` array identity.
+On a compatible rerender, Citry stops effects, runs the cleanup, and calls the
+setup again with fresh server data. The logical component scope and the `els`
+array keep their identity.
 
 ## Pass client props down
 
-`$c-props` passes a reactive client-side object from a parent-authored
-component tag to its child:
+Use [`$c-props`][$c-props] on a component tag when the parent should pass live
+browser values or callbacks to the child:
 
-```html
-<c-chart $c-props="{ theme: selectedTheme, onSelect: (value) => choose(value) }" />
+```citry-html
+<c-chart
+  $c-props="{
+    theme: selectedTheme,
+    onSelect: (value) => choose(value),
+  }"
+/>
 ```
 
 The expression runs in the parent's scope and must synchronously return a
-plain object. The child declares the fields it accepts:
+plain object. The child declares what it accepts in its `$component` setup:
 
 ```js
 $component({
   props: {
-    theme: { type: String, default: "light" },
-    onSelect: { type: Function, required: true },
+    theme: {
+      type: String,
+      default: "light",
+    },
+    onSelect: {
+      type: Function,
+      required: true,
+    },
   },
   init: ({ props, scope, effect }) => {
     scope.select = props.onSelect;
@@ -88,114 +140,132 @@ $component({
 });
 ```
 
-Props are read-only at the top level. Copy a value or callback into `scope`
-when child-authored Alpine markup should use it. Invalid declarations, missing
-required values, type mismatches, thrown expressions, Promises, arrays, and
-other non-plain objects produce pointed browser diagnostics. A later valid
-value recovers normally.
+The child must contain a `$component(...)` registration whenever `$c-props`
+remains on the resolved component call. Citry checks the actual selected target
+for dynamic `<c-component>` calls and raises during rendering if that target
+has no registration. A final `None` or `False` from `c-$c-props` or `c-bind`
+removes the binding, so no registration is required.
 
-`$c-props` is one kind of **component-tag client binding**: a browser-side
-binding resolved from a nested `<c-*>` tag. The parent owns its data or handler,
-while the child supplies the component boundary where Citry applies it. Alpine
-event handlers such as `@click` and Citry handlers such as `@c-save` or
-`@c-poll.5s` are the other kinds.
+Props are reactive and read-only at the top level. Copy a callback or derived
+operation onto `scope` when the child's own template needs to call it.
+
+Citry reports missing required props, type mismatches, thrown expressions,
+Promises, arrays, and other non-plain results in the browser. A later valid
+value can recover normally.
 
 The Python-dynamic form is also valid:
 
-```html
+```citry-html
 <c-chart c-$c-props="props_expression" />
 ```
 
-Here `props_expression` is a Python value containing the Alpine expression
-string. A `c-bind` mapping may contain a `$c-props` key too. When several
-forms supply the same component-tag client binding, source order decides the
-winner.
+Here the Python expression returns a string containing the Alpine expression.
+A `c-bind` mapping may contain a `$c-props` key too. If several forms provide
+the same client binding, the last one in source order wins.
 
 ## Send events up from a component tag
 
-Alpine and Citry handlers authored on a child component tag belong to the
+Alpine and Citry handlers written on a child component tag belong to the
 parent's scope:
 
-```html
+```citry-html
 <section x-data="{ selected: false }">
   <c-action-button
-    @click="selected = true"
+    x-on:click="selected = true"
     @c-save="saveSelection({ selected })"
   />
 </section>
 ```
 
-The Alpine handler is an ordinary client expression. The `@c-*` value names a
-declared server event handler, optionally followed by an Alpine expression
-that returns its argument object. Both execute with parent-owned variables.
-Physical event values such as `$el`, `$event`, `$dispatch`, and
-`event.currentTarget` still refer to the child root that received the event.
+`x-on:click` and its `@click` shorthand are equivalent. Both run an ordinary
+Alpine expression. The `@c-*` form calls a declared Python event handler; its
+optional value is an Alpine expression that returns the handler arguments.
+Both forms above can read the parent's `selected` value.
 
-If child-authored markup should invoke a parent callback, pass that callback
-through `$c-props`, declare it as `Function`, and expose it deliberately from
-the child's initializer. A handler placed on the component tag does not grant
-access to the child's scope.
+Physical event values still point at the child root that received the event.
+That includes `$el`, `$event`, `$dispatch`, and `event.currentTarget`.
+
+If the child's own markup needs to call parent behavior, pass a callback with
+`$c-props`, declare it as a `Function`, and expose it from the child's setup. A
+handler on the component tag does not grant the parent access to private child
+scope.
 
 ## Pass arbitrary HTML attributes explicitly
 
-Only `$c-props`, Alpine event handlers, and `@c-*` handlers have special
-component-boundary behavior. Other names, including `x-show`, `x-model`,
+`$c-props`, Alpine event handlers, and `@c-*` handlers have special
+component-boundary behavior. Other attributes, including `x-show`, `x-model`,
 `:class`, `x-transition`, and `class`, are ordinary Python component kwargs.
-Citry does not implicitly copy them onto a root element.
+Citry does not guess which child element should receive them.
 
-For a reusable attribute API, accept a dictionary and let the child decide
-where it belongs:
+Accept a dictionary when your component should expose an HTML-attribute API,
+then apply it at the intended element:
 
-```html
-<c-card c-attrs="{ 'x-show': 'visible', ':class': '{ selected: selected }' }" />
+```citry-html
+<c-card
+  c-attrs="{
+    'x-show': 'visible',
+    ':class': '{ selected: selected }',
+  }"
+/>
 ```
 
-```html
-<article c-bind="attrs"><c-slot /></article>
+```citry-html
+<article c-bind="attrs">
+  <c-slot />
+</article>
 ```
 
-That choice remains explicit for multi-root components and for components
-whose public attributes belong on a nested element.
+This stays unambiguous for multi-root components and components whose public
+attributes belong on a nested element.
 
 ## Understand slot scope
 
-Template-authored fill content keeps the client scope of the call site. A
-slot's fallback content uses the receiving component's scope. This remains
-true when the rendered nodes move across component boundaries or survive a
-compatible morph.
+Template-authored fill content keeps the browser scope of its call site. A
+slot's fallback content uses the receiving component's scope:
 
-Detached Python content does not invent a source component. If it participates
-in an already active client graph, it receives an isolated empty base scope;
-detached content alone does not activate the client runtime.
+```citry-html
+<section x-data="{ pageTitle: 'Reports' }">
+  <c-panel>
+    <c-fill name="title">
+      <span x-text="pageTitle"></span>
+    </c-fill>
+  </c-panel>
+</section>
+```
 
-See [Slots](/concepts/slots/) for the server-side API.
+The fill can read `pageTitle` even though `<c-panel>` has its own component
+scope. It keeps that access when Citry updates the component later.
+
+Slot content passed from Python cannot read private Alpine values from a
+surrounding component. On an interactive page, it starts with an empty Alpine
+scope, so pass in any values it needs. Rendering that content by itself does
+not load Citry's browser runtime.
+
+See [Slots](/concepts/slots/) for the server-rendered composition rules.
 
 ## Single, multi-root, and rootless components
 
-For a multi-root component, `els` contains every live root in document order.
-Component-tag handlers behave as one logical listener group across those
-roots, including shared `.once`, outside, global, and timing behavior.
+For a component with several root elements, `els` lists every root in document
+order. A handler written on the component tag listens on all of them. Citry
+still treats it as one handler: `.once` runs only once across the roots, and
+timing modifiers share one timer.
 
-A rootless component has an empty `els` array but still owns its scope, props,
-initializer, effects, cleanup, Events State, and polling lifetime through
-Citry's boundary comments. Those comments are load-bearing deployment data;
-see the [rootless deployment checklist](/advanced/alpine-runtime/#preserve-client-graph-markers).
+A component may also render no HTML elements. Its `els` array is then empty,
+but setup, props, effects, cleanup, Events State, and polling still work.
+When optimizing production HTML, follow the
+[client-active HTML checklist](/advanced/alpine-runtime/#preserve-client-active-html).
 
-A component-tag Alpine handler or DOM-event `@c-*` handler still needs a real
-child element to receive the native event. When the child is rootless, Citry
-reports a pointed placement diagnostic and leaves that handler dormant; it
-does not add a wrapper or invent an event target. If a later compatible update
-gives the same logical child an element root, the handler activates there.
-`$c-props`, initialization, effects, cleanup, State, and `@c-poll` continue to
-work while the component is rootless.
+An Alpine handler or DOM-event `@c-*` handler on a component tag needs a real
+child element to receive the event. If that component renders no elements,
+Citry reports the problem and leaves the handler inactive. It does not add a
+wrapper. `$c-props`, setup, effects, cleanup, State, and `@c-poll` continue to
+work.
 
 ## See also
 
 - [Event bindings](/events/bindings/) for `@c-*`, State bindings, loading, and
   errors.
-- [Event actions](/events/actions/) for rendered updates and browser actions.
-- [Direct event routes](/events/http/) for server-handler security.
-- [Alpine runtime](/advanced/alpine-runtime/) for plugins, CSP, loading, and deployment.
-- [HTML attributes](/concepts/html-attributes/) for Python-side attribute merging.
-- [HTML fragments](/advanced/html-fragments/) for client graph adoption.
+- [Event actions](/events/actions/) for server responses and browser actions.
+- [Browser APIs](/reference/browser-apis/) for the exact helper contracts.
+- [HTML fragments](/advanced/html-fragments/) for live HTML updates.
 - [Troubleshooting](/guides/troubleshooting/) for browser diagnostic fixes.

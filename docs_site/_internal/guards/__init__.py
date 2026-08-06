@@ -15,6 +15,7 @@ assembles the context from the site config and a built output directory.
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 from docs_site._internal.config import config as default_config
@@ -39,23 +40,31 @@ from docs_site._internal.guards import (
     internal_link,
     json_ld,
     lexer_alias,
+    live_code,
     nav,
     redirect_target,
+    rendered_css,
+    rendered_markdown,
     single_h1,
     snippet_path,
+    ui_library_projection,
     versions_manifest,
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
 from docs_site._internal.guards.site_index import SiteIndex
+from docs_site._internal.project import use_docs_project
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     from docs_site._internal.config import DocsConfig
     from docs_site._internal.guards.base import Guard
+    from docs_site._internal.project import DocsProject
 
 __all__ = [
     "GUARDS",
+    "POST_BUILD_GUARDS",
+    "SOURCE_GUARDS",
     "VERSION_GUARDS",
     "GuardContext",
     "GuardResult",
@@ -63,19 +72,21 @@ __all__ = [
     "SiteIndex",
     "format_report",
     "make_context",
+    "make_source_context",
     "make_versions_context",
     "run_guards",
 ]
 
 # Guards in run order: source scans first (cheapest, no build needed), then the
 # post-build checks that read the SiteIndex.
-GUARDS: list[Guard] = [
-    # --- source / pre-build scans ---
+SOURCE_GUARDS: list[Guard] = [
     fence_validator.check,
     lexer_alias.check,
+    live_code.check,
     code_lang.check,
     component_fence.check,
     snippet_path.check,
+    ui_library_projection.check,
     blog.check,
     nav.check,
     frontmatter.check,
@@ -83,18 +94,24 @@ GUARDS: list[Guard] = [
     builtin_tags.check,
     authored_reference.check,
     api_symbols.check,
-    # --- post-build (SiteIndex) ---
+]
+
+POST_BUILD_GUARDS: list[Guard] = [
     internal_link.check,
     blog_feed.check,
     anchor.check,
     asset.check,
     html_wellformed.check,
+    rendered_css.check,
+    rendered_markdown.check,
     single_h1.check,
     alt_text.check,
     headings.check,
     json_ld.check,
     redirect_target.check,
 ]
+
+GUARDS: list[Guard] = [*SOURCE_GUARDS, *POST_BUILD_GUARDS]
 
 # Guards for the committed docs_site/versions/ tree. They run separately (via
 # make_versions_context + run_guards(..., guards=VERSION_GUARDS)), not as part of
@@ -106,8 +123,9 @@ VERSION_GUARDS: list[Guard] = [
 ]
 
 
-def make_context(build_dir: Path, *, config: DocsConfig) -> GuardContext:
+def make_context(build_dir: Path, *, config: DocsConfig, project: DocsProject | None = None) -> GuardContext:
     """Assemble a ``GuardContext`` for the guard suite over a built site."""
+    examples_dir = project.runtime.examples_dir if project is not None else config.examples_dir
     return GuardContext(
         content_dir=config.content_dir,
         examples_dir=config.examples_dir,
@@ -116,7 +134,23 @@ def make_context(build_dir: Path, *, config: DocsConfig) -> GuardContext:
         repo_root=config.repo_root,
         base_path=config.base_path,
         site_index=SiteIndex(build_dir),
-        example_registry=get_example_registry(),
+        example_registry=get_example_registry(examples_dir),
+        project=project,
+    )
+
+
+def make_source_context(*, config: DocsConfig, project: DocsProject | None = None) -> GuardContext:
+    """Assemble a guard context that is safe to use before rendering starts."""
+    examples_dir = project.runtime.examples_dir if project is not None else config.examples_dir
+    return GuardContext(
+        content_dir=config.content_dir,
+        examples_dir=config.examples_dir,
+        nav_path=config.content_dir / "_nav.yml",
+        static_dir=config.base_dir / "static",
+        repo_root=config.repo_root,
+        base_path=config.base_path,
+        example_registry=get_example_registry(examples_dir),
+        project=project,
     )
 
 
@@ -151,16 +185,18 @@ def run_guards(
     silently pass the suite.
     """
     results: list[GuardResult] = []
-    for guard in guards if guards is not None else GUARDS:
-        try:
-            results.extend(guard(ctx))
-        except Exception as e:  # noqa: BLE001 - a broken guard must fail loudly, not pass silently
-            results.append(
-                GuardResult.error(
-                    guard=getattr(guard, "__module__", "unknown").rsplit(".", 1)[-1],
-                    message=f"Guard crashed: {type(e).__name__}: {e}",
+    project_scope = use_docs_project(ctx.project) if ctx.project is not None else nullcontext()
+    with project_scope:
+        for guard in guards if guards is not None else GUARDS:
+            try:
+                results.extend(guard(ctx))
+            except Exception as e:  # noqa: BLE001 - a broken guard must fail loudly, not pass silently
+                results.append(
+                    GuardResult.error(
+                        guard=getattr(guard, "__module__", "unknown").rsplit(".", 1)[-1],
+                        message=f"Guard crashed: {type(e).__name__}: {e}",
+                    )
                 )
-            )
 
     has_error = any(r.severity is Severity.ERROR for r in results)
     has_warning = any(r.severity is Severity.WARNING for r in results)

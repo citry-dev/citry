@@ -203,14 +203,13 @@ def _validate_typed_artifact(artifact: CachedRenderArtifact) -> None:
             _validate_root_marker(
                 marker,
                 f"{path}.root_markers[{marker_index}]",
-                is_boundary=frame_index == artifact.root_frame,
             )
         if type(frame.parts) is not tuple:
             raise CacheArtifactError(f"{path}.parts must be an immutable tuple.")
     _validate_frame_tree(artifact)
 
 
-def _validate_root_marker(marker: object, path: str, *, is_boundary: bool) -> None:
+def _validate_root_marker(marker: object, path: str) -> None:
     marker = _require_nonempty_string(marker, path)
     match = _ROOT_MARKER_RE.fullmatch(marker)
     if match is None or "{#" in marker:
@@ -218,8 +217,8 @@ def _validate_root_marker(marker: object, path: str, *, is_boundary: bool) -> No
     name = match.group(1).lower()
     if name == "data-cid" or name.startswith("data-cid-"):
         raise CacheArtifactError(f"{path} contains reserved render identity marker {name!r}.")
-    if is_boundary and name == "data-citry-key":
-        raise CacheArtifactError(f"{path} contains the archived cache-boundary morph key.")
+    if name == "data-citry-key":
+        raise CacheArtifactError(f"{path} contains a legacy component morph key marker.")
 
 
 def _validate_frozen_json(root: object, path: str) -> None:

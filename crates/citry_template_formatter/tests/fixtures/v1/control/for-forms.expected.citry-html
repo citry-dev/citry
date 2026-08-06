@@ -1,0 +1,2 @@
+<c-for each="item in items if item.visible"><section>{{ item.name }}</section></c-for>
+<div c-for="other in others">{{ other.name }}</div>

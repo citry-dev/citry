@@ -1,8 +1,12 @@
 # Product charter: Citry UI
 
-**Status (2026-07-24): product direction ratified; Phases 3 through 6 and the
-generic publishing API are complete. Production component APIs and the exact
-v1 inventory remain Phase 7 and 8 work.** This charter fixes what the library
+**Status (2026-07-29): product direction ratified and Phase 7 started.** The
+generic publishing API is complete. Production work now targets one styled
+component library with Vuetify-level configuration, breadth, and browser
+interaction. Headless component APIs are parked until real applications and
+representative pages provide evidence for their useful shape and cost.
+Production component APIs and the exact v1 inventory remain Phase 7 and 8
+work. This charter fixes what the library
 should accomplish. The implementation and research sequence live in
 [`../ui_library_plan.md`](../ui_library_plan.md).
 
@@ -61,27 +65,21 @@ The documented installation path remains `uv add citry-ui`. Installing the
 distribution and registering its component classes into one `Citry` engine
 are separate contracts.
 
-## 4. Styled and headless promise
+## 4. Styled production promise
 
-Each component family should provide two authoring surfaces:
+Every production family provides a coherent, accessible, styled assembly that
+is useful without project CSS. The target is the practical product depth of a
+suite such as Vuetify: rich configuration, consistent variants and states,
+compound composition where warranted, and complete browser interaction for
+interactive components. Citry UI does not copy Vuetify's API or require its
+Sass-based customization system.
 
-1. **Headless:** no library-owned HTML assembly. It exposes typed state,
-   native attributes, ARIA relationships, event bindings, focus targets, and
-   other behavior through required slots or parts so the author supplies the
-   markup and theme.
-2. **Styled:** a coherent, production-ready library assembly over the same
-   behavior and accessibility contract.
-
-The styled surface should reuse the headless behavior rather than maintain a
-second implementation of focus, keyboard, form, or state logic. Research will
-decide whether the shared layer is a mixin, controller, public kernel, or
-another equally clear API. Removing CSS while retaining library HTML is an
-unstyled mode, not the headless surface promised here.
-
-Purely presentational families still need a documented pair. Their headless
-surface may expose only structural data and required attribute placement while
-the styled surface supplies markup, tokens, layout, and variants. The project
-will not invent behavior solely to make the two surfaces look symmetrical.
+Headless component APIs are not part of the Phase 7 production promise. The
+existing renderless pressure components remain research evidence only. Revisit
+headless components after the styled library has enough real components and
+at least one actual application provides concrete customization needs. At that
+point, representative full pages also provide the right basis for measuring
+nested rendering, client initialization, and alternative implementation costs.
 
 ## 5. Breadth target
 
@@ -138,8 +136,7 @@ Customization should form a deliberate ladder:
 4. per-instance class, style, data, ARIA, and ordinary HTML attributes through
    explicit component APIs;
 5. named slots and documented parts for structural composition;
-6. headless components for full visual control;
-7. source ownership or subclassing only where the earlier levels cannot
+6. source ownership, composition, or subclassing only where the earlier levels cannot
    express a legitimate product need.
 
 Two distinct brand themes must be achievable through documented tokens and
@@ -254,7 +251,7 @@ The ecosystem synthesis uses this rubric:
 |---|---:|
 | Accessibility correctness | 20 |
 | Fit with Citry's server and client model | 20 |
-| Customization and styled/headless pairing | 15 |
+| Configuration and customization depth | 15 |
 | API consistency and composition | 15 |
 | Useful default visual design | 10 |
 | General-purpose component coverage | 10 |
@@ -273,9 +270,6 @@ Citry UI succeeds when:
 - a new project can install it, register it, and render a documented component
   without frontend tooling;
 - the styled surface produces a coherent application without project CSS;
-- the headless surface lets an author supply all HTML while reusing the same
-  state, interaction, binding, and accessibility contract as the styled
-  assembly;
 - ordinary application categories are covered without a second generic UI
   library;
 - customization uses documented tokens, parts, slots, and attributes rather
@@ -292,8 +286,8 @@ Citry UI succeeds when:
 ## 12. Decisions the research still owns
 
 - Exact component names and v1 inventory.
-- Whether styled/headless pairing uses separate classes, modes, exports, or a
-  generated relationship.
+- Whether later application evidence justifies a headless surface, and if so,
+  which component families and authoring contracts need one.
 - Default visual language and theme token schema.
 - The separate localization extension, translation-key, catalog, locale
   selection, formatter, and release contracts.
@@ -303,7 +297,6 @@ Citry UI succeeds when:
   hooks are semantic-versioning commitments.
 - Per-component versus grouped asset delivery.
 - Icon strategy and optional specialist packages.
-- The pre-Phase-7 client ambient-context contract for theme, direction, and
-  behavioral defaults through nested, slotted, teleported, and morphed
-  components. Later localization work may reuse it but does not block its
-  readiness proof.
+- Production verification of the implemented client ambient-context contract
+  for theme, direction, and behavioral defaults through nested, slotted,
+  teleported, and morphed components. Later localization work may reuse it.

@@ -1,210 +1,208 @@
 ---
 title: Testing components
-description: Test citry components in isolation by giving each test its own Citry instance, then rendering and asserting on the HTML.
+description: Test rendered HTML, input contracts, server behavior, and browser interactions.
 ---
 
 # Testing components
 
-Testing a citry component is mostly rendering it and checking the HTML. Calling
-a component returns a [`CitryElement`][citry.CitryElement], and `str()` on it
-produces the final HTML (see [Rendering](/concepts/rendering/)), so a test can
-render and assert in a couple of lines. If the component is one you have already
-defined and imported, that is the whole story: import it, render it, assert on
-the output.
-
-Isolation matters when a test defines its own components. A component registers
-itself (see [Registration](/concepts/registration/)) with a
-[`Citry`][citry.Citry] instance when the class is defined, and by default that
-is the shared default instance ([`citry`][citry.citry]). Define throwaway
-components on that shared instance across many tests and they pile up: a name
-from one test is still registered in the next, and two tests that both define a
-`Card` clash with an [`AlreadyRegistered`][citry.AlreadyRegistered] error. Give
-each test its own [`Citry`][citry.Citry] instance and the problem goes away.
+Test each behavior at the smallest useful layer. Python tests are quick and
+good at checking component input and rendered HTML. A host framework's test
+client checks HTTP integration. A browser test proves that Alpine, Citry's
+client runtime, and real DOM events work together.
 
 ## Give each test its own Citry instance
 
-Construct a fresh [`Citry`][citry.Citry] inside the test and point the component
-at it with the `citry` class attribute. Define the component inside the test
-function too, so it registers with that test's instance and is gone once the
-test returns.
+A component registers when Python defines its class. If tests define temporary
+components on the shared default engine, their names remain registered for
+later tests and may collide.
+
+Create a fresh [`Citry`][citry.Citry] instance instead:
 
 ```citry
 from citry import Citry, Component
 
+
 def test_greeting():
-    app = Citry()
+    app = Citry(autodiscover=False)
 
     class Greeting(Component):
+        class Kwargs:
+            name: str
+
         citry = app
+
         template = """
           <p>Hello {{ name }}!</p>
         """
 
-        class Kwargs:
-            name: str
+    html = str(Greeting(name="World"))
 
-        def template_data(self, kwargs: Kwargs, slots):
-            return {"name": kwargs.name}
-
-    assert "Hello World!" in str(Greeting(name="World"))
+    assert "Hello World!" in html
 ```
 
-`Greeting(name="World")` composes the component into a
-[`CitryElement`][citry.CitryElement]; `str()` renders it and serializes the
-result to HTML. Because `app` is brand new, no component from another test is
-registered on it, and the `Greeting` class disappears when the test returns.
+Set `autodiscover=False` when the test defines every component it needs. This
+keeps the test independent of project directories and imports.
 
-## Assert on the HTML you care about
-
-You might reach for an exact match:
+For several tests, put the engine in a fixture and let each test define the
+components it needs on that engine:
 
 ```python
-assert str(Greeting(name="World")) == "<p>Hello World!</p>"   # fails
-```
-
-This fails, because the rendered HTML carries two things your literal string
-does not. First, it keeps the whitespace from your `template`, the newlines and
-indentation you wrote. Second, citry adds a `data-cid-<id>` marker to each
-component's root element, to record which component produced which part of the
-page:
-
-```html
-<p data-cid-cbgnc0d00="">Hello World!</p>
-```
-
-The id in that marker changes on every render, so no fixed string will match it.
-The robust approach is to assert on the content you care about with `in`:
-
-```python
-html = str(Greeting(name="World"))
-assert "Hello World!" in html
-```
-
-## Use a pytest fixture
-
-Writing `app = Citry()` at the top of every test gets repetitive. A pytest
-fixture hands each test a fresh instance, and because pytest calls the fixture
-again for every test, the isolation is automatic.
-
-```citry
 import pytest
-from citry import Citry, Component
+from citry import Citry
+
 
 @pytest.fixture
 def app():
-    return Citry()
-
-def test_button_label(app):
-    class Button(Component):
-        citry = app
-        template = """
-          <button>{{ label }}</button>
-        """
-
-        class Kwargs:
-            label: str
-
-        def template_data(self, kwargs: Kwargs, slots):
-            return {"label": kwargs.label}
-
-    assert "Save" in str(Button(label="Save"))
-
-def test_registrations_do_not_leak(app):
-    # This test's app is fresh, so a Button registered on
-    # another test's instance was never added here.
-    assert not app.has("button")
+    return Citry(autodiscover=False)
 ```
 
-The `app.has("button")` call asks that instance's registry whether a component
-is registered under the name. On a fresh instance it is `False` until a
-component is registered under that name.
+## Assert the result the reader can observe
 
-## Match the whole string with a stable id
+Prefer focused checks for text, attributes, and ordering:
 
-When you do want to compare the entire output, make the marker predictable by
-passing an `id_generator` to [`Citry`][citry.Citry], and strip the template's
-surrounding whitespace. The `id_generator` is any callable that returns a
-unique string made from lowercase ASCII letters, digits, hyphens, and
-underscores; a counter hands out `c1`, `c2`, and so on in render order. The
-lowercase restriction matters because Citry embeds the value in an HTML
-attribute name, and HTML attribute names are case-insensitive.
+```python
+html = str(Badge(label="Ready", tone="success"))
+
+assert ">Ready<" in html
+assert 'class="badge badge--success"' in html
+```
+
+Citry may add attributes needed by its browser runtime. Those attributes are
+implementation details, so avoid exact comparisons against the entire HTML
+string unless the exact serialization is the behavior under test.
+
+An HTML parser can make structural assertions easier when whitespace and
+attribute order do not matter:
+
+```python
+from bs4 import BeautifulSoup
+
+soup = BeautifulSoup(html, "html.parser")
+badge = soup.select_one(".badge")
+
+assert badge is not None
+assert badge.get_text(strip=True) == "Ready"
+```
+
+Use whichever parser your application already depends on. Citry does not
+require Beautiful Soup for tests.
+
+## Test inputs and slots
+
+Render representative values, defaults, and boundary cases. Also check that
+invalid calls fail in the way your public component contract promises:
 
 ```citry
-import itertools
+import pytest
+from citry import Citry, Component, SlotInput
+
+
+def test_notice_requires_a_message():
+    app = Citry(autodiscover=False)
+
+    class Notice(Component):
+        class Kwargs:
+            message: str
+
+        class Slots:
+            actions: SlotInput | None = None
+
+        citry = app
+
+        template = """
+          <aside>
+            <p>{{ message }}</p>
+            <c-slot name="actions" />
+          </aside>
+        """
+
+    with pytest.raises(TypeError):
+        str(Notice())
+```
+
+Test slot content through the public `slots` mapping:
+
+```python
+html = str(
+    Notice(
+        message="Saved",
+        slots={"actions": "Undo"},
+    )
+)
+
+assert "Saved" in html
+assert "Undo" in html
+```
+
+## Test several components together
+
+A component can render registered children only when they belong to the same
+engine. Define the small component family on one test engine and render the
+outer component:
+
+```citry
 from citry import Citry, Component
 
-def test_card_html():
-    ids = itertools.count(1)
-    app = Citry(id_generator=lambda: f"c{next(ids)}")
 
-    class Card(Component):
-        citry = app
-        template = """
-          <div class="card">{{ title }}</div>
-        """
+def test_profile_card_contains_the_avatar():
+    app = Citry(autodiscover=False)
 
-        class Kwargs:
-            title: str
-
-        def template_data(self, kwargs: Kwargs, slots):
-            return {"title": kwargs.title}
-
-    html = str(Card(title="Hi")).strip()
-    assert html == '<div class="card" data-cid-c1="">Hi</div>'
-```
-
-Prefer the `in` check unless you specifically need the whole string. It does not
-tie your test to the marker or to your template's indentation.
-
-## Testing slots and typed inputs
-
-Slot fills pass through the reserved `slots` argument, so a test can hand a slot
-its content and assert on the result the same way. The component below renders
-its `body` slot with the built-in `<c-slot>` tag.
-
-```citry
-def test_layout_slot(app):
-    class Layout(Component):
-        citry = app
-        template = """
-          <section>
-            <c-slot name="body" />
-          </section>
-        """
-
-    html = str(Layout(slots={"body": "Page content"}))
-    assert "Page content" in html
-```
-
-A component with a `Kwargs` class checks its inputs when it renders (see
-[Typing and validation](/concepts/typing-and-validation/)), so asserting that a
-bad call is rejected is a good test of the contract. Composing the element does
-not validate; rendering does, so render inside the `pytest.raises` block.
-
-```citry
-def test_missing_required_kwarg(app):
-    class Greeting(Component):
-        citry = app
-        template = """
-          <p>Hello {{ name }}!</p>
-        """
-
+    class Avatar(Component):
         class Kwargs:
             name: str
 
-        def template_data(self, kwargs: Kwargs, slots):
-            return {"name": kwargs.name}
+        citry = app
 
-    with pytest.raises(TypeError):
-        str(Greeting())   # no name passed
+        template = """
+          <span class="avatar">{{ name[:1] }}</span>
+        """
+
+    class ProfileCard(Component):
+        class Kwargs:
+            name: str
+
+        citry = app
+
+        template = """
+          <article>
+            <c-avatar c-name="name" />
+            <h2>{{ name }}</h2>
+          </article>
+        """
+
+    html = str(ProfileCard(name="Ada"))
+
+    assert 'class="avatar"' in html
+    assert ">Ada</h2>" in html
 ```
 
-## Isolation without a test decorator
+This checks composition, input forwarding, template lookup, and final output
+without depending on an HTTP server.
 
-The pattern on this page is deliberately plain Python: a fresh
-[`Citry`][citry.Citry] per test, directly or through a fixture. A single
-decorator that wraps a test in its own instance, so you would not write the
-fixture yourself, is a natural convenience and a good candidate for a future
-release. Until then, the fixture above is the recommended way to keep tests
-isolated, and [contributions](/community/contributing/) toward the helper are
-welcome.
+## Choose the right test for interactive behavior
+
+Rendering in Python proves which HTML, bindings, and assets Citry produces. It
+does not execute Alpine or Citry's browser runtime.
+
+- Use a Python render test for component inputs and initial HTML.
+- Use your framework's test client for mounted Citry routes, event requests,
+  response status, and returned actions.
+- Use a browser test for clicks, reactive state, focus, DOM updates, and event
+  bubbling.
+
+For server events, keep the handler's business logic in ordinary Python
+functions when practical. Test those functions directly, then add a smaller
+integration test for the Citry event boundary. See
+[Events](/events/) and [Web frameworks](/web-frameworks/).
+
+For browser behavior, exercise the page as a person would: click the visible
+control and assert the visible result. Avoid reaching into Citry's internal DOM
+attributes or JavaScript registries.
+
+## Related reference
+
+- [`Citry`][citry.Citry]
+- [`Component`][citry.Component]
+- [`CitryElement`][citry.CitryElement]
+- [Rendering](/concepts/rendering/)
+- [Alpine in components](/syntax/alpine/)

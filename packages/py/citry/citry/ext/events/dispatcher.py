@@ -35,11 +35,28 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-import math
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Any, Literal
+
+from citry._protocol.events import (
+    CAPABILITIES_BASELINE_V1,
+    PROTOCOL,
+    CallEnvelopeFailure,
+    ProtocolValueError,
+    assemble_owned_ok_result,
+    assemble_validated_ok_result,
+    build_error,
+    build_error_result,
+    build_rejected_call_envelope,
+    build_state_action,
+    call_send_sequence,
+    finalize_owned_result_envelope,
+    inspect_call_envelope,
+    validate_action,
+    validate_result,
+)
 
 # The csrf_failed message is example-locked contract text; it lives next to
 # the floor that raises it (csrf.py) and is shared here for the fallback path
@@ -64,7 +81,6 @@ from citry.ext.events.tokens import (
     mint_state_token,
     verify_state_token,
 )
-from citry.util.id import validate_render_id
 from citry.util.logger import logger
 from citry.util.routing import RouteHeaders, RouteResponse, call_maybe_sync
 
@@ -87,20 +103,6 @@ __all__ = [
     "TransportContext",
 ]
 
-PROTOCOL = "citry-events/1"
-
-# The capability set an envelope without a ``capabilities`` field resolves
-# to: every v1 swap except morph, plus all six v1 action kinds. This mirrors
-# the protocol package's CAPABILITIES_BASELINE_V1 (spec.md section 5) as a
-# runtime literal, so the protocol package never becomes a runtime
-# dependency; the test suite checks the two stay identical.
-CAPABILITIES_BASELINE_V1: dict[str, tuple[str, ...]] = {
-    "swaps": ("replace", "inner", "append", "prepend", "remove", "none"),
-    "actions": ("render", "data", "state", "event", "redirect", "url"),
-}
-
-_CALLS_CAP = 16
-
 # Wire error messages locked by the protocol examples (exact text is
 # contract; see the module docstring). The csrf_failed text is imported from
 # ``csrf.py`` above.
@@ -112,51 +114,9 @@ _MSG_UNENCODABLE_RESULT = (
     "inf or nan)."
 )
 
-_ERROR_STATUS_BY_CODE: dict[str, int] = {
-    "invalid_args": 422,
-    "invalid_state": 403,
-    "stale_state": 409,
-    "unknown_event": 404,
-    "unknown_component": 404,
-    "forbidden": 403,
-    "not_found": 404,
-    "conflict": 409,
-    "csrf_failed": 403,
-    "payload_too_large": 413,
-    "protocol_mismatch": 400,
-    "handler_error": 500,
-}
-
-_V1_ACTION_KINDS = frozenset({"render", "data", "state", "event", "redirect", "url"})
-_V1_SWAPS = frozenset({"morph", "replace", "inner", "append", "prepend", "remove", "none"})
-
 # Sentinel: "the on_event hook did not answer the call" (None is a valid
 # answer, meaning acknowledged with no actions).
 _NOT_ANSWERED: Any = object()
-
-
-def _is_strict_json_value(value: Any, ancestors: set[int] | None = None) -> bool:
-    """Whether an in-memory value can exist unchanged in strict JSON."""
-    if value is None or isinstance(value, (str, bool, int)):
-        return True
-    if isinstance(value, float):
-        return math.isfinite(value)
-    if not isinstance(value, (dict, list)):
-        return False
-
-    seen = ancestors if ancestors is not None else set()
-    identity = id(value)
-    if identity in seen:
-        return False
-    seen.add(identity)
-    try:
-        if isinstance(value, list):
-            return all(_is_strict_json_value(item, seen) for item in value)
-        return all(isinstance(key, str) and _is_strict_json_value(item, seen) for key, item in value.items())
-    except RecursionError:
-        return False
-    finally:
-        seen.remove(identity)
 
 
 # The action kinds a user sees applied (a state refresh is bookkeeping); used
@@ -396,51 +356,6 @@ def _state_fingerprint(state: Any) -> str | None:
         return None
 
 
-def _call_send_sequence(call: Any) -> int | None:
-    """
-    Best-effort send_sequence of one raw call, for echoing into its result.
-
-    Rejections echo the send_sequence too (spec 4.1: present exactly when the
-    answered call carried one), so this reads it before any validation has
-    vouched for the call; only a well-formed value (an int of at least 0,
-    bools excluded) counts, anything else echoes nothing.
-    """
-    if not isinstance(call, Mapping):
-        return None
-    send_sequence = call.get("sendSequence")
-    if isinstance(send_sequence, bool) or not isinstance(send_sequence, int) or send_sequence < 0:
-        return None
-    return send_sequence
-
-
-def _error_object(
-    status: int, code: str, message: str, error_fields: Mapping[str, str] | None = None
-) -> dict[str, Any]:
-    """One wire error object (design 4.3): ``{status, code, message, fieldErrors?}``."""
-    encoded: dict[str, Any] = {"status": status, "code": code, "message": message}
-    if error_fields:
-        encoded["fieldErrors"] = dict(error_fields)
-    return encoded
-
-
-def _error_result(error: dict[str, Any], send_sequence: int | None) -> dict[str, Any]:
-    """A failure result item, echoing the call's send_sequence when it carried one."""
-    result: dict[str, Any] = {"ok": False}
-    if send_sequence is not None:
-        result["sendSequence"] = send_sequence
-    result["error"] = error
-    return result
-
-
-def _ok_result(actions: list[dict[str, Any]], send_sequence: int | None) -> dict[str, Any]:
-    """A success result item, echoing the call's send_sequence when it carried one."""
-    result: dict[str, Any] = {"ok": True}
-    if send_sequence is not None:
-        result["sendSequence"] = send_sequence
-    result["actions"] = actions
-    return result
-
-
 def _debug_enabled() -> bool:
     """Debug mode is the ``"citry"`` logger at DEBUG; the engine has no separate flag."""
     return logger.isEnabledFor(logging.DEBUG)
@@ -524,7 +439,7 @@ class EventsDispatcher:
             if isinstance(outcome, RouteResponse):
                 return outcome
             results.append(outcome)
-        return {"protocol": PROTOCOL, "requestId": envelope_id, "results": results}
+        return finalize_owned_result_envelope(envelope_id, results)
 
     async def dispatch_async(
         self,
@@ -580,7 +495,7 @@ class EventsDispatcher:
             if isinstance(outcome, RouteResponse):
                 return outcome
             results.append(outcome)
-        return {"protocol": PROTOCOL, "requestId": envelope_id, "results": results}
+        return finalize_owned_result_envelope(envelope_id, results)
 
     # ----- Envelope-level validation -----
 
@@ -590,136 +505,20 @@ class EventsDispatcher:
         """
         Structurally validate the envelope; reject it as a whole on failure.
 
-        Plain Python checks, never JSON-Schema loading (the protocol
-        package's schemas bind in tests, plan WP18). A rejection mirrors the
-        same error object into every result slot, so ``results[i]`` answers
-        ``calls[i]`` unconditionally (spec 4.6). Returns the parsed pieces
-        (request ID, calls, resolved capabilities) on success.
+        The embedded protocol package owns the fixed records and returns the
+        parsed pieces on success. With a usable request ID, a rejection mirrors
+        the error into every call slot. Without one, it returns the single
+        uncorrelated transport-edge error permitted by the result schema.
         """
-        if not isinstance(envelope, Mapping):
-            return self._rejected(None, 1, 400, "protocol_mismatch", "The request body is not a call envelope object.")
-
-        raw_calls = envelope.get("calls")
-        # How many result slots a whole-envelope rejection mirrors into:
-        # one per call when calls is a usable list, else a single slot.
-        usable_calls = raw_calls if isinstance(raw_calls, list) and raw_calls else None
-        slots = len(usable_calls) if usable_calls is not None else 1
-
-        raw_id = envelope.get("requestId")
-        envelope_id = raw_id if isinstance(raw_id, str) and raw_id else None
-
-        allowed_envelope_fields = {"protocol", "requestId", "calls", "capabilities"}
-        extra_fields = set(envelope) - allowed_envelope_fields
-        if extra_fields:
-            names = ", ".join(repr(name) for name in sorted(extra_fields, key=str))
-            message = f"The envelope carries unknown field(s): {names}."
-            return self._rejected(envelope_id, slots, 400, "protocol_mismatch", message, calls=usable_calls)
-
-        protocol = envelope.get("protocol")
-        if protocol != PROTOCOL:
-            if isinstance(protocol, str):
-                message = f"Unknown protocol {protocol!r}; this server speaks {PROTOCOL!r}."
-            else:
-                message = f"The envelope names no protocol; this server speaks {PROTOCOL!r}."
-            return self._rejected(envelope_id, slots, 400, "protocol_mismatch", message, calls=usable_calls)
-        if not isinstance(raw_id, str) or not raw_id:
-            message = "The envelope carries no 'requestId' string."
-            return self._rejected(envelope_id, slots, 400, "protocol_mismatch", message, calls=usable_calls)
-        if usable_calls is None:
-            message = "The envelope carries no calls; 'calls' must be an array of 1 to 16 call objects."
-            return self._rejected(envelope_id, 1, 400, "protocol_mismatch", message)
-        if len(usable_calls) > _CALLS_CAP:
-            message = f"The envelope carries {len(usable_calls)} calls; the cap is {_CALLS_CAP}."
-            return self._rejected(envelope_id, slots, 413, "payload_too_large", message, calls=usable_calls)
-
-        if "capabilities" in envelope:
-            resolved_capabilities = self._resolve_capabilities(envelope["capabilities"])
-        else:
-            resolved_capabilities = {key: frozenset(values) for key, values in CAPABILITIES_BASELINE_V1.items()}
-        if resolved_capabilities is None:
-            message = (
-                "The envelope's 'capabilities' must contain only 'swaps' and 'actions';"
-                " each value must be a duplicate-free array of known v1 names."
+        checked = inspect_call_envelope(envelope)
+        if isinstance(checked, CallEnvelopeFailure):
+            return build_rejected_call_envelope(
+                envelope,
+                status=checked.status,
+                code=checked.code,
+                message=checked.issue.message,
             )
-            return self._rejected(envelope_id, slots, 400, "protocol_mismatch", message, calls=usable_calls)
-
-        # Prove every fixed call record before running any handler. A malformed
-        # later call must not let earlier calls mutate application state first.
-        for call in usable_calls:
-            error: dict[str, Any] | None
-            if not isinstance(call, Mapping):
-                error = _error_object(400, "protocol_mismatch", "Each entry of 'calls' must be a call object.")
-            else:
-                error = self._check_call_fields(call)
-            if error is not None:
-                return self._rejected(
-                    envelope_id,
-                    slots,
-                    error["status"],
-                    error["code"],
-                    error["message"],
-                    calls=usable_calls,
-                )
-
-        return raw_id, usable_calls, resolved_capabilities
-
-    def _rejected(
-        self,
-        envelope_id: str | None,
-        slots: int,
-        status: int,
-        code: str,
-        message: str,
-        calls: list[Any] | None = None,
-    ) -> dict[str, Any]:
-        """
-        A whole-envelope rejection: the same error mirrored into every slot.
-
-        ``results[i]`` still answers ``calls[i]``, so each mirrored slot
-        echoes its own call's send_sequence when that call carried a well-formed one
-        (spec 4.1); ``calls`` rides along whenever the envelope had a usable
-        list.
-        """
-        error = _error_object(status, code, message)
-        results = []
-        for index in range(slots):
-            send_sequence = _call_send_sequence(calls[index]) if calls is not None and index < len(calls) else None
-            # Each slot gets its own dict, so a consumer mutating one result
-            # cannot silently edit the others.
-            results.append(_error_result(dict(error), send_sequence))
-        return {
-            "protocol": PROTOCOL,
-            "requestId": envelope_id,
-            "results": results,
-        }
-
-    @staticmethod
-    def _resolve_capabilities(raw: Any) -> dict[str, frozenset[str]] | None:
-        """
-        The client's capability set, with the baseline filling absent keys.
-
-        Returns ``None`` for a structurally invalid field. V1 is closed:
-        unknown keys, unknown names, and duplicate names are rejected.
-        """
-        if not isinstance(raw, Mapping):
-            return None
-        if set(raw) - {"swaps", "actions"}:
-            return None
-        resolved: dict[str, frozenset[str]] = {}
-        for key in ("swaps", "actions"):
-            if key not in raw:
-                resolved[key] = frozenset(CAPABILITIES_BASELINE_V1[key])
-                continue
-            values = raw[key]
-            known = _V1_SWAPS if key == "swaps" else _V1_ACTION_KINDS
-            if (
-                not isinstance(values, list)
-                or not all(isinstance(value, str) and value in known for value in values)
-                or len(values) != len(set(values))
-            ):
-                return None
-            resolved[key] = frozenset(values)
-        return resolved
+        return checked.request_id, checked.calls, checked.capabilities
 
     # ----- The per-call pipeline -----
 
@@ -777,7 +576,7 @@ class EventsDispatcher:
                 warn_unreturned_actions(plan.events, actions, plan.handler.name)
             return self._complete_call(plan, ctx, actions, capabilities)
         except EventError as err:
-            return _error_result(wire_error(err), plan.send_sequence)
+            return build_error_result(wire_error(err), plan.send_sequence)
         except Exception as err:  # noqa: BLE001 - the dispatcher answers 500, never crashes the host
             return self._unexpected_error(ctx, err, plan=plan)
 
@@ -828,7 +627,7 @@ class EventsDispatcher:
                 warn_unreturned_actions(plan.events, actions, plan.handler.name)
             return self._complete_call(plan, ctx, actions, capabilities)
         except EventError as err:
-            return _error_result(wire_error(err), plan.send_sequence)
+            return build_error_result(wire_error(err), plan.send_sequence)
         except Exception as err:  # noqa: BLE001 - the dispatcher answers 500, never crashes the host
             return self._unexpected_error(ctx, err, plan=plan)
 
@@ -849,51 +648,46 @@ class EventsDispatcher:
         when the call ends before the handler.
         """
         if not isinstance(call, Mapping):
-            error = _error_object(400, "protocol_mismatch", "Each entry of 'calls' must be a call object.")
-            return _error_result(error, None)
+            error = build_error(400, "protocol_mismatch", "Each entry of 'calls' must be a call object.")
+            return build_error_result(error, None)
 
-        # The send_sequence echoes on every result for this call, rejections included
-        # (spec 4.1), so it is read before the structural checks vouch for
-        # anything; a malformed send_sequence value echoes nothing.
-        send_sequence = _call_send_sequence(call)
-        structural = self._check_call_fields(call)
-        if structural is not None:
-            return _error_result(structural, send_sequence)
+        # The complete envelope was validated before the dispatcher entered
+        # its call loop, so no handler can run before a malformed later call
+        # is rejected. Read the already-proved correlation counter here.
+        send_sequence = call_send_sequence(call)
 
         # Component and event resolution. The per-event URL is authoritative:
         # body fields must match it when present (design 3.8).
         mismatch = self._url_body_mismatch(call, url_component=url_component, url_event=url_event)
         if mismatch is not None:
-            return _error_result(mismatch, send_sequence)
+            return build_error_result(mismatch, send_sequence)
         class_id = url_component if url_component is not None else call.get("componentClassId")
         event_name = url_event if url_event is not None else call.get("handlerName")
         if class_id is None:
-            error = _error_object(
+            error = build_error(
                 400,
                 "protocol_mismatch",
                 "The call names no component; the batch endpoint requires each call to carry its target's class id.",
             )
-            return _error_result(error, send_sequence)
+            return build_error_result(error, send_sequence)
         if event_name is None:
-            error = _error_object(
+            error = build_error(
                 400,
                 "protocol_mismatch",
                 "The call names no event; the batch endpoint requires each call to carry the handler's wire name.",
             )
-            return _error_result(error, send_sequence)
+            return build_error_result(error, send_sequence)
         try:
             comp_cls = ctx.citry.get_component_by_class_id(class_id)
         except KeyError:
-            error = _error_object(404, "unknown_component", f"No component with class id {class_id!r} is registered.")
-            return _error_result(error, send_sequence)
+            error = build_error(404, "unknown_component", f"No component with class id {class_id!r} is registered.")
+            return build_error_result(error, send_sequence)
         extension = ctx.citry.extensions.get_extension("events")
         info: EventsInfo = extension.resolve(comp_cls)  # type: ignore[attr-defined]
         handler = info.handlers.get(event_name)
         if handler is None:
-            error = _error_object(
-                404, "unknown_event", f"Component {comp_cls.__name__!r} has no event {event_name!r}."
-            )
-            return _error_result(error, send_sequence)
+            error = build_error(404, "unknown_event", f"Component {comp_cls.__name__!r} has no event {event_name!r}.")
+            return build_error_result(error, send_sequence)
 
         # The transport's CSRF check (HTTP attaches the floor and the
         # per-handler policy; design 7.4). Any rejection answers csrf_failed.
@@ -901,10 +695,10 @@ class EventsDispatcher:
             try:
                 csrf_check(handler)
             except EventError as err:
-                return _error_result(_error_object(403, "csrf_failed", err.message, err.fields), send_sequence)
+                return build_error_result(build_error(403, "csrf_failed", err.message, err.fields), send_sequence)
             except Exception:  # noqa: BLE001 - a broken user policy still answers the fixed wire error
                 logger.exception(f"The CSRF policy for event {event_name!r} on {comp_cls.__name__} raised.")
-                return _error_result(_error_object(403, "csrf_failed", _MSG_CSRF_FAILED), send_sequence)
+                return build_error_result(build_error(403, "csrf_failed", _MSG_CSRF_FAILED), send_sequence)
 
         # Token verification and two-way binding updates (design 6.1, WP8).
         state = None
@@ -916,12 +710,12 @@ class EventsDispatcher:
             # A stray token on a stateless component is ignored (there is
             # nothing to rebuild), but updates have no writable target.
             if updates:
-                error = _error_object(
+                error = build_error(
                     422,
                     "invalid_args",
                     f"The call carries state updates, but component {comp_cls.__name__!r} declares no State class.",
                 )
-                return _error_result(error, send_sequence)
+                return build_error_result(error, send_sequence)
         elif token is not None or needs_state or updates:
             secrets = list(ctx.citry.settings.secret or [])
             try:
@@ -931,23 +725,23 @@ class EventsDispatcher:
                 verified = verify_state_token(token or "", cls=comp_cls, secrets=secrets, cache=ctx.citry.cache)
             except InvalidStateError as err:
                 logger.debug(err.message)
-                return _error_result(_error_object(403, "invalid_state", _MSG_INVALID_STATE), send_sequence)
+                return build_error_result(build_error(403, "invalid_state", _MSG_INVALID_STATE), send_sequence)
             except StaleStateError as err:
                 logger.debug(err.message)
-                return _error_result(_error_object(409, "stale_state", _MSG_STALE_STATE), send_sequence)
+                return build_error_result(build_error(409, "stale_state", _MSG_STALE_STATE), send_sequence)
             try:
                 state = info.state_cls(**verified.state_kwargs)
             except TypeError:
                 # The token verified but its fields no longer match the State
                 # class: the version-skew case (the class changed across a
                 # deploy), which is the stale-token story (design 4.5).
-                return _error_result(_error_object(409, "stale_state", _MSG_STALE_STATE), send_sequence)
+                return build_error_result(build_error(409, "stale_state", _MSG_STALE_STATE), send_sequence)
             state_fingerprint = _state_fingerprint(state)
             if updates and info.state_meta is not None:
                 try:
                     apply_state_updates(state, updates, model_fields=info.state_meta.model)
                 except StateUpdateError as err:
-                    return _error_result(_error_object(422, "invalid_args", err.message, err.fields), send_sequence)
+                    return build_error_result(build_error(422, "invalid_args", err.message, err.fields), send_sequence)
 
         # Args validation against the handler's data schema (design 3.3, WP9).
         args = call.get("args") or {}
@@ -956,14 +750,14 @@ class EventsDispatcher:
             validation = validate_args(handler.data_schema, args)
             if not validation.ok:
                 message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
-                return _error_result(_error_object(422, "invalid_args", message, validation.fields), send_sequence)
+                return build_error_result(build_error(422, "invalid_args", message, validation.fields), send_sequence)
             data_value = validation.value
         elif args:
             # A handler that declares no data takes no input; extra keys are
             # a 422 here exactly as they are on a schema (design 3.3).
             message = f"The args for event {event_name!r} on component {comp_cls.__name__!r} did not validate."
             extra = dict.fromkeys(sorted(str(key) for key in args), "Unexpected field: not declared on the schema.")
-            return _error_result(_error_object(422, "invalid_args", message, extra), send_sequence)
+            return build_error_result(build_error(422, "invalid_args", message, extra), send_sequence)
 
         # The per-call events instance: the woven config class (the
         # component's Events class as the extension manager rebuilt it on the
@@ -997,7 +791,7 @@ class EventsDispatcher:
                 if handler.guard is not None:
                     handler.guard(events)
         except EventError as err:
-            return _error_result(wire_error(err), send_sequence)
+            return build_error_result(wire_error(err), send_sequence)
         except Exception as err:  # noqa: BLE001 - a crash before the handler still answers 500
             return self._unexpected_error(
                 ctx, err, comp_cls=comp_cls, handler=handler, events=events, send_sequence=send_sequence
@@ -1025,74 +819,13 @@ class EventsDispatcher:
         )
 
     @staticmethod
-    def _check_call_fields(call: Mapping[str, Any]) -> dict[str, Any] | None:
-        """Per-call structural checks; returns the wire error for the first bad field."""
-        allowed_fields = {
-            "componentClassId",
-            "handlerName",
-            "callerRenderId",
-            "args",
-            "stateToken",
-            "stateUpdates",
-            "sendSequence",
-        }
-        extra_fields = set(call) - allowed_fields
-        if extra_fields:
-            names = ", ".join(repr(name) for name in sorted(extra_fields, key=str))
-            return _error_object(400, "protocol_mismatch", f"The call carries unknown field(s): {names}.")
-        for required in ("componentClassId", "handlerName", "args"):
-            if required not in call:
-                return _error_object(400, "protocol_mismatch", f"The call is missing required field {required!r}.")
-        for name in ("componentClassId", "handlerName"):
-            value = call[name]
-            if not isinstance(value, str) or not value:
-                return _error_object(400, "protocol_mismatch", f"The call's {name!r} must be a non-empty string.")
-        for name in ("callerRenderId", "stateToken"):
-            if name in call and (not isinstance(call[name], str) or not call[name]):
-                return _error_object(400, "protocol_mismatch", f"The call's {name!r} must be a non-empty string.")
-        instance_id = call.get("callerRenderId")
-        if instance_id is not None:
-            try:
-                validate_render_id(instance_id)
-            except (TypeError, ValueError):
-                return _error_object(
-                    400,
-                    "protocol_mismatch",
-                    "The call's 'callerRenderId' must use only lowercase ASCII letters, digits, hyphens,"
-                    " and underscores.",
-                )
-        if not isinstance(call["args"], Mapping):
-            return _error_object(400, "protocol_mismatch", "The call's 'args' must be an object.")
-        if not _is_strict_json_value(call["args"]):
-            return _error_object(
-                400,
-                "protocol_mismatch",
-                "The call's 'args' must contain only strict JSON values under string keys.",
-            )
-        if "stateUpdates" in call and not isinstance(call["stateUpdates"], Mapping):
-            return _error_object(400, "protocol_mismatch", "The call's 'stateUpdates' must be an object.")
-        if "stateUpdates" in call and not _is_strict_json_value(call["stateUpdates"]):
-            return _error_object(
-                400,
-                "protocol_mismatch",
-                "The call's 'stateUpdates' must contain only strict JSON values under string keys.",
-            )
-        if "sendSequence" in call:
-            send_sequence = call["sendSequence"]
-            if isinstance(send_sequence, bool) or not isinstance(send_sequence, int) or send_sequence < 0:
-                return _error_object(
-                    400, "protocol_mismatch", "The call's 'sendSequence' must be an integer of at least 0."
-                )
-        return None
-
-    @staticmethod
     def _url_body_mismatch(
         call: Mapping[str, Any], *, url_component: str | None, url_event: str | None
     ) -> dict[str, Any] | None:
         """On the per-event route, a body naming a different target is rejected."""
         body_component = call.get("componentClassId")
         if url_component is not None and body_component is not None and body_component != url_component:
-            return _error_object(
+            return build_error(
                 400,
                 "protocol_mismatch",
                 f"The call names component {body_component!r}, but the URL addresses {url_component!r};"
@@ -1100,7 +833,7 @@ class EventsDispatcher:
             )
         body_event = call.get("handlerName")
         if url_event is not None and body_event is not None and body_event != url_event:
-            return _error_object(
+            return build_error(
                 400,
                 "protocol_mismatch",
                 f"The call names event {body_event!r}, but the URL addresses {url_event!r};"
@@ -1203,21 +936,32 @@ class EventsDispatcher:
                 else action
                 for action in actions
             ]
-        encoded = encode_actions(actions, instance_id=plan.instance_id, handler=plan.handler.name)
+        try:
+            encoded = encode_actions(actions, instance_id=plan.instance_id, handler=plan.handler.name)
+        except ProtocolValueError:
+            return build_error_result(build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
         encoded = self._apply_capabilities(encoded, capabilities, handler=plan.handler.name)
 
-        result_ctx = OnEventResultContext(
-            citry=ctx.citry,
-            component_class=plan.comp_cls,
-            handler=plan.handler,
-            events=plan.events,
-            actions=encoded,
-        )
-        final_actions = ctx.citry.extensions.emit("on_event_result", result_ctx, result="map", field="actions")
-        if not isinstance(final_actions, list):
-            final_actions = list(final_actions)
-
-        final_actions = self._validate_hook_actions(final_actions, handler=plan.handler.name)
+        has_result_hooks = bool(ctx.citry.extensions._extensions_with_hook("on_event_result"))
+        if has_result_hooks:
+            result_ctx = OnEventResultContext(
+                citry=ctx.citry,
+                component_class=plan.comp_cls,
+                handler=plan.handler,
+                events=plan.events,
+                actions=encoded,
+            )
+            final_actions = ctx.citry.extensions.emit("on_event_result", result_ctx, result="map", field="actions")
+            if not isinstance(final_actions, list):
+                final_actions = list(final_actions)
+            try:
+                final_actions = self._validate_hook_actions(final_actions, handler=plan.handler.name)
+            except ProtocolValueError:
+                return build_error_result(
+                    build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence
+                )
+        else:
+            final_actions = encoded
         final_actions = self._resign_state(plan, ctx, final_actions, capabilities)
         final_actions = self._apply_capabilities(final_actions, capabilities, handler=plan.handler.name)
 
@@ -1230,11 +974,14 @@ class EventsDispatcher:
                     f" action). If the page should update, return a rendering, e.g. 'return state.render()'."
                 )
 
-        result = _ok_result(final_actions, plan.send_sequence)
         try:
-            json.dumps(result, allow_nan=False)
-        except (TypeError, ValueError):
-            return _error_result(_error_object(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
+            result = (
+                assemble_validated_ok_result(final_actions, plan.send_sequence)
+                if has_result_hooks
+                else assemble_owned_ok_result(final_actions, plan.send_sequence)
+            )
+        except ProtocolValueError:
+            return build_error_result(build_error(500, "handler_error", _MSG_UNENCODABLE_RESULT), plan.send_sequence)
         return result
 
     @staticmethod
@@ -1250,83 +997,17 @@ class EventsDispatcher:
                 )
                 raise ValueError(msg)  # noqa: TRY004 - one failure type for malformed hook results
             encoded = dict(action)
-            kind = encoded.get("action")
-            if kind not in _V1_ACTION_KINDS:
+            issue = validate_action(encoded)
+            if issue is not None:
+                if issue.category == "strict_json":
+                    raise ProtocolValueError(issue)
                 msg = (
                     f"The on_event_result hook for event handler {handler!r} returned item {index}"
-                    f" with unknown action kind {kind!r}."
+                    f" with an invalid wire action: {issue.message}"
                 )
                 raise ValueError(msg)
-
-            allowed_by_kind = {
-                "render": {"action", "target", "swap", "html", "delay", "wait"},
-                "data": {"action", "value", "delay", "wait"},
-                "state": {"action", "targetRenderId", "stateToken", "delay", "wait"},
-                "event": {"action", "eventName", "detail", "target", "delay", "wait"},
-                "redirect": {"action", "url", "delay", "wait"},
-                "url": {"action", "url", "mode", "delay", "wait"},
-            }
-            extra_fields = set(encoded) - allowed_by_kind[kind]
-            if extra_fields:
-                names = ", ".join(repr(name) for name in sorted(extra_fields, key=str))
-                msg = (
-                    f"The on_event_result hook for event handler {handler!r} returned item {index}"
-                    f" with unknown field(s): {names}."
-                )
-                raise ValueError(msg)
-
-            delay = encoded.get("delay", 0)
-            if isinstance(delay, bool) or not isinstance(delay, (int, float)) or delay < 0:
-                msg = f"The on_event_result hook for event handler {handler!r} returned an invalid action delay."
-                raise ValueError(msg)
-            wait = encoded.get("wait", False)
-            if "wait" in encoded and wait is not False:
-                msg = f"The on_event_result hook for event handler {handler!r} returned an invalid action wait flag."
-                raise ValueError(msg)
-
-            if kind == "render":
-                EventsDispatcher._validate_hook_target(encoded.get("target"), handler=handler)
-                if encoded.get("swap") not in _V1_SWAPS or not isinstance(encoded.get("html"), str):
-                    msg = f"The on_event_result hook for event handler {handler!r} returned an invalid render action."
-                    raise ValueError(msg)
-            elif kind == "data":
+            if encoded["action"] == "data":
                 data_count += 1
-                if "value" not in encoded:
-                    msg = (
-                        f"The on_event_result hook for event handler {handler!r} returned a data action with no value."
-                    )
-                    raise ValueError(msg)
-            elif kind == "state":
-                instance = encoded.get("targetRenderId")
-                token = encoded.get("stateToken")
-                if not isinstance(instance, str) or not instance or not isinstance(token, str) or not token:
-                    msg = f"The on_event_result hook for event handler {handler!r} returned an invalid state action."
-                    raise ValueError(msg)
-                try:
-                    validate_render_id(instance)
-                except (TypeError, ValueError) as error:
-                    msg = f"The on_event_result hook for event handler {handler!r} returned an invalid state action."
-                    raise ValueError(msg) from error
-            elif kind == "event":
-                name = encoded.get("eventName")
-                if not isinstance(name, str) or not name or name.startswith("citry:"):
-                    msg = f"The on_event_result hook for event handler {handler!r} returned an invalid event action."
-                    raise ValueError(msg)
-                if "target" in encoded:
-                    EventsDispatcher._validate_hook_target(encoded["target"], handler=handler)
-            elif kind == "redirect":
-                if not isinstance(encoded.get("url"), str) or not encoded["url"]:
-                    msg = (
-                        f"The on_event_result hook for event handler {handler!r} returned an invalid redirect action."
-                    )
-                    raise ValueError(msg)
-            elif (
-                not isinstance(encoded.get("url"), str)
-                or not encoded["url"]
-                or encoded.get("mode") not in {"push", "replace"}
-            ):
-                msg = f"The on_event_result hook for event handler {handler!r} returned an invalid URL action."
-                raise ValueError(msg)
             validated.append(encoded)
 
         if data_count > 1:
@@ -1336,19 +1017,6 @@ class EventsDispatcher:
             )
             raise ValueError(msg)
         return validated
-
-    @staticmethod
-    def _validate_hook_target(target: Any, *, handler: str) -> None:
-        """Validate a hook-produced render or event target."""
-        if not isinstance(target, str) or not target:
-            msg = f"The on_event_result hook for event handler {handler!r} returned an invalid action target."
-            raise ValueError(msg)
-        if target.startswith("render:"):
-            try:
-                validate_render_id(target[7:])
-            except (TypeError, ValueError) as error:
-                msg = f"The on_event_result hook for event handler {handler!r} returned an invalid action target."
-                raise ValueError(msg) from error
 
     def _state_changed(self, plan: _CallPlan) -> bool:
         """Whether the call's State differs from what the verified token carried."""
@@ -1409,11 +1077,7 @@ class EventsDispatcher:
                 f" capabilities exclude the 'state' action; the token refresh is dropped."
             )
             return wire_actions
-        state_action: dict[str, Any] = {
-            "action": "state",
-            "targetRenderId": plan.instance_id,
-            "stateToken": token,
-        }
+        state_action = build_state_action(plan.instance_id, token)
         return [state_action, *wire_actions]
 
     @staticmethod
@@ -1487,7 +1151,7 @@ class EventsDispatcher:
             message = f"The event handler raised an unexpected error: {type(err).__name__}: {err}"
         else:
             message = _MSG_HANDLER_ERROR
-        result = _error_result(_error_object(500, "handler_error", message), send_sequence)
+        result = build_error_result(build_error(500, "handler_error", message), send_sequence)
         error_ctx = OnEventErrorContext(
             citry=ctx.citry,
             component_class=comp_cls,
@@ -1523,50 +1187,11 @@ class EventsDispatcher:
         """Validate an error-hook replacement and restore the answered call's exact send_sequence."""
         if not isinstance(replaced, Mapping) or replaced.get("ok") is not False:
             return None
-        raw_error = replaced.get("error")
-        if not isinstance(raw_error, Mapping):
-            return None
-        status = raw_error.get("status")
-        code = raw_error.get("code")
-        message = raw_error.get("message")
-        if (
-            isinstance(status, bool)
-            or not isinstance(status, int)
-            or status < 400
-            or status > 599
-            or not isinstance(code, str)
-            or not code
-            or not isinstance(message, str)
-            or not message
-        ):
-            return None
-        expected_status = _ERROR_STATUS_BY_CODE.get(code)
-        if code != "error" and expected_status != status:
-            return None
-        if set(replaced) - {"ok", "error", "sendSequence"}:
-            return None
-        if set(raw_error) - {"status", "code", "message", "fieldErrors"}:
-            return None
-        if "fieldErrors" in raw_error:
-            raw_fields = raw_error["fieldErrors"]
-            if not isinstance(raw_fields, Mapping) or not all(
-                isinstance(key, str) and isinstance(value, str) for key, value in raw_fields.items()
-            ):
-                return None
-        else:
-            raw_fields = None
-
-        normalized: dict[str, Any] = {"ok": False}
-        normalized_error: dict[str, Any] = {"status": status, "code": code, "message": message}
-        if raw_fields is not None:
-            normalized_error["fieldErrors"] = dict(raw_fields)
-        normalized["error"] = normalized_error
+        candidate = dict(replaced)
         if send_sequence is None:
-            normalized.pop("sendSequence", None)
+            candidate.pop("sendSequence", None)
         else:
-            normalized["sendSequence"] = send_sequence
-        try:
-            json.dumps(normalized, allow_nan=False)
-        except (TypeError, ValueError):
+            candidate["sendSequence"] = send_sequence
+        if validate_result(candidate) is not None:
             return None
-        return normalized
+        return build_error_result(candidate["error"], send_sequence)

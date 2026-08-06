@@ -46,13 +46,25 @@ rules (a string where the schema declares ``int`` is a per-field error).
 
 from __future__ import annotations
 
-import json
-import math
-from contextlib import suppress
 from typing import TYPE_CHECKING, Any, NamedTuple, Protocol, runtime_checkable
 from urllib.parse import parse_qs
 
-from citry.ext.events.dispatcher import PROTOCOL
+from citry._protocol.events import (
+    CALLER_RENDER_ID_FIELD,
+    CAPABILITIES_FIELD,
+    FLAT_REQUEST_ID,
+    FORM_REQUEST_ID,
+    PROTOCOL_FIELD,
+    REQUEST_ID_FIELD,
+    SEND_SEQUENCE_FIELD,
+    STATE_TOKEN_FIELD,
+    build_partial_call_envelope,
+    build_query_envelope,
+    has_envelope_identity_fields,
+    loads_strict_json,
+    split_flat_fields,
+    split_query_fields,
+)
 from citry.ext.events.errors import EventError
 from citry.ext.events.schemas import StringArgs
 
@@ -75,34 +87,6 @@ __all__ = [
     "PayloadCodec",
     "decode_request",
 ]
-
-# The reserved field names a form post, a flat JSON post, and a GET query
-# string may carry besides the handler's own args (design 6.2).
-STATE_TOKEN_FIELD = "_citry_state_token"  # noqa: S105 - reserved transport field name, not a credential
-CALLER_RENDER_ID_FIELD = "_citry_caller_render_id"
-# Browser-triggered GET calls carry the send epoch in the query string so
-# their DOM actions retain the same stale-response protection as POST calls.
-SEND_SEQUENCE_FIELD = "_citry_send_sequence"
-# Browser-triggered GET calls flatten the envelope into the query. These
-# fields preserve the envelope metadata that controls version rejection,
-# response correlation, and action/swap capability negotiation. Hand-authored
-# pasteable URLs omit them and retain the fixed query-envelope defaults.
-PROTOCOL_FIELD = "_citry_protocol"
-REQUEST_ID_FIELD = "_citry_request_id"
-CAPABILITIES_FIELD = "_citry_capabilities"
-
-# The synthesized correlation ids of the single-call envelopes built from a
-# form post, a flat JSON post, and a GET query string. These callers cannot
-# mint an id, and the result schema requires a non-empty one, so the ids are
-# fixed (envelopes must be deterministic).
-_FORM_ENVELOPE_ID = "form"
-_FLAT_ENVELOPE_ID = "flat"
-_QUERY_ENVELOPE_ID = "query"
-
-# The envelope's identifying fields: every valid call envelope carries all
-# three (spec section 3), so an object with none of them has no envelope
-# reading at all.
-_ENVELOPE_FIELDS = ("protocol", "requestId", "calls")
 
 
 @runtime_checkable
@@ -191,16 +175,9 @@ class FlatJsonCodec:
         if not isinstance(payload, dict):
             msg = "The request body must be a JSON object (the handler's fields, one key per field)."
             raise EventError(msg, status=400)
-        call: dict[str, Any] = {}
-        args = dict(payload)
-        state = args.pop(STATE_TOKEN_FIELD, None)
-        instance = args.pop(CALLER_RENDER_ID_FIELD, None)
-        if isinstance(state, str) and state:
-            call["stateToken"] = state
-        if isinstance(instance, str) and instance:
-            call["callerRenderId"] = instance
+        args, call = split_flat_fields(payload)
         call["args"] = args
-        return {"protocol": PROTOCOL, "requestId": _FLAT_ENVELOPE_ID, "calls": [call]}
+        return build_partial_call_envelope(FLAT_REQUEST_ID, call)
 
 
 def _parse_json(body: bytes) -> Any:
@@ -219,24 +196,7 @@ def _parse_json(body: bytes) -> Any:
     raising in either surfaces as the ``ValueError`` the codecs already
     answer with a 400.
     """
-    return json.loads(body, parse_constant=_reject_non_json_literal, parse_float=_parse_finite_float)
-
-
-def _reject_non_json_literal(literal: str) -> Any:
-    # json.loads calls parse_constant only for Infinity / -Infinity / NaN.
-    msg = f"non-standard JSON literal {literal}"
-    raise ValueError(msg)
-
-
-def _parse_finite_float(raw: str) -> float:
-    # json.loads calls parse_float with the raw number text. RFC 8259 leaves
-    # out-of-range numbers implementation-defined, and Python overflows them
-    # to inf; no JSON encoder could carry that value back.
-    value = float(raw)
-    if not math.isfinite(value):
-        msg = f"JSON number out of range for a float: {raw}"
-        raise ValueError(msg)
-    return value
+    return loads_strict_json(body)
 
 
 class FormCodec:
@@ -258,16 +218,9 @@ class FormCodec:
     def decode(self, body: bytes, request: RouteRequest) -> dict[str, Any]:  # noqa: ARG002 - codec protocol signature
         """Build the single-call envelope a form post means."""
         fields = parse_form_fields(body)
-        call: dict[str, Any] = {}
-        args = StringArgs(fields)
-        state = args.pop(STATE_TOKEN_FIELD, None)
-        instance = args.pop(CALLER_RENDER_ID_FIELD, None)
-        if isinstance(state, str) and state:
-            call["stateToken"] = state
-        if isinstance(instance, str) and instance:
-            call["callerRenderId"] = instance
-        call["args"] = args
-        return {"protocol": PROTOCOL, "requestId": _FORM_ENVELOPE_ID, "calls": [call]}
+        args, call = split_flat_fields(fields)
+        call["args"] = StringArgs(args)
+        return build_partial_call_envelope(FORM_REQUEST_ID, call)
 
 
 def parse_form_fields(body: bytes) -> dict[str, Any]:
@@ -313,36 +266,9 @@ def decode_query_request(request: RouteRequest, *, state_declared: bool) -> dict
     args: dict[str, Any] = StringArgs(
         {key: values[0] if len(values) == 1 else list(values) for key, values in request.query.items()}
     )
-    call: dict[str, Any] = {}
-    state = args.pop(STATE_TOKEN_FIELD, None)
-    instance = args.pop(CALLER_RENDER_ID_FIELD, None)
-    send_sequence = args.pop(SEND_SEQUENCE_FIELD, None)
-    protocol = args.pop(PROTOCOL_FIELD, PROTOCOL)
-    request_id = args.pop(REQUEST_ID_FIELD, _QUERY_ENVELOPE_ID)
-    capabilities = args.pop(CAPABILITIES_FIELD, None)
-    if state_declared and isinstance(state, str) and state:
-        call["stateToken"] = state
-    if isinstance(instance, str) and instance:
-        call["callerRenderId"] = instance
-    if isinstance(send_sequence, str) and send_sequence:
-        try:
-            call["sendSequence"] = int(send_sequence)
-        except ValueError:
-            # Preserve an invalid authored value so the dispatcher returns
-            # its ordinary protocol error rather than silently dropping it.
-            call["sendSequence"] = send_sequence
-    elif send_sequence is not None:
-        call["sendSequence"] = send_sequence
-    call["args"] = args
-    envelope: dict[str, Any] = {"protocol": protocol, "requestId": request_id, "calls": [call]}
-    if capabilities is not None:
-        if isinstance(capabilities, str):
-            with suppress(json.JSONDecodeError):
-                capabilities = json.loads(capabilities)
-                # An invalid value stays a string so the dispatcher's
-                # ordinary envelope validation returns protocol_mismatch.
-        envelope["capabilities"] = capabilities
-    return envelope
+    fields = split_query_fields(args, state_declared=state_declared)
+    fields.call["args"] = StringArgs(fields.call["args"])
+    return build_query_envelope(fields)
 
 
 def decode_request(
@@ -442,7 +368,7 @@ def _check_batch_envelope_shape(envelope: dict[str, Any]) -> None:
     pointed message costs nothing, and a valid envelope always carries the
     fields, so classification still never depends on body shape.
     """
-    if any(field in envelope for field in _ENVELOPE_FIELDS):
+    if has_envelope_identity_fields(envelope):
         return
     msg = (
         "The batch endpoint takes the citry-events/1 call envelope (an object with 'protocol',"

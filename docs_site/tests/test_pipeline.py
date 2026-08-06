@@ -74,6 +74,13 @@ def test_markdown_extensions_render() -> None:
     assert 'class="admonition note"' in html
 
 
+def test_markdown_tables_have_a_bounded_scroll_container() -> None:
+    result = render_page("| Name | Description |\n|---|---|\n| value | A long contract |")
+
+    assert '<div class="table-wrapper" tabindex="0">' in result.html
+    assert "<table>" in result.html
+
+
 def test_citry_fence_styles_builtin_names_as_html_tags() -> None:
     result = render_page('```citry\ntemplate = """<c-slot /><c-template /><c-component is="card" />"""\n```')
 
@@ -133,21 +140,46 @@ def test_markdown_body_expands_nested_block_and_empty_snippets(tmp_path: Path) -
     assert "--8<--" not in result.markdown_body
 
 
+def test_configured_snippet_options_survive_runtime_path_overrides(tmp_path: Path) -> None:
+    settings_source = config.settings_config.read_text(encoding="utf-8")
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        settings_source.replace(
+            "  docstrings:\n",
+            "      pymdownx.snippets:\n        encoding: latin-1\n  docstrings:\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "latin.py").write_bytes("MESSAGE = 'café'\n".encode("latin-1"))
+    cfg = DocsConfig(
+        repo_root=tmp_path,
+        content_dir=tmp_path,
+        site_dir=tmp_path / "site",
+        settings_config=settings_path,
+    )
+
+    result = render_page(
+        '```python\n--8<-- "latin.py"\n```\n',
+        config=cfg,
+        wrap_in_layout=False,
+    )
+
+    assert "café" in result.html
+
+
 def test_content_index_renders() -> None:
-    # The home page reads the {{ version }} template global, which build and serve
-    # configure at startup; do the same here so rendering the real page matches
-    # production instead of relying on another test having set the global.
+    # Configure globals exactly as build and serve do before exercising the real
+    # page through all three rendering passes.
     configure_docs_globals(config)
     source = (config.content_dir / "index.md").read_text(encoding="utf-8")
     result = render_page(source)
     html = result.html
 
     assert "<!DOCTYPE html>" in html
-    assert "<title>Citry</title>" in html  # title == site_name, so no suffix
-    # The home page's sections and its "where to go next" links rendered.
-    assert "Two simple rules" in html
-    assert 'href="/getting-started/installation/"' in html
-    # toc tokens were captured.
+    assert result.meta.layout == "landing"
+    assert 'class="landing-shell"' in html
+    assert 'class="djc-layout"' not in html
     assert isinstance(result.toc_tokens, list)
 
 

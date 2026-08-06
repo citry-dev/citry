@@ -108,7 +108,8 @@ raises `NotRegistered` because nothing is registered under that name.
   rules.
 - **The serializer's HTML rendering rules** (CLAUDE.md gotchas): void
   elements stay compact (`<br/>`), non-void self-closing expand
-  (`<div></div>`).
+  (`<div></div>`), and HTML tag/void identity is ASCII-case-insensitive while
+  authored spelling is preserved (`is="BR"` emits `<BR/>`).
 - **`citry_core.template_parser`** is wired (e.g. `tag_rules.py` imports
   `TagRules` from it), so exposing `HTML_VOID_ELEMENTS` to Python
   (section 5.3) follows an existing path.
@@ -404,6 +405,12 @@ Notes on this shape:
   `style` contribution for the dynamic `element` built-in and merges them
   before `template_data`; ordinary component kwargs remain last-one-wins.
   The parity tests in section 9 lock this.
+- **Resolved-attribute hook ownership follows authorship.** The transparent
+  dynamic-element instance remains the renderer and owns private morph
+  metadata, but `on_attrs_resolved` receives the lexical component whose
+  template authored `<c-element>`. Extensions therefore resolve handlers,
+  State, class IDs, and other component-local metadata exactly as they do for
+  a statically written HTML element.
 
 `transparent = True` keeps the output identical to writing the target
 directly: no extra `data-cid` marker for the wrappers, and a component
@@ -461,6 +468,15 @@ give the clean "void elements cannot have children" error. One list,
 Rust-owned, same single-source rule as everything else. (The earlier
 fallback design needed a full `HTML_ELEMENT_NAMES` list plus settings
 plumbed into the compile call; all of that is gone.)
+
+`c-` itself is an exact lowercase framework prefix, but registered component
+identity after the prefix is ASCII-case-insensitive. Consequently
+`<c-Element>` / `<c-Component>` take the same validation, rewrite, metadata,
+and slot paths as `<c-element>` / `<c-component>`; `<C-Element>` is invalid
+Citry syntax. `<c-element>` is an HTML-attribute boundary, so ASCII-case
+variants of its selector (`IS`, `c-IS`, or a spread-provided `Is`) share the
+`is` identity. `<c-component>` is a component-input boundary and keeps `is`
+and `c-is` exact, like its other kwargs.
 
 ### 5.4 Cross-binding consistency audit (CLAUDE.md mechanism 4)
 
@@ -662,7 +678,7 @@ DJC behavior contract plus the `<c-element>` half:
   expression, `c-bind` spread, boolean attributes, `class`/`style` values,
   values needing escaping), `<c-element is="div" ...>` output is
   byte-identical to the statically written `<div ...>` equivalent, and
-  `on_attrs_resolved` fires with the same payload.
+  `on_attrs_resolved` fires with the same payload and lexical owner.
 - No shadowing: with a registered `Table` component, `<c-component
   is="table">` renders the component and `<c-element is="table">` renders
   the element; neither consults the other's namespace.

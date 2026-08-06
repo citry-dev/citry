@@ -797,9 +797,17 @@ and count limits are enforced by iterative validation. `max_entry_bytes=None`
 disables only the lower operator policy limit; it cannot disable these format
 caps.
 
+Format v1 requires nullable `morph_key` and `morph_mode` on every archived
+descendant component invocation. The morph mode accepts only `null` and
+`"ignore"`. Malformed invocation records are rejected rather than replayed
+with defaults, because either default could change browser identity or range
+policy. The current call's boundary invocation key and morph mode remain
+call-owned and are never restored from the artifact that
+populated the cache.
+
 ### 7.2 Structural shape
 
-The exact private schema belongs to implementation, but version 1 needs these
+The exact private schema belongs to implementation, but the current version needs these
 logical sections:
 
 ```text
@@ -864,7 +872,7 @@ Replay is transactional:
 1. Validate the complete artifact, all limits, symbolic references, and
    extension compatibility without mutating the current render.
 2. Bind the archived component root to the already-created current boundary.
-   Its render ID, `#c-key`, client bindings, supplied fills, invocation metadata,
+   Its render ID, component-range `#c-key`, client bindings, supplied fills, invocation metadata,
    and containing region remain those of this call. A transparent `<c-cache>`
    has no marked root of its own.
 3. Reserve a fresh render ID for every archived descendant occurrence. For
@@ -986,8 +994,12 @@ artifact a miss.
 
 Events export follows the same final active-ID selection. Records owned by
 parents, Slot writers, siblings, and retired descendants stay outside the
-artifact. Component-tag client bindings and `#c-key` behavior are rebuilt from the current
-call; they are not copied from the occurrence that populated the entry.
+artifact. Boundary component-tag client bindings and `#c-key` behavior are
+rebuilt from the current call; they are not copied from the occurrence that
+populated the entry. Archived descendant invocations carry their own required
+nullable `morph_key` and `morph_mode`, because that metadata was authored
+inside the cached subtree and is needed to reproduce its ownership graph
+exactly.
 
 The ownership payload restores active instances, invocations, fills, regions,
 and init relations under fresh IDs. The client manifest generated from a replay

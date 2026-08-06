@@ -70,7 +70,7 @@ python page.py
 The page contains one list with two books and another with the message
 “Choose your next book.”
 
-## Import components before you use their tags
+## Import components
 
 This line matters even though `ReadingList` is not mentioned in the Python
 code below it:
@@ -84,14 +84,17 @@ Importing the module creates the component class and tells Citry that the
 tag when it renders the page.
 
 Larger projects can discover component modules automatically. For now, an
-ordinary import keeps the setup visible. [Registration and
-autodiscovery](/concepts/registration/) covers the project-wide choices.
+ordinary import keeps the setup visible. Read
+[Registration](/concepts/registration/) for tag names and engine ownership,
+then
+[Component discovery](/advanced/component-discovery/) for automatic imports
+and startup.
 
-## Pass fixed text and live Python values
+## Pass component inputs
 
 The first list receives two kinds of options:
 
-```html
+```citry-html
 <c-ReadingList
   heading="Reading now"
   c-books="current_books"
@@ -105,14 +108,14 @@ and pass the resulting list.
 Use a plain option for fixed text. Use the `c-` form when the value is a Python
 expression:
 
-```html
+```citry-html
 <c-ReadingList heading="Fixed words" c-books="books_from_python" />
 ```
 
 The child receives only the values you pass. It cannot silently read other
 variables from the page around it, which makes the component safe to reuse.
 
-## Add a small render check
+## Add a render check
 
 You can test the useful result without matching Citry's generated attributes.
 Save this as `check_page.py`:
@@ -146,7 +149,7 @@ package. It will keep working when an unimportant generated attribute changes.
 [Testing components](/advanced/testing/) shows how to turn checks like this
 into pytest tests and add browser or framework coverage for larger projects.
 
-## Give part of the page content of its own
+## Next steps
 
 You now have a complete page made from smaller pieces, and you have checked its
 meaningful output. Next, [add flexible content with named areas and useful

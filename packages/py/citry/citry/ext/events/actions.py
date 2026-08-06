@@ -17,10 +17,11 @@ Import the namespace once and return what you build::
                 actions.Redirect(f"/orders/{order.id}"),
             ]
 
-Every envelope action accepts the timing keywords ``delay`` (seconds before
-the client applies the action) and ``wait`` (whether later actions hold for
-it). ``Download`` is the exception: it constructs a raw HTTP response result,
-not an envelope action.
+Every envelope action accepts ``delay`` (seconds before the client applies the
+action). Most also accept ``wait`` (whether later actions hold for it). A
+``Data`` action always waits because applying it resolves the caller's
+promise. ``Download`` is not an envelope action; it constructs a raw HTTP
+response result.
 
 Turning return values into these actions (dicts, elements, resolver-claimed
 values) and encoding them for the wire lives in the sibling ``results``
@@ -35,6 +36,7 @@ from typing import Any
 from unicodedata import category, normalize
 from urllib.parse import quote
 
+from citry._protocol.events import SWAPS, is_finite_json_number
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender
 from citry.util.id import validate_render_id
@@ -49,9 +51,6 @@ __all__ = [
     "Render",
     "ReplaceUrl",
 ]
-
-# The swap modes the render action supports (design events.md 4.3).
-SWAPS = ("morph", "replace", "inner", "append", "prepend", "remove", "none")
 
 # Debug-mode construction tracking: while a handler call is being dispatched
 # in debug mode, this holds the per-call list every constructed action or
@@ -89,7 +88,8 @@ class Action:
         wait: Whether later actions in the same result hold until this one
             (and its ``delay``) has applied. ``True`` (the default) keeps the
             list strictly sequential; ``False`` schedules this action and
-            lets the rest proceed immediately.
+            lets the rest proceed immediately. Concrete actions may require
+            ``True`` when their effect cannot run independently.
 
     """
 
@@ -99,8 +99,11 @@ class Action:
     def __post_init__(self) -> None:
         # Subclasses validate their own fields first and call this last, so a
         # rejected constructor call never lands in the debug tracker.
-        if isinstance(self.delay, bool) or not isinstance(self.delay, (int, float)) or self.delay < 0:
-            msg = f"actions.{type(self).__name__}: delay must be a non-negative number of seconds; got {self.delay!r}."
+        if not is_finite_json_number(self.delay) or self.delay < 0:
+            msg = (
+                f"actions.{type(self).__name__}: delay must be a finite, non-negative number of seconds;"
+                f" got {self.delay!r}."
+            )
             raise ValueError(msg)
         if not isinstance(self.wait, bool):
             msg = f"actions.{type(self).__name__}: wait must be True or False; got {self.wait!r}."
@@ -193,20 +196,33 @@ class Data(Action):
     """
     Resolve the client caller's promise with a JSON value.
 
-    The value becomes the resolution of the ``$sendEvent`` /
-    ``Citry.events.send`` promise on the client. At most one ``Data`` may
-    appear in one handler result (two would contradict: which value resolves
-    the promise?); returning a bare ``dict`` from a handler builds this
-    action implicitly.
+    The value becomes the resolution of the ``$sendEvent``,
+    ``$component`` ``sendEvent``, or ``Citry.events.send`` promise on the
+    client. Declarative ``@c-*`` bindings discard that promise, so they do
+    not expose the Data value; return ``Dispatch`` when browser code must
+    observe their result. At most one ``Data`` may appear in one handler
+    result (two would contradict: which value resolves the promise?);
+    returning a bare ``dict`` from a handler builds this action implicitly.
 
     Attributes:
         value: The JSON-serializable value the caller receives.
         delay: Seconds the client waits before applying the action.
-        wait: Whether later actions hold until this one has applied.
+        wait: Always ``True`` because applying this action resolves the
+            caller's promise.
+
+    Raises:
+        ValueError: If ``wait`` is ``False``, or another timing value is
+            invalid.
 
     """
 
     value: Any
+
+    def __post_init__(self) -> None:
+        if self.wait is False:
+            msg = "actions.Data: wait must be True because Data resolves the caller's promise; got False."
+            raise ValueError(msg)
+        super().__post_init__()
 
 
 @dataclass(frozen=True)

@@ -88,6 +88,14 @@ mod tests {
     }
 
     #[test]
+    fn test_expr_comment_text_cannot_hide_host_delimiter() {
+        assert_compile(
+            r#"{{ x # say "}}" then stop }}"#,
+            r#"[ExprNode(source, (0, 14,), """x # say \"""", ("x",)), """\" then stop }}""",]"#,
+        );
+    }
+
+    #[test]
     fn test_expr_arithmetic_multiple_vars() {
         assert_compile(
             "{{ a + b }}",
@@ -137,6 +145,12 @@ mod tests {
     #[test]
     fn test_html_void_element_self_closing() {
         assert_compile("<br/>", r#"["""<br/>""",]"#);
+    }
+
+    #[test]
+    fn test_html_void_element_preserves_authored_uppercase_spelling() {
+        assert_compile("<BR>", r#"["""<BR/>""",]"#);
+        assert_compile("<BR/>", r#"["""<BR/>""",]"#);
     }
 
     #[test]
@@ -398,6 +412,40 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_if_else_template_comment_and_surrounding_whitespace_group() {
+        assert_compile(
+            "<c-if cond=\"x\">a</c-if>\n{# note #}\n<c-else>b</c-else>",
+            r#"[IfNode(source, (((0, 23,), (ExprHtmlAttr(source, (6, 14,), """cond""", """x""", ("x",)),), ["""a""",], (),), ((35, 53,), (), ["""b""",], (),),), ("x",)),]"#,
+        );
+    }
+
+    #[test]
+    fn test_if_elif_else_multiple_template_comments_group() {
+        assert_compile(
+            "<c-if cond=\"a\">A</c-if>\n{# first #}\n<c-elif cond=\"b\">B</c-elif>\n  {# second #}\n<c-else>C</c-else>",
+            r#"[IfNode(source, (((0, 23,), (ExprHtmlAttr(source, (6, 14,), """cond""", """a""", ("a",)),), ["""A""",], (),), ((36, 63,), (ExprHtmlAttr(source, (44, 52,), """cond""", """b""", ("b",)),), ["""B""",], (),), ((79, 97,), (), ["""C""",], (),),), ("a", "b",)),]"#,
+        );
+    }
+
+    #[test]
+    fn test_if_else_shorthand_template_comment_and_whitespace_group() {
+        assert_compile(
+            "<div c-if=\"x\">a</div>\n{# note #}\n<div c-else>b</div>",
+            r#"[IfNode(source, (((0, 21,), (ExprHtmlAttr(source, (5, 13,), """cond""", """x""", ("x",)),), ["""<div>a</div>""",], (),), ((33, 52,), (), ["""<div>b</div>""",], (),),), ("x",)),]"#,
+        );
+    }
+
+    #[test]
+    fn test_if_trailing_comment_split_whitespace_is_kept() {
+        // With no following branch, both whitespace nodes around the
+        // non-rendering template comment remain ordinary output content.
+        assert_compile(
+            "<c-if cond=\"x\">a</c-if>\n{# trailing #}\n<div>z</div>",
+            "[IfNode(source, (((0, 23,), (ExprHtmlAttr(source, (6, 14,), \"\"\"cond\"\"\", \"\"\"x\"\"\", (\"x\",)),), [\"\"\"a\"\"\",], (),),), (\"x\",)), \"\"\"\n\n<div>z</div>\"\"\",]",
+        );
+    }
+
     // =============================================================================
     // CONTROL FLOW: FOR / EMPTY
     // =============================================================================
@@ -426,6 +474,14 @@ mod tests {
         assert_compile(
             "<c-for each=\"item in items\">{{ item }}</c-for>\n<c-empty>none</c-empty>",
             r#"[ForNode(source, (((0, 46,), (ExprHtmlAttr(source, (7, 27,), """each""", """item in items""", ("items",)),), [ExprNode(source, (28, 38,), """item """, ("item",)),], ("item",),), ((47, 70,), (), ["""none""",], (),),), ("items",)),]"#,
+        );
+    }
+
+    #[test]
+    fn test_for_empty_template_comment_and_surrounding_whitespace_group() {
+        assert_compile(
+            "<c-for each=\"item in items\">{{ item }}</c-for>\n{# empty #}\n<c-empty>none</c-empty>",
+            r#"[ForNode(source, (((0, 46,), (ExprHtmlAttr(source, (7, 27,), """each""", """item in items""", ("items",)),), [ExprNode(source, (28, 38,), """item """, ("item",)),], ("item",),), ((59, 82,), (), ["""none""",], (),),), ("items",)),]"#,
         );
     }
 
@@ -566,6 +622,52 @@ mod tests {
         assert_compile(
             "<c-raw><c-Foo/>{# nope #}</c-raw>",
             r#"["""<c-Foo/>{# nope #}""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_literal_events_attrs_remain_structured_for_extensions() {
+        // Static Events bindings and compiler-output-shaped names are the one
+        // static exception to attribute flattening. The Python extension sees
+        // these parser-proven attrs and can transform or reject them without
+        // scanning literal template text.
+        assert_compile(
+            r#"<button @c-click="save">x</button>"#,
+            r#"["""<button""", ElementAttrsNode(source, (0, 24,), (StaticHtmlAttr(source, (8, 23,), """@c-click""", """save""", ()),), ()), """>x</button>""",]"#,
+        );
+        assert_compile(
+            r#"<input :c-q data-cev-future="x">"#,
+            r#"["""<input""", ElementAttrsNode(source, (0, 32,), (StaticHtmlAttr(source, (7, 11,), """:c-q""", True, ()), StaticHtmlAttr(source, (12, 31,), """data-cev-future""", """x""", ()),), ()), """/>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_native_text_containers_keep_tag_shaped_text_literal() {
+        // Citry interpolation remains active, but HTML-looking text is never
+        // compiled as a child node or an attribute region.
+        assert_compile(
+            r#"<script>const x = `<button @c-click="ghost">`; {{ value }}</script>"#,
+            r#"["""<script>const x = `<button @c-click=\"ghost\">`; """, ExprNode(source, (47, 58,), """value """, ("value",)), """</script>""",]"#,
+        );
+        assert_compile(
+            r#"<style>.x::before { content: "<b>"; }</style>"#,
+            r#"["""<style>.x::before { content: \"<b>\"; }</style>""",]"#,
+        );
+        assert_compile(
+            "<textarea><b>{{ x }}</b></textarea>",
+            r#"["""<textarea><b>""", ExprNode(source, (13, 20,), """x """, ("x",)), """</b></textarea>""",]"#,
+        );
+        assert_compile(
+            "<title><i>literal</i></title>",
+            r#"["""<title><i>literal</i></title>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_template_comments_inside_native_text_containers_are_removed() {
+        assert_compile(
+            "<style>{# note #}.x { color: red; }</style>",
+            r#"["""<style>.x { color: red; }</style>""",]"#,
         );
     }
 

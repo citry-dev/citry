@@ -5,12 +5,14 @@ from __future__ import annotations
 import dataclasses
 import json
 import math
+import sys
 import types
 import typing
 from collections.abc import Callable as AbcCallable
 from collections.abc import Mapping as AbcMapping
 from collections.abc import Sequence as AbcSequence
 from dataclasses import MISSING, Field, is_dataclass
+from pathlib import Path
 from typing import Any, ForwardRef, Literal, NamedTuple, TypeVar, cast, get_args, get_origin
 
 from citry._class_introspection import _safe_class_import_path, _safe_class_text, _static_class_dict, _static_class_mro
@@ -54,6 +56,7 @@ class _RawField(NamedTuple):
     default_kind: Literal["missing", "value", "factory"]
     default_value: object
     description: str | None
+    declaring_class: type | None
 
 
 def _inspect_component_schemas(
@@ -150,7 +153,7 @@ def _read_schema_fields(schema_class: object) -> tuple[_RawField, ...] | None:
         classvar_marker = dataclasses._FIELD_CLASSVAR  # type: ignore[attr-defined]
         declared_fields = cast("dict[str, Field[Any]]", schema_class.__dataclass_fields__)
         return tuple(
-            _dataclass_field(field)
+            _dataclass_field(schema_class, field)
             for field in declared_fields.values()
             if field.init and field._field_type is not classvar_marker  # type: ignore[attr-defined]
         )
@@ -158,18 +161,18 @@ def _read_schema_fields(schema_class: object) -> tuple[_RawField, ...] | None:
     # Pydantic v2 is checked first because v2 also exposes a deprecated v1 alias.
     model_fields = getattr(schema_class, "model_fields", None)
     if isinstance(model_fields, dict):
-        return tuple(_pydantic_v2_field(name, info) for name, info in model_fields.items())
+        return tuple(_pydantic_v2_field(schema_class, name, info) for name, info in model_fields.items())
 
     v1_fields = getattr(schema_class, "__fields__", None)
     if isinstance(v1_fields, dict):
-        return tuple(_pydantic_v1_field(name, info) for name, info in v1_fields.items())
+        return tuple(_pydantic_v1_field(schema_class, name, info) for name, info in v1_fields.items())
 
     if issubclass(schema_class, tuple) and hasattr(schema_class, "_fields"):
         return _named_tuple_fields(schema_class)
     return None
 
 
-def _dataclass_field(field: Field[Any]) -> _RawField:
+def _dataclass_field(schema_class: type, field: Field[Any]) -> _RawField:
     if field.default is MISSING and field.default_factory is MISSING:
         default_kind: Literal["missing", "value", "factory"] = "missing"
         default_value = _UNAVAILABLE
@@ -188,10 +191,11 @@ def _dataclass_field(field: Field[Any]) -> _RawField:
         default_kind=default_kind,
         default_value=default_value,
         description=description,
+        declaring_class=_field_declaring_class(schema_class, field.name),
     )
 
 
-def _pydantic_v2_field(name: str, info: object) -> _RawField:
+def _pydantic_v2_field(schema_class: type, name: str, info: object) -> _RawField:
     required = bool(cast("Any", info).is_required())
     default_factory = getattr(info, "default_factory", None)
     if required:
@@ -212,10 +216,11 @@ def _pydantic_v2_field(name: str, info: object) -> _RawField:
         default_kind=default_kind,
         default_value=default_value,
         description=description,
+        declaring_class=_field_declaring_class(schema_class, name),
     )
 
 
-def _pydantic_v1_field(name: str, info: object) -> _RawField:
+def _pydantic_v1_field(schema_class: type, name: str, info: object) -> _RawField:
     required = bool(getattr(info, "required", False))
     default_factory = getattr(info, "default_factory", None)
     if required:
@@ -237,6 +242,7 @@ def _pydantic_v1_field(name: str, info: object) -> _RawField:
         default_kind=default_kind,
         default_value=default_value,
         description=description,
+        declaring_class=_field_declaring_class(schema_class, name),
     )
 
 
@@ -275,6 +281,7 @@ def _named_tuple_fields(schema_class: type) -> tuple[_RawField, ...]:
             default_kind="missing" if name not in defaults else "value",
             default_value=defaults.get(name, _UNAVAILABLE),
             description=None,
+            declaring_class=_field_declaring_class(schema_class, name),
         )
         for name in field_names
     )
@@ -296,6 +303,7 @@ def _field_info(field: _RawField, *, include_default_values: bool) -> FieldInfo:
             default_value = None
         else:
             default_value_state = "available"
+    source_module, source_qualname, source_file = _field_source(field.declaring_class)
     return FieldInfo(
         name=field.name,
         required=field.required,
@@ -305,7 +313,56 @@ def _field_info(field: _RawField, *, include_default_values: bool) -> FieldInfo:
         default_value_state=default_value_state,
         default_value=default_value,
         description=field.description,
+        source_module=source_module,
+        source_qualname=source_qualname,
+        source_file=source_file,
     )
+
+
+def _field_source(owner: type | None) -> tuple[str | None, str | None, Path | None]:
+    """Return provenance atomically, or no provenance when identity is unsafe."""
+    if owner is None:
+        return None, None, None
+    module = _safe_class_text(owner, "__module__")
+    qualname = _safe_class_text(owner, "__qualname__")
+    if module is None or qualname is None:
+        return None, None, None
+    return module, qualname, _loaded_python_file(owner)
+
+
+def _field_declaring_class(schema_class: type, name: str) -> type | None:
+    """Find the nearest authored class whose own declaration defines ``name``."""
+    for candidate in _static_class_mro(schema_class):
+        namespace = _static_class_dict(candidate)
+        if namespace.get("_citry_synthesized_declaration", False) is True:
+            continue
+        annotations = namespace.get("__annotations__")
+        if isinstance(annotations, dict) and name in annotations:
+            return candidate
+        own_fields = namespace.get("_fields")
+        if type(own_fields) is tuple and name in own_fields:
+            return candidate
+    return None
+
+
+def _loaded_python_file(cls: type) -> Path | None:
+    """Return an already-loaded authoring module path without importing it."""
+    module_name = _safe_class_text(cls, "__module__")
+    if module_name is None:
+        return None
+    module = sys.modules.get(module_name)
+    # Read the concrete module namespace so a module-level ``__getattr__``
+    # cannot execute user code during introspection.
+    module_file = module.__dict__.get("__file__") if type(module) is types.ModuleType else None
+    if (
+        type(module_file) is not str
+        or not module_file
+        or not _is_utf8_string(module_file)
+        or (module_file.startswith("<") and module_file.endswith(">"))
+    ):
+        return None
+    path = Path(module_file)
+    return path if path.is_absolute() else path.absolute()
 
 
 def _format_annotation(annotation: object) -> str | None:

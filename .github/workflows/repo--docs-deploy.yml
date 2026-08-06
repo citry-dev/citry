@@ -29,6 +29,9 @@ on:
       - "rust-toolchain.toml"
       - "pyproject.toml"
       - "uv.lock"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
       - ".github/workflows/repo--docs-deploy.yml"
   workflow_dispatch:
 
@@ -87,6 +90,21 @@ jobs:
       # is the build/guard dependency set.
       - name: Install the workspace with docs + social-card extras
         run: uv sync --locked --all-packages --extra docs --extra social-cards
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install Node tooling
+        run: pnpm install --frozen-lockfile
+
+      - name: Check the generated playground bundle
+        run: pnpm --dir docs_site/_internal/frontend run check
 
       - name: Install the chromium browser
         run: uv run --no-sync playwright install --with-deps chromium

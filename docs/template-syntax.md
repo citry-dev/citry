@@ -496,6 +496,40 @@ so a spread can add classes without wiping out the element's own (see
 <div class="default from-bind override" id="second"></div>
 ```
 
+## Template flags
+
+Template flags tell Citry about a node rather than producing an attribute with
+the authored name. Write them directly on the HTML element or component tag:
+
+```html
+<article #c-key="row_key">
+  <div #c-ignore>Browser-owned content</div>
+</article>
+
+<!-- Keep the complete logical component range, including multi-root output -->
+<c-BrowserOwnedChart #c-ignore />
+```
+
+`#c-key` takes a non-empty Python expression. When it evaluates to `None`, the
+node is unkeyed for that render, exactly as if the flag were absent. `False`,
+`0`, and the empty string remain key values. An unkeyed same-class component
+may still keep positional continuity; `None` opts out of key-based movement,
+not all matching. `#c-ignore` is always bare. On an
+HTML element it keeps that physical element subtree. On a component tag it
+keeps the whole comment-delimited ComponentRange, including its old DOM,
+State, props, bindings, fills, callbacks, and dependencies. A root element
+inside the component's own template still has ordinary element semantics; it
+does not implicitly become a range flag.
+
+A template flag cannot arrive through `c-bind`. When a caller should influence
+a component's element key, pass an ordinary input and write the flag in the
+component template:
+
+```html
+<!-- Inside Row, where row_key is a component input -->
+<article #c-key="row_key"></article>
+```
+
 ## Comments
 
 Citry supports three kinds of comment.

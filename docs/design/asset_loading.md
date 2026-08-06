@@ -1,13 +1,13 @@
 # Design: asset loading (template, JS, and CSS files)
 
-**Status (2026-06-12): design agreed and built.** This
+**Status (2026-08-05): design agreed and built.** This
 document specifies how a component's assets, the HTML template and the
 component-colocated JS and CSS, are declared on the Component class, resolved to
 files on disk, loaded, cached, and invalidated. It covers the three inline/file
 field pairs (`template`/`template_file`, `js`/`js_file`, `css`/`css_file`), the
 `CitryTemplate` struct, the path lookup chain, the secondary-asset
 `Dependencies` class (owned by a built-in extension), the loading hooks, and the
-hot-reload seam.
+hot-reload boundary.
 
 For the broader migration context see
 [`migration_djc.md`](migration_djc.md). For the render model that consumes
@@ -101,6 +101,10 @@ Decisions made with the maintainer:
    the extension system's own naming rule, so the loading half (this doc) and
    the later emission half live in the same extension and users never see a
    migration. Section 7 specifies the mechanism.
+6. **Inline primary assets remove common indentation.** Multiline Python
+   literals stay readable beside their class fields without adding that class
+   indentation to rendered HTML, JavaScript, or CSS. File-backed assets remain
+   exact.
 
 Naming cascade from decision 5: the nested class is `Dependencies`, the merged
 struct is `CitryDependencies`, the accessor is `get_dependencies()`, the core
@@ -210,6 +214,39 @@ register against the same file in the reverse index (section 8), so file-driven
 invalidation reaches both; only a direct `reset_template(Parent)` call does not
 clear children. Acceptable for the skeleton; revisit if it bites.
 
+### 3.4 Inline source normalization
+
+`template`, `js`, and `css` string declarations pass through Python-compatible
+common-indentation removal before their loading hooks run. The transform has
+the same behavior as `textwrap.dedent`:
+
+```python
+class Card(Component):
+    template = """
+      <article>
+        <p>{{ message }}</p>
+      </article>
+    """
+```
+
+The loaded template is `"\n<article>\n  <p>{{ message }}</p>\n</article>\n"`.
+Relative indentation remains intact. Leading and trailing blank lines remain
+intact. Blank lines do not determine the common margin. Tabs and spaces follow
+`textwrap.dedent` rather than being treated as interchangeable.
+
+Normalization applies only to the loaded value. `Card.template` remains the
+raw declaration, preserving class introspection and source tooling. Extension
+hooks receive normalized inline content. `template_file`, `js_file`, and
+`css_file` content is never dedented, because whitespace in a standalone asset
+is authored at file scope already and may be significant.
+
+The Python checker, formatter, and language server use the same normalized
+parser view while mapping diagnostics back to the surviving characters in the
+original literal. Removed indentation creates no parser characters; a cursor
+strictly inside it has no semantic template position, while its line boundary
+can map to the adjacent newline. Standalone Citry source passed directly to the
+parser is not normalized.
+
 ---
 
 ## 4. `CitryTemplate`: the loaded template struct
@@ -220,7 +257,7 @@ clear children. Acceptable for the skeleton; revisit if it bites.
 ```python
 @dataclass(slots=True)
 class CitryTemplate:
-    source: str           # the template string, after on_template_loaded hooks
+    source: str           # normalized when inline, then passed through loading hooks
     origin: str           # display string: the absolute file path, or "pkg.mod::ClassName" for inline
     filepath: Path | None # the resolved file, or None when inline
 
@@ -255,10 +292,11 @@ class CitryTemplate:
   - **Render time**: `set_template_position_error_message`'s header line
     (currently `In template of 'Page':`) gains the origin, e.g.
     `In template of 'Page' (/path/card.html):`.
-- `source` is post-hook: `on_template_loaded` fires inside the loader (for both
-  inline and file content, matching DJC), and the hooked content is what gets
-  cached and compiled. The firing moved out of `_get_compiled_template` into the
-  loader so there is exactly one place content enters the engine.
+- `source` is post-hook: inline content is normalized first;
+  `on_template_loaded` then fires inside the loader for both inline and file
+  content, matching DJC, and the hooked content is what gets cached and
+  compiled. The firing moved out of `_get_compiled_template` into the loader
+  so there is exactly one place content enters the engine.
 - The struct's role in #1240 template-only components is recorded with that
   feature in [`migration_djc.md`](migration_djc.md) (planned-features
   table).
@@ -324,11 +362,13 @@ All primary-asset loading funnels through `assets.py`, which fires the
 extension hooks:
 
 - **`on_template_loaded`** - fires once per class with the template string
-  (inline or file) before parse. Already existed; the firing site moves from
+  before parse. Inline content has already had common indentation removed;
+  file content remains exact. The firing site moves from
   `_get_compiled_template` into the template loader.
 - **`on_js_loaded`** / **`on_css_loaded`** - new, fire once per class with the
-  JS/CSS content (inline or file). Contexts carry `citry`, `component_class`,
-  `content`; threaded with `result="map"` like `on_template_loaded`. These were
+  JS/CSS content. Inline content is normalized first and file content remains
+  exact. Contexts carry `citry`, `component_class`, `content`; threaded with
+  `result="map"` like `on_template_loaded`. These were
   the "deferred pending CSS/JS subsystem" rows in
   [`extensions.md`](extensions.md) section 10; this subsystem lands them.
 
@@ -367,7 +407,7 @@ An entry may be:
 
 - a `str` or `Path` - a file path (globs allowed, section 7.4) or a URL,
 - a callable returning one of those - evaluated lazily at resolution time,
-- an object with `__html__` (e.g. `SafeString`) - a pre-rendered tag, passed
+- an object with `__html__` (e.g. `Markup`) - a pre-rendered tag, passed
   through untouched.
 
 Divergences from DJC, flagged per migration principle 5: `bytes` entries are

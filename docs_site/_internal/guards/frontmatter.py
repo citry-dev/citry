@@ -53,6 +53,9 @@ def _type_error(key: str, value: str, declared: type) -> str | None:
     if declared is bool and value.lower() not in _BOOL_TOKENS:
         expected = ", ".join(sorted(_BOOL_TOKENS))
         return f"{key}: {value!r} is not a boolean (expected one of: {expected})"
+    if key == "layout" and value not in frontmatter._LAYOUTS:
+        expected = ", ".join(sorted(frontmatter._LAYOUTS))
+        return f"{key}: {value!r} is not a known layout (expected one of: {expected})"
     if declared is float:
         try:
             float(value)

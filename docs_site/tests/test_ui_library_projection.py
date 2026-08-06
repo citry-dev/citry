@@ -1,0 +1,166 @@
+from dataclasses import replace
+from pathlib import PurePosixPath
+
+from docs_site._internal.guards.base import GuardContext
+from docs_site._internal.guards.ui_library_projection import check
+from docs_site._internal.project import default_docs_project, use_docs_project
+from docs_site._internal.ui_library_projection import (
+    UiLibraryCatalog,
+    UiLibraryProjection,
+    ui_library_projection_for_path,
+    ui_library_source_path,
+    ui_library_source_routes,
+)
+
+
+def _project_with(projection):
+    return replace(default_docs_project(), ui_library=UiLibraryCatalog((projection,)))
+
+
+def _context(tmp_path):
+    content = tmp_path / "docs_site" / "content"
+    examples = tmp_path / "docs_site" / "examples"
+    static = tmp_path / "docs_site" / "static"
+    content.mkdir(parents=True)
+    examples.mkdir(parents=True)
+    static.mkdir(parents=True)
+    return GuardContext(
+        content_dir=content,
+        examples_dir=examples,
+        nav_path=content / "_nav.yml",
+        static_dir=static,
+        repo_root=tmp_path,
+    )
+
+
+def _write_component_guide(tmp_path, *, body="# Widget\n\n## Use Widget\n\nExample.\n"):
+    source = tmp_path / "package/components/widget/api.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(body, encoding="utf-8")
+    source.with_suffix(".yml").write_text(
+        "schema_version: 1\n"
+        "family: widget\n"
+        "components: [CWidget]\n"
+        "inputs: []\n"
+        "slots: []\n"
+        "events: []\n"
+        "methods: []\n"
+        "css: []\n"
+        "attributes: []\n"
+        "selectors: []\n"
+        "interfaces: []\n",
+        encoding="utf-8",
+    )
+    return source
+
+
+def _widget_projection():
+    return UiLibraryProjection(
+        "widget",
+        "widget",
+        PurePosixPath("package/components/widget/api.md"),
+    )
+
+
+def test_catalog_keeps_source_and_public_route_ownership_separate(tmp_path):
+    projection = UiLibraryProjection(
+        "button",
+        "button",
+        PurePosixPath("package/components/button/api.md"),
+    )
+
+    source = ui_library_source_path(projection, repo_root=tmp_path)
+
+    assert source == tmp_path / "package/components/button/api.md"
+    assert projection.public_path == "/ui-library/components/button/"
+
+
+def test_projection_guard_rejects_an_obsolete_public_copy(tmp_path):
+    context = _context(tmp_path)
+    _write_component_guide(tmp_path)
+    target = context.content_dir / "ui-library/components/button.md"
+    target.parent.mkdir(parents=True)
+    target.write_text("stale", encoding="utf-8")
+
+    with use_docs_project(_project_with(_widget_projection())):
+        findings = list(check(context))
+
+    assert len(findings) == 1
+    assert findings[0].source == "ui-library/components/button.md"
+    assert "Obsolete" in findings[0].message
+
+
+def test_projection_guard_rejects_thin_or_examples_owned_component_docs(tmp_path):
+    context = _context(tmp_path)
+    _write_component_guide(
+        tmp_path,
+        body='# Widget\n\n## Use Widget\n\n<c-example name="widget" />\n',
+    )
+
+    with use_docs_project(_project_with(_widget_projection())):
+        [finding] = check(context)
+
+    assert "component-owned source" in finding.message
+
+
+def test_projection_guard_rejects_missing_structured_api_data(tmp_path):
+    context = _context(tmp_path)
+    source = tmp_path / "package/components/widget/api.md"
+    source.parent.mkdir(parents=True)
+    source.write_text("# Widget\n\n## Use Widget\n\nExample.\n", encoding="utf-8")
+
+    with use_docs_project(_project_with(_widget_projection())):
+        [finding] = check(context)
+
+    assert finding.source == "package/components/widget/api.yml"
+    assert "requires sibling api.yml" in finding.message
+
+
+def test_projection_guard_rejects_invalid_structured_api_data(tmp_path):
+    context = _context(tmp_path)
+    source = _write_component_guide(tmp_path)
+    source.with_suffix(".yml").write_text("family: widget\n", encoding="utf-8")
+
+    with use_docs_project(_project_with(_widget_projection())):
+        [finding] = check(context)
+
+    assert finding.source == "package/components/widget/api.yml"
+    assert "API data is invalid" in finding.message
+
+
+def test_projection_guard_accepts_a_manifest_defined_new_family(tmp_path):
+    context = _context(tmp_path)
+    _write_component_guide(tmp_path)
+
+    with use_docs_project(_project_with(_widget_projection())):
+        findings = list(check(context))
+
+    assert findings == []
+
+
+def test_projection_guard_rejects_a_manual_api_reference(tmp_path):
+    context = _context(tmp_path)
+    _write_component_guide(
+        tmp_path,
+        body="# Widget\n\n## Use Widget\n\nExample.\n\n## API reference\n",
+    )
+
+    with use_docs_project(_project_with(_widget_projection())):
+        [finding] = check(context)
+
+    assert "leave API reference generation to api.yml" in finding.message
+
+
+def test_catalog_resolves_source_routes_without_a_content_copy(tmp_path):
+    projection = UiLibraryProjection(
+        "button",
+        "button",
+        PurePosixPath("package/components/button/api.md"),
+    )
+    catalog = UiLibraryCatalog((projection,))
+
+    routes = ui_library_source_routes(catalog, repo_root=tmp_path)
+
+    assert routes == {(tmp_path / "package/components/button/api.md").resolve(): "/ui-library/components/button/"}
+    assert ui_library_projection_for_path(catalog, "ui-library/components/button") is projection
+    assert ui_library_projection_for_path(catalog, "/ui-library/components/missing/") is None

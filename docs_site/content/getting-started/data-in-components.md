@@ -15,48 +15,14 @@ If you have not built a component yet, start with
 
 Save this as `reading_list.py`:
 
-```citry
-from citry import Component
+<c-live-code
+  path="docs_site/live_snippets/reading_list.py"
+  title="Reading list with Python data"
+/>
 
-class ReadingList(Component):
-    class Kwargs:
-        books: list[str]
-        heading: str = "Reading list"
-        empty_message: str = "Your list is empty."
-        show_count: bool = True
-
-    class Slots:
-        pass
-
-    def template_data(self, kwargs: Kwargs, slots: Slots):
-        return {
-            "books": kwargs.books,
-            "heading": kwargs.heading,
-            "empty_message": kwargs.empty_message,
-            "show_count": kwargs.show_count,
-            "total": len(kwargs.books),
-        }
-
-    template = """
-      <section>
-        <h2>{{ heading }}</h2>
-        <p c-if="show_count and total > 0">
-          {{ total }} {{ "book" if total == 1 else "books" }}
-        </p>
-        <ul c-data-count="total">
-          <li c-for="book in books">{{ book }}</li>
-          <li c-empty>{{ empty_message }}</li>
-        </ul>
-      </section>
-    """
-
-if __name__ == "__main__":
-    reading_list = ReadingList(
-        heading="Books for the weekend",
-        books=["A Wizard of Earthsea", "Kindred", "Piranesi"],
-    )
-    print(reading_list)
-```
+The final `reading_list` line gives **Try live** the value to preview. Python
+ignores that bare expression when you run the file normally; the `__main__`
+block prints the same component in your terminal.
 
 Run it:
 
@@ -79,7 +45,7 @@ The result contains this list:
 Citry adds some attributes of its own, so the complete HTML will be a little
 longer.
 
-## Choose the options your component accepts
+## Component inputs
 
 `Kwargs` lists the named options people can give your component:
 
@@ -108,16 +74,20 @@ ReadingList(
 )
 ```
 
-## Read those options in the template
+## Template variables
 
 A `Kwargs` field is available to the template under the same name. That is why
-`{{ heading }}` prints the heading and `books` is ready for the loop.
+`{{ heading }}` inserts the heading and `books` is ready for the loop.
 
 Use [`template_data()`][citry.Component.template_data] when the template needs
 a new value that Python must work out. Here it adds `total`:
 
 ```python
-def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:
+def template_data(
+    self,
+    kwargs: Kwargs,
+    slots: Slots,
+) -> dict[str, object]:
     return {
         "books": kwargs.books,
         "heading": kwargs.heading,
@@ -133,7 +103,7 @@ The method returns every name this template uses.
 
     For a component that only needs its `Kwargs` fields, leave the `template_data()` out and Citry supplies those fields automatically. Like we did in [Your first component](/getting-started/your-first-component#create-the-card).
 
-## Show, repeat, and set an attribute
+## Template syntax
 
 The template uses four small tools:
 
@@ -156,7 +126,7 @@ The [Control flow](/syntax/control-flow/) and [Dynamic
 attributes](/syntax/dynamic-attributes/) pages cover the other forms once you
 need them.
 
-## Fix missing or misspelled options
+## Input validation
 
 If you leave out `books`, Citry tells you that the required option is missing
 when the component renders:
@@ -170,15 +140,15 @@ A misspelled option is also rejected:
 
 ```python
 print(ReadingList(books=[], heding="Typo"))
-# TypeError: ReadingList.Kwargs.__init__() got an unexpected keyword ... 'heding'
+# TypeError: ReadingList.Kwargs got unexpected keyword 'heding'
 ```
 
 The annotations help your editor and type checker, but they do not check the
 value's type while the program runs. Validate values from forms, APIs, or other
 untrusted sources before passing them to the component. [Typing and
-validation](/concepts/typing-and-validation/) explains the available choices.
+validation](/concepts/inputs-and-validation/) explains the available choices.
 
-## Build a page with it
+## Next steps
 
 You now have a component that turns Python data into useful HTML. Next,
 [build a complete page from components](/getting-started/build-page/)

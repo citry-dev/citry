@@ -22,7 +22,7 @@ from citry.ext.cache.artifact import (
     _freeze_object,
     _thaw_json,
 )
-from citry.ext.cache.errors import CacheArtifactError
+from citry.ext.cache.errors import CacheArtifactError, _CacheArtifactCompatibilityError
 from citry.ext.cache.limits import _MAX_ARTIFACT_BYTES, _MAX_ARTIFACT_DEPTH, _MAX_ARTIFACT_RECORDS
 
 
@@ -108,7 +108,7 @@ class TestArtifactCodec:
         [
             ("not json", "JSON"),
             (
-                '{"artifact_version":2,"citry_version":1,"created_by":"citry-python",'
+                '{"artifact_version":9,"citry_version":1,"created_by":"citry-python",'
                 '"root_frame":0,"frames":[],"ownership":{},"extensions":[]}',
                 "artifact_version",
             ),
@@ -156,6 +156,13 @@ class TestArtifactCodec:
         wire = json.loads(_encode_artifact(_artifact()))
         wire["surprise"] = True
         with pytest.raises(CacheArtifactError, match="unknown field"):
+            _decode_artifact(json.dumps(wire))
+
+    def test_unknown_version_is_an_explicit_compatibility_rejection(self):
+        wire = json.loads(_encode_artifact(_artifact()))
+        wire["artifact_version"] = 9
+
+        with pytest.raises(_CacheArtifactCompatibilityError, match="artifact_version"):
             _decode_artifact(json.dumps(wire))
 
     def test_bool_is_not_accepted_as_an_integer_reference(self):

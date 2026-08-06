@@ -56,6 +56,7 @@ template_element = {
     html_directive |
     html_processing_instruction |
     html_raw |
+    html_text_container |
     html_tag |
     template_expression |
     template_comment |
@@ -150,6 +151,92 @@ html_raw_content = @{
 html_raw_tag_name = @{
     "c-raw"
 }
+
+/////////////////////////////
+// HTML TEXT CONTAINERS
+/////////////////////////////
+
+// HTML's script/style raw-text elements and textarea/title escapable-raw-text
+// elements do not parse tag-looking body text as child elements. Citry still
+// recognizes its own {{ ... }} expressions and {# ... #} comments in these
+// bodies, matching the interpolation behavior it has historically supported.
+//
+// Keep one rule per tag so the closing name is paired with the opening name;
+// a generic alternation could incorrectly let <script> close with </style>.
+html_text_container = {
+    html_script |
+    html_style |
+    html_textarea |
+    html_title
+}
+
+html_script = {
+    html_script_start_tag ~ html_script_content ~ html_script_end_tag
+}
+html_script_start_tag = {
+    "<" ~ html_script_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
+}
+html_script_end_tag = {
+    "</" ~ html_script_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
+}
+html_script_content = {
+    (template_expression | template_comment | html_script_text)*
+}
+html_script_text = @{
+    (!(html_script_end_tag | "{{" | "{#") ~ ANY)+
+}
+html_script_tag_name = @{ ^"script" }
+
+html_style = {
+    html_style_start_tag ~ html_style_content ~ html_style_end_tag
+}
+html_style_start_tag = {
+    "<" ~ html_style_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
+}
+html_style_end_tag = {
+    "</" ~ html_style_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
+}
+html_style_content = {
+    (template_expression | template_comment | html_style_text)*
+}
+html_style_text = @{
+    (!(html_style_end_tag | "{{" | "{#") ~ ANY)+
+}
+html_style_tag_name = @{ ^"style" }
+
+html_textarea = {
+    html_textarea_start_tag ~ html_textarea_content ~ html_textarea_end_tag
+}
+html_textarea_start_tag = {
+    "<" ~ html_textarea_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
+}
+html_textarea_end_tag = {
+    "</" ~ html_textarea_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
+}
+html_textarea_content = {
+    (template_expression | template_comment | html_textarea_text)*
+}
+html_textarea_text = @{
+    (!(html_textarea_end_tag | "{{" | "{#") ~ ANY)+
+}
+html_textarea_tag_name = @{ ^"textarea" }
+
+html_title = {
+    html_title_start_tag ~ html_title_content ~ html_title_end_tag
+}
+html_title_start_tag = {
+    "<" ~ html_title_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
+}
+html_title_end_tag = {
+    "</" ~ html_title_tag_name ~ (spacing_with_whitespace ~ html_attribute)* ~ spacing* ~ ">"
+}
+html_title_content = {
+    (template_expression | template_comment | html_title_text)*
+}
+html_title_text = @{
+    (!(html_title_end_tag | "{{" | "{#") ~ ANY)+
+}
+html_title_tag_name = @{ ^"title" }
 
 /////////////////////////////
 // HTML TAGS
@@ -347,15 +434,17 @@ text = @{
 
 // Python expressions
 //
-// When considering the Python expression, we recognize string literals and nested curly braces.
+// When considering the Python expression, we recognize comments, string literals, and nested curly braces.
 // We do this so that we can identify when the expression REALLY ends.
 //
 // Without this, we wouldn't be able to tell if `}}` is the end of expression
 // or just an end of 2 dicts.
 //
-// And naturally, we want to ignore `}}` inside string literals.
+// And naturally, we want to ignore `}}` inside string literals, while a
+// top-level `}}` still ends a line comment and the surrounding interpolation.
 python_expr = ${
     (
+        python_comment |
         python_str_triple_double |
         python_str_triple_single |
         python_str_double |
@@ -364,6 +453,11 @@ python_expr = ${
         python_other_char
     )*
 }
+
+// Quotes and braces have no structural meaning after `#`. Stop before a
+// newline so expression parsing can resume there, or before the host `}}`
+// delimiter so the comment cannot swallow the interpolation boundary.
+python_comment = @{ "#" ~ (!("\r" | "\n" | "}}") ~ ANY)* }
 
 // When we encounter a string literal, ignore everything inside it.
 python_str_triple_double = @{ "\"\"\"" ~ (!"\"\"\"" ~ ANY)* ~ "\"\"\"" }

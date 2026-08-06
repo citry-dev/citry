@@ -7,7 +7,11 @@ import re
 import pytest
 
 from citry import Citry, Component
-from citry.ext.dependencies.scripts import gen_cache_key
+from citry.ext.dependencies.scripts import (
+    gen_cache_key,
+    transform_component,
+    uses_component,
+)
 from citry.util.css import is_css_func, serialize_css_var_value, validate_css_var_name
 
 COMPONENT_JS = "$component(({ els, data }) => { els[0].textContent = data.rows; });"
@@ -166,7 +170,7 @@ class TestJsVars:
     def test_non_json_data_value_raises_naming_its_type(self, asset_kind):
         c = Citry()
 
-        def data_method(_self, _kwargs, _slots):
+        def data_method(self, kwargs, slots):
             return {"bad": object()}
 
         attrs = {
@@ -295,6 +299,108 @@ class TestComponentTransform:
         script = get_component_script("js", Widget)
         assert "$component" not in script.content
         assert f'Citry.manager.registerComponent("{Widget.class_id}", ' in script.content
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "const value = '$component(() => {})';",
+            'const value = "$component(() => {})";',
+            "// $component(() => {})\nconst value = 1;",
+            "/* $component(() => {}) */ const value = 1;",
+            "const value = `$component(() => {})`;",
+            "const value = /[$]component[(]/;",
+            "if (ready) /[$]component[(]/.test(value);",
+            "object.$component(() => {});",
+            "const not$component = () => {}; not$component();",
+            "function $component() {}",
+            "function $component()\n{}",
+            "function* $component() {}",
+            "const object = { $component() {} };",
+            "const object = { get $component() {} };",
+            "const object = { async $component() {} };",
+            "class Widget { $component() {} }",
+            "class Widget { static $component() {} }",
+            "class Widget { first() {} $component() {} }",
+            "class Widget { value = 1\n$component() {} }",
+            "class Widget { #$component() {} }",
+            "class Outer { Inner = class { $component() {} } }",
+            "class Outer { Inner = class Nested { $component() {} } }",
+            "class Outer { Inner = new class { $component() {} } }",
+            "class Outer { Kind = typeof class { $component() {} } }",
+        ],
+    )
+    def test_non_code_and_other_identifiers_are_not_transformed(self, source):
+        assert transform_component(source, "example") == source
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "$component(() => {});",
+            "$component \n (() => {});",
+            "$component/* why */(() => {});",
+            "const value = `${$component(() => {})}`;",
+            "const value = total / $component(() => {});",
+            "$component(handler)\n{\n  cleanup();\n}",
+            "const result = $component(handler)\n{\n  cleanup();\n}",
+            "const object = { class() {\n  $component(handler)\n  { cleanup(); }\n} };",
+            "class Widget { class() {\n  $component(handler)\n  { cleanup(); }\n} }",
+            "class Holder {\n  class\n  run() {\n    $component(handler)\n    { cleanup(); }\n  }\n}",
+        ],
+    )
+    def test_actual_calls_are_transformed(self, source):
+        result = transform_component(source, "example")
+
+        assert "$component" not in result
+        assert 'Citry.manager.registerComponent("example", ' in result
+
+    def test_call_followed_by_block_activates_component_runtime(self):
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            js = "$component(handler)\n{\n  cleanup();\n}"
+
+        assert uses_component(Widget) is True
+
+    def test_call_inside_method_named_class_activates_runtime(self):
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            js = """
+                const object = { class() {
+                  $component(handler)
+                  { cleanup(); }
+                } };
+            """
+
+        assert uses_component(Widget) is True
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            "const value = '$component(() => {})';",
+            "// $component(() => {})",
+            "const value = `$component(() => {})`;",
+            "const value = /[$]component[(]/;",
+            "function $component() {}",
+            "const object = { $component() {} };",
+            "class Widget { $component() {} }",
+            "class Widget { value = 1\n$component() {} }",
+            "class Widget { #$component() {} }",
+        ],
+    )
+    def test_non_code_occurrences_do_not_activate_component_runtime(self, source):
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = "<span>w</span>"
+            js = source
+
+        assert uses_component(Widget) is False
 
 
 class TestCssVars:

@@ -103,12 +103,87 @@ def _render_site_nav(current_path: str) -> str:
     ).html
 
 
+def test_playground_layout_keeps_header_and_owns_the_viewport() -> None:
+    tree = _site_nav()
+    tree.areas.insert(
+        3,
+        NavArea(
+            label="Try it",
+            scope=SCOPE_SITE,
+            items=[NavItem(title="Playground", path="/playground/", scope=SCOPE_SITE)],
+        ),
+    )
+    source = """\
+---
+title: Try Citry
+description: Run Citry in the browser.
+layout: playground
+---
+
+Playground help text.
+"""
+
+    rendered = render_page(source, nav_tree=tree, current_path="playground/").html
+    document = lxml_html.document_fromstring(rendered)
+
+    assert len(document.xpath('//main[contains(@class, "citry-playground")]')) == 1
+    assert len(document.xpath("//h1")) == 1
+    assert document.xpath('//h1[text()="Try Citry"]')
+    assert not document.xpath('//div[contains(@class, "djc-layout")]')
+    assert not document.xpath('//nav[contains(@class, "djc-breadcrumbs")]')
+    assert not document.xpath('//aside[@id="djc-toc"]')
+    assert not document.xpath('//nav[contains(@class, "djc-page-nav")]')
+    assert not document.xpath('//footer[contains(@class, "djc-footer")]')
+    assert not document.xpath('//button[contains(@class, "djc-back-to-top")]')
+    assert not document.xpath('//div[contains(@class, "djc-version-picker")]')
+    assert document.xpath('//link[@href="/static/playground/playground.css"]')
+    assert document.xpath('//script[@src="/static/playground/playground.js"]')
+    assert document.xpath('//iframe[@sandbox="allow-forms allow-scripts" and @src="/static/playground/preview.html"]')
+    for button_id, label in (
+        ("citry-playground-run", "Run Python"),
+        ("citry-playground-stop", "Stop Python"),
+        ("citry-playground-copy-code", "Copy code"),
+        ("citry-playground-download-code", "Download code"),
+        ("citry-playground-reset", "Reset code"),
+        ("citry-playground-help", "Playground help"),
+        ("citry-playground-copy-python-error", "Copy Python diagnostic"),
+        ("citry-playground-dismiss-python", "Close Python diagnostic"),
+        ("citry-playground-copy-preview-error", "Copy Result diagnostic"),
+        ("citry-playground-dismiss-preview", "Close Result diagnostic"),
+    ):
+        buttons = document.xpath(f'//button[@id="{button_id}" and @aria-label="{label}"]')
+        assert len(buttons) == 1
+        assert buttons[0].xpath("./svg")
+        assert not buttons[0].text_content().strip()
+    stop = document.xpath('//button[@id="citry-playground-stop"]')[0]
+    assert "disabled" in stop.attrib
+    assert "hidden" not in stop.attrib
+    help_dialog = document.xpath('//dialog[@id="citry-playground-help-dialog"]')[0]
+    assert help_dialog.attrib["aria-labelledby"] == "citry-playground-help-title"
+    help_close = document.xpath('//button[@id="citry-playground-close-help"]')[0]
+    assert help_close.attrib["aria-label"] == "Close playground help"
+    assert help_close.xpath("./svg")
+    assert not help_close.text_content().strip()
+    help_footer_close = document.xpath('//button[@id="citry-playground-close-help-footer"]')[0]
+    assert help_footer_close.text_content().strip() == "Close"
+    assert document.xpath(
+        '//dialog[@id="citry-playground-help-dialog"]'
+        '//article[contains(concat(" ", normalize-space(@class), " "), " prose ")]'
+    )
+    assert (
+        "from citry import Component" in document.xpath('//textarea[@id="citry-playground-editor-fallback"]')[0].text
+    )
+    active = document.xpath('//nav[@aria-label="Primary navigation"]/a[@aria-current="true"]')
+    assert [link.text_content().strip() for link in active] == ["Try it"]
+    assert 'content="website"' in rendered
+
+
 def test_sidebar_shows_sections_and_active_item() -> None:
     html = _render_components_page()
     document = lxml_html.document_fromstring(html)
     # The active area and its groups are the only sidebar hierarchy.
-    assert '<div class="djc-sidebar__label">Docs</div>' in html
-    assert '<div class="djc-sidebar__label">Concepts</div>' in html
+    labels = document.xpath('//div[contains(@class, "djc-sidebar__label")]')
+    assert [label.text_content().strip() for label in labels] == ["Docs", "Concepts"]
     assert not document.xpath('//button[contains(@class, "djc-sidebar__group-label")]')
     # The current page's item is marked active; its sibling is not.
     components = document.xpath('//a[@href="/concepts/components/"]')[0]
@@ -124,6 +199,55 @@ def test_sidebar_shows_sections_and_active_item() -> None:
     assert "djc-sidebar__link--top" not in home.classes
     section = document.xpath('//div[contains(@class, "djc-sidebar__section")]')[0]
     assert section.get("data-area") == "Docs"
+
+
+def test_navigation_renders_review_hint_and_area_badge_without_changing_titles() -> None:
+    tree = NavTree(
+        areas=[
+            NavArea(
+                label="Citry UI",
+                badge="alpha",
+                items=[
+                    NavItem(
+                        title="Overview",
+                        path="/ui-library/",
+                        needs_review=True,
+                    ),
+                ],
+            ),
+        ],
+    )
+    rendered = render_page(
+        "# Citry UI\n",
+        nav_tree=tree,
+        current_path="ui-library/",
+    ).html
+    document = lxml_html.document_fromstring(rendered)
+
+    header = document.xpath('//nav[@aria-label="Primary navigation"]/a')[0]
+    assert header.xpath('.//span[contains(@class, "djc-nav-badge")]/text()')[0].strip() == "alpha"
+
+    sidebar = document.xpath(
+        '//a[@href="/ui-library/" and contains(@class, "djc-sidebar__link")]',
+    )[0]
+    assert sidebar.get("aria-label") == (
+        "Overview. This page has not completed final human review. May contain minor inaccuracies."
+    )
+    assert sidebar.xpath('.//span[contains(@class, "djc-sidebar__review-icon")]/text()') == ["🚧"]
+    assert (
+        "has not completed final human review"
+        in sidebar.xpath(
+            './/span[contains(@class, "djc-sidebar__review-hint")]',
+        )[0].text_content()
+    )
+
+    current = document.xpath('//span[contains(@class, "djc-breadcrumbs__current")]')[0]
+    assert current.text_content().strip() == "Citry UI"
+    assert tree.find_title("/ui-library/") == "Overview"
+
+    css = Path("docs_site/static/css/site.css").read_text(encoding="utf-8")
+    assert ".djc-sidebar__link:hover .djc-sidebar__review-hint" in css
+    assert ".djc-sidebar__link:focus-visible .djc-sidebar__review-hint" in css
 
 
 def test_collapsible_group_uses_toggle_markup_and_starts_closed() -> None:
@@ -385,6 +509,24 @@ def test_right_rail_toc_lists_h2_sections() -> None:
     basics = document.xpath('//a[@href="#basics"]')[0]
     assert "djc-toc__link" in basics.classes
     assert basics.text_content().strip() == "Basics"
+
+
+def test_toc_preserves_and_marks_every_heading_depth() -> None:
+    rendered = render_page("# Page\n\n## Two\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six\n").html
+    document = lxml_html.document_fromstring(rendered)
+
+    for container in ('//aside[@id="djc-toc"]', '//details[contains(@class, "djc-toc-mobile")]'):
+        for heading_id, level in (("two", 2), ("three", 3), ("four", 4), ("five", 5), ("six", 6)):
+            links = document.xpath(f'{container}//a[@href="#{heading_id}"]')
+            assert len(links) == 1
+            level_owner = links[0].xpath(
+                f'ancestor::*[contains(concat(" ", normalize-space(@class), " "), " djc-toc__level-{level} ")][1]'
+            )[0]
+            assert f"djc-toc__level-{level}" in level_owner.classes
+        three_item = document.xpath(f'{container}//a[@href="#three"]/ancestor::li[1]')[0]
+        four_item = document.xpath(f'{container}//a[@href="#four"]/ancestor::li[1]')[0]
+        assert three_item.xpath('.//a[@href="#four"]')
+        assert four_item.xpath('.//a[@href="#five"]')
 
 
 def test_chrome_header_and_footer() -> None:

@@ -22,7 +22,7 @@ const meta = {
 },
   parameters: {
   "citry": {
-    "catalogSchemaVersion": 2,
+    "catalogSchemaVersion": 1,
     "clientInteractive": true,
     "generatorVersion": 1,
     "scenarioId": "readiness/reactive-state",

@@ -7,7 +7,7 @@ description: Where to ask questions about Citry, how to search before posting, a
 
 Have a question about Citry, or hit something that looks like a bug? Everything
 happens on the GitHub repository at
-[citry-dev/citry](https://github.com/citry-dev/citry){: target="_blank" rel="noopener"}. Here is where to go.
+[{{ repo_full_name }}]({{ repo_url }}){: target="_blank" rel="noopener"}. Here is where to go.
 
 ## Search before you post
 
@@ -15,13 +15,13 @@ Chances are someone has already run into the same thing. Before you open
 anything, search:
 
 - The
-[existing isssues and discussions](https://github.com/citry-dev/citry/issues?q=){: target="_blank" rel="noopener"} for your question or the exact error message.
+[existing isssues and discussions]({{ repo_issues_url }}?q=){: target="_blank" rel="noopener"} for your question or the exact error message.
 - Use the [documentation search feature](/community/help/?q=help)
  feature.
 
 ## Ask a question
 
-If you cannot find an answer, [open a new issue](https://github.com/citry-dev/citry/issues/new){: target="_blank" rel="noopener"}. Usage questions are welcome there, not just
+If you cannot find an answer, [open a new issue]({{ repo_issues_url }}/new){: target="_blank" rel="noopener"}. Usage questions are welcome there, not just
 bug reports.
 
 To get a useful answer quickly, include:
@@ -33,7 +33,7 @@ To get a useful answer quickly, include:
 ## Report a bug
 
 A bug report is an issue with enough detail for someone else to reproduce it.
-[Open a bug report](https://github.com/citry-dev/citry/issues/new){: target="_blank" rel="noopener"} and include:
+[Open a bug report]({{ repo_issues_url }}/new){: target="_blank" rel="noopener"} and include:
 
 - The Citry version. Run `citry --version` to get it.
 - Your Python version and operating system.
@@ -47,4 +47,4 @@ up a fix.
 
 Please **DO NOT** open a public issue for a security problem. Report it privately
 through GitHub's
-[private vulnerability reporting](https://github.com/citry-dev/citry/security/advisories/new){: target="_blank" rel="noopener"}.
+[private vulnerability reporting]({{ repo_url }}/security/advisories/new){: target="_blank" rel="noopener"}.

@@ -1,0 +1,178 @@
+{
+	"name": "citry",
+	"displayName": "Citry",
+	"description": "Highlighting, diagnostics, editor intelligence, and formatting for Citry templates",
+	"version": "0.1.0",
+	"publisher": "citry-dev",
+	"license": "MIT",
+	"engines": {
+		"vscode": "^1.93.0"
+	},
+	"main": "./out/extension.js",
+	"extensionKind": [
+		"workspace"
+	],
+	"activationEvents": [
+		"onLanguage:python",
+		"onLanguage:citry-html",
+		"onLanguage:html",
+		"onCommand:citry.restartServer",
+		"onCommand:citry.showStatus",
+		"onCommand:citry.formatAtCursor",
+		"onCommand:citry.formatDocument"
+	],
+	"categories": [
+		"Programming Languages"
+	],
+	"keywords": [
+		"citry",
+		"python",
+		"html",
+		"templates",
+		"components"
+	],
+	"icon": "images/icon.png",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/citry-dev/citry.git"
+	},
+	"homepage": "https://citry.dev",
+	"bugs": {
+		"url": "https://github.com/citry-dev/citry/issues"
+	},
+	"scripts": {
+		"compile": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node20 --external:vscode --sourcemap --outfile=out/extension.js",
+		"lint": "biome check .",
+		"test": "esbuild src/completionRetrigger.ts --bundle --platform=node --format=esm --target=node20 --outfile=out/tests/completionRetrigger.mjs && esbuild src/embedded.ts --bundle --platform=node --format=esm --target=node20 --outfile=out/tests/embedded.mjs && esbuild src/embeddedFormatting.ts --bundle --platform=node --format=esm --target=node20 --outfile=out/tests/embeddedFormatting.mjs && esbuild src/formatting.ts --bundle --platform=node --format=esm --target=node20 --outfile=out/tests/formatting.mjs && esbuild src/nativeHtmlAttributes.ts --bundle --platform=node --format=esm --target=node20 --outfile=out/tests/nativeHtmlAttributes.mjs && node --test",
+		"check": "pnpm run compile && pnpm run lint && pnpm run test && vsce ls --tree --no-dependencies",
+		"prepackage": "pnpm run compile && node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\"",
+		"package": "vsce package --no-dependencies --out dist/citry.vsix"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.6",
+		"@types/node": "22.20.1",
+		"@types/vscode": "1.93.0",
+		"@vscode/vsce": "3.9.2",
+		"esbuild": "0.28.1",
+		"typescript": "5.9.3",
+		"vscode-oniguruma": "2.0.1",
+		"vscode-textmate": "9.3.2"
+	},
+	"dependencies": {
+		"@vscode/python-extension": "1.0.6",
+		"vscode-languageclient": "10.1.0"
+	},
+	"contributes": {
+		"languages": [
+			{
+				"id": "citry-html",
+				"aliases": [
+					"Citry Template",
+					"citry-html"
+				],
+				"configuration": "./language-configuration.json"
+			}
+		],
+		"grammars": [
+			{
+				"language": "citry-html",
+				"scopeName": "text.html.citry",
+				"path": "./syntaxes/citry-html.tmLanguage.json",
+				"embeddedLanguages": {
+					"meta.embedded.inline.citry-html.citry": "citry-html",
+					"meta.embedded.inline.python.citry": "python",
+					"meta.embedded.inline.javascript.citry": "javascript"
+				},
+				"tokenTypes": {
+					"meta.embedded.inline.citry-html.citry": "other",
+					"meta.embedded.inline.python.citry": "other",
+					"meta.embedded.inline.javascript.citry": "other"
+				}
+			},
+			{
+				"scopeName": "citry.html.injection",
+				"path": "./syntaxes/citry-html.injection.tmLanguage.json"
+			},
+			{
+				"scopeName": "citry.html.attributes.injection",
+				"path": "./syntaxes/citry-html-attributes.injection.tmLanguage.json",
+				"injectTo": [
+					"source.python"
+				],
+				"embeddedLanguages": {
+					"meta.embedded.inline.citry-html.citry": "citry-html",
+					"meta.embedded.inline.python.citry": "python",
+					"meta.embedded.inline.javascript.citry": "javascript"
+				},
+				"tokenTypes": {
+					"meta.embedded.inline.citry-html.citry": "other",
+					"meta.embedded.inline.python.citry": "other",
+					"meta.embedded.inline.javascript.citry": "other"
+				}
+			},
+			{
+				"scopeName": "citry.python.injection",
+				"path": "./syntaxes/citry-python.injection.tmLanguage.json",
+				"injectTo": [
+					"source.python"
+				],
+				"embeddedLanguages": {
+					"meta.embedded.block.citry-html": "citry-html",
+					"meta.embedded.block.javascript": "javascript",
+					"meta.embedded.block.css": "css"
+				},
+				"tokenTypes": {
+					"meta.embedded.block.citry-html": "other",
+					"meta.embedded.block.javascript": "other",
+					"meta.embedded.block.css": "other"
+				}
+			}
+		],
+		"commands": [
+			{
+				"command": "citry.restartServer",
+				"title": "Citry: Restart Language Server"
+			},
+			{
+				"command": "citry.showStatus",
+				"title": "Citry: Show Language Server Status"
+			},
+			{
+				"command": "citry.formatDocument",
+				"title": "Citry: Format Document"
+			},
+			{
+				"command": "citry.formatAtCursor",
+				"title": "Citry: Format at Cursor"
+			}
+		],
+		"configuration": {
+			"title": "Citry",
+			"properties": {
+				"citry.app": {
+					"type": "string",
+					"default": "",
+					"scope": "resource",
+					"description": "Citry app as module:attribute. Empty uses syntax-only analysis."
+				},
+				"citry.python": {
+					"type": "string",
+					"default": "",
+					"scope": "resource",
+					"description": "Explicit Python executable for citry-lsp. Empty uses the Python extension's active environment."
+				},
+				"citry.trace.server": {
+					"type": "string",
+					"enum": [
+						"off",
+						"messages",
+						"verbose"
+					],
+					"default": "off",
+					"scope": "window",
+					"description": "Trace communication with the Citry language server."
+				}
+			}
+		}
+	}
+}

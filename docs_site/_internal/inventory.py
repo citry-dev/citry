@@ -28,10 +28,7 @@ import zlib
 from functools import lru_cache
 from pathlib import Path
 
-# Pinned to one version so generated links stay stable regardless of the
-# reader's own Python; bump deliberately when we move the docs to a new release.
-_PYTHON_DOCS = "https://docs.python.org/3.13/"
-_INVENTORIES = ((_PYTHON_DOCS + "objects.inv", _PYTHON_DOCS),)
+from docs_site._internal.project import current_docs_project
 
 _INV_LINE = re.compile(r"^(?P<name>.+?)\s+\S+:\S+\s+-?\d+\s+(?P<uri>\S+)\s+.*$")
 
@@ -84,11 +81,20 @@ def _load_one(url: str, base_url: str) -> dict[str, str]:
     return parsed
 
 
-@lru_cache(maxsize=1)
 def external_inventory() -> dict[str, str]:
     """Merged ``name -> URL`` map for the external Python-stdlib documentation."""
+    base_url = current_docs_project().settings.inventory.python_docs_url
+    return _external_inventory(base_url)
+
+
+@lru_cache(maxsize=4)
+def _external_inventory(base_url: str) -> dict[str, str]:
     merged: dict[str, str] = {}
-    for url, base_url in _INVENTORIES:
-        for name, target in _load_one(url, base_url).items():
-            merged.setdefault(name, target)
+    for name, target in _load_one(base_url + "objects.inv", base_url).items():
+        merged.setdefault(name, target)
     return merged
+
+
+# Preserve the cache-management hook exposed by the formerly decorated public
+# function. Tests and long-running tooling use it after changing configuration.
+external_inventory.cache_clear = _external_inventory.cache_clear  # type: ignore[attr-defined]

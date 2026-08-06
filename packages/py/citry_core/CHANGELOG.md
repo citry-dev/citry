@@ -1,5 +1,52 @@
 # Release notes
 
+## Unreleased
+
+### Changed
+
+- Plain-element `#c-key` now compiles to an `ElementKeyNode` wrapping the key
+  expression. This lets a host runtime omit the complete `data-citry-key`
+  attribute when the value is `None`; host runtimes that execute generated
+  source must provide this node class.
+
+### Added
+
+- Added `citry_core.template_formatter.format_template()` and the structured
+  `TemplateFormatError` for parser-backed structural formatting of authored
+  Citry template text without application discovery or global state. The
+  structural formatter preserves sensitive, verbatim, and suppressed bytes while
+  formatting proven block structure and nested template attributes.
+- Add built-in Python expression formatting backed by the vendored Ruff
+  0.14.10 pin. Ordinary expressions and `c-for` clauses are accepted only
+  after AST and anchored-comment equivalence checks; direct `c-fill data`
+  patterns use Citry's own formatter. The new
+  `python_expression_provider()` function reports the authoritative provider
+  identity.
+- Add the typed two-pass embedded-formatting API under
+  `citry_core.template_formatter`. `prepare_embedded_format()` exposes
+  immutable JavaScript/CSS requests and capability notices, while
+  `finish_embedded_format()` validates source-bound provider results and
+  composes them atomically. Invalid, stale, missing, duplicate, or unsafe
+  provider output raises `TemplateFormatError` with the stable
+  `citry.format.provider-invalid` code.
+- Template parse failures expose a stable diagnostic code and root-template
+  UTF-8 byte range through `parse_diagnostic()`. They retain their existing
+  `SyntaxError` or `ValueError` class and rendered message. Parsed
+  `HtmlAttr.kind` values are also readable and comparable from Python.
+
+### Fixed
+
+- Recognize omitted, bare, empty, module, and standard JavaScript MIME
+  `script` types when preparing embedded formatter requests, while retaining
+  data-block and parameterized-type exclusions. Embedded result statuses now
+  reject contradictory output fields.
+- Treat quotes and braces inside Python `#` comments as comment text while
+  finding a `{{ ... }}` interpolation boundary, and keep the host `}}`
+  delimiter outside the compiled expression.
+- Return the parser's validation error for unsupported Python expression kinds
+  such as `await` instead of allowing the safe-expression transformer to
+  panic.
+
 ## v1.4.0
 
 _27 Jul 2026_

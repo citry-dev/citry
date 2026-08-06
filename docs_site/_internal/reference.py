@@ -25,16 +25,13 @@ from markupsafe import Markup
 from citry import citry as _default_citry
 from citry.component_registry import NotRegistered
 from docs_site._internal.annotation import render_annotation
-from docs_site._internal.config import config
 from docs_site._internal.crossrefs import make_type_resolver, resolve_crossrefs
 from docs_site._internal.git_metadata import source_url_for
+from docs_site._internal.project import current_docs_project, materialize_markdown_configs
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-# A small, self-contained markdown set for docstring prose (no snippet includes
-# or repo-relative config, so it stays independent of the page pipeline).
-_MD_EXTENSIONS = ["admonition", "attr_list", "def_list", "tables", "fenced_code"]
 _ANCHOR_RE = re.compile(r"[^a-z0-9]+")
 
 # Docstring sections that are rendered as their own structured fields, so the
@@ -45,7 +42,18 @@ _FIELD_SECTIONS = frozenset({"parameters", "returns", "raises", "attributes"})
 @functools.cache
 def _package() -> Any:
     """The griffe model of the citry package (loaded once)."""
-    return griffe.load("citry", docstring_parser="google")
+    modules = griffe.ModulesCollection()
+    # Citry re-exports a first-party citry_core exception and MarkupSafe's
+    # class. Loading only those packages resolves the intentional imports
+    # without walking every third-party alias reachable from Citry.
+    griffe.load("citry_core", modules_collection=modules, docstring_parser="google")
+    griffe.load("markupsafe", modules_collection=modules, docstring_parser="google")
+    return griffe.load(
+        "citry",
+        modules_collection=modules,
+        docstring_parser="google",
+        resolve_aliases=True,
+    )
 
 
 def resolve_symbol(dotted_path: str) -> Any | None:
@@ -92,7 +100,6 @@ def extract_symbol(dotted_path: str) -> SimpleNamespace | None:
     return _extract(obj, dotted_path) if obj is not None else None
 
 
-@functools.lru_cache(maxsize=1)
 def reference_anchor_map() -> dict[str, str]:
     """
     The unique HTML anchor for every reference symbol and member, keyed by path.
@@ -105,10 +112,13 @@ def reference_anchor_map() -> dict[str, str]:
     clash gets a numeric suffix. Both the rendered ids and the cross-reference
     links read from this map, so a symbol's anchor is the same in both places.
     """
-    from docs_site._internal.reference_pages import CATEGORIES  # noqa: PLC0415 - lazy: avoids an import cycle
+    return _reference_anchor_map(current_docs_project().reference.categories)
 
+
+@functools.lru_cache(maxsize=8)
+def _reference_anchor_map(categories: tuple[Any, ...]) -> dict[str, str]:
     mapping: dict[str, str] = {}
-    for cat in CATEGORIES:
+    for cat in categories:
         if cat.source != "griffe":
             continue  # builtin tags are distinct and need no dedup
         seen: set[str] = set()
@@ -119,7 +129,7 @@ def reference_anchor_map() -> dict[str, str]:
             _assign_anchor(mapping, seen, path)
             # Members are walked in the same order and with the same filter as
             # _extract, so a member's anchor matches what its page renders.
-            if obj.kind.value == "class":
+            if obj.kind.value == "class" and not is_external_alias(obj):
                 for name, member in obj.members.items():
                     if name.startswith("_") or member.kind.value not in ("function", "attribute"):
                         continue
@@ -142,14 +152,17 @@ def _assign_anchor(mapping: dict[str, str], seen: set[str], path: str) -> None:
 def _extract(obj: Any, path: str, *, with_members: bool = True) -> SimpleNamespace:
     kind = obj.kind.value  # "class" | "function" | "attribute" | "module"
     sections = obj.docstring.parsed if obj.docstring else []
+    external_alias = is_external_alias(obj)
 
     members: list[SimpleNamespace] = []
-    if with_members and kind == "class":
+    if with_members and kind == "class" and not external_alias:
         for name, member in obj.members.items():
             if name.startswith("_") or member.kind.value not in ("function", "attribute"):
                 continue
             members.append(_extract(member, f"{path}.{name}", with_members=False))
 
+    project = current_docs_project()
+    repository = project.settings.repository
     return SimpleNamespace(
         name=obj.name,
         path=path,
@@ -158,15 +171,36 @@ def _extract(obj: Any, path: str, *, with_members: bool = True) -> SimpleNamespa
         anchor=reference_anchor_map().get(path, anchor(path)),
         kind=kind,
         signature=_signature(obj),
-        description=_description(sections),
+        description=_description_for(path, sections),
         bases=_bases(obj),
-        source_url=source_url_for(config.repo_root, getattr(obj, "filepath", None), getattr(obj, "lineno", None)),
+        source_url=""
+        if external_alias
+        else source_url_for(
+            project.runtime.repo_root,
+            getattr(obj, "filepath", None),
+            getattr(obj, "lineno", None),
+            repo_url=repository.url,
+            edit_branch=repository.edit_branch,
+        ),
         params=_params(sections),
         returns=_returns(sections),
         raises=_raises(sections),
         attributes=_attributes(sections),
         members=members,
     )
+
+
+def is_external_alias(obj: Any) -> bool:
+    """Whether ``obj`` is a re-export implemented outside Citry's first-party packages."""
+    return isinstance(obj, griffe.Alias) and not obj.canonical_path.startswith(("citry.", "citry_core."))
+
+
+def _description_for(path: str, sections: list) -> Markup:
+    """Render a symbol's Citry-owned override or its parsed source docstring."""
+    override = current_docs_project().reference.description_override(path)
+    if override is not None:
+        return Markup(_md(override.strip()))  # noqa: S704 - repository-owned reference prose
+    return _description(sections)
 
 
 def extract_builtin(tag: str) -> SimpleNamespace | None:
@@ -345,7 +379,7 @@ def _params(sections: list) -> list[SimpleNamespace]:
                 SimpleNamespace(
                     name=p.name,
                     annotation=_annotation_html(p.annotation, resolve),
-                    description=p.description.strip(),
+                    description=_md_inline(p.description),
                 )
                 for p in section.value
             ]
@@ -367,7 +401,9 @@ def _returns(sections: list) -> Markup:
 def _raises(sections: list) -> list[SimpleNamespace]:
     for section in sections:
         if section.kind.value == "raises":
-            return [SimpleNamespace(name=str(r.annotation), description=r.description.strip()) for r in section.value]
+            return [
+                SimpleNamespace(name=str(r.annotation), description=_md_inline(r.description)) for r in section.value
+            ]
     return []
 
 
@@ -379,7 +415,7 @@ def _attributes(sections: list) -> list[SimpleNamespace]:
                 SimpleNamespace(
                     name=a.name,
                     annotation=_annotation_html(a.annotation, resolve),
-                    description=a.description.strip(),
+                    description=_md_inline(a.description),
                 )
                 for a in section.value
             ]
@@ -391,7 +427,28 @@ def _md(text: str) -> str:
         return ""
     # Resolve [text][symbol] cross-refs to reference links before HTML conversion.
     resolved, _unresolved = resolve_crossrefs(text, degrade_unresolved=True)
-    return markdown.markdown(resolved, extensions=_MD_EXTENSIONS)
+    settings = current_docs_project().settings
+    profile = settings.markdown_docstrings
+    return markdown.markdown(
+        resolved,
+        extensions=list(profile.extensions),
+        extension_configs=materialize_markdown_configs(profile, settings=settings),
+    )
+
+
+def _md_inline(text: str) -> Markup:
+    """
+    Render one parameter, attribute, or raises description.
+
+    These land inside a list item that already supplies its own markup, so the
+    single wrapping paragraph markdown adds is dropped. Without this the
+    description keeps its cross-reference as source and a reader sees
+    ``[`Name`](/reference/...)`` printed on the page instead of a link.
+    """
+    html = _md(text.strip())
+    if html.startswith("<p>") and html.endswith("</p>") and html.count("<p>") == 1:
+        html = html[len("<p>") : -len("</p>")]
+    return Markup(html)  # noqa: S704 - our own docstrings
 
 
 def anchor(path: str) -> str:

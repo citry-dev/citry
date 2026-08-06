@@ -1,0 +1,5 @@
+<c-raw>  {{ untouched }}
+<div>{# still raw #}</div></c-raw><script>if (a < b) {
+  run();
+}</script><style>.x > .y { white-space: pre; }</style><textarea>  first
+ second</textarea>

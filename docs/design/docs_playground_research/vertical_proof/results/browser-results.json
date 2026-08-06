@@ -1,0 +1,117 @@
+{
+  "generatedOn": "2026-07-28T15:26:54.305Z",
+  "build": {
+    "bundleId": "b724f52d9cbd5ebcb2fa",
+    "packageTrack": "current_package_track",
+    "citry": "0.3.0",
+    "citryCore": "1.4.0",
+    "fileCount": 22,
+    "hostBytes": 601932,
+    "cssBytes": 4345,
+    "runtimeBytes": 21174090
+  },
+  "faults": {
+    "missingWheel": "Runtime artifact citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl returned HTTP 404.",
+    "hashMismatch": "Runtime artifact citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl failed SHA-256 verification.",
+    "importFailure": "Traceback (most recent call last): File \"/lib/python314.zip/_pyodide/_base.py\", line 597, in eval_code_async await CodeRunner( ...<9 lines>... .run_async(globals, locals) File \"/lib/python314.zip/_pyodide/_base.py\", line 411, in run_async coroutine = eval(self.code, globals, locals) File \"<exec>\", line 1, in <module> ModuleNotFoundError: No module named 'citry_package_that_does_not_exist'",
+    "noWasm": "This browser does not provide the required WebAssembly runtime."
+  },
+  "layouts": {
+    "phone": true,
+    "nestedBaseAndRtl": true,
+    "themeAndNames": true
+  },
+  "loading": {
+    "slowLoadMs": 5136.201041,
+    "offline": {
+      "message": "Runner handshake timed out.",
+      "recovered": true
+    }
+  },
+  "runtime": [
+    {
+      "browser": "chromium",
+      "browserVersion": "149.0.7827.55",
+      "builtinsPersisted": true,
+      "coldMs": 1383.7801250000002,
+      "failedRequests": [
+        {
+          "url": "https://example.invalid/missing.png",
+          "error": "csp"
+        }
+      ],
+      "filesystemPersisted": true,
+      "modulePersisted": true,
+      "pageErrors": [
+        "preview sync",
+        "preview rejection"
+      ],
+      "previewActionPagesCreated": 0,
+      "previewSecurity": {
+        "parentReadable": false,
+        "storage": false,
+        "popup": false,
+        "fetch": false
+      },
+      "pythonDocsFetchReached": false,
+      "warmMs": 59.16841699999986,
+      "exactTupleVerified": true,
+      "workerCloseRecovered": true,
+      "workerJavaScriptPersisted": true
+    },
+    {
+      "browser": "firefox",
+      "browserVersion": "151.0",
+      "builtinsPersisted": true,
+      "coldMs": 7183.401207999996,
+      "failedRequests": [],
+      "filesystemPersisted": true,
+      "modulePersisted": true,
+      "pageErrors": [
+        "preview sync",
+        "preview rejection"
+      ],
+      "previewActionPagesCreated": 0,
+      "previewSecurity": {
+        "parentReadable": false,
+        "storage": false,
+        "popup": false,
+        "fetch": false
+      },
+      "pythonDocsFetchReached": false,
+      "warmMs": 62.73041699999885,
+      "exactTupleVerified": true,
+      "workerCloseRecovered": null,
+      "workerJavaScriptPersisted": true
+    },
+    {
+      "browser": "webkit",
+      "browserVersion": "26.5",
+      "builtinsPersisted": true,
+      "coldMs": 1376.2392919999984,
+      "failedRequests": [],
+      "filesystemPersisted": true,
+      "modulePersisted": true,
+      "pageErrors": [
+        "preview sync",
+        "Error: preview rejection"
+      ],
+      "previewActionPagesCreated": 0,
+      "previewSecurity": {
+        "parentReadable": false,
+        "storage": false,
+        "popup": false,
+        "fetch": false
+      },
+      "pythonDocsFetchReached": false,
+      "warmMs": 46.94945800000278,
+      "exactTupleVerified": true,
+      "workerCloseRecovered": null,
+      "workerJavaScriptPersisted": true
+    }
+  ],
+  "security": {
+    "docsCookieReachedRunner": false,
+    "runnerRequests": 219
+  }
+}

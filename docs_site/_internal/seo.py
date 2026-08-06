@@ -25,6 +25,7 @@ from xml.sax.saxutils import escape
 
 from docs_site._internal.config import config as default_config
 from docs_site._internal.git_metadata import get_page_git_meta
+from docs_site._internal.project import current_docs_project
 from docs_site._internal.versioning import load_manifest, select_indexed_versions
 
 if TYPE_CHECKING:
@@ -32,26 +33,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from docs_site._internal.build import PageRecord
-
-# AI crawlers allowed explicitly (the default stance is allow-all; listing them
-# keeps the policy visible and auditable in robots.txt).
-AI_BOTS = (
-    "GPTBot",
-    "ClaudeBot",
-    "anthropic-ai",
-    "Google-Extended",
-    "PerplexityBot",
-    "CCBot",
-)
-
-# Per-section sitemap <priority>, keyed by the URL path prefix (no leading
-# slash). Google ignores it; Bing and Yandex still read it. The home page is
-# 1.0 and anything unmatched is 0.5.
-_PRIORITY_RULES = (
-    ("getting-started", 0.8),
-    ("concepts", 0.6),
-    ("reference", 0.6),
-)
 
 
 @dataclass
@@ -105,7 +86,7 @@ def _priority_for(url: str) -> float:
     path = url.strip("/")
     if not path:
         return 1.0
-    for prefix, priority in _PRIORITY_RULES:
+    for prefix, priority in current_docs_project().settings.seo.priorities:
         if path == prefix or path.startswith(prefix + "/"):
             return priority
     return 0.5
@@ -179,7 +160,8 @@ def _disallowed_versions(versions_root: Path) -> list[str]:
     exist).
     """
     manifest = load_manifest(versions_root)
-    kept = set(select_indexed_versions(manifest))
+    keep_recent = current_docs_project().versions.index_keep_recent
+    kept = set(select_indexed_versions(manifest, keep_recent=keep_recent))
     return [str(info.version) for info in manifest if str(info.version) not in kept]
 
 
@@ -197,7 +179,7 @@ def write_robots(output_dir: Path, *, site_url: str, versions_root: Path | None 
     lines = ["User-agent: *", "Allow: /"]
     lines += [f"Disallow: /v/{version}/" for version in disallowed]
     lines += ["", f"Sitemap: {site_url}/sitemap.xml", "", "# AI crawlers - explicit allow"]
-    for bot in AI_BOTS:
+    for bot in current_docs_project().settings.seo.ai_bots:
         lines += [f"User-agent: {bot}", "Allow: /"]
     (output_dir / "robots.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
     return len(disallowed)

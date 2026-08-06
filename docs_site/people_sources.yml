@@ -1,0 +1,28 @@
+# Inputs for docs_site/scripts/people.py. Accepted fields are implemented by
+# PeopleSources in that file: `repositories` is an ordered list whose entries
+# are either the literal `site` or an `{owner, name}` mapping; `maintainers`,
+# `special_thanks`, and `ignored_logins` are unique lists of non-empty GitHub
+# login strings. Unknown fields fail validation. The script counts merged pull
+# requests in repository order, features named people in listed order, and
+# omits ignored accounts from contributors.
+repositories:
+  # `site` resolves to the repository declared in settings.yml.
+  - site
+  - owner: django-components
+    name: django-components
+
+maintainers:
+  - JuroOravec
+
+special_thanks:
+  - EmilStenstrom
+
+ignored_logins:
+  - dependabot
+  - dependabot[bot]
+  - github-actions
+  - github-actions[bot]
+  - pre-commit-ci
+  - pre-commit-ci[bot]
+  - copilot-swe-agent
+  - copilot-swe-agent[bot]

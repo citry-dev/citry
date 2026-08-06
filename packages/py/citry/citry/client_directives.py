@@ -6,9 +6,12 @@ from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 from citry.constness import const_value
+from citry.ext.dependencies.scripts import uses_component
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+    from citry.component import Component
 
 CLIENT_PROPS_ATTR = "$c-props"
 
@@ -128,3 +131,20 @@ def apply_client_props_contribution(
         raise TypeError(msg)
 
     target[CLIENT_PROPS_ATTR] = value
+
+
+def validate_client_props_target(
+    component_class: type[Component],
+    binding_keys: Iterable[str],
+    *,
+    tag_name: str,
+) -> None:
+    """Require a target-side ``$component`` registration for a resolved props supply."""
+    if CLIENT_PROPS_ATTR not in binding_keys or uses_component(component_class):
+        return
+    msg = (
+        f"{CLIENT_PROPS_ATTR} on <{tag_name}> cannot be delivered because target component "
+        f"{component_class.__name__!r} has no $component(...) registration in its JavaScript. "
+        f"Add a $component(...) registration to {component_class.__name__}.js or remove {CLIENT_PROPS_ATTR}."
+    )
+    raise RuntimeError(msg)

@@ -1,0 +1,1025 @@
+{
+  "schema_version": 1,
+  "python_expression_provider": "ruff@0.14.10+45bbb4cbff",
+  "cases": [
+    {
+      "id": "opening-tags.tags.normalize-spacing",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "tags/normalize-spacing.input.citry-html",
+      "expected": "tags/normalize-spacing.expected.citry-html",
+      "features": ["attribute-spacing", "bare-attribute"]
+    },
+    {
+      "id": "opening-tags.tags.collapse-short-tag",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "tags/collapse-short-tag.input.citry-html",
+      "expected": "tags/collapse-short-tag.expected.citry-html",
+      "features": ["collapse", "self-closing-style"]
+    },
+    {
+      "id": "opening-tags.tags.wrap-long-tag",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "tags/wrap-long-tag.input.citry-html",
+      "expected": "tags/wrap-long-tag.expected.citry-html",
+      "features": ["preferred-width", "expression-attribute"]
+    },
+    {
+      "id": "opening-tags.comments.tag-internal",
+      "capability": "opening-tags",
+      "category": "comments",
+      "input": "comments/tag-internal.input.citry-html",
+      "expected": "comments/tag-internal.expected.citry-html",
+      "features": ["template-comment", "self-closing"]
+    },
+    {
+      "id": "structural-layout.whitespace.block-structure",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/block-structure.input.citry-html",
+      "expected": "whitespace/block-structure.expected.citry-html",
+      "features": ["block-container", "expression-delimiters"]
+    },
+    {
+      "id": "structural-layout.whitespace.inline-boundaries",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/inline-boundaries.input.citry-html",
+      "expected": "whitespace/inline-boundaries.expected.citry-html",
+      "features": ["inline", "mixed-content", "no-space-vs-space"]
+    },
+    {
+      "id": "structural-layout.whitespace.component-boundary",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/component-boundary.input.citry-html",
+      "expected": "whitespace/component-boundary.expected.citry-html",
+      "features": ["component", "sensitive-boundary"]
+    },
+    {
+      "id": "structural-layout.whitespace.select-options",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/select-options.input.citry-html",
+      "expected": "whitespace/select-options.expected.citry-html",
+      "features": ["select", "structural-container", "sensitive-outer-edge"]
+    },
+    {
+      "id": "structural-layout.whitespace.pre-body",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/pre-body.input.citry-html",
+      "expected": "whitespace/pre-body.expected.citry-html",
+      "features": ["pre", "verbatim-body", "block-boundary"]
+    },
+    {
+      "id": "structural-layout.comments.structural-html-comment",
+      "capability": "structural-layout",
+      "category": "comments",
+      "input": "comments/structural-html-comment.input.citry-html",
+      "expected": "comments/structural-html-comment.expected.citry-html",
+      "features": ["html-comment", "structural-gap"]
+    },
+    {
+      "id": "structural-layout.comments.structural-template-comment",
+      "capability": "structural-layout",
+      "category": "comments",
+      "input": "comments/structural-template-comment.input.citry-html",
+      "expected": "comments/structural-template-comment.expected.citry-html",
+      "features": ["template-comment", "comment-association"]
+    },
+    {
+      "id": "structural-layout.comments.python-comment-expression",
+      "capability": "structural-layout",
+      "category": "comments",
+      "input": "comments/python-comment-expression.input.citry-html",
+      "expected": "comments/python-comment-expression.expected.citry-html",
+      "features": ["python-comment", "sensitive-expression"]
+    },
+    {
+      "id": "opening-tags.tags.attribute-kinds",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "tags/attribute-kinds.input.citry-html",
+      "expected": "tags/attribute-kinds.expected.citry-html",
+      "features": ["attribute-kinds", "event-attribute", "binding-attribute", "metadata-attribute", "python-comment"]
+    },
+    {
+      "id": "opening-tags.tags.lowercase-component",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "tags/lowercase-component.input.citry-html",
+      "expected": "tags/lowercase-component.expected.citry-html",
+      "features": ["component", "lowercase-component", "tag-spelling"]
+    },
+    {
+      "id": "opening-tags.tags.unbreakable-unicode",
+      "capability": "opening-tags",
+      "category": "tags",
+      "input": "tags/unbreakable-unicode.input.citry-html",
+      "expected": "tags/unbreakable-unicode.expected.citry-html",
+      "features": ["unicode", "unbreakable-token", "preferred-width"]
+    },
+    {
+      "id": "opening-tags.comments.exact-expression-and-end-tag",
+      "capability": "opening-tags",
+      "category": "comments",
+      "input": "comments/exact-expression-and-end-tag.input.citry-html",
+      "expected": "comments/exact-expression-and-end-tag.expected.citry-html",
+      "features": ["expression-byte-exact", "end-tag-comment", "template-comment"]
+    },
+    {
+      "id": "opening-tags.layout.comment-only",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input": "layout/comment-only.input.citry-html",
+      "expected": "layout/comment-only.expected.citry-html",
+      "features": ["template-comment", "comment-only-tag", "inline-comment"]
+    },
+    {
+      "id": "opening-tags.layout.nonzero-column",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input": "layout/nonzero-column.input.citry-html",
+      "expected": "layout/nonzero-column.expected.citry-html",
+      "features": ["source-column", "preferred-width", "multiline-tag"]
+    },
+    {
+      "id": "opening-tags.layout.crlf",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input_text": "prefix\r\n  <div {# note #} id = \"x\"></div>",
+      "expected_text": "prefix\r\n  <div {# note #} id=\"x\"></div>",
+      "features": ["crlf", "newline-detection", "source-column", "template-comment"]
+    },
+    {
+      "id": "opening-tags.layout.itemless-trailing-space",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input": "layout/itemless-trailing-space.input.citry-html",
+      "expected": "layout/itemless-trailing-space.expected.citry-html",
+      "features": ["itemless-tag", "delimiter-spacing"]
+    },
+    {
+      "id": "opening-tags.layout.multiline-value",
+      "capability": "opening-tags",
+      "category": "layout",
+      "input": "layout/multiline-value.input.citry-html",
+      "expected": "layout/multiline-value.expected.citry-html",
+      "features": ["multiline-attribute", "multiline-tag", "static-attribute"]
+    },
+    {
+      "id": "opening-tags.suppression.off-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/off-on.input.citry-html",
+      "expected": "suppression/off-on.expected.citry-html",
+      "features": ["suppression", "fmt-off", "fmt-on", "protected-node"]
+    },
+    {
+      "id": "opening-tags.suppression.unmatched-off",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/unmatched-off.input.citry-html",
+      "expected": "suppression/unmatched-off.expected.citry-html",
+      "features": ["suppression", "fmt-off", "protected-to-end"]
+    },
+    {
+      "id": "opening-tags.suppression.skip-node",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/skip-node.input.citry-html",
+      "expected": "suppression/skip-node.expected.citry-html",
+      "features": ["suppression", "fmt-skip", "protected-node"]
+    },
+    {
+      "id": "opening-tags.suppression.skip-expression",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/skip-expression.input.citry-html",
+      "expected": "suppression/skip-expression.expected.citry-html",
+      "features": ["suppression", "fmt-skip", "protected-expression"]
+    },
+    {
+      "id": "opening-tags.suppression.skip-attribute",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/skip-attribute.input.citry-html",
+      "expected": "suppression/skip-attribute.expected.citry-html",
+      "features": ["suppression", "fmt-skip", "protected-attribute", "template-comment"]
+    },
+    {
+      "id": "opening-tags.suppression.directive-looking-content",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/directive-looking-content.input.citry-html",
+      "expected": "suppression/directive-looking-content.expected.citry-html",
+      "features": ["suppression", "raw-body", "expression-attribute", "literal-directive-text"]
+    },
+    {
+      "id": "opening-tags.errors.nested-fmt-off",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "errors/nested-fmt-off.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "nested"
+      },
+      "features": ["invalid-suppression", "fmt-off"]
+    },
+    {
+      "id": "opening-tags.suppression.skip-text",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/skip-text.input.citry-html",
+      "expected": "suppression/skip-text.expected.citry-html",
+      "features": ["suppression", "fmt-skip", "protected-text"]
+    },
+    {
+      "id": "opening-tags.errors.tag-skip-without-attribute",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "errors/tag-skip-without-attribute.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "attribute"
+      },
+      "features": ["invalid-suppression", "fmt-skip", "tag-internal"]
+    },
+    {
+      "id": "opening-tags.suppression.tag-fmt-off",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/tag-fmt-off.input.citry-html",
+      "expected": "suppression/tag-fmt-off.expected.citry-html",
+      "features": ["suppression", "fmt-off", "tag-internal", "scope-end"]
+    },
+    {
+      "id": "opening-tags.suppression.tag-fmt-off-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/tag-fmt-off-on.input.citry-html",
+      "expected": "suppression/tag-fmt-off-on.expected.citry-html",
+      "features": ["suppression", "fmt-off", "fmt-on", "tag-internal"]
+    },
+    {
+      "id": "opening-tags.suppression.inherited-body-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/inherited-body-on.input.citry-html",
+      "expected": "suppression/inherited-body-on.expected.citry-html",
+      "features": ["suppression", "inherited-state", "body-scope", "end-tag-state"]
+    },
+    {
+      "id": "opening-tags.suppression.body-off-end-tag",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/body-off-end-tag.input.citry-html",
+      "expected": "suppression/body-off-end-tag.expected.citry-html",
+      "features": ["suppression", "body-scope", "end-tag-state", "parent-restoration"]
+    },
+    {
+      "id": "opening-tags.suppression.inherited-end-tag-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/inherited-end-tag-on.input.citry-html",
+      "expected": "suppression/inherited-end-tag-on.expected.citry-html",
+      "features": ["suppression", "inherited-state", "end-tag-state", "fmt-on"]
+    },
+    {
+      "id": "opening-tags.suppression.inherited-nested-template-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/inherited-nested-template-on.input.citry-html",
+      "expected": "suppression/inherited-nested-template-on.expected.citry-html",
+      "features": ["suppression", "inherited-state", "nested-template", "fmt-on"]
+    },
+    {
+      "id": "opening-tags.suppression.inherited-start-tag-on",
+      "capability": "opening-tags",
+      "category": "suppression",
+      "input": "suppression/inherited-start-tag-on.input.citry-html",
+      "expected": "suppression/inherited-start-tag-on.expected.citry-html",
+      "features": ["suppression", "inherited-state", "tag-internal", "nested-template"]
+    },
+    {
+      "id": "opening-tags.errors.nested-template-fmt-on",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "errors/nested-template-fmt-on.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "matching"
+      },
+      "features": ["invalid-suppression", "fmt-on", "nested-template"]
+    },
+    {
+      "id": "opening-tags.errors.end-tag-directive",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "errors/end-tag-directive.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression",
+        "contains": "end tag"
+      },
+      "features": ["invalid-suppression", "fmt-skip", "end-tag-directive"]
+    },
+    {
+      "id": "structural-layout.control.exhaustive-if",
+      "capability": "structural-layout",
+      "category": "control",
+      "input": "control/exhaustive-if.input.citry-html",
+      "expected": "control/exhaustive-if.expected.citry-html",
+      "features": ["control-exhaustive", "transparent-control", "block-container"]
+    },
+    {
+      "id": "structural-layout.control.optional-if",
+      "capability": "structural-layout",
+      "category": "control",
+      "input": "control/optional-if.input.citry-html",
+      "expected": "control/optional-if.expected.citry-html",
+      "features": ["control-optional", "possibly-empty-edge"]
+    },
+    {
+      "id": "structural-layout.control.disagreeing-if",
+      "capability": "structural-layout",
+      "category": "control",
+      "input": "control/disagreeing-if.input.citry-html",
+      "expected": "control/disagreeing-if.expected.citry-html",
+      "features": [
+        "control-flow",
+        "transparent-edge",
+        "disagreeing-branches",
+        "sensitive-boundary"
+      ]
+    },
+    {
+      "id": "structural-layout.control.shorthand-nested-loop",
+      "capability": "structural-layout",
+      "category": "control",
+      "input": "control/shorthand-nested-loop.input.citry-html",
+      "expected": "control/shorthand-nested-loop.expected.citry-html",
+      "features": ["control-optional", "shorthand-control", "nested-control"]
+    },
+    {
+      "id": "structural-layout.whitespace.contextual-option",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/contextual-option.input.citry-html",
+      "expected": "whitespace/contextual-option.expected.citry-html",
+      "features": ["contextual-option", "sensitive-boundary"]
+    },
+    {
+      "id": "structural-layout.whitespace.empty-and-comment-only",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/empty-and-comment-only.input.citry-html",
+      "expected": "whitespace/empty-and-comment-only.expected.citry-html",
+      "features": ["empty-body", "comment-only-body", "template-comment"]
+    },
+    {
+      "id": "structural-layout.whitespace.rendered-nbsp",
+      "capability": "structural-layout",
+      "category": "whitespace",
+      "input": "whitespace/rendered-nbsp.input.citry-html",
+      "expected": "whitespace/rendered-nbsp.expected.citry-html",
+      "features": ["unicode", "rendered-unicode-space", "mixed-content", "sensitive-boundary"]
+    },
+    {
+      "id": "structural-layout.root.doctype",
+      "capability": "structural-layout",
+      "category": "root",
+      "input": "root/doctype.input.citry-html",
+      "expected": "root/doctype.expected.citry-html",
+      "features": ["doctype", "root-structure"]
+    },
+    {
+      "id": "structural-layout.bytes.crlf",
+      "capability": "structural-layout",
+      "category": "bytes",
+      "input_text": "<main><section></section></main>\r\n",
+      "expected_text": "<main>\r\n  <section></section>\r\n</main>\r\n",
+      "features": ["crlf", "newline-detection", "block-container"]
+    },
+    {
+      "id": "structural-layout.bytes.no-final-newline",
+      "capability": "structural-layout",
+      "category": "bytes",
+      "input_text": "<main><section></section></main>",
+      "expected_text": "<main>\n  <section></section>\n</main>",
+      "features": ["missing-final-newline", "block-container"]
+    },
+    {
+      "id": "structural-layout.attributes.nested-template",
+      "capability": "structural-layout",
+      "category": "attributes",
+      "input": "attributes/nested-template.input.citry-html",
+      "expected": "attributes/nested-template.expected.citry-html",
+      "features": ["nested-template", "recursive-formatting"]
+    },
+    {
+      "id": "structural-layout.attributes.nested-fragment",
+      "capability": "structural-layout",
+      "category": "attributes",
+      "input": "attributes/nested-fragment.input.citry-html",
+      "expected": "attributes/nested-fragment.expected.citry-html",
+      "features": ["nested-template", "fragment", "recursive-formatting"]
+    },
+    {
+      "id": "python-expressions.attributes.python-comment",
+      "capability": "python-expressions",
+      "category": "attributes",
+      "input": "attributes/python-comment.input.citry-html",
+      "expected": "attributes/python-comment.expected.citry-html",
+      "features": ["python-comment", "expression-attribute", "python-expression-formatting"]
+    },
+    {
+      "id": "python-expressions.expressions.ordinary",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/ordinary.input.citry-html",
+      "expected": "expressions/ordinary.expected.citry-html",
+      "features": ["python-expression-formatting", "template-expression", "calls", "collections"]
+    },
+    {
+      "id": "python-expressions.expressions.python-shapes",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/python-shapes.input.citry-html",
+      "expected": "expressions/python-shapes.expected.citry-html",
+      "features": [
+        "python-expression-formatting",
+        "strings",
+        "nested-containers",
+        "comprehension",
+        "python-comment",
+        "trailing-comma"
+      ]
+    },
+    {
+      "id": "python-expressions.expressions.attributes",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/attributes.input.citry-html",
+      "expected": "expressions/attributes.expected.citry-html",
+      "features": ["python-expression-formatting", "expression-attribute", "meta-key", "browser-expression-preservation"]
+    },
+    {
+      "id": "python-expressions.expressions.long-attribute",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/long-attribute.input.citry-html",
+      "expected": "expressions/long-attribute.expected.citry-html",
+      "features": ["python-expression-formatting", "line-width", "multiline-attribute"]
+    },
+    {
+      "id": "python-expressions.expressions.long-interpolation",
+      "capability": "python-expressions",
+      "category": "expressions",
+      "input": "expressions/long-interpolation.input.citry-html",
+      "expected": "expressions/long-interpolation.expected.citry-html",
+      "features": ["python-expression-formatting", "line-width", "multiline-interpolation"]
+    },
+    {
+      "id": "python-expressions.control.for-forms",
+      "capability": "python-expressions",
+      "category": "control",
+      "input": "control/for-forms.input.citry-html",
+      "expected": "control/for-forms.expected.citry-html",
+      "features": ["python-expression-formatting", "c-for-clause", "physical-control", "shorthand-control"]
+    },
+    {
+      "id": "python-expressions.control.for-comment",
+      "capability": "python-expressions",
+      "category": "control",
+      "input": "control/for-comment.input.citry-html",
+      "expected": "control/for-comment.expected.citry-html",
+      "features": [
+        "python-expression-formatting",
+        "c-for-clause",
+        "physical-control",
+        "shorthand-control",
+        "python-comment",
+        "comment-attachment"
+      ]
+    },
+    {
+      "id": "python-expressions.fills.data-pattern",
+      "capability": "python-expressions",
+      "category": "fills",
+      "input": "fills/data-pattern.input.citry-html",
+      "expected": "fills/data-pattern.expected.citry-html",
+      "features": ["python-expression-formatting", "fill-data-pattern", "alias", "mapping-rest"]
+    },
+    {
+      "id": "python-expressions.nesting.nested-template",
+      "capability": "python-expressions",
+      "category": "nesting",
+      "input": "nesting/nested-template.input.citry-html",
+      "expected": "nesting/nested-template.expected.citry-html",
+      "features": ["python-expression-formatting", "nested-template", "recursive-formatting"]
+    },
+    {
+      "id": "python-expressions.preservation.mixed-control",
+      "capability": "python-expressions",
+      "category": "preservation",
+      "input": "preservation/mixed-control.input.citry-html",
+      "expected": "preservation/mixed-control.expected.citry-html",
+      "features": ["python-expression-formatting", "mixed-content", "optional-control", "sensitive-boundary"]
+    },
+    {
+      "id": "python-expressions.preservation.suppressed-and-verbatim",
+      "capability": "python-expressions",
+      "category": "preservation",
+      "input": "preservation/suppressed-and-verbatim.input.citry-html",
+      "expected": "preservation/suppressed-and-verbatim.expected.citry-html",
+      "features": ["python-expression-formatting", "suppression", "verbatim-body"]
+    },
+    {
+      "id": "structural-layout.components.slots-and-fills",
+      "capability": "structural-layout",
+      "category": "components",
+      "input": "components/slots-and-fills.input.citry-html",
+      "expected": "components/slots-and-fills.expected.citry-html",
+      "features": ["component", "slot", "fill", "slot-data", "typed-slot-data"]
+    },
+    {
+      "id": "structural-layout.verbatim.protected-bodies",
+      "capability": "structural-layout",
+      "category": "verbatim",
+      "input": "verbatim/protected-bodies.input.citry-html",
+      "expected": "verbatim/protected-bodies.expected.citry-html",
+      "features": ["raw-body", "script-body", "style-body", "textarea-body", "verbatim-body"]
+    },
+    {
+      "id": "structural-layout.comments.mixed-html-comment",
+      "capability": "structural-layout",
+      "category": "comments",
+      "input": "comments/mixed-html-comment.input.citry-html",
+      "expected": "comments/mixed-html-comment.expected.citry-html",
+      "features": ["html-comment", "mixed-content", "sensitive-boundary"]
+    },
+    {
+      "id": "structural-layout.suppression.all-directives",
+      "capability": "structural-layout",
+      "category": "suppression",
+      "input": "suppression/all-directives.input.citry-html",
+      "expected": "suppression/all-directives.expected.citry-html",
+      "features": ["suppression", "fmt-off", "fmt-on", "fmt-skip"]
+    },
+    {
+      "id": "opening-tags.errors.unmatched-fmt-on",
+      "capability": "opening-tags",
+      "category": "errors",
+      "input": "errors/unmatched-fmt-on.input.citry-html",
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.suppression"
+      },
+      "features": ["invalid-suppression", "fmt-on"]
+    },
+    {
+      "id": "structural-layout.errors.invalid-citry",
+      "capability": "structural-layout",
+      "category": "errors",
+      "input": "errors/invalid-citry.input.citry-html",
+      "expected_error": {
+        "phase": "parse",
+        "code": "citry.format.syntax",
+        "contains": "c-raw"
+      },
+      "features": ["invalid-citry", "parse-error"]
+    },
+    {
+      "id": "python-expressions.errors.invalid-expression",
+      "capability": "python-expressions",
+      "category": "errors",
+      "input": "errors/invalid-expression.input.citry-html",
+      "expected_error": {
+        "phase": "parse",
+        "code": "citry.format.syntax",
+        "contains": "Failed to parse expression"
+      },
+      "features": ["python-expression-formatting", "invalid-python-expression", "parse-error"]
+    }
+  ],
+  "embedded_cases": [
+    {
+      "id": "embedded-formatting.bodies.script-style",
+      "category": "embedded-bodies",
+      "input": "embedded/script-style.input.citry-html",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "const  answer=41+1;",
+          "virtual_source": "const  answer=41+1;",
+          "base_indent": 4,
+          "newline": "\n"
+        },
+        {
+          "language": "css",
+          "kind": "style-body",
+          "source": ".card{color:red}",
+          "virtual_source": ".card{color:red}",
+          "base_indent": 4,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {
+          "status": "formatted",
+          "region": 0,
+          "text": "const answer = 41 + 1;\n",
+          "provider": "fake-javascript@1"
+        },
+        {
+          "status": "formatted",
+          "region": 1,
+          "text": ".card {\n  color: red;\n}\n",
+          "provider": "fake-css@1"
+        }
+      ],
+      "expected": "embedded/script-style.expected.citry-html",
+      "outcome_notices": [],
+      "providers": ["fake-css@1", "fake-javascript@1"],
+      "features": ["script-body", "style-body", "embedded-virtual-mapping", "embedded-idempotence"]
+    },
+    {
+      "id": "embedded-formatting.providers.unavailable",
+      "category": "providers",
+      "input_text": "<style>.a{color:red}</style>",
+      "requests": [
+        {
+          "language": "css",
+          "kind": "style-body",
+          "source": ".a{color:red}",
+          "virtual_source": ".a{color:red}",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {
+          "status": "unavailable",
+          "region": 0,
+          "provider": "fake-css@1",
+          "message": "no CSS provider"
+        }
+      ],
+      "expected_text": "<style>.a{color:red}</style>",
+      "outcome_notices": [
+        {"code": "citry.format.provider-unavailable", "contains": "no CSS provider"}
+      ],
+      "providers": [],
+      "features": ["style-body", "embedded-provider-unavailable"]
+    },
+    {
+      "id": "embedded-formatting.preservation.unavailable-regions",
+      "category": "preservation",
+      "input": "preservation/unavailable.input.citry-html",
+      "requests": [],
+      "plan_notices": [
+        {"code": "citry.format.embedded-interpolation-unsupported", "contains": "interpolation"},
+        {"code": "citry.format.embedded-language-unsupported", "contains": "alternate"},
+        {"code": "citry.format.embedded-suppressed", "contains": "protected"}
+      ],
+      "results": [],
+      "expected": "preservation/unavailable.expected.citry-html",
+      "outcome_notices": [
+        {"code": "citry.format.embedded-interpolation-unsupported", "contains": "interpolation"},
+        {"code": "citry.format.embedded-language-unsupported", "contains": "alternate"},
+        {"code": "citry.format.embedded-suppressed", "contains": "protected"}
+      ],
+      "providers": [],
+      "features": ["script-body", "style-body", "suppression", "embedded-interpolation-unsupported"]
+    },
+    {
+      "id": "embedded-formatting.preservation.multiline-literal",
+      "category": "preservation",
+      "input_text": "<script>\n    const x = `\n      hello\n    `;\n    console.log(x);\n</script>",
+      "requests": [],
+      "plan_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "results": [],
+      "expected_text": "<script>\n    const x = `\n      hello\n    `;\n    console.log(x);\n</script>",
+      "outcome_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "providers": [],
+      "features": ["script-body", "multiline-literal", "whitespace-sensitive-preservation"]
+    },
+    {
+      "id": "embedded-formatting.preservation.ambiguous-regex-before-multiline-literal",
+      "category": "preservation",
+      "input_text": "<script>if(ok) /`/.test(x);const s=`a\nb`;</script>",
+      "requests": [],
+      "plan_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "results": [],
+      "expected_text": "<script>if(ok) /`/.test(x);const s=`a\nb`;</script>",
+      "outcome_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "providers": [],
+      "features": ["script-body", "ambiguous-regex", "whitespace-sensitive-preservation"]
+    },
+    {
+      "id": "embedded-formatting.preservation.css-escape-before-multiline-string",
+      "category": "preservation",
+      "input_text": "<style>a{--x:foo\\'bar;content:'a\\\nb'}</style>",
+      "requests": [],
+      "plan_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "results": [],
+      "expected_text": "<style>a{--x:foo\\'bar;content:'a\\\nb'}</style>",
+      "outcome_notices": [
+        {
+          "code": "citry.format.embedded-language-unsupported",
+          "contains": "multiline whitespace-sensitive token"
+        }
+      ],
+      "providers": [],
+      "features": ["style-body", "css-escape", "whitespace-sensitive-preservation"]
+    },
+    {
+      "id": "embedded-formatting.providers.error",
+      "category": "providers",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {
+          "status": "error",
+          "region": 0,
+          "provider": "fake-javascript@1",
+          "message": "provider crashed"
+        }
+      ],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "provider crashed"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-provider-error"]
+    },
+    {
+      "id": "embedded-formatting.results.stale",
+      "category": "result-validation",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {"status": "stale-plan", "region": 0, "text": "let value = 1;\n", "provider": "fake@1"}
+      ],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "different plan"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-result-stale"]
+    },
+    {
+      "id": "embedded-formatting.results.duplicate",
+      "category": "result-validation",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {"status": "duplicate", "region": 0, "text": "let value = 1;\n", "provider": "fake@1"}
+      ],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "result count"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-result-duplicate"]
+    },
+    {
+      "id": "embedded-formatting.results.missing",
+      "category": "result-validation",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "result count"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-result-missing"]
+    },
+    {
+      "id": "embedded-formatting.results.delimiter-conflict",
+      "category": "result-validation",
+      "input_text": "<script>let  value=1</script>",
+      "requests": [
+        {
+          "language": "javascript",
+          "kind": "script-body",
+          "source": "let  value=1",
+          "virtual_source": "let  value=1",
+          "base_indent": 2,
+          "newline": "\n"
+        }
+      ],
+      "plan_notices": [],
+      "results": [
+        {"status": "formatted", "region": 0, "text": "const value = '</script>';\n", "provider": "fake@1"}
+      ],
+      "expected_error": {
+        "phase": "format",
+        "code": "citry.format.provider-invalid",
+        "contains": "forbidden delimiter"
+      },
+      "outcome_notices": [],
+      "providers": null,
+      "features": ["script-body", "embedded-delimiter-conflict"]
+    }
+  ],
+  "python_hosts": [
+    {
+      "id": "python-hosts.framing.triple-double",
+      "category": "framing",
+      "input": "python-hosts/framing/triple-double.input.py",
+      "expected": "python-hosts/framing/triple-double.expected.py",
+      "features": ["python-host-framing", "triple-double-quote"]
+    },
+    {
+      "id": "python-hosts.rewrites.reverse-order",
+      "category": "rewrites",
+      "input": "python-hosts/rewrites/reverse-order.input.py",
+      "expected": "python-hosts/rewrites/reverse-order.expected.py",
+      "features": ["python-host-reverse-rewrite", "raw-prefix", "unicode-prefix"]
+    },
+    {
+      "id": "python-hosts.framing.crlf-wrapped-tag",
+      "category": "framing",
+      "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton class=\\\"primary\\\" c-disabled=\\\"not enabled\\\" aria-label=\\\"Save changes to the current profile and return to the account overview\\\"></c-CButton>\"\"\"\r\n",
+      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n      <c-CButton\r\n        class=\\\"primary\\\"\r\n        c-disabled=\\\"not enabled\\\"\r\n        aria-label=\\\"Save changes to the current profile and return to the account overview\\\"\r\n      ></c-CButton>\r\n    \"\"\"\r\n",
+      "features": ["python-host-crlf", "python-host-framing", "preferred-width"]
+    },
+    {
+      "id": "python-hosts.framing.inline-structural-triple-double",
+      "category": "framing",
+      "input": "python-hosts/framing/inline-triple-double.input.py",
+      "expected": "python-hosts/framing/inline-triple-double.expected.py",
+      "features": ["python-host-framing", "triple-double-quote", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.framing.newline-structural-triple-single",
+      "category": "framing",
+      "input": "python-hosts/framing/newline-triple-single.input.py",
+      "expected": "python-hosts/framing/newline-triple-single.expected.py",
+      "features": ["python-host-framing", "triple-single-quote", "base-indentation", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.framing.raw-and-unicode-structural",
+      "category": "framing",
+      "input": "python-hosts/framing/raw-and-unicode.input.py",
+      "expected": "python-hosts/framing/raw-and-unicode.expected.py",
+      "features": ["python-host-framing", "raw-prefix", "unicode-prefix", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.framing.indented-own-line-close",
+      "category": "framing",
+      "input": "python-hosts/framing/indented-own-line-close.input.py",
+      "expected": "python-hosts/framing/indented-own-line-close.expected.py",
+      "features": ["python-host-framing", "closing-delimiter-indentation", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.framing.crlf-structural",
+      "category": "framing",
+      "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<main><section></section></main>\"\"\"\r\n",
+      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n      <main>\r\n        <section></section>\r\n      </main>\r\n    \"\"\"\r\n",
+      "features": ["python-host-crlf", "python-host-framing", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.expressions.structural",
+      "category": "expressions",
+      "input": "python-hosts/expressions/structural.input.py",
+      "expected": "python-hosts/expressions/structural.expected.py",
+      "features": ["python-host-framing", "python-expression-formatting", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.eligibility.single-quoted-structural",
+      "category": "eligibility",
+      "input": "python-hosts/eligibility/single-quoted-structural.input.py",
+      "expected_error": {
+        "code": "citry.format.ineligible",
+        "contains": "framing"
+      },
+      "features": ["python-host-framing", "single-quote", "atomic-rewrite", "structural-layout"]
+    },
+    {
+      "id": "python-hosts.eligibility.implicit-concatenation",
+      "category": "eligibility",
+      "input": "python-hosts/eligibility/implicit-concatenation.input.py",
+      "expected_error": {
+        "code": "citry.format.ineligible",
+        "contains": "implicit"
+      },
+      "features": ["python-literal-concatenation", "atomic-rewrite"]
+    },
+    {
+      "id": "python-hosts.eligibility.escape",
+      "category": "eligibility",
+      "input": "python-hosts/eligibility/escape.input.py",
+      "expected_error": {
+        "code": "citry.format.ineligible",
+        "contains": "escape"
+      },
+      "features": ["python-literal-escape", "atomic-rewrite"]
+    },
+    {
+      "id": "python-hosts.errors.invalid-python",
+      "category": "errors",
+      "input": "python-hosts/errors/invalid-python.input.py",
+      "expected_error": {
+        "code": "citry.format.host-syntax",
+        "contains": "Python"
+      },
+      "features": ["invalid-python-host", "atomic-rewrite"]
+    },
+    {
+      "id": "python-hosts.errors.invalid-citry",
+      "category": "errors",
+      "input": "python-hosts/errors/invalid-citry.input.py",
+      "expected_error": {
+        "code": "citry.format.syntax",
+        "contains": "Parse error"
+      },
+      "features": ["invalid-citry", "atomic-rewrite"]
+    }
+  ]
+}

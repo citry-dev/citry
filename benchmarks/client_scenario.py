@@ -75,7 +75,9 @@ def build_client_scenario(count: int, *, managed_effects: bool = True) -> Client
           });
         """
         if managed_effects
-        else None
+        else """
+          $component(() => {});
+        """
     )
 
     class Item(Component):
@@ -125,7 +127,7 @@ def build_client_scenario(count: int, *, managed_effects: bool = True) -> Client
           </ul>
         """
 
-        def template_data(self, _kwargs: dict[str, object], _slots: object) -> dict[str, object]:
+        def template_data(self, kwargs: dict[str, object], slots: object) -> dict[str, object]:
             return items_data()
 
     class MorphPage(Component):
@@ -147,7 +149,7 @@ def build_client_scenario(count: int, *, managed_effects: bool = True) -> Client
           </section>
         """
 
-        def template_data(self, _kwargs: dict[str, object], _slots: object) -> dict[str, object]:
+        def template_data(self, kwargs: dict[str, object], slots: object) -> dict[str, object]:
             return items_data()
 
     class MorphDocument(Component):

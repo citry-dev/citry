@@ -24,7 +24,7 @@ from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from citry import Citry, CitryContext, CitryRender, Component, Extension, Slot, component_render, nodes
-from citry.util.html import SafeString
+from citry.util.html import Markup
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -577,7 +577,7 @@ def _build_fixture(name: str, extension: type[Extension] | None = None):
 
     if name == "reused_python_slot":
         reusable = Slot(
-            SafeString('<small class="reused">python</small>'),
+            Markup('<small class="reused">python</small>'),
             component_name="Outlet",
             slot_name="default",
         )

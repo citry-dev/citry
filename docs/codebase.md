@@ -25,6 +25,7 @@ citry/
 ├── crates/              # Rust workspace crates (core + internal crates)
 │   ├── citry_core_py/   # Main Rust crate exposed to Python
 │   ├── citry_html_transform/
+│   ├── citry_template_formatter/
 │   ├── python_safe_eval/
 │   └── citry_template_parser/
 ├── packages/            # Shipping products per language
@@ -61,7 +62,15 @@ As such, the Rust crates are ideal for:
 - **Rust**: Install via [rustup](https://rustup.rs/) v1.93 or higher (nightly toolchain required for edition 2024)
 - **Python**: 3.10 or higher
 - **UV**: Fast Python package installer (recommended)
-- **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based phases: `pyright` (a pinned pyright from `node_modules`) and `citry-client` (TypeScript type-check, Biome lint, and the canary test of the events client package under `packages/js/citry-client`). A current LTS Node is fine; run `pnpm install` once after cloning. pnpm is the repo's Node package manager: the committed lockfile is `pnpm-lock.yaml`, CI installs from it with `pnpm install --frozen-lockfile`, and one root install also covers the workspace members under `packages/js/`. npm is not a substitute here: it does not read `pnpm-workspace.yaml`, so it would skip the `packages/js/citry-client` toolchain and the gate's `citry-client` phase would fail.
+- **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based
+  phases: the pinned `pyright`, the `citry-client` TypeScript package, the docs
+  playground bundle, and the VS Code language extension. A current LTS Node is
+  fine; run `pnpm install` once after cloning. pnpm is the repo's Node package
+  manager: the committed lockfile is `pnpm-lock.yaml`, CI installs from it with
+  `pnpm install --frozen-lockfile`, and one root install covers every member in
+  `pnpm-workspace.yaml`, including `docs_site/_internal/frontend`, `packages/editors/*`,
+  and `packages/js/*`. npm is not a substitute here because it does not read
+  the pnpm workspace or run those package-local gates.
 
 ### Installing and Managing Rust
 
@@ -176,7 +185,7 @@ pip install uv
    uv run pytest
 
    # Or run Rust tests first (scoped to our crates, see "Running tests" below)
-   cargo test -p citry_core_py -p citry_html_transform -p citry_template_parser -p python_safe_eval
+   cargo test -p citry_core_py -p citry_html_transform -p citry_template_formatter -p citry_template_parser -p python_safe_eval
    ```
 
 ## Common Development Tasks
@@ -205,10 +214,10 @@ would also run ruff's own test suite. CI scopes the run the same way
 uv run pytest
 
 # Rust tests (our crates only)
-cargo test -p citry_core_py -p citry_html_transform -p citry_template_parser -p python_safe_eval
+cargo test -p citry_core_py -p citry_html_transform -p citry_template_formatter -p citry_template_parser -p python_safe_eval
 
 # Both (Rust first, then Python)
-cargo test -p citry_core_py -p citry_html_transform -p citry_template_parser -p python_safe_eval && uv run pytest
+cargo test -p citry_core_py -p citry_html_transform -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
 ```
 
 ### Formatting and linting code
@@ -245,9 +254,10 @@ Quality is enforced by one explicit command, not a commit-time hook: `python scr
 #### Running the checks
 
 ```bash
-# The full gate: cargo fmt/clippy/test, ruff check/format, mypy, pyright, the
-# citry-client package checks, pytest, and the custom validators. Runs every
-# phase, then reports all results in one pass.
+# The full gate: lock validation, cargo fmt/clippy/test, ruff check/format,
+# mypy, pyright, the citry-client, docs-playground, and VS Code extension
+# package checks, pytest, and the custom validators. Runs every phase, then
+# reports all results in one pass.
 python scripts/check.py
 
 # Machine-readable: one JSON object with per-phase status (and the tail of any
@@ -258,7 +268,13 @@ python scripts/check.py --reporter agent
 python scripts/validate.py
 ```
 
-`check.py` only checks; it never edits files. It assumes the workspace is set up (`uv sync --all-packages`, plus `pnpm install` for the pinned Node tools) and that `cargo`, `uv`, `node`, `pnpm`, and the Rust toolchain are on PATH. The `pyright` phase runs the pinned pyright (from `node_modules`) over the Events typing contract test, sitting alongside the mypy phase. The `citry-client` phase runs the events client package's own gate (`pnpm run check` in `packages/js/citry-client`: `tsc --noEmit` over the TypeScript runtime source, `biome check` for lint and format, and the pinned-version canary). One root `pnpm install` covers both phases, the same way `uv sync` installs the Python tools.
+`check.py` only checks; it never edits files. It assumes the workspace is set
+up (`uv sync --all-packages`, plus `pnpm install` for the pinned Node tools)
+and that `cargo`, `uv`, `node`, `pnpm`, and the Rust toolchain are on PATH. The
+`pyright` phase runs the pinned pyright from `node_modules` alongside mypy.
+The package-local Node phases run `pnpm run check` for `citry-client`, the docs
+playground, and the VS Code language extension. One root `pnpm install` covers
+all of them, the same way `uv sync` installs the Python tools.
 
 #### Custom validators
 
@@ -286,6 +302,88 @@ The runner prints `PASS`/`FAIL` per validator and exits non-zero if any returns 
 
 The gate runs in CI via the [`repo--check.yml`](../.github/workflows/repo--check.yml) workflow, which builds the workspace and runs `python scripts/check.py` on every change (no path filters). The per-language matrix workflows ([`rust--tests.yml`](../.github/workflows/rust--tests.yml), [`py--tests.yml`](../.github/workflows/py--tests.yml)) add cross-version and cross-OS test breadth on top of that single-environment gate.
 
+### Protocol packages and shipped copies
+
+Citry has two private server/browser wire contracts:
+
+- [`packages/protocol/events/v1/`](../packages/protocol/events/v1/) owns
+  Events calls, results, actions, and browser manifests.
+- [`packages/protocol/client_graph/v1/`](../packages/protocol/client_graph/v1/)
+  owns the rendered component graph and its ownership comments.
+
+Each directory contains the prose spec, JSON Schemas, worked examples, a
+standard-library-only Python package, and a TypeScript package. The protocol
+directories are the editable sources. Citry ships byte-identical Python copies
+under `citry._protocol`; refresh or check them with:
+
+```bash
+uv run python scripts/sync_protocol_python.py
+uv run python scripts/sync_protocol_python.py --check
+```
+
+The Events TypeScript package builds into `citry-events.js`. The client-graph
+TypeScript package builds one marked generated block inside `citry.js`.
+Package-local `pnpm run check` commands type-check the sources, replay shared
+cases, and reject stale generated files:
+
+```bash
+pnpm --dir packages/protocol/events/v1/js run check
+pnpm --dir packages/protocol/client_graph/v1/js run check
+pnpm --dir packages/js/citry-client run check
+```
+
+`tests/conformance-cases.json` holds surgical mutations that require matching
+Python and JavaScript issue paths and categories. A schema constraint means one
+concrete structural rule at one schema location. The companion
+`tests/constraint-ownership.json` groups every such rule under named Python
+and JavaScript validator functions and supporting test files. Counts and
+content fingerprints make a schema edit fail until its validator assignment
+is reviewed. Run both protocol audits with:
+
+```bash
+uv run python -m packages.protocol._tooling.check \
+  packages/protocol/events/v1 \
+  packages/protocol/client_graph/v1
+```
+
+The report deliberately keeps complete ownership assignment separate from the
+smaller exact-mutation count. Relationship rules such as reference integrity
+and cycle rejection live in the named valid/invalid fixture corpora because
+JSON Schema does not express them.
+
+### Verifying the citry distribution
+
+The publish workflow builds one wheel and one source distribution. Its smoke
+job then builds a second wheel from the source distribution in a temporary
+directory outside the checkout and runs:
+
+```bash
+python scripts/verify_citry_distribution.py --dist-dir dist
+```
+
+The verifier compares every installed `citry/` source file with both wheels
+and the source distribution, compares the two wheels member by member, and
+installs each wheel into its own fresh environment. The installed checks run
+outside the repository with Node absent from `PATH` and without `jsonschema`.
+They exercise both embedded protocol packages, both browser data files, the
+typing marker, the top-level import, and `citry --help`.
+
+During active development, `citry` can need an unreleased companion
+`citry-core` change. Build that wheel explicitly and pass it to the same
+isolated proof:
+
+```bash
+uv build --package citry-core --wheel --out-dir dist/core
+python scripts/verify_citry_distribution.py \
+  --dist-dir dist \
+  --core-wheel dist/core/citry_core-*.whl
+```
+
+The tag-triggered publish workflow does not pass `--core-wheel`. It resolves
+the exact `citry-core` pin from PyPI, so the smoke job still enforces the
+documented release order: publish the compatible core first, wait for it to be
+available, then tag `citry`.
+
 ### Adding a codebase-wide tooling package
 
 To add a new tooling dependency (like a linter, formatter, or test utility) that should be available across the entire codebase:
@@ -297,7 +395,7 @@ To add a new tooling dependency (like a linter, formatter, or test utility) that
 
    ```toml
    [dependency-groups]
-   dev = ["maturin>=1.10.2", "ruff>=0.8.0", "mypy>=1.0.0", "your-new-tool>=1.0.0"]
+   dev = ["maturin>=1.10.2", "ruff>=0.10.0", "mypy>=1.0.0", "your-new-tool>=1.0.0"]
    ```
 
 3. Install the new dependency:
@@ -590,6 +688,84 @@ CI installs the whole workspace from the lockfile, so it builds citry_core and i
 uv sync --locked --all-packages
 ```
 
+### Brand assets: the C3 logo, favicons, and icons
+
+The logo is the characters **C3**, which is how the name sounds read aloud: say
+the `ci` of *citry* as the English letter C and what is left is `tri`, Slovak for
+three. It is a pun on the name, not a version number.
+
+Everything that shows the logo is cut from **two SVG files**, and nothing else is
+drawn by hand:
+
+| File | What it is |
+|---|---|
+| [`docs_site/static/img/citry-icon.svg`](../docs_site/static/img/citry-icon.svg) | The mark on a square frame, for anything sitting in a square slot |
+| [`docs_site/static/img/citry-mark.svg`](../docs_site/static/img/citry-mark.svg) | The same two paths on a wide frame, for anything sitting beside text |
+
+Both take their colour from the surrounding CSS through `currentColor`, except
+the square one, which sets its own and flips with the reader's theme because a
+favicon loads as its own document with no stylesheet around it.
+
+#### Regenerating the rasters
+
+Every PNG is a screenshot of one of those two SVGs. After changing the artwork,
+run:
+
+```bash
+uv run --no-sync python docs_site/scripts/icons.py
+```
+
+That writes the browser and phone icons into `docs_site/static/img/`
+(`favicon.svg`, `favicon-16.png`, `favicon-32.png`, `favicon.png`,
+`apple-touch-icon.png`), the README wordmark and the profile picture into
+`docs/assets/`, and the VS Code Marketplace icon into
+`packages/editors/vscode/images/`. It needs Playwright and a Chromium binary
+(`uv sync --extra social-cards`, then `playwright install chromium`). Do not
+hand-export a PNG or edit one in an image editor: the next run overwrites it,
+and the file drifts from the drawing in the meantime.
+
+Three of the outputs are drawn on a white ground rather than a transparent one,
+because their host fills transparency with something unpredictable: iOS paints a
+home-screen icon's transparency black, a chat client composites a link preview
+against its own theme, and GitHub shows a profile picture on both. The rest are
+transparent.
+
+#### Placing the logo in a page
+
+In the docs site, do not paste the path data. The
+[`<c-citry-mark />`](../docs_site/_internal/components/brand.py) component holds
+it, and both the site header and the social-share card render through it. Pass
+`css_class` when a stylesheet sizes and colours it, or `color` with `width` and
+`height` when there is no stylesheet to read (the card is screenshotted on its
+own, so it states both).
+
+**When the mark stands beside the name, it sits slightly shorter than the
+letters.** The site header is the reference: a `1rem` mark against a `1.05rem`
+name, spaced `0.5rem` apart (`.djc-logo` in `docs_site/static/css/site.css`).
+The README wordmark and the card footer are built from those same two
+proportions, so all three read as one lockup. They do not follow the stylesheet
+automatically, so retuning the header means retuning
+`MARK_TO_NAME` and `GAP_TO_NAME` in `docs_site/scripts/icons.py` and the mark
+size in `og_card.py`.
+
+#### Images and links in a published README
+
+A README that ships outside the repository (PyPI, the VS Code Marketplace) is
+rendered on that host's own domain, where a repo-relative path such as
+`docs/assets/benchmark.png` or `./LICENSE` resolves against *their* site and
+404s. GitHub resolves the same path fine, so the breakage is invisible until
+someone opens the package page. Every reference in those files therefore has to
+be absolute: images at `https://raw.githubusercontent.com/...`, repository files
+at `https://github.com/citry-dev/citry/blob/main/...`. The
+`published_readme_links` validator enforces this, so a relative path fails the
+gate rather than shipping.
+
+#### The parts that are not in the repository
+
+A GitHub organisation profile picture and a repository social-preview image can
+only be uploaded through the web interface; there is no API for either.
+`docs/assets/citry-avatar.png` is the file to upload for the profile picture.
+
 ## Rust-First Architecture
 
 ### Core Principle
@@ -600,7 +776,8 @@ uv sync --locked --all-packages
 
 The top-level `Cargo.toml` defines a workspace that includes:
 
-- Core crates (`citry_core_py`, `citry_html_transform`, `python_safe_eval`, `citry_template_parser`)
+- Core crates (`citry_core_py`, `citry_html_transform`,
+  `citry_template_formatter`, `python_safe_eval`, `citry_template_parser`)
 - Shared dependencies and toolchain configuration
 - Unified linting, formatting, and testing
 
@@ -681,7 +858,7 @@ The root `pyproject.toml` uses **UV** for dependency management instead of tradi
 members = ["packages/py/*"]
 
 [dependency-groups]
-dev = ["maturin>=1.10.2", "ruff>=0.8.0", "mypy>=1.0.0"]
+dev = ["maturin>=1.10.2", "ruff>=0.10.0", "mypy>=1.0.0"]
 ```
 
 **Usage:**
@@ -728,65 +905,43 @@ Tools exclude standard build artifacts and caches:
 - `__pycache__`, `.mypy_cache`
 - But **NOT** `packages/` - tools should run on package code
 
-## Versioning Strategy
+## Versioning strategy
 
-### Current Approach
+### Current approach
 
-- **Lockstep versioning**: All packages share the same version
-- Version is defined in each package's `pyproject.toml`
-- Rust crates may have independent versions (via `Cargo.toml`)
+- Published distributions are independently versioned and released.
+- Each Python distribution declares its version in its own `pyproject.toml`.
+- The `citry` distribution pins its compatible `citry-core` version exactly;
+  the release-order rule below keeps that pair coherent.
+- Rust crates declare their versions in their `Cargo.toml` files.
 
-### Future Considerations
+## Changelog management
 
-If we split into multiple Python distributions:
+### Package-owned changelogs
 
-- Core package (`citry_core`) could have independent versioning
-- SDK package (`citry`) would depend on compatible `citry_core` versions
-- Or maintain lockstep versions for simplicity
+Each published package owns one changelog. The root
+[`CHANGELOG.md`](../CHANGELOG.md) belongs only to the Python `citry` package.
+Auxiliary distributions keep release notes in their package directories, for
+example:
 
-## Changelog Management
+- [`packages/py/citry_core/CHANGELOG.md`](../packages/py/citry_core/CHANGELOG.md)
+  for `citry-core`
+- [`packages/py/pygments_citry/CHANGELOG.md`](../packages/py/pygments_citry/CHANGELOG.md)
+  for `pygments-citry`
+- [`packages/py/citry_lsp/CHANGELOG.md`](../packages/py/citry_lsp/CHANGELOG.md)
+  for `citry-lsp`
+- [`packages/editors/vscode/CHANGELOG.md`](../packages/editors/vscode/CHANGELOG.md)
+  for the VS Code extension
 
-### Single Root-Level Changelog
+This matches the independently versioned and tagged distributions. Users see
+the release history for the package they are deciding whether to upgrade, and
+one change is not duplicated across unrelated release streams. Internal crates
+and monorepo infrastructure do not need user-facing release notes.
 
-This monorepo uses a **single root-level `CHANGELOG.md`** that includes releases of all public-facing packages.
-
-**Rationale:**
-
-- **Simplicity**: Maintaining multiple changelog files across packages is cumbersome
-- **User-friendly**: Users can see all relevant changes in one place
-- **Scalability**: Works well even as the monorepo grows with multiple major projects and language bindings
-
-**Structure:**
-
-The root [`CHANGELOG.md`](../CHANGELOG.md) contains:
-
-- All releases for public-facing packages (e.g., `citry_core` Python package)
-- Version-specific release notes organized by version
-- Feature additions, bug fixes, and breaking changes for all packages
-- Migration guides when needed
-
-**What's NOT included:**
-
-- Internal package changes (e.g., Rust crates that aren't published)
-- Monorepo infrastructure changes (these are documented in this `codebase.md`)
-
-**Format:**
-
-The changelog follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) format with sections for:
-
-- `Added` - New features
-- `Changed` - Changes in existing functionality
-- `Deprecated` - Soon-to-be removed features
-- `Removed` - Removed features
-- `Fixed` - Bug fixes
-- `Security` - Security fixes
-
-**When adding entries:**
-
-- Group changes by package when multiple packages are updated in the same release
-- Use clear, user-facing language (not internal implementation details)
-- Include migration notes for breaking changes
-- Link to relevant issues/PRs when helpful
+Use clear user-facing language, include migration instructions for breaking
+changes, and link relevant issues when helpful. Record each release exactly
+once in its owning changelog. The content test and exclusions are defined in
+[`CLAUDE.md`](../CLAUDE.md#what-belongs-in-the-changelog).
 
 ## Versioning, tags and releases
 
@@ -823,16 +978,19 @@ Currently, releases are managed manually:
    package's version, so a bumped `pyproject.toml` without a matching `uv.lock`
    makes CI fail its `uv sync --locked --all-packages` step (in `repo--check` and
    the test workflows), not only at publish time.
-3. **Update CHANGELOG.md** with release notes
+3. **Update the package's owning changelog** with release notes. Use the root
+   `CHANGELOG.md` only for `citry`; auxiliary packages use the `CHANGELOG.md`
+   in their own package directory.
 4. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
 5. **Push the tag**: `git push origin citry-core@1.3.0`
 
 Pushing the tag triggers the package's publish workflow, which verifies the tag matches the pyproject version, builds the distributions, smoke-tests them, and uploads to PyPI. A `citry@X.Y.Z` tag also triggers the documentation release workflow that builds, validates, commits, and deploys a version snapshot; sibling package tags do not. Review the snapshot procedure and first-release blockers in [`docs_site/README.md`](../docs_site/README.md#release-version-snapshots) before pushing a Citry release tag. **Release ordering**: citry depends on `citry-core`, so when bumping both, publish `citry-core` first and let it reach PyPI before tagging `citry`.
 
 The packages are versioned and released **independently on purpose**, so each
-can ship on its own cadence. The ordering rule applies only when `citry` and
-`citry-core` both change; `pygments-citry` has no cross-package release
-ordering requirement.
+can ship on its own cadence. The ordering rule applies when `citry` and
+`citry-core` both change. A `citry-lsp` release whose minimum Citry version is
+new must likewise wait for that Citry release to reach PyPI. `pygments-citry`
+has no cross-package release ordering requirement.
 
 **`citry` pins one exact `citry-core` version** (`citry-core==1.4.0`, not a
 range). The runtime node classes in `citry.nodes` read the source that
@@ -841,6 +999,66 @@ would otherwise reach an already-published `citry` that cannot read it. Raise
 the pin in the same change that bumps citry-core's version, before tagging
 either. That makes the two releases a pair: publish `citry-core` first, wait
 for PyPI, then tag `citry`.
+
+### The `review` branch holds work that has not been read yet
+
+Releases go out from `main`, but not everything committed has been read line by
+line. The `review` branch is where that unread work waits, so the editor's
+source-control panel doubles as the worklist:
+
+- **`main` is the reviewed baseline.** Local `main` tracks `origin/main`, so it
+  never reports as diverged and never prompts to sync.
+- **`review` carries everything not yet read**, branched at the commit `main`
+  held when the ledger was last reset. The `reviewed-baseline` tag names that
+  commit as a recovery point.
+- **Reading a file through means committing it on `review`.** The commit is the
+  audit record of what has been read.
+- **Do not pull generated commits into `review`.** The docs release pushes a
+  `docs: build <version> [skip ci]` commit to `main` carrying the version
+  snapshot. Let local `main` fetch those and leave `review` alone; nobody
+  reviews generated output.
+
+**`review` never merges into `main`, in either direction.** The gate works by
+having `HEAD` point at an old tree, so the two branches diverging is what makes
+it function, not damage to repair. The editor's "N behind, M ahead" indicator is
+cosmetic and stays lit; `review` has no upstream configured, so the editor is
+just comparing against `origin/main`. Merging `main` into `review` would refuse
+to run anyway, because it would have to overwrite hundreds of locally-modified
+files, and `git merge -s ours` is worse: it records "deliberately discard main's
+changes", so a later merge the other way would revert content on `main` to
+`review`'s older copies.
+
+A release therefore never comes from `review`. Assemble it in a throwaway
+worktree of `main` instead:
+
+```bash
+git worktree add ../citry-release main
+# copy the named files this release needs into the worktree, then
+# commit, tag, and push from there
+git worktree remove ../citry-release
+```
+
+Two rules that came out of doing this five times:
+
+- **Copy named files, never whole trees.** A wholesale copy drags in whatever
+  other work is in progress on disk, and `main` may not be able to run it. Diff
+  each file into place and read the diff.
+- **Land any fix you make during the release in the working tree too**, not
+  only in the worktree. Otherwise the disk copy stays stale and committing the
+  tree later silently reverts the fix. The change then shows up in the panel as
+  an ordinary unread entry, which is accurate.
+
+Releasing straight from `review` looks tempting because the publish workflows
+accept a manual `workflow_dispatch`, but that path uploads to PyPI with the
+tag-versus-`pyproject` version check skipped, creates no tag and no GitHub
+Release, and leaves the changelog's `<package>@X.Y.Z` compare links pointing at
+a tag that does not exist. A tag push from `main` is the supported route.
+
+The arrangement is rebuilt by pushing the release commit to `main`, then moving
+the branch pointer with `git reset --mixed`, which leaves the working tree
+untouched so every unread file reappears in the panel. A tag alone cannot do
+this: a tag only names a commit, and the panel is populated from the working
+tree against `HEAD`.
 
 ### Chronological Ordering
 
@@ -939,13 +1157,16 @@ The repository uses **three separate test workflows** to optimize CI performance
 
 **What it runs**:
 
-- `python scripts/check.py`: cargo fmt/clippy/test, ruff check/format, mypy, pytest, and the custom validators, every phase followed by a combined report
+- `python scripts/check.py`: lock validation, cargo fmt/clippy/test, Ruff,
+  mypy, Pyright, the client/docs-playground/VS Code package checks, pytest, and
+  the custom validators, every phase followed by a combined report
 - The single source of truth for "does everything pass"
 
 **Configuration**:
 
-- Python 3.13 on ubuntu-latest, with the Rust nightly toolchain
-- `uv sync --locked --all-packages` to build the workspace, then `python scripts/check.py`
+- Python 3.13 on ubuntu-latest, with the Rust nightly toolchain and Node 22
+- `uv sync --locked --all-packages` and `pnpm install --frozen-lockfile` to
+  build both workspaces, then `python scripts/check.py`
 
 #### 2. `rust--tests.yml` - Rust Tests
 

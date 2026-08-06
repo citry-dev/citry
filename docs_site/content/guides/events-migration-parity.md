@@ -99,7 +99,7 @@ choice when a value must not appear in the page token.
 | Deferred State write | Handwritten | `.defer` | Client state | htmx values | `$state` writes and pending two-way updates ride the next call | **v1** |
 | Discard pending writes | Handwritten | `.discard` | - | - | Application decides which value to send | **Dropped** |
 | Loading UI | Handwritten | Loading directives | Lifecycle/Alpine | htmx indicator | `$loading()` / `$loading(name)` and lifecycle events | **v1** |
-| Error UI | Host response | Error context/attrs | Method-error event | HTTP error | `$error`, field map, and error lifecycle event | **v1** |
+| Error UI | Host response | Error context/attrs | Method-error event | HTTP error | `$error()` / `$error(name)`, field map, and error lifecycle event | **v1** |
 | Dirty-input indicator | Handwritten | `unicorn:dirty` | Alpine | htmx | Build from Alpine and lifecycle events when needed | **Dropped** |
 | Polling | Handwritten | Rich poll object | Application code | htmx | `@c-poll.<time>="handler"`, hidden-tab pause | **v1** |
 | Dynamic poll retiming | Handwritten | `PollUpdate` | Application code | htmx | Re-render a different binding or use app code | **Dropped** |
@@ -155,8 +155,8 @@ ranges. State remains under `$state`; it is not flattened into user `x-data`.
 | Custom return resolver | Host response | Framework return handling | Framework callbacks | Execution result classes | Registered event-result resolver | **v1** |
 | Typed form collection | Manual | Model binding | Form components | Body kwargs | Named controls into typed `data` | **v1** |
 | Django `form_class` sugar | Manual | Shipped | Form/ModelForm components | - | Convenience integration | **v1.x** |
-| Field-error map | Manual | Shipped | `form_errors` | Application code | Schema errors and `EventError.fields` in `$error.fieldErrors` | **v1** |
-| Error attrs/template tag | Manual | Shipped | Template state | Application code | Render from `$error` explicitly | **Dropped** |
+| Field-error map | Manual | Shipped | `form_errors` | Application code | Schema errors and `EventError.fields` in `$error(name).fieldErrors` | **v1** |
+| Error attrs/template tag | Manual | Shipped | Template state | Application code | Render from `$error(name)` explicitly | **Dropped** |
 | Multipart upload | Raw request files | Limited | Shipped | Shipped | Built-in multipart to `UploadedFile` | **v1.x** |
 | Staged multi-request upload | Application code | - | Temporary files | Upload flow | Single-request multipart is the planned scope | **Dropped** |
 | HTTP file response | Native response | - | `FileResponse` | Application response | `RouteResponse` from `@event(bundle=False)` on a per-event HTTP call | **v1** |

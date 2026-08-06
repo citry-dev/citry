@@ -1,0 +1,10 @@
+<main>
+  <script>
+    const answer = 41 + 1;
+  </script>
+  <style>
+    .card {
+      color: red;
+    }
+  </style>
+</main>

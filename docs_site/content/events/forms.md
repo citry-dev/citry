@@ -62,8 +62,13 @@ class ContactForm(Component):
         <form @c-submit.prevent="submit">
           <input name="name">
           <input name="email">
-          <span x-text="$error?.fieldErrors.email"></span>
-          <button type="submit" :disabled="$loading()">
+          <span
+            x-text="$error('submit')?.fieldErrors?.email"
+          ></span>
+          <button
+            type="submit"
+            :disabled="$loading('submit')"
+          >
             Send
           </button>
         </form>
@@ -81,23 +86,27 @@ in JavaScript.
 
 ## Show errors and loading state
 
-[`$error`][$error] exposes the last failed call. Its `fieldErrors` object uses
-the names passed to `EventError`:
+[`$error('submit')`][$error] exposes this handler's retained error. Its
+`fieldErrors` object uses the names passed to `EventError`:
 
 ```citry-html
-<span x-text="$error?.fieldErrors.email"></span>
+<span x-text="$error('submit')?.fieldErrors?.email"></span>
 ```
 
-[`$loading()`][$loading] covers time spent waiting in the queue as well as the
-network request, so it is suitable for disabling the submit button:
+[`$loading('submit')`][$loading] covers this handler's time waiting in the
+queue as well as the network request, so it is suitable for disabling the
+submit button:
 
 ```citry-html
-<button type="submit" :disabled="$loading()">
+<button type="submit" :disabled="$loading('submit')">
   Send
 </button>
 ```
 
-A successful call clears `$error`.
+A successful `submit` call clears only its own error. Other handlers in the
+same component keep their errors, so independent forms can show independent
+feedback. Call `$error()` without a name when a component-wide banner should
+show the newest retained error.
 
 The [event bindings guide](/events/bindings/) covers submit modifiers and the
 other loading and error helpers. [Use event routes directly](/events/http/)

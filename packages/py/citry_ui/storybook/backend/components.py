@@ -78,14 +78,12 @@ class CStaticTabsContent(LibraryComponent):
         pass
 
     template = """
-      <c-CTabList aria_label="Account settings">
-        <c-CTab value="account">
-          Account
-        </c-CTab>
-        <c-CTab value="security">
-          Security
-        </c-CTab>
-      </c-CTabList>
+      <c-CTab value="account">
+        Account
+      </c-CTab>
+      <c-CTab value="security">
+        Security
+      </c-CTab>
       <c-CTabPanel value="account">
         Account preferences
       </c-CTabPanel>

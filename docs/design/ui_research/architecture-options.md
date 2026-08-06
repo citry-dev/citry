@@ -1,7 +1,7 @@
 # Phase 6 architecture hypotheses and packaging spike
 
 **Snapshot:** 2026-07-23. **Status:** Phase 6 historical evidence, with a
-2026-07-24 publishing follow-up. The architecture comparison was frozen before
+2026-07-29 framework and publishing follow-up. The architecture comparison was frozen before
 the original packaging spike was evaluated. Examples of package-owned
 registration, invocation facades, and installation references below describe
 that experiment, not the current authoring API. Current publishing behavior is
@@ -10,6 +10,13 @@ current source rules are in the repository-wide
 [`component authoring guide`](../../best-practices/component-authoring.md) and
 Citry UI's
 [`package policy`](../../../packages/py/citry_ui/docs/component-authoring.md).
+
+**Phase 7 decision (2026-07-29):** one public architecture advances:
+the separate `citry-ui` distribution publishes `LibraryComponent` definitions
+that applications register explicitly into each Citry engine. The H1/H2/H3
+headless-delivery comparison below remains historical research. Headless APIs
+and their performance comparison are parked until a broader styled catalog,
+real application usage, and representative full pages provide evidence.
 
 The controlling product decisions are in the
 [product charter](product-charter.md), the implemented framework boundary is
@@ -45,11 +52,11 @@ The Python distribution is `citry-ui`, its import namespace is `citry_ui`, and
 it depends on a tested compatible `citry` range. There is no `citry[ui-*]`
 installation alias.
 
-The executable spike temporarily carries `citry>=0.2.0,<0.3.0` so it can run
-inside the current workspace. That is not a compatibility claim for the
-published Citry 0.2.0 artifact, which lacks APIs used by the spike. The package
-must not be published until the first Citry release containing those contracts
-is known and the lower bound is replaced and tested against that artifact.
+The package now uses the released `citry>=0.3.1,<0.4.0` line. Citry 0.3.1 and
+Citry Core 1.4.0 contain the publishing, slot-data, Events, ownership, and
+ambient-context APIs used by the spike, including the corrected generated
+Events browser asset. Citry UI still needs real multi-release installation
+fixtures before publication.
 
 ## 2. Fixed boundaries
 
@@ -68,8 +75,9 @@ The following constraints apply equally to every hypothesis:
   must be deterministic wheel content. File assets resolve relative to the
   declaring Python module.
 - Explicit per-Citry registration happens before `Citry.initialize()`.
-- Client ambient context is a named framework prerequisite. Phase 6 does not
-  promote an application global or DOM-parent lookup into a UI API.
+- Client ambient context uses Citry's public server and client
+  provide/inject/unprovide contract. Phase 6 does not promote an application
+  global or DOM-parent lookup into a UI API.
 - Localization architecture remains separate follow-up work. Explicit
   direction and author-supplied text remain in scope.
 - Charts, rich-text editors, maps, and domain-heavy data grids remain
@@ -595,13 +603,13 @@ The Phase 6 package skeleton uses:
 | Import package | `citry_ui` |
 | Initial spike version | `0.0.1` |
 | Python range | Same floor and ceiling as the compatible Citry line |
-| Citry dependency | A bounded compatible minor line, widened only after its full matrix passes |
+| Citry dependency | `citry>=0.3.1,<0.4.0`, widened only after its full matrix passes |
 | Type marker | `citry_ui/py.typed` included in wheel |
 | Assets | Inline or module-relative templates and prebuilt plain CSS/JavaScript; the static Button probe uses inline template/CSS and no JavaScript |
 | Consumer tools | Python installer only; no Node, compiler, CDN, or runtime fetch |
 
-The spike version is not a public stability promise. A real release starts
-only after the publishing prerequisite and Phase 8 decision record.
+The spike version is not a public stability promise. Production component APIs
+start only after their Phase 7 specifications and the Phase 8 decision record.
 
 ### 10.2 Release ordering
 
@@ -667,10 +675,9 @@ or unavailable until multiple real releases exist:
 
 ## 12. Quantitative budgets frozen for Phase 7
 
-These are comparative-prototype budgets, not forecasts for the final catalog.
-Both advancing hypotheses use the same measurements and fixtures. A budget may
-change only before Phase 7 implementation begins, with the reason recorded in
-this file.
+These began as comparative-prototype budgets and now gate the one styled
+production architecture. A budget may change only through a recorded decision
+made before the affected implementation increment begins.
 
 ### 12.1 Assets and interaction
 
@@ -679,7 +686,8 @@ this file.
 | Incremental Brotli CSS for the complete eight-probe route | at most 30 KiB |
 | Incremental Brotli JavaScript for the complete eight-probe route, excluding Citry, Alpine, and Events | at most 45 KiB |
 | Incremental Brotli assets for a route containing only Button, Field/Input, and semantic Table | at most 12 KiB CSS and 8 KiB JavaScript |
-| Static Button and semantic Table client work | zero component JavaScript, observers, timers, and global listeners when no interactive option is used |
+| Semantic Table client work | zero component JavaScript, observers, timers, and global listeners |
+| Inactive Button retained work | one shared reactive initializer is allowed; zero observers, timers, document/window listeners, or retained global entries |
 | Duplicate family asset execution after fragment insertion | zero |
 | First local interaction handler duration in the pinned desktop CI profile | p95 at most 50 ms over 30 measured runs |
 | First local interaction handler duration in the pinned mobile-emulation profile | p95 at most 100 ms over 30 measured runs |
@@ -689,6 +697,14 @@ Raw, gzip, and Brotli sizes are all recorded. The limits apply to Brotli only
 because one compression basis is needed for the gate. Interaction timing is
 incremental and local; transport latency is measured separately.
 
+The Button row was revised on 2026-07-30 after the production input contract
+made `disabled` and `loading` reactive client props. A Button with false server
+values can receive either prop later, so the class cannot truthfully promise
+zero initialization. The replacement budget limits idle retained work while
+keeping semantic Table completely script-free. Conditional per-instance asset
+delivery remains a future compiler or runtime optimization, not a hidden
+requirement on component authors.
+
 ### 12.2 Customization and visual coverage
 
 | Measure | Phase 7 budget |
@@ -697,7 +713,7 @@ incremental and local; transport latency is measured separately.
 | Undocumented selectors or internal DOM queries needed by either required brand theme | zero |
 | Consumer `!important` declarations needed by either required brand theme | zero |
 | Selector specificity above one package class or state attribute plus one documented part | zero without a recorded accessibility or browser justification |
-| Frozen styled states, variants, sizes, densities, responsive modes, dark mode, RTL mode, and error states represented by scenarios and Storybook stories | 100% |
+| Frozen styled states, variants, sizes, densities, responsive modes, dark mode, RTL mode, and error states represented by scenarios and docs live examples | 100% |
 | Screenshot maximum differing-pixel ratio in pinned browser images | 0.1% after masking only genuinely nondeterministic content |
 | Required theme and coexistence fixtures | default light, default dark, two brand themes, plain CSS, Bootstrap, and Tailwind |
 
@@ -710,7 +726,7 @@ focus assertions.
 | Measure | Phase 7 budget |
 |---|---:|
 | Required package registration and asset scenarios passing | 100% |
-| Styled/headless shared conformance cases passing in both modes | 100% |
+| Required styled production component conformance cases passing | 100% |
 | Automated axe violations at serious or critical impact | zero |
 | Nu HTML validation errors caused by library output | zero |
 | APG keyboard cases in the supported mode matrix | 100% |
@@ -737,8 +753,8 @@ one probe family rather than pretending Phase 7's component work was complete.
 That historical probe was enough to exercise:
 
 - a real `citry-ui` distribution and `citry_ui` import namespace;
-- a workspace-only dependency placeholder whose release lower bound remains a
-  prerequisite rather than compatibility evidence;
+- the then-current workspace-only dependency placeholder, which did not count
+  as compatibility evidence before Citry 0.3.0 was released;
 - inert import and explicit per-Citry registration;
 - an explicit component-family catalog, generic registration plumbing, thin
   package installation layer, and flat class references;
@@ -801,8 +817,9 @@ notification contracts.
 ### 13.2 Wheel and installer behavior observed
 
 The revised family-local 0.0.1 wheel was built and exercised with a locally
-built development Citry artifact in a fresh Python 3.13 environment. This does
-not establish compatibility with the published Citry 0.2.0 artifact. An
+built development Citry artifact in a fresh Python 3.13 environment. At the
+time, this did not establish compatibility with the published Citry 0.2.0
+artifact. Citry 0.3.0 has since supplied the compatible floor. An
 earlier synthetic upgrade experiment used the superseded
 external Button asset layout. It is excluded from evidence for the revised
 package rather than carried forward as if the artifacts were equivalent:
@@ -812,7 +829,7 @@ package rather than carried forward as if the artifacts were equivalent:
 | Wheel build | Pass | Setuptools produced `citry_ui-0.0.1-py3-none-any.whl` |
 | Wheel inventory | Pass, refreshed 2026-07-23 | The expanded pure wheel has 16 entries: 11 `citry_ui` source/type-marker files and five own dist-info/license entries; it contains no generated client assets or source toolchain |
 | Namespace isolation | Pass | No path in the wheel writes into `citry/**` |
-| Clean/offline pip install | Pass for local artifacts | `python -m pip` in a fresh standard-library venv installed locally built Citry Core, development Citry, Citry UI, and three Python dependencies from a prepared wheelhouse with index access disabled; the release lower bound remains unresolved |
+| Clean/offline pip install | Pass for local artifacts | `python -m pip` in a fresh standard-library venv installed locally built Citry Core, development Citry, Citry UI, and three Python dependencies from a prepared wheelhouse with index access disabled; testing the released 0.3.0 floor remains a refreshed fixture |
 | Repeat same-wheel install | Historical pass for the Button-only artifact | The expanded 16-entry wheel still needs the isolated repeat-install and fingerprint fixture rerun before release evidence is current |
 | Isolated runtime | Pass | An installed-wheel smoke test imported, registered, initialized, rendered styled and consumer-owned headless markup, and resolved the public `CButton` with an explicit engine |
 | No-Node runtime | Pass | The same render succeeded with an otherwise empty environment whose `PATH` contained only the consumer virtual environment and no `node` executable |
@@ -877,7 +894,7 @@ silently counted toward the Phase 7 requirement of 100% passing cases.
 
 | Frozen scenario | Classification | Evidence or remaining obligation |
 |---|---|---|
-| Clean pip install | Pass for local artifacts | A fresh Python 3.13 standard-library venv installed the wheel and locally built development Citry dependency with `python -m pip`, then imported and rendered the styled probe; the first compatible release lower bound is still a prerequisite |
+| Clean pip install | Pass for local artifacts | A fresh Python 3.13 standard-library venv installed the wheel and locally built development Citry dependency with `python -m pip`, then imported and rendered the styled probe; the now-released 0.3.0 floor still needs a refreshed isolated fixture |
 | Clean uv install | Pass for local artifacts | A no-workspace project resolved direct `citry` and `citry-ui` dependencies from the prepared development wheelhouse |
 | Wheel contents | Pass, refreshed 2026-07-23 | The 16-entry pure wheel contains only 11 `citry_ui` source/type-marker files and five own dist-info/license entries; family assets remain inline and no build toolchain ships |
 | Offline install | Pass | Both pip and uv installations completed from local artifacts with index access disabled; runtime performed no fetch |
@@ -897,9 +914,9 @@ silently counted toward the Phase 7 requirement of 100% passing cases.
 | Introspection | Pass for the current scope | Canonical names, flat handle order, separate styled/headless schemas, asset provenance, and files are deterministic; richer versioned family and partner metadata is deferred until a concrete consumer requires it |
 | No build runtime | Pass | Isolated rendering and asset loading succeed with no Node executable, compiler, CDN, or network access, and the static Button emits no component JS |
 
-## 14. Phase 6 advancement decision
+## 14. Phase 6 advancement decision and Phase 7 resolution
 
-The executable gate passes for comparative prototyping. Citry now supplies the
+The executable gate passed for comparative prototyping. Citry now supplies the
 small atomic registration primitive the package needs, while the broader
 package-lifecycle contract remains future work:
 
@@ -927,23 +944,25 @@ keyboard, and cleanup contracts create real pressure.
   upgrade and drift burden before a prototype can justify that cost. Its
   installed-kernel form is represented by H3.
 
-Phase 7 must implement the same eight probes and conformance suite for H1 and
-H3. It may reuse one behavior kernel only if the comparison still preserves
-their different ownership and assembly contracts. Shared code must not erase
-the decision under test.
+That was the Phase 6 conclusion. Phase 7 now advances one public publishing and
+authoring architecture: styled `LibraryComponent` definitions in the separate
+`citry-ui` package. It does not implement the eight probes twice. Headless H1,
+H2, and H3 work is parked until real application usage identifies an API worth
+supporting and representative pages make its performance costs measurable.
 
 The following work remains before a public `citry-ui` release:
 
-1. A released Citry compatibility floor plus real multi-release upgrade,
-   downgrade, retained-page, and deprecation fixtures.
+1. Real installation, multi-release upgrade, downgrade, retained-page, and
+   deprecation fixtures for the released `citry>=0.3.1,<0.4.0` line.
 2. Atomic live uninstall and hot replacement only if the product requires
    them; additive publication, preflight, collision handling, repeated
    registration, concurrent visibility, and rollback are implemented.
 3. Versioned UI family/mode/partner metadata in introspection, if a concrete
    consumer cannot obtain it from the library definition map, without
    requiring an extension to be installed after `Citry` construction.
-4. Client ambient context for theme and direction across graph ancestry,
-   slots, teleports, morphs, updates, defaults, cleanup, and diagnostics.
+4. Production-family verification of the implemented client ambient-context
+   contract across slots, teleports, morphs, updates, defaults, cleanup, and
+   diagnostics.
 5. The complete Phase 7 accessibility, browser, forms, lifecycle, security,
    styling, visual, and asset-budget suite.
 
@@ -969,14 +988,19 @@ per-library definition map rather than a same-named registry entry.
 
 ### 15.2 Added pressure families
 
+This table records the Phase 6 pressure state. The styled Tabs row was
+superseded on 2026-07-29 by the Phase 7 production specification and first
+interactive increment in [`../ui_components/tabs.md`](../ui_components/tabs.md).
+
 | Family | Implemented evidence | Explicitly unproven |
 |---|---|---|
 | Field plus Input | Separate styled/headless schemas, stable label/control/description/error IDs, persistent polite error region, native form attributes, tri-state Field inheritance, open-attribute precedence, and `ComponentLike` returned from a scoped slot callback | Focus, caret, autofill, native reset, validity, live-region timing, and Events morph preservation in browsers |
 | Semantic Table | Validated keyed columns and rows, semantic table/header/cell output, row headers, explicit rejection of unvalidated spans, ready/loading/error states, repeated scoped slots, nested `ComponentLike` cell values, and zero JavaScript | A validated logical span grid, large-data performance, fragment row replacement, and visual/browser matrix |
 | Tabs | Eight compound styled/headless definitions, one accessibly named TabList, enforced TabList ownership, explicit values, stable paired ARIA IDs, initial selection, disabled-selection rejection, duplicate and missing-pair rejection after descendants settle, orientation/direction metadata, and zero unclaimed JavaScript | Keyboard navigation, activation modes, focus ownership, dynamic removal, client/server state, morph preservation, and cleanup |
 
-Tabs is server-first on purpose. Shipping it as interactive before the browser
-matrix passes would turn incomplete behavior into a product claim.
+Tabs began server-first on purpose. Its first production interaction was added
+only after the specification and Chromium, Firefox, and WebKit behavior tests
+existed. The remaining release matrix stays open in the component spec.
 
 ### 15.3 Constraints exposed
 
@@ -988,9 +1012,9 @@ matrix passes would turn incomplete behavior into a product claim.
 2. The original explicit constructor, spec, installation-reference, and typed
    facade work grew linearly with every definition. The 16-class catalog
    justified moving those responsibilities into the core publishing API.
-3. Styled composition over headless definitions works for server semantics,
-   provide/inject, attributes, and scoped slots. Tabs still cannot prove H1
-   versus H3 until one client behavior implementation drives both assemblies.
+3. Styled composition over headless definitions worked for the Phase 6 server
+   pressure case. Phase 7 parked that comparison and the production styled
+   Tabs now owns its DOM and client behavior directly.
 4. Compound validation can observe descendants only after they render. The
    Tabs probe uses a render-local mutable registry carried inside an immutable
    provided payload, then validates it in generator `on_render`. This is

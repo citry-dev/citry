@@ -409,6 +409,30 @@ class TestFrozenValueModel:
         with pytest.raises(ValueError, match=message):
             FieldInfo(**values)
 
+    def test_field_info_rejects_incomplete_or_invalid_source_provenance(self):
+        values = {
+            "name": "title",
+            "required": True,
+            "type_display": "str",
+            "type_fidelity": "normalized",
+            "default_kind": "missing",
+            "default_value_state": "not-applicable",
+            "default_value": None,
+            "description": None,
+        }
+
+        with pytest.raises(ValueError, match="both be present"):
+            FieldInfo(**values, source_module=__name__)
+        with pytest.raises(ValueError, match="non-empty string"):
+            FieldInfo(**values, source_module="", source_qualname="Card.Kwargs")
+        with pytest.raises(ValueError, match=r"absolute pathlib\.Path"):
+            FieldInfo(
+                **values,
+                source_module=__name__,
+                source_qualname="Card.Kwargs",
+                source_file=Path("card.py"),
+            )
+
     def test_available_null_is_distinct_from_omitted_value(self):
         available = FieldInfo(
             name="value",
@@ -847,6 +871,18 @@ class TestFrozenValueModel:
         }
 
     def test_asset_info_rejects_contradictory_and_relative_paths(self):
+        with pytest.raises(ValueError, match="structured owner provenance"):
+            AssetInfo(
+                kind="inline",
+                declared_on="shop.Card",
+                owner_file=Path(__file__).resolve(),
+                declared_path=None,
+                resolution="not-applicable",
+                resolved_path=None,
+                searched_paths=(),
+                owner_module="other",
+                owner_qualname="Card",
+            )
         with pytest.raises(ValueError, match=r"absolute pathlib\.Path"):
             AssetInfo(
                 kind="inline",
@@ -1260,6 +1296,8 @@ class TestFrozenValueModel:
             resolution="not-requested",
             resolved_path=None,
             searched_paths=(),
+            owner_module="shop.card",
+            owner_qualname="Card",
         )
         extension = ComponentExtensionInfo(
             name="events",
@@ -1317,6 +1355,9 @@ class TestFrozenValueModel:
                                     "default_value_state": "not-applicable",
                                     "default_value": None,
                                     "description": None,
+                                    "source_module": None,
+                                    "source_qualname": None,
+                                    "source_file": None,
                                 },
                             ],
                         },
@@ -1335,6 +1376,8 @@ class TestFrozenValueModel:
                             "kind": "file",
                             "declared_on": "shop.card.Card",
                             "owner_file": Path(__file__).resolve().as_posix(),
+                            "owner_module": "shop.card",
+                            "owner_qualname": "Card",
                             "declared_path": "card.html",
                             "resolution": "not-requested",
                             "resolved_path": None,
@@ -1344,6 +1387,8 @@ class TestFrozenValueModel:
                             "kind": "none",
                             "declared_on": None,
                             "owner_file": None,
+                            "owner_module": None,
+                            "owner_qualname": None,
                             "declared_path": None,
                             "resolution": "not-applicable",
                             "resolved_path": None,
@@ -1353,6 +1398,8 @@ class TestFrozenValueModel:
                             "kind": "none",
                             "declared_on": None,
                             "owner_file": None,
+                            "owner_module": None,
+                            "owner_qualname": None,
                             "declared_path": None,
                             "resolution": "not-applicable",
                             "resolved_path": None,
@@ -1509,6 +1556,93 @@ class TestSchemaAdapter:
         assert schema.import_path is not None
         assert schema.import_path.endswith(".<locals>.Combined.Kwargs")
         assert [item.name for item in schema.fields] == ["right", "left"]
+        assert schema.fields[0].source_qualname is not None
+        assert schema.fields[0].source_qualname.endswith(".<locals>.Right.Kwargs")
+        assert schema.fields[1].source_qualname is not None
+        assert schema.fields[1].source_qualname.endswith(".<locals>.Left.Kwargs")
+        assert all(item.source_module == __name__ for item in schema.fields)
+        assert all(item.source_file == Path(__file__).resolve() for item in schema.fields)
+
+    def test_composed_field_with_unsafe_authored_owner_drops_provenance_atomically(self):
+        app = Citry(autodiscover=False)
+
+        class BadSchema:
+            bad: str
+
+        BadSchema.__qualname__ = ""
+
+        class GoodSchema:
+            good: str
+
+        class BadDefinition:
+            Kwargs = BadSchema
+
+        class GoodDefinition:
+            Kwargs = GoodSchema
+
+        class Card(BadDefinition, GoodDefinition, Component):
+            citry = app
+
+        fields = {item.name: item for item in _inspect_component_schemas(Card).kwargs.fields}
+
+        assert fields["bad"].source_module is None
+        assert fields["bad"].source_qualname is None
+        assert fields["bad"].source_file is None
+        assert fields["good"].source_module == __name__
+        assert fields["good"].source_qualname is not None
+        assert fields["good"].source_file == Path(__file__).resolve()
+
+    def test_field_source_lookup_does_not_call_module_getattr(self):
+        module_name = f"{__name__}._source_without_file"
+        module = ModuleType(module_name)
+        calls: list[str] = []
+
+        def module_getattr(name: str) -> object:
+            calls.append(name)
+            raise AttributeError(name)
+
+        module.__dict__["__getattr__"] = module_getattr
+        sys.modules[module_name] = module
+        try:
+
+            @dataclass
+            class Schema:
+                value: str
+
+            Schema.__module__ = module_name
+            Schema.__qualname__ = "Schema"
+            inspected = _inspect_schema_class(Schema, include_default_values=False)
+        finally:
+            del sys.modules[module_name]
+
+        assert inspected is not None
+        field_info = inspected[0]
+        assert calls == []
+        assert field_info.source_module == module_name
+        assert field_info.source_qualname == "Schema"
+        assert field_info.source_file is None
+
+    def test_field_source_with_non_utf8_module_file_keeps_only_safe_identity(self):
+        module_name = f"{__name__}._source_with_non_utf8_file"
+        module = ModuleType(module_name)
+        module.__file__ = str(Path.cwd() / "bad\ud800.py")
+        sys.modules[module_name] = module
+        try:
+
+            @dataclass
+            class Schema:
+                value: str
+
+            Schema.__module__ = module_name
+            Schema.__qualname__ = "Schema"
+            inspected = _inspect_schema_class(Schema)
+        finally:
+            del sys.modules[module_name]
+
+        assert inspected is not None
+        assert inspected[0].source_module == module_name
+        assert inspected[0].source_qualname == "Schema"
+        assert inspected[0].source_file is None
 
     def test_schema_role_rejects_a_non_class_binding(self):
         app = Citry(autodiscover=False)
@@ -1592,6 +1726,11 @@ class TestSchemaAdapter:
         assert fields_info[1].description == "Count."
         assert fields_info[1].default_value == 3
         assert fields_info[2].default_value_state == "not-applicable"
+        assert fields_info[0].source_qualname is not None
+        assert fields_info[0].source_qualname.endswith(".<locals>.Base")
+        assert fields_info[1].source_qualname is not None
+        assert fields_info[1].source_qualname.endswith(".<locals>.Schema")
+        assert fields_info[0].source_file == Path(__file__).resolve()
         assert calls == 0
         assert get_fields(Schema) == [
             FieldSpec("inherited", required=True),
@@ -1635,6 +1774,12 @@ class TestSchemaAdapter:
         ]
         assert [item.description for item in v2] == ["Required v2.", "Value v2.", None]
         assert [item.description for item in v1] == ["Required v1.", "Value v1.", None]
+        assert all(
+            item.source_qualname is not None and item.source_qualname.endswith(".<locals>.V2Schema") for item in v2
+        )
+        assert all(
+            item.source_qualname is not None and item.source_qualname.endswith(".<locals>.V1Schema") for item in v1
+        )
         assert v2[1].default_value == (1,)
         assert v1[1].default_value == (1,)
         assert factories == 0
@@ -1651,6 +1796,10 @@ class TestSchemaAdapter:
             ("title", True, "str"),
             ("count", False, "int"),
         ]
+        assert all(
+            item.source_qualname is not None and item.source_qualname.endswith(".<locals>.Schema")
+            for item in fields_info
+        )
         assert fields_info[1].default_value == 3
 
     def test_named_tuple_can_fall_back_to_static_constructor_annotations(self):
@@ -2820,6 +2969,9 @@ class TestCatalogAssetQueries:
             "inline",
         ]
         assert inline.assets.template.owner_file == Path(__file__).resolve()
+        assert inline.assets.template.owner_module == __name__
+        assert inline.assets.template.owner_qualname is not None
+        assert inline.assets.template.owner_qualname.endswith(".<locals>.Inline")
         assert empty.assets.template == NONE_ASSET
         assert shadow.assets.template.kind == "none"
         assert shadow.assets.template.declared_on is not None
@@ -2958,6 +3110,8 @@ class TestCatalogAssetQueries:
 
         assert inherited.declared_on == "citry_test_asset_base.Base"
         assert inherited.owner_file == (base_dir / "base.py").absolute()
+        assert inherited.owner_module == "citry_test_asset_base"
+        assert inherited.owner_qualname == "Base"
         assert inherited.resolved_path == (base_dir / "card.html").resolve()
         assert searched.resolved_path == (second_root / "search.css").resolve()
         assert searched.searched_paths == (

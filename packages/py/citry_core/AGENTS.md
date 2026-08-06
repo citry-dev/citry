@@ -15,6 +15,8 @@ facts see [`/docs/agent/INDEX.md`](../../../docs/agent/INDEX.md).
 - `citry_core/html_transform/` - wraps the `html_transform` submodule.
 - `citry_core/safe_eval/` - sandboxed expression eval (`eval.py`, `sandbox.py`,
   `error.py`); wraps the `safe_eval` submodule.
+- `citry_core/template_formatter/` - typed wrapper for the pure authored
+  template formatter and its structured error.
 - `citry_core/template_parser/` - the V3 parser/compiler wrapper (`parse.py`,
   `compile.py`); wraps the `template_parser` submodule. The generated code it
   returns instantiates the runtime node classes that live in the `citry`
@@ -22,9 +24,9 @@ facts see [`/docs/agent/INDEX.md`](../../../docs/agent/INDEX.md).
 - `pyproject.toml` - `[tool.maturin]` config. `module-name = "citry_core._rust"`
   and `manifest-path` point maturin at `crates/citry_core_py`. The long comment
   there explains why the module name mapping is necessary.
-- `tests/` - `test_html_transformer.py`, `test_safe_eval.py`, and
-  `test_template_parser.py` run in CI; the `benchmark_*.py` files are manual
-  helpers, not collected.
+- `tests/` - binding tests for HTML transformation, safe evaluation, template
+  parsing, and template formatting run in CI; the `benchmark_*.py` files are
+  manual helpers, not collected.
 
 ## Gotchas
 

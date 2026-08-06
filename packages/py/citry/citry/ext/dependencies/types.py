@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypeAlias
 
 from citry.attrs import format_attrs
-from citry.util.html import SafeString
+from citry.util.html import Markup
 
 if TYPE_CHECKING:
     from citry.component import Component
@@ -140,14 +140,16 @@ class Dependency:
         """Return ``(tag_name, all_attrs, content)``. Implemented by subclasses."""
         raise NotImplementedError
 
-    def render(self) -> SafeString:
+    def render(self) -> Markup:
         """Render as an HTML tag string."""
         tag_name, all_attrs, content = self._render()
         attrs_str = format_attrs(all_attrs)
         attrs_prefix = " " + attrs_str if attrs_str else ""
-        return SafeString(f"<{tag_name}{attrs_prefix}>{content}</{tag_name}>")
+        # Inline dependency content is an explicit raw HTML boundary; tag names
+        # are controlled here and attributes were escaped by format_attrs().
+        return Markup(f"<{tag_name}{attrs_prefix}>{content}</{tag_name}>")  # noqa: S704
 
-    def __html__(self) -> SafeString:
+    def __html__(self) -> Markup:
         """The rendered tag; lets a ``Script``/``Style`` stand anywhere a pre-rendered tag is accepted."""
         return self.render()
 
@@ -312,7 +314,7 @@ class Style(Dependency):
             content = self.content or ""
         return (tag_name, all_attrs, content)
 
-    def render(self) -> SafeString:
+    def render(self) -> Markup:
         tag_name, all_attrs, content = self._render()
         attrs_str = format_attrs(all_attrs)
         attrs_prefix = " " + attrs_str if attrs_str else ""
@@ -320,5 +322,7 @@ class Style(Dependency):
         # A url renders as a void <link/> tag (compact, per citry's HTML
         # rendering rules); inline content renders as <style>...</style>.
         if tag_name == "link":
-            return SafeString(f"<link{attrs_prefix}/>")
-        return SafeString(f"<style{attrs_prefix}>{content}</style>")
+            return Markup("<link{}/>").format(attrs_prefix)
+        # Inline stylesheet content is an explicit raw CSS boundary; the
+        # attributes were escaped by format_attrs().
+        return Markup(f"<style{attrs_prefix}>{content}</style>")  # noqa: S704

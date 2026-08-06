@@ -225,7 +225,8 @@ class OnAttrsResolvedContext:
     citry: Citry
     """The ``Citry`` instance the component belongs to."""
     component: Component
-    """The component whose template holds the element."""
+    """The component whose template holds the element. For ``<c-element>``,
+    this is the lexical owner, not the transparent built-in renderer."""
     tag_name: str
     """The HTML tag the attributes belong to (e.g. ``"div"``)."""
     attrs: dict[str, Any]
@@ -821,6 +822,14 @@ def _builtin_extensions(mode: str) -> tuple[type[Extension], ...]:
     return builtins
 
 
+_MISSING_EXTENSION_OWNER = object()
+
+# Public nested Component declarations owned by built-in extensions. They are
+# real base-class API slots, so the owning extension may use its class name;
+# every other collision remains an error.
+_COMPONENT_CONFIG_API_OWNERS = {"Events": "events"}
+
+
 class ExtensionManager:
     """
     Fans each lifecycle hook out across a ``Citry`` instance's extensions.
@@ -844,12 +853,17 @@ class ExtensionManager:
         self.citry = citry
         # Name -> instance map, populated by ``_build`` for O(1) ``get_extension``.
         self._extensions_by_name: dict[str, Extension] = {}
-        self._extensions: tuple[Extension, ...] = self._build(extensions)
-        self._hook_extensions_cache: dict[str, tuple[Extension, ...]] = {}
-        self._validated_component_declarations: dict[str, WeakSet[type]] = {}
-        self._validate_names()
-        self._validate_render_cache_compatibility()
-        self._validate_extensions_defaults()
+        self._ownership_snapshot: list[tuple[Extension, object]] = []
+        try:
+            self._extensions: tuple[Extension, ...] = self._build(extensions)
+            self._hook_extensions_cache: dict[str, tuple[Extension, ...]] = {}
+            self._validated_component_declarations: dict[str, WeakSet[type]] = {}
+            self._validate_names()
+            self._validate_render_cache_compatibility()
+            self._validate_extensions_defaults()
+        except BaseException:
+            self._rollback_extension_ownership()
+            raise
 
     def _build(
         self,
@@ -865,9 +879,23 @@ class ExtensionManager:
             # Case: class object or instance.
             else:
                 resolved = extension
-            instances.append(resolved() if isinstance(resolved, type) else resolved)
+            if isinstance(resolved, type):
+                instance = resolved()
+            else:
+                instance = resolved
+                current_owner = getattr(instance, "citry", None)
+                if current_owner is not None and current_owner is not self.citry:
+                    msg = (
+                        f"Extension instance {instance.name!r} is already installed on another Citry instance. "
+                        "Pass the extension class or create a fresh extension instance."
+                    )
+                    raise ValueError(msg)
+            instances.append(instance)
         # Attach the Citry back-reference (extensions are per-instance, so
         # each instance belongs to exactly one Citry).
+        self._ownership_snapshot = [
+            (instance, getattr(instance, "citry", _MISSING_EXTENSION_OWNER)) for instance in instances
+        ]
         for instance in instances:
             instance.citry = self.citry
         # Name -> instance map for O(1) ``get_extension``. A duplicate name
@@ -876,6 +904,20 @@ class ExtensionManager:
         self._extensions_by_name = {inst.name: inst for inst in instances}
         # Make extensions list immutable
         return tuple(instances)
+
+    def _commit_extension_ownership(self) -> None:
+        """Forget rollback state after construction hooks have succeeded."""
+        self._ownership_snapshot.clear()
+
+    def _rollback_extension_ownership(self) -> None:
+        """Restore extension owners after engine construction fails."""
+        for instance, owner in reversed(self._ownership_snapshot):
+            if owner is _MISSING_EXTENSION_OWNER:
+                if hasattr(instance, "citry"):
+                    del instance.citry
+            else:
+                instance.citry = cast("Citry", owner)
+        self._ownership_snapshot.clear()
 
     def _validate_names(self) -> None:
         # The Component-API conflict check needs the Component class, which is
@@ -915,9 +957,13 @@ class ExtensionManager:
                 )
                 raise ValueError(msg)
             class_name_owners[extension.class_name] = extension.name
-            if component is not None and (
-                hasattr(component, extension.name) or hasattr(component, extension.class_name)
-            ):
+            instance_name_conflicts = component is not None and hasattr(component, extension.name)
+            class_name_conflicts = (
+                component is not None
+                and hasattr(component, extension.class_name)
+                and _COMPONENT_CONFIG_API_OWNERS.get(extension.class_name) != extension.name
+            )
+            if instance_name_conflicts or class_name_conflicts:
                 msg = f"Extension name {extension.name!r} conflicts with existing Component API"
                 raise ValueError(msg)
 

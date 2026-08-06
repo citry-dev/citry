@@ -98,9 +98,10 @@ failed-call behavior explicit: raise `EventError` and do not render.
 --8<-- "docs_site/snippets/migrate_unicorn.py:validation"
 ```
 
-The response carries status 422 and the field map. `$error` exposes that map
-to Alpine, while the existing form stays in the DOM with everything the user
-typed. A later successful call clears `$error`.
+The response carries status 422 and the field map. `$error("save")` exposes
+that handler's map to Alpine, while the existing form stays in the DOM with
+everything the user typed. A later successful `save` call clears that error
+without clearing errors retained for other handlers.
 
 Django `Form` and `ModelForm` convenience wiring is a later addition. Today,
 run the form in the handler and translate `form.errors` yourself:
@@ -174,7 +175,7 @@ attributes. Keep `{{ expression }}` for element text.
 | `.prevent` / `.stop` | `.prevent` / `.stop` |
 | Method on `UnicornView` | Public method inside `class Events` |
 | Automatic re-render | Return a fresh component or `state.render()` helper you define |
-| `ValidationError` / `unicorn.errors` | `EventError(..., fields=...)` / `$error.fieldErrors` |
+| `ValidationError` / `unicorn.errors` | `EventError(..., fields=...)` / `$error("save").fieldErrors` |
 | Loading attributes | `$loading()` or `$loading("save")` in an Alpine expression |
 | `unicorn:poll` | `@c-poll.2s="refresh"` |
 | `self.call("fn", ...)` | `actions.Dispatch(name, detail)` plus a browser listener |

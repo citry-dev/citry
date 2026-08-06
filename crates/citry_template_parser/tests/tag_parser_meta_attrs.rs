@@ -3,8 +3,8 @@
 // The channel has exactly two members: `#c-key="expr"` (expression-valued,
 // server-evaluated) and the bare `#c-ignore` marker. They parse into
 // `HtmlAttr` with `HtmlAttrKind::Meta`; every other `#c-*` name, a valueless
-// `#c-key`, a valued `#c-ignore`, and either member on a tag that cannot
-// carry it are parse errors. See docs/design/events.md section 5.1.
+// `#c-key`, a valued `#c-ignore`, and either member on a reserved structural
+// tag are parse errors. See docs/design/component_ranges_plan.md.
 
 mod common;
 
@@ -109,6 +109,24 @@ mod tests {
     }
 
     #[test]
+    fn test_meta_ignore_allowed_on_component_and_element_tags() {
+        for input in [
+            "<c-Card #c-ignore />",
+            r#"<c-component is="Card" #c-ignore />"#,
+            r#"<c-element c-is="tag" #c-ignore />"#,
+        ] {
+            let node = parse_first_node(input).unwrap();
+            let ignore = node
+                .attrs()
+                .iter()
+                .find(|attr| attr.key.content == "#c-ignore")
+                .unwrap_or_else(|| panic!("missing #c-ignore in {input:?}"));
+            assert_eq!(ignore.kind, HtmlAttrKind::Meta);
+            assert!(ignore.inner_value.is_none());
+        }
+    }
+
+    #[test]
     fn test_meta_key_and_ignore_can_share_an_element() {
         // A keyed element may also opt its subtree out of morphing; the two
         // members do not conflict.
@@ -121,10 +139,10 @@ mod tests {
     }
 
     #[test]
-    fn test_meta_key_exempt_from_user_attr_rules() {
+    fn test_meta_attrs_exempt_from_user_attr_rules() {
         // A component's declared attribute rules constrain its inputs.
-        // `#c-key` is framework metadata, not an input, so a rules-restricted
-        // component still accepts it.
+        // `#c-*` is framework metadata, not an input, so a rules-restricted
+        // component still accepts both members.
         let mut rules = HashMap::new();
         rules.insert(
             "c-my-comp".to_string(),
@@ -138,11 +156,11 @@ mod tests {
         );
         let rules_rc = Rc::new(rules);
 
-        let input = r#"<c-my-comp id="1" #c-key="k"></c-my-comp>"#;
+        let input = r#"<c-my-comp id="1" #c-key="k" #c-ignore></c-my-comp>"#;
         let result = parse_template(input, None, Some(&rules_rc));
         assert!(
             result.is_ok(),
-            "#c-key must bypass user attribute rules: {:?}",
+            "#c-* must bypass user attribute rules: {:?}",
             result.err()
         );
     }
@@ -193,7 +211,15 @@ mod tests {
     fn test_valued_ignore_is_error() {
         assert_parse_error(
             r#"<div #c-ignore="yes">x</div>"#,
-            "'#c-ignore' takes no value. Write the bare marker ('#c-ignore') to opt this element and its subtree out of morphing.",
+            "'#c-ignore' takes no value. Write the bare marker ('#c-ignore') to opt the element subtree or component range out of morphing.",
+        );
+    }
+
+    #[test]
+    fn test_valued_ignore_on_component_is_error() {
+        assert_parse_error(
+            r#"<c-Card #c-ignore="yes" />"#,
+            "'#c-ignore' takes no value. Write the bare marker ('#c-ignore') to opt the element subtree or component range out of morphing.",
         );
     }
 
@@ -219,36 +245,66 @@ mod tests {
     // =============================================================================
 
     #[test]
-    fn test_ignore_on_component_tag_is_error_pointing_at_fix() {
-        assert_parse_error(
-            r#"<c-Card #c-ignore />"#,
-            "'#c-ignore' is not supported on '<c-Card>' (line 1, column 9): it would opt out a component instance's root element. Put it on an element inside the child's own template below the template's root element, or on a wrapper element around '<c-Card>'.",
-        );
-    }
-
-    #[test]
-    fn test_ignore_on_dynamic_component_tag_is_error() {
-        // `<c-component>` renders a component instance, so the marker would
-        // sit on an instance root there too.
-        assert_parse_error(
-            r#"<c-component is="Card" #c-ignore />"#,
-            "'#c-ignore' is not supported on '<c-component>' (line 1, column 24)",
-        );
-    }
-
-    #[test]
     fn test_ignore_on_reserved_tag_is_error() {
         assert_parse_error(
             r#"<c-if cond="x" #c-ignore>y</c-if>"#,
-            "'#c-ignore' is not supported on '<c-if>' (line 1, column 16). Put it on the HTML element whose subtree should be left alone, or on a wrapper element.",
+            "'#c-ignore' is not supported on '<c-if>' (line 1, column 16). It belongs on a plain HTML element (the ignored subtree) or on a component tag (the ignored component range).",
         );
     }
 
     #[test]
-    fn test_ignore_on_raw_tag_is_error() {
+    fn test_ignore_rejected_on_every_reserved_structural_tag() {
+        let cases = [
+            (r#"<c-if cond="x" #c-ignore />"#, "c-if"),
+            (r#"<c-for each="x in xs" #c-ignore />"#, "c-for"),
+            (r#"<c-slot name="s" #c-ignore />"#, "c-slot"),
+            (
+                r#"<c-Card><c-fill name="s" #c-ignore /></c-Card>"#,
+                "c-fill",
+            ),
+            ("<c-raw #c-ignore>y</c-raw>", "c-raw"),
+        ];
+
+        for (input, tag_name) in cases {
+            assert_parse_error(
+                input,
+                &format!("'#c-ignore' is not supported on '<{tag_name}>'"),
+            );
+        }
+    }
+
+    #[test]
+    fn test_reserved_structural_tag_case_variants_get_spelling_error() {
+        for (input, canonical) in [
+            (r#"<c-If cond="x" #c-key="k" />"#, "c-if"),
+            (r#"<c-For each="x in xs" #c-ignore />"#, "c-for"),
+            (r#"<c-Slot name="s" #c-key="k" />"#, "c-slot"),
+            (r#"<c-Raw #c-ignore>x</c-Raw>"#, "c-raw"),
+        ] {
+            assert_parse_error(
+                input,
+                &format!("Reserved Citry structural tags are lowercase. Write '<{canonical}>'"),
+            );
+        }
+    }
+
+    #[test]
+    fn test_uppercase_citry_prefix_gets_pointed_error() {
         assert_parse_error(
-            "<c-raw #c-ignore>y</c-raw>",
-            "'#c-ignore' is not supported on '<c-raw>' (line 1, column 8).",
+            "<C-Card />",
+            "Citry component tag prefixes are lowercase. Write '<c-Card>'",
+        );
+        assert_parse_error(
+            "<c-Card></C-Card>",
+            "Citry component tag prefixes are lowercase. Write '</c-Card>'",
+        );
+    }
+
+    #[test]
+    fn test_structural_closing_tag_requires_lowercase_spelling() {
+        assert_parse_error(
+            r#"<c-if cond="x">x</c-IF>"#,
+            "Reserved Citry structural tags are lowercase. Write '</c-if>'",
         );
     }
 

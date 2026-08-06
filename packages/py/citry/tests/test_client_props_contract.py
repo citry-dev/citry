@@ -21,6 +21,9 @@ def _render_with_capture(
 
     class Child(Component):
         citry = c
+        js = """
+          $component(() => {});
+        """
         template = """
           <span>child</span>
         """
@@ -177,6 +180,9 @@ class TestComponentBoundaryForms:
 
         class Child(Component):
             citry = c
+            js = """
+              $component(() => {});
+            """
 
             class Kwargs:
                 title: str
@@ -214,6 +220,108 @@ class TestComponentBoundaryForms:
         )
 
         assert captured == [[]]
+
+
+class TestTargetRegistration:
+    @staticmethod
+    def _render(
+        template: str,
+        data: dict[str, Any] | None = None,
+        *,
+        child_js: str | None = None,
+        transparent: bool = False,
+    ) -> str:
+        c = Citry()
+        is_transparent = transparent
+
+        class Child(Component):
+            citry = c
+            js = child_js
+            transparent = is_transparent
+            template = """
+              child
+            """
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                return dict(data or {})
+
+        Page.template = template
+        return Page().render().serialize(deps_strategy="ignore")
+
+    @pytest.mark.parametrize("child_js", [None, "console.log('child');"])
+    @pytest.mark.parametrize(
+        ("template", "data"),
+        [
+            ('<c-child $c-props="{ value: 1 }" />', None),
+            ('<c-child c-$c-props="props" />', {"props": "{ value: 1 }"}),
+            ('<c-child c-bind="attrs" />', {"attrs": {"$c-props": "{ value: 1 }"}}),
+        ],
+    )
+    def test_resolved_props_require_target_component_registration(self, child_js, template, data):
+        with pytest.raises(
+            RuntimeError,
+            match=r"\$c-props.*target component 'Child'.*no \$component\(\.\.\.\) registration",
+        ):
+            self._render(template, data, child_js=child_js)
+
+    @pytest.mark.parametrize("removed", [None, False])
+    def test_removed_props_do_not_require_target_registration(self, removed):
+        output = self._render(
+            '<c-child $c-props="first" c-bind="attrs" />',
+            {"attrs": {"$c-props": removed}},
+        )
+
+        assert output.strip() == "child"
+
+    @pytest.mark.parametrize(
+        "template",
+        [
+            '<c-provide key="theme" value="dark" $c-props="{ value: 1 }">child</c-provide>',
+            '<c-js $c-props="{ value: 1 }" />',
+            '<c-css $c-props="{ value: 1 }" />',
+            '<c-cache key="fragment" $c-props="{ value: 1 }">child</c-cache>',
+        ],
+    )
+    def test_framework_components_without_registration_are_rejected(self, template):
+        with pytest.raises(RuntimeError, match=r"\$c-props.*no \$component\(\.\.\.\) registration"):
+            self._render(template)
+
+    def test_transparent_target_with_registration_is_allowed(self):
+        output = self._render(
+            '<c-child $c-props="{ value: 1 }" />',
+            child_js="$component(() => {});",
+            transparent=True,
+        )
+
+        assert output.strip() == "child"
+
+    @pytest.mark.parametrize("child_js", [None, "console.log('child');"])
+    def test_runtime_dynamic_component_validates_the_actual_target(self, child_js):
+        with pytest.raises(
+            RuntimeError,
+            match=r"\$c-props.*target component 'Child'.*no \$component\(\.\.\.\) registration",
+        ) as error:
+            self._render(
+                '<c-component c-is="target" $c-props="{ value: 1 }" />',
+                {"target": "child"},
+                child_js=child_js,
+            )
+        message = str(error.value)
+        assert "$c-props on <c-component>" in message
+        assert "In template of 'Page'" in message
+        assert '<c-component c-is="target" $c-props="{ value: 1 }" />' in message
+
+    def test_runtime_dynamic_component_allows_registered_actual_target(self):
+        output = self._render(
+            '<c-component c-is="target" $c-props="{ value: 1 }" />',
+            {"target": "child"},
+            child_js="$component(() => {});",
+        )
+
+        assert output.strip() == "child"
 
 
 class TestPlainElementDiagnostics:

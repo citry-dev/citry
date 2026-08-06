@@ -41,16 +41,24 @@ from typing import TYPE_CHECKING, Any
 from citry.attrs import format_attrs, merge_attrs
 from citry.citry_element import CitryElement
 from citry.citry_render import CitryRender
-from citry.client_directives import CLIENT_PROPS_ATTR, apply_client_props_contribution, has_client_props_key
+from citry.client_directives import (
+    CLIENT_PROPS_ATTR,
+    apply_client_props_contribution,
+    has_client_props_key,
+)
 from citry.component import Component
 from citry.component_registry import _VALID_NAME_RE, NotRegistered
 from citry.constness import const_value
-from citry.util.html import SafeString
+from citry.util.html import Markup
 from citry_core.template_parser import HTML_VOID_ELEMENTS
 
 if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.slots import Slot
+
+
+_ELEMENT_KEY_ATTR = "data-citry-key"
+_ELEMENT_MORPH_ATTR = "data-citry-morph"
 
 
 def make_dynamic_component(citry_instance: Citry) -> type[Component]:
@@ -149,7 +157,7 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
             slots: Any,  # noqa: ARG002
         ) -> dict[str, Any]:
             attrs = dict(self.raw_kwargs)
-            tag = const_value(attrs.pop("is", None))
+            tag = const_value(_pop_html_attr(attrs, "is"))
             _validate_tag_name(tag)
             _reject_named_fills(self.raw_slots)
 
@@ -157,17 +165,23 @@ def make_dynamic_element(citry_instance: Citry) -> type[Component]:
 
             # Void elements cannot have children; the empty open/close pair
             # below otherwise brackets the default slot (the tag's body).
-            if tag in HTML_VOID_ELEMENTS:
+            if tag.lower() in HTML_VOID_ELEMENTS:
                 if self.raw_slots:
                     msg = f"<c-element>: void element '{tag}' cannot have children."
                     raise ValueError(msg)
-                return {"open": SafeString(f"<{tag}{attr_str}/>"), "close": ""}
+                return {"open": Markup("<{}{}/>").format(tag, attr_str), "close": ""}
             return {
-                "open": SafeString(f"<{tag}{attr_str}>"),
-                "close": SafeString(f"</{tag}>"),
+                "open": Markup("<{}{}>").format(tag, attr_str),
+                "close": Markup("</{}>").format(tag),
             }
 
     return DynamicElement
+
+
+def _pop_html_attr(attrs: dict[str, Any], name: str) -> Any:
+    """Pop one ASCII-case-insensitive HTML attribute, preserving authored spelling elsewhere."""
+    authored_name = next((key for key in attrs if key.lower() == name), None)
+    return attrs.pop(authored_name) if authored_name is not None else None
 
 
 def _validate_tag_name(tag: Any) -> None:
@@ -203,14 +217,15 @@ def _reject_named_fills(raw_slots: dict[str, Slot]) -> None:
         raise ValueError(msg)
 
 
-def _format_element_attrs(component: Component, tag: str, attrs: dict[str, Any]) -> str:
+def _format_element_attrs(renderer: Component, tag: str, attrs: dict[str, Any]) -> Markup:
     """
     Format the element's attributes the way a statically written element's
     are: normalize class/style, drop ``False``/``None``, fire the
     ``on_attrs_resolved`` extension hook, escape values (``attrs.py`` is the
     shared value layer; docs/design/template_html_attrs.md).
 
-    Returns ``""`` or a string with a leading space (`` class="btn"``).
+    Returns empty ``Markup`` or trusted attributes with a leading space
+    (`` class="btn"``).
     """
     contributions = {key: const_value(value) for key, value in attrs.items()}
     for value in contributions.values():
@@ -226,6 +241,7 @@ def _format_element_attrs(component: Component, tag: str, attrs: dict[str, Any])
             raise TypeError(msg)
 
     merged = merge_attrs(contributions)
+    _reject_element_metadata_conflicts(renderer, merged)
     # Validate case variants before None/False removal. The canonical key may
     # be removed, but a noncanonical spelling is always an authoring error.
     has_client_props_key(merged, tag_name=tag)
@@ -237,8 +253,14 @@ def _format_element_attrs(component: Component, tag: str, attrs: dict[str, Any])
             tag_name=tag,
             component_boundary=False,
         )
-    resolved = component.citry.extensions.on_attrs_resolved(
-        component=component,
+    # DynamicElement is the renderer that owns private morph metadata, but it
+    # is transparent: bindings and every other element-level extension belong
+    # to the component whose template authored the <c-element> invocation.
+    # A programmatically rendered DynamicElement has no parent, so retain the
+    # renderer as the only available owner in that uncommon root case.
+    owner = renderer.parent or renderer
+    resolved = renderer.citry.extensions.on_attrs_resolved(
+        component=owner,
         tag_name=tag,
         attrs=resolved,
     )
@@ -249,5 +271,31 @@ def _format_element_attrs(component: Component, tag: str, attrs: dict[str, Any])
             tag_name=tag,
             component_boundary=False,
         )
+    _reject_element_metadata_conflicts(renderer, resolved)
+    metadata = renderer._element_morph_metadata
+    if metadata is not None:
+        if metadata.key is not None:
+            resolved[_ELEMENT_KEY_ATTR] = f":{metadata.key}"
+        if metadata.morph_mode == "ignore":
+            resolved[_ELEMENT_MORPH_ATTR] = "ignore"
     formatted = format_attrs(resolved)
-    return f" {formatted}" if formatted else ""
+    return Markup(" {}").format(formatted) if formatted else Markup("")
+
+
+def _reject_element_metadata_conflicts(component: Component, attrs: dict[str, Any]) -> None:
+    """Keep private dynamic-element directives authoritative and single-valued."""
+    metadata = component._element_morph_metadata
+    if metadata is None:
+        return
+    protected = set()
+    if metadata.key is not None:
+        protected.add(_ELEMENT_KEY_ATTR)
+    if metadata.morph_mode is not None:
+        protected.add(_ELEMENT_MORPH_ATTR)
+    for key in attrs:
+        if isinstance(key, str) and key.lower() in protected:
+            msg = (
+                f"<c-element> attribute {key!r} conflicts with its private "
+                f"#{'c-key' if key.lower() == _ELEMENT_KEY_ATTR else 'c-ignore'} metadata."
+            )
+            raise ValueError(msg)

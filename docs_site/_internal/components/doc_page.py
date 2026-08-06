@@ -28,8 +28,12 @@ from urllib.parse import urlsplit, urlunsplit
 from markupsafe import Markup
 
 from citry import Component
-from docs_site._internal.components.search_modal import DEFAULT_QUICK_LINKS
+from docs_site._internal.components.brand import CitryMark  # noqa: F401
+from docs_site._internal.components.landing import LandingPage  # noqa: F401
+from docs_site._internal.components.playground_workspace import PlaygroundWorkspace  # noqa: F401
 from docs_site._internal.nav import SCOPE_VERSIONED
+from docs_site._internal.project import current_docs_project
+from docs_site._internal.settings import google_search_site_target
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -40,11 +44,122 @@ if TYPE_CHECKING:
 # Site-level social-card image used when a page sets no og_image of its own.
 _DEFAULT_OG_IMAGE_PATH = "/static/img/favicon.png"
 
-# The project's social channels: header icon links (GitHub / PyPI / Discord)
-# and text links in the mobile overflow menu.
-_REPO_URL = "https://github.com/citry-dev/citry"
-_PYPI_URL = "https://pypi.org/project/citry/"
-_DISCORD_URL = "https://discord.gg/NaQ8QPyHtD"
+_REVIEW_HINT = "This page has not completed final human review. May contain minor inaccuracies."
+
+
+class TocItems(Component):
+    """Recursive, level-aware list used by the desktop and mobile page TOCs."""
+
+    transparent = True
+
+    class Kwargs:
+        items: list
+        mobile: bool = False
+        nested: bool = False
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
+        return {
+            "items": kwargs.items,
+            "mobile": kwargs.mobile,
+            "list_class": "djc-toc__sublist" if kwargs.nested else "djc-toc__list",
+            "item_class": "djc-toc__subitem" if kwargs.nested else "djc-toc__item",
+        }
+
+    template = """
+      <ul c-class="list_class">
+        <li
+          c-for="item in items"
+          c-class="[item_class, {'djc-toc__item--collapsible': item.collapsible and not mobile}]"
+        >
+          <span c-class="['djc-toc__row', item.level_class]">
+            <c-if cond="item.collapsible and not mobile">
+              <button
+                type="button"
+                class="djc-toc__toggle"
+                aria-expanded="false"
+                c-aria-label="'Toggle members of ' + item.name"
+              ></button>
+            </c-if>
+            <c-if cond="item.kind">
+              <span c-class="'doc-symbol doc-symbol-' + item.kind"></span>
+            </c-if>
+            <a
+              class="djc-toc__link"
+              c-href="'#' + item.id"
+            >
+              {{ item.name }}
+            </a>
+          </span>
+          <c-TocItems
+            c-if="item.children"
+            c-items="item.children"
+            c-mobile="mobile"
+            c-nested="True"
+          />
+        </li>
+      </ul>
+    """
+
+
+class SidebarNavLink(Component):
+    """One page link with optional review state and publication date."""
+
+    transparent = True
+
+    class Kwargs:
+        item: Any
+        top: bool = False
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
+        needs_review = bool(kwargs.item.needs_review)
+        return {
+            "item": kwargs.item,
+            "top": kwargs.top,
+            "needs_review": needs_review,
+            "review_hint": _REVIEW_HINT,
+            "aria_label": f"{kwargs.item.title}. {_REVIEW_HINT}" if needs_review else None,
+        }
+
+    template = """
+      <a
+        c-class="[
+          'djc-sidebar__link',
+          {
+            'djc-sidebar__link--top': top,
+            'is-active': item.active,
+          },
+        ]"
+        c-href="item.path"
+        c-aria-label="aria_label"
+      >
+        <span
+          c-if="needs_review"
+          class="djc-sidebar__review-icon"
+          aria-hidden="true"
+        >🚧</span>
+        <span>{{ item.title }}</span>
+        <time
+          c-if="item.date_iso"
+          class="djc-sidebar__date"
+          c-datetime="item.date_iso"
+        >
+          {{ item.date_label }}
+        </time>
+        <span
+          c-if="needs_review"
+          class="djc-sidebar__review-hint"
+          aria-hidden="true"
+        >
+          {{ review_hint }}
+        </span>
+      </a>
+    """
 
 
 class DocPage(Component):
@@ -99,12 +214,29 @@ class DocPage(Component):
         # Declarative build scope and the mount prefix used by frozen snapshots.
         page_scope: str = SCOPE_VERSIONED
         version_prefix: str = ""
+        # Narrative docs pages use the complete three-column chrome. The
+        # playground keeps only the shared header and owns the viewport below.
+        layout: str = "docs"
+        # Set by the render-scoped live-code collector, never inferred from prose.
+        has_live_code: bool = False
+        has_interactive_live_code: bool = False
+        repo_url: str = ""
+        pypi_url: str = ""
+        discord_url: str = ""
+        search_quick_links: list | None = None
+        pagefind_path: str = "/pagefind/pagefind.js"
+        search_site_target: str = ""
 
     class Slots:
         pass
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
+        settings = current_docs_project().settings
         title = kwargs.title
+        is_playground = kwargs.layout == "playground"
+        is_landing = kwargs.layout == "landing"
+        has_live_code = kwargs.has_live_code
+        has_interactive_live_code = kwargs.has_interactive_live_code
         site_name = kwargs.site_name
         page_title = f"{title} - {site_name}" if title and title != site_name else site_name
 
@@ -135,7 +267,7 @@ class DocPage(Component):
         # canonical URL, plus an article description on content pages (the home
         # page has no path segments, so it gets neither).
         breadcrumb_jsonld = ""
-        if kwargs.current_path.strip("/") and kwargs.canonical and breadcrumbs:
+        if not is_playground and kwargs.current_path.strip("/") and kwargs.canonical and breadcrumbs:
             breadcrumb_jsonld = _build_breadcrumb_jsonld(
                 kwargs.canonical,
                 breadcrumbs,
@@ -152,7 +284,7 @@ class DocPage(Component):
             if kwargs.blog_post and kwargs.blog_post.author_url
             else (kwargs.blog_post.author if kwargs.blog_post else "")
         )
-        if kwargs.current_path.strip("/") and kwargs.canonical and title:
+        if not is_playground and kwargs.current_path.strip("/") and kwargs.canonical and title:
             if kwargs.blog_post:
                 article_jsonld = _build_blog_posting_jsonld(
                     canonical=kwargs.canonical,
@@ -177,6 +309,10 @@ class DocPage(Component):
 
         return {
             "lang": kwargs.lang,
+            "is_playground": is_playground,
+            "is_landing": is_landing,
+            "has_live_code": has_live_code,
+            "has_interactive_live_code": has_interactive_live_code,
             "page_title": page_title,
             "base_path": kwargs.base_path,
             "searchable": kwargs.searchable,
@@ -187,13 +323,14 @@ class DocPage(Component):
             "robots": "noindex,follow" if kwargs.noindex else "index,follow",
             "version": kwargs.version,
             "site_name": site_name,
+            "og_type": "website" if is_playground else "article",
             "og_image": og_image,
             "breadcrumb_jsonld": Markup(breadcrumb_jsonld) if breadcrumb_jsonld else "",  # noqa: S704 - escaped for <script>
             "article_jsonld": Markup(article_jsonld) if article_jsonld else "",  # noqa: S704 - escaped for <script>
             "edit_url": kwargs.edit_url,
-            "repo_url": _REPO_URL,
-            "pypi_url": _PYPI_URL,
-            "discord_url": _DISCORD_URL,
+            "repo_url": kwargs.repo_url or settings.repository.url,
+            "pypi_url": kwargs.pypi_url or settings.pypi_url,
+            "discord_url": kwargs.discord_url or settings.discord_url,
             "google_site_verification": kwargs.google_site_verification,
             "top_nav_items": top_nav_items,
             "nav_sections": nav_sections,
@@ -206,7 +343,7 @@ class DocPage(Component):
             "content_html": Markup(kwargs.content_html),  # noqa: S704 - trusted pipeline output
             "last_updated": last_updated,
             "authors": ", ".join(kwargs.authors) if kwargs.authors else "",
-            "show_version_picker": kwargs.page_scope == SCOPE_VERSIONED,
+            "show_version_picker": kwargs.page_scope == SCOPE_VERSIONED and not is_playground,
             "blog_feed_url": kwargs.blog_feed_url,
             "blog_post": kwargs.blog_post,
             "blog_author": kwargs.blog_post.author if kwargs.blog_post else "",
@@ -234,10 +371,13 @@ class DocPage(Component):
             "home_path": nav_tree.project_path("/", kwargs.version_prefix) if nav_tree is not None else "/",
             "search_quick_links": [
                 SimpleNamespace(label=link.label, path=nav_tree.project_path(link.path, kwargs.version_prefix))
-                for link in DEFAULT_QUICK_LINKS
+                for link in (kwargs.search_quick_links or settings.quick_links)
             ]
             if nav_tree is not None
-            else DEFAULT_QUICK_LINKS,
+            else (kwargs.search_quick_links or settings.quick_links),
+            "pagefind_path": kwargs.pagefind_path or settings.pagefind_path,
+            "search_site_target": kwargs.search_site_target
+            or google_search_site_target(kwargs.site_url or settings.public_url),
         }
 
     template = """
@@ -276,7 +416,7 @@ class DocPage(Component):
             >
           </c-if>
 
-          <meta property="og:type" content="article">
+          <meta property="og:type" c-content="og_type">
           <meta property="og:site_name" c-content="site_name">
           <meta property="og:title" c-content="title or site_name">
           <c-if cond="description">
@@ -344,7 +484,19 @@ class DocPage(Component):
           <link
             rel="icon"
             type="image/png"
-            href="/static/img/favicon.png"
+            sizes="32x32"
+            href="/static/img/favicon-32.png"
+          >
+          <link
+            rel="icon"
+            type="image/png"
+            sizes="16x16"
+            href="/static/img/favicon-16.png"
+          >
+          <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="/static/img/apple-touch-icon.png"
           >
           <link rel="stylesheet" href="/static/css/tokens.css">
           <link rel="stylesheet" href="/static/css/site.css">
@@ -352,10 +504,21 @@ class DocPage(Component):
           <link rel="stylesheet" href="/static/css/pygments-dark.css">
           <link rel="stylesheet" href="/static/css/reference.css">
           <link rel="stylesheet" href="/static/css/search.css">
+          <c-if cond="is_playground">
+            <link rel="stylesheet" href="/static/playground/playground.css">
+          </c-if>
+          <c-if cond="has_live_code">
+            <link rel="stylesheet" href="/static/playground/live_code.css">
+          </c-if>
           <meta name="djc-base-path" c-content="base_path">
           <c-css />
         </head>
-        <body>
+        <body
+          c-class="{
+            'citry-playground-page': is_playground,
+            'citry-landing-page': is_landing,
+          }"
+        >
           <header class="djc-header">
             <div class="djc-header__inner">
               <button
@@ -394,7 +557,9 @@ class DocPage(Component):
                 </svg>
               </button>
               <a class="djc-logo" c-href="home_path">
+                <c-citry-mark css_class="djc-logo__mark" />
                 <span class="djc-logo__wordmark">Citry</span>
+                <span class="djc-badge">Beta</span>
               </a>
               <nav class="djc-header__nav" aria-label="Primary navigation">
                 <a
@@ -403,7 +568,13 @@ class DocPage(Component):
                   c-href="item.path"
                   c-aria-current="item.aria_current"
                 >
-                  {{ item.label }}
+                  <span class="djc-header__nav-label">{{ item.label }}</span>
+                  <span
+                    c-if="item.badge"
+                    class="djc-nav-badge"
+                  >
+                    {{ item.badge }}
+                  </span>
                 </a>
               </nav>
               <div class="djc-header__actions">
@@ -685,7 +856,58 @@ class DocPage(Component):
             </div>
           </header>
 
-          <div class="djc-layout">
+          <c-if cond="is_playground">
+            <aside class="djc-sidebar citry-playground__nav-drawer" id="djc-sidebar">
+              <nav class="djc-sidebar__topnav" aria-label="Primary drawer navigation">
+                <a
+                  c-for="item in top_nav_items"
+                  c-class="{'is-active': item.active}"
+                  c-href="item.path"
+                  c-aria-current="item.aria_current"
+                >
+                  <span>{{ item.label }}</span>
+                  <span
+                    c-if="item.badge"
+                    class="djc-nav-badge"
+                  >
+                    {{ item.badge }}
+                  </span>
+                </a>
+              </nav>
+            </aside>
+            <div class="djc-drawer-overlay"></div>
+            <c-playground-workspace c-help_html="content_html" />
+          </c-if>
+
+          <c-if cond="is_landing">
+            <aside class="djc-sidebar citry-landing__nav-drawer" id="djc-sidebar">
+              <nav class="djc-sidebar__topnav" aria-label="Primary drawer navigation">
+                <a
+                  c-for="item in top_nav_items"
+                  c-class="{'is-active': item.active}"
+                  c-href="item.path"
+                  c-aria-current="item.aria_current"
+                >
+                  <span>{{ item.label }}</span>
+                  <span
+                    c-if="item.badge"
+                    class="djc-nav-badge"
+                  >
+                    {{ item.badge }}
+                  </span>
+                </a>
+              </nav>
+            </aside>
+            <div class="djc-drawer-overlay"></div>
+            <c-landing-page
+              c-content_html="content_html"
+              c-searchable="searchable"
+              c-pagefind_weight="pagefind_weight"
+              c-repo_url="repo_url"
+            />
+          </c-if>
+
+          <div c-if="not is_playground and not is_landing" class="djc-layout">
             <aside class="djc-sidebar" id="djc-sidebar">
               <nav class="djc-sidebar__topnav" aria-label="Primary drawer navigation">
                 <a
@@ -694,7 +916,13 @@ class DocPage(Component):
                   c-href="item.path"
                   c-aria-current="item.aria_current"
                 >
-                  {{ item.label }}
+                  <span>{{ item.label }}</span>
+                  <span
+                    c-if="item.badge"
+                    class="djc-nav-badge"
+                  >
+                    {{ item.badge }}
+                  </span>
                 </a>
               </nav>
               <nav class="djc-sidebar__nav" aria-label="Section navigation">
@@ -708,7 +936,13 @@ class DocPage(Component):
                       c-class="['djc-sidebar__link', 'djc-sidebar__link--top', {'is-active': section.active}]"
                       c-href="section.path"
                     >
-                      {{ section.label }}
+                      <span>{{ section.label }}</span>
+                      <span
+                        c-if="section.badge"
+                        class="djc-nav-badge"
+                      >
+                        {{ section.badge }}
+                      </span>
                     </a>
                   </c-if>
                   <c-else>
@@ -722,6 +956,12 @@ class DocPage(Component):
                           c-aria-expanded="'true' if section.expanded else 'false'"
                         >
                           <span>{{ section.label }}</span>
+                          <span
+                            c-if="section.badge"
+                            class="djc-nav-badge"
+                          >
+                            {{ section.badge }}
+                          </span>
                           <span class="djc-sidebar__caret">&#9662;</span>
                         </button>
                         <ul class="djc-sidebar__items" c-hidden="not section.expanded">
@@ -736,25 +976,21 @@ class DocPage(Component):
                             </li>
                           </c-if>
                           <li c-for="item in section.child_items">
-                            <a
-                              c-class="['djc-sidebar__link', {'is-active': item.active}]"
-                              c-href="item.path"
-                            >
-                              <span>{{ item.title }}</span>
-                              <time
-                                c-if="item.date_iso"
-                                class="djc-sidebar__date"
-                                c-datetime="item.date_iso"
-                              >
-                                {{ item.date_label }}
-                              </time>
-                            </a>
+                            <c-SidebarNavLink c-item="item" />
                           </li>
                         </ul>
                       </div>
                     </c-if>
                     <c-else>
-                      <div class="djc-sidebar__label">{{ section.label }}</div>
+                      <div class="djc-sidebar__label">
+                        <span>{{ section.label }}</span>
+                        <span
+                          c-if="section.badge"
+                          class="djc-nav-badge"
+                        >
+                          {{ section.badge }}
+                        </span>
+                      </div>
                       <c-if cond="section.index_path or section.child_items">
                         <ul class="djc-sidebar__items">
                           <c-if cond="section.index_path">
@@ -768,19 +1004,7 @@ class DocPage(Component):
                             </li>
                           </c-if>
                           <li c-for="item in section.child_items">
-                            <a
-                              c-class="['djc-sidebar__link', {'is-active': item.active}]"
-                              c-href="item.path"
-                            >
-                              <span>{{ item.title }}</span>
-                              <time
-                                c-if="item.date_iso"
-                                class="djc-sidebar__date"
-                                c-datetime="item.date_iso"
-                              >
-                                {{ item.date_label }}
-                              </time>
-                            </a>
+                            <c-SidebarNavLink c-item="item" />
                           </li>
                         </ul>
                       </c-if>
@@ -800,19 +1024,7 @@ class DocPage(Component):
                             </button>
                             <ul class="djc-sidebar__items" c-hidden="not group.expanded">
                               <li c-for="item in group.items">
-                                <a
-                                  c-class="['djc-sidebar__link', {'is-active': item.active}]"
-                                  c-href="item.path"
-                                >
-                                  <span>{{ item.title }}</span>
-                                  <time
-                                    c-if="item.date_iso"
-                                    class="djc-sidebar__date"
-                                    c-datetime="item.date_iso"
-                                  >
-                                    {{ item.date_label }}
-                                  </time>
-                                </a>
+                                <c-SidebarNavLink c-item="item" />
                               </li>
                             </ul>
                           </c-if>
@@ -820,19 +1032,7 @@ class DocPage(Component):
                             <div class="djc-sidebar__label">{{ group.label }}</div>
                             <ul class="djc-sidebar__items">
                               <li c-for="item in group.items">
-                                <a
-                                  c-class="['djc-sidebar__link', {'is-active': item.active}]"
-                                  c-href="item.path"
-                                >
-                                  <span>{{ item.title }}</span>
-                                  <time
-                                    c-if="item.date_iso"
-                                    class="djc-sidebar__date"
-                                    c-datetime="item.date_iso"
-                                  >
-                                    {{ item.date_label }}
-                                  </time>
-                                </a>
+                                <c-SidebarNavLink c-item="item" />
                               </li>
                             </ul>
                           </c-else>
@@ -877,34 +1077,7 @@ class DocPage(Component):
 
               <details c-if="toc_items" class="djc-toc-mobile">
                 <summary>On this page</summary>
-                <ul class="djc-toc__list">
-                  <li c-for="item in toc_items" class="djc-toc__item">
-                    <span class="djc-toc__row">
-                      <c-if cond="item.kind">
-                        <span c-class="'doc-symbol doc-symbol-' + item.kind"></span>
-                      </c-if>
-                      <a
-                        class="djc-toc__link"
-                        c-href="'#' + item.id"
-                      >
-                        {{ item.name }}
-                      </a>
-                    </span>
-                    <ul c-if="item.children" class="djc-toc__sublist">
-                      <li c-for="child in item.children" class="djc-toc__subitem">
-                        <c-if cond="child.kind">
-                          <span c-class="'doc-symbol doc-symbol-' + child.kind"></span>
-                        </c-if>
-                        <a
-                          class="djc-toc__link"
-                          c-href="'#' + child.id"
-                        >
-                          {{ child.name }}
-                        </a>
-                      </li>
-                    </ul>
-                  </li>
-                </ul>
+                <c-TocItems c-items="toc_items" c-mobile="True" />
               </details>
 
               <article
@@ -1074,49 +1247,12 @@ class DocPage(Component):
               class="djc-toc"
             >
               <div class="djc-toc__label">On this page</div>
-              <ul class="djc-toc__list">
-                <li
-                  c-for="item in toc_items"
-                  c-class="['djc-toc__item', {'djc-toc__item--collapsible': item.collapsible}]"
-                >
-                  <span class="djc-toc__row">
-                    <c-if cond="item.collapsible">
-                      <button
-                        type="button"
-                        class="djc-toc__toggle"
-                        aria-expanded="false"
-                        c-aria-label="'Toggle members of ' + item.name"
-                      ></button>
-                    </c-if>
-                    <c-if cond="item.kind">
-                      <span c-class="'doc-symbol doc-symbol-' + item.kind"></span>
-                    </c-if>
-                    <a
-                      class="djc-toc__link"
-                      c-href="'#' + item.id"
-                    >
-                      {{ item.name }}
-                    </a>
-                  </span>
-                  <ul c-if="item.children" class="djc-toc__sublist">
-                    <li c-for="child in item.children" class="djc-toc__subitem">
-                      <c-if cond="child.kind">
-                        <span c-class="'doc-symbol doc-symbol-' + child.kind"></span>
-                      </c-if>
-                      <a
-                        class="djc-toc__link"
-                        c-href="'#' + child.id"
-                      >
-                        {{ child.name }}
-                      </a>
-                    </li>
-                  </ul>
-                </li>
-              </ul>
+              <c-TocItems c-items="toc_items" />
             </aside>
           </div>
 
           <button
+            c-if="not is_playground"
             class="djc-back-to-top"
             type="button"
             aria-label="Back to top"
@@ -1143,11 +1279,21 @@ class DocPage(Component):
             </svg>
           </button>
 
-          <c-search-modal c-quick_links="search_quick_links" />
+          <c-search-modal
+            c-quick_links="search_quick_links"
+            c-pagefind_path="pagefind_path"
+            c-site_target="search_site_target"
+          />
 
           <c-js />
           <script src="/static/js/site.js"></script>
           <script src="/static/js/search.js"></script>
+          <c-if cond="is_playground">
+            <script type="module" src="/static/playground/playground.js"></script>
+          </c-if>
+          <c-if cond="has_interactive_live_code">
+            <script type="module" src="/static/playground/live_code.js"></script>
+          </c-if>
         </body>
       </html>
     """
@@ -1164,6 +1310,7 @@ def _build_top_nav_view(
         SimpleNamespace(
             key=area.label,
             label=area.label,
+            badge=area.badge,
             path=nav_tree.project_path(area.entry_path, version_prefix),
             active=area is active_area,
             aria_current="true" if area is active_area else None,
@@ -1184,6 +1331,7 @@ def _build_nav_view(
         SimpleNamespace(
             key=area.label,
             label=area.label,
+            badge=area.badge,
             path="",
             is_standalone=False,
             active=False,
@@ -1222,6 +1370,7 @@ def _project_nav_item(item: Any, nav_tree: NavTree, version_prefix: str) -> Simp
         title=item.title,
         path=nav_tree.project_path(item.path, version_prefix),
         active=item.active,
+        needs_review=item.needs_review,
         date_iso=item.date_iso,
         date_label=item.date_label,
     )
@@ -1249,9 +1398,27 @@ def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
     Turn python-markdown's toc tokens into the right-rail model.
 
     The page H1 is unwrapped so its sections become the top level (the rail
-    lists sections, not the redundant page title). Each item keeps one level of
-    children.
+    lists sections, not the redundant page title). Descendants retain their
+    hierarchy and heading level so ``TocItems`` can render every H2-H6 with
+    both semantic nesting and a level-based visual offset.
     """
+
+    def view(token: dict, *, allow_collapse: bool = False) -> SimpleNamespace:
+        level = int(token.get("level", 2))
+        children = [view(child) for child in token.get("children", [])]
+        return SimpleNamespace(
+            id=token["id"],
+            name=token["name"],
+            kind=token.get("kind", ""),
+            level=level,
+            level_class=f"djc-toc__level-{level}",
+            children=children,
+            # Preserve the existing reference-page behavior: a top-level
+            # symbol groups all of its recursively rendered members under one
+            # toggle. Narrative subsection trees remain fully visible.
+            collapsible=allow_collapse and any(child.kind for child in children),
+        )
+
     top: list = []
     for token in toc_tokens:
         if token.get("level") == 1:
@@ -1261,21 +1428,7 @@ def _flatten_toc(toc_tokens: list) -> list[SimpleNamespace]:
 
     items: list[SimpleNamespace] = []
     for token in top:
-        children = [
-            SimpleNamespace(id=c["id"], name=c["name"], kind=c.get("kind", "")) for c in token.get("children", [])
-        ]
-        # A reference symbol with members (children that carry a kind) is
-        # collapsible; a plain content section is not.
-        collapsible = any(child.kind for child in children)
-        items.append(
-            SimpleNamespace(
-                id=token["id"],
-                name=token["name"],
-                kind=token.get("kind", ""),
-                children=children,
-                collapsible=collapsible,
-            )
-        )
+        items.append(view(token, allow_collapse=True))
     return items
 
 

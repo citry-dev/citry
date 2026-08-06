@@ -1,141 +1,167 @@
 ---
 title: HTML fragments
-description: Render a component as an HTML fragment for HTMX-style swaps, and let citry load its JS and CSS in the browser.
+description: Render a component for insertion into an existing page, including its client behavior and dependencies.
 ---
 
 # HTML fragments
 
-A fragment is a rendered component prepared for insertion into a page that is
-already loaded. This is the shape you want for HTMX swaps or a plain
-`fetch()` that sets `innerHTML`: the server returns a chunk of HTML, the
-browser drops it into the page, and citry wires up the component's JavaScript
-and CSS for you.
+Return an HTML fragment when one request should replace only part of a page.
+This works well for search results, modal contents, and HTMX-style swaps. The
+server renders a component, while the browser keeps the rest of the document
+in place.
 
-## Render a component as a fragment
+There is one important choice on the receiving page:
 
-Build the component, render it, then serialize it with the `"fragment"`
-strategy:
+- If the page already loaded Citry's runtime, a normal DOM insertion is
+  enough. Citry discovers the new fragment and activates it.
+- If the page did not load Citry, the insertion method must execute the
+  fragment's loader script. Assigning a string to `innerHTML` does not execute
+  inserted `<script>` elements.
+
+## Render the fragment
+
+Render a component, then serialize it with the `"fragment"`
+[`DepsStrategy`][citry.DepsStrategy]:
 
 ```python
-card = Card(title="Welcome")
-card.render().serialize(deps_strategy="fragment")
+html = Card(title="Welcome").render().serialize(
+    deps_strategy="fragment",
+)
 ```
 
-Each step in that chain does one thing. `Card(title="Welcome")` returns a
-[`CitryElement`][citry.CitryElement]. `.render()` returns a
-[`CitryRender`][citry.CitryRender]. Its `serialize` method returns the final
-HTML string. The `deps_strategy` argument is a [`DepsStrategy`][citry.DepsStrategy]
-value; `"fragment"` is the one meant for insertion into a live page.
+The calls produce three different values:
 
-Unlike the default `"document"` strategy, the fragment output does not inline
-component asset bodies. It carries the markup, client ownership and Events
-manifests when needed, a small pre-loader, and a dependency manifest. The
-browser validates and adopts the complete transaction before component
-callbacks observe it, and fetches each referenced asset once per page.
+1. `Card(...)` creates a [`CitryElement`][citry.CitryElement].
+2. `.render()` creates a [`CitryRender`][citry.CitryRender].
+3. `.serialize(...)` returns the HTML string sent to the browser.
 
-## Fragments need a mounted web framework
+The fragment contains the component markup plus the manifests needed for its
+browser behavior and dependencies. If the component is entirely server-side,
+Citry can return plain HTML without those additions.
 
-Because a client-active fragment refers to runtime and component assets by URL,
-citry has to know where those assets are served from. Client activity includes
-Alpine directives, `$component`, `$c-props`, component-tag handlers, Events,
-and scoped template fills; it is not limited to a component declaring JS or
-CSS. The routes come from a mounted web integration. See
-[Web frameworks](/web-frameworks/) for the adapters (FastAPI, Flask, Django,
-and the generic ASGI or WSGI apps).
+## Make asset routes available
 
-If the fragment needs client activation or asset URLs and nothing is mounted,
-`serialize(deps_strategy="fragment")` raises `RuntimeError` telling you to
-mount an integration or set the prefix yourself. Only genuinely server-only
-output emits plain HTML without a client graph.
+A client-active fragment refers to Citry's runtime and generated assets by
+URL. Mount one of Citry's [web framework integrations](/web-frameworks/) so
+those URLs can be served.
 
-In a worker process that renders fragments but does not serve them, record the
-prefix directly with `set_mounted_prefix` (use the same prefix the serving
-process mounts at):
+Client-active output includes components that use normal Alpine attributes,
+[`$component`][$component], client props, browser or server event handlers, or
+Events state. If such a fragment has no mounted integration or recorded route
+prefix, serialization raises `RuntimeError` instead of returning broken URLs.
+
+A worker that only renders fragments can record the prefix used by the
+serving process with
+[`Citry.set_mounted_prefix`][citry.Citry.set_mounted_prefix]:
 
 ```citry
 from citry import Citry, Component
 
-c = Citry()
-c.set_mounted_prefix("/citry")
+app = Citry()
+app.set_mounted_prefix("/citry")
 
-class Frag(Component):
-    citry = c
-    template = """
-        <div class="frag">frag</div>
-    """
-    js = """
-        $component(({ els, data }) => {
-            els[0].setAttribute('data-n', String(data.n));
-        });
-    """
+
+class Notice(Component):
+    citry = app
 
     def js_data(self, kwargs, slots):
-        return {"n": 42}
+        return {"message": "Ready"}
 
-# The prefix must be set before serializing: the fragment references
-# its scripts by URL.
-fragment_html = Frag().render().serialize(deps_strategy="fragment")
+    template = """
+      <p class="notice">Loading...</p>
+    """
+
+    js = """
+      $component(({ els, data }) => {
+        els[0].textContent = data.message;
+      });
+    """
+
+
+html = Notice().render().serialize(
+    deps_strategy="fragment",
+)
 ```
 
-The rendered HTML holds the `<div class="frag">` markup plus a manifest of
-`/citry/cache/...` URLs. The browser fetches and runs them on demand; the JS
-and CSS bodies are never inlined into the fragment.
+Set the prefix before serialization. The generated URLs are fixed when Citry
+turns the render into a string.
 
-## Load a fragment in the browser
+## Insert into a page that already uses Citry
 
-On the host page, load the citry runtime once, fetch a fragment, and set it as
-`innerHTML`:
+Load Citry once in the host document, then insert the response:
 
 ```html
-<html>
-  <head><script src="/citry/citry.js"></script></head>
-  <body>
-    <div id="target"></div>
-    <script>
-      fetch('/fragment')
-        .then((r) => r.text())
-        .then((html) => { document.getElementById('target').innerHTML = html; });
-    </script>
-  </body>
-</html>
+<script src="/citry/citry.js"></script>
+<div id="results"></div>
+<script>
+  fetch('/search-fragment')
+    .then((response) => response.text())
+    .then((html) => {
+      document.getElementById('results').innerHTML = html;
+    });
+</script>
 ```
 
-Once the fragment lands in the page, citry's runtime notices the inserted
-manifest and fetches and runs the component's JS and CSS. A fragment dropped
-into a page that has not loaded the runtime also ships a pre-loader for
-`citry.js`, but the fragment consumer must execute inserted script elements.
-Browsers do not execute `<script>` tags created by assigning `innerHTML`, so
-the plain assignment above is sufficient only because that host page already
-loads the runtime. For runtime-free hosts, use a swap library that executes
-fragment scripts, or recreate each inserted script node after parsing it. The
-pre-loader then starts Citry, which discovers the inert graph and dependency
-manifests already present in the fragment.
+The existing runtime notices the fragment manifest, fetches missing assets,
+and activates the complete fragment. Each dependency is loaded once per page.
 
-## Good to know
+## Insert into a page without Citry
 
-- `set_mounted_prefix` must run before you serialize, because the fragment
-  embeds its script URLs at serialize time.
-- `deps_position` (the [`DepsPosition`][citry.DepsPosition] argument) only
-  affects the `"document"` and `"simple"` strategies. A fragment always
-  appends its manifest, so `deps_position` is ignored for `"fragment"`.
-- If you run more than one worker, point them at a shared cache backend. The
-  `/cache` endpoint may be served by a different process than the one that
-  rendered the fragment, and it needs the shared store to serve the
-  per-instance variables script. The Django adapter ships a
-  `DjangoCache` for this; see [Caching](/advanced/caching/).
-- A [`Dependency`][citry.ext.dependencies.Dependency] that points at a local file has no URL, so
-  in a fragment it rides inline as a tag descriptor rather than as a fetch URL.
-- Preserve Citry's ownership comments and manifest tags when an HTML minifier,
-  CDN, sanitizer, or client DOM library handles the response. See
-  [Alpine runtime](/advanced/alpine-runtime/#preserve-client-graph-markers).
+A fragment can include a small loader for Citry's runtime. The browser still
+has to execute that loader. Scripts inserted through `innerHTML` stay inert,
+so the example in the previous section only works because Citry was already
+loaded.
+
+For a runtime-free host, use a swap library that executes response scripts, or
+parse the response and recreate its `<script>` elements as live DOM nodes.
+The loader can then start Citry and adopt the manifests that arrived with the
+fragment.
+
+Whichever insertion method you choose, insert the fragment as one transaction.
+Do not split its markup, manifests, and ownership markers into separate swaps.
+
+## Deliver component dependencies
+
+Fragment serialization handles dependency declarations according to their
+form:
+
+- URL dependencies remain URLs and are fetched by the browser.
+- Local files are included as script or style descriptors by default.
+- With `Dependencies.local_files = "serve"`, mounted applications turn local
+  files into fingerprinted URLs instead.
+- Objects that only provide opaque pre-rendered HTML through `__html__` cannot
+  be decomposed into a fragment dependency. Serialization raises `TypeError`;
+  declare a `Script`, `Style`, or URL instead.
+
+The [`deps_position`][citry.DepsPosition] option applies to document and simple
+serialization. A fragment always appends the information needed for adoption,
+so that option is ignored.
+
+## Run fragments across several workers
+
+The request for a generated asset may reach a different worker from the one
+that rendered the fragment. Configure a shared cache backend so every worker
+can serve the generated values. See
+[Cache backends](/advanced/cache-backends/) for Redis, DiskCache, Django, and
+deployment generations.
+
+Use the same mounted prefix and cache configuration in the rendering and
+serving processes.
+
+## Keep fragments intact in production
+
+HTML optimizers and sanitizers must preserve Citry's ownership comments,
+manifest scripts, and client attributes. See
+[Preserve client-active HTML](/advanced/alpine-runtime/#preserve-client-active-html)
+for the exact list.
 
 ## See also
 
-- [JS and CSS dependencies](/advanced/js-and-css-dependencies/) for how a
-  component declares its scripts and styles.
-- [Client interactivity](/concepts/client-interactivity/) for activation and scope ownership.
-- [Event actions](/events/actions/) for handlers that return and apply
-  rendered updates.
-- [Rendering](/concepts/rendering/) for the render and serialize model.
-- [Web frameworks](/web-frameworks/) to mount the routes that serve fragment
-  assets.
+- [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for a
+  component's own browser behavior and styles.
+- [Dependency files](/advanced/dependency-files/) for URLs and local files.
+- [Client interactivity](/concepts/client-interactivity/) for browser scope
+  and component lifecycles.
+- [Event actions](/events/actions/) for returning rendered updates from a
+  Python handler.
+- [Rendering](/concepts/rendering/) for render and serialization choices.

@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("pytest_playwright")
 
 from citry import Citry, Component
+from citry._protocol.client_graph import canonical_json
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -31,7 +32,7 @@ def _mutate_graph(html: str, mutate: Callable[[dict[str, Any]], None]) -> str:
     old_revision = manifest["revision"]
     mutate(manifest)
     unsigned = {key: value for key, value in manifest.items() if key != "revision"}
-    canonical = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode("utf8")
+    canonical = canonical_json(unsigned).encode("utf8")
     manifest["revision"] = hashlib.sha256(canonical).hexdigest()
     replacement = f"{match.group(1)}{json.dumps(manifest)}{match.group(3)}"
     return f"{html[: match.start()]}{replacement}{html[match.end() :]}".replace(
@@ -291,7 +292,12 @@ def test_runtime_dynamic_target_commits_without_a_wrapper_identity(page: Any, se
 
     class Target(Component):
         citry = c
-        template = "<button>target</button>"
+        js = """
+          $component(() => {});
+        """
+        template = """
+          <button>target</button>
+        """
 
     class Page(Component):
         citry = c
@@ -305,7 +311,9 @@ def test_runtime_dynamic_target_commits_without_a_wrapper_identity(page: Any, se
             );
           });
         """
-        template = '<c-component c-is="target" $c-props="{value: 1}" />'
+        template = """
+          <c-component c-is="target" $c-props="{value: 1}" />
+        """
 
         def template_data(self, kwargs, slots):
             return {"target": Target}

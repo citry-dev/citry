@@ -83,11 +83,17 @@ _PAGE = """
       window.__refireFragmentCall = () => {
         const manifest = JSON.parse(document.querySelector('script[data-citry]').textContent);
         manifest.graph = null;
+        for (const kind of ['js', 'css']) {
+          manifest.fetch[kind] = manifest.fetch[kind].map((entry) => Array.isArray(entry) ? entry[0] : entry);
+        }
         Citry.manager._loadComponentScripts(manifest);
       };
       window.__insertFreshCallManifest = () => {
         const manifest = JSON.parse(document.querySelector('script[data-citry]').textContent);
         manifest.graph = null;
+        for (const kind of ['js', 'css']) {
+          manifest.fetch[kind] = manifest.fetch[kind].map((entry) => Array.isArray(entry) ? entry[0] : entry);
+        }
         const tag = document.createElement('script');
         tag.type = 'application/json';
         tag.dataset.citry = '';

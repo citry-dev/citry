@@ -15,6 +15,78 @@ pytestmark = pytest.mark.e2e
 READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
 
 
+def test_rendered_component_ancestors_settle_before_sibling_slot_descendants(
+    page: Any,
+    serve_live: Any,
+) -> None:
+    c = Citry()
+    c.set_mounted_prefix("/citry")
+
+    class Reader(Component):
+        citry = c
+        js = """
+          $component(({ inject, scope }) => {
+            scope.value = `${inject("outer")}:${inject("inner")}`;
+          });
+        """
+        template = """
+          <output class="rendered-order-reader" x-text="value"></output>
+        """
+
+    class InnerProvider(Component):
+        citry = c
+        js = """
+          $component(({ provide }) => {
+            provide("inner", "inner");
+          });
+        """
+        template = """
+          <section>
+            <c-slot />
+          </section>
+        """
+
+    class OuterProvider(Component):
+        citry = c
+        js = """
+          $component(({ provide }) => {
+            provide("outer", "outer");
+          });
+        """
+        template = """
+          <main>
+            <c-slot />
+          </main>
+        """
+
+    class Page(Component):
+        citry = c
+        template = """
+          <html>
+            <body>
+              <c-outer-provider>
+                <c-inner-provider>
+                  <c-reader />
+                </c-inner-provider>
+                <c-inner-provider>
+                  <c-reader />
+                </c-inner-provider>
+              </c-outer-provider>
+            </body>
+          </html>
+        """
+
+    base = serve_live(c, Page().render().serialize(), "")
+    page.goto(base + "/")
+    page.wait_for_function(READY)
+    page.wait_for_function(
+        "[...document.querySelectorAll('.rendered-order-reader')]"
+        ".every((element) => element.textContent === 'outer:inner')"
+    )
+
+    assert page.locator(".rendered-order-reader").all_inner_texts() == ["outer:inner", "outer:inner"]
+
+
 def test_component_context_supports_values_symbols_boundaries_and_rootless_consumers(
     page: Any,
     serve_live: Any,

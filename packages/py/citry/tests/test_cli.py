@@ -69,6 +69,19 @@ class TestEngineBinding:
 
 
 class TestCommandTree:
+    def test_direct_builder_binds_check_to_the_supplied_engine(self, capsys):
+        engine = _Citry()
+
+        class Broken(Component):
+            citry = engine
+            template = "<div>"
+
+        with pytest.raises(SystemExit) as exc:
+            run(build_cli(engine), ["check"], citry=engine)
+
+        assert exc.value.code == 1
+        assert "Broken.template" in capsys.readouterr().err
+
     def test_ext_run_dispatches_to_extension_command(self):
         captured: dict = {}
         engine, _ = _engine_with_command(captured)
@@ -118,11 +131,12 @@ class TestHelpListings:
         assert code == 0
         out = capsys.readouterr().out
         assert "usage: citry" in out
-        assert "{list,inspect,create,watch,ext}" in out
+        assert "{check,format,list,inspect,create,watch,ext}" in out
         assert "--version" in out
         # Each subcommand's one-line description appears in the listing
         # (watch's wraps across lines, so its roster entry above stands in).
         assert "List the registered components." in out
+        assert "Format statically identifiable Citry component assets." in out
         assert "Emit the runtime component catalog as JSON." in out
         assert "Scaffold a new component file." in out
         assert "Inspect and run extension commands." in out
@@ -258,7 +272,7 @@ class TestListComponents:
 
     def test_component_without_a_source_file_gets_an_empty_path_cell(self, capsys):
         # A dynamically built class has no file to point at; the listing
-        # shows an empty cell instead of failing.
+        # remains usable and shows an empty path cell.
         engine = _Citry()
         type("Ghost", (Component,), {"citry": engine, "template": "<i></i>", "__module__": "no_such_module_xyz"})
 
@@ -342,8 +356,18 @@ class TestCreateComponent:
         assert created.exists()
         text = created.read_text()
         assert "class MyButton(Component):" in text
-        # The scaffold must be valid Python.
-        compile(text, str(created), "exec")
+        assert "    class Kwargs:\n" in text
+        assert "    class Slots:\n" in text
+        assert "def template_data" not in text
+        kwargs_index = text.index("    class Kwargs:\n")
+        slots_index = text.index("    class Slots:\n")
+        template_index = text.index('    template = """\n')
+        assert kwargs_index < slots_index < template_index
+        namespace = {"__name__": "test_generated_component"}
+        exec(compile(text, str(created), "exec"), namespace)  # noqa: S102
+
+        component = namespace["MyButton"]
+        assert "<h1>Hello</h1>" in str(component(title="Hello"))
 
     def test_reports_created_file_path(self, tmp_path, capsys):
         engine = _Citry()

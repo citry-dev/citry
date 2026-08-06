@@ -29,6 +29,7 @@ from citry.ext.events import EventsExtension
 app = Citry()
 
 assert_type(Component.State, type | None)
+assert_type(Component.Events, type | None)
 
 
 class TodoState:

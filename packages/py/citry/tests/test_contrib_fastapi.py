@@ -94,7 +94,7 @@ class TestFragmentRoundTrip:
         match = re.search(r'<script type="application/json" data-citry>(.*?)</script>', fragment, re.DOTALL)
         manifest = json.loads(match.group(1))
         descriptors = [
-            json.loads(base64.b64decode(item).decode())
+            json.loads(base64.b64decode(item[0]).decode())
             for item in [*manifest["fetch"]["js"], *manifest["fetch"]["css"]]
         ]
         urls = [d["attrs"].get("src") or d["attrs"].get("href") for d in descriptors]

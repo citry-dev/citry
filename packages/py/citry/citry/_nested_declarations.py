@@ -157,6 +157,9 @@ def _convert_to_slotted_dataclass(
         "__annotations__": annotations,
         "__module__": module if isinstance(module, str) else "citry.component",
         "__qualname__": qualname if isinstance(qualname, str) else _safe_class_text(user_cls, "__name__"),
+        # Tooling must attribute effective fields to their authored bases, not
+        # to this implementation-only class that copies the merged annotations.
+        _SYNTHESIZED_DECLARATION_ATTR: True,
     }
     for field_name in annotations:
         default = inspect.getattr_static(user_cls, field_name, MISSING)

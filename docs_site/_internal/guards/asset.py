@@ -13,6 +13,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
+from docs_site._internal.guards.site_index import strip_base_path
+from docs_site._internal.project import current_docs_project
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -29,15 +31,23 @@ _STATIC_PREFIX = "/static/"
 _GENERATED_ROOT_ASSETS = frozenset(
     {"/objects.inv", "/sitemap.xml", "/robots.txt", "/llms.txt", "/llms-full.txt"},
 )
-_GENERATED_PREFIXES = ("/pagefind/", "/citry/")
+_GENERATED_PREFIXES = ("/citry/",)
 
 
-def _asset_exists(src: str, build_dir: Path, static_dir: Path, page_dir: Path) -> bool:
+def _asset_exists(
+    src: str,
+    build_dir: Path,
+    static_dir: Path,
+    page_dir: Path,
+    generated_prefixes: tuple[str, ...],
+    base_path: str,
+) -> bool:
     path, _, _ = src.partition("#")
     path, _, _ = path.partition("?")
     if not path:
         return True
-    if path in _GENERATED_ROOT_ASSETS or path.startswith(_GENERATED_PREFIXES):
+    path = strip_base_path(path, base_path)
+    if path in _GENERATED_ROOT_ASSETS or path.startswith(generated_prefixes):
         return True
     if path.startswith(_STATIC_PREFIX):
         # Resolve against the source static dir, which is copied verbatim into
@@ -57,6 +67,9 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         return
 
     seen: set[str] = set()  # dedupe identical broken assets across pages
+    project = ctx.project or current_docs_project()
+    pagefind_dir = project.settings.pagefind_path.rsplit("/", 1)[0]
+    generated_prefixes = (*_GENERATED_PREFIXES, f"{pagefind_dir}/")
     for page in index.pages:
         # Only check docs-owned assets. Example demo pages reference the
         # runtime-injected citry static, which is not part of the docs tree.
@@ -66,7 +79,14 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         for asset in page.assets:
             if asset.is_external or not asset.src:
                 continue
-            if _asset_exists(asset.src, index.build_dir, ctx.static_dir, page_dir):
+            if _asset_exists(
+                asset.src,
+                index.build_dir,
+                ctx.static_dir,
+                page_dir,
+                generated_prefixes,
+                ctx.base_path,
+            ):
                 continue
             key = asset.src
             if key in seen:

@@ -10,6 +10,8 @@ in ``test_pipeline`` (it needs the config that ``parse_page`` does not have).
 
 from __future__ import annotations
 
+import pytest
+
 from docs_site._internal.frontmatter import _DESCRIPTION_CAP, parse_page
 
 
@@ -97,3 +99,14 @@ def test_description_empty_when_body_has_no_usable_paragraph() -> None:
     # A body that is only a heading yields no first paragraph, so tiers 1 and 2
     # both come up empty and the render-time site default takes over.
     assert parse_page("---\ntitle: T\n---\n\n# Only a heading\n").description == ""
+
+
+def test_layout_defaults_to_docs_and_accepts_specialized_layouts() -> None:
+    assert parse_page("# Page\n").layout == "docs"
+    assert parse_page("---\nlayout: landing\n---\n\nPage.\n").layout == "landing"
+    assert parse_page("---\nlayout: playground\n---\n\nPage.\n").layout == "playground"
+
+
+def test_unknown_layout_is_rejected() -> None:
+    with pytest.raises(ValueError, match="Unknown page layout 'dashboard'"):
+        parse_page("---\nlayout: dashboard\n---\n\nPage.\n")

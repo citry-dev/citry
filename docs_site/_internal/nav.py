@@ -20,10 +20,11 @@ if TYPE_CHECKING:
 
 
 _AREA_SOURCES = frozenset({"blog", "reference"})
-_GROUP_SOURCES = frozenset({"releases"})
-_AREA_KEYS = frozenset({"label", "items", "groups", "source", "scope", "entry"})
+_GROUP_SOURCES = frozenset({"releases", "ui_library"})
+_AREA_KEYS = frozenset({"label", "items", "groups", "source", "scope", "entry", "badge"})
 _GROUP_KEYS = frozenset({"label", "items", "source", "scope", "entry", "collapsible", "section_style"})
-_ITEM_KEYS = frozenset({"title", "path", "scope"})
+_ITEM_KEYS = frozenset({"title", "path", "scope", "needs_review"})
+_HOME_REQUIRED_KEYS = frozenset({"title", "path", "scope"})
 SCOPE_VERSIONED = "versioned"
 SCOPE_SITE = "site"
 CONTENT_SCOPES = frozenset({SCOPE_SITE, SCOPE_VERSIONED})
@@ -35,6 +36,9 @@ class NavItem:
     title: str
     path: str
     active: bool = False
+    # Review state is presentation metadata, not part of the title. Keeping the
+    # title clean preserves Overview detection, breadcrumbs, and page cards.
+    needs_review: bool = False
     # Generated Blog entries carry an authored publication date. Ordinary
     # navigation items leave these empty and render exactly as before.
     date_iso: str = ""
@@ -71,6 +75,7 @@ class NavArea:
     groups: list[NavGroup] = field(default_factory=list)
     source: str = ""
     scope: str = SCOPE_VERSIONED
+    badge: str = ""
     # A generated site-scoped area declares its stable root entry so snapshot
     # builds can keep the top-nav escape link without loading current content.
     source_entry: NavItem | None = None
@@ -106,6 +111,9 @@ class NavArea:
 
 @dataclass
 class NavTree:
+    # The project home is a route declaration, not a visible primary area.
+    # Repositories without it retain the historical area-owned root behavior.
+    home: NavItem | None = None
     areas: list[NavArea] = field(default_factory=list)
 
     def flat_pages(self) -> list[NavItem]:
@@ -157,7 +165,7 @@ class NavTree:
     def find_title(self, current_path: str) -> str:
         """The nav title for a path, or ``""`` when it is absent."""
         normalized = _norm(current_path)
-        for item in self.flat_pages():
+        for item in self._route_items():
             if _norm(item.path) == normalized:
                 return item.title
         return ""
@@ -165,7 +173,7 @@ class NavTree:
     def scope_for_path(self, current_path: str) -> str:
         """Return a page's resolved content scope, defaulting to versioned."""
         normalized = _norm(current_path)
-        for item in self.flat_pages():
+        for item in self._route_items():
             if _norm(item.path) == normalized:
                 return item.scope
         return SCOPE_VERSIONED
@@ -188,6 +196,8 @@ class NavTree:
 
     def _route_items(self) -> list[NavItem]:
         items = self.flat_pages()
+        if self.home is not None:
+            items.append(self.home)
         items.extend(area.source_entry for area in self.areas if area.source_entry is not None)
         items.extend(
             group.source_entry for area in self.areas for group in area.groups if group.source_entry is not None
@@ -294,7 +304,7 @@ def load_nav(nav_path: Path) -> NavTree:
 
     if not isinstance(raw, dict) or "areas" not in raw:
         raise ValueError("Navigation file must define a top-level 'areas' list")
-    unknown = set(raw) - {"areas"}
+    unknown = set(raw) - {"home", "areas"}
     if unknown:
         names = ", ".join(sorted(str(key) for key in unknown))
         raise ValueError(f"Navigation file has unknown top-level key(s): {names}")
@@ -303,7 +313,8 @@ def load_nav(nav_path: Path) -> NavTree:
     if not raw["areas"]:
         raise ValueError("Navigation 'areas' must contain at least one area")
 
-    tree = NavTree(areas=[_parse_area(area) for area in raw["areas"]])
+    home = _parse_home(raw["home"]) if "home" in raw else None
+    tree = NavTree(home=home, areas=[_parse_area(area) for area in raw["areas"]])
     _validate_tree(tree, allow_unresolved=True)
     return tree
 
@@ -360,6 +371,9 @@ def _parse_area(raw: dict) -> NavArea:
     _reject_unknown_keys(raw, _AREA_KEYS, owner="Navigation area")
     label = raw.get("label", "")
     source = raw.get("source", "")
+    badge = raw.get("badge", "")
+    if not isinstance(badge, str) or ("badge" in raw and not badge.strip()):
+        raise ValueError(f"Nav area {label!r} badge must be a non-empty string")
     scope = _parse_scope(raw.get("scope", SCOPE_VERSIONED), owner=f"Nav area {label!r}")
     if source not in _AREA_SOURCES | {""}:
         msg = f"Unknown navigation area source {source!r}"
@@ -386,8 +400,25 @@ def _parse_area(raw: dict) -> NavArea:
         groups=groups,
         source=source,
         scope=scope,
+        badge=badge.strip(),
         source_entry=source_entry,
     )
+
+
+def _parse_home(raw: dict) -> NavItem:
+    """Parse the optional project home, which never becomes a header area."""
+    if not isinstance(raw, dict):
+        raise TypeError("Navigation home must be a mapping")
+    missing = _HOME_REQUIRED_KEYS - set(raw)
+    if missing:
+        names = ", ".join(sorted(missing))
+        raise ValueError(f"Navigation home is missing required key(s): {names}")
+    home = _parse_item(raw, inherited_scope=SCOPE_SITE)
+    if home.path != "/":
+        raise ValueError("Navigation home path must be '/'")
+    if home.scope != SCOPE_SITE:
+        raise ValueError("Navigation home must use scope 'site'")
+    return home
 
 
 def _parse_group(raw: dict, *, inherited_scope: str) -> NavGroup:
@@ -432,11 +463,29 @@ def _parse_item(raw: dict, *, inherited_scope: str) -> NavItem:
         raise ValueError("Navigation item titles may not be empty")
     if not isinstance(path, str) or not path.strip():
         raise ValueError("Navigation item paths may not be empty")
+    if "🚧" in title:
+        raise ValueError("Navigation item titles must use needs_review: true instead of the 🚧 marker")
     if not path.startswith("/") or not path.endswith("/"):
         msg = f"Navigation path {path!r} must start and end with '/'"
         raise ValueError(msg)
+    unsafe_path = (
+        "//" in path
+        or any(part in {".", ".."} for part in path.split("/"))
+        or any(
+            char.isspace()
+            or ord(char) < 32
+            or ord(char) == 127
+            or char in {'"', "'", "%", ":", "<", ">", "?", "#", "\\"}
+            for char in path
+        )
+    )
+    if unsafe_path:
+        raise ValueError(f"Navigation path {path!r} must be a safe clean URL")
+    needs_review = raw.get("needs_review", False)
+    if not isinstance(needs_review, bool):
+        raise TypeError(f"Nav item {title!r} needs_review must be true or false")
     scope = _parse_scope(raw.get("scope", inherited_scope), owner=f"Nav item {title!r}")
-    return NavItem(title=title, path=path, scope=scope)
+    return NavItem(title=title, path=path, needs_review=needs_review, scope=scope)
 
 
 def _parse_scope(raw: object, *, owner: str) -> str:
@@ -502,6 +551,8 @@ def _validate_tree(tree: NavTree, *, allow_unresolved: bool) -> None:
             raise ValueError(msg)
 
     owners: dict[str, str] = {}
+    if tree.home is not None:
+        owners[_norm(tree.home.path)] = "home"
     for area in tree.areas:
         for item in area.flat_pages():
             normalized = _norm(item.path)

@@ -181,7 +181,7 @@ Code: [`citry/extensions/dependencies/__init__.py`](../../packages/py/citry/citr
 
 The element renderer formatted attributes one at a time: it called
 `format_attrs({key: value})` once per attribute, and each call escaped, joined
-a single piece, allocated a `SafeString`, and was concatenated with a leading
+a single piece, allocated a `Markup`, and was concatenated with a leading
 space. For an element with three attributes that is three of everything.
 
 It now formats the whole resolved attribute dict in a single `format_attrs`
@@ -195,7 +195,7 @@ pass, one join, one allocation per element. Code:
 ### 4.3 Escape to a plain string, not a Markup, in format_attrs
 
 `format_attrs` escapes each attribute key and value into an f-string and wraps
-the whole joined result as one `SafeString` at the end. The individual
+the whole joined result as one `Markup` at the end. The individual
 `escape()` calls therefore allocated a `Markup` per key and per value only to
 have it immediately turned back into a plain string by the f-string: pure
 allocation.

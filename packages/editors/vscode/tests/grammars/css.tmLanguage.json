@@ -1,0 +1,9 @@
+{
+	"name": "CSS test host",
+	"scopeName": "source.css",
+	"patterns": [
+		{ "begin": "/\\*", "end": "\\*/", "name": "comment.block.css" },
+		{ "match": "#[0-9A-Fa-f]+|[A-Za-z_-][\\w-]*", "name": "support.constant.property-value.css" },
+		{ "match": "[{}:;.]", "name": "punctuation.css" }
+	]
+}

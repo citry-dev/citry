@@ -18,6 +18,7 @@ import importlib.util
 import json
 import logging
 import re
+from collections import UserDict
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -1146,6 +1147,7 @@ class TestPipelineOrder:
             [{"action": "unknown"}],
             [{"action": "data", "value": 1, "delay": True}],
             [{"action": "data", "value": 1, "wait": 1}],
+            [{"action": "data", "value": 1, "wait": False}],
             [{"action": "render", "target": "#target", "swap": "replace", "html": 1}],
             [{"action": "render", "target": "", "swap": "replace", "html": "<p>x</p>"}],
             [{"action": "render", "target": "render:MixedCase", "swap": "replace", "html": "<p>x</p>"}],
@@ -1247,6 +1249,29 @@ class TestPipelineOrder:
         assert captured["error"] == "boom"
         assert result["results"][0]["error"]["message"] == "Reported."
         assert result["results"][0]["error"]["fieldErrors"] == {"report": "saved"}
+
+    def test_error_hook_non_json_mapping_retains_the_generic_result(self):
+        class MappingReporter(Extension):
+            name = "mapping_reporter"
+
+            def on_event_error(self, ctx):
+                return {
+                    "ok": False,
+                    "error": UserDict({"status": 500, "code": "handler_error", "message": "Reported."}),
+                }
+
+        c = _citry(extensions=[MappingReporter])
+        counter = _counter(c)
+        call = {"componentClassId": counter.class_id, "handlerName": "crash", "stateToken": _token(counter)}
+        [item] = _dispatch(c, call)["results"]
+        assert item == {
+            "ok": False,
+            "error": {
+                "status": 500,
+                "code": "handler_error",
+                "message": "The event handler raised an unexpected error.",
+            },
+        }
 
     def test_context_failure_reaches_error_hook_with_resolved_context_and_exact_epoch(self):
         captured = {}

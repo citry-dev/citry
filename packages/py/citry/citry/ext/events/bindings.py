@@ -10,9 +10,10 @@ base64-encoded JSON spec that the client runtime (WP17) reads at event time.
 
 The rewrite runs in two stages, because bindings can appear two ways:
 
-- **Stage one, at template load** (:func:`rewrite_template`, string level,
-  before the template is parsed and cached): everything an author writes
-  literally in a template.
+- **Stage one, after template compilation** (:func:`compile_template_bindings`,
+  structured-node level): attributes the parser proved were authored on real
+  elements. The source template remains unchanged for diagnostics and
+  introspection.
 - **Stage two, at render time** (:func:`rewrite_resolved_attrs`, through the
   ``on_attrs_resolved`` hook): bindings contributed by a spread, e.g. a parent
   passing ``attrs="{'@c-click': 'select'}"`` that a child applies with the
@@ -26,28 +27,24 @@ and modifier combinations must parse. On a component boundary, ``@c-*`` is
 left intact for component-tag client binding capture while ``:c-*`` remains invalid.
 ``<c-element>`` follows the element path.
 
-Known v1 caveats (each keeps the authored syntax and the emitted contract
-unchanged, so lifting it later is transparent):
+Additional boundary rules:
 
-- The stage-one rewrite is textual, so it also matches binding-shaped text
-  inside ``<c-raw>`` blocks (the same caveat class as the shipped
-  ``$component`` substring rewrite). The refinement is a node-level
-  transform in a later version.
 - A binding that reaches a component tag through a render-time spread never
-  enters this element rewrite. A1's source-ordered component-input split
+  enters the element rewrite. A1's source-ordered component-input split
   captures `@c-*` as a component-tag client binding and keeps `:c-*` as an ordinary
   invalid component input. Later Alpine batches own client-binding validation and
   delivery.
-- The control-type validations (a two-way ``<input type="file">``, ``.lazy``
-  on a control whose value already commits on ``change``, a key filter on a
-  non-keyboard update event) run only when the control type is written
-  literally on the element. A type contributed dynamically (``c-type``,
-  ``:type``, or a ``c-bind`` spread) is not known at load, so these checks are
-  skipped for that element, and a literal binding that stage one already
-  rewrote is not re-validated at render time. This matches design 5.1's
-  update-event table, which scopes both the ``<input type="file">`` row and
-  the ``.lazy`` column to "where the type is statically known". A test pins
-  this behavior so it is explicit.
+- Control-type validation runs at template load when possible, against final
+  server-rendered attributes after ``c-type`` / ``c-bind`` resolution, and in
+  the browser for Alpine-mutated ``:type`` values. The final two use the same
+  complete input-type matrix and fail closed while the live type is invalid.
+- ``<c-element>`` is classified by the element its ``is`` attribute names. A
+  literal ``is`` permits early target validation; for computed ``is``
+  (``c-is``, or ``is`` through a spread), target-dependent checks are deferred
+  until the selected tag and its final attributes resolve at render time.
+- Binding-shaped text inside ``<c-raw>``, HTML comments, and native
+  ``script``/``style``/``textarea``/``title`` bodies is text, not an
+  attribute, and is therefore never validated or rewritten.
 
 The compiled ``data-cev-*`` contract (WP17 reads this, never the test
 fixtures)
@@ -68,7 +65,7 @@ deterministic. The three attributes and their per-spec keys:
       parentheses (``rate({stars: 5})`` -> ``"{stars: 5}"``), or ``null`` for a
       bare handler name. Carried verbatim; citry never parses it.
     - ``prevent`` / ``stop`` / ``self`` / ``once``: booleans, the event modifiers
-    - ``key``: a keyboard key filter (``"enter"`` / ``"escape"``) or ``null``
+    - ``key``: an ``event.key`` filter (``"enter"`` / ``"escape"``) or ``null``
     - ``debounce`` / ``throttle``: milliseconds, or ``null`` (the merged value:
       an ``.debounce`` modifier wins over the handler's configured default)
 
@@ -82,19 +79,21 @@ deterministic. The three attributes and their per-spec keys:
     - ``cid``: owner component class id
     - ``field``: the State field name (case preserved; the rewrite is
       server-side, so browser attribute-name lowercasing never sees it)
-    - ``mode``: ``"one"`` for a one-way binding (no value), ``"two"`` for a
-      two-way binding (the value names the handler)
+    - ``binding_mode``: ``"one-way"`` for a State-to-control binding (no
+      value), ``"two-way"`` for a binding whose value names the handler and
+      which also writes control changes back to State
     - ``handler``: the handler wire name for a two-way binding, or ``null``
     - ``lazy``: whether ``.lazy`` was set (use the control's committed-value
       event instead of its active event; the client resolves the concrete
       event from the live control)
     - ``on``: an explicit ``.on:<event>`` update-event override, or ``null``
-    - ``key``: a keyboard key filter or ``null``
+    - ``key``: an ``event.key`` filter or ``null``
     - ``debounce`` / ``throttle``: milliseconds, or ``null``
 
 The importable contract mirrors this prose: :data:`DATA_CEV_ATTRS` enumerates
 the attribute names and their payload keys, and :data:`BINDING_SPEC_ENCODING`
-names the encoding.
+names the encoding. These attributes are compiler-owned: authoring a
+``data-cev-*`` attribute directly is a template-load error.
 
 Design: ``docs/design/events.md`` section 5.1; ``docs/design/events_plan.md``
 WP12.
@@ -103,11 +102,12 @@ WP12.
 from __future__ import annotations
 
 import base64
+import binascii
 import json
 import re
 from dataclasses import dataclass, fields
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, NoReturn
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -174,7 +174,17 @@ DATA_CEV_ATTRS: Final[Mapping[str, CevAttr]] = MappingProxyType(
         ),
         DATA_CEV_BIND: CevAttr(
             name=DATA_CEV_BIND,
-            payload_keys=("cid", "field", "mode", "handler", "lazy", "on", "key", "debounce", "throttle"),
+            payload_keys=(
+                "cid",
+                "field",
+                "binding_mode",
+                "handler",
+                "lazy",
+                "on",
+                "key",
+                "debounce",
+                "throttle",
+            ),
             summary="State bindings from :c-<field>: bind a control to a public State field.",
         ),
     }
@@ -187,12 +197,64 @@ DATA_CEV_ATTRS: Final[Mapping[str, CevAttr]] = MappingProxyType(
 DEFAULT_DEBOUNCE_MS: Final = 250
 DEFAULT_THROTTLE_MS: Final = 250
 
-# Key filters (`.enter` / `.escape`) only make sense on a keyboard event.
-KEYBOARD_EVENTS: Final = frozenset({"keydown", "keyup", "keypress"})
-
 # `<input>` types whose committed value already updates on `change`, so `.lazy`
 # (which asks for the committed-value event) is redundant and rejected.
 _COMMITTED_INPUT_TYPES: Final = frozenset({"checkbox", "radio"})
+
+# The 22 input-type keywords in the HTML Standard, partitioned by the State
+# binding directions Citry can faithfully support. Matching is ASCII-case
+# insensitive but deliberately does not strip whitespace: a present nonempty
+# value outside this table is invalid authoring, even though browsers normalize
+# every unknown value to the Text state.
+_TWO_WAY_INPUT_TYPES: Final = frozenset(
+    {
+        "text",
+        "search",
+        "tel",
+        "url",
+        "email",
+        "password",
+        "date",
+        "month",
+        "week",
+        "time",
+        "datetime-local",
+        "number",
+        "range",
+        "color",
+        "checkbox",
+        "radio",
+    }
+)
+_ONE_WAY_INPUT_TYPES: Final = frozenset({"hidden"})
+_UNSUPPORTED_INPUT_TYPES: Final = frozenset({"file", "submit", "image", "reset", "button"})
+_HTML_INPUT_TYPES: Final = _TWO_WAY_INPUT_TYPES | _ONE_WAY_INPUT_TYPES | _UNSUPPORTED_INPUT_TYPES
+
+# The HTML elements the client can read a value from and write a value back to
+# (`readControlValue` / `applyValueToControl` in the client runtime). A
+# `<select multiple>` is included and carries a list of selected option values;
+# the live element's `multiple` property decides that shape, so direct and
+# dynamic/spread forms share the same path. A state binding on any other plain
+# element has nothing to bind, so it is rejected.
+# Widening this set is the single place a future "bind anything" feature hooks
+# in; the client must learn the element's value shape in the same change.
+_KNOWN_FORM_CONTROLS: Final = frozenset({"input", "textarea", "select"})
+
+# Hyphenated names HTML reserves for SVG and MathML elements, so they are not
+# custom element names however much they look like one. None of them holds a
+# value, so a state binding on one is rejected with everything else.
+_RESERVED_HYPHENATED_TAGS: Final = frozenset(
+    {
+        "annotation-xml",
+        "color-profile",
+        "font-face",
+        "font-face-format",
+        "font-face-name",
+        "font-face-src",
+        "font-face-uri",
+        "missing-glyph",
+    }
+)
 
 # Event-binding boolean modifiers (design 5.1 modifier table).
 _EVENT_FLAGS: Final = frozenset({"prevent", "stop", "self", "once"})
@@ -206,60 +268,39 @@ _PREFIX_STATE: Final = ":c-"
 _POLL: Final = "poll"
 
 
-# ----- Textual scanning (stage one) -----
-
-# An HTML start tag: the tag name, then an attribute region where quoted values
-# protect any `>` inside them, up to the closing `>`. A trailing `/` (self
-# closing) is part of the attribute region and handled during reconstruction.
-_TAG_RE: Final = re.compile(
-    r"""<
-        (?P<tag>[A-Za-z][A-Za-z0-9._:-]*)
-        (?P<attrs>(?:"[^"]*"|'[^']*'|[^"'>])*)
-        >""",
-    re.VERBOSE | re.DOTALL,
-)
-
-# One attribute inside a start tag: a name (any run of non-space, non-`=`,
-# non-`/`, non-`>` characters, which captures `@c-submit.prevent` whole), then
-# an optional `= value` where the value is quoted or an unquoted run.
-_ATTR_RE: Final = re.compile(
-    r"""(?P<name>[^\s=/>]+)
-        (?:\s*=\s*(?P<value>"[^"]*"|'[^']*'|[^\s>]+))?""",
-    re.VERBOSE,
-)
-
 # A modifier time segment: a whole number of milliseconds or seconds.
 _TIME_RE: Final = re.compile(r"^(?P<n>\d+)(?P<unit>ms|s)$")
 
 
-def _looks_like_binding(text: str) -> bool:
-    """Whether ``text`` contains any authored binding prefix (a cheap pre-filter)."""
-    return _PREFIX_EVENT in text or _PREFIX_STATE in text
+def _citry_tag_identity(tag_name: str) -> str | None:
+    """Return folded Citry identity only for the exact lowercase prefix."""
+    if not tag_name.startswith("c-"):
+        return None
+    return f"c-{tag_name[2:].lower()}"
 
 
-_NON_BOUNDARY_CITRY_TAGS: Final = {
-    "c-element",
-    "c-if",
-    "c-elif",
-    "c-else",
-    "c-for",
-    "c-empty",
-    "c-raw",
-    "c-fill",
-    "c-slot",
-}
+def _is_custom_element(tag_name: str) -> bool:
+    """
+    Whether a tag names a custom element, by HTML's own rule for the name.
 
+    A custom element may expose a value the way a form control does, so a state
+    binding is allowed on one. After the browser upgrades the element, the
+    client reads and writes that typed property without native-control
+    coercion, and the element names its own update event with ``.on:<event>``.
 
-def _is_component_boundary_tag(tag_name: str) -> bool:
-    """Whether ``tag_name`` is a semantic component boundary."""
-    normalized = tag_name.lower()
-    return normalized.startswith("c-") and normalized not in _NON_BOUNDARY_CITRY_TAGS
+    Pass a lowercased name: HTML tag names are case insensitive, so ``<My-Box>``
+    in markup is the custom element ``my-box``.
 
-
-def _is_reserved_citry_tag(tag_name: str) -> bool:
-    """Whether bindings have no meaningful element or component target."""
-    normalized = tag_name.lower()
-    return normalized.startswith("c-") and normalized != "c-element" and not _is_component_boundary_tag(tag_name)
+    A hyphen alone is not enough. HTML reserves a handful of hyphenated names
+    for SVG and MathML elements that hold no value, a name must start with an
+    ASCII letter, and Citry's own ``c-`` tags are components rather than
+    elements (reachable here through ``<c-element is="c-foo">``).
+    """
+    if not tag_name or tag_name in _RESERVED_HYPHENATED_TAGS or tag_name.startswith("c-"):
+        return False
+    if not tag_name[0].isascii() or not tag_name[0].isalpha():
+        return False
+    return "-" in tag_name
 
 
 def _time_to_ms(segment: str) -> int:
@@ -282,16 +323,6 @@ class _Attr:
     name: str
     value: str | None  # None when the attribute was written with no `=value`
     source: str  # the exact source text, re-emitted verbatim for non-bindings
-
-
-def _parse_attrs(region: str) -> list[_Attr]:
-    """Parse a start tag's attribute region into ordered :class:`_Attr` records."""
-    parsed: list[_Attr] = []
-    for match in _ATTR_RE.finditer(region):
-        raw_value = match.group("value")
-        value = raw_value[1:-1] if raw_value is not None and raw_value[:1] in "\"'" else raw_value
-        parsed.append(_Attr(name=match.group("name"), value=value, source=match.group(0)))
-    return parsed
 
 
 def _split_name(attr_name: str, prefix: str) -> tuple[str, list[str]]:
@@ -399,7 +430,7 @@ class _Location:
     """Where a binding lives, for error messages: the component and a place in it."""
 
     comp_name: str
-    where: str  # e.g. "line 4" (stage one) or "<button> via a render-time spread" (stage two)
+    where: str  # e.g. "line 4" (compiled stage) or "<button> after dynamic attributes resolved"
 
     def suffix(self) -> str:
         return f" (in {self.comp_name} template, {self.where})"
@@ -412,9 +443,10 @@ class _Element:
     tag_name: str
     input_type: str | None  # the static `type` value, when statically known
     type_static_known: bool  # False when the type is dynamic (e.g. via c-type / c-bind)
+    tag_static_known: bool = True  # False for <c-element> whose `is` is dynamic
 
 
-def _fail(location: _Location, message: str) -> None:
+def _fail(location: _Location, message: str) -> NoReturn:
     msg = message + location.suffix()
     raise ValueError(msg)
 
@@ -481,9 +513,6 @@ def _build_event_spec(info: EventsInfo, class_id: str, event: str, attr: _Attr, 
             _fail(location, f"{attr.name!r}: a time segment only applies to @c-poll; use '.debounce'/'.throttle' here")
         else:  # unknown
             _fail(location, f"{attr.name!r} has an unknown modifier '.{token.value}'")
-
-    if key is not None and event not in KEYBOARD_EVENTS:
-        _fail(location, f"{attr.name!r}: the key filter '.{key}' only applies to keyboard events, not {event!r}")
 
     debounce, throttle = _merged_timing(info, handler, debounce, throttle)
     return {
@@ -584,8 +613,16 @@ def _build_bind_spec(
             _fail(location, f"{attr.name!r} has an unknown modifier '.{token.value}'")
 
     if not two_way:
-        # A one-way binding only reads state onto the control; it takes no
-        # update-timing or key modifiers (there is no update to time).
+        # A one-way binding writes the field into the control, so it needs an
+        # element that can hold a value just as much as a two-way one does.
+        _validate_binding_target(
+            element,
+            binding_mode="one-way",
+            attr_name=attr.name,
+            location=location,
+        )
+        # It only reads state onto the control; it takes no update-timing or
+        # key modifiers (there is no update to time).
         if lazy or on_event is not None or debounce is not None or throttle is not None or key is not None:
             _fail(
                 location,
@@ -595,7 +632,7 @@ def _build_bind_spec(
         return {
             "cid": class_id,
             "field": field,
-            "mode": "one",
+            "binding_mode": "one-way",
             "handler": None,
             "lazy": False,
             "on": None,
@@ -608,13 +645,13 @@ def _build_bind_spec(
     _require_writable(info, field, attr.name, location)
     if lazy and on_event is not None:
         _fail(location, f"{attr.name!r}: '.lazy' and '.on:' cannot be combined; choose one update event")
-    _validate_two_way_control(element, lazy=lazy, on_event=on_event, key=key, attr_name=attr.name, location=location)
+    _validate_two_way_control(element, lazy=lazy, on_event=on_event, attr_name=attr.name, location=location)
 
     debounce, throttle = _merged_timing(info, handler or "", debounce, throttle)
     return {
         "cid": class_id,
         "field": field,
-        "mode": "two",
+        "binding_mode": "two-way",
         "handler": handler,
         "lazy": lazy,
         "on": on_event,
@@ -660,44 +697,135 @@ def _require_writable(info: EventsInfo, field: str, attr_name: str, location: _L
         )
 
 
+def _validate_binding_target(element: _Element, *, binding_mode: str, attr_name: str, location: _Location) -> str:
+    """
+    Classify the element a ``:c-*`` binding sits on, or reject it.
+
+    Returns ``"control"`` for a form control the client reads and writes
+    directly, ``"custom"`` for a custom element (which must name its own
+    update event), and ``"deferred"`` for a computed ``<c-element>`` target.
+
+    Every other plain HTML element is rejected: the client has no value to read
+    from it or write to it, so the binding would silently do nothing on the way
+    down and write an undefined value on the way up.
+
+    A ``<c-element>`` whose element name is computed cannot be classified while
+    its template is loaded. Its compiled spec is re-checked by the final-attrs
+    hook against the selected tag before any HTML reaches the browser, so only
+    target-dependent checks defer; State and handler ownership still validate
+    immediately.
+    """
+    if not element.tag_static_known:
+        return "deferred"
+    tag = element.tag_name.lower()
+    if tag in _KNOWN_FORM_CONTROLS:
+        if tag == "input":
+            _validate_input_binding_mode(
+                element,
+                binding_mode=binding_mode,
+                attr_name=attr_name,
+                location=location,
+            )
+        return "control"
+    if _is_custom_element(tag):
+        return "custom"
+    controls = ", ".join(f"<{name}>" for name in sorted(_KNOWN_FORM_CONTROLS))
+    _fail(
+        location,
+        f"{attr_name!r}: <{element.tag_name}> holds no value, so a State binding has nothing to bind."
+        f" State bindings go on {controls}, or on a custom element that exposes a value."
+        f" To react to events on <{element.tag_name}>, use an '@c-*' event binding instead",
+    )
+    return "control"  # pragma: no cover - _fail always raises
+
+
+def _input_type(element: _Element) -> str | None:
+    """Return a known static input keyword, ``""`` for unknown, or ``None`` while dynamic."""
+    if not element.type_static_known:
+        return None
+    raw = element.input_type
+    if raw is None or raw == "":
+        return "text"
+    normalized = raw.lower()
+    return normalized if normalized in _HTML_INPUT_TYPES else ""
+
+
+def _validate_input_binding_mode(element: _Element, *, binding_mode: str, attr_name: str, location: _Location) -> None:
+    """
+    Enforce the complete HTML input-type/binding-direction matrix.
+
+    A dynamic type is deferred to the final-attrs hook or browser classifier.
+    Missing and empty types are Text; a present unknown keyword is rejected
+    distinctly from a standard type that Citry deliberately does not bind.
+    """
+    input_type = _input_type(element)
+    if input_type is None:
+        return
+    if input_type in _TWO_WAY_INPUT_TYPES:
+        return
+    if input_type == "hidden":
+        if binding_mode == "one-way":
+            return
+        _fail(
+            location,
+            f'{attr_name!r}: <input type="hidden"> supports one-way State bindings only;'
+            " it has no user update event. Remove the handler value to make this binding one-way",
+        )
+    if input_type == "file":
+        _fail(
+            location,
+            f'{attr_name!r}: <input type="file"> cannot be bound to State (files cannot live in State);'
+            " use an ordinary upload endpoint or a custom transport instead;"
+            " Citry's JSON events transport does not carry files",
+        )
+    if input_type in _UNSUPPORTED_INPUT_TYPES:
+        _fail(
+            location,
+            f'{attr_name!r}: <input type="{input_type}"> cannot be bound to State; {input_type} inputs are'
+            " action controls, not editable value controls. Use an '@c-*' event binding instead",
+        )
+    raw = element.input_type or ""
+    _fail(
+        location,
+        f'{attr_name!r}: <input type="{raw}"> is not a recognized input type in this Citry version,'
+        " so its value and update behavior are unknown. Use a supported standard type",
+    )
+
+
 def _validate_two_way_control(
-    element: _Element, *, lazy: bool, on_event: str | None, key: str | None, attr_name: str, location: _Location
+    element: _Element, *, lazy: bool, on_event: str | None, attr_name: str, location: _Location
 ) -> None:
     """Run the control-type validations for a two-way binding (design 5.1's update-event table)."""
     tag = element.tag_name.lower()
-    known_control = tag in ("input", "textarea", "select")
-    if not known_control:
+    kind = _validate_binding_target(
+        element,
+        binding_mode="two-way",
+        attr_name=attr_name,
+        location=location,
+    )
+    if kind == "deferred":
+        # The final selected tag determines both whether it is bindable and
+        # which default update event/modifier combinations it supports.
+        return
+    if kind != "control":
         # A custom element has no default update event, so it must name one.
         if on_event is None:
             _fail(
                 location,
-                f"{attr_name!r}: <{element.tag_name}> is not a known form control, so a two-way binding needs an"
-                f" explicit update event via '.on:<event>'",
+                f"{attr_name!r}: <{element.tag_name}> is a custom element, so it has no default update event."
+                f" Name the event the element fires when its value changes, via '.on:<event>'",
             )
-        effective_event: str | None = on_event
-    elif on_event is not None:
-        effective_event = on_event
-    else:
-        effective_event = _control_event(element, tag, lazy=lazy, attr_name=attr_name, location=location)
-
-    # A key filter only makes sense once the update event is known to be a
-    # keyboard event; when the control type is dynamic the event is unknown, so
-    # the check is left to the runtime rather than guessed at load time.
-    if key is not None and effective_event is not None and effective_event not in KEYBOARD_EVENTS:
-        _fail(
-            location,
-            f"{attr_name!r}: the key filter '.{key}' only applies to keyboard events, but this binding updates on"
-            f" {effective_event!r}; set the event with '.on:keyup'/'.on:keydown'",
-        )
+    elif on_event is None:
+        _control_event(element, tag, lazy=lazy, attr_name=attr_name, location=location)
 
 
 def _control_event(element: _Element, tag: str, *, lazy: bool, attr_name: str, location: _Location) -> str | None:
     """
     The update event for a statically-known form control, or ``None`` when the type is not statically known.
 
-    Raises for the control-type load errors: a two-way ``<input type=file>``,
-    and ``.lazy`` on a control whose committed value already updates on
-    ``change`` (checkbox, radio, select).
+    Raises for ``.lazy`` on a control whose committed value already updates on
+    ``change`` (checkbox, radio, select). The complete direction check runs
+    earlier in :func:`_validate_input_binding_mode`.
     """
     if tag == "select":
         if lazy:
@@ -708,13 +836,8 @@ def _control_event(element: _Element, tag: str, *, lazy: bool, attr_name: str, l
     # tag == "input"
     if not element.type_static_known:
         return None
-    input_type = (element.input_type or "text").strip().lower()
-    if input_type == "file":
-        _fail(
-            location,
-            f'{attr_name!r}: <input type="file"> cannot be two-way bound (files cannot live in State);'
-            f" collect the file through event args instead",
-        )
+    input_type = _input_type(element)
+    assert input_type in _TWO_WAY_INPUT_TYPES  # validated by _validate_binding_target  # noqa: S101
     if input_type in _COMMITTED_INPUT_TYPES:
         if lazy:
             _fail(
@@ -807,142 +930,431 @@ def compile_citry_boundary_binding(
     return CompiledCitryBoundaryBinding(channel=channel, spec=MappingProxyType(spec))
 
 
-# ----- Stage one: template-load rewrite -----
+# ----- Stage one: compiled-node rewrite -----
 
 
 @dataclass(frozen=True, slots=True)
-class TemplateRewrite:
+class CompiledTemplateBindings:
     """
-    The result of the stage-one template rewrite.
+    The result of transforming one compiled template body.
 
     Attributes:
-        content: The template string with every ``@c-*`` / ``:c-*`` attribute
-            replaced by its ``data-cev-*`` form.
+        nodes: The compiled body with real element bindings replaced by their
+            ``data-cev-*`` form. Literal text is untouched.
         two_way_fields: The State fields bound two-way anywhere in the template.
             Each binding has already been checked against ``_model``; this
             aggregate remains available for diagnostics and introspection.
 
     """
 
-    content: str
+    nodes: list[Any]
     two_way_fields: frozenset[str]
 
 
-def rewrite_template(info: EventsInfo, class_id: str, comp_name: str, content: str) -> TemplateRewrite:
+def compile_template_bindings(
+    info: EventsInfo,
+    class_id: str,
+    comp_name: str,
+    nodes: list[Any],
+) -> CompiledTemplateBindings:
     """
-    Stage one: rewrite the authored bindings in a template string at load time.
+    Validate and transform parser-proven bindings in a compiled template body.
 
-    Scans start tags for ``@c-*`` / ``:c-*`` attributes, validates each against
-    the owning component's handlers and State (design 5.1), and replaces them
-    with the ``data-cev-*`` attributes the client runtime reads. Non-binding
-    attributes and the rest of the template are left untouched; only tags that
-    actually carry a binding are reconstructed.
+    Ordinary static HTML usually compiles straight to strings. The template
+    compiler deliberately preserves regions containing ``@c-*``, ``:c-*``, or
+    ``data-cev-*`` as :class:`ElementAttrsNode` objects, so this pass can
+    distinguish real attributes from binding-shaped text. Otherwise-static
+    regions collapse back to a string after transformation.
 
     Args:
         info: The owning component's resolved events info (handlers, State).
         class_id: The owning component's class id (the spec's ``cid``).
         comp_name: The owning component's name, for error messages.
-        content: The template string, before parsing.
+        nodes: The compiled body nodes.
 
     Returns:
-        A [`TemplateRewrite`][citry.ext.events.bindings.TemplateRewrite] with
-        the rewritten content and the two-way field diagnostics.
+        The transformed nodes and two-way field diagnostics.
 
     Raises:
         ValueError: On any invalid binding (undeclared handler, non-public
-            field, illegal modifier combination, a binding on a component tag),
-            with the template location.
+            field, illegal modifier combination, invalid placement, or
+            authored compiler output), with the template location.
 
     """
-    if not _looks_like_binding(content):
-        return TemplateRewrite(content=content, two_way_fields=frozenset())
-
     two_way_fields: set[str] = set()
+    transformed = _transform_compiled_body(
+        nodes,
+        info=info,
+        class_id=class_id,
+        comp_name=comp_name,
+        two_way_fields=two_way_fields,
+    )
+    return CompiledTemplateBindings(nodes=transformed, two_way_fields=frozenset(two_way_fields))
 
-    def replace(match: re.Match[str]) -> str:
-        tag_name = match.group("tag")
-        region = match.group("attrs")
-        attrs = _parse_attrs(region)
-        bindings = [attr for attr in attrs if _classify_binding(attr.name) is not None]
-        if not bindings:
-            return match.group(0)
 
-        line = content.count("\n", 0, match.start()) + 1
-        location = _Location(comp_name=comp_name, where=f"line {line}")
-        if _is_component_boundary_tag(tag_name):
-            state_binding = next(
-                (attr for attr in bindings if _classify_binding(attr.name) == DATA_CEV_BIND),
-                None,
+def _transform_compiled_body(
+    body: list[Any],
+    *,
+    info: EventsInfo,
+    class_id: str,
+    comp_name: str,
+    two_way_fields: set[str],
+) -> list[Any]:
+    """Recursively transform every compiled body owned by the same component."""
+    from citry.nodes import (  # noqa: PLC0415
+        ComponentNode,
+        ElementAttrsNode,
+        FillNode,
+        ForNode,
+        IfNode,
+        SlotNode,
+    )
+
+    transformed: list[Any] = []
+    for item in body:
+        if isinstance(item, ElementAttrsNode):
+            tag_name = item.tag_name
+            if transformed and isinstance(transformed[-1], str):
+                # The compiler places the emitted ``<tag`` chunk immediately
+                # before its attribute-region node. This matters for the
+                # zero-cost static `<c-element is="...">` path: its source
+                # position still names c-element, while the emitted chunk
+                # names the actual target element.
+                emitted_prefix = transformed[-1].rsplit("<", 1)[-1]
+                if emitted_prefix and not any(char.isspace() or char in "/>" for char in emitted_prefix):
+                    tag_name = emitted_prefix
+            transformed.append(
+                _transform_element_attrs_node(
+                    item,
+                    tag_name=tag_name,
+                    info=info,
+                    class_id=class_id,
+                    comp_name=comp_name,
+                    two_way_fields=two_way_fields,
+                )
             )
-            if state_binding is None:
-                # @c-* on a component is a component-tag client binding. Leave the authored
-                # source and exact span intact for ComponentNode to capture.
-                return match.group(0)
+            continue
+
+        if isinstance(item, ComponentNode):
+            if item.name == "element":
+                item.attrs = _transform_element_attrs(
+                    tag_name="c-element",
+                    source=item.source,
+                    position=item.position,
+                    attrs=item.attrs,
+                    info=info,
+                    class_id=class_id,
+                    comp_name=comp_name,
+                    two_way_fields=two_way_fields,
+                )[0]
+            else:
+                _validate_component_boundary_attrs(
+                    item,
+                    info=info,
+                    class_id=class_id,
+                    comp_name=comp_name,
+                )
+            item.body = _transform_compiled_body(
+                item.body,
+                info=info,
+                class_id=class_id,
+                comp_name=comp_name,
+                two_way_fields=two_way_fields,
+            )
+            transformed.append(item)
+            continue
+
+        if isinstance(item, (SlotNode, FillNode)):
+            _reject_structural_attrs(item, comp_name=comp_name)
+            item.body = _transform_compiled_body(
+                item.body,
+                info=info,
+                class_id=class_id,
+                comp_name=comp_name,
+                two_way_fields=two_way_fields,
+            )
+            transformed.append(item)
+            continue
+
+        if isinstance(item, (IfNode, ForNode)):
+            branches = []
+            for branch in item.branches:
+                _reject_attrs_without_element(
+                    branch[1],
+                    tag_name="c-if/c-for control-flow branch",
+                    source=item.source,
+                    comp_name=comp_name,
+                )
+                branches.append(
+                    (
+                        branch[0],
+                        branch[1],
+                        _transform_compiled_body(
+                            branch[2],
+                            info=info,
+                            class_id=class_id,
+                            comp_name=comp_name,
+                            two_way_fields=two_way_fields,
+                        ),
+                        branch[3],
+                    )
+                )
+            item.branches = tuple(branches)
+
+        transformed.append(item)
+    return transformed
+
+
+def _transform_element_attrs_node(
+    node: Any,
+    *,
+    tag_name: str,
+    info: EventsInfo,
+    class_id: str,
+    comp_name: str,
+    two_way_fields: set[str],
+) -> Any:
+    """Transform one ordinary HTML element's structured attribute region."""
+    attrs, emitted = _transform_element_attrs(
+        tag_name=tag_name,
+        source=node.source,
+        position=node.position,
+        attrs=node.attrs,
+        info=info,
+        class_id=class_id,
+        comp_name=comp_name,
+        two_way_fields=two_way_fields,
+    )
+    if not emitted:
+        return node
+
+    from citry.nodes import ElementAttrsNode, StaticHtmlAttr  # noqa: PLC0415
+
+    had_runtime_attr = any(not isinstance(attr, StaticHtmlAttr) for attr in node.attrs)
+    if had_runtime_attr:
+        return ElementAttrsNode(node.source, node.position, attrs, node.used_vars)
+
+    # This region was preserved only so the extension could see its literal
+    # binding. Collapse it back to the static fast path, preserving the exact
+    # authored spelling of every non-binding attribute.
+    pieces = [
+        _source_slice(attr.source, attr.position)
+        for attr in node.attrs
+        if isinstance(attr, StaticHtmlAttr) and _classify_binding(attr.key) is None
+    ]
+    pieces.extend(f'{name}="{value}"' for name, value in emitted)
+    return (" " + " ".join(pieces)) if pieces else ""
+
+
+def _transform_element_attrs(
+    *,
+    tag_name: str,
+    source: Any,
+    position: tuple[int, int],
+    attrs: tuple[Any, ...],
+    info: EventsInfo,
+    class_id: str,
+    comp_name: str,
+    two_way_fields: set[str],
+) -> tuple[tuple[Any, ...], list[tuple[str, str]]]:
+    """Compile literal bindings in one parser-proven element attribute tuple."""
+    from citry.nodes import StaticHtmlAttr  # noqa: PLC0415
+
+    literal_attrs = [attr for attr in attrs if isinstance(attr, StaticHtmlAttr)]
+    reserved = next((attr for attr in literal_attrs if attr.key.lower().startswith("data-cev-")), None)
+    if reserved is not None:
+        _fail(
+            _compiled_location(comp_name, source, reserved.position),
+            f"{reserved.key!r} is reserved compiler output;"
+            " author State bindings with ':c-*' and event bindings with '@c-*' instead",
+        )
+
+    bindings = [attr for attr in literal_attrs if _classify_binding(attr.key) is not None]
+    if not bindings:
+        return attrs, []
+
+    element_attrs = [_compiled_attr(attr) for attr in attrs]
+    element = _element_of(tag_name, element_attrs)
+    channels = _channels()
+    for attr in bindings:
+        channel = _classify_binding(attr.key)
+        assert channel is not None  # filtered above  # noqa: S101
+        spec = _build_spec(
+            channel,
+            info,
+            class_id,
+            _compiled_attr(attr),
+            element,
+            _compiled_location(comp_name, source, attr.position),
+        )
+        channels[channel].append(spec)
+        if channel == DATA_CEV_BIND and spec["binding_mode"] == "two-way":
+            two_way_fields.add(spec["field"])
+
+    kept = tuple(attr for attr in attrs if attr not in bindings)
+    emitted = [(name, _encode(specs)) for name, specs in channels.items() if specs]
+    compiled = tuple(StaticHtmlAttr(source, position, name, value, ()) for name, value in emitted)
+    return kept + compiled, emitted
+
+
+def _validate_component_boundary_attrs(
+    node: Any,
+    *,
+    info: EventsInfo,
+    class_id: str,
+    comp_name: str,
+) -> None:
+    """Validate literal component-boundary bindings without consuming them."""
+    from citry.nodes import StaticHtmlAttr  # noqa: PLC0415
+
+    tag_name = f"c-{node.name}"
+    for attr in node.attrs:
+        if not isinstance(attr, StaticHtmlAttr):
+            continue
+        location = _compiled_location(comp_name, node.source, attr.position)
+        if attr.key.lower().startswith("data-cev-"):
             _fail(
                 location,
-                f"<{tag_name}> is a component tag, but {state_binding.name!r} binds State on it."
-                f" State bindings go on HTML elements only: a child component binds its own State in its own"
-                f" template; pass data down through $c-props or Python kwargs.",
+                f"{attr.key!r} is reserved compiler output; author event bindings with '@c-*' instead",
             )
-        if _is_reserved_citry_tag(tag_name):
+        channel = _classify_binding(attr.key)
+        if channel is None:
+            continue
+        if channel == DATA_CEV_BIND:
             _fail(
                 location,
-                f"<{tag_name}> is a Citry structural tag, so {bindings[0].name!r} has no HTML element target.",
+                f"<{tag_name}> is a component tag, but {attr.key!r} binds State on it."
+                " State bindings go on HTML elements only: a child component binds its own State in its own"
+                " template; pass data down through $c-props or Python kwargs.",
+            )
+        line, column = _line_column(node.source, attr.position[0])
+        compile_citry_boundary_binding(
+            info,
+            class_id,
+            comp_name,
+            tag_name,
+            attr.key,
+            "" if attr.value is True else str(attr.value),
+            line=line,
+            column=column,
+        )
+
+
+def _reject_structural_attrs(node: Any, *, comp_name: str) -> None:
+    _reject_attrs_without_element(
+        node.attrs,
+        tag_name=type(node).__name__.removesuffix("Node").lower(),
+        source=node.source,
+        comp_name=comp_name,
+    )
+
+
+def _reject_attrs_without_element(
+    attrs: tuple[Any, ...],
+    *,
+    tag_name: str,
+    source: Any,
+    comp_name: str,
+) -> None:
+    """Reject Events-owned attributes on a structural node with no DOM target."""
+    from citry.nodes import StaticHtmlAttr  # noqa: PLC0415
+
+    for attr in attrs:
+        if not isinstance(attr, StaticHtmlAttr):
+            continue
+        if attr.key.lower().startswith("data-cev-"):
+            _fail(
+                _compiled_location(comp_name, source, attr.position),
+                f"{attr.key!r} is reserved compiler output;"
+                " author State bindings with ':c-*' and event bindings with '@c-*' instead",
+            )
+        if _classify_binding(attr.key) is not None:
+            _fail(
+                _compiled_location(comp_name, source, attr.position),
+                f"<{tag_name}> is a Citry structural tag, so {attr.key!r} has no HTML element target.",
             )
 
-        element = _element_of(tag_name, attrs)
-        channels = _channels()
-        for attr in bindings:
-            channel = _classify_binding(attr.name)
-            assert channel is not None  # bindings were filtered on this  # noqa: S101
-            spec = _build_spec(channel, info, class_id, attr, element, location)
-            channels[channel].append(spec)
-            if channel == DATA_CEV_BIND and spec["mode"] == "two":
-                two_way_fields.add(spec["field"])
-        return _reconstruct_tag(tag_name, region, attrs, channels)
 
-    rewritten = _TAG_RE.sub(replace, content)
-    return TemplateRewrite(content=rewritten, two_way_fields=frozenset(two_way_fields))
+def _compiled_attr(attr: Any) -> _Attr:
+    """Adapt one compiled HtmlAttr to the existing binding validators."""
+    from citry.nodes import ExprHtmlAttr, StaticHtmlAttr, TemplateHtmlAttr  # noqa: PLC0415
+
+    if isinstance(attr, StaticHtmlAttr):
+        value = None if attr.value is True else str(attr.value)
+    elif isinstance(attr, ExprHtmlAttr):
+        value = None if attr.expr is True else str(attr.expr)
+    elif isinstance(attr, TemplateHtmlAttr):
+        value = attr.template
+    else:  # pragma: no cover - compiler output is a closed HtmlAttr family
+        msg = f"Unsupported compiled HTML attribute {type(attr).__name__}."
+        raise TypeError(msg)
+    return _Attr(name=attr.key, value=value, source=_source_slice(attr.source, attr.position))
+
+
+def _source_slice(source: Any, position: tuple[int, int]) -> str:
+    """Slice parser byte offsets without confusing them for Python code points."""
+    encoded = str(source).encode("utf-8")
+    return encoded[position[0] : position[1]].decode("utf-8")
+
+
+def _line_column(source: Any, byte_index: int) -> tuple[int, int]:
+    prefix = str(source).encode("utf-8")[:byte_index].decode("utf-8")
+    line = prefix.count("\n") + 1
+    column = len(prefix.rsplit("\n", 1)[-1]) + 1
+    return line, column
+
+
+def _compiled_location(
+    comp_name: str,
+    source: Any,
+    position: tuple[int, int],
+) -> _Location:
+    line, _ = _line_column(source, position[0])
+    return _Location(
+        comp_name=comp_name,
+        where=f"line {line}",
+    )
 
 
 def _element_of(tag_name: str, attrs: list[_Attr]) -> _Element:
-    """Read the control type off a parsed tag: a static ``type``, or a dynamic marker."""
+    """
+    Read the control type off a parsed tag: a static ``type``, or a dynamic marker.
+
+    HTML attribute names are case insensitive, so every name read here is
+    lowercased first. Matching them exactly would let ``TYPE="file"`` walk past
+    the checks that ``type="file"`` fails.
+    """
     static_type: str | None = None
     dynamic = False
-    for attr in attrs:
-        if attr.name == "type":
+    effective_tag = tag_name
+    tag_known = True
+    names = [attr.name.lower() for attr in attrs]
+    if _citry_tag_identity(tag_name) == "c-element":
+        # `<c-element>` renders the element its `is` attribute names, so that
+        # name is what the binding actually lands on. Only a literal `is` says
+        # which element that is; target-dependent checks for a computed name
+        # defer to the final-attrs hook, which sees the selected HTML tag.
+        static_is = next((attr.value for name, attr in zip(names, attrs, strict=True) if name == "is"), None)
+        computed = any(name in ("c-is", "c-bind") for name in names)
+        if static_is and not computed:
+            effective_tag = static_is
+        else:
+            tag_known = False
+    for name, attr in zip(names, attrs, strict=True):
+        if name == "type":
             static_type = attr.value
-        elif attr.name in ("c-type", ":type", "c-bind"):
-            # The type is contributed dynamically (a c-* expression, an Alpine
-            # bind, or a spread), so it is not statically known at load. The
-            # control-type checks (file two-way, `.lazy` on a committed control,
-            # a key filter on a non-keyboard update event) run only for a
-            # statically-known type; design 5.1's update-event table scopes both
-            # the file-input row and the `.lazy` column to "where the type is
-            # statically known". They are not re-run for this element's literal
-            # binding, which stage one has already rewritten by render time. A
-            # documented v1 caveat covers the gap; see the module docstring.
+        elif name in ("c-type", ":type", "c-bind"):
+            # Defer a Python-resolved c-type/spread to the final-attrs hook and
+            # an Alpine bind to the live browser classifier. A literal binding
+            # is already compiled by then, so both later phases explicitly
+            # decode and revalidate its internal spec.
             dynamic = True
-    return _Element(tag_name=tag_name, input_type=static_type, type_static_known=not dynamic)
-
-
-def _reconstruct_tag(tag_name: str, region: str, attrs: list[_Attr], channels: dict[str, list[dict[str, Any]]]) -> str:
-    """
-    Rebuild a start tag with its bindings replaced by the ``data-cev-*`` attributes.
-
-    Non-binding attributes are re-emitted verbatim in source order; the emitted
-    ``data-cev-*`` attributes follow them, in a fixed channel order. A trailing
-    ``/`` (self-closing tag) is preserved.
-    """
-    self_closing = region.rstrip().endswith("/")
-    kept = [attr.source for attr in attrs if _classify_binding(attr.name) is None]
-    emitted = [f'{name}="{_encode(specs)}"' for name, specs in channels.items() if specs]
-    pieces = kept + emitted
-    body = " ".join(pieces)
-    slash = "/" if self_closing else ""
-    if body:
-        return f"<{tag_name} {body}{slash}>"
-    return f"<{tag_name}{slash}>"
+    return _Element(
+        tag_name=effective_tag,
+        input_type=static_type,
+        type_static_known=not dynamic,
+        tag_static_known=tag_known,
+    )
 
 
 # ----- Stage two: render-time (spread) rewrite -----
@@ -955,10 +1367,10 @@ def rewrite_resolved_attrs(
     Stage two: rewrite bindings that arrive on an element at render time.
 
     Fires through the ``on_attrs_resolved`` hook for every element with dynamic
-    attributes, so it fast-returns when no ``@c-*`` / ``:c-*`` key is present.
-    When one is, it validates and rewrites it exactly like stage one, but the
-    error is raised now (render time) rather than at template load, with the
-    same wording.
+    attributes. Raw ``@c-*`` / ``:c-*`` keys are compiled exactly like stage
+    one. An existing ``data-cev-bind`` is also decoded and validated against
+    the final resolved input type, closing the literal-binding + dynamic-type
+    gap before HTML reaches the browser.
 
     Args:
         info: The owning component's resolved events info.
@@ -975,8 +1387,8 @@ def rewrite_resolved_attrs(
         ValueError: On any invalid binding, with the render-time location.
 
     """
-    binding_keys = [key for key in attrs if _classify_binding(key) is not None]
-    if not binding_keys:
+    binding_keys = [key for key in attrs if isinstance(key, str) and _classify_binding(key) is not None]
+    if not binding_keys and DATA_CEV_BIND not in attrs:
         return None
 
     # This hook fires only for HTML elements; a `<c-*>` component tag never
@@ -987,13 +1399,8 @@ def rewrite_resolved_attrs(
     # one, and a binding that a spread lands on a component tag is a documented
     # v1 caveat (see the module docstring), silently ignored until a
     # component-input check lands.
-    location = _Location(comp_name=comp_name, where=f"<{tag_name}> via a render-time attribute spread")
-    resolved_type = attrs.get("type")
-    element = _Element(
-        tag_name=tag_name,
-        input_type=str(resolved_type) if isinstance(resolved_type, str) else None,
-        type_static_known=True,
-    )
+    location = _Location(comp_name=comp_name, where=f"<{tag_name}> after dynamic attributes resolved")
+    element = _resolved_element(tag_name, attrs, location)
 
     result = {key: value for key, value in attrs.items() if key not in binding_keys}
     channels = _channels()
@@ -1009,8 +1416,37 @@ def rewrite_resolved_attrs(
 
     for name, specs in channels.items():
         if specs:
-            _merge_encoded(result, name, specs)
+            _merge_encoded(result, name, specs, location)
+    encoded_bind = result.get(DATA_CEV_BIND)
+    if encoded_bind is not None:
+        bind_specs = _decode_compiled_specs(DATA_CEV_BIND, encoded_bind, location)
+        _validate_compiled_bind_specs(bind_specs, element, location)
+        result[DATA_CEV_BIND] = _encode(bind_specs)
     return result
+
+
+def _resolved_element(tag_name: str, attrs: dict[str, Any], location: _Location) -> _Element:
+    """Describe the final rendered element, preserving browser-only ``:type`` uncertainty."""
+    type_keys = [key for key in attrs if isinstance(key, str) and key.lower() == "type"]
+    if len(type_keys) > 1:
+        _fail(
+            location,
+            "the resolved element contains more than one case-variant of the HTML 'type' attribute;"
+            " keep exactly one spelling",
+        )
+    client_dynamic = any(isinstance(key, str) and key.lower() in {":type", "x-bind:type"} for key in attrs)
+    raw_type: str | None = None
+    if type_keys:
+        value = attrs[type_keys[0]]
+        if value is True:
+            raw_type = ""
+        elif value is not None and value is not False:
+            raw_type = str(value)
+    return _Element(
+        tag_name=tag_name,
+        input_type=raw_type,
+        type_static_known=not client_dynamic,
+    )
 
 
 def _as_str(value: Any) -> str | None:
@@ -1021,7 +1457,95 @@ def _as_str(value: Any) -> str | None:
     return text if text.strip() else None
 
 
-def _merge_encoded(attrs: dict[str, Any], name: str, specs: list[dict[str, Any]]) -> None:
+def _decode_compiled_specs(name: str, encoded: Any, location: _Location) -> list[dict[str, Any]]:
+    """Strictly decode one existing internal binding attribute at render time."""
+    if not isinstance(encoded, str) or not encoded:
+        _fail(location, f"{name!r} must contain nonempty base64-encoded binding specs")
+    try:
+        payload = base64.b64decode(encoded, validate=True).decode("utf8")
+        decoded = json.loads(payload)
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        _fail(location, f"{name!r} does not contain valid base64-encoded UTF-8 JSON: {exc}")
+    if type(decoded) is not list:
+        _fail(location, f"{name!r} must decode to a JSON array of binding spec objects")
+    specs: list[dict[str, Any]] = []
+    for index, spec in enumerate(decoded):
+        if type(spec) is not dict:
+            _fail(location, f"{name!r} spec {index} must be a JSON object")
+        specs.append(spec)
+    return specs
+
+
+def _validate_compiled_bind_specs(specs: list[dict[str, Any]], element: _Element, location: _Location) -> None:
+    """Validate compiled bind shape plus the final element/type support matrix."""
+    expected_keys = frozenset(DATA_CEV_ATTRS[DATA_CEV_BIND].payload_keys)
+    for index, spec in enumerate(specs):
+        if frozenset(spec) != expected_keys:
+            _fail(
+                location,
+                f"{DATA_CEV_BIND!r} spec {index} must contain exactly: {', '.join(sorted(expected_keys))}",
+            )
+        cid = spec["cid"]
+        field = spec["field"]
+        binding_mode = spec["binding_mode"]
+        handler = spec["handler"]
+        lazy = spec["lazy"]
+        on_event = spec["on"]
+        key = spec["key"]
+        debounce = spec["debounce"]
+        throttle = spec["throttle"]
+        if not isinstance(cid, str) or not cid or not isinstance(field, str) or not field:
+            _fail(location, f"{DATA_CEV_BIND!r} spec {index} needs nonempty string 'cid' and 'field' values")
+        if not isinstance(binding_mode, str) or binding_mode not in {"one-way", "two-way"}:
+            _fail(
+                location,
+                f"{DATA_CEV_BIND!r} spec {index} has invalid 'binding_mode'; expected 'one-way' or 'two-way'",
+            )
+        if type(lazy) is not bool:
+            _fail(location, f"{DATA_CEV_BIND!r} spec {index} has non-boolean 'lazy'")
+        if on_event is not None and (not isinstance(on_event, str) or not on_event):
+            _fail(location, f"{DATA_CEV_BIND!r} spec {index} has invalid 'on'; expected a nonempty string or null")
+        if key is not None and (not isinstance(key, str) or key not in _KEY_FILTERS):
+            _fail(location, f"{DATA_CEV_BIND!r} spec {index} has invalid event-key filter 'key'")
+        for timing_name, timing in (("debounce", debounce), ("throttle", throttle)):
+            if timing is not None and (type(timing) is not int or timing < 0):
+                _fail(
+                    location,
+                    f"{DATA_CEV_BIND!r} spec {index} has invalid '{timing_name}';"
+                    " expected nonnegative integer or null",
+                )
+        attr_name = f":c-{field}"
+        if binding_mode == "one-way":
+            if (
+                handler is not None
+                or lazy
+                or on_event is not None
+                or key is not None
+                or debounce is not None
+                or throttle is not None
+            ):
+                _fail(location, f"{DATA_CEV_BIND!r} spec {index} has update fields on a one-way binding")
+            _validate_binding_target(
+                element,
+                binding_mode="one-way",
+                attr_name=attr_name,
+                location=location,
+            )
+            continue
+        if not isinstance(handler, str) or not handler:
+            _fail(location, f"{DATA_CEV_BIND!r} spec {index} needs a nonempty two-way 'handler'")
+        if lazy and on_event is not None:
+            _fail(location, f"{DATA_CEV_BIND!r} spec {index} cannot combine 'lazy' with an explicit 'on' event")
+        _validate_two_way_control(
+            element,
+            lazy=lazy,
+            on_event=on_event,
+            attr_name=attr_name,
+            location=location,
+        )
+
+
+def _merge_encoded(attrs: dict[str, Any], name: str, specs: list[dict[str, Any]], location: _Location) -> None:
     """
     Set (or extend) a ``data-cev-*`` attribute with new specs.
 
@@ -1030,11 +1554,7 @@ def _merge_encoded(attrs: dict[str, Any], name: str, specs: list[dict[str, Any]]
     appended, so both survive in one attribute.
     """
     existing = attrs.get(name)
-    if isinstance(existing, str) and existing:
-        try:
-            prior = json.loads(base64.b64decode(existing).decode())
-        except (ValueError, json.JSONDecodeError):
-            prior = []
-        if isinstance(prior, list):
-            specs = [*prior, *specs]
+    if existing is not None:
+        prior = _decode_compiled_specs(name, existing, location)
+        specs = [*prior, *specs]
     attrs[name] = _encode(specs)

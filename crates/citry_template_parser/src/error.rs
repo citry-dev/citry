@@ -1,6 +1,58 @@
+use pest::error::{InputLocation, LineColLocation};
+use pyo3::prelude::*;
 use thiserror::Error;
 
 use crate::grammar::Rule;
+
+/// Machine-readable details for one template parse failure.
+///
+/// Indices are half-open UTF-8 byte offsets in the complete template source.
+/// Pest position errors have an empty range. Line and column values are
+/// 1-based, matching Pest's rendered diagnostics.
+#[pyclass(frozen)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParseDiagnostic {
+    /// Stable identifier for the broad failure category.
+    #[pyo3(get)]
+    pub code: String,
+    /// The same rendered text carried by the Python exception.
+    #[pyo3(get)]
+    pub message: String,
+    /// Inclusive UTF-8 byte offset, when the parser has a source position.
+    #[pyo3(get)]
+    pub start_index: Option<usize>,
+    /// Exclusive UTF-8 byte offset, when the parser has a source position.
+    #[pyo3(get)]
+    pub end_index: Option<usize>,
+    /// 1-based start line, when the parser has a source position.
+    #[pyo3(get)]
+    pub start_line: Option<usize>,
+    /// 1-based start column, when the parser has a source position.
+    #[pyo3(get)]
+    pub start_column: Option<usize>,
+    /// 1-based end line, when the parser has a source position.
+    #[pyo3(get)]
+    pub end_line: Option<usize>,
+    /// 1-based end column, when the parser has a source position.
+    #[pyo3(get)]
+    pub end_column: Option<usize>,
+}
+
+#[pymethods]
+impl ParseDiagnostic {
+    fn __repr__(&self) -> String {
+        format!(
+            "ParseDiagnostic(code={:?}, start_index={:?}, end_index={:?}, start_line={:?}, start_column={:?}, end_line={:?}, end_column={:?})",
+            self.code,
+            self.start_index,
+            self.end_index,
+            self.start_line,
+            self.start_column,
+            self.end_line,
+            self.end_column,
+        )
+    }
+}
 
 #[derive(Debug, Error, PartialEq)]
 pub enum CompileError {
@@ -37,6 +89,42 @@ impl ParseError {
             pest::error::ErrorVariant::CustomError { message },
             span,
         ))
+    }
+
+    /// Return stable, machine-readable details without changing display text.
+    pub fn diagnostic(&self) -> ParseDiagnostic {
+        match self {
+            ParseError::Syntax(error) => {
+                let (start_index, end_index) = match error.location {
+                    InputLocation::Pos(position) => (position, position),
+                    InputLocation::Span((start, end)) => (start, end),
+                };
+                let ((start_line, start_column), (end_line, end_column)) = match error.line_col {
+                    LineColLocation::Pos(position) => (position, position),
+                    LineColLocation::Span(start, end) => (start, end),
+                };
+                ParseDiagnostic {
+                    code: "citry.parse.syntax".to_string(),
+                    message: self.to_string(),
+                    start_index: Some(start_index),
+                    end_index: Some(end_index),
+                    start_line: Some(start_line),
+                    start_column: Some(start_column),
+                    end_line: Some(end_line),
+                    end_column: Some(end_column),
+                }
+            }
+            ParseError::Value(_) => ParseDiagnostic {
+                code: "citry.parse.value".to_string(),
+                message: self.to_string(),
+                start_index: None,
+                end_index: None,
+                start_line: None,
+                start_column: None,
+                end_line: None,
+                end_column: None,
+            },
+        }
     }
 }
 

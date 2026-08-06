@@ -14,6 +14,52 @@ import re
 import pytest
 
 from citry import Citry, Component, NotRegistered
+from citry.nodes import ComponentNode, ExprHtmlAttr
+
+
+def _component_node(metadata=None):
+    return ComponentNode("<c-card />", (0, 10), (), [], (), "card", False, metadata)  # noqa: FBT003
+
+
+class TestComponentNodeMetadata:
+    def test_none_preserves_the_metadata_free_constructor(self):
+        node = _component_node()
+        assert node.metadata is None
+        assert node._metadata_locus is None
+        assert node.key is None
+        assert node.morph_mode is None
+
+    def test_tagged_tuple_normalizes_once_and_keeps_the_original(self):
+        key = ExprHtmlAttr("<c-card />", (0, 1), "#c-key", "item", ("item",))
+        metadata = ("range", ("key", key), ("morph", "ignore"))
+        node = _component_node(metadata)
+
+        assert node.metadata is metadata
+        assert node._metadata_locus == "range"
+        assert node.key is key
+        assert node.morph_mode == "ignore"
+
+    @pytest.mark.parametrize(
+        "metadata",
+        [
+            ["range"],
+            (),
+            ("unknown",),
+            ("range", "key"),
+            ("range", ("unknown", "value")),
+            ("range", ("key", "not-an-expression")),
+            ("range", ("morph", "replace")),
+            ("range", ("morph", "ignore"), ("morph", "ignore")),
+            (
+                "range",
+                ("key", ExprHtmlAttr("", (0, 0), "#c-key", "1", ())),
+                ("key", ExprHtmlAttr("", (0, 0), "#c-key", "2", ())),
+            ),
+        ],
+    )
+    def test_malformed_metadata_is_rejected(self, metadata):
+        with pytest.raises(TypeError):
+            _component_node(metadata)
 
 
 class TestComponentNodeBasic:

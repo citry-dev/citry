@@ -1,0 +1,102 @@
+:root {
+  color-scheme: dark;
+  background: #070912;
+  color: #f7f8ff;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 75% 10%, rgb(80 72 180 / 18%), transparent 38rem),
+    #070912;
+}
+
+button,
+a,
+code {
+  font: inherit;
+}
+
+.research-proof {
+  position: relative;
+  z-index: 2;
+  width: min(72rem, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 6rem 0 10rem;
+}
+
+.research-proof h2 {
+  max-width: 18ch;
+  margin: 0;
+  font-size: clamp(2rem, 5vw, 4.5rem);
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+  overflow-wrap: anywhere;
+}
+
+.research-proof > p {
+  max-width: 42rem;
+  margin: 1.5rem 0 3rem;
+  color: #b8bed9;
+  font-size: 1.1rem;
+  line-height: 1.7;
+}
+
+.research-proof__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.research-proof article {
+  min-width: 0;
+  min-height: 12rem;
+  padding: 1.5rem;
+  border: 1px solid rgb(175 186 255 / 20%);
+  border-radius: 1.25rem;
+  background: rgb(16 20 41 / 78%);
+}
+
+.research-proof h3 {
+  margin: 0 0 0.75rem;
+}
+
+.research-proof article p {
+  color: #aeb5d2;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 46rem) {
+  .research-proof {
+    padding-top: 4rem;
+  }
+
+  .research-proof__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+@media (forced-colors: active) {
+  :root,
+  body {
+    background: Canvas;
+    color: CanvasText;
+  }
+}

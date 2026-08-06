@@ -300,6 +300,9 @@ class FieldInfo:
         default_value_state: Whether a real default value was requested and copied.
         default_value: A recursively frozen portable default, when available.
         description: Runtime field documentation from a supported schema source.
+        source_module: Module that owns the authored field, when provable.
+        source_qualname: Qualified class name that owns the field, when provable.
+        source_file: Absolute already-loaded module file for that class, when available.
 
     """
 
@@ -311,6 +314,9 @@ class FieldInfo:
     default_value_state: Literal["not-applicable", "omitted", "available", "unsupported"]
     default_value: FrozenJsonValue | None
     description: str | None
+    source_module: str | None = None
+    source_qualname: str | None = None
+    source_file: Path | None = None
 
     def __init__(
         self,
@@ -322,6 +328,9 @@ class FieldInfo:
         default_value_state: Literal["not-applicable", "omitted", "available", "unsupported"],
         default_value: object,
         description: str | None,
+        source_module: str | None = None,
+        source_qualname: str | None = None,
+        source_file: Path | None = None,
     ) -> None:
         """Accept ordinary JSON inputs while storing only a frozen JSON value."""
         object.__setattr__(self, "name", name)
@@ -332,6 +341,9 @@ class FieldInfo:
         object.__setattr__(self, "default_value_state", default_value_state)
         object.__setattr__(self, "default_value", cast("FrozenJsonValue | None", default_value))
         object.__setattr__(self, "description", description)
+        object.__setattr__(self, "source_module", source_module)
+        object.__setattr__(self, "source_qualname", source_qualname)
+        object.__setattr__(self, "source_file", source_file)
         self.__post_init__()
 
     def __eq__(self, other: object) -> bool:
@@ -346,6 +358,9 @@ class FieldInfo:
             self.default_kind,
             self.default_value_state,
             self.description,
+            self.source_module,
+            self.source_qualname,
+            self.source_file,
         ) == (
             other_field.name,
             other_field.required,
@@ -354,6 +369,9 @@ class FieldInfo:
             other_field.default_kind,
             other_field.default_value_state,
             other_field.description,
+            other_field.source_module,
+            other_field.source_qualname,
+            other_field.source_file,
         ) and _json_values_equal(self.default_value, other_field.default_value)
 
     def __hash__(self) -> int:
@@ -368,6 +386,9 @@ class FieldInfo:
                 self.default_value_state,
                 _json_value_hash(self.default_value),
                 self.description,
+                self.source_module,
+                self.source_qualname,
+                self.source_file,
             )
         )
 
@@ -407,6 +428,19 @@ class FieldInfo:
             raise TypeError(msg)
         if self.description is not None:
             _require_utf8_string(self.description, "FieldInfo.description")
+        for value, field_name in (
+            (self.source_module, "FieldInfo.source_module"),
+            (self.source_qualname, "FieldInfo.source_qualname"),
+        ):
+            if value is not None:
+                _require_exact_str(value, field_name)
+        if (self.source_module is None) != (self.source_qualname is None):
+            msg = "FieldInfo source module and qualname must either both be present or both be absent."
+            raise ValueError(msg)
+        _require_absolute_path(self.source_file, "FieldInfo.source_file")
+        if self.source_file is not None and self.source_module is None:
+            msg = "FieldInfo.source_file requires source module and qualname provenance."
+            raise ValueError(msg)
 
         if self.default_kind in {"missing", "factory"}:
             if self.default_value_state != "not-applicable" or self.default_value is not None:
@@ -521,6 +555,8 @@ class AssetInfo:
         resolution: Whether path resolution was requested and what it found.
         resolved_path: Absolute existing asset path when resolution succeeded.
         searched_paths: Absolute candidate paths checked during resolution.
+        owner_module: Module of the class that supplied the declaration.
+        owner_qualname: Qualified name of that declaring class.
 
     """
 
@@ -531,6 +567,8 @@ class AssetInfo:
     resolution: Literal["not-applicable", "not-requested", "resolved", "missing", "unavailable"]
     resolved_path: Path | None
     searched_paths: tuple[Path, ...]
+    owner_module: str | None = None
+    owner_qualname: str | None = None
 
     def __post_init__(self) -> None:
         if type(self.kind) is not str or self.kind not in {"none", "inline", "file"}:
@@ -550,6 +588,15 @@ class AssetInfo:
         _require_absolute_path(self.resolved_path, "AssetInfo.resolved_path")
         for searched_path in self.searched_paths:
             _require_absolute_path_entry(searched_path, "AssetInfo.searched_paths entry")
+        if (self.owner_module is None) != (self.owner_qualname is None):
+            msg = "Asset owner module and qualified name must either both be present or both be absent."
+            raise ValueError(msg)
+        if self.owner_module is not None and self.owner_qualname is not None:
+            _require_exact_str(self.owner_module, "AssetInfo.owner_module")
+            _require_exact_str(self.owner_qualname, "AssetInfo.owner_qualname")
+            if self.declared_on != f"{self.owner_module}.{self.owner_qualname}":
+                msg = "Asset structured owner provenance must match declared_on."
+                raise ValueError(msg)
 
         if self.kind == "none":
             if (
@@ -931,6 +978,9 @@ def _schema_to_dict(schema: SchemaInfo) -> dict[str, object]:
                 "default_value_state": field.default_value_state,
                 "default_value": _thaw_json_value(field.default_value),
                 "description": field.description,
+                "source_module": field.source_module,
+                "source_qualname": field.source_qualname,
+                "source_file": field.source_file.as_posix() if field.source_file is not None else None,
             }
             for field in schema.fields
         ],
@@ -942,6 +992,8 @@ def _asset_to_dict(asset: AssetInfo) -> dict[str, object]:
         "kind": asset.kind,
         "declared_on": asset.declared_on,
         "owner_file": asset.owner_file.as_posix() if asset.owner_file is not None else None,
+        "owner_module": asset.owner_module,
+        "owner_qualname": asset.owner_qualname,
         "declared_path": asset.declared_path,
         "resolution": asset.resolution,
         "resolved_path": asset.resolved_path.as_posix() if asset.resolved_path is not None else None,

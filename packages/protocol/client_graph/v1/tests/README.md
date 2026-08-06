@@ -17,15 +17,50 @@ library; it uses the `jsonschema` package when that is installed and an
 equivalent built-in checker otherwise). CI runs the same checks through pytest
 (`packages/py/citry/tests/test_client_graph_protocol_package.py`).
 
+Check the revision vectors in both languages with:
+
+```bash
+python -S packages/protocol/client_graph/v1/tests/check_canonicalization.py
+node packages/protocol/client_graph/v1/tests/check_canonicalization.mjs
+```
+
+[`conformance-cases.json`](conformance-cases.json) is the cross-language
+structural mutation set. Each case points to one valid manifest here, changes
+one small thing, and records the expected issue path and category. Check it
+and print the remaining schema coverage with:
+
+```bash
+uv run python -m packages.protocol._tooling.check packages/protocol/client_graph/v1
+pnpm --dir packages/protocol/client_graph/v1/js run check
+```
+
+The existing `error_*.manifest.json` corpus continues to own relationship
+rules and browser staging or adoption behavior.
+
+[`constraint-ownership.json`](constraint-ownership.json) groups all 219
+structural schema constraints under their Python and JavaScript validator
+functions and supporting test files. Each group stores its expected count and
+content fingerprint, so a schema change fails the tooling check until its
+runtime ownership is reviewed. This complete assignment is separate from the
+smaller mutation set, which proves exact cross-language issue paths and
+categories for selected boundaries.
+
+[`canonicalization.json`](canonicalization.json) is a separate set of exact
+byte vectors for the revision algorithm. It is an object with format
+`citry-client-graph-canonicalization/1` and a `vectors` array. A vector carries
+one of `manifest`, `input`, `inputJson`, or `equivalentInputJson`; valid vectors
+record canonical UTF-8 hex and usually a SHA-256 digest, while rejected vectors
+carry `"expect": "reject"`. Runners remove `revision` only from a `manifest`
+vector. They parse JSON strings before canonicalizing them and require every
+entry in `equivalentInputJson` to produce the same bytes.
+
 ## What passing means
 
 **A reader passes when it accepts every `"expect": "valid"` example and rejects
 every `"expect": "invalid"` one without letting any of it change the page.**
 Rejecting is the rule that has to hold; which error message a reader prints is
-up to the reader. This repository has two readers, and for each one the index
-records the message it actually prints as a help field, not a rule (see below).
-CI holds both to their examples: the reference validator through the pytest
-module named above, and the browser through
+up to the reader. CI holds both readers to the examples: the reference
+validator through the pytest module named above, and the browser through
 `packages/py/citry/tests/e2e/test_client_graph_corpus_e2e.py`.
 
 **A writer passes when rendering an example's setup produces exactly that
@@ -51,9 +86,6 @@ Test runners read the list, never this prose.
 - `problem` (invalid only): a substring that has to appear somewhere in the
   reference validator's list of problems. A help for other implementations,
   not a rule they have to match.
-- `browserProblem` (invalid only, optional): a substring of the error the
-  browser throws. Left out when the browser rejects with an error whose wording
-  we do not control (an engine-native error).
 - `harness` (invalid only, optional): `"adoption"` when the browser only
   catches the defect while preparing to adopt the graph, a step after its first
   round of checks. The default, `"stage"`, means that first round rejects it on
@@ -66,13 +98,12 @@ Test runners read the list, never this prose.
 Every broken example changes exactly one thing and, except for the
 tampered-revision example itself, is then re-signed so the `revision` check
 passes and the one broken thing is what trips. A few rules cannot be broken one
-at a time, so a single change can trip more than one check; the `problem` and
-`browserProblem` substrings name the one that matters for each reader. Two
-cases worth knowing: a cycle in the component execution order forces a
-cycle in the parent chain too (the browser reports the parent-chain cycle, the
-reference validator reports both), and giving a detached fill an owner also
-breaks the rule that an owner and its source location go together (which is
-what the browser reports).
+at a time, so a single change can trip more than one check. Two cases worth
+knowing: a cycle in the component execution order forces a cycle in the parent
+chain too. Giving a detached fill an owner also breaks the rule that an owner
+and its source location go together. Fixture runners require rejection, while
+the shared conformance mutations separately lock exact issue paths and
+categories in both runtime languages and at the browser boundary.
 
 ## What the valid examples nail down
 
@@ -84,7 +115,7 @@ conformance tests and the two production error examples.
 | Example | Nails down |
 |---|---|
 | `minimal` | The smallest complete graph: one component class, one root component instance, everything else empty. |
-| `component_tag_client_bindings` | One nested component carrying all four component-tag client binding kinds (`props`, `alpine-handler`, `citry-dom-event` with a key filter and a debounce, and `citry-poll`), plus an execution-order constraint and binding source locations. For example, `$c-props="{n: 1}"`, `@click="open = true"`, `@c-click.prevent="save({x: 1})"`, and `@c-poll.5s="tick"` become separate `clientBindings` records. The parent owns each expression or server handler, while the child supplies the component boundary where the browser applies it. Also nails down the poll rule: only the exact event `poll` is a poll, so the custom DOM event `@c-pollchange` stays a DOM event. |
+| `component_tag_client_bindings` | One nested component carrying all four component-tag client binding kinds (`props`, `alpine-handler`, `citry-dom-event` with a key filter and a debounce, and `citry-poll`), the closed `morphMode: "ignore"` component-range mode, an execution-order constraint, and binding source locations. For example, `$c-props="{n: 1}"`, `@click="open = true"`, `@c-click.prevent="save({x: 1})"`, and `@c-poll.5s="tick"` become separate `clientBindings` records. The parent owns each expression or server handler, while the child supplies the component boundary where the browser applies it. Also nails down the poll rule: only the exact event `poll` is a poll, so the custom DOM event `@c-pollchange` stays a DOM event. |
 | `dynamic_spread_loop` | The `spread` and `server-dynamic` client-binding sources, spread mapping keys and indices on source locations, and implicit fills from a loop body. |
 | `supplied_fills` | A named fill written in a template, carrying the nested component it came from, rendered through two outlets of one slot: one fill, two slot regions. |
 | `fallback_fill` | A slot with nothing supplied to it rendering its own client-active fallback: a `fallback` fill with a `fallbackLocationId` and no source nested component. |

@@ -1,0 +1,4 @@
+<main>
+  {# fmt: off #}<section  class = "x" ></section>{# fmt: on #}
+  <footer id="y"></footer>
+</main>

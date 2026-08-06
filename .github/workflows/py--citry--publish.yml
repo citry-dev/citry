@@ -68,6 +68,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: citry-dist
@@ -75,35 +76,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-      - name: Install the built wheel and exercise it
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "$(ls dist/*.whl)"
-          python -c "import citry; print('citry', citry.__file__)"
-          citry --help >/dev/null
-          python - <<'PY'
-          import importlib.util
-          from pathlib import Path
-
-          # Every non-Python file the package must ship. setuptools copies one
-          # of these in only when a glob in [tool.setuptools.package-data]
-          # matches it, and a miss is silent: the package imports fine and the
-          # feature fails later, when something reads the file at run time. So
-          # assert each one is really in the installed wheel. Add a line here
-          # whenever the package starts shipping another data file.
-          REQUIRED = (
-              "py.typed",
-              "ext/dependencies/client/citry.js",
-              "ext/events/client/citry-events.js",
-          )
-
-          root = Path(importlib.util.find_spec("citry").origin).parent
-          missing = [name for name in REQUIRED if not (root / name).is_file()]
-          if missing:
-              raise SystemExit("missing from the wheel: " + ", ".join(missing))
-          for name in REQUIRED:
-              print("present:", name)
-          PY
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+      - name: Install and compare the source and sdist wheels
+        run: python scripts/verify_citry_distribution.py --dist-dir dist
 
   release:
     runs-on: ubuntu-latest

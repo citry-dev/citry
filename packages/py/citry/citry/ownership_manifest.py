@@ -2,12 +2,29 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._protocol.client_graph import (
+    COMMENT_PREFIX,
+    PROTOCOL,
+    assemble_graph,
+    assemble_manifest,
+    build_client_binding,
+    build_component_class,
+    build_component_instance,
+    build_dom_event_payload,
+    build_execution_constraint,
+    build_expression_payload,
+    build_fill,
+    build_nested_component,
+    build_poll_payload,
+    build_slot_region,
+    build_source_location,
+    format_ownership_comment,
+    serialize_manifest,
+)
 from citry.citry_render import CitryRender, PhysicalRegionPart, PhysicalRegionRender
 from citry.ownership import (
     AlpineHandlerClientBindingPayload,
@@ -25,12 +42,15 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
     from citry.ext.events.extension import EventsExtension
-    from citry.ownership import ComponentTagClientBindingRecord, OwnershipGraph, PhysicalRegionId
+    from citry.ownership import (
+        ComponentInvocationRecord,
+        ComponentTagClientBindingRecord,
+        OwnershipGraph,
+        PhysicalRegionId,
+    )
 
 
-PROTOCOL = "citry-client-graph/1"
 EXTRA_KEY = "citry:ownership-manifest"
-COMMENT_PREFIX = "citry:g1"
 _ALPINE_ATTRIBUTE_RE = re.compile(
     r"(?:^|[\s<])(?:x-[^\s=/>]+|@[^\s=/>]+|:[^\s=/>]+)(?=\s|=|/?>)",
     re.IGNORECASE,
@@ -63,6 +83,7 @@ class OwnershipManifestArtifact:
     transparent_instance_ids: frozenset[tuple[int, str]]
     region_ids: frozenset[tuple[int, int]]
     client_active_instances: frozenset[tuple[int, str]]
+    audit_manifest: bool = True
 
     def assert_unchanged(self) -> None:
         """Fail closed if delayed work mutated a graph after serialization."""
@@ -77,7 +98,7 @@ class OwnershipManifestArtifact:
         if graph_index is None:
             msg = "A physical ownership cap refers to a graph absent from the manifest."
             raise RuntimeError(msg)
-        return f"<!--{COMMENT_PREFIX}:{self.revision}:{graph_index}:{kind}:{record_id}:{side}-->"
+        return format_ownership_comment(self.revision, graph_index, kind, record_id, side)
 
     def instance_cap(self, graph: OwnershipGraph, render_id: str, side: str) -> str:
         key = (id(graph), render_id)
@@ -109,7 +130,12 @@ class OwnershipManifestArtifact:
     def json(self) -> str:
         """Return deterministic compact JSON suitable for an inert script tag."""
         self.assert_unchanged()
-        return json.dumps(self.manifest, separators=(",", ":"), sort_keys=True)
+        return serialize_manifest(self.manifest, audit=self.audit_manifest)
+
+
+def has_range_directive(invocation: ComponentInvocationRecord) -> bool:
+    """Whether an invocation needs browser-visible ComponentRange metadata."""
+    return invocation.morph_key is not None or invocation.morph_mode is not None
 
 
 def _client_binding_payload(
@@ -118,43 +144,43 @@ def _client_binding_payload(
     include_location: bool,
 ) -> dict[str, Any]:
     payload = client_binding.payload
-    wire: dict[str, Any]
     if isinstance(payload, (PropsClientBindingPayload, AlpineHandlerClientBindingPayload)):
-        wire = {"type": payload.type, "expression": payload.expression}
+        wire = build_expression_payload(payload.type, payload.expression, audit=False)
     elif isinstance(payload, CitryDomEventClientBindingPayload):
-        wire = {
-            "type": payload.type,
-            "classId": payload.class_id,
-            "event": payload.event,
-            "handler": payload.handler,
-            "args": payload.args,
-            "prevent": payload.prevent,
-            "stop": payload.stop,
-            "self": payload.self_,
-            "once": payload.once,
-            "key": payload.key,
-            "debounce": payload.debounce,
-            "throttle": payload.throttle,
-        }
+        wire = build_dom_event_payload(
+            class_id=payload.class_id,
+            event=payload.event,
+            handler=payload.handler,
+            args=payload.args,
+            prevent=payload.prevent,
+            stop=payload.stop,
+            self_=payload.self_,
+            once=payload.once,
+            key=payload.key,
+            debounce=payload.debounce,
+            throttle=payload.throttle,
+            audit=False,
+        )
     elif isinstance(payload, CitryPollClientBindingPayload):
-        wire = {
-            "type": payload.type,
-            "classId": payload.class_id,
-            "handler": payload.handler,
-            "args": payload.args,
-            "interval": payload.interval,
-        }
+        wire = build_poll_payload(
+            class_id=payload.class_id,
+            handler=payload.handler,
+            args=payload.args,
+            interval=payload.interval,
+            audit=False,
+        )
     else:  # pragma: no cover - closed internal union
         msg = f"Unsupported component-tag client binding payload {type(payload).__name__}."
         raise TypeError(msg)
-    return {
-        "key": client_binding.key,
-        "source": client_binding.source.value,
+    return build_client_binding(
+        key=client_binding.key,
+        source=client_binding.source.value,
         # The location is developer-only provenance; production omits it (Option
         # B in the client_graph package review, and dev_prod_mode.md).
-        "locationId": int(client_binding.source_location_id) if include_location else None,
-        "payload": wire,
-    }
+        location_id=int(client_binding.source_location_id) if include_location else None,
+        payload=wire,
+        audit=False,
+    )
 
 
 def _require_local_render(serialized_renders: set[str], render_id: str | None, relation: str) -> None:
@@ -282,6 +308,32 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
             )
             if render_id in physical_transparent_ids
         }
+        reached_render_ids = reachable | physical_transparent_ids
+        logical_by_render = {
+            record.render_id: record
+            for record in snapshot.logical_instances
+            if record.state == OwnershipState.ACTIVE and record.render_id in reached_render_ids
+        }
+        # A range-directed transparent/rootless component is itself the virtual
+        # node whose caps carry policy. Include it and every reached transparent
+        # logical ancestor needed to encode the invocation path to it.
+        directed_path: list[str] = []
+        for invocation in snapshot.component_invocations:
+            if (
+                invocation.state == OwnershipState.ACTIVE
+                and has_range_directive(invocation)
+                and invocation.source_render_id in reached_render_ids
+                and invocation.target_render_id in reached_render_ids
+            ):
+                directed_path.extend((invocation.source_render_id, invocation.target_render_id))
+        while directed_path:
+            render_id = directed_path.pop()
+            if render_id not in physical_transparent_ids or render_id in required_transparent_ids:
+                continue
+            required_transparent_ids.add(render_id)
+            instance = logical_by_render.get(render_id)
+            if instance is not None and instance.logical_parent_render_id is not None:
+                directed_path.append(instance.logical_parent_render_id)
         active_instances = [
             record
             for record in snapshot.logical_instances
@@ -410,20 +462,20 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
         for fill in active_fills:
             if fill.id not in template_fill_ids:
                 continue
-            for render_id in (fill.lexical_owner_render_id, fill.receiver_render_id):
-                if render_id is not None:
-                    client_active_instances.add((graph_id, render_id))
+            for fill_render_id in (fill.lexical_owner_render_id, fill.receiver_render_id):
+                if fill_render_id is not None:
+                    client_active_instances.add((graph_id, fill_render_id))
         for region in active_regions:
             if region.logical_fill_id not in template_fill_ids:
                 continue
-            for render_id in (
+            for region_render_id in (
                 region.lexical_owner_render_id,
                 region.receiver_render_id,
                 region.transition_from_render_id,
                 region.result_owner_render_id,
             ):
-                if render_id is not None:
-                    client_active_instances.add((graph_id, render_id))
+                if region_render_id is not None:
+                    client_active_instances.add((graph_id, region_render_id))
 
         # Template fill endpoints can add new active roots after the ordinary
         # callback/Event seed pass above. Apply the same isolation cascade to
@@ -505,121 +557,127 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
 
         location_wire: list[dict[str, Any]] = []
         if include_provenance:
-            location_wire = [
-                {
-                    "locationId": int(record.id),
-                    "kind": record.kind.value,
-                    "ownerRenderId": record.owner_render_id,
-                    "ownerClassId": record.owner_class_id,
-                    "carrierInstanceId": instance_ids.get((graph_id, record.owner_render_id)),
-                    "origin": record.origin,
-                    "sourceOffset": {"start": record.byte_span[0], "end": record.byte_span[1]},
-                    "sourcePos": {"line": record.line, "column": record.column},
-                    "mappingKey": record.mapping_key,
-                    "mappingIndex": record.mapping_index,
-                }
-                for record in locations
-            ]
-            if any(record["carrierInstanceId"] is None for record in location_wire):
-                msg = "Every serialized source location must identify a component instance included in the graph."
-                raise RuntimeError(msg)
+            for location_record in locations:
+                carrier_instance_id = instance_ids.get((graph_id, location_record.owner_render_id))
+                if carrier_instance_id is None:
+                    msg = "Every serialized source location must identify a component instance included in the graph."
+                    raise RuntimeError(msg)
+                location_wire.append(
+                    build_source_location(
+                        location_id=int(location_record.id),
+                        kind=location_record.kind.value,
+                        owner_render_id=location_record.owner_render_id,
+                        owner_class_id=location_record.owner_class_id,
+                        carrier_instance_id=carrier_instance_id,
+                        origin=location_record.origin,
+                        source_start=location_record.byte_span[0],
+                        source_end=location_record.byte_span[1],
+                        source_line=location_record.line,
+                        source_column=location_record.column,
+                        mapping_key=location_record.mapping_key,
+                        mapping_index=location_record.mapping_index,
+                        audit=False,
+                    )
+                )
 
+        component_class_wire = [
+            build_component_class(class_id, class_name, audit=False) for class_id, class_name in classes.items()
+        ]
+        component_instance_wire = [
+            build_component_instance(
+                instance_id=instance_ids[(graph_id, record.render_id)],
+                render_id=record.render_id,
+                class_id=record.class_id,
+                invocation_id=None if record.invocation_id not in invocation_ids else int(record.invocation_id),
+                parent_render_id=(
+                    record.logical_parent_render_id if record.logical_parent_render_id in serialized_renders else None
+                ),
+                transparent=record.transparent,
+                audit=False,
+            )
+            for record in active_instances
+        ]
+        nested_component_wire = [
+            build_nested_component(
+                invocation_id=int(record.id),
+                source_render_id=record.source_render_id,
+                source_class_id=record.source_class_id,
+                location_id=_location_ref(record.source_location_id),
+                tag_name=record.authored_tag,
+                target_class_id=record.target_class_id,
+                morph_key=record.morph_key,
+                morph_mode=record.morph_mode,
+                target_render_id=record.target_render_id or "",
+                parent_region_id=(
+                    None if record.physical_parent_region_id is None else int(record.physical_parent_region_id)
+                ),
+                client_bindings=[
+                    _client_binding_payload(client_binding, include_location=include_provenance)
+                    for client_binding in record.client_bindings
+                ],
+                audit=False,
+            )
+            for record in active_invocations
+        ]
+        execution_constraint_wire = [
+            build_execution_constraint(
+                invocation_id=int(record.invocation_id),
+                parent_render_id=record.parent_render_id,
+                child_render_id=record.child_render_id,
+                audit=False,
+            )
+            for record in active_execution_constraints
+        ]
+        fill_wire = [
+            build_fill(
+                fill_id=int(record.id),
+                kind=record.kind.value,
+                slot_name=record.slot_name,
+                policy=record.source_policy.value,
+                owner_render_id=record.lexical_owner_render_id,
+                owner_class_id=record.lexical_owner_class_id,
+                location_id=_location_ref(record.source_location_id),
+                source_invocation_id=(
+                    None if record.source_invocation_id is None else int(record.source_invocation_id)
+                ),
+                receiver_render_id=record.receiver_render_id,
+                receiver_class_id=record.receiver_class_id,
+                fallback_location_id=_location_ref(record.fallback_slot_site_location_id),
+                audit=False,
+            )
+            for record in active_fills
+        ]
+        slot_region_wire = [
+            build_slot_region(
+                region_id=int(record.id),
+                fill_id=int(record.logical_fill_id),
+                receiver_render_id=record.receiver_render_id,
+                slot_location_id=_location_ref(record.slot_site_location_id),
+                owner_render_id=record.lexical_owner_render_id,
+                source_location_id=_location_ref(record.source_location_id),
+                parent_region_id=(None if record.containing_region_id is None else int(record.containing_region_id)),
+                transition_from_render_id=record.transition_from_render_id,
+                result_owner_render_id=record.result_owner_render_id,
+                audit=False,
+            )
+            for record in active_regions
+        ]
         graph_wires.append(
-            {
-                "graphId": graph_index,
-                "componentClasses": [{"classId": class_id, "className": name} for class_id, name in classes.items()],
-                "componentInstances": [
-                    {
-                        "instanceId": instance_ids[(graph_id, record.render_id)],
-                        "renderId": record.render_id,
-                        "classId": record.class_id,
-                        "invocationId": (
-                            None if record.invocation_id not in invocation_ids else int(record.invocation_id)
-                        ),
-                        "parentRenderId": (
-                            record.logical_parent_render_id
-                            if record.logical_parent_render_id in serialized_renders
-                            else None
-                        ),
-                        "transparent": record.transparent,
-                    }
-                    for record in active_instances
-                ],
-                "sourceLocations": location_wire,
-                "nestedComponents": [
-                    {
-                        "invocationId": int(record.id),
-                        "sourceRenderId": record.source_render_id,
-                        "sourceClassId": record.source_class_id,
-                        "locationId": _location_ref(record.source_location_id),
-                        "tagName": record.authored_tag,
-                        "targetClassId": record.target_class_id,
-                        "targetRenderId": record.target_render_id or "",
-                        "parentRegionId": (
-                            None if record.physical_parent_region_id is None else int(record.physical_parent_region_id)
-                        ),
-                        "clientBindings": [
-                            _client_binding_payload(client_binding, include_location=include_provenance)
-                            for client_binding in record.client_bindings
-                        ],
-                    }
-                    for record in active_invocations
-                ],
-                "componentExecutionOrderConstraints": [
-                    {
-                        "invocationId": int(record.invocation_id),
-                        "parentRenderId": record.parent_render_id,
-                        "childRenderId": record.child_render_id,
-                    }
-                    for record in active_execution_constraints
-                ],
-                "fills": [
-                    {
-                        "fillId": int(record.id),
-                        "kind": record.kind.value,
-                        "slotName": record.slot_name,
-                        "policy": record.source_policy.value,
-                        "ownerRenderId": record.lexical_owner_render_id,
-                        "ownerClassId": record.lexical_owner_class_id,
-                        "locationId": _location_ref(record.source_location_id),
-                        "sourceInvocationId": (
-                            None if record.source_invocation_id is None else int(record.source_invocation_id)
-                        ),
-                        "receiverRenderId": record.receiver_render_id,
-                        "receiverClassId": record.receiver_class_id,
-                        "fallbackLocationId": _location_ref(record.fallback_slot_site_location_id),
-                    }
-                    for record in active_fills
-                ],
-                "slotRegions": [
-                    {
-                        "regionId": int(record.id),
-                        "fillId": int(record.logical_fill_id),
-                        "receiverRenderId": record.receiver_render_id,
-                        "slotLocationId": _location_ref(record.slot_site_location_id),
-                        "ownerRenderId": record.lexical_owner_render_id,
-                        "sourceLocationId": _location_ref(record.source_location_id),
-                        "parentRegionId": (
-                            None if record.containing_region_id is None else int(record.containing_region_id)
-                        ),
-                        "transitionFromRenderId": record.transition_from_render_id,
-                        "resultOwnerRenderId": record.result_owner_render_id,
-                    }
-                    for record in active_regions
-                ],
-            }
+            assemble_graph(
+                graph_id=graph_index,
+                component_classes=component_class_wire,
+                component_instances=component_instance_wire,
+                source_locations=location_wire,
+                nested_components=nested_component_wire,
+                component_execution_order_constraints=execution_constraint_wire,
+                fills=fill_wire,
+                slot_regions=slot_region_wire,
+            )
         )
         region_ids.update((graph_id, int(record.id)) for record in active_regions)
 
-    unsigned = {
-        "protocol": PROTOCOL,
-        "mode": mode,
-        "graphs": graph_wires,
-        "delimiters": {"format": COMMENT_PREFIX},
-    }
-    canonical = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode("utf8")
-    revision = hashlib.sha256(canonical).hexdigest()
-    manifest = {**unsigned, "revision": revision}
+    manifest = assemble_manifest(mode, graph_wires, audit=include_provenance)
+    revision = manifest["revision"]
     artifact = OwnershipManifestArtifact(
         revision=revision,
         manifest=manifest,
@@ -634,8 +692,8 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
         ),
         region_ids=frozenset(region_ids),
         client_active_instances=frozenset(client_active_instances),
+        audit_manifest=include_provenance,
     )
-    artifact.json()
     return artifact
 
 
@@ -697,6 +755,7 @@ def ownership_manifest_required(root: CitryRender) -> bool:
     seen: set[int] = set()
     reached_regions_by_graph: dict[int, tuple[OwnershipGraph, set[int]]] = {}
     reached_region_parts: dict[int, dict[int, object]] = {}
+    reached_render_ids_by_graph: dict[int, tuple[OwnershipGraph, set[str]]] = {}
     while pending:
         current = pending.pop()
         if isinstance(current, (PhysicalRegionPart, PhysicalRegionRender)):
@@ -717,6 +776,14 @@ def ownership_manifest_required(root: CitryRender) -> bool:
         seen.add(object_id)
         component = current.context.component
         component_class = _resolve_frame_class(current, root_citry)
+        graph = current.context.ownership
+        render_id = current.frame.render_id
+        if graph is not None and render_id is not None and component_class is not None:
+            reached_renders = reached_render_ids_by_graph.get(id(graph))
+            if reached_renders is None:
+                reached_renders = (graph, set())
+                reached_render_ids_by_graph[id(graph)] = reached_renders
+            reached_renders[1].add(render_id)
         if component_class is not None:
             if (
                 (component is not None and component._component_tag_client_bindings)
@@ -729,6 +796,16 @@ def ownership_manifest_required(root: CitryRender) -> bool:
             if info.events_cls is not None or info.state_cls is not None:
                 return True
         pending.extend(current.parts)
+
+    for graph, render_ids in reached_render_ids_by_graph.values():
+        if any(
+            invocation.state == OwnershipState.ACTIVE
+            and has_range_directive(invocation)
+            and invocation.source_render_id in render_ids
+            and invocation.target_render_id in render_ids
+            for invocation in graph.snapshot().component_invocations
+        ):
+            return True
 
     for graph, region_ids in reached_regions_by_graph.values():
         snapshot = graph.snapshot()
@@ -777,6 +854,7 @@ __all__ = [
     "EXTRA_KEY",
     "PROTOCOL",
     "OwnershipManifestArtifact",
+    "has_range_directive",
     "ownership_manifest_required",
     "prepare_ownership_manifest",
 ]

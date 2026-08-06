@@ -12,7 +12,7 @@ def test_extract_function() -> None:
     assert data.name == "format_attrs"
     assert data.kind == "function"
     assert "format_attrs(" in data.signature
-    assert "-> SafeString" in data.signature
+    assert ">Markup</a>" in data.signature
     assert data.members == []
 
 
@@ -23,6 +23,25 @@ def test_extract_class_with_members() -> None:
     member_names = {m.name for m in data.members}
     assert "html" in member_names  # an attribute member
     assert all(not m.name.startswith("_") for m in data.members)
+
+
+def test_extract_external_markup_without_citry_owned_details() -> None:
+    data = extract_symbol("citry.Markup")
+    assert data is not None
+    assert data.kind == "class"
+    assert data.name == "Markup"
+    assert data.source_url == ""
+    assert data.members == []
+    assert 'href="/foo"' not in str(data.description)
+
+
+def test_extract_first_party_security_error() -> None:
+    data = extract_symbol("citry.SecurityError")
+    assert data is not None
+    assert data.kind == "class"
+    assert data.name == "SecurityError"
+    assert "packages/py/citry_core/citry_core/safe_eval/eval.py" in data.source_url
+    assert data.members == []
 
 
 def test_extract_unknown_returns_none() -> None:

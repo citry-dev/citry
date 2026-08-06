@@ -1,7 +1,7 @@
 # Design: AlpineJS and the Citry client component model
 
-**Status (2026-07-24): normative landed design; A0 through A10 and client
-ambient context implemented.** The maintainer selected
+**Status (2026-08-04): normative landed design; A0 through A10, client
+ambient context, and ComponentRange morphing implemented.** The maintainer selected
 the Citry graph-first Alpine architecture and the
 `$c-props` component-boundary directive after the research and spike program indexed in
 [`alpinejs/`](alpinejs/README.md). This document is the source of truth for
@@ -252,6 +252,18 @@ detail and never becomes the client binding target. A literal occurrence on plai
 is a template-load error. A dynamically resolved occurrence fails at render
 time. `<c-element>` chooses a plain HTML element, so it rejects `$c-props` and
 follows the normal HTML path for handlers and bindings.
+
+After those source-ordered contributions resolve, a surviving `$c-props`
+binding requires a live `$component(...)` registration in the **actual target
+component's** JavaScript. This is a capability check, not a root-shape check:
+transparent and rootless components may receive props when they register, but
+ordinary components and framework built-ins without a registration fail at
+render time. Runtime `<c-component>` selectors are followed through every
+transparent wrapper to the final selected target, and diagnostics retain the
+authored call site. A final `None` or `False` removes the binding and therefore
+requires no registration. Cached ownership is checked against the current
+target registration before replay staging; stale artifacts fall back to the
+same live-render validation.
 
 Authoring, diagnostics, implementation, and normative examples use
 `$c-props`.
@@ -1028,9 +1040,14 @@ O9 is settled as follows:
 - Plain HTML replacing the self target retires both the browser anchor and the
   logical instance.
 - A same-class keyed child match preserves its browser anchor and logical
-  instance, including when that child has no Events sidecar.
-- Uncorrelated incoming IDs receive fresh identities. A non-self targeted
-  replacement has no positional continuity beyond explicit keyed matches.
+  instance, including when that child has no Events sidecar. Component identity
+  is `(component class, morphKey)` on the comment-bounded virtual range, not a
+  key copied onto a root element.
+- After keyed matches are reserved, remaining old and incoming unkeyed direct
+  children pair by position; only same-class pairs preserve identity. There is
+  no scan-ahead, so reordering unkeyed siblings does not move their identity.
+- Uncorrelated incoming IDs receive fresh identities. Class or key mismatches
+  replace the range, and an unmatched component is opaque to descendant keys.
 
 The old render records become inactive at correspondence or retirement and
 are no longer routable. Their physical caps and logical lifecycles retire even
@@ -1044,14 +1061,22 @@ A separate used-revision tombstone still rejects replay of that revision.
 Graph and DOM changes use one coordinated transaction:
 
 1. parse and validate the incoming graph, Events, and dependency manifests;
-2. apply the O9 correspondence policy to incoming render IDs and keys;
-3. stage source links, props suppliers, RootGroups, and logical ranges;
-4. expose mappings needed while Alpine morph evaluates incoming expressions;
-5. morph physical DOM;
-6. validate and adopt the landed canonical and runtime-placement caps;
-7. commit the new graph revision and initialize ready instances;
-8. reconcile bindings and busy state;
-9. retire old records, timers, subscriptions, and effects exactly once.
+2. build provisional physical and logical correspondence candidates without
+   mutating the live document or running dependency code;
+3. seed retention from old-side ordinary `#c-ignore` barriers and ignored
+   ComponentRanges, then close transitively over shared component, fill,
+   slot-region, and mirror records;
+4. remove retained old and excluded incoming branches, discard provisional
+   matches, and compute final correspondence from scratch: reserve keyed
+   same-class children, then positionally pair remaining unkeyed children;
+5. stage only accepted source links, props suppliers, RootGroups, descriptors,
+   dependencies, and logical ranges;
+6. expose private mappings needed while Alpine morph evaluates accepted
+   incoming expressions and morph the physical DOM;
+7. validate and adopt the landed canonical and runtime-placement caps;
+8. commit the new graph revision and initialize ready instances;
+9. reconcile bindings and busy state, then retire old records, timers,
+   subscriptions, effects, and unused descriptor revisions exactly once.
 
 The old mapping remains available only for the portion of morph evaluation
 that needs it. Provisional routes are private and public readiness waiters are
@@ -1069,33 +1094,60 @@ Failure handling has two precise levels:
   adoption hold, and runs retired cleanup once. It does not claim general DOM
   rollback after Alpine has begun morphing.
 
-A6 supplies the range-operation half used by this transaction. It
-parses incoming HTML in the target parent context, morphs through a
-parent-shaped container, and collapses live nested ownership ranges into inert
-keyed islands for the duration of the outer morph. The scan covers every live
-ownership revision, including independently inserted fragment graphs inside
-the target range. Lifecycle reconciliation is held synchronously while those
-caps sit inside inert templates and resumes only after expansion, so temporary
-disconnection cannot run component cleanup. Incoming nested islands are
-preserved only when the caller supplies explicit stable correspondence.
-Without that mapping they are fresh, which deliberately avoids guessing O9
-from render ID, class, key, or DOM position. A8 now owns validation, commit,
-preflight rejection, and invocation of this adapter as one graph plus Events
-transaction. A malformed graph, Events manifest, or dependency package is
-rejected before epoch, DOM, public graph, callback, or anchor mutation. Its
-dependency preflight covers calls, instance CSS, loaded and fetched asset
-lists, descriptor shape, tag names, attributes, and content before any asset
-or component callback can be published. Events preflight validates every
-handler's method, timing, and queue-option types before publishing its class
-descriptor.
+A6 supplies the contextual range-operation half used by this transaction. A8
+adds a complete, read-only correspondence plan before DOM mutation. Explicitly
+addressed roots correlate first. Within each matched parent, provisional
+physical candidates exist only to discover old-side ignore closure; after
+that closure is removed, the planner recomputes direct-child correspondence
+from scratch. It first reserves unique non-null keys by component class, then
+zips all remaining unkeyed positions and accepts only same-class pairs. An
+unmatched component is opaque, so a descendant key cannot leak through it.
+
+An old ordinary ignored element is an opaque physical barrier: the element
+itself may still participate in its surrounding Alpine sibling match, but its
+attributes and descendants remain old. An old ignored ComponentRange retains
+every placement and every graph-owned resource in its closure. Incoming
+callbacks, fills, dependencies, inline scripts, styles, and manifest hooks
+from excluded branches never become observable. `swap="replace"` bypasses
+range ignore because it deliberately does not perform a morph transaction.
+
+The physical adapter makes every component range atomic to its parent's
+ordinary element walk and recursively applies fresh server HTML inside matched
+ranges. A stationary range stays connected between temporary paired sentinels.
+Citry filters the range's ordinary roots out of Alpine's flat keyed-sibling map
+before matching, then makes the enclosing walk skip directly to the closing
+sentinel. The live caps and contents are never reparented, preserving focus,
+selection, scroll containers, iframe documents, and other browser-owned
+resources. Nested stationary component and equivalent slot-region ranges are
+processed inside-out; an unmatched intermediate virtual range vetoes this
+connected path. A real move uses a temporary portable holder and can cross
+ordinary wrappers or depths. Unmatched ranges are replaced atomically. All temporary
+nodes disappear synchronously before lifecycle reconciliation resumes. The
+scan covers every live ownership revision, including independently inserted
+fragment graphs and runtime mirror placements.
+
+`swap="morph"` keeps matched physical caps and nodes where the recursive morph
+permits it. `swap="replace"` applies the same logical correspondence plan but
+wholesale replaces physical DOM and caps. A8 owns validation, commit, preflight
+rejection, and invocation of this adapter as one graph plus Events transaction.
+Events and dependency descriptors are revision-scoped: retained old anchors
+continue routing through their old immutable descriptor revision, accepted
+incoming anchors use the new revision, and installation rollback restores the
+prior snapshot. A revision is pruned only after no live anchor or pending call
+still references it. A malformed graph, Events manifest, or dependency package
+is rejected before epoch, DOM, public graph, callback, or anchor mutation.
 
 ### 9.3 Key preservation
 
-A `#c-key` expression can be authored in the parent while its rendered marker
-lives on child roots. A child self-render does not know that caller-authored
-key. Citry therefore preserves the matching caller key onto incoming roots for
-a same-class self-render so morph does not replace the node and lose focus or
-future keyed linking. Foreign-class keys never survive a class change.
+A component `#c-key` is authored on the parent invocation and stored on the
+stable logical component range. It never lives on the child's root DOM. A
+same-class child self-render has no parent invocation in its incoming graph, so
+Citry retains both the parent-authored `morphKey` and the external logical
+parent relation while transferring the fresh render ID. The next parent render
+can therefore rediscover the child without copying or reconstructing a DOM
+attribute. A class change creates a fresh logical instance and cannot inherit
+the old component key. An element `#c-key` on the child's root is an independent
+ordinary morph key.
 
 ## 10. Events and queue integration
 

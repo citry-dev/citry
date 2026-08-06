@@ -23,7 +23,7 @@ If the version is outside the supported range, install a supported
 Python version before continuing. The [Compatibility
 page](/about/compatibility/) has the full platform details.
 
-## Install the package
+## Installation
 
 Install Citry into your environment:
 
@@ -70,12 +70,6 @@ You have now confirmed that Python can import Citry and render a component.
     Citry adds an attribute to the opening tag, and its value can change each time.
     That extra text is expected.
 
-## Build your first component
-
-Citry is installed and ready to render HTML. Next,
-[build a reusable card](/getting-started/your-first-component/) with an option,
-content of your choice, and its own styles.
-
 ## Troubleshoot
 
 If running `hello.py` reports `No module named 'citry'`, the install command
@@ -87,3 +81,9 @@ version first.
 If pip tries to compile the core package and the build fails,
 see [Compatibility](/about/compatibility/#building-from-source) for the
 platform and Rust requirements.
+
+## Next steps
+
+Citry is installed and ready to render HTML. Next,
+[build a reusable card](/getting-started/your-first-component/) with an option,
+content of your choice, and its own styles.

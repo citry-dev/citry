@@ -2,12 +2,19 @@
 
 **Date:** 2026-07-28
 
-**Status:** Stage 5 design complete. Production implementation remains gated by
-the open runtime release and deployed-origin checks in
-[`runtime_feasibility.md`](runtime_feasibility.md).
+**Shipping override (2026-07-29):** The separate-origin immutable-bundle plan
+in this research record is deferred hardening. V1 serves its first-party files
+through the existing docs static deployment and loads pinned Pyodide and exact
+package files from their current CDN/PyPI URLs. See the current Stage 7 plan in
+[`docs_playground.md`](../docs_playground.md#current-shipping-plan).
 
-**Scope:** the authored page, docs builder, browser package, immutable runtime
-artifacts, release order, indexing, cancellation, and verification contracts.
+**Status:** Stage 5 design accepted for iterative implementation. The tested
+core 1.4.0 PyEmscripten wheel is public and passed the package smoke from its
+PyPI bytes. Local implementation can proceed, and production activation is no
+longer conditional on a separate runner deployment.
+
+**Scope:** the authored page, docs builder, browser package, indexing,
+cancellation, and the originally researched hardened release contracts.
 
 ## Outcome
 
@@ -38,8 +45,9 @@ consumer can reuse the same host without copying the page application.
 
 CodeMirror and the small playground application are route-only, self-hosted
 assets. Pyodide, Python packages, wheels, WebAssembly, and the execution Worker
-live in a content-addressed bundle on the separately deployed, credential-free
-runner origin accepted in Stage 1. Ordinary docs pages load none of them.
+live in a content-addressed bundle on the separately deployed, credential-free,
+different-site runner origin accepted in Stage 1. Ordinary docs pages load
+none of them.
 
 ## Evidence from the current builder
 
@@ -197,7 +205,7 @@ later if reader testing establishes a need.
 Add a closed layout type to `PageMeta`:
 
 ```python
-class PageLayout(StrEnum):
+class PageLayout(str, Enum):
     DOCS = "docs"
     PLAYGROUND = "playground"
 ```
@@ -213,7 +221,7 @@ playground.md: invalid layout 'playgound'; expected one of: docs, playground
 This validation must run in `parse_page()` or immediately after it, not only in
 `build-check`, because an ordinary `build` or live render must not silently
 choose the wrong chrome. Pass a source label to parsing so errors remain useful.
-The front-matter guard should also understand `StrEnum` values and report the
+The front-matter guard should also understand string-backed `Enum` values and report the
 same accepted set before a post-build pass.
 
 Blog catalog pages construct `PageMeta` programmatically and keep the default
@@ -313,7 +321,7 @@ not treated as verification for Worker-fetched runtime files.
 
 ## Private frontend package and module boundaries
 
-Add `docs_site/frontend` as a private pnpm workspace member. Pin all direct and
+Add `docs_site/_internal/frontend` as a private pnpm workspace member. Pin all direct and
 transitive packages in the root `pnpm-lock.yaml`. Use the selected CodeMirror
 versions from Stage 4 and the repository's existing esbuild version unless an
 implementation proof establishes a reason to change it.
@@ -321,7 +329,7 @@ implementation proof establishes a reason to change it.
 Proposed source graph:
 
 ```text
-docs_site/frontend/
+docs_site/_internal/frontend/
   package.json
   tsconfig.json
   build.mjs
@@ -330,10 +338,11 @@ docs_site/frontend/
       playground.ts
       inline-live-activator.ts
       runner-page.ts
+      preview-page.ts
       runtime-worker.ts
     host/
       browser-session.ts
-      runtime-loader.ts
+      runtime-descriptor.ts
       runner-connection.ts
       protocol.ts
       scheduler.ts
@@ -352,6 +361,8 @@ docs_site/frontend/
     runner/
       broker.ts
       worker-session.ts
+      runtime-loader.ts
+      preview-shell.ts
       executor.py
   tests/
     ...
@@ -369,7 +380,9 @@ consumer adapter -> preview and diagnostics views
 
 Host modules do not query playground DOM ids, write splitter values, choose a
 storage key, or assume that code and result are simultaneously visible. The
-consumer supplies source and view callbacks.
+consumer supplies source and view callbacks. Host modules also fetch no
+Pyodide or wheel bytes; the verified loader executes inside the runner-owned
+Worker, where those artifacts are same-origin.
 
 The narrow public interface within the private package should resemble:
 
@@ -435,6 +448,9 @@ Use persistent, in-flow panel diagnostics rather than toast-only errors:
 
 - Python parse, execution, render, output-type, loading, and Worker failures
   belong to the code panel;
+- stdout and stderr remain separate protocol fields; when either is nonempty,
+  the code tray shows a non-error captured-output notice with counts and
+  truncation state even while the expandable console is deferred;
 - preview script, promise, resource, navigation, and protocol failures belong
   to the result panel;
 - each tray has a concise summary, expandable sanitized details, Copy, and
@@ -445,15 +461,30 @@ Use persistent, in-flow panel diagnostics rather than toast-only errors:
   run is pending, stopped, timed out, or failed;
 - a successful current run clears superseded diagnostics for its owning panel.
 
-The preview remains `srcdoc` with `sandbox="allow-scripts"` and a title. The
-right-panel bridge captures the bounded error classes accepted in Stage 1. It
-cannot promise to observe every possible browser failure. Unexpected preview
-navigation invalidates and replaces the iframe.
+Stage 6 rejects host-owned `srcdoc` for production because it inherits the docs
+response CSP and cannot relax that policy for visitor inline CSS and
+JavaScript. The preview is instead a fixed content-addressed document on the
+credential-free, different-site runner origin, still embedded with `sandbox="allow-scripts"`
+without `allow-same-origin` and with a title. The immutable page contains its
+small trusted bootstrap inline; no external script origin is allowed. The
+bootstrap transfers a private MessagePort, accepts bounded HTML, activates
+visitor content under a preview-specific restrictive CSP, and forwards the
+bounded error classes accepted in Stage 1. A runner-origin script-source probe
+must produce no server request. It cannot promise to observe every possible
+browser failure. Unexpected navigation
+disconnects the port and replaces the document with an inert frame; the next
+successful run creates a new preview session. See
+[`vertical_prototype.md`](vertical_prototype.md#preview-architecture-correction).
+Self-navigation and download activation can still issue docs-origin requests,
+and visitor Python can retain visitor-created runner-origin IndexedDB or Cache
+Storage data across Worker restarts and tabs. V1 accepts and discloses these
+residuals only for locally edited code; production tests exercise them with the
+real origins, cookies, request logs, and storage cleanup.
 
-## Auto-run candidates and local instrumentation
+## Auto-run policy and local instrumentation
 
-Stage 5 does not select the production default. Stage 6 compares two complete,
-testable candidates while preserving an explicit Run control in both:
+Stage 5 defined two complete, testable candidates while preserving an explicit
+Run control in both:
 
 | Behavior | Candidate A: guided live | Candidate B: run on demand |
 | --- | --- | --- |
@@ -470,9 +501,10 @@ for example `citry.playground.settings.v1`. Store only the explicit Auto-run
 choice and splitter value. Storage failure uses the active candidate default
 and does not block editing or Run.
 
-Hard timeout candidates are 5 and 10 seconds. These are test inputs, not
-accepted budgets. The Stage 6 performance and reader studies must select or
-replace the load policy, Auto-run default, debounce, and timeout together.
+Stage 6 selected Candidate B for the initial implementation, with Auto-run off,
+an always-visible Run control, a persisted explicit Auto-run choice, a 500 ms
+latest-source debounce after opt-in, and a five-second execution timeout.
+These values are rollout-tunable defaults rather than architectural contracts.
 
 Instrumentation uses browser Performance marks, measures, and a test-only
 `CustomEvent` stream. Record phase, duration, candidate, cache state, reason,
@@ -501,7 +533,8 @@ The hard timeout and Worker crash use the same termination and stale-preview
 path, with different diagnostic codes. Syntax, validation, and normal render
 failures do not terminate a healthy Worker or pause Auto-run. Reset during a run
 first stops the generation, restores the authored starter, and follows the
-selected initial-run policy.
+selected initial-run policy. Reset while idle also terminates the warm Worker,
+so the restored starter runs in a clean interpreter.
 
 This contract is more understandable than a timeout-only interface and matches
 the hard-cancellation mechanism the Pyodide proof can actually guarantee.
@@ -537,6 +570,7 @@ the page containing:
   "docsBasePath": "/citry",
   "assetBaseUrl": "/citry/static/generated/playground/",
   "runnerUrl": "https://runner.example/runtime/<bundle-id>/runner.html",
+  "previewUrl": "https://runner.example/runtime/<bundle-id>/preview.html",
   "runtimeManifestUrl": "https://runner.example/runtime/<bundle-id>/manifest.json",
   "runtimeBundleId": "<bundle-id>",
   "protocolVersion": 1,
@@ -561,7 +595,7 @@ For local development, run the docs server and the compiled runner on distinct
 ports, for example:
 
 ```sh
-pnpm --dir docs_site/frontend dev:runner --port 8011
+pnpm --dir docs_site/_internal/frontend dev:runner --port 8011
 DOCS_PLAYGROUND_RUNNER_ORIGIN=http://127.0.0.1:8011 \
   uv run --no-sync python -m docs_site serve
 ```
@@ -576,13 +610,17 @@ site. The production lock records:
 
 - schema and protocol versions;
 - bundle id algorithm and resulting bundle id;
+- canonical docs and runner origins, their private-PSL-aware schemeful sites,
+  and exact `frame-ancestors` values;
 - exact Citry, Citry Core, Pyodide, Python, Emscripten, Rust, Maturin,
   `pyodide-build`, and supporting package versions;
 - source tag and peeled commit for built Citry artifacts;
 - filename, byte size, SHA-256, media type, and source URL for every artifact;
+- license identifier, notice source, and required license text for every
+  redistributed artifact;
 - deterministic install order with dependency resolution disabled;
-- runner page, broker, Worker, Python executor, Pyodide JavaScript, lock file,
-  standard library, WASM, and wheel inventory;
+- runner page, broker, preview page and bootstrap, Worker, Python executor,
+  Pyodide JavaScript, lock file, standard library, WASM, and wheel inventory;
 - required response headers and Content Security Policy;
 - the acceptance smoke-test digest and timestamp.
 
@@ -594,6 +632,7 @@ that id and a complete file inventory. The remote directory is:
 https://<runner-origin>/runtime/<bundle-id>/
   manifest.json
   runner.html
+  preview.html
   assets/
     broker.<hash>.mjs
     worker.<hash>.mjs
@@ -608,22 +647,33 @@ https://<runner-origin>/runtime/<bundle-id>/
     citry-<exact>-py3-none-any.whl
     citry_core-<exact>-cp314-cp314-pyemscripten_2026_0_wasm32.whl
     <exact transitive wheels>
+  THIRD_PARTY_NOTICES.txt
+  licenses/
+    <artifact-specific license files>
 ```
 
 No `latest`, floating PyPI URL, live dependency resolver, or mutable file path is
-part of page startup. The runner verifies manifest identity and every fetched
-file's size and SHA-256 before use. The release smoke test repeats verification
-through the public origin. Browser caching uses:
+part of page startup. The production loader must consume the bodies whose sizes
+and SHA-256 values it verified, not let Pyodide re-fetch their URLs. A
+mutation-between-fetches test enforces that boundary. The release smoke test
+repeats verification through the public origin. Browser caching uses:
 
 - immutable bundle files: `Cache-Control: public, max-age=31536000, immutable`;
 - the content-addressed manifest: the same immutable policy;
 - no cookies, authentication, personalized responses, or state-changing routes
   on the runner origin;
-- explicit MIME types, `nosniff`, no referrer, and the accepted restrictive CSP.
+- explicit MIME types, `nosniff`, no referrer, the accepted runner and preview
+  CSPs, and exact docs-origin `frame-ancestors`. The lock stores the complete
+  policy for every response class. Runner HTML permits only its same-origin
+  script and Worker; the Worker policy retains the tested `blob:`,
+  `'unsafe-eval'`, and `'wasm-unsafe-eval'` script sources plus same-origin
+  connect while verified-buffer startup needs them. Runtime files remain
+  runner-to-runner same-origin resources rather than receiving broad CORS.
 
-The exact production origin and hosting provider remain a Stage 1 deployment
-gate. The path, immutability, header, and consumer contracts do not depend on
-that provider.
+Selecting the production provider and canonical different-site origin is the
+entry gate for implementation slice 5. Its deployment record owns credentials,
+staging, atomic promotion, headers, and rollback. The earlier page, editor, and
+local host slices do not depend on that provider.
 
 ## Release and deployment order
 
@@ -631,14 +681,18 @@ The PyEmscripten build is another wheel in the existing `citry-core` PyPI
 release. It is not a separate package or a docs-only wheel. Matching Pyodide
 installers can select its platform tag; native installers ignore it.
 
-The accepted first release plan remains:
+The accepted first release plan is now:
 
-1. Build `citry-core==1.4.1` from the clean tag with sdist, native wheels, and
-   the PyEmscripten wheel. Run the reproducibility and stock-Pyodide smoke tests
-   before one Trusted Publishing job uploads the complete inventory.
-2. Verify the expected core filename and hash from PyPI.
-3. Publish `citry==0.3.0` with an exact `citry-core==1.4.1` dependency after its
-   native and browser public-package smoke tests pass.
+1. Completed on 2026-07-28: upload the reproducible,
+   stock-Pyodide-tested 1.4.0 PyEmscripten wheel to the existing
+   `citry-core==1.4.0` release. Citry 0.3.0 already exactly pins that core
+   version.
+2. Completed on 2026-07-28: verify the expected core filename, size, and hash
+   from PyPI, then rerun the exact 0.3.0/1.4.0 package smoke from those public
+   bytes. The public file is byte-identical to the three-browser matrix input.
+3. The fallback was not needed. If a comparable late file cannot be added in
+   the future, publish a new core version and a new Citry patch that pins it,
+   then repeat the acceptance matrix.
 4. Assemble a runtime bundle only from the exact published wheel bytes and the
    pinned Pyodide files. Build it twice and require identical manifests and
    content hashes.
@@ -648,8 +702,10 @@ The accepted first release plan remains:
    Promotion must not rewrite bytes.
 7. Run the deployed cross-origin broker, containment, browser, package, and
    header matrix against that exact bundle.
-8. Update the committed runtime lock used by the docs page only after steps 1
-   through 7 pass.
+8. Emit the verified runtime lock as a workflow artifact after steps 1 through
+   7 pass. Apply it through an ordinary maintainer branch and reviewed merge,
+   or an explicitly configured GitHub App token. Do not rely on a default
+   `GITHUB_TOKEN` commit to trigger downstream checks or deployment.
 9. Build the root docs artifact, verify that its configured bundle already
    exists publicly, then deploy the Pages artifact atomically.
 
@@ -720,6 +776,10 @@ Pagefind and LLM files contain the one current page only.
 | User presses Stop, run times out, or Worker crashes | Invalidate the generation, terminate the Worker, preserve stale output, pause Auto-run until explicit Run, and create a clean Worker next time. |
 | CodeMirror fails | Keep the authoritative named textarea, Copy, Download, Reset, and Retry editor controls. Run remains available only if the full latest source and runner health are known. |
 | Preview reports a client failure | Preserve the safe DOM where possible and show the persistent right-panel diagnostic. |
+| Preview JavaScript loops forever | The Python timeout does not contain it. Attempt replacement only if the parent event loop remains responsive; otherwise document tab reload as the v1 recovery. |
+| Preview self-navigation or download activation issues a request | The parent cannot prevent the first request. Keep docs static and credential-free, test cookie and log behavior in all engines, disclose the residual, and reopen the design before docs gains sensitive GET endpoints. |
+| Python uses runner-origin IndexedDB or Cache Storage | Application code stores nothing there. Test persistence and cross-tab visibility with real operations, clean up test keys, disclose the residual, and require a new decision before shared code. |
+| Python writes stdout or stderr | Return both fields and show a left-tray notice with counts and truncation state; never use either as preview HTML. |
 | Snapshot build contains `playground/index.html` | Fail the snapshot test or version guard and do not commit the snapshot. |
 | Historical page links to a versioned playground | Fail link or version guards. Link to the canonical current page with current-runtime wording instead. |
 
@@ -733,7 +793,9 @@ docs_site/content/playground.md
 docs_site/content/_nav.yml
 docs_site/playground/starter.py
 docs_site/playground/runtime-lock.json
-docs_site/frontend/**
+docs_site/playground/DEPLOYMENT.md
+docs_site/playground/THIRD_PARTY_NOTICES.md
+docs_site/_internal/frontend/**
 docs_site/static/generated/asset-manifest.json
 docs_site/static/generated/playground/*
 
@@ -750,6 +812,7 @@ docs_site/_internal/components/mobile_primary_nav.py
 docs_site/_internal/components/doc_page.py
 docs_site/_internal/components/playground_page.py
 docs_site/_internal/guards/playground.py
+docs_site/_internal/guards/__init__.py
 
 docs_site/tests/test_frontmatter.py
 docs_site/tests/test_pipeline.py
@@ -763,10 +826,13 @@ docs_site/tests/e2e/test_playground_e2e.py
 
 pnpm-workspace.yaml
 pnpm-lock.yaml
+scripts/check.py
 .github/workflows/py--citry-core--publish.yml
 .github/workflows/py--citry--publish.yml
+.github/workflows/repo--check.yml
 .github/workflows/repo--playground-runtime.yml
 .github/workflows/repo--docs-check.yml
+.github/workflows/repo--docs-cross-browser.yml
 .github/workflows/repo--docs-deploy.yml
 .github/workflows/repo--docs-release.yml
 ```
@@ -782,7 +848,8 @@ Not every file must land in one change. The preferred sequence is:
 4. runner-origin deployment workflow and exact public package lock;
 5. page connection, diagnostics, Stop, reset, base paths, projections, and full
    static e2e coverage;
-6. Stage 6 candidate testing and approval before production rollout.
+6. Stage 7 activation checks, including the public bundle, all three engines,
+   final navigation, and one physical-phone smoke, before production rollout.
 
 ## Verification matrix
 
@@ -838,18 +905,17 @@ Not every file must land in one change. The preferred sequence is:
 - uncached physical mid-tier mobile timings, heap pressure, termination
   recovery, and the accepted product budgets.
 
-## Remaining gates and falsifying conditions
+## Iterative rollout work and falsifying conditions
 
 Stage 5 is complete because the repository, page, artifact, version, release,
-and failure behavior are now specified. It does not claim the runner is ready
-to deploy.
+and failure behavior are now specified. The following work belongs to release
+and rollout rather than blocking the first implementation.
 
-Before Stage 6 production integration, Stage 1 must still:
+Release and rollout should:
 
 - repeat the broker and preview proof on the real runner origin and headers;
 - put deterministic PyEmscripten builds and comparison into release CI;
 - measure uncached and physical mid-tier mobile behavior;
-- publish and test the exact Citry and Citry Core pair;
 - promote and verify the first immutable public runtime bundle.
 
 Reopen this integration design if any of the following occurs:

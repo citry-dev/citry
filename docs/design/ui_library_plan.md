@@ -1,25 +1,37 @@
 # Plan: the Citry UI component library
 
-**Status (2026-07-24): active research plan. Phases 0 through 6 are complete;
-the generic publishing foundation and expanded pressure catalog are
-implemented, and the Phase 7 entry program is underway. The comparative
-component prototype has not started.** This plan defines the research and
-decision process for Citry's official component library. The ratified product
+**Status (2026-08-06): Tabs, Button, Field/Input, Form, Dialog, Combobox, and
+Table reference families are complete in code and public documentation.**
+Phases 0 through 6 are complete. Citry's
+generic publishing contracts, slot contracts, client ambient context, and
+docs live-component host are implemented. `citry 0.3.1` and `citry_core 1.4.0`
+provide the released floor for the work, including the corrected Events
+browser asset. Phase 7 has direct styled implementations for Button,
+Field/Input, Form, Tabs, Dialog, Combobox, and semantic Table, plus
+repeatable-form and representative branded compositions. Tabs is the reference
+quality bar. Button, Field/Input, Form, Dialog, and Combobox have now repeated
+that full research, specification, example-planning, implementation, test, and
+documentation pass. Human visual and content polish plus live browser review
+remain for all seven families.
+
+This plan defines the research and decision process for Citry's
+official component library. The ratified product
 target is recorded in
 [`ui_research/product-charter.md`](ui_research/product-charter.md).
 
 The planned Python distribution is `citry-ui`, imported as `citry_ui`. It is a
-separate first-party package built on Citry. The styled component surface is
-usable without design work, while a matching renderless headless surface gives
-authors the same component behavior and binding contract with fully
-author-owned HTML and visual design.
+separate first-party package built on Citry. Phase 7 builds a styled component
+surface that is usable without design work and has Vuetify-level configuration
+and browser interaction. Headless component APIs are parked until real
+application usage reveals their useful contract.
 
 Citry's generic library publishing and engine-neutral invocation APIs are now
-implemented. This document does not select production component-family APIs,
-the v1 inventory, the theme architecture, or the final styled-to-headless
-layering. Those decisions follow the ecosystem study and comparative
-prototypes. For repository operating rules, see
-[`/CLAUDE.md`](../../CLAUDE.md).
+implemented. Production families follow the reusable
+[`component specification template`](ui_components/_template.md). The working
+[`theme and color-scheme contract`](ui_theme.md) fixes light/dark ownership and
+acceptance while the production slice supplies evidence for the final provider
+and global token architecture. The v1 inventory remains a Phase 8 decision.
+For repository operating rules, see [`/CLAUDE.md`](../../CLAUDE.md).
 
 ---
 
@@ -32,7 +44,8 @@ ambition to established suites such as Vuetify:
 - styled and useful immediately;
 - native to the framework's component, slot, asset, and client models;
 - accessible across the supported interaction modes;
-- customizable from theme tokens down to headless component behavior;
+- customizable through theme tokens, variants, slots, documented parts, and
+  explicit HTML attributes;
 - broad enough for the common layout, navigation, form, feedback, overlay,
   and data-display needs of an application.
 
@@ -42,17 +55,17 @@ from evidence rather than treating maximum component count as the goal.
 
 ## 2. Decisions already made
 
-The maintainer ratified these product decisions on 2026-07-23:
+The maintainer ratified these product decisions on 2026-07-23 and updated the
+Phase 7 scope on 2026-07-29:
 
 1. The UI library is a separate first-party Python distribution. The leading
    names are the `citry-ui` distribution and the `citry_ui` import package.
 2. The default experience is a styled, coherent, batteries-included library,
    not a collection of unstyled primitives.
-3. Each component family should also expose a headless version. It renders no
-   library-owned HTML and exposes state, native attributes, ARIA relationships,
-   handlers, focus targets, and other behavior through required slots or
-   parts. The author owns the markup and visual design. The exact packaging
-   and API shape remains a research question.
+3. Phase 7 ships styled production components only. Existing headless pressure
+   components are not production commitments. Reconsider a headless surface
+   after the library has broader real-world usage, concrete customization
+   requests, and representative pages for API and performance evaluation.
 4. The breadth target is a general-purpose suite. A developer should not need
    another generic component library for ordinary application UI.
 5. The library uses Citry's public server and browser contracts. It does not
@@ -130,7 +143,7 @@ preferred design.
 influence the criteria.
 
 **Output:** [`ui_research/product-charter.md`](ui_research/product-charter.md),
-covering users, jobs, styled and headless promises, meaning of "default",
+covering users, jobs, the styled production promise, meaning of "default",
 breadth, framework integration, accessibility, support floors, hard
 boundaries, and evaluation weights.
 
@@ -272,121 +285,132 @@ The packaging and registration spike covers:
 - installation and runtime without Node, a compiler, a CDN, or a network
   download.
 
-**Gate:** at least two viable hypotheses advance to the same comparative
-prototype. Local-artifact installation, registration, assets, and atomic
-rollback have passed. Publication still waits for a released compatible Citry
-lower bound and multi-release upgrade, downgrade, and uninstall fixtures.
+**Gate:** the publishing architecture is proven. Local-artifact installation,
+registration, assets, and atomic
+rollback have passed. The current development and API contract is
+`citry>=0.3.1,<0.4.0`. Multi-release upgrade, downgrade, uninstall, and wheel
+fixtures remain publication work. Phase 7 uses one public architecture:
+`LibraryComponent` definitions in the separate `citry-ui` distribution,
+registered explicitly into each Citry engine. The earlier H1/H2/H3 comparison
+is historical research rather than multiple advancing production architectures.
 
-### Phase 7 entry program: scenarios, Storybook, and browser readiness
+### Phase 7 readiness and optional preview tooling
 
-Phase 7 does not begin by polishing the current pressure components. Its entry
-program establishes the tooling and framework behavior needed to compare
-production candidates without accidentally releasing the probes as public
-APIs.
+The framework and quality foundations needed to begin Phase 7 now exist:
 
-The immediate execution order is:
+- the accepted Python-owned
+  [scenario-catalog contract](ui_research/scenario-catalog.md) separates
+  reusable states and workflows from their quality-tool consumers;
+- the docs site provides first-party live components and a playground without
+  requiring Node;
+- direct Playwright, axe, Lighthouse, screenshots, host tests, and manual
+  accessibility work remain the authoritative quality paths;
+- `LibraryComponent`, `ComponentLike`, nested declarations, typed slot data,
+  slot-data destructuring, `SlotInput[T]` validation, and atomic library
+  registration are implemented;
+- server and client `provide`, `inject`, and `unprovide` contracts are
+  implemented and browser-tested; and
+- the released `citry 0.3.1` and `citry_core 1.4.0` line is the production
+  development floor.
 
-1. Align the research documents and define the Python-owned
-   [scenario-catalog contract](ui_research/scenario-catalog.md).
-2. Render the same current server-static scenarios through both
-   `@storybook/server-webpack5` and `@storybook/html-vite`. This is a
-   provisional comparison and does not select the adapter.
-3. Run disposable browser-readiness journeys with direct Playwright against
-   standalone scenario routes, while previewing the same interactive scenarios
-   through both Storybook adapters. Implement and verify client ambient context
-   before any proof that depends on nested context, caller slots, or teleports.
-4. Select the Storybook adapter from the combined static and interactive
-   evidence. Freeze the formal Phase 7 component specifications, scenario set,
-   and acceptance fixtures; ratify or revise the already drafted quantitative
-   budgets; and confirm the advancing architecture candidates.
-5. Implement the same paired slice for both candidates and run conformance,
-   accessibility, visual, host, lifecycle, security, asset, and performance
-   measurements.
-6. Write the Phase 8 architecture decision and v1 roadmap.
+Storybook is now independent optional extension work, tracked in
+[`extensions_storybook.md`](extensions_storybook.md) and its supporting
+[`extensions_storybook/`](extensions_storybook/) research. Its private Citry
+UI spike remains useful evidence about Controls, generated stories, asset
+activation, preview replacement, and contributor workflow. Adapter selection
+and broader interactive coverage do not gate Citry UI specifications,
+implementation, documentation, or publication.
 
-Steps 1 and 2 are complete. Client ambient context and the first disposable
-reactive-state and asset-readiness slice of step 3 are also complete. The
-static and first interactive two-adapter results are recorded in
-[`ui_research/storybook-adapter-exploration.md`](ui_research/storybook-adapter-exploration.md).
-Both adapters advance and selection remains deferred until the complete
-interactive set in steps 3 and 4.
+The implementation slice now contains the seven required public families.
+Direct cross-browser suites cover native actions and forms, compound Tabs,
+native modal Dialog, remote Combobox request ordering, keyed semantic Table,
+browser-owned dynamic Form membership, and the repeatable business workflow. Tabs includes
+server reorder and removal, deterministic focus recovery, and client-owned
+removal callbacks. The representative public-site form and dashboard exercise
+two brands through documented tokens and parts. Aggregate Brotli assets and
+local interaction timing are inside the frozen budgets, and the representative
+complete page has zero serious or critical axe violations. Tabs has also
+completed the first full public-documentation pass: 13 component-owned
+previews cover composition, configuration, variants, density, layout,
+controlled selection, disabled behavior, keyboard activation, overflow,
+nesting, direction, and theming. Its public reference is generated from the
+family-owned `api.yml`.
 
-The Python scenario catalog is the source of truth for isolated states and
-composed pages. Storybook is the planned maintainer state browser once its
-feasibility gate passes. The same catalog also renders complete standalone
-Citry pages for Lighthouse, manual keyboard and assistive-technology work,
-performance measurement, and direct Playwright tests. Those pages are test
-surfaces, not a second gallery product. A custom state-browser UI is considered
-only if Storybook fails documented requirements.
+Phase 7.5 now supplies the repository-side release qualification described
+below: per-state axe coverage, visual-candidate capture, Nu HTML and Lighthouse
+CI profiles, Bootstrap and Tailwind coexistence, bounded asset and scaling
+profiles, host fixtures, public live examples, and clean-wheel lifecycle jobs.
+That infrastructure does not turn configured CI into a pass or replace human
+review. The first hosted Nu, Lighthouse, and clean-wheel records, approved
+screenshots, manual keyboard and assistive-technology results, and real mobile
+and Safari evidence remain release tasks.
 
-The two-stage Storybook comparison uses identical scenario metadata,
-rendering, assets, and behavior. The first stage proves the projection and
-server-static cases. The second proves that both adapters can preview every
-interactive readiness scenario before selection. Storybook does not execute
-the Playwright journeys or become a conformance runner. Small adapter smoke
-tests may open its preview iframe to verify mounting, asset activation, Control
-updates, diagnostics, and cleanup when a story is replaced.
+An InfiniteScroll observer and async-cleanup proof remains optional if those
+required cases expose the same lifecycle constraints. All disposable helpers
+stay outside the public `citry_ui` manifest. A custom gallery is not planned:
+the docs live-component host is the first-party preview surface, and a
+different state browser should be designed only if a concrete need remains
+unserved by the docs site and the optional Storybook extension.
 
-Together the two stages must prove Args and Controls, Citry CSS and JavaScript
-activation, Events transport, nested and composed states, accessibility
-inspection, deterministic generated stories, and direct standalone links.
-Both adapters now use the same-origin `/citry/**` route through a development
-or static-build reverse proxy. This route carries scenario HTML, the Citry
-runtime, and extension and component assets; later Events scenarios must use
-the same route and exercise the host's real security policy. A `postMessage`
-bridge remains a fallback for a future sandboxed or cross-origin deployment.
-The comparison also records whether a static Storybook build embeds frozen
-output or requires a reachable Citry rendering service.
+The remaining sequence is now:
 
-Node may be required for contributor-only Storybook tooling. Installing and
-running `citry-ui`, rendering standalone scenarios, and using the component
-library in an application remain Node-free.
+1. run the hosted Nu, Lighthouse, visual-candidate, and clean-wheel jobs;
+2. review and approve or reject the visual candidates, including the final
+   Tabs human polish and live browser pass;
+3. complete manual assistive-technology and real-device evidence;
+4. add multi-release upgrade and downgrade evidence after two Citry UI
+   releases exist; and
+5. write the Phase 8 production contract and v1 roadmap from the accepted
+   evidence.
 
-The current Button, Field/Input, semantic Table, and Tabs catalog contains no
-library-owned client interaction. Native controls retain their browser
-behavior, but Tabs expresses server-selected semantics only. Before formal
-Phase 7 specifications, disposable proofs outside the public `citry_ui`
-manifest must exercise:
+Button completed first, followed by Field/Input, Form, Dialog, and Combobox. Dialog now
+has its revised native-modal runtime, nested ownership and focus evidence,
+structured reference, and eleven component-owned live examples. Human visual,
+keyboard, assistive-technology, and real-device polish remains part of the
+release review. Combobox now has its strict editable-single-select contract,
+independent value/query/open ownership, abort-safe local and remote behavior,
+native Form and IME evidence, structured reference, and nine astronomy-themed
+live examples. Table now has its native simple-Table boundary, one-row footer,
+column-wide cell attributes, named responsive scrolling, distinct sticky
+modes, nested-Table CSS isolation, structured reference, and nine
+astronomy-themed live examples. Human visual, keyboard,
+assistive-technology, print, and real-device review remains release evidence.
+This follows component dependencies and increases interaction risk gradually.
+Each pass starts by auditing the existing
+design, source, tests, quality scenarios, public guide, and structured
+reference. Existing work may be retained when current evidence supports it,
+but it does not bypass research or freeze the API. No runtime changes begin
+until the family's current-source record, complete specification, and example
+coverage catalog are ready for review.
 
-- reactive component state, browser-local events, and client asset activation
-  (proved for the first private counter probe, including Controls replacement,
-  delayed and failed readiness, stale-response rejection, basic story
-  navigation, exact component cleanup, Alpine disposal, CSS readiness, and
-  stale physical-listener disposal);
-- a two-phase client activation contract, or a deliberately narrower readiness
-  contract, because a hidden connected candidate already runs Citry and Alpine
-  initialization and can otherwise affect global listeners, Events, focus,
-  teleports, and CSS before promotion;
-- focus-preserving fragment insertion and morphing;
-- ambient context over logical ancestry, caller-owned slots, nested providers,
-  teleports, reactive updates, defaults, and cleanup;
-- stateful Tabs with keyboard navigation, focus, activation modes, dynamic
-  removal, server replacement, and morph preservation;
-- an Overlay/Dialog with teleport, focus trap and restoration, document
-  listeners, stacking, outside interaction, and removal cleanup;
-- a remote Combobox or MultiSelect with keyboard behavior, loading, request
-  cancellation, stale-result rejection, and native form output;
-- Form-owned dynamic child registration, unregistration, validation, and
-  submission; and
-- one composed repeatable-form workflow that combines those behaviors.
+The Tabs pass left one maintained source for each reusable lesson:
 
-An InfiniteScroll observer/async/cleanup proof is optional if the required
-cases already expose the relevant lifecycle constraints. Every readiness proof
-must also verify activation and cleanup while Storybook switches scenarios.
-These proofs may be deliberately plain and short-lived. They do not establish
-component names, markup, CSS, or release support.
+| Concern | Maintained source |
+|---|---|
+| Family research, source freshness, specification, implementation, and review order | [`citry_ui` component policy](../../packages/py/citry_ui/docs/component-authoring.md#requalify-one-component-family-at-a-time) |
+| Required component decisions and source record | [Component specification template](ui_components/_template.md) |
+| Result-first examples, controls, page tone, and coverage catalog | [Preview and public-example contract](ui_components/_preview.md) |
+| Server inputs, client overrides, callbacks, slots, anatomy, templates, and CSS authoring | [Repository component best practices](../best-practices/component-authoring.md) |
+| Theme and color-scheme ownership | [Theme contract](ui_theme.md) |
+| Reusable quality scenarios and complete-page routes | [Scenario catalog](ui_research/scenario-catalog.md) |
+| Automated and human evidence | [Quality strategy](ui_research/quality-test-strategy.md) |
+| Tabs-specific products, standards, complaints, choices, and example progression | [Tabs specification](ui_components/tabs.md) |
 
-### Phase 7: comparative vertical slice
+The family workflow links these documents rather than copying their details.
+When a later family exposes a reusable rule, update the narrowest owning source
+before beginning the next family.
 
-**Goal:** test the decisions that are expensive to reverse.
+### Phase 7: production vertical slice
 
-The slice is selected after synthesis and the entry program. Every advancing
-architecture implements the same six component-family probes in both styled
-and headless forms. Form composition and client ambient context are
-cross-cutting workflow and framework probes rather than styled/headless
-families. One shared conformance suite must establish that paired components
-have the same semantics, accessibility, state, Events, morph, and lifecycle
-behavior. The eight required probes are:
+**Goal:** prove that Citry UI can deliver Vuetify-level component
+configuration and browser interaction through native Citry contracts before
+expanding the catalog.
+
+The slice is selected after synthesis and the readiness work. Production
+components use the one `LibraryComponent` publishing architecture and own
+their styled markup, configuration, interaction, and accessibility behavior.
+Form composition and client ambient context are cross-cutting workflow and
+framework probes. The eight required probes are:
 
 - Button for attributes, variants, slots, icons, loading, and disabled
   semantics;
@@ -418,7 +442,7 @@ insertion; cleanup; server and native form behavior; CSS coexistence;
 deterministic assets; deep Django and FastAPI fixtures; and registration,
 asset, render, form, and Events smoke tests for every shipped Citry host.
 
-The styled prototype must also prove the product claim rather than only
+The styled slice must also prove the product claim rather than only
 technical correctness. Before implementation, the comparison freezes:
 
 - complete fixtures for every supported state, variant, size, density,
@@ -430,44 +454,609 @@ technical correctness. Before implementation, the comparison freezes:
   interaction feedback, responsiveness, and consistency;
 - two distinct brand adaptations using documented tokens and parts only.
 
-The typed Python prototype uses direct tags and an imported engine-neutral
+Each production component comparison must also inventory the notification
+surfaces of relevant React, Vue, Web Component, and native counterparts:
+names, trigger conditions, request-versus-commit meaning, controlled and
+programmatic behavior, ordering, cancellation, and payload. Citry UI uses
+optional callback inputs such as `onValueChange` through `$c-props` for
+component-authored notifications and leaves Alpine `@...` listeners to native
+browser events. A custom DOM event advances only with a documented interop or
+lifecycle need that those two surfaces cannot meet.
+
+The same comparison must inventory composition surfaces: ordinary children,
+named and scoped slots, render callbacks, collection renderers, and
+replaceable internal parts. The resulting specification records every chosen
+slot's purpose, data shape, fallback, cardinality, nesting, and error behavior.
+Data-driven families must explicitly decide whether they need dynamic keyed
+slot namespaces such as `header.<key>` or `item.<key>`, including their name
+grammar, fallback precedence, collisions, typing, and introspection. A dynamic
+slot family does not advance until Citry's parser and runtime behavior are
+proven for it.
+
+Every production family fills the complete component specification template
+before implementation. The template also classifies stable public API,
+behavioral and required structural contracts, evolvable default design, and
+private implementation. Exact theme values and incidental wrappers must not
+become accidental semantic-versioning commitments merely because a screenshot
+or implementation test observes them.
+
+After the family works end to end, repeat its public-anatomy review before
+freezing the API. Implementation evidence may show that a structural component
+only groups declarations or forwards inputs. Remove it when an existing owner
+can accept those inputs and preserve every supported composition, validation,
+semantic, customization, and extension scenario. Tabs establish the reference
+case: `CTabs` can collect lazy `CTab` and `CTabPanel` declarations and generate
+the single semantic TabList internally, so a public list wrapper does not earn
+its API cost.
+
+Styled components support the default light and dark schemes as a library
+quality requirement. Applications choose and persist the active scheme and
+own brand overrides. The Phase 7 Overlay slice must prove nested scopes and
+theme continuity when an overlay's physical DOM location differs from its
+Citry owner before the final theme-provider API is selected.
+
+The typed Python slice uses direct tags and an imported engine-neutral
 component invocation from ordinary application code. It also obtains the
 ordered `LibraryInstallation` and its exact-definition class lookup for
 advanced composition and introspection, exercises the supported extension
-mechanism, and verifies that each pair is exposed deterministically.
+mechanism, and verifies that each component is exposed deterministically.
 
 Before implementation, Phase 7 ratifies or records a revision to the Phase 6
 budgets for compressed asset size, first-interaction cost, documented-token
 theme coverage, selector overrides, registration failures, lifecycle cases,
 visual-regression tolerances, and complete styled-state coverage.
 
-The slice also measures the cost of styled components rendering their headless
-variant internally against independent styled/headless implementations that
-share behavior without nesting renders. Record server render time, rendered
-component count, allocations, output size, and client initialization across
-realistic trees. The pressure components do not decide this production
-architecture in advance.
+Headless APIs and the styled-via-headless performance comparison are parked.
+Revisit them only after the styled catalog and an actual application provide
+representative pages, concrete authoring needs, and realistic render trees.
+
+### Phase 7.5: repository release qualification
+
+**Goal:** turn the implemented Phase 7 slice into reproducible release
+evidence using work that can be completed in this repository and its CI. This
+phase adds quality infrastructure, fixtures, host coverage, package checks,
+and user-facing examples. It does not add another required component family or
+change the publishing architecture.
+
+Phase 7.5 is distinct from manual release qualification. Repository automation
+can prepare screen-reader scripts, visual candidates, and real-device task
+lists, but it cannot honestly approve visual design, verify announcements from
+assistive technology, or claim behavior on hardware it did not run. Those
+results remain explicit human release records, not simulated passing tests.
+
+Phase 7.5 follows a bounded evidence budget. Each automated profile names the
+release decision it protects, the failure threshold that would change that
+decision, and the smallest representative scenario set that can exercise it.
+Pull requests run deterministic correctness, one Chromium accessibility and
+interaction profile, docs synchronization, asset budgets, and wheel inventory.
+Broader browser, visual, host, and scaling profiles run on a schedule or for a
+release candidate only after their harness is stable. A local exploratory run
+stops within five minutes unless a concrete failure requires a narrower
+follow-up. Adding another state, browser, viewport, host, or instance count is
+not useful by itself: the addition must protect a distinct decision that the
+existing sample cannot make.
+
+The scenario catalog uses pairwise and boundary coverage rather than a
+Cartesian product of every state and environment. Metadata can enumerate the
+full supported state contract while one scenario exercises several compatible
+states. A component specification remains the source of the complete contract;
+the catalog records which representative scenario supplies evidence for each
+part of it.
+
+#### Component-owned files and package boundary
+
+Phase 7.5 groups files by the component family a maintainer changes. The target
+layout is:
+
+```text
+packages/py/citry_ui/
+  citry_ui/components/
+    ctabs/
+      __init__.py
+      ctabs.py
+      README.md
+      api.md
+      api.yml
+      tests/
+        e2e/
+  citry_ui/quality/
+    scenarios.py
+    routes.py
+    tools/
+```
+
+The family directory owns runtime code, focused internal notes, public docs
+source, component scenarios, and focused tests. Shared scenario types, route
+hosting, tool adapters, composed workflows, and cross-family checks live once
+under `quality/`. The package catalog remains
+`citry_ui/components/__init__.py`; a component author does not edit registration
+plumbing.
+
+Only `__init__.py`, the runtime module, shared runtime helpers, and `py.typed`
+belong in the wheel. Setuptools excludes family `tests/` and quality tooling,
+and package data does not include `README.md`, `api.md`, `api.yml`, screenshots,
+reports, or fixtures. The wheel qualification check inspects the built artifact
+and rejects those paths. This is an enforced package boundary, not a
+convention.
+
+Each family owns two authoritative public documentation sources. `api.md`
+contains explanation and task-oriented examples. `api.yml` contains the
+complete structured reference for every component in the family: server
+inputs, client inputs, slots and slot data, callbacks and native events, public
+selectors, reflected attributes, public CSS variables, and named interfaces as
+applicable. Whole-family semantics, keyboard, focus, forms, and lifecycle
+behavior belong in the explanatory guide. The docs builder validates the YAML
+schema, generates the fixed reference hierarchy and tables, and appends them to
+the guide.
+The docs catalog maps the combined result directly to
+`/ui-library/components/<slug>/`; the static builder and development server
+read the authoritative files without a second copy under
+`docs_site/content/`. A docs guard reports a missing or invalid source.
+
+The explanatory half follows reader priority rather than the implementation
+layout. Lead with the smallest valid composition, then the most common
+configuration and controlled-use tasks. Move nesting, alternate interaction
+modes, environmental behavior, and other specialized cases later. Keyboard,
+focus, and semantics that apply to a compound family as a whole belong in this
+explanatory half rather than under one component's API entry.
+
+The API-reference half uses this categorical hierarchy when applicable:
+
+1. **Inputs**, split by component and explicitly named **server inputs** or
+   **client inputs**. Every server subsection says that values are passed
+   through `<c-CXyz />` or `CXyz(...)`; every client subsection says that
+   values are passed through `$c-props="{ ... }"`.
+2. **Slots**, split by owner component. Each row shows the complete inline data
+   shape and links a named type to **Interfaces** when one exists.
+3. **Events**, split by owner component. Callback inputs such as
+   `onValueChange` are event entries even though `$c-props` carries them;
+   native DOM events are identified separately. Event rows define signature,
+   trigger, timing, payload, controlled behavior, and cancellation.
+4. **Methods**, with one row per imperative surface. Write `-` when the family
+   exposes no methods.
+5. **CSS**, split by the component that reads each variable. State where a
+   variable should be applied and do not imply that a descendant reads a
+   root-scoped variable independently. Each row records its accepted value
+   kind, purpose, and current fallback or fallback derivation.
+6. **Attributes**, split by rendered component. This name covers supported
+   reflected `data-*` values and identity hooks. Do not call them "state
+   attributes", because Citry State means server event-handler state. Explain
+   before the tables that attributes are read-only CSS and inspection output,
+   not configuration inputs.
+7. **Selectors**, split by component. Document the exact
+   `[data-citry-ui-part="..."]` selector, element, and purpose. Public docs use
+   "Selectors" because these are attribute selectors, not Shadow DOM
+   `::part()` selectors; the internal anatomy may still call each marker a
+   part.
+8. **Interfaces**, containing every public alias and data shape referenced by
+   earlier rows, including explicit fields for non-empty slot data and an
+   explicit empty signature for empty data.
+
+Reference rows remain understandable without following a link. When an input
+uses a public alias, its Type cell shows the complete inline expansion and a
+link to the alias under **Interfaces**. Interface links provide a stable target
+and reusable definition; they do not hide the type needed to read the row.
+
+Keep the reference categorical and terse. Routine contract detail belongs in
+table rows. Longer behavior that applies across components or explains an edge
+case belongs in the guide, preferably beside the task it affects or in a short
+admonition. Avoid trailing prose below a table when the same rule fits in its
+rows or in the category introduction.
+
+Omit empty per-component subsections. If a top-level category has no entries
+for the whole family, write `-` and do not enumerate every component that lacks
+the surface.
+
+Every table and entry in `api.yml` receives a stable kebab-case ID. The docs
+renderer derives anchors for individual inputs, slots, events, methods, CSS
+variables, attributes, selectors, interfaces, and interface fields from those
+IDs. A reader can link directly to one contract entry without relying on an
+auto-generated table or heading ID. Released IDs do not change. The optional
+selector-entry `anchor` field exists only to retain an already published
+noncanonical anchor during migration. Explanatory copy appears before the
+table it qualifies, not after it.
+
+The cross-family contract test compares every implementation's exact public
+variables, selector markers, and reflected attributes with both its production
+specification and public reference. It also locks the 20-section specification
+shape, public-variable resolution through private fallbacks, and the template
+ordering that keeps an owned selector marker after consumer attribute spreads.
+Adding or removing a reflected attribute requires updating this explicit
+inventory, so a runtime-only public surface cannot ship accidentally.
+
+Citry UI is a top-level docs area with grouped navigation; Components is one of
+its groups. Component pages do not use `/examples/` for either their public
+route or their embedded presentation. Complete reader-facing modules live in
+the owning family's `snippets/` directory. Use `<c-ui-demo>` when a
+build-rendered result should precede a source disclosure; use `<c-live-code>`
+for source-first teaching. The local authoring server adds a lazy **Try live**
+workspace to `<c-ui-demo>` using its workspace `citry-ui` wheel. Deployed
+component pages omit that action until the published wheel is installed in the
+committed browser runtime. Repository-only snippet directories are excluded
+from the wheel.
+
+#### 7.5.1 Shared state catalog and standalone routes
+
+Create one reusable Python scenario source for every frozen state and
+meaningful state combination. Playwright, axe, screenshots, Lighthouse, Nu
+HTML, and host fixtures should consume the same composition and data instead
+of maintaining tool-specific copies. Reader-facing docs snippets remain
+task-shaped modules that use only public package imports, so they do not import
+repository-only quality tooling; their behavior must still be covered by the
+corresponding shared scenario.
+
+The catalog must include:
+
+- Button variants, intents, sizes, loading positions, disabled state, slots,
+  and native action types;
+- Field/Input required, disabled, read-only, invalid, described, controlled,
+  uncontrolled, reset, and native constraint states;
+- Form native-valid, native-invalid, attempted, disabled, read-only,
+  submitting, dynamic-membership, external-control, reset, and native
+  submission states;
+- Tabs orientation, activation, direction, loop, density, variant, disabled,
+  long-label, nested, controlled, reordered, and removed states;
+- Dialog open, closed, controlled, persistent, nested, long-content, form,
+  removed-trigger, and removed-open states;
+- Combobox local, remote, open, selected, empty, loading, failed, aborted,
+  stale, disabled, read-only, invalid, and form-reset states;
+- Table normal, empty, loading, error, dense, striped, hover, sticky,
+  overflowing, large-output, reordered, edited, and removed-row states;
+- the repeatable contact workflow and both representative composed pages; and
+- light, dark, RTL, forced-colors, reduced-motion, narrow, touch-emulated, and
+  zoom profiles wherever they affect the component.
+
+Every scenario declares its stable ID, purpose, supported states, fixture
+data, expected assets, safe standalone status, and applicable quality tools.
+State setup belongs to the Python scenario or an explicit browser action, not
+to hidden test-only markup. Standalone routes include complete document
+metadata so page-level tools audit a realistic page.
+
+**Acceptance:** a registry test proves unique IDs and deterministic ordering;
+every supported public state maps to at least one scenario; standalone and
+embedded rendering agree on markup, assets, semantics, and behavior; and no
+catalog import requires Node, a host framework, network access, or a running
+server.
+
+#### 7.5.2 Automated accessibility and semantic contracts
+
+Expand the representative-page axe smoke test into per-state coverage. Each
+visible state is activated before scanning, including open overlays, visible
+errors, remote failures, loading status, empty collections, and content after
+Events replacement. Hidden DOM does not count as coverage of an open state.
+
+For each scenario, combine axe with focused assertions for:
+
+- roles, accessible names, descriptions, errors, and referenced IDs;
+- expanded, selected, disabled, invalid, busy, modal, and live-region state;
+- landmark, heading, form, list, table, and dialog structure;
+- DOM and accessible order after add, remove, reorder, open, close, and morph;
+- keyboard focus, roving `tabindex`, `aria-activedescendant`, restoration, and
+  escape paths; and
+- duplicate IDs, dangling references, and relationships after repeated render.
+
+Store compact accessible-structure snapshots only for intentional public
+relationships. Do not snapshot incidental wrappers or private class names.
+Axe `incomplete` results receive an explicit disposition with a linked manual
+task; broad rule exclusions are not accepted as fixes.
+
+**Acceptance:** zero serious or critical axe violations; every incomplete
+result is owned and explained; all APG and native keyboard cases pass in the
+supported browser matrix; and every public semantic relationship has a focused
+assertion that fails when the relationship is broken.
+
+#### 7.5.3 Visual and environmental regression profiles
+
+Build Playwright screenshot profiles from the shared scenarios. Pin browser,
+operating environment, fonts, device scale, viewport, animation policy, and
+color scheme. Record both the pixel threshold and the maximum differing-pixel
+ratio. Mask only content proven to be nondeterministic.
+
+The initial matrix covers:
+
+- default light and dark schemes;
+- both Orbit and Ledger brand adaptations;
+- every public variant, size, density, state, and slot-backed anatomy;
+- focus-visible, hover, active, disabled, loading, invalid, empty, and error;
+- horizontal and vertical Tabs, RTL, long labels, and overflowing Table;
+- Dialog backdrop, nested scope, long content, and narrow viewport;
+- 200 and 400 percent zoom-oriented layouts;
+- reduced motion and forced colors; and
+- desktop, narrow mobile viewport, and touch-emulated input.
+
+Automated work can generate candidate baselines, prove deterministic output,
+and enforce future diffs. Maintainer approval of the initial images and an
+independent review of hierarchy, typography, spacing, color, responsiveness,
+and consistency remain human release tasks.
+
+**Acceptance:** every frozen visual state has a deterministic candidate
+baseline; subsequent CI runs remain within the 0.1 percent differing-pixel
+budget; there are no unexplained masks or platform-dependent fonts; and the
+review ledger distinguishes approved, rejected, and awaiting-human-review
+images.
+
+#### 7.5.4 Complete-page HTML and Lighthouse validation
+
+Run the Nu Html Checker against rendered standalone routes rather than source
+templates. Validate the default and composed pages, every component state that
+changes structure, and output after representative Events replacements.
+Diagnostics must name the scenario and preserve the rendered artifact for
+inspection.
+
+Add Lighthouse CI for the public-site form and dashboard. Use a pinned Chrome
+profile, at least three runs per page, explicit resource budgets, and source-
+controlled assertions. Require an accessibility score of 100 for these
+controlled first-party fixtures while treating that score only as a regression
+smoke test. Track performance, best-practice, LCP, CLS, and interaction
+findings diagnostically without claiming the library alone guarantees Web
+Vitals.
+
+**Acceptance:** zero Nu HTML errors caused by Citry UI; Lighthouse
+accessibility is 100 on both representative pages; resource budgets pass; run
+variance and configuration are recorded; and generated reports are available
+as CI artifacts without becoming package contents.
+
+#### 7.5.5 CSS coexistence and customization proof
+
+Test the actual pinned compiled output of Bootstrap and Tailwind, including
+Tailwind's reset, rather than a small hand-written imitation. Exercise each
+stylesheet before and after Citry UI to make cascade-order assumptions visible.
+Plain CSS remains the control profile.
+
+The fixtures verify native controls, Button, Field/Input, Form, Tabs, Dialog,
+Combobox, and Table in each environment. They assert semantics and computed
+styles for layout, visibility, box sizing, typography inheritance, focus,
+disabled state, overlay backdrop, popup stacking, and responsive overflow.
+Orbit and Ledger continue to prove customization using documented variables
+and parts only.
+
+**Acceptance:** components remain operable and legible in plain CSS,
+Bootstrap, and Tailwind profiles; no fix requires `!important`, a private
+class, a private data marker, or a private variable; selector specificity
+stays within the frozen budget; and any required reset or cascade-layer order
+is documented as public installation behavior.
+
+#### 7.5.6 Performance, scaling, assets, and cleanup
+
+Extend the existing Brotli asset and local interaction tests into reproducible
+route and scaling profiles. Measure a control page and subtract Citry, Alpine,
+Events, and host costs before attributing incremental work to Citry UI.
+
+Record:
+
+- raw, gzip, and Brotli bytes per family and for representative routes;
+- asset request count, duplicate registration, and fragment insertion;
+- initialization and first interaction over thirty runs in pinned desktop and
+  mobile-emulation profiles;
+- 1, 10, 100, 500, and 1,000 instances where the component contract permits;
+- large Table output and the repeatable workflow under add, remove, and
+  reorder pressure;
+- cold load, warm cache, repeated morph, and fragment activation; and
+- retained listeners, observers, timers, requests, scroll locks, component
+  roots, and detached DOM after cleanup checkpoints.
+
+Prefer direct counters and browser performance marks over score-only gates.
+Profiles that cannot run reliably on every pull request move to nightly CI,
+but their thresholds remain executable and versioned.
+
+**Acceptance:** the Phase 7 compressed-asset and p95 interaction budgets pass;
+Table remains script-free; inactive Button retains no global resource;
+fragment insertion executes each family asset once; cleanup returns every
+tracked resource to baseline; and scaling results have an explicit threshold
+or a documented diagnostic-only status.
+
+#### 7.5.7 Host integration matrix
+
+Render the same shared scenarios through Django and FastAPI rather than
+testing host-specific toy components. Each deep fixture covers registration,
+document and fragment assets, native forms, Events, errors, mounted prefixes,
+request context, cleanup, and the representative composed pages. Generic ASGI
+and WSGI receive smaller smoke coverage for the same core contracts.
+
+Browser assertions should be shared across hosts wherever behavior is meant to
+be identical. Host-specific tests remain only for routing, request objects,
+middleware, CSRF, static serving, and framework error integration. No adapter
+may patch or copy Citry UI component definitions.
+
+**Acceptance:** Django and FastAPI pass the render, asset, form, Events,
+fragment, error, and teardown matrix; ASGI and WSGI smoke tests pass; mounted
+prefixes and asset URLs are correct; and behavioral differences are either
+fixed or documented as host contracts rather than hidden test branches.
+
+#### 7.5.8 Wheel and clean-environment lifecycle
+
+Build the `citry-ui` wheel once and use that exact artifact for all package
+qualification. Do not let source-checkout imports accidentally satisfy wheel
+tests.
+
+The matrix covers:
+
+- wheel inventory, `RECORD`, license, `py.typed`, modules, and declared assets;
+- clean `uv add` and `pip install` environments;
+- the lowest and highest currently testable Python and compatible Citry
+  versions;
+- offline installation from a prepared wheelhouse;
+- import and render with no Node executable, network access, Django, or
+  FastAPI installed;
+- reinstalling the same wheel, replacing a local candidate wheel, and clean
+  environment uninstall;
+- confirmation that uninstall removes `citry_ui` while leaving `citry`
+  importable; and
+- registration, two-engine isolation, collisions, rollback, introspection,
+  assets, and a browser smoke test from the installed artifact.
+
+Upgrade and downgrade between multiple published `citry-ui` releases cannot
+be completed before those releases exist. Phase 7.5 supplies the reusable
+harness and tests every currently available local and published artifact; the
+multi-release result remains a future release record.
+
+**Acceptance:** the built wheel is self-contained and deterministic; clean and
+offline installs work; runtime performs no build or download; uninstall is
+isolated; installed-artifact browser smoke passes; and the deferred
+multi-release cells are named as unavailable rather than counted as passing.
+
+#### 7.5.9 Public docs live examples
+
+Add one polished docs live example for each production family, plus the
+repeatable workflow and representative compositions. Examples use only public
+imports, registration, tags, kwargs, slots, callbacks, variables, parts, and
+native browser behavior. They must not import test helpers or private
+component modules.
+
+Each family documentation demonstrates:
+
+- installation with `uv add citry-ui` and explicit library registration;
+- direct template usage and imported Python composition where useful;
+- common configuration, slots and slot data, callbacks, native events, forms,
+  validation, and controlled or uncontrolled state as applicable;
+- public theme variables, parts, light/dark ownership, and one focused brand
+  override;
+- no-JavaScript behavior and the interactions that require Citry's client
+  runtime; and
+- accessibility expectations, known limitations, and links to the exact
+  component contract.
+
+The examples share scenario data where that improves fidelity, but their copy
+and explanation are edited for readers rather than exposing internal research
+terminology. Playground auto-install and auto-registration wait for a
+published compatible wheel; the docs can use the workspace package in the
+meantime.
+
+**Acceptance:** every public family has a rendered and tested live example;
+all snippets execute in CI; examples pass relevant axe, HTML, browser, and
+asset checks; public links resolve; and no example relies on Storybook, Node at
+runtime, a private selector, or unpublished behavior presented as stable.
+
+#### 7.5.10 CI organization and exit record
+
+Wire fast deterministic checks to pull requests, the full browser, visual,
+host, and scaling matrix to nightly CI, and clean-wheel plus release reports to
+release-candidate workflows. Cache browsers and toolchains without caching
+rendered success. Upload rendered HTML, axe details, screenshots, Lighthouse
+reports, traces, and package inventories only when useful for diagnosis.
+
+The Phase 7.5 exit record contains:
+
+- a machine-readable list of scenarios and applicable quality profiles;
+- exact tool and browser versions;
+- passed automated gates and links to CI artifacts;
+- open axe incomplete results and manual-task owners;
+- candidate visual baselines awaiting or carrying human approval;
+- unavailable real-device, assistive-technology, and multi-release cells;
+- known limitations with a release decision; and
+- the evidence that supports each Phase 8 contract recommendation.
+
+**Repository gate:** all applicable automated scenarios pass with no silent
+skip, generated artifacts are current, budgets pass, and any unavailable cell
+is explicitly excluded from the automated claim. The broader release remains
+blocked on the separately recorded visual approval, manual keyboard and
+assistive-technology tasks, real Safari/mobile samples, and independent design
+review.
+
+#### Phase 7.5 implementation record
+
+Repository implementation status through 2026-08-05:
+
+- component families co-locate runtime code, maintainer notes, public docs
+  source, reader-facing snippets, family scenarios, and focused browser tests
+  under `citry_ui/components/c*/`;
+- the docs catalog publishes every authoritative family source under the
+  top-level `/ui-library/components/` area. Every family page owns a
+  public-import-only live module. Its `api.md` teaches component use, while
+  schema-validated `api.yml` data generates the categorical Inputs, Slots,
+  Events, Methods, CSS, Attributes, Selectors, and Interfaces reference. The
+  renderer derives stable entry anchors and the docs guard enforces the direct
+  source-to-route contract. Tabs, Button, Field/Input, Form, Dialog, and
+  Combobox, and Table have complete feature-by-feature preview catalogs;
+- the Field/Input pass retains a separate relationship owner and native Input,
+  makes Field authoritative for composed state, makes Form-disabled state
+  dominant, enforces exactly one control across library and custom content,
+  supports unnamed client-only inputs, uses `sm`, `md`, and `lg` visual sizes,
+  and preserves native character-width `size` through `attrs`. Its twelve
+  tidepool examples cover composition, configuration, variants, layout,
+  states, forms, controlled values, native types, custom controls, direction,
+  and theming;
+- the Form pass keeps the browser as the complete validity, membership,
+  submission, reset, and `FormData` authority; exposes direct native routing
+  inputs; shares only disabled and read-only descendant configuration; uses a
+  private first legend to close the disabled-fieldset exemption; guards later
+  submits without disabling successful controls; and has twelve observatory
+  examples covering configuration, native validation, reset, submitting,
+  multiple submitters, external ownership, server errors, dynamic controls,
+  and theming;
+- the machine-readable catalog has ten ready routes: all seven component
+  families, the repeatable contact workflow, and the Orbit and Ledger
+  compositions. Embedded and complete-document renders are checked for the
+  same normalized component markup;
+- the bounded Chromium profile scans every route before and after one
+  representative action. Serious and critical axe violations fail the run,
+  while the two observed incomplete rule classes have source-controlled
+  dispositions tied to manual tasks;
+- Tabs and both representative compositions run against pinned Bootstrap and
+  compiled Tailwind output on both sides of Citry's CSS. Focused tests also
+  prove public variables and selectors through computed styles;
+- `capture_visuals.py` creates pairwise light, dark, narrow, RTL,
+  reduced-motion, forced-colors, touch, and 200- and 400-percent-reflow
+  candidates with pinned browser metadata and `awaiting-human-review` status.
+  Scheduled CI uploads the candidates rather than treating generated pixels
+  as approved;
+- every ready route is wired through the pinned Nu wrapper in pull-request CI.
+  A dedicated Lighthouse profile audits the Orbit form and Ledger dashboard
+  three times, requires accessibility and best-practice scores of 100, enforces
+  a total byte ceiling, and uploads reports;
+- asset tooling records raw, gzip, and Brotli bytes per family and for the
+  catalog. Frozen compressed budgets and interaction checks remain the gates;
+  the 1, 10, 100, 500, and 1,000 scaling profile is diagnostic and scheduled;
+- Django and FastAPI serve both shared compositions and all assets they
+  reference. Generic ASGI and WSGI adapters serve the shared Tabs assets;
+- CI builds the pure-Python wheel once, checks its exact runtime allowlist,
+  installs the same artifact with pip and `uv add` in the lowest and highest
+  Python environments, proves offline reinstall and isolated uninstall, and
+  runs an installed-artifact Chromium smoke test; and
+- `exit_record.py` records exact installed tool versions, scenario metadata,
+  profile results, artifact links, axe incomplete ownership, visual-review
+  status, unavailable cells, and known limitations without converting
+  configured work into a pass. `MANUAL_QUALIFICATION.md` defines the bounded
+  visual, keyboard, assistive-technology, and real-device sessions referenced
+  by that record.
+
+The repository implementation does not complete the human release record.
+Initial visual candidates still need maintainer approval and independent design
+review. Keyboard scripts need manual assistive-technology runs, and real
+Safari, mobile hardware, touch, zoom, and high-contrast samples remain
+unavailable until somebody runs them. The first hosted Nu, Lighthouse, and
+clean-wheel CI artifacts remain pending until these workflow changes run.
+Multi-release upgrade and downgrade evidence remains unavailable until at least
+two `citry-ui` releases exist. Localization and headless counterparts remain
+the separate follow-up work already described in this plan.
 
 ### Phase 8: decision and v1 roadmap
 
-**Goal:** select the architecture from evidence and define the public product.
+**Goal:** freeze the production component contract from Phase 7 evidence and
+define the public v1 product.
 
 **Outputs:**
 
-- architecture decision record, including rejected alternatives and
+- production contract decision record, including parked alternatives and
   falsifiers;
 - the product-facing compatibility, extension, and release commitments around
   the implemented Python publishing, composition, and per-Citry class-access
   contract;
 - v1 component inventory and dependency order;
 - a component-specification template requiring focused ecosystem research and
-  explicit inputs, slots, slot data, events, states, semantics, keyboard and
-  focus behavior, parts, variables, browser behavior, and acceptance tests;
+  explicit inputs, static and dynamic slots, slot data, slot fallback and
+  collision rules, callbacks, exceptional custom events, states, semantics,
+  keyboard and focus behavior, parts, variables, browser behavior, and
+  acceptance tests;
 - component, package, asset, browser, and accessibility work packages;
 - semantic-versioning policy for names, kwargs, slots, emitted markup, CSS
   tokens and classes, JavaScript hooks, and accessibility-driven DOM changes;
-- documentation and Storybook support policy over the Python-owned scenario
-  catalog, including standalone routes for complete-page quality work;
+- documentation support policy over the Python-owned scenario catalog,
+  including docs live examples and standalone routes for complete-page
+  quality work; optional Storybook support remains a separate extension;
+- playground integration after publication: pin the compatible `citry-ui`
+  wheel, register it after each playground registry reset, allow `citry_ui`
+  imports, and resolve direct library-component final expressions;
 - a separate follow-up research brief for localization after component text,
   formatting, direction, and locale-selection requirements are concrete;
 - release, compatibility, and maintenance policy.
@@ -475,13 +1064,14 @@ architecture in advance.
 **Gate:** independent adversarial review of the prototype-backed decision
 before implementation dispatch.
 
-The timing is deliberate: release core Citry first, then pass the scenario and
-Storybook entry gate before broad production component implementation.
-Storybook is the planned maintainer state browser, while the Python catalog and
-standalone routes remain the framework-native rendering and quality contract.
-No separate custom gallery is planned. If Storybook cannot browse, control,
-activate, isolate, and reliably clean up realistic Citry scenarios, record the
-failure before designing a replacement.
+The timing remains deliberate: the released `citry 0.3.1` and
+`citry_core 1.4.0` baseline supports production component work. Production
+component work proceeds through specifications, docs live examples,
+standalone scenarios, and direct quality tools. Storybook may later add an
+optional contributor previewer, but it is not an entry gate. No separate
+custom gallery is planned unless a concrete need remains after using the docs
+site and evaluating the optional Storybook extension. Publication still needs
+the released-artifact compatibility matrix.
 
 ## 5. Evaluation rubric
 
@@ -491,7 +1081,7 @@ The product charter freezes the rubric before the breadth scan:
 |---|---:|
 | Accessibility correctness | 20 |
 | Fit with Citry's server and client model | 20 |
-| Customization and styled/headless pairing | 15 |
+| Configuration and customization depth | 15 |
 | API consistency and composition | 15 |
 | Useful default visual design | 10 |
 | General-purpose component coverage | 10 |
@@ -513,7 +1103,7 @@ must change the plan rather than receive a favorable explanation afterwards.
 | Accessible composite controls require a second client framework | Narrow the first release or choose a different behavior architecture. |
 | Common compound APIs cannot be expressed through Citry's component and slot contracts | Redesign the public composition model before building breadth. |
 | Morphing breaks focus, edits, overlay identity, stale-result guards, or cleanup | Hold the affected component family until the lifecycle contract passes. |
-| Two distinct brand themes require undocumented selector overrides | Strengthen the token/part contract or prefer the headless/source-owned hypothesis. |
+| Two distinct brand themes require undocumented selector overrides | Strengthen the token/part contract before expanding the catalog. |
 | Static visual primitives activate substantial client machinery | Split static and interactive paths before expanding the inventory. |
 | Clean installation, registration, upgrade, or rollback cases fail | Simplify the distribution and registration contract or hold the release until its lifecycle is explicit. |
 | The prebuilt assets exceed the agreed payload or interaction budgets | Split delivery, reduce runtime work, or narrow the first release. |

@@ -1735,7 +1735,7 @@ assert str(Hello()) == "<p>Hello!</p>"   # element -> render -> serialize
 inlines an embedded render). `TemplateNode` renders a nested template (a `c-*`
 attribute whose value is itself a template) against the same context. Escaping
 lives in `citry/util/html.py`, a thin layer over `markupsafe` exporting
-`escape` and `Markup` (aliased `SafeString`).
+`escape` and `Markup`.
 
 **Why:** Makes dynamic templates actually render, with correct HTML escaping.
 
@@ -1750,7 +1750,7 @@ lives in `citry/util/html.py`, a thin layer over `markupsafe` exporting
   in both body-text and double-quoted attribute positions. This matters because
   the compiler inlines a dynamic attribute on a plain HTML element as an
   `ExprNode` between literal quote strings, so the same node and escaper serve
-  both positions. `SafeString` (= `Markup`) passes through unescaped via the
+  both positions. `Markup` passes through unescaped via the
   `__html__` protocol. Adds `markupsafe` as a runtime dependency of `citry`.
   Rationale: HTML escaping is security-sensitive, so reuse the battle-tested
   standard rather than hand-roll it.
@@ -2111,7 +2111,7 @@ the DJC scope machinery removed.
   `CitryRender.serialize`.
 - **Escaping at the earliest sensible point.** String/scalar contents are
   escaped at construction; a function's return value is escaped per call
-  (`escape` honors `__html__`, so `SafeString` stays trusted). Matches
+  (`escape` honors `__html__`, so `Markup` stays trusted). Matches
   `{{ expr }}` escaping.
 - **`Slot(Slot(...))` raises** (ambiguous metadata, as in DJC);
   `normalize_slot_fills` copies an incomplete Slot (filling in

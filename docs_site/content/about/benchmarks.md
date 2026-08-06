@@ -58,7 +58,7 @@ These are relative numbers from a single machine, not absolute guarantees.
 
 The full methodology, the exact engine versions, and step-by-step instructions
 to run the comparison yourself live in the benchmarks README:
-[benchmarks/README.md](https://github.com/citry-dev/citry/blob/main/benchmarks/README.md).
+[benchmarks/README.md]({{ repo_url }}/blob/{{ repo_edit_branch }}/benchmarks/README.md).
 
 One trap worth repeating from there: the Rust extension must be built in
 release mode before measuring. A debug build makes citry's Rust-backed paths
@@ -66,6 +66,7 @@ many times slower and invalidates every citry number.
 
 ## Related pages
 
-- [Performance](/advanced/performance/) covers [`Const`][citry.Const], the
+- [Const optimization](/advanced/const-optimization/) covers
+  [`Const`][citry.Const], the
   opt-in optimization that renders a template's unchanging parts once and
   reuses them across renders.

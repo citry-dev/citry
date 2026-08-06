@@ -36,4 +36,4 @@ for people to find Citry and write components correctly the first time.
 
 We update the allow-list on a rolling basis as new well-behaved crawlers appear.
 To request that a specific bot be added or removed,
-[file an issue](https://github.com/citry-dev/citry/issues){: target="_blank" rel="noopener"}.
+[file an issue]({{ repo_issues_url }}){: target="_blank" rel="noopener"}.

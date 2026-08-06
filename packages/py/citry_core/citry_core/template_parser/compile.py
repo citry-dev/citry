@@ -40,7 +40,7 @@ def compile_template(
 
             from citry_core.template_parser import parse_template, compile_template
             from citry.nodes import (
-                ExprNode, ComponentNode, IfNode, ForNode,
+                ExprNode, ElementKeyNode, ComponentNode, IfNode, ForNode,
                 SlotNode, FillNode, StaticHtmlAttr, ExprHtmlAttr,
                 TemplateHtmlAttr, TemplateNode,
             )
@@ -51,6 +51,7 @@ def compile_template(
             ns = {
                 "source": '<c-Card title="Hi">body</c-Card>',
                 "ExprNode": ExprNode,
+                "ElementKeyNode": ElementKeyNode,
                 "ComponentNode": ComponentNode,
                 "IfNode": IfNode,
                 "ForNode": ForNode,

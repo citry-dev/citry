@@ -48,7 +48,7 @@ const meta = {
 },
   parameters: {
   "citry": {
-    "catalogSchemaVersion": 2,
+    "catalogSchemaVersion": 1,
     "clientInteractive": false,
     "generatorVersion": 1,
     "scenarioId": "table/static",

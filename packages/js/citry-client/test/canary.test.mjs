@@ -32,6 +32,7 @@ import {
   ALPINE_VERSION as EXPECTED_VERSION,
   citryClientBuildOptions,
   instrumentAlpineDirectives,
+  instrumentAlpineMorphPlanner,
 } from "../build-support.mjs";
 
 globalThis.MutationObserver = class {
@@ -64,6 +65,23 @@ test("the pinned Alpine directive handler is instrumented exactly", () => {
 
   assert.ok(instrumented.includes("runCitryAmbientDirective(el, directive.original, utilities.cleanup, handler)"));
   assert.ok(instrumented.includes("() => handler.inline(el, directive, utilities)"));
+  assert.notEqual(instrumented, source);
+});
+
+test("the pinned Alpine morph working sequence is instrumented exactly", () => {
+  const source = readFileSync(require.resolve("@alpinejs/morph/dist/module.esm.js"), "utf8");
+  const instrumented = instrumentAlpineMorphPlanner(source);
+
+  assert.ok(instrumented.includes("function planBetween(from, to, options = {})"));
+  assert.ok(instrumented.includes("planning: options.planning || false"));
+  assert.ok(instrumented.includes("keyMapFilter: options.keyMapFilter || (() => true)"));
+  assert.ok(instrumented.includes("if (!context.keyMapFilter(el)) continue"));
+  assert.ok(
+    instrumented.indexOf("if (!context.keyMapFilter(el)) continue") <
+      instrumented.indexOf("let theKey = context.getKey(el)", instrumented.indexOf("context.keyToMap")),
+  );
+  assert.ok(instrumented.includes("if (!context.planning && from.nodeType === 1 && window.Alpine)"));
+  assert.ok(instrumented.includes("Alpine._citryPlanBetween = planBetween"));
   assert.notEqual(instrumented, source);
 });
 

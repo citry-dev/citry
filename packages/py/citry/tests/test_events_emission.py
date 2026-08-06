@@ -52,6 +52,11 @@ def _unb64(value):
     return base64.b64decode(value).decode()
 
 
+def _fetch_descriptor(entry):
+    encoded = entry[0] if isinstance(entry, list) else entry
+    return json.loads(_unb64(encoded))
+
+
 def _instances(manifest):
     return manifest["componentInstances"]
 
@@ -472,7 +477,7 @@ class TestEventsManifestFragment:
         from citry.ext.events.emission import _EVENTS_BOOTSTRAP_STUB
 
         html = search(query="frag").render().serialize(deps_strategy="fragment")
-        fetch_js = [json.loads(_unb64(item)) for item in _deps_manifest(html)["fetch"]["js"]]
+        fetch_js = [_fetch_descriptor(item) for item in _deps_manifest(html)["fetch"]["js"]]
         # The stub is an inline descriptor (the manager runs those
         # synchronously while processing the manifest, events.md 5.2), the
         # runtime a URL descriptor the manager fetches once per page. The
@@ -526,7 +531,7 @@ class TestCssLifecycleEmission:
             """
 
         html = Card().render().serialize(deps_strategy="fragment")
-        fetch_css = [json.loads(_unb64(item)) for item in _deps_manifest(html)["fetch"]["css"]]
+        fetch_css = [_fetch_descriptor(item) for item in _deps_manifest(html)["fetch"]["css"]]
         assert fetch_css == [
             {
                 "tag": "link",

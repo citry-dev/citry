@@ -1,138 +1,283 @@
 ---
 title: Expressions
-description: How Citry's {{ }} expression syntax works, which Python is allowed, why builtins like len() are missing, and how expression comments behave.
+description: Insert Python values in a Citry template, prepare names for the template, and understand escaping and sandbox limits.
 ---
 
 # Expressions
 
-Anywhere in a template you can drop a value into the output with double curly
-braces. Whatever is between the braces is a small piece of Python, evaluated
-against the data your component exposes, and its result is rendered where you
-wrote it.
+Use `{{ ... }}` to evaluate a Python expression inside a template:
 
-```html
-<p>Hello, {{ user.name }}</p>
+```citry-html
+<p>
+  Hello, {{ user.name }}
+</p>
+<p>
+  Your total is {{ price * quantity }}.
+</p>
 ```
 
-The same rules apply inside dynamic `c-*` attributes, so once you know how
-expressions work here you know how they work there too. See
-[Dynamic attributes](/syntax/dynamic-attributes/) for the attribute side.
+Citry evaluates both expressions on the server.
 
-## What you can write
+[Dynamic attributes](/syntax/dynamic-attributes/) use the same expressions,
+but without the braces:
 
-An expression is a single Python expression: something that produces a value.
-Attribute access, arithmetic, comparisons, boolean logic, indexing, slicing,
-conditional (ternary) expressions, method calls, literals, and f-strings all
-work.
-
-```html
-<p>{{ user.name }}</p>
-<p>{{ price * quantity }}</p>
-<p>{{ greeting + ', ' + user.name }}</p>
-<p>{{ user.name.upper() }}</p>
-<p>{{ 'Member' if user.is_active else 'Guest' }}</p>
-<p>{{ items[0] }}</p>
+```citry-html
+<p c-title="user.name">
+  Hello, {{ user.name }}
+</p>
 ```
 
-These six lines cover the common shapes: attribute access, arithmetic, string
-joining, a method call, a conditional expression, and indexing.
+## Placement
 
-More advanced forms work too: list, dict, set, and tuple literals,
-comprehensions, lambdas, and the walrus operator (`name := value`). If you need
-an inline assignment inside an expression, the walrus operator is the way to do
-it.
+The `{{ ... }}` Python expressions are allowed only outside of tags:
 
-## What you cannot write
+```citry-html
+{# ✅ Valid #}
+<p title="Some title">
+  {{ content }}
+</p>
 
-An expression must be a single expression, not a statement. Assignments with
-`=`, augmented assignments like `+=`, `del`, `import`, `def`, `class`, and the
-`for`, `while`, `if`, `try`, `return`, and `yield` statements are all rejected
-when the template compiles. When you reach for one of these, move the logic into
-`template_data` (shown below) and pass the finished value into the template.
+{# ❌ Invalid #}
+<p title="{{ content }}">
+</p>
 
-## Python builtins are not available
+{# ❌ Invalid #}
+<p title="Some title" {{ content }}>
+</p>
 
-This is the surprise most people hit first. Builtin functions like `len()`,
-`range()`, `str()`, `int()`, and `sum()` are not available inside expressions.
-Names in an expression are looked up in the data your component provides, and
-the builtins are not part of that data.
-
-So the natural first attempt fails:
-
-```html
-<!-- Renders an error: the name `len` is not available in expressions -->
-<p>{{ len(items) }} items</p>
+{# ❌ Invalid #}
+<{{ tag }} title="Some title">
+</{{ tag }}>
 ```
 
-You see `KeyError: 'len'`, because `len` is looked up in the render context
-(where it does not exist) rather than in Python's builtins.
+## Template variables
 
-The fix is to compute the value in plain Python and hand it to the template. A
-component's `template_data` method returns the names the template can use, and
-it runs as ordinary Python where every builtin is available.
+By default, every field in a component's [`Kwargs`][citry.Component.Kwargs]
+is available by name:
 
 ```citry
 from citry import Component
 
+class Greeting(Component):
+    class Kwargs:
+        name: str
+
+    template = "<p>Hello, {{ name }}</p>"
+```
+
+Use [`template_data`][citry.Component.template_data] when the template needs a
+value you first have to prepare in Python.
+
+Here Python counts the items and exposes `count`:
+
+```citry
+from citry import Component
 
 class Cart(Component):
-    template = """
-      <p>{{ count }} items</p>
-    """
+    class Kwargs:
+        items: list[str]
 
-    def template_data(self, kwargs, slots):
-        return {"count": len(kwargs["items"])}
+    def template_data(self, kwargs: Kwargs, slots):
+        return {"count": len(kwargs.items)}
+
+    template = "<p>{{ count }} items</p>"
 ```
 
-Here `template_data` calls `len` itself and exposes the result as `count`. The
-template just displays the prepared name.
-
-You can also expose a builtin under a name and call it from the template. If
-`template_data` returns `{"max": max}`, then `{{ max(scores) }}` works, because
-now `max` really is one of the names in the context.
-
-## How name lookups fail
-
-It helps to know the two ways a name can fail, because the messages differ.
-
-A name that is simply not in the context raises `KeyError`. You can see this
-directly with [safe_eval][citry.citry] applied to a bare name:
+Overriding `template_data()` replaces the default mapping. In this example,
+`count` is available but `items` is not. Return both when you need both:
 
 ```python
-from citry_core.safe_eval import safe_eval
-
-expr_func = safe_eval("x")
-expr_func({})  # raises KeyError: 'x'
-
-expr_func = safe_eval("x")
-expr_func({"x": None})  # returns None
+return {
+    "items": kwargs.items,
+    "count": len(kwargs.items),
+}
 ```
 
-A present name whose value is `None` resolves fine, as the second call shows. It
-is the absence of the name, not a falsy value, that raises.
+Missing variable raises `KeyError`.
 
-A name that the sandbox actively blocks fails with `SecurityError` instead. The
-sandbox blocks underscore and dunder attribute access (like `obj._secret` or
-`__class__`), unsafe builtins such as `eval`, `exec`, and `open` (even when
-passed in under a different name), and `str.format` and `str.format_map` (use an
-f-string instead). So `KeyError` means "this name is missing" and
-`SecurityError` means "this is not allowed", which is a useful distinction when
-you are debugging a template.
+!!! note
+
+    If [sandboxing](#sandbox) is disabled, missing variable instead raises `NameError`.
+
+## Python expressions
+
+You can use the familiar expression forms that produce a value:
+
+```citry-html
+{{ user.name.upper() }}
+{{ items[0] }}
+{{ names[1:3] }}
+{{ "Member" if user.is_active else "Guest" }}
+{{ f"{user.name}: {score}" }}
+{{ any_score > 0 and account.is_active }}
+```
+
+Literals, calls, attribute access, indexing, slicing, arithmetic,
+comparisons, boolean operations, and conditional expressions all work.
+
+An expression must produce a value. Python statements such as `import`,
+`return`, `del`, `def`, and an assignment with `=` are not allowed. Async
+expressions and `yield` are not supported either.
+
+A Python string may contain `}}`; Citry still finds the real end of the
+expression correctly:
+
+```citry-html
+<p>{{ "A string containing }} is fine" }}</p>
+```
+
+Citry expressions are Python, not Django or Jinja expressions. There are no
+template filters, and `|` keeps its Python meaning as the [bitwise OR operator](https://docs.python.org/3/reference/expressions.html#binary-bitwise-operations){: target="_blank" rel="noopener"}.
+
+!!! note
+
+    Comprehensions, lambdas, and assignment expressions with `:=` work too, but
+    usually make a template harder to scan. Prepare complicated values in
+    `template_data()` instead. A `:=` assignment changes the render context, so a
+    name it creates can affect expressions that render later in the same context.
+
+## Python builtins not available
+
+Functions such as `len()`, `range()`, `str()`, and `sum()` are not added to a
+template automatically.
+
+This fails with `KeyError: 'len'`:
+
+```citry-html
+{{ len(items) }} items
+```
+
+Compute the value in `template_data()`, as the `Cart` example above does. You
+can deliberately expose a function too:
+
+```python
+return {
+    "len": len,
+    "items": kwargs.items,
+}
+```
+
+The template can then call `len(items)`, because both names are
+available to it.
+
+## Expression results
+
+Expression results follow these rules:
+
+| Type | Result |
+|--|--|
+| `None` | Empty string |
+| Ordinary values | Converted to text and HTML-escaped |
+| Composed components <br/> ([`Component()`][citry.Component], [`CitryElement`][citry.CitryElement]) | Behaves as part of template |
+| Rendered components <br/> ([`Component().render()`][citry.CitryElement.render], [`CitryRender`][citry.CitryRender]) | Behaves as part of template |
+| [`Slot`][citry.Slot] | Behaves as part of template |
+| [`Markup`][citry.Markup] or an object with `__html__()` | Inserted as trusted HTML |
+
+Serializing a component turns it into a regular string.
+If you then try to insert it into a template, it gets HTML-escaped:
+
+```citry
+table = str(
+    Table(headers=headers, rows=rows)
+)
+
+class Page(Component):
+    def template_data(self, kwargs, slots):
+        return {"table": table}
+
+    template = "{{ table }}"
+
+page = str(Page())
+print(page)
+# '&lt;table&gt;...'
+```
+
+## Bypass HTML escape
+
+HTML escaping includes quotes, apostrophes, `<`, `>`, and `&`.
+
+[`Markup`][citry.Markup] and `__html__()` bypass the escaping that
+normally protects the page from untrusted content.
+
+`citry.Markup` is exactly
+[`markupsafe.Markup`](https://markupsafe.palletsprojects.com/en/stable/escaping/#markupsafe.Markup){: target="_blank" rel="noopener"},
+re-exported unchanged. `Markup(value)` trusts the complete value. It does not
+sanitize, validate, or escape anything, so use it only when the complete value
+is trusted HTML.
+
+Dynamic values must be added through `Markup.format()`, which escapes ordinary
+strings. Passing an interpolated string to the constructor trusts the dynamic
+part too:
+
+```python
+from citry import Markup
+
+user_title = '<img src=x onerror="alert(1)">'
+
+# Wrong: the constructor trusts the interpolated user value.
+unsafe_title = Markup(f"<h1>{user_title}</h1>")
+
+# Right: Markup.format() escapes the user value.
+safe_title = Markup("<h1>{}</h1>").format(user_title)
+```
+
+Citry also trusts the result of an object's `__html__()` method. Return
+`Markup` and compose dynamic values through its escaping operations:
+
+```python
+from citry import Markup
+
+class MetaTag:
+    name: str
+    content: str
+
+    def __html__(self) -> Markup:
+        return Markup('<meta name="{}" content="{}">').format(
+            self.name,
+            self.content,
+        )
+```
+
+To make Ruff's
+[`S704`](https://docs.astral.sh/ruff/rules/unsafe-markup-use/){: target="_blank" rel="noopener"}
+rule recognize
+the Citry import path, add this to your `pyproject.toml`:
+
+```toml
+[tool.ruff.lint.flake8-bandit]
+extend-markup-names = ["citry.Markup"]
+```
+
+This setting extends S704's recognized constructors; enable S704 through your
+Ruff lint selection if it is not already enabled.
 
 ## Comments in expressions
 
-Inside an expression you can write an ordinary Python `#` comment. Everything
-after the `#` to the end of the line is ignored, exactly as in Python.
+Inside an expression, `#` starts an ordinary Python comment:
 
-```html
-<div c-class="get_classes()  # fetch dynamic classes">
-  {{ user.name  # display username }}
+```citry-html
+<div c-class="get_classes()  # prepare the class list">
+  {{ user.name  # show the person's name }}
 </div>
 ```
 
-This works in `{{ }}` and in `c-*` expression attributes alike. Note that `#` is
-a comment only inside an expression. In plain template text or inside a quoted
-static attribute value, `# ...` is just literal text.
+The comment ends either at the end of the line, or at the end of the expression region (closing quote or `}}`).
+See [Comments and literal text](/syntax/comments/).
 
-For comments that live outside expressions (HTML comments and template
-comments), see [Comments](/syntax/comments/).
+## Sandbox
+
+All Python expressions run in a security sandbox, whether it's  `{{ ... }}` or `c-` attributes.
+
+The sandbox blocks following:
+
+What | How
+--|--
+Private attributes `_abc` | Access blocked
+Dunder attributes `__abc` | Access blocked
+Unsafe functions such as `eval`, `exec`, and `open` | Calling blocked
+`str.format()` and `str.format_map()` | Calling blocked (use an f-string instead)
+
+A blocked operation raises [`SecurityError`][citry.SecurityError].
+
+Read [Security](/security/) for the complete sandbox contract and the settings
+that control it.

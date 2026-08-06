@@ -249,7 +249,7 @@ Two related calls help when a single path is not enough:
   do not run `citry watch` and do not add the framework helper; leaving them out
   is all it takes.
 
-For how citry caches rendered work in the first place, see
-[Performance](/advanced/performance/) and [Caching](/advanced/caching/). For
-loading JS and CSS from files, see
-[JS and CSS dependencies](/advanced/js-and-css-dependencies/).
+For how Citry reuses rendered work, see
+[Const optimization](/advanced/const-optimization/) and
+[Cache rendered output](/advanced/caching/). For loading JavaScript and CSS
+from files, see [Dependency files](/advanced/dependency-files/).

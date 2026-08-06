@@ -3,16 +3,16 @@
 The project gate: run every check in one pass and report all results.
 
 Phases: uv lock, cargo fmt, cargo clippy, cargo test, ruff check, ruff format,
-mypy, pyright, citry-client (tsc, biome, and the canary over the events client
-package), pytest, and the custom validators (scripts/validate.py). Every phase
-runs even after an earlier one fails, so a single invocation surfaces every
-problem at once instead of one-at-a-time.
+mypy, pyright, the private protocol packages, citry-client (tsc, biome, and the
+canary over the events client package), the generated docs playground bundle,
+the VS Code language extension, pytest, and the custom validators
+(scripts/validate.py). Every phase runs even after an earlier one fails, so a
+single invocation surfaces every problem at once instead of one-at-a-time.
 
 This only CHECKS; it never edits files. Fix the reported issues yourself, then
 re-run. It assumes the workspace is already set up (`uv sync --all-packages`,
-plus `pnpm install` for the pinned Node tools: pyright and the citry-client
-toolchain) and that `cargo`, `uv`, `node`, `pnpm`, and a Rust toolchain are
-on PATH.
+plus `pnpm install` for the pinned Node tools and package-local checks) and that
+`cargo`, `uv`, `node`, `pnpm`, and a Rust toolchain are on PATH.
 
 Usage:
     python scripts/check.py                    # human-readable, streamed output
@@ -63,6 +63,7 @@ def _phases() -> list[tuple[str, list[str]]]:
                 # the typed-base contract test runs under mypy, not pytest
                 "packages/py/citry/tests/test_events_typing.py",
                 "packages/py/citry/tests/test_library_component_typing.py",
+                "packages/py/citry_lsp/citry_lsp",
                 "packages/py/citry_ui/citry_ui",
                 "packages/py/citry_ui/tests/typing_contract.py",
                 "packages/py/citry_core/citry_core",
@@ -107,6 +108,37 @@ def _phases() -> list[tuple[str, list[str]]]:
         (
             "citry-client",
             ["pnpm", "--dir", "packages/js/citry-client", "run", "check"],
+        ),
+        (
+            "protocol contracts",
+            [
+                *uvr,
+                "python",
+                "-m",
+                "packages.protocol._tooling.check",
+                "packages/protocol/events/v1",
+                "packages/protocol/client_graph/v1",
+            ],
+        ),
+        (
+            "protocol Python copies",
+            [*uvr, "python", "scripts/sync_protocol_python.py", "--check"],
+        ),
+        (
+            "events protocol JavaScript",
+            ["pnpm", "--dir", "packages/protocol/events/v1/js", "run", "check"],
+        ),
+        (
+            "client graph protocol JavaScript",
+            ["pnpm", "--dir", "packages/protocol/client_graph/v1/js", "run", "check"],
+        ),
+        (
+            "docs-playground",
+            ["pnpm", "--dir", "docs_site/_internal/frontend", "run", "check"],
+        ),
+        (
+            "vscode-extension",
+            ["pnpm", "--dir", "packages/editors/vscode", "run", "check"],
         ),
         # `--cov` (no target) uses [tool.coverage.run] source; pytest-cov enforces
         # `fail_under` from [tool.coverage.report] (docs/design/migration_djc_tests.md).

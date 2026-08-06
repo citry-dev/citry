@@ -7,7 +7,7 @@ import re
 
 import pytest
 
-from citry import Citry, CitryRender, Component, Extension, Slot
+from citry import Citry, CitryRender, Component, Extension, Markup, Slot
 from citry.constness import const_value
 from citry.ownership import (
     CitryDomEventClientBindingPayload,
@@ -17,7 +17,6 @@ from citry.ownership import (
     QueueState,
     SourcePolicy,
 )
-from citry.util.html import SafeString
 
 
 def _snapshot(render):
@@ -33,6 +32,9 @@ class TestComponentTagClientBindingOwnership:
 
         class Child(Component):
             citry = c
+            js = """
+              $component(() => {});
+            """
 
             class Kwargs:
                 title: str
@@ -108,6 +110,9 @@ class TestComponentTagClientBindingOwnership:
 
         class Child(Component):
             citry = c
+            js = """
+              $component(() => {});
+            """
             template = """
               <button>child</button>
             """
@@ -279,6 +284,9 @@ class TestComponentTagClientBindingOwnership:
 
         class Child(Component):
             citry = c
+            js = """
+              $component(() => {});
+            """
             template = """
               <i>child</i>
             """
@@ -310,6 +318,9 @@ class TestComponentTagClientBindingOwnership:
 
         class Child(Component):
             citry = c
+            js = """
+              $component(() => {});
+            """
             template = "child"
 
         class Page(Component):
@@ -353,6 +364,9 @@ class TestDynamicTargetOwnership:
 
         class Card(Component):
             citry = c
+            js = """
+              $component(() => {});
+            """
             template = """
               <article><c-slot /></article>
             """
@@ -596,7 +610,7 @@ class TestSlotOwnership:
 
     def test_reused_python_slot_creates_one_logical_supply_per_receiver(self):
         c = Citry()
-        reusable = Slot(SafeString("<small>python</small>"), component_name="Outlet", slot_name="default")
+        reusable = Slot(Markup("<small>python</small>"), component_name="Outlet", slot_name="default")
 
         class Outlet(Component):
             citry = c
@@ -1023,6 +1037,40 @@ class TestDeferredOwnership:
         }
         assert active_fills[0].receiver_render_id in active_instance_ids
         assert active_regions[0].receiver_render_id in active_instance_ids
+
+    def test_child_replacement_does_not_retire_the_fill_owning_parent(self):
+        c = Citry()
+
+        class Active(Component):
+            citry = c
+            template = "<span>active</span>"
+            js = "$component({})"
+
+        class Replace(Component):
+            citry = c
+            template = "<c-slot />"
+
+            def on_render(self):
+                result, error = yield
+                assert result is not None
+                assert error is None
+                return self.slots["default"]
+
+        class Page(Component):
+            citry = c
+            template = "<main><c-replace><c-active /></c-replace></main>"
+
+        render = Page().render()
+        snapshot = _snapshot(render)
+        page_instance = next(record for record in snapshot.logical_instances if record.class_name == "Page")
+        active_fills = [fill for fill in snapshot.logical_fills if fill.state.value == "active"]
+        retired_invocation_ids = {
+            invocation.id for invocation in snapshot.component_invocations if invocation.state.value == "retired"
+        }
+
+        assert page_instance.state.value == "active"
+        assert all(fill.source_invocation_id not in retired_invocation_ids for fill in active_fills)
+        assert "<span" in render.serialize()
 
     def test_extension_wrapper_preserves_reachable_old_output_records(self):
         class WrapPage(Extension):

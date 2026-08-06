@@ -259,7 +259,10 @@ The complete version 1 shape is:
               "default_kind": "missing",
               "default_value_state": "not-applicable",
               "default_value": null,
-              "description": null
+              "description": null,
+              "source_module": "shop.components.card",
+              "source_qualname": "Card.Kwargs",
+              "source_file": "/work/shop/components/card.py"
             }
           ]
         },
@@ -484,6 +487,9 @@ class FieldInfo:
     ]
     default_value: FrozenJsonValue | None
     description: str | None
+    source_module: str | None
+    source_qualname: str | None
+    source_file: Path | None
 ```
 
 The schema `kind` is not cosmetic:
@@ -539,8 +545,26 @@ Schema builders enforce these combinations:
 `FieldInfo` also validates that `required=True` pairs only with
 `default_kind="missing"`, that `type_display` is present exactly when
 `type_fidelity="normalized"`, and that default value state follows the table
-below. Public frozen records reject contradictory constructor arguments in
-`__post_init__`; internal private builders remain the normal construction path.
+below. Field source module and qualified class name are either both present or
+both absent; a source file requires both and is an absolute path. Public frozen
+records reject contradictory constructor arguments in `__post_init__`;
+internal private builders remain the normal construction path.
+
+Field provenance names the authored class whose own annotation declares that
+effective field. It is deliberately per-field: a composed C3 schema can contain
+fields from several base declarations even though `SchemaInfo.import_path`
+names one effective receiving schema. Citry walks the already-created schema
+MRO, skips implementation-only synthesized declaration shells, and reads only
+already-loaded module paths. It does not import modules or scan source to invent
+provenance. Dynamically produced or otherwise unprovable declarations may
+therefore leave all three values absent. A local class can retain a module,
+`<locals>` qualified name, and file while still lacking a stable source join;
+`exec` and REPL classes commonly have no usable file. A tooling consumer may
+conservatively join a non-local qualified class and field name to an exact
+annotated assignment in `source_file`; ambiguity, unreadable source, or a
+missing assignment yields no location. This v1 provenance has no source-content
+fingerprint, so it cannot distinguish two valid source generations that retain
+the same qualified class and field identity.
 
 The recognized adapters remain the current ones: dataclasses, Pydantic v2,
 Pydantic v1, and NamedTuple. Fields stay in declaration order. Runtime

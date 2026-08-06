@@ -54,6 +54,7 @@ import pytest
 pytest.importorskip("pytest_playwright")
 
 from citry import Citry, Component
+from citry.ext.events import event
 
 pytestmark = pytest.mark.e2e
 
@@ -106,7 +107,9 @@ def _make_todo_page() -> tuple[Citry, str, type[Component]]:
             <span class="n" x-text="$state.count"></span>
             <span class="busy" x-text="$loading() ? 'busy' : 'idle'"></span>
             <span class="busy-save" x-text="$loading('save') ? 'busy' : 'idle'"></span>
-            <span class="err" x-text="$error ? $error.message : 'none'"></span>
+            <span class="err" x-text="$error() ? $error().message : 'none'"></span>
+            <span class="err-save" x-text="$error('save') ? $error('save').message : 'none'"></span>
+            <span class="err-find" x-text="$error('find') ? $error('find').message : 'none'"></span>
             <button
               class="inc"
               x-on:click="$state.count = $state.count + 1"
@@ -268,7 +271,7 @@ def test_outgoing_batch_rejects_non_json_args_and_state_before_side_effects(page
     _goto_todo(page, serve_live)
     result = page.evaluate(
         """
-        () => {
+        async () => {
           const internal = Citry.events._internal;
           const id = document.querySelector(".todo").getAttribute("data-cid");
           const anchor = internal.getAnchor(id);
@@ -423,9 +426,9 @@ def test_narrow_model_gates_writes_and_refreshes_on_a_live_descriptor(page: Any,
     assert result["query"] == "hats"
     assert result["count"] == 0
 
-    # Re-processing metadata for one live id must update the Sets closed over
-    # by every live proxy of that class. Descriptors are class-global even
-    # when a fragment carries only one of several sibling instances.
+    # Re-processing graphless metadata moves the listed live anchor onto the
+    # refreshed legacy descriptor. A graph-backed sibling remains tied to its
+    # revision-scoped contract.
     refreshed = page.evaluate(
         """
         async () => {
@@ -502,13 +505,13 @@ def test_narrow_model_gates_writes_and_refreshes_on_a_live_descriptor(page: Any,
     )
 
     assert "writable fields: (none)" in refreshed["rejected"]
-    assert "writable fields: (none)" in refreshed["siblingRejected"]
+    assert refreshed["siblingRejected"] is None
     assert refreshed["settlement"] == "rejected"
     assert refreshed["staleWireUpdates"] is None
     assert refreshed["pending"] == {}
-    assert refreshed["siblingPending"] == {}
+    assert refreshed["siblingPending"] == {"query": "also blocked"}
     assert refreshed["query"] == "hats"
-    assert refreshed["siblingQuery"] == "boots"
+    assert refreshed["siblingQuery"] == "also blocked"
 
 
 # ----- scopes -----
@@ -857,6 +860,14 @@ def test_shared_root_resolves_magics_to_the_innermost_instance(page: Any, serve_
             def ping(self, state):
                 return None
 
+        js = """
+          $component(({ onEvent }) => {
+            onEvent("shared:ping", () => {
+              window.__childSharedPings = (window.__childSharedPings || 0) + 1;
+            });
+          });
+        """
+
         template = """
           <p class="shared" x-text="$state.owner"></p>
         """
@@ -876,9 +887,14 @@ def test_shared_root_resolves_magics_to_the_innermost_instance(page: Any, serve_
           $component((ctx) => {
             window.__wrap = {
               stateOwner: ctx.state ? ctx.state.owner : null,
+              loading: [typeof ctx.loading, ctx.loading(), ctx.loading("pong")],
+              error: [typeof ctx.error, ctx.error(), ctx.error("pong")],
               sendEvent: typeof ctx.sendEvent,
               onEvent: typeof ctx.onEvent,
             };
+            ctx.onEvent("shared:ping", () => {
+              window.__wrapSharedPings = (window.__wrapSharedPings || 0) + 1;
+            });
           });
         """
         template = """
@@ -902,7 +918,29 @@ def test_shared_root_resolves_magics_to_the_innermost_instance(page: Any, serve_
     marker = page.evaluate("""() => document.querySelector(".shared").getAttribute("data-cid")""")
     assert len(marker.split()) == 2  # both ids on the one element, innermost last
     assert page.locator(".shared").inner_text() == "child"
-    assert page.evaluate("window.__wrap") == {"stateOwner": "wrap", "sendEvent": "function", "onEvent": "function"}
+    assert page.evaluate("window.__wrap") == {
+        "stateOwner": "wrap",
+        "loading": ["function", False, False],
+        "error": ["function", None, None],
+        "sendEvent": "function",
+        "onEvent": "function",
+    }
+    shared = page.evaluate(
+        """
+        async () => {
+          const root = document.querySelector(".shared");
+          const ids = root.getAttribute("data-cid").split(/\\s+/).filter(Boolean);
+          await Citry.events.applyActions([{
+            action: "event",
+            eventName: "shared:ping",
+            detail: {},
+            target: "render:" + ids[ids.length - 1],
+          }]);
+          return [window.__wrapSharedPings || 0, window.__childSharedPings || 0];
+        }
+        """
+    )
+    assert shared == [1, 1]  # the exact shared root belongs to both scoped subscriptions
 
 
 # ----- the two identities and the three-way split (stubbed render metadata) -----
@@ -1036,13 +1074,18 @@ def test_different_class_adopts_wholesale_and_plain_html_discards(page: Any, ser
 
     result = page.evaluate(
         """
-        () => {
+        async () => {
           const internal = Citry.events._internal;
           const cardId = document.querySelector(".card").getAttribute("data-cid");
           const panelClass = internal.getAnchor(
             document.querySelector(".panel").getAttribute("data-cid")
           ).classId;
           const anchor = internal.getAnchor(cardId);
+          let rejectOldCall;
+          internal.setTransport(() => new Promise((_resolve, reject) => {
+            rejectOldCall = reject;
+          }));
+          const oldCall = Citry.events.send(cardId, "save", {}).catch(() => {});
           anchor.stateProxy.title = "local-title"; // pending write, dropped by the class switch
           const before = { proxy: anchor.stateProxy, values: anchor.values };
 
@@ -1071,6 +1114,12 @@ def test_different_class_adopts_wholesale_and_plain_html_discards(page: Any, ser
             oldFieldWriteThrew: oldFieldWrite !== null && oldFieldWrite.includes("not client-writable"),
           };
 
+          rejectOldCall({ status: 409, code: "conflict", message: "old class failure" });
+          await oldCall;
+          adopted.oldFailureDropped =
+            anchor.errorBox.current === null &&
+            Object.keys(anchor.errorBox.handlers).join(",") === "flip";
+
           const anchorsBefore = internal.anchors.size;
           const plain = internal.linkRenderedInstance(anchor, null);
           const inert = window.Alpine.evaluate(document.querySelector(".card"), "$state.title");
@@ -1097,6 +1146,7 @@ def test_different_class_adopts_wholesale_and_plain_html_discards(page: Any, ser
             "classId": result["adopted"]["classId"],  # asserted non-trivially below
             "token": "tok-p",
             "oldFieldWriteThrew": True,
+            "oldFailureDropped": True,
         },
         "plain": {
             "branch": "plain-html",
@@ -1142,7 +1192,7 @@ def test_state_is_inert_for_unregistered_marker_and_pointed_outside(page: Any, s
 
 def test_loading_and_error_transitions_with_a_stubbed_transport(page: Any, serve_live: Any) -> None:
     # The anchor-side send pipeline drives $loading (callable, per-handler)
-    # and $error (last envelope, cleared on the next success) around a
+    # and $error (callable, retained per handler) around a
     # transport stub set through the internal hook. The call record the
     # transport receives carries the instance's class, event, faithful id,
     # token, and the queued pending updates.
@@ -1211,18 +1261,271 @@ def test_loading_and_error_transitions_with_a_stubbed_transport(page: Any, serve
     )
     assert error == {"status": 422, "code": "invalid_args", "message": "boom", "fieldErrors": {}}
 
-    # ...and the next successful call clears it.
+    # ...and the next successful call for that handler clears it.
     page.evaluate(
         """
         () => {
           window.__sent3 = Citry.events.send(
-            document.querySelector(".todo").getAttribute("data-cid"), "save", {},
+            document.querySelector(".todo").getAttribute("data-cid"), "find", {},
           );
           window.__settle.resolve({ ok: true });
         }
         """
     )
     page.wait_for_function("document.querySelector('.err').innerText === 'none'")
+
+
+def test_error_retention_is_independent_per_handler(page: Any, serve_live: Any) -> None:
+    # Each declared handler retains its own latest failure. The no-argument
+    # form exposes the most recently landed retained failure and falls back
+    # to an older handler when that newer handler succeeds.
+    _goto_todo(page, serve_live)
+    page.evaluate(
+        """
+        () => {
+          window.__settles = [];
+          Citry.events._internal.setTransport((call) => new Promise((resolve, reject) => {
+            window.__settles.push({ call, resolve, reject });
+          }));
+          window.__send = (name) => {
+            const id = document.querySelector(".todo").getAttribute("data-cid");
+            Citry.events.send(id, name, {}).catch(() => {});
+          };
+        }
+        """
+    )
+
+    page.evaluate("window.__send('save')")
+    page.wait_for_function("window.__settles.length === 1")
+    page.evaluate("window.__settles[0].reject({ status: 409, code: 'conflict', message: 'save failed' })")
+    page.wait_for_function("document.querySelector('.err-save').innerText === 'save failed'")
+    assert page.locator(".err").inner_text() == "save failed"
+    assert page.locator(".err-find").inner_text() == "none"
+
+    page.evaluate("window.__send('find')")
+    page.wait_for_function("window.__settles.length === 2")
+    page.evaluate("window.__settles[1].reject({ status: 404, code: 'not_found', message: 'find failed' })")
+    page.wait_for_function("document.querySelector('.err').innerText === 'find failed'")
+    assert page.locator(".err-save").inner_text() == "save failed"
+    assert page.locator(".err-find").inner_text() == "find failed"
+
+    # Starting a retry does not clear the retained error while the retry is
+    # queued or in flight.
+    page.evaluate("window.__send('find')")
+    page.wait_for_function("window.__settles.length === 3")
+    assert page.locator(".err-find").inner_text() == "find failed"
+    page.evaluate("window.__settles[2].resolve({ ok: true })")
+    page.wait_for_function("document.querySelector('.err').innerText === 'save failed'")
+    assert page.locator(".err-find").inner_text() == "none"
+
+    page.evaluate("window.__send('save')")
+    page.wait_for_function("window.__settles.length === 4")
+    page.evaluate("window.__settles[3].resolve({ ok: true })")
+    page.wait_for_function("document.querySelector('.err').innerText === 'none'")
+    assert page.locator(".err-save").inner_text() == "none"
+
+
+def test_reserved_handler_name_uses_own_loading_and_error_slots(page: Any, serve_live: Any) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Reserved(Component):
+        citry = c
+
+        class Events:
+            @event(name="__proto__")
+            def save(self):
+                return None
+
+        template = '<div class="reserved"></div>'
+
+    class Page(Component):
+        citry = c
+        template = "<html><body><c-reserved /></body></html>"
+
+    messages = _collect_console(page)
+    base = serve_live(c, str(Page()), "")
+    page.goto(base + "/")
+    page.wait_for_function(READY)
+
+    result = page.evaluate(
+        """
+        async () => {
+          const el = document.querySelector(".reserved");
+          const id = el.getAttribute("data-cid");
+          const anchor = Citry.events._internal.getAnchor(id);
+          let rejectCall;
+          Citry.events._internal.setTransport(() => new Promise((_resolve, reject) => {
+            rejectCall = reject;
+          }));
+          const sent = Citry.events.send(id, "__proto__", {}, { wait: false });
+          const during = {
+            any: anchor.loading.any,
+            handler: anchor.loading.handlers.__proto__,
+          };
+          rejectCall({ status: 422, code: "invalid", message: "reserved failed" });
+          await sent.catch(() => {});
+          return {
+            during,
+            loading: [anchor.loading.any, anchor.loading.handlers.__proto__],
+            error: window.Alpine.evaluate(el, "$error('__proto__')"),
+            loadingPrototype: Object.getPrototypeOf(anchor.loading.handlers),
+            errorPrototype: Object.getPrototypeOf(anchor.errorBox.handlers),
+            objectPrototypeUntouched:
+              Object.prototype.current === undefined && Object.prototype.latestStartedIntent === undefined,
+          };
+        }
+        """
+    )
+
+    assert result == {
+        "during": {"any": 1, "handler": 1},
+        "loading": [0, 0],
+        "error": {"status": 422, "code": "invalid", "message": "reserved failed"},
+        "loadingPrototype": None,
+        "errorPrototype": None,
+        "objectPrototypeUntouched": True,
+    }
+    assert _citry_errors(messages) == []
+
+
+def test_wait_false_invalid_args_reject_without_leaving_loading_stuck(page: Any, serve_live: Any) -> None:
+    _goto_todo(page, serve_live)
+    result = page.evaluate(
+        """
+        async () => {
+          const el = document.querySelector(".todo");
+          const id = el.getAttribute("data-cid");
+          const anchor = Citry.events._internal.getAnchor(id);
+          const probe = document.createElement("span");
+          probe.setAttribute(
+            "x-init",
+            "window.__invokeInvalidBypass = () => $sendEvent('save', { invalid: undefined }, { wait: false })",
+          );
+          el.appendChild(probe);
+          window.Alpine.initTree(probe);
+          let syncError = null;
+          let sent = null;
+          try {
+            sent = window.__invokeInvalidBypass();
+          } catch (error) {
+            syncError = String(error && (error.message || error));
+          }
+          const outcome = sent
+            ? await sent.then(() => "resolved", (error) => String(error && (error.message || error)))
+            : null;
+          return {
+            syncError,
+            promiseReturned: !!sent && typeof sent.then === "function",
+            outcome,
+            loading: [anchor.loading.any, anchor.loading.handlers.save],
+            busy: el.hasAttribute("data-citry-busy"),
+          };
+        }
+        """
+    )
+
+    assert result["syncError"] is None
+    assert result["promiseReturned"] is True
+    assert "must be a strict JSON object" in result["outcome"]
+    assert result["loading"] == [0, 0]
+    assert result["busy"] is False
+
+
+def test_component_loading_and_error_accessors_are_reactive(page: Any, serve_live: Any) -> None:
+    # `$component` receives function accessors over the same reactive boxes as
+    # the Alpine magics, so a component effect can react to loading, failure,
+    # retained-error-during-retry, and success transitions.
+    _goto_todo(page, serve_live)
+    page.evaluate(
+        """
+        () => {
+          const id = document.querySelector(".todo").getAttribute("data-cid");
+          window.__ctx = { id };
+          Citry.events._decorate(window.__ctx);
+          window.__ctxStates = [];
+          window.Alpine.effect(() => {
+            window.__ctxStates.push({
+              loading: window.__ctx.loading("save"),
+              error: window.__ctx.error("save")?.message || null,
+            });
+          });
+          window.__ctxSettles = [];
+          Citry.events._internal.setTransport(() => new Promise((resolve, reject) => {
+            window.__ctxSettles.push({ resolve, reject });
+          }));
+          Citry.events.send(id, "save", {}).catch(() => {});
+        }
+        """
+    )
+    page.wait_for_function("window.__ctxStates.some((state) => state.loading && state.error === null)")
+    page.evaluate("window.__ctxSettles[0].reject({ status: 409, code: 'conflict', message: 'save failed' })")
+    page.wait_for_function("window.__ctxStates.some((state) => !state.loading && state.error === 'save failed')")
+
+    page.evaluate(
+        """
+        () => {
+          Citry.events.send(window.__ctx.id, "save", {}).catch(() => {});
+        }
+        """
+    )
+    page.wait_for_function("window.__ctxStates.some((state) => state.loading && state.error === 'save failed')")
+    page.evaluate("window.__ctxSettles[1].resolve({ ok: true })")
+    page.wait_for_function("window.__ctxStates.some((state) => !state.loading && state.error === null)")
+
+
+def test_error_retention_uses_intent_order_when_wait_false_overtakes(page: Any, serve_live: Any) -> None:
+    # A wait:false retry can overtake an older queued call for the same
+    # handler. Once the newer intent succeeds, the older call's late failure
+    # must not restore stale UI error state.
+    _goto_todo(page, serve_live)
+    page.evaluate(
+        """
+        () => {
+          window.__controlled = [];
+          Citry.events._internal.setTransport((call) => new Promise((resolve, reject) => {
+            window.__controlled.push({ call, resolve, reject });
+          }));
+          window.__id = document.querySelector(".todo").getAttribute("data-cid");
+        }
+        """
+    )
+
+    # Seed a retained save failure.
+    page.evaluate("() => { Citry.events.send(window.__id, 'save', {}).catch(() => {}); }")
+    page.wait_for_function("window.__controlled.length === 1", timeout=3_000)
+    page.evaluate("window.__controlled[0].reject({ status: 409, code: 'conflict', message: 'old failure' })")
+    page.wait_for_function("document.querySelector('.err-save').innerText === 'old failure'", timeout=3_000)
+    page.wait_for_function("document.querySelector('.busy').innerText === 'idle'", timeout=3_000)
+
+    # `find` blocks the ordinary queued save. The later wait:false save goes
+    # to the transport immediately and is therefore controlled at index 2.
+    page.evaluate(
+        """
+        () => {
+          Citry.events.send(window.__id, "find", {}).catch(() => {});
+          Citry.events.send(window.__id, "save", {}).catch(() => {});
+          Citry.events.send(window.__id, "save", {}, { wait: false }).catch(() => {});
+        }
+        """
+    )
+    page.wait_for_function("window.__controlled.length === 3", timeout=3_000)
+    assert page.evaluate("window.__controlled.map((item) => item.call.handlerName)") == [
+        "save",
+        "find",
+        "save",
+    ]
+    page.evaluate("window.__controlled[2].resolve({ ok: true })")
+    page.wait_for_function("document.querySelector('.err-save').innerText === 'none'", timeout=3_000)
+
+    # Releasing the blocker starts the older save at index 3. Its failure is
+    # real for lifecycle purposes but stale for retained error state.
+    page.evaluate("window.__controlled[1].resolve({ ok: true })")
+    page.wait_for_function("window.__controlled.length === 4", timeout=3_000)
+    page.evaluate("window.__controlled[3].reject({ status: 409, code: 'conflict', message: 'late old failure' })")
+    page.wait_for_function("document.querySelector('.busy').innerText === 'idle'", timeout=3_000)
+    assert page.locator(".err-save").inner_text() == "none"
+    assert page.locator(".err").inner_text() == "none"
 
 
 def test_failed_send_restores_pending_updates_for_the_retry(page: Any, serve_live: Any) -> None:
@@ -1302,7 +1605,7 @@ def test_failed_send_restores_pending_updates_for_the_retry(page: Any, serve_liv
 
 
 def test_unknown_names_throw_pointed_errors_naming_declared_events(page: Any, serve_live: Any) -> None:
-    # $loading and sendEvent validate names against the class descriptor
+    # $loading, $error, and sendEvent validate names against the class descriptor
     # before anything could hit a wire; the errors name the declared events.
     _goto_todo(page, serve_live)
 
@@ -1312,6 +1615,11 @@ def test_unknown_names_throw_pointed_errors_naming_declared_events(page: Any, se
         lambda msg: "has no event 'nope'" in msg.text and "declared events: find, save" in msg.text
     ):
         page.evaluate("""() => { window.Alpine.evaluate(document.querySelector(".todo"), "$loading('nope')"); }""")
+
+    with page.expect_console_message(
+        lambda msg: "has no event 'nope'" in msg.text and "declared events: find, save" in msg.text
+    ):
+        page.evaluate("""() => { window.Alpine.evaluate(document.querySelector(".todo"), "$error('nope')"); }""")
 
     # The promise path keeps the same pointed message.
     send_err = page.evaluate(
@@ -1359,7 +1667,11 @@ def test_payload_members_for_a_non_interactive_instance(page: Any, serve_live: A
         citry = c
         js = """
           $component((ctx) => {
-            window.__plain = { state: ctx.state };
+            window.__plain = {
+              state: ctx.state,
+              loading: [typeof ctx.loading, ctx.loading()],
+              error: [typeof ctx.error, ctx.error()],
+            };
             ctx.sendEvent("anything").catch((err) => {
               window.__plainSendErr = String(err.message);
             });
@@ -1386,7 +1698,11 @@ def test_payload_members_for_a_non_interactive_instance(page: Any, serve_live: A
     page.wait_for_function(READY)
     page.wait_for_function("!!window.__plainSendErr")
 
-    assert page.evaluate("window.__plain.state") is None
+    assert page.evaluate("window.__plain") == {
+        "state": None,
+        "loading": ["function", False],
+        "error": ["function", None],
+    }
     err = page.evaluate("window.__plainSendErr")
     assert "declares no events" in err
     assert "class Events" in err
@@ -1522,6 +1838,12 @@ def test_bootstrap_stub_queues_and_the_runtime_drains(page: Any, serve_live: Any
         <script>{_EVENTS_BOOTSTRAP_STUB}</script>
         <script>
           window.__wasStub = !!Citry.events._stubQueue;
+          window.__stubCtx = {{ id: "x1" }};
+          Citry.events._decorate(window.__stubCtx);
+          window.__stubPayloadBefore = {{
+            loading: [typeof window.__stubCtx.loading, window.__stubCtx.loading()],
+            error: [typeof window.__stubCtx.error, window.__stubCtx.error()],
+          }};
           Citry.events.configure({{ timeout: 5, transport: "early" }});
           window.__offPing = Citry.events.on("stub:ping", (detail) => {{ window.__pinged = detail; }});
           Citry.events.registerTransport("early", {{
@@ -1567,7 +1889,12 @@ def test_bootstrap_stub_queues_and_the_runtime_drains(page: Any, serve_live: Any
             configApplied: Citry.events._internal.config.timeout,
             transportApplied: Citry.events._internal.config.transport,
             pinged: window.__pinged,
-                anchorSeeded: Citry.events._internal.getAnchor("x1").values.n,
+            anchorSeeded: Citry.events._internal.getAnchor("x1").values.n,
+            stubPayloadBefore: window.__stubPayloadBefore,
+            stubPayloadAfter: {
+              loading: [typeof window.__stubCtx.loading, window.__stubCtx.loading(), window.__stubCtx.loading("save")],
+              error: [typeof window.__stubCtx.error, window.__stubCtx.error(), window.__stubCtx.error("save")],
+            },
           };
         }
         """
@@ -1579,6 +1906,11 @@ def test_bootstrap_stub_queues_and_the_runtime_drains(page: Any, serve_live: Any
     assert result["transportApplied"] == "early"
     assert result["pinged"] == {"hi": True}
     assert result["anchorSeeded"] == 1
+    assert result["stubPayloadBefore"] == {"loading": ["function", False], "error": ["function", None]}
+    assert result["stubPayloadAfter"] == {
+        "loading": ["function", False, False],
+        "error": ["function", None, None],
+    }
 
 
 def test_foreign_alpine_warns_and_the_owned_global_wins(page: Any, serve_live: Any) -> None:

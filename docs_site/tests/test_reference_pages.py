@@ -11,8 +11,9 @@ from starlette.testclient import TestClient
 from docs_site._internal.build import build_site
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.pipeline import render_page
+from docs_site._internal.project import load_docs_project
 from docs_site._internal.reference import extract_symbol, public_entrypoints
-from docs_site._internal.reference_pages import CATEGORIES, category, reference_page_markdown
+from docs_site._internal.reference_pages import category, reference_nav_items, reference_page_markdown
 from docs_site._internal.serve import create_app
 
 
@@ -20,12 +21,20 @@ def test_every_category_symbol_resolves() -> None:
     # Guards against a typo in the (hand-written) category symbol lists.
     missing = [
         symbol
-        for cat in CATEGORIES
+        for cat in load_docs_project().reference.categories
         if cat.source == "griffe"
         for symbol in cat.symbols
         if extract_symbol(symbol) is None
     ]
     assert missing == []
+
+
+def test_every_reference_page_stays_pending_human_review() -> None:
+    items = reference_nav_items()
+
+    assert items[0].title == "Overview"
+    assert all(item.needs_review for item in items)
+    assert all("🚧" not in item.title for item in items)
 
 
 def test_public_entrypoints_are_the_three_shapes() -> None:
@@ -51,7 +60,9 @@ def test_categories_cover_the_public_api() -> None:
     # reference page, either under the entrypoint's own path or as the root
     # re-export. The reference is the enforcement of the public-API rule, so
     # a new export without a page fails here.
-    covered = {s for cat in CATEGORIES if cat.source == "griffe" for s in cat.symbols}
+    covered = {
+        symbol for cat in load_docs_project().reference.categories if cat.source == "griffe" for symbol in cat.symbols
+    }
     uncovered = [
         f"{entrypoint}.{name}"
         for entrypoint in public_entrypoints()
@@ -68,10 +79,13 @@ def test_every_public_entrypoint_declares_all() -> None:
     assert missing == []
 
 
-def test_component_class_identity_members_are_visible_to_reference_extraction() -> None:
+def test_component_public_class_members_are_visible_to_reference_extraction() -> None:
     assert extract_symbol("citry.Component.class_id") is not None
     assert extract_symbol("citry.Component.definition_id") is not None
     assert extract_symbol("citry.Component.State") is not None
+    events = extract_symbol("citry.Component.Events")
+    assert events is not None
+    assert "Optional server event handlers" in events.description
     assert extract_symbol("citry.Citry.engine_id") is not None
     assert extract_symbol("citry.Citry.inspect_component") is not None
     assert extract_symbol("citry.Citry.inspect_components") is not None
@@ -103,12 +117,15 @@ def test_unknown_builtin_shows_error() -> None:
 def test_build_writes_reference_pages(tmp_path: Path) -> None:
     out = tmp_path / "site"
     outcome = build_site(config=DocsConfig(site_dir=out))
-    generated = sum(not cat.authored for cat in CATEGORIES)
+    generated = sum(not cat.authored for cat in load_docs_project().reference.categories)
     assert outcome.reference == generated + 1  # generated categories plus index
     assert (out / "reference" / "index.html").is_file()
     component_page = out / "reference" / "component" / "index.html"
     assert component_page.is_file()
-    assert "<code>Component</code>" in component_page.read_text(encoding="utf-8")
+    component_html = component_page.read_text(encoding="utf-8")
+    assert "<code>Component</code>" in component_html
+    assert "id=citry-component-events" in component_html
+    assert "Optional server event handlers" in component_html
 
     # Each authored category owns one record and a Markdown companion. The
     # generated pass must not overwrite or duplicate either one.

@@ -32,11 +32,47 @@ def test_client_runtime_bundle_budget():
     ]
     payload = b"".join(path.read_bytes() for path in paths)
 
-    # Strict Events protocol validation intentionally adds a small amount of
-    # runtime code. Keep a close regression guard around the resulting bundle;
-    # broader optimization belongs to the dedicated benchmarking work.
-    assert len(payload) <= 565_000
-    assert len(gzip.compress(payload, mtime=0)) <= 122_000
+    # Strict Events protocol validation, per-handler loading/error state, and
+    # atomic error rollback intentionally add a small amount of runtime code.
+    # Keep a close regression guard around the resulting bundle; broader
+    # optimization belongs to the dedicated benchmarking work.
+    # Raised by 1 KB for the two-way binding value guard: a control that reads
+    # back no value keeps its unsent draft instead of writing `undefined` into
+    # the field, which costs a little code at both flush sites.
+    # Raised by another 1 KB raw / 0.5 KB gzip for multi-select list reads,
+    # exact list application, and post-morph preservation of pending lists.
+    # Keyed virtual component ranges add strict graph-key validation, a
+    # top-down logical correspondence planner, connected/portable recursive
+    # physical paths, and correlated supplied-slot regions. The generated
+    # Events bundle now also embeds the strict Events protocol runtime. The
+    # maintainer approved that protocol-binding cost on 2026-08-04. Concurrent
+    # graph work moved the core again during the bounded review. Nested split
+    # Document/body ranges also need a lossless boundary-text alignment step;
+    # keep narrow headroom over the resulting 646,821 raw / 134,997 gzip
+    # moving baseline. Client-graph protocol validation then moved into its
+    # generated browser helper and the Events bundle began sharing the same
+    # ownership-comment parser. ComponentRange ignore then added detached
+    # ignore-closure planning, transactional subset adoption, owner-filtered
+    # dependencies, and persistent revision descriptors. Keep narrow headroom
+    # over the resulting 702,253 raw / 146,749 gzip baseline. Connected
+    # stationary ranges then added paired-sentinel traversal, pre-map key
+    # filtering, fixed-point physical replanning, retained-boundary liveness,
+    # and compositional connected handling through equivalent slot regions.
+    # Keep the same narrow headroom over the resulting 710,453 raw baseline.
+    # Direct element event listeners then replaced document delegation so
+    # non-bubbling native/custom events follow browser propagation semantics;
+    # listener reconciliation and same-document liveness checks move the raw
+    # baseline to 713,520 while compressed size remains within its prior cap.
+    # The complete input-type matrix adds strict compiled-spec decoding plus
+    # one shared live classifier across effects, listeners, morph guards, and
+    # delayed drafts. The measured baseline is 724,618 raw / 150,955 gzip.
+    # Typed custom-element values then add upgrade-aware activation, strict
+    # JSON uplink validation, raw-object identity, and pointed property
+    # diagnostics. The measured baseline is 728,847 raw / 151,867 gzip.
+    # These are deliberate validation and identity features, not incidental
+    # bundle drift.
+    assert len(payload) <= 731_000
+    assert len(gzip.compress(payload, mtime=0)) <= 153_000
 
 
 def test_325_instance_client_payload_budget():
@@ -44,8 +80,11 @@ def test_325_instance_client_payload_budget():
 
     assert sizes.graph_raw <= 660_000
     assert sizes.graph_gzip <= 38_000
-    assert sizes.document_raw <= 1_415_000
-    assert sizes.document_gzip <= 170_000
+    assert sizes.document_raw <= 1_425_000
+    # Owner-aware fragment fetch entries and the ComponentRange client runtime
+    # plus strict live input validation move the realistic document baseline
+    # to 1,413,161 raw / 182,460 bytes compressed.
+    assert sizes.document_gzip <= 183_000
 
 
 def test_450_instance_large_graph_regression_budget():

@@ -27,7 +27,7 @@ register or import them.
 Render a block when its `cond` expression is truthy. An `<c-if>` may be
 followed by any number of `<c-elif>` branches and one `<c-else>` branch.
 
-```citry
+```citry-html
 <c-if cond="is_admin">
   <p>Administrator tools</p>
 </c-if>
@@ -41,7 +41,7 @@ attributes, truthiness, and branch ordering.
 Add another condition to an `<c-if>` chain. Citry renders this branch only
 when every earlier condition was false and this branch's `cond` is truthy.
 
-```citry
+```citry-html
 <c-if cond="is_admin">Admin</c-if>
 <c-elif cond="is_editor">Editor</c-elif>
 ```
@@ -51,7 +51,7 @@ when every earlier condition was false and this branch's `cond` is truthy.
 Add the final fallback to an `<c-if>` chain. `<c-else>` has no `cond`
 attribute.
 
-```citry
+```citry-html
 <c-if cond="is_signed_in">Account</c-if>
 <c-else>Sign in</c-else>
 ```
@@ -61,21 +61,21 @@ attribute.
 Repeat a block for every value in an iterable. Its `each` attribute uses a
 Python-style target and expression.
 
-```citry
+```citry-html
 <c-for each="book in books">
   <p>{{ book.title }}</p>
 </c-for>
 ```
 
-Read [Control flow](/syntax/control-flow/#loops) for unpacking, filtering,
-and the `loop` helper.
+Read [Conditions and loops](/syntax/control-flow/#unpack-and-filter-values)
+for unpacking, filtering, and variable scope.
 
 <h3 id="c-empty"><code>&lt;c-empty&gt;</code></h3>
 
 Show an empty state when the `<c-for>` immediately before it produces no
 items.
 
-```citry
+```citry-html
 <c-for each="book in books">
   <p>{{ book.title }}</p>
 </c-for>
@@ -90,7 +90,7 @@ Mark a place where another template can add content. Leave out `name` for the
 default slot, or name the slot when a component has more than one. Content
 inside the tag is its fallback.
 
-```citry
+```citry-html
 <article>
   <c-slot />
   <footer>
@@ -107,7 +107,7 @@ and fallback details.
 Choose which named slot receives a block of content when you use a component.
 You can pass plain body content when you only need the default slot.
 
-```citry
+```citry-html
 <c-Panel>
   <c-fill name="footer">
     <a href="/help/">Get help</a>
@@ -138,8 +138,8 @@ and the difference between component names and HTML tag names.
 
 <c-builtin tag="js" c-level="3" />
 
-The [JS and CSS dependencies guide][dependencies-guide] explains collection,
-placement, and serialization strategies.
+The [Asset placement guide][dependencies-guide] explains where Citry puts the
+collected files and component assets.
 
 ## Literal template text
 
@@ -148,8 +148,11 @@ placement, and serialization strategies.
 Keep template-looking text unchanged. Citry does not evaluate expressions or
 component tags inside `<c-raw>`.
 
-```citry
+```citry-html
 --8<-- "docs_site/snippets/builtin_raw.html"
 ```
 
-[dependencies-guide]: /advanced/js-and-css-dependencies/
+Read [Comments and literal text](/syntax/comments/#pass-template-looking-text-through-unchanged)
+for the trust boundary and exact raw-block rules.
+
+[dependencies-guide]: /advanced/asset-placement/

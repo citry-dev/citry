@@ -89,6 +89,71 @@ class TestManagerConstruction:
         # Built-ins come first, then the user's extensions in spec order.
         assert [ext.name for ext in c.extensions._extensions] == ["cache", "dependencies", "events", "e1", "e2"]
 
+    def test_rejects_instance_already_installed_on_another_citry(self):
+        class E(Extension):
+            name = "e"
+
+        extension = E()
+        first = _Citry(extensions=[extension])
+
+        with pytest.raises(ValueError, match="already installed on another Citry"):
+            _Citry(extensions=[extension])
+
+        assert first.extensions.get_extension("e") is extension
+        assert extension.citry is first
+
+    def test_failed_duplicate_does_not_claim_ready_instance(self):
+        class E(Extension):
+            name = "e"
+
+        extension = E()
+
+        with pytest.raises(ValueError, match="share the name"):
+            _Citry(extensions=[extension, E])
+
+        assert not hasattr(extension, "citry")
+        second = _Citry(extensions=[extension])
+        assert extension.citry is second
+
+    def test_invalid_defaults_do_not_claim_ready_instance(self):
+        class E(Extension):
+            name = "e"
+
+            def validate_config_fields(self, fields, *, component=None):
+                if "unknown" in fields:
+                    raise ValueError("unknown setting")
+
+        extension = E()
+
+        with pytest.raises(ValueError, match="unknown setting"):
+            _Citry(
+                extensions=[extension],
+                extensions_defaults={"e": {"unknown": True}},
+            )
+
+        assert not hasattr(extension, "citry")
+        second = _Citry(extensions=[extension])
+        assert extension.citry is second
+
+    def test_failed_created_hook_does_not_claim_ready_instance(self):
+        class E(Extension):
+            name = "e"
+            fail = True
+
+            def on_extension_created(self, ctx):
+                if self.fail:
+                    raise RuntimeError("extension startup failed")
+
+        extension = E()
+
+        with pytest.raises(RuntimeError, match="extension startup failed"):
+            _Citry(extensions=[extension])
+
+        assert not hasattr(extension, "citry")
+        extension.fail = False
+        second = _Citry(extensions=[extension])
+        assert extension.citry is second
+
     def test_accepts_string_path(self):
         spec = f"{_StringPathExt.__module__}.{_StringPathExt.__qualname__}"
         c = _Citry(extensions=[spec])
@@ -147,6 +212,15 @@ class TestManagerConstruction:
 
         with pytest.raises(ValueError, match="conflicts"):
             _Citry(extensions=[Tmpl])
+
+    def test_builtin_extension_may_own_its_documented_component_config_slot(self):
+        app = _Citry()
+
+        class Card(Component):
+            citry = app
+
+        assert Component.Events is None
+        assert Card.Events.component_class is Card
 
 
 class TestClassAndRegistrationHooks:

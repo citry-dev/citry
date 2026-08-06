@@ -77,6 +77,8 @@ The initializer receives these values:
 | `unprovide(key)` | Hide an inherited value from rendered descendants during synchronous initialization. |
 | `sendEvent(name, args?, opts?)` | Call one of this component's declared server events and return a Promise for its data result. |
 | `onEvent(name, callback)` | Listen for server-dispatched events targeting this instance and return an unsubscribe function. |
+| `loading(name?)` | Return whether any handler, or one named handler, is queued or running. |
+| `error(name?)` | Return the newest retained error, or the retained error for one named handler. |
 
 A prop declaration accepts `type`, `required`, and `default`. `type` may be a
 constructor or an array of constructors. `required` defaults to `false`. Use a
@@ -94,7 +96,7 @@ props: {
 
 The [Client interactivity](/concepts/client-interactivity/) page explains
 component boundaries, client props, slot scope, and rootless components. The
-[JS and CSS dependencies](/advanced/js-and-css-dependencies/) page explains
+[Component JavaScript and CSS](/advanced/js-and-css-dependencies/) explains
 when component scripts load.
 
 ## Alpine magics
@@ -111,7 +113,7 @@ queues that change for the component's next server call. A field excluded by
 `State._public` cannot be read, and a field excluded by `State._model` cannot
 be written.
 
-```html
+```citry-html
 <button @click="$state.count++">Add one</button>
 <output x-text="$state.count"></output>
 ```
@@ -125,7 +127,7 @@ Return whether this component has a queued or running server call. Pass an
 event name to check only that handler. An unknown handler name throws an
 error.
 
-```html
+```citry-html
 <button :disabled="$loading('save')">
   <span x-show="!$loading('save')">Save</span>
   <span x-show="$loading('save')">Saving...</span>
@@ -134,13 +136,22 @@ error.
 
 <h3 class="doc-heading" id="error"><code>$error</code></h3>
 
-Read the last failed call as
-`{ status, code, message, fieldErrors? }`, or `null` when there is no current
-error. A successful call clears it. The value is read-only.
+Read retained handler errors as
+`{ status, code, message, fieldErrors? }`, or `null` when there is no matching
+error. Call `$error()` for the newest retained error across this component's
+handlers. Pass a handler name to read only that handler. An unknown handler
+name throws an error.
 
-```html
-<p x-show="$error" x-text="$error?.message"></p>
+```citry-html
+<p
+  x-show="$error('save')"
+  x-text="$error('save')?.message"
+></p>
 ```
+
+A successful call clears only its own handler's error. A retry leaves that
+error visible while the new call is queued or running, then replaces it on
+failure or clears it on success. Reading an error does not clear it.
 
 <h3 class="doc-heading" id="send-event"><code>$sendEvent</code></h3>
 
@@ -154,13 +165,19 @@ The method returns a Promise. It resolves with the handler's data result and
 rejects with a structured event error. `opts.timeout` overrides the request
 timeout. `opts.wait: false` lets a call bypass the component's event queue.
 
-```html
+```citry-html
 <button
   @click="result = await $sendEvent('preview', { page: 2 })"
 >
   Preview page 2
 </button>
 ```
+
+Only imperative calls receive a returned
+[`actions.Data`][citry.ext.events.actions.Data] value. A declarative `@c-*`
+binding starts the same handler but does not expose its Promise result. Return
+[`actions.Dispatch`][citry.ext.events.actions.Dispatch] when browser code must
+observe a result from a declarative call.
 
 <h3 class="doc-heading" id="on-event"><code>$onEvent</code></h3>
 
@@ -180,7 +197,7 @@ initializer's cleanup lifetime.
 
 Provide one value to rendered descendants:
 
-```html
+```citry-html
 <section x-init="$provide('theme', { name: 'dark' })">
   <c-slot />
 </section>
@@ -195,7 +212,7 @@ value later, provide one reactive object and update its fields.
 Read the nearest inherited value. Citry returns the exact value that was
 provided. A missing key throws unless you pass a default:
 
-```html
+```citry-html
 <output x-text="$inject('theme', 'system')"></output>
 ```
 
@@ -207,7 +224,7 @@ parents.
 
 Hide an inherited value from rendered descendants:
 
-```html
+```citry-html
 <section x-init="$unprovide('theme')">
   <output x-text="$inject('theme', 'system')"></output>
 </section>

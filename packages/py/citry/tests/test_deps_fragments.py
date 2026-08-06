@@ -6,10 +6,9 @@ import re
 
 import pytest
 
-from citry import Citry, Component, Extension
+from citry import Citry, Component, Extension, Markup
 from citry.ext.dependencies import Script
 from citry.ext.dependencies.routes import script_url
-from citry.util.html import SafeString
 from citry.util.routing import match_route
 
 
@@ -21,6 +20,10 @@ def _manifest(html):
 
 def _unb64(value):
     return base64.b64decode(value).decode()
+
+
+def _fetch_descriptors(manifest, kind):
+    return [json.loads(_unb64(item[0] if isinstance(item, list) else item)) for item in manifest["fetch"][kind]]
 
 
 def _widget(c):
@@ -57,8 +60,8 @@ class TestFragmentStrategy:
         assert "client-side dependency manager" not in html
 
         manifest = _manifest(html)
-        fetch_js = [json.loads(_unb64(item)) for item in manifest["fetch"]["js"]]
-        fetch_css = [json.loads(_unb64(item)) for item in manifest["fetch"]["css"]]
+        fetch_js = _fetch_descriptors(manifest, "js")
+        fetch_css = _fetch_descriptors(manifest, "css")
         js_urls = [item["attrs"]["src"] for item in fetch_js]
         css_urls = [item["attrs"]["href"] for item in fetch_css]
         assert script_url(widget, "js") in js_urls
@@ -71,6 +74,47 @@ class TestFragmentStrategy:
         calls = [[_unb64(part) if part is not None else None for part in call] for call in manifest["calls"]]
         assert calls == [[widget.class_id, record.component_id, record.js_vars_hash]]
         assert manifest["markLoaded"] == {"js": [], "css": []}
+
+    def test_graph_fetches_union_sorted_component_owners(self):
+        c = Citry()
+        c.set_mounted_prefix("/citry")
+        widget = _widget(c)
+
+        class Page(Component):
+            citry = c
+            template = """
+                <main><c-widget /><c-widget /></main>
+            """
+
+        rendered = Page().render()
+        records = [record for record in rendered.context.extra["dependencies"] if record.class_id == widget.class_id]
+        manifest = _manifest(rendered.serialize(deps_strategy="fragment"))
+        class_url = script_url(widget, "js")
+        entries = []
+        for descriptor_encoded, owners_encoded in manifest["fetch"]["js"]:
+            descriptor = json.loads(_unb64(descriptor_encoded))
+            if descriptor["attrs"].get("src") == class_url:
+                entries.append([_unb64(owner) for owner in owners_encoded])
+
+        assert entries == [sorted(record.component_id for record in records)]
+
+    def test_graph_before_manifest_dependencies_stay_inert_in_the_wire(self):
+        class HookAssets(Extension):
+            name = "hook_assets"
+
+            def on_dependencies(self, ctx):
+                ctx.before_manifest.append(Script(content="globalThis.fragmentLeaked = true;", wrap=False))
+
+        c = Citry(extensions=[HookAssets])
+        c.set_mounted_prefix("/citry")
+        widget = _widget(c)
+        html = widget().render().serialize(deps_strategy="fragment")
+        manifest = _manifest(html)
+
+        assert "<script>globalThis.fragmentLeaked = true;</script>" not in html
+        assert len(manifest["beforeManifest"]) == 1
+        descriptor = json.loads(_unb64(manifest["beforeManifest"][0]))
+        assert descriptor == {"tag": "script", "attrs": {}, "content": "globalThis.fragmentLeaked = true;"}
 
     def test_fragment_serves_contained_css_variables(self):
         payload = 'red"; } body { outline: 99px solid red; } x { color: "blue'
@@ -90,7 +134,7 @@ class TestFragmentStrategy:
         fragment = rendered.serialize(deps_strategy="fragment")
         css_url = f"/citry/cache/{Card.class_id}.{record.css_vars_hash}.css"
 
-        assert css_url in [json.loads(_unb64(item))["attrs"]["href"] for item in _manifest(fragment)["fetch"]["css"]]
+        assert css_url in [item["attrs"]["href"] for item in _fetch_descriptors(_manifest(fragment), "css")]
         matched = match_route(c.urls, css_url.removeprefix("/citry/"))
         response = matched.route.handler(None, **matched.params)
         assert response.status == 200
@@ -117,8 +161,8 @@ class TestFragmentStrategy:
         assert new_card.class_id == old_card.class_id
 
         manifest = _manifest(old_render.serialize(deps_strategy="fragment"))
-        js_urls = [json.loads(_unb64(item))["attrs"]["src"] for item in manifest["fetch"]["js"]]
-        css_urls = [json.loads(_unb64(item))["attrs"]["href"] for item in manifest["fetch"]["css"]]
+        js_urls = [item["attrs"]["src"] for item in _fetch_descriptors(manifest, "js")]
+        css_urls = [item["attrs"]["href"] for item in _fetch_descriptors(manifest, "css")]
 
         assert script_url(old_card, "js") in js_urls
         assert script_url(old_card, "css") in css_urls
@@ -147,7 +191,7 @@ class TestFragmentStrategy:
                 js = ["helper.js"]
 
         html = Card().render().serialize(deps_strategy="fragment")
-        fetch_js = [json.loads(_unb64(item)) for item in _manifest(html)["fetch"]["js"]]
+        fetch_js = _fetch_descriptors(_manifest(html), "js")
         inline = [item for item in fetch_js if item["content"]]
         assert inline
         assert inline[0]["content"] == "var H = 1;"
@@ -155,8 +199,8 @@ class TestFragmentStrategy:
     @pytest.mark.parametrize(
         ("attr", "tag"),
         [
-            ("js", SafeString("<script>raw()</script>")),
-            ("css", SafeString("<style>.raw {}</style>")),
+            ("js", Markup("<script>raw()</script>")),
+            ("css", Markup("<style>.raw {}</style>")),
         ],
     )
     def test_fragment_rejects_prerendered_entries(self, attr, tag):
@@ -238,8 +282,8 @@ class TestFragmentStrategy:
 
         fragment = rendered.serialize(deps_strategy="fragment")
         manifest = _manifest(fragment)
-        fetch_js = [json.loads(_unb64(item)) for item in manifest["fetch"]["js"]]
-        fetch_css = [json.loads(_unb64(item)) for item in manifest["fetch"]["css"]]
+        fetch_js = _fetch_descriptors(manifest, "js")
+        fetch_css = _fetch_descriptors(manifest, "css")
         assert [item["attrs"]["src"] for item in fetch_js] == ["/static/card.js"]
         assert fetch_css == []
         assert manifest["cssInstances"] == []

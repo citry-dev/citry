@@ -42,7 +42,7 @@ When you download `citry` project, use `--recurse-submodules` to include the Ruf
 
 ```sh
 # Clone fresh
-git clone --recurse-submodules https://github.com/citry-dev/citry
+git clone --recurse-submodules {{ repo_url }}
 cd citry
 
 # Or if you already cloned without --recurse-submodules:
@@ -184,7 +184,8 @@ uv run maturin develop
 
 Both `maturin develop` and the `uv sync` build produce a debug (unoptimized)
 extension. That is fine for tests, but it makes the Rust-backed paths several
-times slower, so pass `--release` before running any [benchmark](/advanced/performance/):
+times slower, so pass `--release` before running any
+[benchmark](/advanced/const-optimization/):
 
 ```sh
 uv run maturin develop --release
@@ -247,11 +248,14 @@ The [Built-in tags](/reference/builtins/) page is the exception. Not all Citry `
     - `<c-slot>`, `<c-fill>`
     - `<c-raw>`
 
-The [Browser APIs](/reference/browser-apis/) page is authored too. Its public
-surface spans the `$component` source transform, the dependency manager, and
-the Events runtime, so no Python docstring owns the whole contract. Declare
-each linkable name and stable anchor in
-`docs_site/_internal/reference_pages.py`, then document that anchor in
+The [Browser APIs](/reference/browser-apis/) page is manual too. It covers everything that runs in the browser:
+
+- `$component`
+- dependency manager
+- Events runtime
+
+Declare each linkable name and stable anchor in
+`docs_site/reference.yml`, then document that anchor in
 `docs_site/content/reference/browser-apis.md`. The `authored_reference` guard
 reports a missing, duplicated, or undeclared anchor.
 

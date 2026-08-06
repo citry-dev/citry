@@ -35,24 +35,24 @@ enforces:
 
 | Payload | Budget |
 |---|---:|
-| Combined owned Alpine and Events runtime, raw | 560,000 bytes |
-| Combined owned Alpine and Events runtime, gzip | 120,000 bytes |
+| Combined owned Alpine and Events runtime, raw | 731,000 bytes |
+| Combined owned Alpine and Events runtime, gzip | 153,000 bytes |
 | 325-instance ownership graph, raw | 660,000 bytes |
 | 325-instance ownership graph, gzip | 38,000 bytes |
-| 325-instance document, raw | 1,415,000 bytes |
-| 325-instance document, gzip | 170,000 bytes |
+| 325-instance document, raw | 1,425,000 bytes |
+| 325-instance document, gzip | 183,000 bytes |
 | 450-instance ownership graph, raw | 900,000 bytes |
 
-At closeout, the measured values were:
+The current deterministic measurement on 2026-08-05 is:
 
 | Payload | Raw | Gzip |
 |---|---:|---:|
-| Combined runtime | 543,629 | 117,507 |
-| 10-instance graph | 19,921 | 2,000 |
-| 100-instance graph | 195,121 | 11,219 |
-| 325-instance graph | 638,598 | 33,872 |
-| 325-instance document | 1,393,813 | 165,241 |
-| 450-instance graph | 885,473 | 46,438 |
+| Combined runtime | 728,847 | 151,867 |
+| 10-instance graph | 15,783 | 1,263 |
+| 100-instance graph | 153,747 | 6,077 |
+| 325-instance graph | 500,697 | 18,205 |
+| 325-instance document | 1,413,161 | 182,460 |
+| 450-instance graph | 693,447 | 24,880 |
 
 Gzip uses Python's `gzip.compress(..., mtime=0)` so CI results are
 deterministic. Runtime files are measured exactly as shipped by the Python
@@ -67,6 +67,12 @@ gzip bytes to the combined runtime. The raw runtime ceiling and the raw and
 gzip document ceilings were raised by the measured feature cost while
 retaining similar regression headroom; the ownership graph budgets did not
 change.
+
+Later protocol validation, ComponentRange planning and ignore transactions,
+direct element event listeners, strict input-type validation, and typed custom
+elements account for the current runtime baseline. These are deliberate
+validation and identity costs; the limits retain narrow headroom so unrelated
+bundle growth remains visible.
 
 ## Browser runner
 
@@ -131,9 +137,12 @@ Events consumers validate the wire value before using it in a selector.
 
 `nativeListenerTargets` counts Citry RootGroup target/type registrations. It
 is not the browser's total JavaScript listener count. The optional Chromium
-CDP sample supplies the latter. Likewise, `propsEffects`, `managedEffects`,
-Events `formEffects`, and delegated listener types are separate categories;
-adding them together does not produce an Alpine internal effect total.
+CDP sample supplies the latter. Events reports ordinary HTML bindings
+separately as `bindingListenerElements` and `bindingListenerTargets`; the
+second count is the sum of element/event-type registrations. Likewise,
+`propsEffects`, `managedEffects`, and Events `formEffects` are separate
+categories; adding them together does not produce an Alpine internal effect
+total.
 
 The cross-browser churn test, rather than a heap threshold, is the enforced
 leak detector: 25 compatible morphs must leave all stable aggregate resource

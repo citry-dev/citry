@@ -8,14 +8,14 @@ library. The controlling plan is [`../ui_library_plan.md`](../ui_library_plan.md
 | Phase | Status | Artifact |
 |---|---|---|
 | 0. Product charter | Ratified on 2026-07-23 | [`product-charter.md`](product-charter.md) |
-| 1. Citry baseline | Complete for the 2026-07-23 snapshot | [`citry-baseline.md`](citry-baseline.md) |
+| 1. Citry baseline | Complete; framework and release status refreshed 2026-07-29 | [`citry-baseline.md`](citry-baseline.md) |
 | 2. Local prior art | Complete | [`local-prior-art.md`](local-prior-art.md) |
 | 3. Breadth scan | Complete; independent gate passed 2026-07-23 | [`candidate-map.md`](candidate-map.md) |
 | 4. Deep dives | Complete; independent evidence gate passed 2026-07-23 | [`complaint-register.md`](complaint-register.md) and the twelve `recon-*.md` dossiers |
 | 5. Synthesis | Complete; independent synthesis gate passed 2026-07-23 | [`component-taxonomy.md`](component-taxonomy.md), [`customization-patterns.md`](customization-patterns.md), [`citry-fit-matrix.md`](citry-fit-matrix.md) |
 | 6. Architecture hypotheses | Complete; fresh maintainer-revision gate passed 2026-07-23 | [`architecture-options.md`](architecture-options.md) |
-| Phase 7 entry program | Contract and static adapter comparison complete; interactive readiness next | [`scenario-catalog.md`](scenario-catalog.md) and [`storybook-adapter-exploration.md`](storybook-adapter-exploration.md) |
-| 7. Comparative prototype | Not started | `prototype-report.md` |
+| Phase 7 readiness | Complete enough to begin specifications; further interactive evidence is part of the slice | [`scenario-catalog.md`](scenario-catalog.md) |
+| 7. Production vertical slice | Started with the specified styled Tabs increment | [`../ui_components/tabs.md`](../ui_components/tabs.md) and `prototype-report.md` |
 | 8. Decision and roadmap | Not started | `decision-record.md` |
 
 ## Evidence rules
@@ -33,10 +33,15 @@ library. The controlling plan is [`../ui_library_plan.md`](../ui_library_plan.md
 
 Quality and release testing is routed through
 [`quality-test-strategy.md`](quality-test-strategy.md). The
-[`scenario catalog`](scenario-catalog.md) and Storybook feasibility comparison
-form the transition into Phase 7. Client ambient context is a named readiness
-prerequisite before dependent browser and component cases. Localization remains
-post-inventory follow-up research.
+[`scenario catalog`](scenario-catalog.md), docs live-component host, and direct
+quality tools form the transition into Phase 7. Client ambient context is now
+implemented and browser-tested. Localization remains post-inventory follow-up
+research.
+
+Storybook is an optional extension, not a Citry UI phase gate. Its controlling
+design and moved spike evidence live in
+[`../extensions_storybook.md`](../extensions_storybook.md) and
+[`../extensions_storybook/`](../extensions_storybook/).
 
 ## Phase 4 dossier index
 

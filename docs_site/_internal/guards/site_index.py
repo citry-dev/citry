@@ -9,6 +9,7 @@ site, so the whole suite pays the parse cost a single time.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
@@ -27,6 +28,19 @@ _EXTERNAL_SCHEMES = ("http://", "https://", "//", "mailto:", "tel:", "javascript
 # The generator meta tag DocPage emits; pages that carry it are full doc pages
 # (content + reference), as opposed to standalone example demo pages.
 _DOC_PAGE_MARKER = "citry docs builder"
+
+# Markdown that should never survive into visible page text. Both signals are
+# chosen to be effectively impossible in ordinary prose: an ATX heading opening
+# a line, and inline link syntax. Bullet dashes are deliberately not listed,
+# because a wrapped sentence can legitimately begin with one.
+# A var() reference butted straight against the value that should follow it, as
+# in `var(--bg)0%`. CSS requires the space; without it the declaration is void.
+_GLUED_VAR_RE = re.compile(r"var\(--[a-zA-Z0-9_-]+\)(?=[0-9a-zA-Z.#])")
+
+_MARKDOWN_LEAK_PATTERNS = (
+    re.compile(r"^#{1,6}\s+\S"),
+    re.compile(r"^\[[^\]]+\]\([^)\s]+\)"),
+)
 
 
 @dataclass(frozen=True)
@@ -96,6 +110,12 @@ class PageRecord:
     duplicate_ids: list[str] = field(default_factory=list)
     # Raw text of every <script type="application/ld+json"> block.
     jsonld_blocks: list[str] = field(default_factory=list)
+    # Lines of visible text that still look like Markdown source, meaning the
+    # markdown pass skipped a block that was meant to be rendered.
+    markdown_leaks: list[str] = field(default_factory=list)
+    # Inline CSS where a custom property lost the space before the next value,
+    # which makes the browser discard the whole declaration.
+    glued_css_vars: list[str] = field(default_factory=list)
 
     @property
     def h1_count(self) -> int:
@@ -142,7 +162,41 @@ class SiteIndex:
             return record  # unparseable; nothing more to extract
 
         self._extract(dom, record)
+        self._find_markdown_leaks(dom, record)
+        self._find_glued_css_vars(dom, record)
         return record
+
+    @staticmethod
+    def _find_glued_css_vars(dom: lxml.html.HtmlElement, record: PageRecord) -> None:
+        """Collect ``var(--x)`` references that lost the space before the next value."""
+        for style in dom.xpath("//style"):
+            css = style.text or ""
+            for match in _GLUED_VAR_RE.finditer(css):
+                record.glued_css_vars.append(css[match.start() : match.end() + 12])
+
+    @staticmethod
+    def _find_markdown_leaks(dom: lxml.html.HtmlElement, record: PageRecord) -> None:
+        """
+        Collect visible text that is still Markdown source rather than HTML.
+
+        A raw-HTML wrapper without ``markdown="1"`` makes python-markdown skip
+        everything nested inside it, so headings, bullets, and links reach the
+        reader as literal ``###``, ``-``, and ``[text](url)``. The page still
+        builds and every other guard still passes, so nothing else catches it.
+
+        Only text a reader actually sees counts: anything inside code, script,
+        style, or a text area is quoted on purpose.
+        """
+        nodes = dom.xpath(
+            "//body//text()[not(ancestor::pre) and not(ancestor::code)"
+            " and not(ancestor::script) and not(ancestor::style)"
+            " and not(ancestor::textarea)]",
+        )
+        for node in nodes:
+            for raw in str(node).split("\n"):
+                line = raw.strip()
+                if any(pattern.match(line) for pattern in _MARKDOWN_LEAK_PATTERNS):
+                    record.markdown_leaks.append(line)
 
     def _extract(self, dom: lxml.html.HtmlElement, record: PageRecord) -> None:
         seen_ids: dict[str, int] = {}
@@ -244,6 +298,23 @@ def _candidate_paths(normalized: str) -> list[str]:
     candidates.append(f"{normalized}/index.html")
     candidates.append(f"{normalized}.html")
     return candidates
+
+
+def strip_base_path(target: str, base_path: str) -> str:
+    """Remove a deployment prefix from a local URL without changing its suffix."""
+    base = "/" + base_path.strip("/") if base_path.strip("/") else ""
+    if not base or not target.startswith("/"):
+        return target
+    suffix_index = len(target)
+    for separator in ("?", "#"):
+        index = target.find(separator)
+        if index >= 0:
+            suffix_index = min(suffix_index, index)
+    path = target[:suffix_index]
+    if path != base and not path.startswith(f"{base}/"):
+        return target
+    stripped = path[len(base) :] or "/"
+    return stripped + target[suffix_index:]
 
 
 def _parse_link(href: str) -> LinkRef:

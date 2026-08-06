@@ -1,0 +1,4 @@
+<main>
+  {# fmt: off #}<section> <div></div> </section>{# fmt: on #}
+  {# fmt: skip #}<footer> <div></div> </footer>
+</main>

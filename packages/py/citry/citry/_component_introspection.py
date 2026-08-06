@@ -96,6 +96,8 @@ def _inspect_asset(
     framework_default = _static_class_dict(owner).get("_citry_component_root", False) is True
     declared_on = None if framework_default else _safe_class_import_path(owner)
     owner_file = None if framework_default else _loaded_python_file(owner)
+    owner_module = None if framework_default else _safe_class_text(owner, "__module__")
+    owner_qualname = None if framework_default else _safe_class_text(owner, "__qualname__")
 
     if inline_value is None and file_value is None:
         return AssetInfo(
@@ -106,6 +108,8 @@ def _inspect_asset(
             resolution="not-applicable",
             resolved_path=None,
             searched_paths=(),
+            owner_module=owner_module,
+            owner_qualname=owner_qualname,
         )
 
     if declared_on is None:
@@ -120,6 +124,8 @@ def _inspect_asset(
             resolution="not-applicable",
             resolved_path=None,
             searched_paths=(),
+            owner_module=owner_module,
+            owner_qualname=owner_qualname,
         )
 
     class_name = _safe_class_text(owner, "__name__") or "Component"
@@ -133,6 +139,8 @@ def _inspect_asset(
             resolution="not-requested",
             resolved_path=None,
             searched_paths=(),
+            owner_module=owner_module,
+            owner_qualname=owner_qualname,
         )
 
     path_state = _inspect_asset_path(
@@ -148,6 +156,8 @@ def _inspect_asset(
         resolution=path_state.resolution,
         resolved_path=path_state.resolved_path,
         searched_paths=path_state.searched_paths,
+        owner_module=owner_module,
+        owner_qualname=owner_qualname,
     )
 
 

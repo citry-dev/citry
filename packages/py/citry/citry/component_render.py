@@ -49,6 +49,7 @@ from citry.citry_render import (
     unwrap_physical_region,
 )
 from citry.citry_template import CitryTemplate, DeclaredSlot
+from citry.client_directives import CLIENT_PROPS_ATTR, validate_client_props_target
 from citry.component_like import ComponentLike, _component_like_render_scope, _resolve_component_like
 from citry.constness import const_value, extract_const_vars, precompute_const_parts
 from citry.ext.cache.errors import CacheArtifactError, _CacheRevisionChanged
@@ -57,6 +58,7 @@ from citry.ext.cache.replay import _replay_component_artifact, _replay_fragment_
 from citry.nodes import (
     ComponentNode,
     ElementAttrsNode,
+    ElementKeyNode,
     ExprHtmlAttr,
     ExprNode,
     FillDataBinding,
@@ -75,7 +77,6 @@ from citry.util.exception import (
     set_template_origin_error_message,
     set_template_position_error_message,
 )
-from citry.util.html import escape_to_str
 from citry.util.logger import is_tracing, trace_component_msg, trace_node_msg
 from citry.util.misc import get_fields, is_generator, to_dict
 from citry_core.template_parser import compile_template, parse_template
@@ -862,6 +863,55 @@ def _finalize(render: CitryRender, error: Exception | None) -> CitryRender:
     return render
 
 
+def _validate_client_props_target(element: CitryElement) -> None:
+    """Validate the final dynamic target and retain the authored call-site diagnostic."""
+    if element.forward_ownership_invocation:
+        return
+    binding_keys = tuple(binding.key for binding in element.component_tag_client_bindings)
+    if CLIENT_PROPS_ATTR not in binding_keys:
+        return
+
+    invocation = None
+    location = None
+    ownership = element.ownership_graph or current_ownership_graph()
+    if ownership is not None and element.ownership_invocation_id is not None:
+        invocation = next(
+            (
+                record
+                for record in ownership.snapshot().component_invocations
+                if record.id == element.ownership_invocation_id
+            ),
+            None,
+        )
+        if invocation is not None:
+            location = ownership.source_location(invocation.source_location_id)
+
+    comp_cls = element.comp_cls
+    tag_name = (
+        f"c-{invocation.authored_tag}"
+        if invocation is not None
+        else f"c-{getattr(comp_cls, 'name', None) or comp_cls.__name__}"
+    )
+    try:
+        validate_client_props_target(comp_cls, binding_keys, tag_name=tag_name)
+    except RuntimeError as err:
+        if location is not None and invocation is not None:
+            try:
+                source_class = comp_cls.citry.get_component_by_class_id(invocation.source_class_id)
+            except KeyError:
+                component_name = None
+            else:
+                component_name = source_class.__name__
+            set_template_position_error_message(
+                err,
+                location.source,
+                location.span,
+                component_name,
+                location.origin,
+            )
+        raise
+
+
 def _render_one(
     element: CitryElement,
     parent: Component | None = None,
@@ -892,6 +942,7 @@ def _render_one(
 
     """
     comp_cls = element.comp_cls
+    _validate_client_props_target(element)
     citry_instance = comp_cls.citry
     extensions = citry_instance.extensions
 
@@ -909,6 +960,9 @@ def _render_one(
         _defer_input_finalization=True,
     )
     component._component_tag_client_bindings = element.component_tag_client_bindings
+    # Private dynamic-element directives must be visible to input hooks, but
+    # never enter the user kwargs those hooks can replace.
+    component._element_morph_metadata = element.element_morph_metadata
     component._ownership_invocation_id = element.ownership_invocation_id
     ownership = element.ownership_graph or current_ownership_graph()
     if ownership is None:
@@ -943,7 +997,8 @@ def _render_one(
 
     # 3. Build the current-call boundary before component data executes. A
     #    cache replay keeps this component, its input-hook mutations, ownership
-    #    anchors, provides, and root key while replacing only archived output.
+    #    anchors, provides, and invocation-owned range key while replacing only
+    #    archived output.
     active_provides = component._provides_inherited
     if component._provides_own:
         active_provides = {**active_provides, **component._provides_own}
@@ -953,20 +1008,6 @@ def _render_one(
         sandboxed=citry_instance.settings.sandbox_expressions,
         ownership=ownership,
     )
-
-    # The parent's `#c-key` (already evaluated by ComponentNode) lands on this
-    # component's current root even when its structural output is replayed.
-    if element.morph_key is not None:
-        if comp_cls.transparent:
-            tag_name = (getattr(comp_cls, "name", None) or comp_cls.__name__).lower()
-            msg = (
-                f"#c-key cannot be used on <c-{tag_name}>: the component is "
-                "transparent (it renders no root element of its own), so there is no element to "
-                "key. Put the key on the component's rendered content instead."
-            )
-            raise RuntimeError(msg)
-        composite_key = f"{comp_cls.class_id}:{escape_to_str(element.morph_key)}"
-        context._add_root_markers([f'data-citry-key="{composite_key}"'])
 
     cache_extension = extensions.get_extension("cache")
     if not isinstance(cache_extension, CacheExtension):
@@ -1008,11 +1049,12 @@ def _render_one(
     #    feed the component's JS/CSS variables, consumed by the built-in
     #    `dependencies` extension (docs/design/dependencies.md section 5).
     #    Each may return a dict, a NamedTuple, or the component's typed
-    #    dataclass; `_normalize_data` converts to a plain dict and validates
-    #    against the declared schema. No defensive copy is needed here: an
-    #    override produces its result fresh each render, and the default
-    #    returns the component's own kwargs, which __init__ already copied per
-    #    render (raw_kwargs), so the result is never shared across renders.
+    #    dataclass; `_normalize_data` validates it and converts the validated
+    #    instance to a plain dict, so schema defaults and coercions become the
+    #    values consumers see. No defensive copy is needed here: an override
+    #    produces its result fresh each render, and the default returns the
+    #    component's own kwargs, which __init__ already copied per render
+    #    (raw_kwargs), so the result is never shared across renders.
     tpl_data = _normalize_data(component.template_data(component.kwargs, component.slots), comp_cls.TemplateData)
     js_data = _normalize_data(component.js_data(component.kwargs, component.slots), comp_cls.JsData)
     css_data = _normalize_data(component.css_data(component.kwargs, component.slots), comp_cls.CssData)
@@ -1419,6 +1461,7 @@ def _compile_template(
         "TemplateNode": TemplateNode,
         "ComponentNode": ComponentNode,
         "ElementAttrsNode": ElementAttrsNode,
+        "ElementKeyNode": ElementKeyNode,
         "IfNode": IfNode,
         "ForNode": ForNode,
         "SlotNode": SlotNode,
@@ -1436,6 +1479,7 @@ def _compile_template(
 def _compile_nested_template(
     template_str: str,
     user_rules: dict[str, TagRules] | None = None,
+    component_class: type[Component] | None = None,
 ) -> Callable[[], list[BodyItem]]:
     """
     Compile a nested template fragment into its body-generating function.
@@ -1445,10 +1489,17 @@ def _compile_nested_template(
     a component class's template, so there is no class-level ``CitryTemplate``
     to fill; a throwaway one wraps the fragment for the shared compile step.
     Position-in-the-outer-template error context is attached by the node's
-    render wrapper, not here.
+    render wrapper, not here. When an owning component class is available, the
+    fragment passes through the same compiled-template extension hooks as that
+    class's primary body. Nested-template bindings therefore remain in the
+    owner's handler/State scope without rewriting the authored source string.
     """
     template = CitryTemplate(source=template_str, origin="<nested template>")
-    return _compile_template(template, user_rules)
+    generate = _compile_template(template, user_rules)
+    if component_class is None:
+        return generate
+    compiled = component_class.citry.extensions.on_template_compiled(component_class, generate())
+    return lambda: compiled
 
 
 def _render_body(body: list[BodyItem], context: CitryContext) -> list[RenderPart]:
@@ -1538,14 +1589,15 @@ def _normalize_data(maybe_data: Any, schema_cls: type | None) -> dict[str, Any]:
     a dict, a NamedTuple, or the component's typed dataclass, so convert with
     ``to_dict``. When the component declares the matching schema class
     (``TemplateData``/``JsData``/``CssData``), constructing
-    ``schema_cls(**data)`` raises on missing or unexpected fields; skipped
-    when the method already returned a schema instance, since that was
-    validated on construction.
+    ``schema_cls(**data)`` raises on invalid input and materializes schema
+    defaults and coercions. Convert that validated instance back to a shallow
+    dict so every downstream consumer observes the declared schema result.
     """
     data: dict[str, Any] = to_dict(maybe_data) if maybe_data is not None else {}
-    if schema_cls is not None and not isinstance(maybe_data, schema_cls):
-        schema_cls(**data)
-    return data
+    if schema_cls is None:
+        return data
+    validated = maybe_data if isinstance(maybe_data, schema_cls) else schema_cls(**data)
+    return to_dict(validated)
 
 
 def _merge_dependencies(into: CitryContext, source: CitryContext) -> None:

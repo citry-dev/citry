@@ -1,0 +1,167 @@
+{
+  "format": "citry-protocol-conformance-cases/1",
+  "cases": [
+    {
+      "id": "graph-missing-protocol",
+      "schema": "manifest.schema.json",
+      "constraint": "/required/0",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "remove", "path": "/protocol"}],
+      "expected": {"path": "/protocol", "category": "required"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-unknown-envelope-field",
+      "schema": "manifest.schema.json",
+      "constraint": "/additionalProperties",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "add", "path": "/unexpected", "value": true}],
+      "expected": {"path": "/unexpected", "category": "unknown_field"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-invalid-mode",
+      "schema": "manifest.schema.json",
+      "constraint": "/properties/mode/enum",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "replace", "path": "/mode", "value": "debug"}],
+      "expected": {"path": "/mode", "category": "enum"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-negative-graph-id",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/graph/properties/graphId/minimum",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/graphId", "value": -1}],
+      "expected": {"path": "/graphs/0/graphId", "category": "range"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-class-id-must-be-string",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/componentClass/properties/classId/type",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/componentClasses/0/classId", "value": 1}],
+      "expected": {"path": "/graphs/0/componentClasses/0/classId", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-class-name-must-be-string",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/componentClass/properties/className/type",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/componentClasses/0/className", "value": 1}],
+      "expected": {"path": "/graphs/0/componentClasses/0/className", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-render-id-must-be-safe-for-html",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/componentInstance/properties/renderId/pattern",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/componentInstances/0/renderId", "value": "C1"}],
+      "expected": {"path": "/graphs/0/componentInstances/0/renderId", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-source-origin-must-be-string-or-null",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/nullableStr/oneOf/0/type",
+      "seed": "component_tag_client_bindings.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/sourceLocations/0/origin", "value": false}],
+      "expected": {"path": "/graphs/0/sourceLocations/0/origin", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-source-mapping-key-must-be-string-or-null",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/nullableStr/oneOf/0/type",
+      "seed": "component_tag_client_bindings.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/sourceLocations/0/mappingKey", "value": false}],
+      "expected": {"path": "/graphs/0/sourceLocations/0/mappingKey", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-nested-component-tag-name-must-be-string",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/nestedComponent/properties/tagName/type",
+      "seed": "component_tag_client_bindings.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/nestedComponents/0/tagName", "value": 1}],
+      "expected": {"path": "/graphs/0/nestedComponents/0/tagName", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-component-morph-key-must-be-string-or-null",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/nullableStr/oneOf/0/type",
+      "seed": "component_tag_client_bindings.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/nestedComponents/0/morphKey", "value": false}],
+      "expected": {"path": "/graphs/0/nestedComponents/0/morphKey", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-component-morph-key-is-required",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/nestedComponent/required/6",
+      "seed": "component_tag_client_bindings.manifest.json",
+      "operations": [{"op": "remove", "path": "/graphs/0/nestedComponents/0/morphKey"}],
+      "expected": {"path": "/graphs/0/nestedComponents/0/morphKey", "category": "required"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-component-morph-mode-must-be-null-or-string",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/nestedComponent/properties/morphMode/oneOf/1/type",
+      "seed": "component_tag_client_bindings.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/nestedComponents/0/morphMode", "value": false}],
+      "expected": {"path": "/graphs/0/nestedComponents/0/morphMode", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-component-morph-mode-must-be-known",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/nestedComponent/properties/morphMode/oneOf/0/enum",
+      "seed": "component_tag_client_bindings.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/nestedComponents/0/morphMode", "value": "replace"}],
+      "expected": {"path": "/graphs/0/nestedComponents/0/morphMode", "category": "enum"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-component-morph-mode-is-required",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/nestedComponent/required/7",
+      "seed": "component_tag_client_bindings.manifest.json",
+      "operations": [{"op": "remove", "path": "/graphs/0/nestedComponents/0/morphMode"}],
+      "expected": {"path": "/graphs/0/nestedComponents/0/morphMode", "category": "required"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-fill-slot-name-must-be-string",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/fill/properties/slotName/type",
+      "seed": "fallback_fill.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/fills/0/slotName", "value": 1}],
+      "expected": {"path": "/graphs/0/fills/0/slotName", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-transparent-must-be-boolean",
+      "schema": "manifest.schema.json",
+      "constraint": "/$defs/componentInstance/properties/transparent/type",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "replace", "path": "/graphs/0/componentInstances/0/transparent", "value": 0}],
+      "expected": {"path": "/graphs/0/componentInstances/0/transparent", "category": "type"},
+      "implementations": ["python", "javascript"]
+    },
+    {
+      "id": "graph-revision-must-be-lowercase-sha256",
+      "schema": "manifest.schema.json",
+      "constraint": "/properties/revision/pattern",
+      "seed": "minimal.manifest.json",
+      "operations": [{"op": "replace", "path": "/revision", "value": "BAD"}],
+      "expected": {"path": "/revision", "category": "pattern"},
+      "implementations": ["python", "javascript"]
+    }
+  ]
+}

@@ -1,331 +1,247 @@
 ---
 title: Citry
-description: A fast, simple, and smart frontend framework for Python that brings the best of Vue, React, Django, and Jinja.
+description: Build checked, isolated web components in Python with server-rendered HTML and optional browser behavior.
+layout: landing
+boost: 2
 ---
 
-# Citry
+<section class="landing-hero" markdown="1">
+<div class="landing-hero__grid" markdown="1">
+<div class="landing-hero__copy" markdown="1">
+# The complete frontend stack for Python.
 
-Citry is a **fast**, **simple**, and **smart** frontend framework for Python
-that brings the best of **Vue**, **React**, **Django**, and **Jinja**. You write
-HTML with `<c-*>` tags, and citry renders it. The engine is a single Rust core
-with Python bindings today, and JavaScript, PHP, Go, and Rust to follow.
+<p class="landing-hero__lede">
+Citry is a free, open source <strong>HTML-first component framework</strong> for Python web
+applications. From server-rendered HTML to browser behavior and back to a Python
+handler, one component holds all of it. No second application, no separate build.
+</p>
 
-This very page is rendered by Citry (version {{ version }}): the docs site
-dogfoods the engine it documents.
+<div class="landing-actions">
+  <a class="landing-button landing-button--primary" href="/docs/">
+    Start building
+    <svg class="landing-button__arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h11M9 4l4 4-4 4"/></svg>
+  </a>
+  <a class="landing-button" href="/playground/">Try the playground</a>
+</div>
 
-## Two simple rules
+<div class="landing-install">
+  <code>pip install citry</code>
+  <button class="landing-copy" type="button" data-copy-install>Copy</button>
+</div>
 
-Citry extends HTML with two rules. If you know HTML, you already know most of it.
+<c-social-links variant="landing-social" />
 
-1. `<c-*>` tags are components. A `<c-Welcome />` tag renders the `Welcome` class.
-2. `c-*` attributes are dynamic. Their value is evaluated as an expression, and
-   the `c-` prefix is stripped from the rendered attribute.
+</div>
 
-## A small example
+<div class="landing-code landing-hero__code" markdown="1">
+<div class="landing-code__bar">
+  <span class="landing-code__dot"></span>
+  <span>product_card.py</span>
+</div>
 
-A component pairs a `template` with the data it needs, and can ship its own `js`
-and `css` too. Each part reads values prepared in plain Python by `template_data`,
-`js_data`, and `css_data`:
-
-```citry
-from typing import Any
-
-from citry import Component
-
-
-class Welcome(Component):
-    class Kwargs:
-        title: str
-        messages: list[str]
-
-    class Slots:
-        pass
-
-    def template_data(
-        self,
-        kwargs: Kwargs,
-        slots: Slots,
-    ) -> dict[str, Any]:
-        return {
-            "title": kwargs.title,
-            "count": len(kwargs.messages),
-        }
-
-    template = """
-      <div class="card">
-        <h1>{{ title }}</h1>
-        <p>You have {{ count }} new messages.</p>
-      </div>
-    """
-
-    # js_data values reach the script as `data.*`.
-    def js_data(
-        self,
-        kwargs: Kwargs,
-        slots: Slots,
-    ) -> dict[str, Any]:
-        return {"count": len(kwargs.messages)}
-
-    js = """
-      $component(({ els, data }) => {
-        els[0].title = `${data.count} new messages`;
-      });
-    """
-
-    # css_data values reach the styles as `var(--*)`.
-    def css_data(
-        self,
-        kwargs: Kwargs,
-        slots: Slots,
-    ) -> dict[str, Any]:
-        return {"accent": "tomato"}
-
-    css = """
-      .card {
-        border-top: 3px solid var(--accent);
-      }
-    """
-
-component = Welcome(
-    title="Welcome back",
-    messages=["a", "b", "c"],
-)
-html = str(component)
-```
-
-Only the `template` is required. `js` and `css` are there when a component needs
-them, and citry collects each rendered component's scripts and styles for you.
-
-## Highlights
-
-Beyond a single component, citry ships the pieces you need to build a whole
-interface. Each highlight links to a page with the details.
-
-### Template syntax
-
-Templates are HTML with a little Python. Drop a value into the output with
-`{{ }}`, compute an attribute by prefixing its name with `c-`, and branch or
-loop with `<c-if>` and `<c-for>`.
-
-```html
-<h1>{{ user.name }}</h1>
-<button c-disabled="is_loading">Save</button>
-<ul>
-  <li c-for="tag in tags">{{ tag }}</li>
-  <li c-empty>No tags yet</li>
-</ul>
-```
-
-See [Expressions](/syntax/expressions/),
-[Dynamic attributes](/syntax/dynamic-attributes/),
-[Control flow](/syntax/control-flow/), and
-[Nested templates](/syntax/nested-templates/).
-
-### Slots
-
-Let a component accept content from its caller. It marks insertion points with
-`<c-slot>`; the caller fills them with `<c-fill>` (or passes plain body content
-for the default slot). An unfilled slot renders its own fallback.
-
-```html
-<c-Modal>
-  <c-fill name="default">
-    <p>Are you sure?</p>
-  </c-fill>
-  <c-fill name="actions">
-    <button>Confirm</button>
-  </c-fill>
-</c-Modal>
-```
-
-More in [Slots](/concepts/slots/).
-
-### Typing and validation
-
-Declare what a component accepts with a `Kwargs` class. A typo like
-`<c-Button lable="Save" />` then stands out against the contract instead of
-surfacing as a blank button for a visitor later.
-
-```citry
-from citry import Component
-
-class Button(Component):
-    class Kwargs:
-        label: str                # required
-        variant: str = "primary"  # optional
-
-    template = """
-      <button c-class="'btn btn-' + variant">
-        {{ label }}
-      </button>
-    """
-
-    def template_data(self, kwargs: Kwargs, slots):
-        return {"label": kwargs.label, "variant": kwargs.variant}
-```
-
-More in [Typing and validation](/concepts/typing-and-validation/).
-
-### HTML attributes
-
-Write `class` and `style` as lists and dicts, Vue-style, and citry merges the
-pieces into the final string. Spread a whole dict onto a tag with `c-bind`, or
-assemble attributes in Python with [format_attrs][citry.format_attrs] and
-[merge_attrs][citry.merge_attrs].
-
-```html
-<!-- is_active = True -->
-<div c-class="['btn', { 'active': is_active }]"></div>
-<!-- -> <div class="btn active"></div> -->
-```
-
-More in [HTML attributes](/concepts/html-attributes/).
-
-### Client interactivity
-
-Citry owns one Alpine runtime and gives each client-active component an
-isolated scope. Pass reactive values down with `$c-props`, author Alpine and
-server event handlers on component tags, and keep call-site scope through
-slots without adding wrapper elements.
-
-```html
-<section x-data="{ selected: false }">
-  <c-action-button
-    $c-props="{ active: selected }"
-    @click="selected = true"
-    @c-save="saveSelection({ selected })"
-  />
+<c-include-file
+  path="docs_site/snippets/landing/product_card.py"
+  language="citry"
+/>
+</div>
+</div>
 </section>
-```
 
-More in [Client interactivity](/concepts/client-interactivity/) and
-[Alpine runtime](/advanced/alpine-runtime/).
+<section class="landing-section" id="proof" markdown="1">
+## One file holds the whole component end-to-end.
 
-### Server events
+<p class="landing-section__intro">
+Inputs, slots, server state, Python handlers, markup, browser behavior, and
+styles live together. No context switching.
+</p>
 
-Call typed Python handlers from clicks, forms, State bindings, or polling. A
-handler can re-render its component, update another page region, dispatch a
-browser event, return JSON, or redirect, all through one ordered return value.
+Point at any marked line below to see what it does:
 
-```citry
-class ContactIn:
-    email: str
+<c-landing-tour />
+</section>
 
+<section class="landing-section" id="reliability" markdown="1">
+## Catch UI mistakes early.
 
-class ContactForm(Component):
-    class Events:
-        def submit(self, data: ContactIn):
-            create_account(data.email)
-            return ThankYou()
+<!-- Every message below is the real one. Building this page applies each mistake
+to the component above, renders it, and prints back exactly what Citry raised.
+If a mistake stops being reported, or the report loses its detail, this page
+fails to build. -->
 
-    template = """
-      <form @c-submit.prevent="submit">
-        <input name="email">
-        <button type="submit">Sign up</button>
-      </form>
-    """
-```
+<p class="landing-section__intro">
+Explicit component inputs and isolated contexts turn silent UI
+failures into loud ERRORS.
+</p>
 
-More in [Server events](/events/).
+<p class="landing-section__intro">
+Iterate faster than ever before. Errors give critical context to your AI coding agents.
+</p>
 
-### Provide and inject
+Read about [inputs and validation](/concepts/inputs-and-validation/),
+[error boundaries](/concepts/error-boundaries/), and
+[testing components](/advanced/testing/).
 
-Pass data to a whole subtree without threading it through every level in
-between. A provider sets data under a key with `<c-provide>`, and any descendant
-reads it with `self.inject(...)`.
+<c-landing-diagnostic />
 
-```html
-<c-provide key="theme" mode="dark">
-  <c-Themed />
-</c-provide>
-```
+</section>
 
-`<c-Themed>` never received `mode` as a prop; it reached up the tree for it.
-More in [Provide and inject](/concepts/provide-and-inject/).
+<section class="landing-section landing-section--band" id="integrated" markdown="1">
+## Use with any web server.
 
-### HTML fragments
+<p class="landing-section__intro">
+Citry serves its own component assets, fragments, and events, so it needs a
+route on your application. Your routes, database, authentication, and deployment do not move.
+</p>
 
-Render a component as a fragment for an HTMX-style swap or a plain `fetch()`
-that sets `innerHTML`. Served through a mounted web framework, citry loads the
-component's JS and CSS in the browser for you.
+<p class="landing-section__intro">
+Two lines of code and you're all set. 
+</p>
 
-```python
-card = Card(title="Welcome")
-card.render().serialize(deps_strategy="fragment")
-```
+See the [web framework integrations](/web-frameworks/) and
+[server events](/events/).
 
-The chain runs [CitryElement][citry.CitryElement] to
-[CitryRender][citry.CitryRender] to an HTML string, with the
-[DepsStrategy][citry.DepsStrategy] choosing how the assets ship. More in
-[HTML fragments](/advanced/html-fragments/).
+<c-landing-hosts />
 
-### Extensions
+</section>
 
-Hook into the component lifecycle to watch or change what happens when a
-component takes input, computes its data, or renders. Extensions install per
-[Citry][citry.Citry] instance and can also add per-component config and their
-own CLI commands.
+<section class="landing-section" id="capabilities" markdown="1">
+## Start small. Keep the same model as the interface grows.
 
-```python
-from citry import Citry, Extension
+<p class="landing-section__intro">
+One component can be a button, a dashboard region, or the page around them.
+The primitives compose without forcing every project into a new application
+architecture.
+</p>
 
-class Timing(Extension):
-    name = "timing"
+<ul class="landing-capabilities">
+  <li>
+    <strong>Compose</strong>
+    <span>Checked inputs, slots, provide and inject, and dynamic components.</span>
+  </li>
+  <li>
+    <strong>Interact</strong>
+    <span>Scoped Alpine behavior, state, forms, events, and loading states.</span>
+  </li>
+  <li>
+    <strong>Deliver</strong>
+    <span>Assets, caching, HTML fragments, host adapters, and extensions.</span>
+  </li>
+  <li>
+    <strong>Verify</strong>
+    <span>Plain Python tests, executable examples, loud failures, and tracing.</span>
+  </li>
+</ul>
 
-    def on_component_rendered(self, ctx):
-        print(f"{type(ctx.component).__name__} rendered")
+Explore the [component concepts](/concepts/components/),
+[interactive examples](/examples/), and [advanced guides](/advanced/testing/).
+</section>
 
-app = Citry(extensions=[Timing])
-```
+<section class="landing-section" id="depth" markdown="1">
+## Grow without a rewrite.
 
-More in [Extensions](/advanced/extensions/).
+<p class="landing-section__intro">
+A product that works starts running into different problems. None of them need a different framework.
+</p>
 
-### Caching
+Read about [caching](/advanced/caching/),
+[`Const` optimization](/advanced/const-optimization/),
+[extensions](/advanced/extensions/),
+[HTML fragments](/advanced/html-fragments/), and
+[component libraries](/advanced/component-libraries/).
 
-Cache a complete component subtree with its nested `Cache` policy:
+<c-landing-depth />
 
-```citry
-class ProductCard(Component):
-    class Cache:
-        enabled = True
-        ttl = 300
-        version = 1
-```
+</section>
 
-Or cache one transparent template region and vary it on every value that can
-change its output:
+<section class="landing-section" id="people" markdown="1">
+## Built in public by people who care about Python and the web.
 
-```html
-<c-cache key="account-menu" c-vary="[current_user.id, locale]">
-  <c-account-menu c-user="current_user" c-locale="locale" />
-</c-cache>
-```
+<div class="landing-human-grid" markdown="1">
+<div class="landing-human-note">
+  <blockquote>
+    “Python teams should not have to choose between loose template fragments
+    and maintaining a second application just to build a serious interface.”
+  </blockquote>
+  <footer>Juro Oravec · Citry maintainer</footer>
+</div>
 
-Both surfaces use the backend configured on your [Citry][citry.Citry]
-instance. The default is process-local; Redis, disk, and Django adapters support
-shared deployments. More in [Caching](/advanced/caching/).
+<div markdown="1">
+Citry grows from
+[django-components](https://github.com/django-components/django-components)
+and the work of its contributors. The project is young, the decisions are open,
+and useful questions are contributions too.
 
-### Performance
+The people below have merged work into Citry or django-components. Recognition
+follows the whole history of both projects, not a launch-day count.
 
-Most of a template is the same on every render. Promise which inputs stay the
-same with [Const][citry.Const], and citry renders those parts once and reuses
-the result on later renders.
+<c-people group="contributors" avatars />
 
-```python
-from citry import Const
+### Who funds the work
 
-Card(cols=Const(3))
-```
+Citry is built in the open and paid for by organizations that run it. Sponsors
+get the roadmap early, a direct line to the maintainer, and a say in what gets
+built next.
 
-More in [Performance](/advanced/performance/).
+<ul class="landing-sponsors">
+  <li><a href="https://www.ohnemakler.net/" target="_blank" rel="noopener">Ohne Makler</a></li>
+</ul>
 
-## Where to go next
+[Sponsor Citry]({{ repo_sponsors_url }}) if your product depends
+on this layer and you want it moving faster.
 
-- [Installation](/getting-started/installation/): install citry and render your
-  first component.
-- [Template syntax](/syntax/expressions/): expressions, dynamic attributes, and
-  control flow.
-- [Components](/concepts/components/) and [Slots](/concepts/slots/): the core
-  building blocks.
-- [Examples](/examples/): real citry components, rendered live.
-- [API reference](/reference/): every public class and function.
+<div class="landing-human-links">
+  <a href="/community/people/">Meet the people building Citry</a>
+  <a href="/community/help/">Ask a question</a>
+  <a href="/community/contributing/">Help improve Citry</a>
+  <a href="/blog/">Read the build notes</a>
+</div>
+</div>
+</div>
+</section>
+
+<section class="landing-section landing-section--plain" id="trust" markdown="1">
+## Open source, inspectable, and honest about its stage.
+
+<div class="landing-trust-grid" markdown="1">
+<div class="landing-trust-card" markdown="1">
+### What is available now
+
+- free and open source under the MIT license;
+- CPython 3.10 through 3.14;
+- FastAPI, Starlette, Flask, Django, ASGI, and WSGI adapters;
+- server rendering, scoped browser behavior, events, forms, and fragments; and
+- source, tests, examples, and benchmark method in the public repository.
+</div>
+
+<div class="landing-trust-card" markdown="1">
+### What we will not pretend
+
+Citry is a pre-1.0 project. APIs can still change, the community is still
+forming, and the future IDE linter is not shipped yet. Use the compatibility,
+security, and release notes to make a decision with the current facts.
+
+[Compatibility](/about/compatibility/) · [Security](/security/) ·
+[Benchmarks](/about/benchmarks/) · [Source]({{ repo_url }})
+</div>
+</div>
+</section>
+
+<section class="landing-final" markdown="1">
+## Build your first component.
+
+Start with plain Python and HTML. Add composition, browser behavior, and Python
+events when the interface asks for them.
+
+<div class="landing-actions">
+  <a class="landing-button landing-button--primary" href="/docs/">
+    Read the docs
+    <svg class="landing-button__arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h11M9 4l4 4-4 4"/></svg>
+  </a>
+  <a class="landing-button" href="/examples/">Explore examples</a>
+</div>
+
+<div class="landing-install">
+  <code>pip install citry</code>
+  <button class="landing-copy" type="button" data-copy-install>Copy</button>
+</div>
+</section>

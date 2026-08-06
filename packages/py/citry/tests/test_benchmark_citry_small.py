@@ -277,12 +277,14 @@ class Button(Component):
 # `data-cid-c1` marker is deterministic in tests via the conftest fixture.
 
 EXPECTED_HTML = (
-    "\n        \n\n        "
+    # The inline templates lose their shared leading indentation, so every
+    # line starts at column 0 regardless of how they are indented in source.
+    "\n\n\n"
     '<a href="https://example.com" class="py-2 px-4 bg-blue-600 text-white hover:bg-blue-500'
     " focus-visible:outline-blue-600 transition inline-flex w-full text-sm font-semibold"
     " sm:mt-0 sm:w-auto focus-visible:outline-2 focus-visible:outline-offset-2"
     ' px-3 justify-center rounded-md shadow-sm no-underline" data-cid-c1="">'
-    "Click me!</a>\n    "
+    "Click me!</a>\n"
 )
 
 

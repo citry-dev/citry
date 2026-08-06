@@ -211,7 +211,7 @@ body {
   background: var(--c-surface-2);
   padding: 0.7rem 1rem;
   border-radius: 0.5rem;
-  border-left: 3px solid var(--c-link-dim);
+  border-left: 5px solid var(--c-link-dim);
   overflow-x: auto;
   margin: 1rem 0;
   position: relative;
@@ -347,12 +347,58 @@ body {
 
 /* Overflow wrapper for wide tables on narrow viewports */
 .prose .table-wrapper {
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  overscroll-behavior-inline: contain;
   margin: 1rem 0;
 }
 
 .prose .table-wrapper table {
   margin: 0;
+}
+
+/* Structured UI API tables keep identifiers compact, constrain metadata
+   columns, and leave explanatory prose to consume the remaining width. */
+.prose .ui-api-table {
+  min-width: 0;
+}
+
+.prose .ui-api-table :is(th, td):nth-child(1) {
+  width: var(--ui-api-column-1-width, auto);
+}
+
+.prose .ui-api-table :is(th, td):nth-child(2) {
+  width: var(--ui-api-column-2-width, auto);
+}
+
+.prose .ui-api-table :is(th, td):nth-child(3) {
+  width: var(--ui-api-column-3-width, auto);
+}
+
+.prose .ui-api-table :is(th, td):nth-child(4) {
+  width: var(--ui-api-column-4-width, auto);
+}
+
+.prose .ui-api-table :is(th, td):nth-child(5) {
+  width: var(--ui-api-column-5-width, auto);
+}
+
+.prose .ui-api-table--fit-column-1 :is(th, td):nth-child(1),
+.prose .ui-api-table--fit-column-2 :is(th, td):nth-child(2),
+.prose .ui-api-table--fit-column-3 :is(th, td):nth-child(3),
+.prose .ui-api-table--fit-column-4 :is(th, td):nth-child(4),
+.prose .ui-api-table--fit-column-5 :is(th, td):nth-child(5) {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.prose .ui-api-table--width-column-1 td:nth-child(1) code,
+.prose .ui-api-table--width-column-2 td:nth-child(2) code,
+.prose .ui-api-table--width-column-3 td:nth-child(3) code,
+.prose .ui-api-table--width-column-4 td:nth-child(4) code,
+.prose .ui-api-table--width-column-5 td:nth-child(5) code {
+  white-space: normal;
 }
 
 /* ------------------------------------------------------------------ */
@@ -607,6 +653,143 @@ body {
 }
 
 /* ------------------------------------------------------------------ */
+/* Citry UI result-first component previews                           */
+/* ------------------------------------------------------------------ */
+.citry-ui-demo {
+  margin: 1.5rem 0 2rem;
+  overflow: hidden;
+  border: 1px solid var(--c-border);
+  border-radius: 0.75rem;
+  background: var(--c-surface);
+}
+
+.citry-ui-demo__title {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--c-border);
+  color: var(--c-fg);
+  font-weight: 650;
+  box-shadow: 0 0.3rem 0.65rem -0.3rem oklch(0% 0 0 / 24%);
+}
+
+.citry-ui-demo__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.prose .citry-ui-demo__controls {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--c-border);
+  border-radius: 0;
+  background: var(--c-surface);
+  box-shadow: 0 0.3rem 0.65rem -0.3rem oklch(0% 0 0 / 24%);
+}
+
+.prose .citry-ui-demo__controls > summary {
+  padding: 0.625rem 1rem;
+  color: var(--c-fg-subtle);
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+
+.prose .citry-ui-demo__controls form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+  padding: 0.5rem 1rem;
+}
+
+.citry-ui-demo__control {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  color: var(--c-fg);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.citry-ui-demo__control select {
+  min-height: 1.5rem;
+  width: 100%;
+  padding-inline: 0.3rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.375rem;
+  background: var(--c-bg);
+  color: var(--c-fg);
+  font: inherit;
+  font-weight: normal;
+}
+
+.citry-ui-demo__control--checkbox {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  align-self: end;
+  min-height: 2.25rem;
+}
+
+.citry-ui-demo__control--checkbox input {
+  inline-size: 1rem;
+  block-size: 1rem;
+  margin: 0;
+}
+
+.citry-ui-demo__preview {
+  min-width: 0;
+  background: var(--c-surface-2);
+}
+
+.citry-ui-demo__preview iframe {
+  display: block;
+  width: 100%;
+  min-height: 12rem;
+  border: 0;
+  background: var(--c-surface-2);
+}
+
+.prose .citry-ui-demo__source {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--c-border);
+  border-radius: 0;
+}
+
+.prose .citry-ui-demo__source > summary {
+  padding: 0.625rem 1rem;
+  color: var(--c-fg-subtle);
+  font-size: 0.875rem;
+}
+
+.prose .citry-ui-demo__source[open] > summary {
+  border-bottom: 1px solid var(--c-border);
+}
+
+.prose .citry-ui-demo__source .highlight {
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.prose .citry-ui-demo__source .highlight pre {
+  max-height: 31.25rem;
+  margin: 0;
+  overflow: auto;
+  border: 0;
+  border-radius: 0;
+}
+
+/* ------------------------------------------------------------------ */
 /* People page: avatar grid (UserGrid component)                       */
 /* ------------------------------------------------------------------ */
 .user-list {
@@ -671,10 +854,6 @@ body {
   font-weight: 600;
   color: var(--c-fg);
   padding: 0.25rem 0;
-}
-
-.prose details[open] summary {
-  margin-bottom: 0.5rem;
 }
 
 /* ------------------------------------------------------------------ */
@@ -753,10 +932,34 @@ body {
   flex-shrink: 0;
 }
 
+/* The C3 mark sits in the accent colour so the wordmark beside it stays in the
+   reading ink; sized by height so it tracks the wordmark rather than the box. */
+.djc-logo__mark {
+  height: 1rem;
+  width: auto;
+  color: var(--c-accent);
+  flex-shrink: 0;
+}
+
 .djc-logo__wordmark {
   font-weight: 700;
   font-size: 1.05rem;
   letter-spacing: -0.01em;
+}
+
+/* Release stage, next to the wordmark so it is on every page rather than
+   only where someone thought to write it. */
+.djc-badge {
+  padding: 0.1em 0.45em;
+  color: var(--c-accent);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  margin-left: -12px;
 }
 
 .djc-header__nav {
@@ -766,6 +969,9 @@ body {
 }
 
 .djc-header__nav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--c-fg-muted);
   text-decoration: none;
   font-size: 0.9rem;
@@ -778,7 +984,26 @@ body {
   color: var(--c-fg);
 }
 
+.djc-nav-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.05rem 0.3rem;
+  color: var(--c-fg-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  margin-left: -12px;
+}
+
 .djc-header__nav a.is-active {
+  text-decoration: none;
+}
+
+.djc-header__nav a.is-active > .djc-header__nav-label {
   text-decoration: underline;
   text-decoration-color: var(--c-accent);
   text-decoration-thickness: 2px;
@@ -994,6 +1219,9 @@ body {
 }
 
 .djc-sidebar__topnav a {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   color: var(--c-fg);
   text-decoration: none;
   font-size: 0.95rem;
@@ -1020,6 +1248,9 @@ body {
 }
 
 .djc-sidebar__label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 0.7rem;
   font-family: var(--font-mono);
   text-transform: uppercase;
@@ -1048,12 +1279,45 @@ a.djc-sidebar__label:hover {
 
 .djc-sidebar__link {
   display: block;
+  position: relative;
   padding: 0.25rem 0.75rem;
   font-size: 0.85rem;
   color: var(--c-fg-muted);
   text-decoration: none;
   border-radius: 0.25rem;
   transition: color 0.15s, background 0.15s;
+}
+
+.djc-sidebar__review-icon {
+  margin-right: 0.25rem;
+  font-size: 0.75rem;
+}
+
+.djc-sidebar__review-hint {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.25rem);
+  left: 0.75rem;
+  width: min(15rem, calc(100% - 0.75rem));
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--c-border);
+  border-radius: 0.35rem;
+  background: var(--c-surface-2);
+  box-shadow: 0 0.4rem 1.2rem oklch(0% 0 0 / 18%);
+  color: var(--c-fg);
+  font-size: 0.72rem;
+  font-weight: 400;
+  line-height: 1.4;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-0.15rem);
+  transition: opacity 0.12s, transform 0.12s;
+}
+
+.djc-sidebar__link:hover .djc-sidebar__review-hint,
+.djc-sidebar__link:focus-visible .djc-sidebar__review-hint {
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .djc-sidebar__link:hover {
@@ -1515,8 +1779,20 @@ a.djc-sidebar__label:hover {
   margin-bottom: 0.2rem;
 }
 
-.djc-toc__item--3 {
-  padding-left: 1rem;
+.djc-toc__level-3 {
+  padding-inline-start: 0.75rem;
+}
+
+.djc-toc__level-4 {
+  padding-inline-start: 1.5rem;
+}
+
+.djc-toc__level-5 {
+  padding-inline-start: 2.25rem;
+}
+
+.djc-toc__level-6 {
+  padding-inline-start: 3rem;
 }
 
 .djc-toc__link {
@@ -1541,22 +1817,19 @@ a.djc-sidebar__label:hover {
 /* ------------------------------------------------------------------ */
 /* Reference TOC: collapsible class -> members, with symbol badges     */
 /* ------------------------------------------------------------------ */
-.djc-toc__row,
-.djc-toc__subitem {
+.djc-toc__row {
   display: flex;
   align-items: center;
   gap: 0.3rem;
 }
 
-/* Reserve a left gutter on every top-level row so labels align whether or not
-   the row has a caret (the caret sits in the gutter, absolutely positioned). */
+/* A collapsible row's caret sits in the aside's existing left gutter, so the
+   heading label remains aligned with other entries at the same level. */
 .djc-toc__row {
   position: relative;
-  padding-left: 1.1rem;
 }
 
-.djc-toc__row .djc-toc__link,
-.djc-toc__subitem .djc-toc__link {
+.djc-toc__row .djc-toc__link {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -1566,7 +1839,7 @@ a.djc-sidebar__label:hover {
 
 .djc-toc__toggle {
   position: absolute;
-  left: 0;
+  inset-inline-start: -1.1rem;
   top: 50%;
   transform: translateY(-50%);
   display: flex;
@@ -1602,16 +1875,16 @@ a.djc-sidebar__label:hover {
 .djc-toc__sublist {
   list-style: none;
   margin: 0.1rem 0 0.3rem;
-  padding-left: 1.2rem;
+  padding-inline-start: 0;
 }
 
 /* Members fold away by default; the active class (scroll-spy) or a manual toggle
    opens them. Plain content subsections are not collapsible, so they stay shown. */
-.djc-toc__item--collapsible .djc-toc__sublist {
+.djc-toc__item--collapsible > .djc-toc__sublist {
   display: none;
 }
 
-.djc-toc__item--collapsible.djc-toc__item--expanded .djc-toc__sublist {
+.djc-toc__item--collapsible.djc-toc__item--expanded > .djc-toc__sublist {
   display: block;
 }
 

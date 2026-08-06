@@ -1,13 +1,7 @@
-"""A card with a colored top border and content of your choice."""
-
-from __future__ import annotations
-
 from citry import Component, SlotInput
 
 
 class Card(Component):
-    """Display any content inside a bordered card."""
-
     class Kwargs:
         accent: str
 

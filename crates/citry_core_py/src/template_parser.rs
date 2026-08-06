@@ -30,10 +30,17 @@ fn lang_from_str(s: Option<&str>) -> PyResult<Option<Lang>> {
     }
 }
 
-fn parse_error_to_py(e: ParseError) -> PyErr {
-    match e {
-        ParseError::Syntax(_) => PySyntaxError::new_err(e.to_string()),
-        ParseError::Value(_) => PyValueError::new_err(e.to_string()),
+fn parse_error_to_py(py: Python<'_>, error: ParseError) -> PyErr {
+    let diagnostic = error.diagnostic();
+    let py_error = match error {
+        ParseError::Syntax(_) => PySyntaxError::new_err(diagnostic.message.clone()),
+        ParseError::Value(_) => PyValueError::new_err(diagnostic.message.clone()),
+    };
+    let result = Py::new(py, diagnostic)
+        .and_then(|diagnostic| py_error.value(py).setattr("diagnostic", diagnostic));
+    match result {
+        Ok(()) => py_error,
+        Err(attachment_error) => attachment_error,
     }
 }
 
@@ -65,13 +72,15 @@ fn compile_error_to_py(e: CompileError) -> PyErr {
 #[pyfunction]
 #[pyo3(signature = (input, lang=None, user_rules=None))]
 pub fn parse_template(
+    py: Python<'_>,
     input: &str,
     lang: Option<&str>,
     user_rules: Option<HashMap<String, TagRules>>,
 ) -> PyResult<Template> {
     let lang_enum = lang_from_str(lang)?;
     let rules_rc = user_rules.map(Rc::new);
-    parse_template_rust(input, lang_enum, rules_rc.as_ref()).map_err(parse_error_to_py)
+    parse_template_rust(input, lang_enum, rules_rc.as_ref())
+        .map_err(|error| parse_error_to_py(py, error))
 }
 
 /// Compile a parsed Template AST into host-language source code.

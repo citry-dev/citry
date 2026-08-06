@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from types import ModuleType
 
 from citry import Citry, Component
+from citry._protocol.client_graph import canonical_json
 from citry.ownership_manifest import COMMENT_PREFIX, PROTOCOL
 
 _ROOT = Path(__file__).resolve().parents[4]
@@ -34,7 +35,7 @@ SCHEMA = checker.load_json(checker.ROOT / "manifest.schema.json")
 
 def _resign(manifest: dict) -> None:
     unsigned = {key: value for key, value in manifest.items() if key != "revision"}
-    canonical = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode("utf8")
+    canonical = canonical_json(unsigned).encode("utf8")
     manifest["revision"] = hashlib.sha256(canonical).hexdigest()
 
 
@@ -92,6 +93,11 @@ def test_golden_fixtures_match_their_index_expectations():
 def test_wire_constants_are_locked_across_producer_schema_fixture_and_browser_consumer():
     fixture = checker.load_json(checker.TESTS / "minimal.manifest.json")
     runtime = (_ROOT / "packages/py/citry/citry/ext/dependencies/client/citry.js").read_text()
+    javascript = _ROOT / "packages/protocol/client_graph/v1/js/src"
+    canonical_source = (javascript / "canonical.ts").read_text()
+    comments_source = (javascript / "comments.ts").read_text()
+    manifests_source = (javascript / "manifests.ts").read_text()
+    core_embed_source = (javascript / "core-embed.ts").read_text()
 
     assert PROTOCOL == "citry-client-graph/1"
     assert COMMENT_PREFIX == "citry:g1"
@@ -101,11 +107,18 @@ def test_wire_constants_are_locked_across_producer_schema_fixture_and_browser_co
     assert fixture["protocol"] == PROTOCOL
     assert fixture["mode"] in {"production", "development"}
     assert fixture["delimiters"] == {"format": COMMENT_PREFIX}
-    # The browser consumer checks the same constants.
-    assert f'manifest.protocol !== "{PROTOCOL}"' in runtime
-    assert f'OWNERSHIP_COMMENT_PREFIX = "{COMMENT_PREFIX}"' in runtime
-    assert "manifest.delimiters.format !== OWNERSHIP_COMMENT_PREFIX" in runtime
-    assert 'manifest.mode !== "production" && manifest.mode !== "development"' in runtime
+    # The browser consumer receives the same constants and validator through
+    # the one generated core region.
+    assert f'PROTOCOL = "{PROTOCOL}"' in canonical_source
+    assert f'OWNERSHIP_COMMENT_PREFIX = "{COMMENT_PREFIX}"' in comments_source
+    assert "value.delimiters.format !== OWNERSHIP_COMMENT_PREFIX" in manifests_source
+    assert 'value.mode !== "production" && value.mode !== "development"' in manifests_source
+    assert "assertValidManifest" in core_embed_source
+    assert runtime.count("/*<citry-client-graph-v1>*/") == 1
+    assert runtime.count("/*</citry-client-graph-v1>*/") == 1
+    assert "CitryClientGraphProtocol.assertValidManifest(manifest)" in runtime
+    assert "validatePhysicalCaps(OWNERSHIP_COMMENT_PREFIX" not in runtime
+    assert runtime.count("validatePhysicalCaps(") == 2
     assert "offsetUnit" not in runtime
 
 
@@ -222,7 +235,12 @@ def test_real_server_manifest_validates_in_both_modes():
 
         class Child(Component):
             citry = c
-            template = "<span>child</span>"
+            js = """
+              $component(() => {});
+            """
+            template = """
+              <span>child</span>
+            """
 
         class Page(Component):
             citry = c
@@ -231,6 +249,8 @@ def test_real_server_manifest_validates_in_both_modes():
                 def save(self):
                     return None
 
-            template = '<c-child $c-props="{n: 1}" @c-click="save({x: `)`})" />'
+            template = """
+              <c-child $c-props="{n: 1}" @c-click="save({x: `)`})" />
+            """
 
         assert checker.check_manifest(_manifest_of(Page().render().serialize()), SCHEMA) == []

@@ -1,95 +1,110 @@
 ---
-title: Comments
-description: The three ways to write comments in citry templates, which ones survive to the rendered HTML, and which are stripped.
+title: Comments and literal text
+description: Choose whether a comment reaches the browser, and use c-raw when template-looking text must pass through unchanged.
 ---
 
-# Comments
+# Comments and literal text
 
-Citry gives you three kinds of comments, and the difference between them is
-simple: one shows up in the rendered HTML, one is stripped before rendering,
-and one lives inside a Python expression. Pick the one that matches what you
-want the reader of your page to see.
+Citry has two template comment forms. Use an HTML comment when it should reach
+the browser, or a Citry comment when it should stay in the source file.
 
-## HTML comments are kept
+Use `<c-raw>` for a different job: keeping a whole block of
+template-looking text unchanged.
 
-A normal HTML comment `<!-- ... -->` is left exactly where you wrote it and
-appears verbatim in the final output, just like it would in any HTML file.
+## Keep a comment in the HTML
 
-```html
-<!-- This comment appears in the final HTML -->
-<div>Content</div>
+A normal HTML comment remains in the rendered output:
+
+```citry-html
+<!-- The browser receives this comment. -->
+<p>Account details</p>
 ```
 
-Reach for this when the comment is meant for someone reading the page source in
-their browser.
+This is useful for a note meant for someone inspecting the page source.
 
-## Template comments are stripped
+An HTML comment counts as rendered content. For example, it cannot sit between
+an `if` branch and its `else` branch, because those branches must be adjacent.
 
-A template comment `{# ... #}` is removed before the page is rendered, so it
-never reaches the browser. Use it for notes to yourself and your teammates that
-should not leak into the output.
+## Keep a comment only in the template
 
-```jinja
-{# This comment never appears in the rendered HTML #}
-<div>Content</div>
+A Citry template comment starts with `{#` and ends with `#}`. Citry removes it
+before rendering:
+
+```citry-html
+{# Replace this copy after the beta. #}
+<p>Account details</p>
 ```
 
-You can place a template comment in text or between attributes in a tag. It is
-not allowed inside `{{ ... }}` (that is a parse error), and inside a quoted
-static attribute value it is treated as literal text rather than a comment.
+You can put one in ordinary template text or between attributes:
 
-## Expression comments
+```citry-html
+<button
+  class="button"
+  {# Native behavior, even if browser JavaScript fails. #}
+  type="submit"
+>
+  Save
+</button>
+```
 
-Inside `{{ ... }}` or a dynamic `c-*` attribute, a `#` is an ordinary Python
-comment. It runs to the end of the line and never appears in the output.
+Inside a control-flow branch, a template comment is safe. It is also safe
+between adjacent control-flow branches: the non-rendering comment and its
+surrounding formatting whitespace do not break the branch chain. See
+[Conditions and loops](/syntax/control-flow/#wrap-several-elements-in-a-condition)
+for the exact rule.
 
-```html
-<div c-class="get_classes()  # fetch dynamic classes">
-  {{ user.name  # display username }}
+Inside `{{ ... }}`, `{# ... #}` is not a comment and causes a parse error.
+Inside a quoted static attribute, it is literal text:
+
+```citry-html
+<p title="{# This text stays in the title. #}">Details</p>
+```
+
+## Comment inside a Python expression
+
+Within `{{ ... }}` or an expression-valued dynamic `c-*` attribute, `#` starts
+an ordinary Python comment:
+
+```citry-html
+<div c-class="get_classes()  # build the class list">
+  {{ user.name  # show the person's name }}
 </div>
 ```
 
-This is the same `#` you write in regular Python, so it correctly ignores a `#`
-that sits inside a string. Expression comments are covered in more depth on the
-[Expressions](/syntax/expressions/) page.
+The comment ends at the end of the line, just as it does in Python. A `#`
+inside a Python string remains part of the string.
 
-## Where each form is (and is not) a comment
+Outside a Python expression, `#` is ordinary text. That includes plain
+template text, static attribute values, and markup passed through a nested
+template attribute.
 
-The three forms only act as comments in the contexts above. Outside those
-contexts they are plain text:
+## Pass template-looking text through unchanged
 
-- A bare `#` in ordinary text (`# hello`) is literal text, not a comment.
-- `{# #}` or `#` inside a quoted static attribute value is literal text.
-- A `#` inside a nested template value (for example
-  `c-body="<div># this is text</div>"`) is literal text, not a Python comment.
+Wrap text in `<c-raw>` when Citry must not interpret expressions, component
+tags, or comments inside it:
 
-If you want an HTML comment inside a `c-*` attribute, wrap it in a nested
-template rather than writing `<!-- -->` as the attribute value on its own:
-
-```html
-<c-Card c-body="<div><!-- kept in output --></div>" />
+```citry-html
+--8<-- "docs_site/snippets/builtin_raw.html"
 ```
 
-## A worked example
+Citry removes the `<c-raw>` wrapper and copies its body to the rendered output
+verbatim. In this example, `{{ this_stays_as_text }}` is not evaluated and
+`<c-Card>` is not rendered as a Citry component.
 
-The three forms side by side in one component. The HTML comment survives to the
-browser, the template comment is stripped, and the expression comment documents
-the value without printing anything.
+Raw output is not HTML-escaped. The browser will still interpret any HTML in
+the copied body. Use `<c-raw>` only for text written and trusted by the template
+author. It is not a safe way to display HTML supplied by a user.
 
-```citry
-from citry import Component
+Events binding syntax is safe to show inside the block. Citry compiles only
+attributes that the template parser identified on real elements, so
+`@c-click="save"` and `:c-query` text inside `<c-raw>` remains byte-for-byte
+literal.
 
+`<c-raw>` has a deliberately small syntax:
 
-class Notice(Component):
-    template = """
-      <!-- rendered banner, visible in page source -->
-      {# internal note: swap copy before launch #}
-      <p>{{ message  # the greeting to show }}</p>
-    """
+- It takes no attributes.
+- It needs both opening and closing tags and cannot self-close.
+- Raw blocks cannot nest. The first closing tag ends the block.
 
-    def template_data(self, kwargs, slots):
-        return {"message": kwargs["message"]}
-```
-
-The rendered output keeps the `<!-- ... -->` line and the `<p>`, and contains no
-trace of the `{# ... #}` note or the `# the greeting to show` comment.
+To pass an HTML comment through a component input, see
+[Markup in attributes](/syntax/nested-templates/#when-the-fragment-markers-are-optional).

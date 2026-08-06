@@ -19,6 +19,7 @@ from citry import Citry, Component, Const, Extension
 from citry.constness import is_const
 from citry.nodes import ExprNode
 from citry.slots import Slot
+from citry.util.misc import to_dict
 
 pydantic = pytest.importorskip("pydantic")
 BaseModel = pydantic.BaseModel
@@ -186,6 +187,70 @@ class TestPydanticSlots:
 
         with pytest.raises(SyntaxError, match="wrong"):
             BadFill().render()
+
+
+class TestPydanticComponentData:
+    def test_template_data_uses_validated_coercions_and_defaults(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<p>{{ count + 1 }} {{ label }}</p>"
+
+            class TemplateData(BaseModel):
+                count: int
+                label: str = "rows"
+
+            def template_data(self, kwargs, slots):
+                return {"count": "7"}
+
+        assert Card().render().serialize() == '<p data-cid-c1="">8 rows</p>'
+
+    @pytest.mark.parametrize("model_base", [BaseModel, BaseModelV1])
+    def test_data_schemas_preserve_extras_the_model_explicitly_allows(self, model_base):
+        class OpenData(model_base):
+            if model_base is BaseModel:
+                model_config = ConfigDict(extra="allow")
+            else:
+
+                class Config:
+                    extra = "allow"
+
+            known: int
+
+        captured: list = []
+
+        class Probe(Extension):
+            name = "probe"
+
+            def on_component_data(self, ctx):
+                captured.append(ctx)
+
+        c = Citry(extensions=[Probe])
+
+        class Card(Component):
+            citry = c
+            template = "<p>{{ plugin_value }}</p>"
+            TemplateData = OpenData
+
+            def template_data(self, kwargs, slots):
+                data = OpenData(known=7, plugin_value="kept")
+                data.__dict__["cached_value"] = "must not leak"
+                return data
+
+        assert Card().render().serialize() == '<p data-cid-c1="">kept</p>'
+        assert captured[-1].template_data == {"known": 7, "plugin_value": "kept"}
+
+    def test_pydantic_v1_allowed_underscore_extra_is_preserved(self):
+        class OpenData(BaseModelV1):
+            class Config:
+                extra = "allow"
+
+            known: int
+
+        data = OpenData(known=7, _plugin_value="kept")
+
+        assert to_dict(data) == {"known": 7, "_plugin_value": "kept"}
 
 
 class TestPydanticConstInterplay:

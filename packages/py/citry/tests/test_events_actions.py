@@ -56,7 +56,9 @@ def _badge(c):
 # What one Badge(count=N) fragment serializes to (observed; the conftest
 # counter makes the first render of a test "c1").
 def _badge_html(count):
-    return f'\n            <span class="badge" data-cid-c1="">{count}</span>\n        '
+    # The inline template loses its shared leading indentation, so the
+    # fragment starts at column 0 whatever the source indentation was.
+    return f'\n<span class="badge" data-cid-c1="">{count}</span>\n'
 
 
 def _citry_records(caplog):
@@ -81,14 +83,29 @@ class TestActionConstructors:
         assert (replace.url, replace.delay, replace.wait) == ("#results", 0, True)
 
     def test_delay_and_wait_are_validated(self):
-        with pytest.raises(ValueError, match="delay must be a non-negative number of seconds"):
+        with pytest.raises(ValueError, match="delay must be a finite, non-negative number of seconds"):
             actions.Data(1, delay=-1)
-        with pytest.raises(ValueError, match="delay must be a non-negative number of seconds"):
+        with pytest.raises(ValueError, match="delay must be a finite, non-negative number of seconds"):
             actions.Data(1, delay="soon")
-        with pytest.raises(ValueError, match="delay must be a non-negative number of seconds"):
+        with pytest.raises(ValueError, match="delay must be a finite, non-negative number of seconds"):
             actions.Data(1, delay=True)
+        with pytest.raises(ValueError, match="delay must be a finite, non-negative number of seconds"):
+            actions.Data(1, delay=float("nan"))
+        with pytest.raises(ValueError, match="delay must be a finite, non-negative number of seconds"):
+            actions.Data(1, delay=float("inf"))
+        with pytest.raises(ValueError, match="delay must be a finite, non-negative number of seconds"):
+            actions.Data(1, delay=10**400)
         with pytest.raises(ValueError, match="wait must be True or False"):
             actions.Data(1, wait="yes")
+
+    def test_data_must_wait_to_resolve_the_caller(self):
+        data = actions.Data(1, delay=0.25, wait=True)
+        assert (data.delay, data.wait) == (0.25, True)
+        with pytest.raises(
+            ValueError,
+            match=r"^actions\.Data: wait must be True because Data resolves the caller's promise; got False\.$",
+        ):
+            actions.Data(1, wait=False)
 
     def test_render_rejects_a_component_class(self):
         c = _mounted_citry()
@@ -508,7 +525,7 @@ class TestEncodeActions:
     def test_delay_and_wait_ride_only_when_set(self):
         encoded = encode_actions(
             [
-                actions.Data({"ok": True}),
+                actions.Data({"ok": True}, delay=0.125),
                 actions.Dispatch("bye", delay=0.5),
                 actions.Redirect("/next", delay=5, wait=False),
                 actions.PushUrl("?page=2", delay=0.25, wait=False),
@@ -518,7 +535,7 @@ class TestEncodeActions:
             handler="save",
         )
         assert encoded == [
-            {"action": "data", "value": {"ok": True}},
+            {"action": "data", "value": {"ok": True}, "delay": 0.125},
             {"action": "event", "eventName": "bye", "delay": 0.5},
             {"action": "redirect", "url": "/next", "delay": 5, "wait": False},
             {"action": "url", "url": "?page=2", "mode": "push", "delay": 0.25, "wait": False},

@@ -24,9 +24,10 @@
 #     create-github-app-token shape).
 #   - Every built snapshot is committed to the repo, matching the committed
 #     docs_site/versions/versions.json.
-#   - The snapshot is built from the default branch's tip labelled as the tag
-#     version. A release is tagged on that tip, so they coincide; if main advances
-#     between tagging and this run, the snapshot reflects main's tip.
+#   - A tag-triggered snapshot is built in a detached worktree at that exact tag
+#     commit. The default branch checkout only receives the generated snapshot
+#     and builds the current root site, so later main changes cannot leak into
+#     versioned documentation.
 name: Release docs
 
 on:
@@ -71,11 +72,10 @@ jobs:
           # default branch can be checked out and pushed to below.
           fetch-depth: 0
 
-      # A tagged run intentionally snapshots the default branch under the tag's
-      # version label (see the policy note above). Select that source before
-      # dependency installation so Python, Rust, docs, and the lockfile all come
-      # from one revision rather than producing a mixed tag/main artifact.
-      - name: Check out the snapshot source
+      # Snapshot generation uses a detached worktree at the tag. Keep the main
+      # checkout on the default branch so it can receive that generated tree,
+      # assemble the current root site, and push the snapshot commit.
+      - name: Check out the default branch
         if: github.ref_type == 'tag'
         run: |
           git fetch origin main
@@ -108,6 +108,21 @@ jobs:
       - name: Install the workspace with docs + social-card extras
         run: uv sync --locked --all-packages --extra docs --extra social-cards
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install Node tooling
+        run: pnpm install --frozen-lockfile
+
+      - name: Check the generated playground bundle
+        run: pnpm --dir docs_site/_internal/frontend run check
+
       - name: Install the chromium browser
         run: uv run --no-sync playwright install --with-deps chromium
 
@@ -136,8 +151,8 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: |
           VERSION="${REF_NAME#citry@}"
-          echo "Releasing docs version: $VERSION"
-          uv run --no-sync python -m docs_site build --docs-version "$VERSION" --alias latest
+          echo "Releasing docs version: $VERSION from exact tag $REF_NAME"
+          uv run --no-sync python -m docs_site build-tag "$REF_NAME"
           uv run --no-sync python -m docs_site versions-check
           git add docs_site/versions/
           if git diff --cached --quiet; then

@@ -47,7 +47,7 @@ def _make_app() -> tuple[Citry, type[Component], type[Component], type[Component
           <span class="child-second" x-text="seen"></span>
         """
 
-        def js_data(self, _kwargs: dict[str, object], _slots: object) -> dict[str, object]:
+        def js_data(self, kwargs: dict[str, object], slots: object) -> dict[str, object]:
             component_type = type(self)
             component_type._data_nonce += 1
             return {"nonce": component_type._data_nonce}
@@ -70,9 +70,21 @@ def _make_app() -> tuple[Citry, type[Component], type[Component], type[Component
                 return None
 
         template = """
-          <section class="parent" x-data="{ outer: 1 }">
+          <section
+            class="parent"
+            x-data="{ outer: 1 }"
+            @c-ended="refresh({kind: 'parent-ended', current: $event.currentTarget === $el})"
+          >
             <input class="bound-control" :c-count="refresh" />
             <button class="local-event" @c-click="refresh">refresh</button>
+            <video
+              class="native-ended"
+              @c-ended="refresh({kind: 'ended', current: $event.currentTarget === $el})"
+            ></video>
+            <button
+              class="private-event"
+              @c-private-event="refresh({kind: 'private', current: $event.currentTarget === $el})"
+            >private</button>
             <c-child
               $c-props="{ count: outer }"
               @click="outer += 1"
@@ -86,6 +98,42 @@ def _make_app() -> tuple[Citry, type[Component], type[Component], type[Component
         template = "<html><head><title>A10</title></head><body><c-parent /></body></html>"
 
     return c, Child, Parent, Page
+
+
+def test_element_bindings_receive_non_bubbling_native_and_custom_events(page: Any, serve_live: Any) -> None:
+    citry, _Child, _Parent, Page = _make_app()
+    base = serve_live(citry, str(Page()), "")
+    page.goto(base + "/")
+    page.wait_for_function(READY)
+
+    page.evaluate(
+        """
+        () => {
+          window.__a10ElementCalls = [];
+          Citry.events._internal.setTransport((call) => {
+            window.__a10ElementCalls.push(call);
+            return null;
+          });
+          document.querySelector('.native-ended').dispatchEvent(new Event('ended'));
+          document.querySelector('.private-event').dispatchEvent(new CustomEvent('private-event'));
+        }
+        """
+    )
+    page.wait_for_function("window.__a10ElementCalls.length === 2")
+    calls = page.evaluate(
+        """
+        window.__a10ElementCalls.map((call) => ({
+          handler: call.handlerName,
+          kind: call.args.kind,
+          current: call.args.current,
+        }))
+        """
+    )
+
+    assert calls == [
+        {"handler": "refresh", "kind": "ended", "current": True},
+        {"handler": "refresh", "kind": "private", "current": True},
+    ]
 
 
 def test_protocol_caps_and_runtime_versions_survive_real_document_delivery(page: Any, serve_live: Any) -> None:
@@ -267,7 +315,8 @@ def test_effect_listener_and_graph_counts_stay_bounded_through_morph_churn(page:
     assert baseline["alpine"]["runtime"]["managedEffects"] == 2
     assert baseline["alpine"]["runtime"]["rootBindings"] >= 2
     assert baseline["alpine"]["runtime"]["nativeListenerTargets"] >= 4
-    assert baseline["events"]["delegatedListenerTypes"] >= 2
+    assert baseline["events"]["bindingListenerElements"] == 5
+    assert baseline["events"]["bindingListenerTargets"] == 5
     assert baseline["events"]["formEffects"] == 1
     assert baseline["events"]["queuedCalls"] == 0
 
@@ -294,7 +343,8 @@ def test_effect_listener_and_graph_counts_stay_bounded_through_morph_churn(page:
         "anchors",
         "renderIds",
         "classes",
-        "delegatedListenerTypes",
+        "bindingListenerElements",
+        "bindingListenerTargets",
         "polledElements",
         "anchorIntervals",
         "elementIntervals",

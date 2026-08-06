@@ -63,6 +63,10 @@
 (function () {
   "use strict";
 
+  /*<citry-client-graph-v1>*/
+  var OWNERSHIP_COMMENT_PREFIX="citry:g1",OWNERSHIP_COMMENT_RE=/^citry:g1:([0-9a-f]{64}):([0-9]+):([ir]):([0-9]+):([se])$/,matchOwnershipComment=t=>OWNERSHIP_COMMENT_RE.exec(t.trim()),parseOwnershipComment=t=>{const e=matchOwnershipComment(t);if(e===null)return null;const[,i,c,n,s,o]=e;return{revision:i,graphId:c,kind:n,recordId:s,side:o,key:`${OWNERSHIP_COMMENT_PREFIX}:${i}:${c}:${n}:${s}`}},ProtocolValueError=class extends TypeError{constructor(t){super(t.message),this.name="ProtocolValueError",this.issue=t}},hasOwn=(t,e)=>Object.prototype.hasOwnProperty.call(t,e),pointer=(t,e)=>{const i=String(e).replace(/~/g,"~0").replace(/\//g,"~1");return t?`${t}/${i}`:`/${i}`},isPlainObject=t=>{if(t===null||typeof t!="object"||Array.isArray(t))return!1;const e=Object.getPrototypeOf(t);return e===Object.prototype||e===null},firstUnknown=(t,e)=>Object.keys(t).filter(i=>!e.has(i)).sort()[0]??null,containerIssue=(t,e)=>{if(Object.getOwnPropertySymbols(t).length)return{path:e,category:"strict_json",message:"The value contains a symbol-keyed property."};for(const i of Object.getOwnPropertyNames(t)){if(Array.isArray(t)&&i==="length")continue;const c=Object.getOwnPropertyDescriptor(t,i);if(!c?.enumerable||!("value"in c))return{path:pointer(e,i),category:"strict_json",message:"A JSON property must be an enumerable data property."}}return null},validateStrictJson=(t,e="")=>{const i=[{value:t,path:e,leaving:!1}],c=new Set;for(;i.length;){const n=i.pop(),s=n.value;if(n.leaving){c.delete(s);continue}if(s===null||typeof s=="string"||typeof s=="boolean")continue;if(typeof s=="number"){if(!Number.isFinite(s))return{path:n.path,category:"strict_json",message:"The value contains a non-finite number."};continue}if(typeof s!="object")return{path:n.path,category:"strict_json",message:"The value contains a non-JSON value."};if(!Array.isArray(s)&&!isPlainObject(s))return{path:n.path,category:"strict_json",message:"The value contains a non-JSON object."};const o=containerIssue(s,n.path);if(o)return o;if(c.has(s))return{path:n.path,category:"strict_json",message:"The value contains a cycle."};if(c.add(s),i.push({value:s,path:n.path,leaving:!0}),Array.isArray(s)){const l=Object.keys(s);if(l.length!==s.length||l.some((I,y)=>I!==String(y)))return{path:n.path,category:"strict_json",message:"A JSON array must be dense and carry no named properties."};for(let I=s.length-1;I>=0;I-=1)i.push({value:s[I],path:pointer(n.path,I),leaving:!1});continue}for(const l of Object.keys(s).sort().reverse())i.push({value:s[l],path:pointer(n.path,l),leaving:!1})}return null},PROTOCOL="citry-client-graph/1",MAX_SAFE_INTEGER=Number.MAX_SAFE_INTEGER,canonicalValue=t=>{if(t===null||typeof t=="string"||typeof t=="boolean")return JSON.stringify(t);if(typeof t=="number"){if(!Number.isSafeInteger(t)||t<0)throw new TypeError("client-graph numbers must be non-negative safe integers");return String(t)}if(Array.isArray(t))return`[${t.map(canonicalValue).join(",")}]`;if(isPlainObject(t))return`{${Object.keys(t).sort().map(e=>`${JSON.stringify(e)}:${canonicalValue(t[e])}`).join(",")}}`;throw new TypeError("unsupported client-graph JSON value")},sha256=t=>{const e=new TextEncoder().encode(t),i=Math.ceil((e.length+9)/64)*64,c=new Uint8Array(i);c.set(e),c[e.length]=128;const n=new DataView(c.buffer);n.setUint32(i-8,Math.floor(e.length/536870912),!1),n.setUint32(i-4,e.length<<3>>>0,!1);const s=new Uint32Array([1116352408,1899447441,3049323471,3921009573,961987163,1508970993,2453635748,2870763221,3624381080,310598401,607225278,1426881987,1925078388,2162078206,2614888103,3248222580,3835390401,4022224774,264347078,604807628,770255983,1249150122,1555081692,1996064986,2554220882,2821834349,2952996808,3210313671,3336571891,3584528711,113926993,338241895,666307205,773529912,1294757372,1396182291,1695183700,1986661051,2177026350,2456956037,2730485921,2820302411,3259730800,3345764771,3516065817,3600352804,4094571909,275423344,430227734,506948616,659060556,883997877,958139571,1322822218,1537002063,1747873779,1955562222,2024104815,2227730452,2361852424,2428436474,2756734187,3204031479,3329325298]),o=new Uint32Array([1779033703,3144134277,1013904242,2773480762,1359893119,2600822924,528734635,1541459225]),l=new Uint32Array(64),I=(y,p)=>y>>>p|y<<32-p;for(let y=0;y<i;y+=64){for(let m=0;m<16;m+=1)l[m]=n.getUint32(y+m*4,!1);for(let m=16;m<64;m+=1){const $=l[m-15],k=l[m-2],O=I($,7)^I($,18)^$>>>3,a=I(k,17)^I(k,19)^k>>>10;l[m]=l[m-16]+O+l[m-7]+a>>>0}let p=o[0],g=o[1],R=o[2],C=o[3],v=o[4],L=o[5],w=o[6],b=o[7];for(let m=0;m<64;m+=1){const $=I(v,6)^I(v,11)^I(v,25),k=v&L^~v&w,O=b+$+k+s[m]+l[m]>>>0,a=I(p,2)^I(p,13)^I(p,22),r=p&g^p&R^g&R,d=a+r>>>0;b=w,w=L,L=v,v=C+O>>>0,C=R,R=g,g=p,p=O+d>>>0}o[0]=o[0]+p>>>0,o[1]=o[1]+g>>>0,o[2]=o[2]+R>>>0,o[3]=o[3]+C>>>0,o[4]=o[4]+v>>>0,o[5]=o[5]+L>>>0,o[6]=o[6]+w>>>0,o[7]=o[7]+b>>>0}return Array.from(o).map(y=>y.toString(16).padStart(8,"0")).join("")},revisionFor=t=>sha256(canonicalValue(t)),revisionForManifest=t=>{const e={};for(const i of Object.keys(t))i!=="revision"&&(e[i]=t[i]);return revisionFor(e)},RENDER_ID=/^[a-z0-9_-]+$/,LOCATION_KINDS=new Set(["component-call","component-tag-client-binding","implicit-fill","named-fill","fallback-fill","slot-outlet"]),BINDING_SOURCES=new Set(["direct","server-dynamic","spread"]),FILL_KINDS=new Set(["implicit","named","fallback","python","typed-default"]),SOURCE_POLICIES=new Set(["template","python-detached","typed-default-detached"]),MORPH_MODES=new Set(["ignore"]),COMPONENT_CLASS_FIELDS=["classId","className"],COMPONENT_INSTANCE_FIELDS=["instanceId","renderId","classId","invocationId","parentRenderId","transparent"],SOURCE_LOCATION_FIELDS=["locationId","kind","ownerRenderId","ownerClassId","carrierInstanceId","origin","sourceOffset","sourcePos","mappingKey","mappingIndex"],EXPRESSION_PAYLOAD_FIELDS=["type","expression"],DOM_PAYLOAD_FIELDS=["type","classId","event","handler","args","prevent","stop","self","once","key","debounce","throttle"],POLL_PAYLOAD_FIELDS=["type","classId","handler","args","interval"],CLIENT_BINDING_FIELDS=["key","source","locationId","payload"],NESTED_COMPONENT_FIELDS=["invocationId","sourceRenderId","sourceClassId","locationId","tagName","targetClassId","morphKey","morphMode","targetRenderId","parentRegionId","clientBindings"],EXECUTION_CONSTRAINT_FIELDS=["invocationId","parentRenderId","childRenderId"],FILL_FIELDS=["fillId","kind","slotName","policy","ownerRenderId","ownerClassId","locationId","sourceInvocationId","receiverRenderId","receiverClassId","fallbackLocationId"],SLOT_REGION_FIELDS=["regionId","fillId","receiverRenderId","slotLocationId","ownerRenderId","sourceLocationId","parentRegionId","transitionFromRenderId","resultOwnerRenderId"],GRAPH_FIELDS=["graphId","componentClasses","componentInstances","sourceLocations","nestedComponents","componentExecutionOrderConstraints","fills","slotRegions"],recordIssue=(t,e,i,c,n)=>{if(n){const o=validateStrictJson(t,e);if(o)return o}if(!isPlainObject(t))return{path:e,category:"type",message:`${c} must be an object.`};for(const o of i)if(!hasOwn(t,o))return{path:pointer(e,o),category:"required",message:`${c} requires '${o}'.`};const s=firstUnknown(t,new Set(i));return s===null?null:{path:pointer(e,s),category:"unknown_field",message:`${c} has an unknown field.`}},stringIssue=(t,e,i)=>typeof t=="string"?null:{path:e,category:"type",message:`${i} must be a string.`},nullableStringIssue=(t,e,i)=>t===null||typeof t=="string"?null:{path:e,category:"type",message:`${i} must be a string or null.`},integerIssue=(t,e,i,c)=>typeof t!="number"||!Number.isInteger(t)?{path:e,category:typeof t=="number"&&!Number.isFinite(t)?"strict_json":"type",message:`${i} must be an integer.`}:!Number.isSafeInteger(t)||t<c?{path:e,category:"range",message:`${i} is outside the client-graph range.`}:null,nullableIntegerIssue=(t,e,i,c)=>t===null?null:integerIssue(t,e,i,c),enumIssue=(t,e,i,c)=>typeof t!="string"?{path:e,category:"type",message:`${c} must be a string.`}:i.has(t)?null:{path:e,category:"enum",message:`${c} is not a client-graph v1 value.`},nullableEnumIssue=(t,e,i,c)=>t===null?null:enumIssue(t,e,i,c),validateComponentClass=(t,e="",i=!0)=>{const c=recordIssue(t,e,COMPONENT_CLASS_FIELDS,"A component-class record",i);if(c)return c;const n=t;for(const s of COMPONENT_CLASS_FIELDS){const o=stringIssue(n[s],pointer(e,s),`The component ${s}`);if(o)return o}return null},validateComponentInstance=(t,e="",i=!0)=>{const c=recordIssue(t,e,COMPONENT_INSTANCE_FIELDS,"A component-instance record",i);if(c)return c;const n=t,s=[integerIssue(n.instanceId,pointer(e,"instanceId"),"The instance ID",1),stringIssue(n.renderId,pointer(e,"renderId"),"The render ID"),stringIssue(n.classId,pointer(e,"classId"),"The class ID"),nullableIntegerIssue(n.invocationId,pointer(e,"invocationId"),"The invocation ID",1),nullableStringIssue(n.parentRenderId,pointer(e,"parentRenderId"),"The parent render ID")];for(const o of s)if(o)return o;return RENDER_ID.test(n.renderId)?typeof n.transparent=="boolean"?null:{path:pointer(e,"transparent"),category:"type",message:"The transparent flag must be a boolean."}:{path:pointer(e,"renderId"),category:"pattern",message:"The component renderId is not safe for an HTML attribute name."}},validateSourceLocation=(t,e="",i=!0)=>{const c=recordIssue(t,e,SOURCE_LOCATION_FIELDS,"A source-location record",i);if(c)return c;const n=t,s=[integerIssue(n.locationId,pointer(e,"locationId"),"The location ID",1),enumIssue(n.kind,pointer(e,"kind"),LOCATION_KINDS,"The location kind"),stringIssue(n.ownerRenderId,pointer(e,"ownerRenderId"),"The location owner render ID"),stringIssue(n.ownerClassId,pointer(e,"ownerClassId"),"The location owner class ID"),integerIssue(n.carrierInstanceId,pointer(e,"carrierInstanceId"),"The carrier instance ID",1),nullableStringIssue(n.origin,pointer(e,"origin"),"The source origin")];for(const g of s)if(g)return g;const o=pointer(e,"sourceOffset");let l=recordIssue(n.sourceOffset,o,["start","end"],"A source-offset record",!1);if(l)return l;const I=n.sourceOffset;for(const g of["start","end"])if(l=integerIssue(I[g],pointer(o,g),`The source-offset ${g}`,0),l)return l;const y=pointer(e,"sourcePos");if(l=recordIssue(n.sourcePos,y,["line","column"],"A source-position record",!1),l)return l;const p=n.sourcePos;for(const g of["line","column"])if(l=integerIssue(p[g],pointer(y,g),`The source-position ${g}`,1),l)return l;return l=nullableStringIssue(n.mappingKey,pointer(e,"mappingKey"),"The mapping key"),l||nullableIntegerIssue(n.mappingIndex,pointer(e,"mappingIndex"),"The mapping index",0)},validateClientBindingPayload=(t,e="",i=!0)=>{if(i){const o=validateStrictJson(t,e);if(o)return o}if(!isPlainObject(t))return{path:e,category:"type",message:"A client-binding payload must be an object."};if(!hasOwn(t,"type"))return{path:pointer(e,"type"),category:"required",message:"A client-binding payload requires 'type'."};if(typeof t.type!="string")return{path:pointer(e,"type"),category:"type",message:"The client-binding payload type must be a string."};const c=t.type==="props"||t.type==="alpine-handler"?EXPRESSION_PAYLOAD_FIELDS:t.type==="citry-dom-event"?DOM_PAYLOAD_FIELDS:t.type==="citry-poll"?POLL_PAYLOAD_FIELDS:null;if(c===null)return{path:pointer(e,"type"),category:"enum",message:"The client-binding payload type is not a v1 value."};const n=recordIssue(t,e,c,"A client-binding payload",!1);if(n)return n;if(t.type==="props"||t.type==="alpine-handler")return stringIssue(t.expression,pointer(e,"expression"),"The Alpine expression");if(t.type==="citry-poll"){for(const l of["classId","handler"]){const I=stringIssue(t[l],pointer(e,l),`The poll ${l}`);if(I)return I}return nullableStringIssue(t.args,pointer(e,"args"),"The poll arguments")??integerIssue(t.interval,pointer(e,"interval"),"The poll interval",1)}for(const o of["classId","event","handler"]){const l=stringIssue(t[o],pointer(e,o),`The DOM-event ${o}`);if(l)return l}let s=nullableStringIssue(t.args,pointer(e,"args"),"The DOM-event args");if(s)return s;for(const o of["prevent","stop","self","once"])if(typeof t[o]!="boolean")return{path:pointer(e,o),category:"type",message:`The DOM-event ${o} flag must be a boolean.`};if(s=nullableStringIssue(t.key,pointer(e,"key"),"The DOM-event key"),s)return s;for(const o of["debounce","throttle"])if(s=nullableIntegerIssue(t[o],pointer(e,o),`The DOM-event ${o} delay`,0),s)return s;return null},validateClientBinding=(t,e="",i=!0)=>{const c=recordIssue(t,e,CLIENT_BINDING_FIELDS,"A component-tag client-binding record",i);if(c)return c;const n=t,s=[stringIssue(n.key,pointer(e,"key"),"The client-binding key"),enumIssue(n.source,pointer(e,"source"),BINDING_SOURCES,"The client-binding source"),nullableIntegerIssue(n.locationId,pointer(e,"locationId"),"The client-binding location ID",1)];for(const o of s)if(o)return o;return validateClientBindingPayload(n.payload,pointer(e,"payload"),!1)},validateNestedComponent=(t,e="",i=!0)=>{const c=recordIssue(t,e,NESTED_COMPONENT_FIELDS,"A nested-component record",i);if(c)return c;const n=t,s=[integerIssue(n.invocationId,pointer(e,"invocationId"),"The invocation ID",1),stringIssue(n.sourceRenderId,pointer(e,"sourceRenderId"),"The source render ID"),stringIssue(n.sourceClassId,pointer(e,"sourceClassId"),"The source class ID"),nullableIntegerIssue(n.locationId,pointer(e,"locationId"),"The location ID",1),stringIssue(n.tagName,pointer(e,"tagName"),"The nested-component tag name"),stringIssue(n.targetClassId,pointer(e,"targetClassId"),"The target class ID"),nullableStringIssue(n.morphKey,pointer(e,"morphKey"),"The component morph key"),nullableEnumIssue(n.morphMode,pointer(e,"morphMode"),MORPH_MODES,"The component morph mode"),stringIssue(n.targetRenderId,pointer(e,"targetRenderId"),"The target render ID"),nullableIntegerIssue(n.parentRegionId,pointer(e,"parentRegionId"),"The parent slot-region ID",1)];for(const o of s)if(o)return o;if(!Array.isArray(n.clientBindings))return{path:pointer(e,"clientBindings"),category:"type",message:"Client bindings must be an array."};for(let o=0;o<n.clientBindings.length;o+=1){const l=validateClientBinding(n.clientBindings[o],pointer(pointer(e,"clientBindings"),o),!1);if(l)return l}return null},validateExecutionConstraint=(t,e="",i=!0)=>{const c=recordIssue(t,e,EXECUTION_CONSTRAINT_FIELDS,"An execution-order constraint",i);if(c)return c;const n=t;return integerIssue(n.invocationId,pointer(e,"invocationId"),"The invocation ID",1)??stringIssue(n.parentRenderId,pointer(e,"parentRenderId"),"The parent render ID")??stringIssue(n.childRenderId,pointer(e,"childRenderId"),"The child render ID")},validateFill=(t,e="",i=!0)=>{const c=recordIssue(t,e,FILL_FIELDS,"A fill record",i);if(c)return c;const n=t;return[integerIssue(n.fillId,pointer(e,"fillId"),"The fill ID",1),enumIssue(n.kind,pointer(e,"kind"),FILL_KINDS,"The fill kind"),stringIssue(n.slotName,pointer(e,"slotName"),"The fill slot name"),enumIssue(n.policy,pointer(e,"policy"),SOURCE_POLICIES,"The fill source policy"),nullableStringIssue(n.ownerRenderId,pointer(e,"ownerRenderId"),"The fill owner render ID"),nullableStringIssue(n.ownerClassId,pointer(e,"ownerClassId"),"The fill owner class ID"),nullableIntegerIssue(n.locationId,pointer(e,"locationId"),"The fill location ID",1),nullableIntegerIssue(n.sourceInvocationId,pointer(e,"sourceInvocationId"),"The source invocation ID",1),nullableStringIssue(n.receiverRenderId,pointer(e,"receiverRenderId"),"The fill receiver render ID"),nullableStringIssue(n.receiverClassId,pointer(e,"receiverClassId"),"The fill receiver class ID"),nullableIntegerIssue(n.fallbackLocationId,pointer(e,"fallbackLocationId"),"The fallback location ID",1)].find(o=>o!==null)??null},validateSlotRegion=(t,e="",i=!0)=>{const c=recordIssue(t,e,SLOT_REGION_FIELDS,"A slot-region record",i);if(c)return c;const n=t;return[integerIssue(n.regionId,pointer(e,"regionId"),"The slot-region ID",1),integerIssue(n.fillId,pointer(e,"fillId"),"The fill ID",1),nullableStringIssue(n.receiverRenderId,pointer(e,"receiverRenderId"),"The receiver render ID"),nullableIntegerIssue(n.slotLocationId,pointer(e,"slotLocationId"),"The slot location ID",1),nullableStringIssue(n.ownerRenderId,pointer(e,"ownerRenderId"),"The owner render ID"),nullableIntegerIssue(n.sourceLocationId,pointer(e,"sourceLocationId"),"The source location ID",1),nullableIntegerIssue(n.parentRegionId,pointer(e,"parentRegionId"),"The parent slot-region ID",1),nullableStringIssue(n.transitionFromRenderId,pointer(e,"transitionFromRenderId"),"The transition source render ID"),nullableStringIssue(n.resultOwnerRenderId,pointer(e,"resultOwnerRenderId"),"The result owner render ID")].find(o=>o!==null)??null},validateGraph=(t,e="",i=!0)=>{const c=recordIssue(t,e,GRAPH_FIELDS,"A graph record",i);if(c)return c;const n=t,s=integerIssue(n.graphId,pointer(e,"graphId"),"The graph ID",0);if(s)return s;const o=[["componentClasses",validateComponentClass],["componentInstances",validateComponentInstance],["sourceLocations",validateSourceLocation],["nestedComponents",validateNestedComponent],["componentExecutionOrderConstraints",validateExecutionConstraint],["fills",validateFill],["slotRegions",validateSlotRegion]];for(const[l,I]of o){const y=n[l],p=pointer(e,l);if(!Array.isArray(y))return{path:p,category:"type",message:`The graph's ${l} must be an array.`};for(let g=0;g<y.length;g+=1){const R=I(y[g],pointer(p,g),!1);if(R)return R}}return null},cycle=t=>{const e=new Set,i=new Set;for(const c of t.keys()){let n=c;const s=[];for(;n!=null&&t.has(n)&&!i.has(n);){if(e.has(n))return!0;e.add(n),s.push(n);const o=t.get(n);if(o===void 0)break;n=o}for(const o of s)e.delete(o),i.add(o)}return!1},executionCycle=t=>{const e=new Set,i=new Set,c=Array.from(t.keys()).reverse().map(n=>[n,!1]);for(;c.length;){const[n,s]=c.pop();if(s){e.delete(n),i.add(n);continue}if(e.has(n))return!0;if(!i.has(n)){e.add(n),c.push([n,!0]);for(const o of[...t.get(n)??[]].reverse())c.push([o,!1])}}return!1},semantic=(t,e)=>({path:t,category:"semantic",message:e}),bindingKeyIssue=(t,e,i)=>{if(t.type==="props"&&e!=="$c-props")return semantic(i,"A props client binding must use the $c-props key.");if(t.type==="alpine-handler"&&!(e.startsWith("@")&&!e.startsWith("@c-")||e.startsWith("x-on:")))return semantic(i,"An Alpine-handler client binding has a non-Alpine key.");if(t.type==="citry-dom-event"){if(!e.startsWith("@c-")||e.slice(3).split(".")[0]==="poll")return semantic(i,"A Citry DOM-event client binding has a non-event key.");if(e.slice(3).split(".")[0]!==t.event)return semantic(i,"A Citry DOM-event client binding disagrees with its key.")}return t.type==="citry-poll"&&!e.startsWith("@c-poll.")?semantic(i,"A Citry poll client binding must use an @c-poll key."):null},validateRelationships=(t,e="")=>{const i=t.mode==="development",c=new Set;for(let n=0;n<t.graphs.length;n+=1){const s=t.graphs[n],o=pointer(pointer(e,"graphs"),n);if(s.graphId!==n)return semantic(pointer(o,"graphId"),`graphs[${n}].graphId is not dense and ordered.`);const l=[["componentInstances","instanceId"],["sourceLocations","locationId"],["nestedComponents","invocationId"],["fills","fillId"],["slotRegions","regionId"]],I=new Map;for(const[a,r]of l){const f=s[a].map(h=>h[r]),u=new Set(f);if(I.set(a,u),f.length!==u.size)return semantic(pointer(o,a),`graphs[${n}].${a} has duplicate ids.`)}if(!i){if(s.sourceLocations.length)return semantic(pointer(o,"sourceLocations"),`graphs[${n}] production manifest has sourceLocations.`);for(let a=0;a<s.nestedComponents.length;a+=1){const r=s.nestedComponents[a],d=pointer(pointer(o,"nestedComponents"),a);if(r.locationId!==null)return semantic(pointer(d,"locationId"),`graphs[${n}] production invocation has a location reference.`);for(let f=0;f<r.clientBindings.length;f+=1)if(r.clientBindings[f].locationId!==null){const u=pointer(pointer(d,"clientBindings"),f);return semantic(pointer(u,"locationId"),`graphs[${n}] production client binding has a location reference.`)}}for(let a=0;a<s.fills.length;a+=1){const r=s.fills[a];for(const d of["locationId","fallbackLocationId"])if(r[d]!==null)return semantic(pointer(pointer(pointer(o,"fills"),a),d),`graphs[${n}] production fill has a location reference.`)}for(let a=0;a<s.slotRegions.length;a+=1){const r=s.slotRegions[a];for(const d of["slotLocationId","sourceLocationId"])if(r[d]!==null)return semantic(pointer(pointer(pointer(o,"slotRegions"),a),d),`graphs[${n}] production slot region has a location reference.`)}}const y=new Set;for(let a=0;a<s.componentClasses.length;a+=1){const r=s.componentClasses[a].classId;if(y.has(r))return semantic(pointer(pointer(pointer(o,"componentClasses"),a),"classId"),`graphs[${n}] has duplicate class ids.`);y.add(r)}const p=new Set,g=new Map,R=new Map,C=new Map,v=[],L=new Map;for(let a=0;a<s.componentInstances.length;a+=1){const r=s.componentInstances[a],d=pointer(pointer(o,"componentInstances"),a);if(!y.has(r.classId))return semantic(pointer(d,"classId"),`graphs[${n}] component instance classId is unknown.`);if(p.has(r.renderId))return semantic(pointer(d,"renderId"),`graphs[${n}] has duplicate render ids.`);if(c.has(r.renderId))return semantic(pointer(d,"renderId"),`render id '${r.renderId}' appears in more than one graph.`);p.add(r.renderId),c.add(r.renderId),g.set(r.renderId,r.classId),R.set(r.instanceId,r.renderId),L.set(r.renderId,r.parentRenderId);const f=[r.renderId,r.parentRenderId,r.invocationId];if(v.push(f),r.invocationId!==null){const u=C.get(r.invocationId)??[];u.push(f),C.set(r.invocationId,u)}}for(let a=0;a<s.componentInstances.length;a+=1){const r=s.componentInstances[a].parentRenderId;if(r!==null&&!p.has(r))return semantic(pointer(pointer(pointer(o,"componentInstances"),a),"parentRenderId"),`graphs[${n}] component instance parentRenderId is unknown.`)}const w=new Map,b=new Map;if(i)for(let a=0;a<s.sourceLocations.length;a+=1){const r=s.sourceLocations[a],d=pointer(pointer(o,"sourceLocations"),a);if(!I.get("componentInstances").has(r.carrierInstanceId))return semantic(pointer(d,"carrierInstanceId"),`graphs[${n}] location has an unknown carrier.`);if(r.sourceOffset.start>r.sourceOffset.end)return semantic(pointer(d,"sourceOffset"),`graphs[${n}] location has a reversed byte range.`);if(!p.has(r.ownerRenderId)||g.get(r.ownerRenderId)!==r.ownerClassId)return semantic(pointer(d,"ownerRenderId"),`graphs[${n}] location owner is unknown or mismatched.`);if(R.get(r.carrierInstanceId)!==r.ownerRenderId)return semantic(pointer(d,"carrierInstanceId"),`graphs[${n}] location carrier is mismatched.`);w.set(r.locationId,[r.ownerRenderId,r.ownerClassId]),b.set(r.locationId,r.kind)}const m=new Map;for(let a=0;a<s.nestedComponents.length;a+=1){const r=s.nestedComponents[a],d=pointer(pointer(o,"nestedComponents"),a);if(!p.has(r.sourceRenderId)||g.get(r.sourceRenderId)!==r.sourceClassId)return semantic(pointer(d,"sourceRenderId"),`graphs[${n}] invocation source is unknown or mismatched.`);if(!p.has(r.targetRenderId)||g.get(r.targetRenderId)!==r.targetClassId)return semantic(pointer(d,"targetRenderId"),`graphs[${n}] invocation target is unknown or mismatched.`);if(i){if(!I.get("sourceLocations").has(r.locationId))return semantic(pointer(d,"locationId"),`graphs[${n}] invocation has an unknown location.`);const f=w.get(r.locationId);if(!f||f[0]!==r.sourceRenderId||f[1]!==r.sourceClassId)return semantic(pointer(d,"locationId"),`graphs[${n}] invocation location owner is mismatched.`);if(b.get(r.locationId)!=="component-call")return semantic(pointer(d,"locationId"),`graphs[${n}] invocation location kind is mismatched.`)}if(r.parentRegionId!==null&&!I.get("slotRegions").has(r.parentRegionId))return semantic(pointer(d,"parentRegionId"),`graphs[${n}] nested component parentRegionId references an unknown slot region.`);m.set(r.invocationId,[r.sourceRenderId,r.targetRenderId]);for(let f=0;f<r.clientBindings.length;f+=1){const u=r.clientBindings[f],h=pointer(pointer(d,"clientBindings"),f);if(i){if(!I.get("sourceLocations").has(u.locationId))return semantic(pointer(h,"locationId"),`graphs[${n}] client binding has an unknown location.`);const S=w.get(u.locationId);if(!S||S[0]!==r.sourceRenderId||S[1]!==r.sourceClassId)return semantic(pointer(h,"locationId"),`graphs[${n}] client-binding location owner is mismatched.`);if(b.get(u.locationId)!=="component-tag-client-binding")return semantic(pointer(h,"locationId"),`graphs[${n}] client-binding location kind is mismatched.`)}if((u.payload.type==="citry-dom-event"||u.payload.type==="citry-poll")&&u.payload.classId!==r.sourceClassId)return semantic(pointer(pointer(h,"payload"),"classId"),`graphs[${n}] Citry client-binding class is not its source parent.`);const T=bindingKeyIssue(u.payload,u.key,pointer(h,"key"));if(T)return T}}for(let a=0;a<s.componentInstances.length;a+=1){const r=s.componentInstances[a].invocationId;if(r!==null&&!I.get("nestedComponents").has(r))return semantic(pointer(pointer(pointer(o,"componentInstances"),a),"invocationId"),`graphs[${n}] instance has an unknown invocation.`)}for(let a=0;a<v.length;a+=1){const[r,d,f]=v[a],u=pointer(pointer(o,"componentInstances"),a);if(f===null){if(d!==null)return semantic(pointer(u,"parentRenderId"),`graphs[${n}] uninvoked instance has a parent.`);continue}const h=m.get(f);if(!h||h[0]!==d||h[1]!==r)return semantic(pointer(u,"invocationId"),`graphs[${n}] instance endpoints do not match their invocation.`)}for(let a=0;a<s.nestedComponents.length;a+=1){const r=s.nestedComponents[a].invocationId;if((C.get(r)??[]).length!==1)return semantic(pointer(pointer(pointer(o,"nestedComponents"),a),"invocationId"),`graphs[${n}] invocation does not bind exactly one target instance.`)}const $=new Map;for(let a=0;a<s.fills.length;a+=1){const r=s.fills[a],d=pointer(pointer(o,"fills"),a);if(r.ownerRenderId===null!=(r.ownerClassId===null)||r.ownerRenderId!==null&&g.get(r.ownerRenderId)!==r.ownerClassId)return semantic(pointer(d,"ownerRenderId"),`graphs[${n}] fill owner and class are mismatched.`);if(r.receiverRenderId===null!=(r.receiverClassId===null)||r.receiverRenderId!==null&&g.get(r.receiverRenderId)!==r.receiverClassId)return semantic(pointer(d,"receiverRenderId"),`graphs[${n}] fill receiver and class are mismatched.`);if(r.sourceInvocationId!==null&&!I.get("nestedComponents").has(r.sourceInvocationId))return semantic(pointer(d,"sourceInvocationId"),`graphs[${n}] fill has an unknown sourceInvocation.`);const f=r.locationId===null?void 0:b.get(r.locationId),u=r.fallbackLocationId===null?void 0:b.get(r.fallbackLocationId);if(r.policy==="template"){if(r.ownerRenderId===null||r.receiverRenderId===null||!new Set(["implicit","named","fallback"]).has(r.kind))return semantic(pointer(d,"policy"),`graphs[${n}] template fill ownership is inconsistent.`)}else if(r.policy==="python-detached"){if(r.kind!=="python"||r.ownerRenderId!==null||r.receiverRenderId===null||r.sourceInvocationId!==null||r.fallbackLocationId!==null)return semantic(pointer(d,"policy"),`graphs[${n}] detached Python fill ownership is inconsistent.`)}else if(r.kind!=="typed-default"||r.ownerRenderId!==null||r.receiverRenderId===null||r.sourceInvocationId!==null||r.fallbackLocationId!==null)return semantic(pointer(d,"policy"),`graphs[${n}] detached typed-default fill ownership is inconsistent.`);if(i){for(const[S,D]of[["locationId",r.locationId],["fallbackLocationId",r.fallbackLocationId]])if(D!==null&&!I.get("sourceLocations").has(D))return semantic(pointer(d,S),`graphs[${n}] fill has an unknown ${S}.`);const h=r.locationId===null?void 0:w.get(r.locationId),T=r.fallbackLocationId===null?void 0:w.get(r.fallbackLocationId);if(r.ownerRenderId===null!=(h===void 0))return semantic(pointer(d,"locationId"),`graphs[${n}] fill owner and source location are inconsistent.`);if(h&&(h[0]!==r.ownerRenderId||h[1]!==r.ownerClassId))return semantic(pointer(d,"locationId"),`graphs[${n}] fill source location owner is mismatched.`);if(T&&(T[0]!==r.receiverRenderId||T[1]!==r.receiverClassId))return semantic(pointer(d,"fallbackLocationId"),`graphs[${n}] fill fallback location receiver is mismatched.`)}if(r.policy==="template"){if(i){const h={implicit:"implicit-fill",named:"named-fill",fallback:"fallback-fill"}[r.kind];if(f!==h)return semantic(pointer(d,"locationId"),`graphs[${n}] template fill source location kind is mismatched.`);if(r.kind==="fallback"&&(r.fallbackLocationId===null||u!=="slot-outlet"))return semantic(pointer(d,"fallbackLocationId"),`graphs[${n}] fallback location kind is mismatched.`);if(r.kind!=="fallback"&&r.fallbackLocationId!==null)return semantic(pointer(d,"fallbackLocationId"),`graphs[${n}] supplied fill carrier is inconsistent.`)}if(r.kind==="fallback"){if(r.sourceInvocationId!==null)return semantic(pointer(d,"sourceInvocationId"),`graphs[${n}] fallback fill carrier is inconsistent.`)}else{if(r.sourceInvocationId===null)return semantic(pointer(d,"sourceInvocationId"),`graphs[${n}] supplied fill carrier is inconsistent.`);if(m.get(r.sourceInvocationId)?.[0]!==r.ownerRenderId)return semantic(pointer(d,"sourceInvocationId"),`graphs[${n}] supplied fill source invocation owner is mismatched.`)}}$.set(r.fillId,[r.ownerRenderId,r.receiverRenderId,r.locationId])}const k=new Map;for(let a=0;a<s.slotRegions.length;a+=1){const r=s.slotRegions[a],d=pointer(pointer(o,"slotRegions"),a);if(!I.get("fills").has(r.fillId))return semantic(pointer(d,"fillId"),`graphs[${n}] slot region has an unknown fill.`);if(r.parentRegionId!==null&&!I.get("slotRegions").has(r.parentRegionId))return semantic(pointer(d,"parentRegionId"),`graphs[${n}] slot region has an unknown parent.`);for(const[u,h]of Object.entries({receiverRenderId:r.receiverRenderId,ownerRenderId:r.ownerRenderId,transitionFromRenderId:r.transitionFromRenderId,resultOwnerRenderId:r.resultOwnerRenderId}))if(h!==null&&!p.has(h))return semantic(pointer(d,u),`graphs[${n}] slot region.${u} is unknown.`);if(i){for(const[h,T]of[["slotLocationId",r.slotLocationId],["sourceLocationId",r.sourceLocationId]])if(T!==null&&!I.get("sourceLocations").has(T))return semantic(pointer(d,h),`graphs[${n}] slot region has an unknown ${h}.`);const u=r.slotLocationId===null?void 0:w.get(r.slotLocationId);if(u&&u[0]!==r.receiverRenderId)return semantic(pointer(d,"slotLocationId"),`graphs[${n}] slot region slot location receiver is mismatched.`);if(r.slotLocationId!==null&&b.get(r.slotLocationId)!=="slot-outlet")return semantic(pointer(d,"slotLocationId"),`graphs[${n}] slot region slot location kind is mismatched.`)}const f=$.get(r.fillId);if(!f||f[0]!==r.ownerRenderId||f[1]!==r.receiverRenderId||f[2]!==r.sourceLocationId)return semantic(pointer(d,"fillId"),`graphs[${n}] slot region ownership does not match its fill.`);k.set(r.regionId,[r.ownerRenderId,r.receiverRenderId,r.parentRegionId,r.transitionFromRenderId])}if(cycle(new Map(Array.from(k,([a,r])=>[a,r[2]]))))return semantic(pointer(o,"slotRegions"),`graphs[${n}] slot region ancestry contains a cycle.`);for(let a=0;a<s.slotRegions.length;a+=1){const r=s.slotRegions[a],d=r.parentRegionId===null?r.receiverRenderId:k.get(r.parentRegionId)?.[0]??null;if(r.transitionFromRenderId!==d)return semantic(pointer(pointer(pointer(o,"slotRegions"),a),"transitionFromRenderId"),`graphs[${n}] slot region scope transition does not match its ancestry.`)}const O=new Map;for(let a=0;a<s.componentExecutionOrderConstraints.length;a+=1){const r=s.componentExecutionOrderConstraints[a],d=pointer(pointer(o,"componentExecutionOrderConstraints"),a),f=m.get(r.invocationId);if(!f||f[0]!==r.parentRenderId||f[1]!==r.childRenderId)return semantic(pointer(d,"invocationId"),`graphs[${n}] component execution order constraint does not match its invocation.`);const u=O.get(r.parentRenderId)??[];u.push(r.childRenderId),O.set(r.parentRenderId,u)}if(executionCycle(O))return semantic(pointer(o,"componentExecutionOrderConstraints"),`graphs[${n}] component execution order contains a cycle.`);if(cycle(L))return semantic(pointer(o,"componentInstances"),`graphs[${n}] logical instance ancestry contains a cycle.`)}return null},REVISION=/^[0-9a-f]{64}$/,MANIFEST_FIELDS=new Set(["protocol","revision","mode","graphs","delimiters"]),REQUIRED_MANIFEST_FIELDS=["protocol","revision","mode","graphs","delimiters"],DELIMITER_FIELDS=new Set(["format"]),validateManifestShape=(t,e)=>{const i=validateStrictJson(t,e);if(i)return i;if(!isPlainObject(t))return{path:e,category:"type",message:"The client-graph manifest must be an object."};for(const o of REQUIRED_MANIFEST_FIELDS)if(!hasOwn(t,o))return{path:pointer(e,o),category:"required",message:`The manifest requires '${o}'.`};const c=firstUnknown(t,MANIFEST_FIELDS);if(c!==null)return{path:pointer(e,c),category:"unknown_field",message:"The manifest has an unknown field."};if(t.protocol!==PROTOCOL)return{path:pointer(e,"protocol"),category:typeof t.protocol=="string"?"enum":"type",message:`The manifest protocol must be ${PROTOCOL}.`};if(typeof t.revision!="string")return{path:pointer(e,"revision"),category:"type",message:"The manifest revision must be a string."};if(!REVISION.test(t.revision))return{path:pointer(e,"revision"),category:"pattern",message:"The manifest revision must be lowercase SHA-256."};if(typeof t.mode!="string")return{path:pointer(e,"mode"),category:"type",message:"The manifest mode must be a string."};if(t.mode!=="production"&&t.mode!=="development")return{path:pointer(e,"mode"),category:"enum",message:"The manifest mode must be production or development."};if(!Array.isArray(t.graphs))return{path:pointer(e,"graphs"),category:"type",message:"The manifest graphs must be an array."};for(let o=0;o<t.graphs.length;o+=1){const l=validateGraph(t.graphs[o],pointer(pointer(e,"graphs"),o),!1);if(l)return l}const n=pointer(e,"delimiters");if(!isPlainObject(t.delimiters))return{path:n,category:"type",message:"The manifest delimiters must be an object."};if(!hasOwn(t.delimiters,"format"))return{path:pointer(n,"format"),category:"required",message:"The manifest delimiters require 'format'."};const s=firstUnknown(t.delimiters,DELIMITER_FIELDS);return s!==null?{path:pointer(n,s),category:"unknown_field",message:"The manifest delimiters have an unknown field."}:t.delimiters.format!==OWNERSHIP_COMMENT_PREFIX?{path:pointer(n,"format"),category:typeof t.delimiters.format=="string"?"enum":"type",message:`The ownership-comment prefix must be ${OWNERSHIP_COMMENT_PREFIX}.`}:null},validateRevision=(t,e="")=>!isPlainObject(t)||typeof t.revision!="string"||!REVISION.test(t.revision)||revisionForManifest(t)===t.revision?null:{path:pointer(e,"revision"),category:"correlation",message:"The revision does not match the canonical unsigned manifest."},validateManifest=(t,e="")=>{const i=validateManifestShape(t,e);if(i)return i;const c=validateRevision(t,e);return c||validateRelationships(t,e)},assertValidManifest=t=>{const e=validateManifest(t);if(e)throw new ProtocolValueError(e);return t},CitryClientGraphProtocol={OWNERSHIP_COMMENT_PREFIX,parseOwnershipComment,ProtocolValueError,assertValidManifest};
+  /*</citry-client-graph-v1>*/
+
   if (globalThis.Citry && globalThis.Citry.manager) {
     return; // already loaded (e.g. both a document page and a fragment included it)
   }
@@ -633,119 +637,8 @@
     return utf8FromBinary(atob(value)); // atob alone mangles non-ASCII
   };
 
-  var OWNERSHIP_COMMENT_PREFIX = "citry:g1";
-  var OWNERSHIP_COMMENT_RE = new RegExp(
-    "^" + OWNERSHIP_COMMENT_PREFIX + ":([0-9a-f]{64}):(\\d+):([ir]):(\\d+):([se])$"
-  );
-
-  // Construct same JSON as came from the server, so a SHA-256 hash of it can be compared
-  // to the manifest's 'revision' attribute.
-  // The server uses a canonical JSON encoder that sorts object keys and omits whitespace.
-  // The client must do the same to avoid false mismatches.
-  // NOTE: This is NOT a security feature. It is only a sanity check to detect accidental
-  //       corruption of the manifest.
-  var canonicalJson = function (value) {
-    if (value === null || typeof value !== "object") return JSON.stringify(value);
-    if (Array.isArray(value)) return "[" + value.map(canonicalJson).join(",") + "]";
-    return (
-      "{" +
-      Object.keys(value)
-        .sort()
-        .map(function (key) { return JSON.stringify(key) + ":" + canonicalJson(value[key]); })
-        .join(",") +
-      "}"
-    );
-  };
-
-  // Synchronous SHA-256 keeps graph validation available on ordinary HTTP
-  // origins where SubtleCrypto may be unavailable.
-  var sha256 = function (value) {
-    var bytes = new TextEncoder().encode(value);
-    var paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
-    var padded = new Uint8Array(paddedLength);
-    padded.set(bytes);
-    padded[bytes.length] = 0x80;
-    var view = new DataView(padded.buffer);
-    view.setUint32(paddedLength - 8, Math.floor(bytes.length / 0x20000000), false);
-    view.setUint32(paddedLength - 4, (bytes.length << 3) >>> 0, false);
-    var constants = new Uint32Array([
-      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4,
-      0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe,
-      0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f,
-      0x4a7484aa, 0x5cb0a9dc, 0x76f988da, 0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7,
-      0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc,
-      0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
-      0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070, 0x19a4c116,
-      0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-      0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7,
-      0xc67178f2,
-    ]);
-    var hash = new Uint32Array([
-      0x6a09e667,
-      0xbb67ae85,
-      0x3c6ef372,
-      0xa54ff53a,
-      0x510e527f,
-      0x9b05688c,
-      0x1f83d9ab,
-      0x5be0cd19,
-    ]);
-    var words = new Uint32Array(64);
-    var rotate = function (word, count) { return (word >>> count) | (word << (32 - count)); };
-    for (var offset = 0; offset < paddedLength; offset += 64) {
-      for (var index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4, false);
-      for (var expanded = 16; expanded < 64; expanded += 1) {
-        var before15 = words[expanded - 15];
-        var before2 = words[expanded - 2];
-        var sigma0 = rotate(before15, 7) ^ rotate(before15, 18) ^ (before15 >>> 3);
-        var sigma1 = rotate(before2, 17) ^ rotate(before2, 19) ^ (before2 >>> 10);
-        words[expanded] = (words[expanded - 16] + sigma0 + words[expanded - 7] + sigma1) >>> 0;
-      }
-      var a = hash[0];
-      var b = hash[1];
-      var c = hash[2];
-      var d = hash[3];
-      var e = hash[4];
-      var f = hash[5];
-      var g = hash[6];
-      var h = hash[7];
-      for (var round = 0; round < 64; round += 1) {
-        var sum1 = rotate(e, 6) ^ rotate(e, 11) ^ rotate(e, 25);
-        var choice = (e & f) ^ (~e & g);
-        var temporary1 = (h + sum1 + choice + constants[round] + words[round]) >>> 0;
-        var sum0 = rotate(a, 2) ^ rotate(a, 13) ^ rotate(a, 22);
-        var majority = (a & b) ^ (a & c) ^ (b & c);
-        var temporary2 = (sum0 + majority) >>> 0;
-        h = g;
-        g = f;
-        f = e;
-        e = (d + temporary1) >>> 0;
-        d = c;
-        c = b;
-        b = a;
-        a = (temporary1 + temporary2) >>> 0;
-      }
-      hash[0] = (hash[0] + a) >>> 0;
-      hash[1] = (hash[1] + b) >>> 0;
-      hash[2] = (hash[2] + c) >>> 0;
-      hash[3] = (hash[3] + d) >>> 0;
-      hash[4] = (hash[4] + e) >>> 0;
-      hash[5] = (hash[5] + f) >>> 0;
-      hash[6] = (hash[6] + g) >>> 0;
-      hash[7] = (hash[7] + h) >>> 0;
-    }
-    return Array.prototype.map
-      .call(hash, function (word) { return ("00000000" + word.toString(16)).slice(-8); })
-      .join("");
-  };
-
-  var ownershipRevision = function (manifest) {
-    var unsigned = {};
-    Object.keys(manifest).forEach(function (key) {
-      if (key !== "revision") unsigned[key] = manifest[key];
-    });
-    return sha256(canonicalJson(unsigned));
-  };
+  var OWNERSHIP_COMMENT_PREFIX =
+    CitryClientGraphProtocol.OWNERSHIP_COMMENT_PREFIX;
 
   var deepFreeze = function (value) {
     if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
@@ -753,128 +646,9 @@
     return Object.freeze(value);
   };
 
-  var isObject = function (value) {
-    return value !== null && typeof value === "object" && !Array.isArray(value);
-  };
-
-  var exactKeys = function (value, keys, where) {
-    if (!isObject(value)) throw new TypeError("[Citry] graph: " + where + " must be an object.");
-    var actual = Object.keys(value).sort();
-    var expected = keys.slice().sort();
-    if (actual.length !== expected.length || actual.some(function (key, i) { return key !== expected[i]; })) {
-      throw new TypeError("[Citry] graph: " + where + " has unknown or missing fields.");
-    }
-  };
-
-  var integer = function (value, where, minimum) {
-    if (!Number.isSafeInteger(value) || value < minimum) {
-      throw new TypeError("[Citry] graph: " + where + " must be an integer >= " + minimum + ".");
-    }
-    return value;
-  };
-
-  var requiredString = function (value, where) {
-    if (typeof value !== "string") {
-      throw new TypeError("[Citry] graph: " + where + " must be a string.");
-    }
-    return value;
-  };
-
-  var nullableString = function (value, where) {
-    return value === null ? null : requiredString(value, where);
-  };
-
-  var nullableInteger = function (value, where, minimum) {
-    return value === null ? null : integer(value, where, minimum);
-  };
-
-  var uniqueId = function (set, value, where) {
-    integer(value, where, 1);
-    if (set.has(value)) throw new TypeError("[Citry] graph: duplicate " + where + " " + value + ".");
-    set.add(value);
-  };
-
-  // In development the manifest carries source-location records and every
-  // location reference resolves to one; in production sourceLocations is empty
-  // and every reference is null. `provenance` is true only in development and
-  // gates every check that looks a source-location record up.
-  var validateClientBinding = function (clientBinding, locations, provenance, where) {
-    exactKeys(clientBinding, ["key", "locationId", "payload", "source"], where);
-    var bindingKey = requiredString(clientBinding.key, where + ".key");
-    if (provenance) {
-      if (!locations.has(integer(clientBinding.locationId, where + ".locationId", 1))) {
-        throw new TypeError("[Citry] graph: " + where + " references an unknown location.");
-      }
-    } else if (clientBinding.locationId !== null) {
-      throw new TypeError("[Citry] graph: " + where + ".locationId must be null in production.");
-    }
-    if (["direct", "server-dynamic", "spread"].indexOf(clientBinding.source) === -1) {
-      throw new TypeError("[Citry] graph: " + where + ".source is invalid.");
-    }
-    var payload = clientBinding.payload;
-    if (!isObject(payload) || typeof payload.type !== "string") {
-      throw new TypeError("[Citry] graph: " + where + ".payload is invalid.");
-    }
-    if (payload.type === "props" || payload.type === "alpine-handler") {
-      exactKeys(payload, ["expression", "type"], where + ".payload");
-      requiredString(payload.expression, where + ".payload.expression");
-      if (payload.type === "props" && bindingKey !== "$c-props") {
-        throw new TypeError("[Citry] graph: a props client binding must use the $c-props key.");
-      }
-      if (
-        payload.type === "alpine-handler" &&
-        !(
-          (bindingKey.indexOf("@") === 0 && bindingKey.indexOf("@c-") !== 0) ||
-          bindingKey.indexOf("x-on:") === 0
-        )
-      ) {
-        throw new TypeError("[Citry] graph: an Alpine-handler client binding has a non-Alpine key.");
-      }
-      return;
-    }
-    if (payload.type === "citry-dom-event") {
-      exactKeys(
-        payload,
-        ["args", "classId", "debounce", "event", "handler", "key", "once", "prevent", "self", "stop", "throttle", "type"],
-        where + ".payload"
-      );
-      ["once", "prevent", "self", "stop"].forEach(function (key) {
-        if (typeof payload[key] !== "boolean") throw new TypeError("[Citry] graph: " + where + ".payload." + key + " must be boolean.");
-      });
-      requiredString(payload.classId, where + ".payload.classId");
-      requiredString(payload.event, where + ".payload.event");
-      requiredString(payload.handler, where + ".payload.handler");
-      nullableString(payload.args, where + ".payload.args");
-      nullableString(payload.key, where + ".payload.key");
-      nullableInteger(payload.debounce, where + ".payload.debounce", 0);
-      nullableInteger(payload.throttle, where + ".payload.throttle", 0);
-      // The event segment decides poll-vs-DOM-event, matching the server's
-      // classifier: "@c-poll.5s" is a poll, "@c-pollchange" is a DOM event.
-      if (bindingKey.indexOf("@c-") !== 0 || bindingKey.slice(3).split(".")[0] === "poll") {
-        throw new TypeError("[Citry] graph: a Citry DOM-event client binding has a non-event key.");
-      }
-      if (bindingKey.slice(3).split(".")[0] !== payload.event) {
-        throw new TypeError("[Citry] graph: the Citry DOM-event client binding disagrees with its key.");
-      }
-      return;
-    }
-    if (payload.type === "citry-poll") {
-      exactKeys(payload, ["args", "classId", "handler", "interval", "type"], where + ".payload");
-      requiredString(payload.classId, where + ".payload.classId");
-      requiredString(payload.handler, where + ".payload.handler");
-      nullableString(payload.args, where + ".payload.args");
-      integer(payload.interval, where + ".payload.interval", 1);
-      if (bindingKey.indexOf("@c-poll.") !== 0) {
-        throw new TypeError("[Citry] graph: a Citry poll client binding must use an @c-poll key.");
-      }
-      return;
-    }
-    throw new TypeError("[Citry] graph: " + where + ".payload.type is unknown.");
-  };
-
-  var validatePhysicalCaps = function (delimiterPrefix, revision, expected, root) {
+  var validatePhysicalCaps = function (revision, expected, root) {
     root = root || document;
-    var prefix = delimiterPrefix + ":" + revision + ":";
+    var revisionPrefix = OWNERSHIP_COMMENT_PREFIX + ":" + revision + ":";
     var comments = document.createTreeWalker(root, NodeFilter.SHOW_COMMENT);
     var found = new Map();
     var stack = [];
@@ -882,13 +656,18 @@
     var node;
     while ((node = comments.nextNode())) {
       var text = node.data.trim();
-      if (text.indexOf(prefix) !== 0) continue;
-      var match = /^(\d+):([ir]):(\d+):([se])$/.exec(text.slice(prefix.length));
-      if (!match) throw new TypeError("[Citry] graph: malformed physical cap.");
-      var graphId = match[1];
-      var kind = match[2];
-      var recordId = match[3];
-      var side = match[4];
+      var ownership = CitryClientGraphProtocol.parseOwnershipComment(text);
+      if (!ownership) {
+        if (text.indexOf(revisionPrefix) === 0) {
+          throw new TypeError("[Citry] graph: malformed physical cap.");
+        }
+        continue;
+      }
+      if (ownership.revision !== revision) continue;
+      var graphId = ownership.graphId;
+      var kind = ownership.kind;
+      var recordId = ownership.recordId;
+      var side = ownership.side;
       var key = graphId + ":" + kind + ":" + recordId;
       if (!expected.has(key)) throw new TypeError("[Citry] graph: physical cap names an unknown record " + key + ".");
       var pair = found.get(key) || {};
@@ -933,440 +712,44 @@
   };
 
   var stageOwnershipManifest = function (manifest, capRoot) {
-    exactKeys(manifest, ["delimiters", "graphs", "mode", "protocol", "revision"], "manifest");
-    if (manifest.protocol !== "citry-client-graph/1") throw new TypeError("[Citry] graph: unsupported protocol.");
-    if (!/^[0-9a-f]{64}$/.test(manifest.revision)) throw new TypeError("[Citry] graph: revision must be lowercase SHA-256 hex.");
-    if (ownershipRevision(manifest) !== manifest.revision) {
-      throw new TypeError("[Citry] graph: revision does not match the canonical manifest.");
-    }
-    exactKeys(manifest.delimiters, ["format"], "delimiters");
-    if (manifest.delimiters.format !== OWNERSHIP_COMMENT_PREFIX) throw new TypeError("[Citry] graph: unsupported delimiter format.");
-    // Development ships source-location records; production keeps the
-    // sourceLocations arrays empty and nulls every location reference.
-    // `provenance` is true only in development.
-    if (manifest.mode !== "production" && manifest.mode !== "development") {
-      throw new TypeError("[Citry] graph: mode must be 'production' or 'development'.");
-    }
-    var provenance = manifest.mode === "development";
-    if (!Array.isArray(manifest.graphs)) throw new TypeError("[Citry] graph: graphs must be an array.");
+    var validated = CitryClientGraphProtocol.assertValidManifest(manifest);
     var expectedCaps = new Set();
-    var graphIds = new Set();
-    var instancesByInvocationByGraph = [];
-    var stagedGraphs = manifest.graphs.map(function (graph, graphIndex) {
-      exactKeys(graph, ["componentClasses", "componentExecutionOrderConstraints", "componentInstances", "fills", "graphId", "nestedComponents", "slotRegions", "sourceLocations"], "graphs[" + graphIndex + "]");
-      integer(graph.graphId, "graphs[" + graphIndex + "].graphId", 0);
-      if (graphIds.has(graph.graphId)) throw new TypeError("[Citry] graph: duplicate graph id.");
-      graphIds.add(graph.graphId);
-      if (graph.graphId !== graphIndex) throw new TypeError("[Citry] graph: graph ids must be dense and ordered.");
-      ["componentClasses", "componentExecutionOrderConstraints", "componentInstances", "fills", "nestedComponents", "slotRegions", "sourceLocations"].forEach(function (key) {
-        if (!Array.isArray(graph[key])) throw new TypeError("[Citry] graph: graphs[" + graphIndex + "]." + key + " must be an array.");
-      });
-      // Production carries no source-location records; fail closed if any leak.
-      if (!provenance && graph.sourceLocations.length) {
-        throw new TypeError("[Citry] graph: production graphs must carry no sourceLocations records.");
-      }
-      var classIds = new Set();
-      graph.componentClasses.forEach(function (record, index) {
-        var where = "graphs[" + graphIndex + "].componentClasses[" + index + "]";
-        exactKeys(record, ["classId", "className"], where);
-        var classId = record.classId;
-        if (classIds.has(classId)) throw new TypeError("[Citry] graph: duplicate class id.");
-        classIds.add(classId);
-      });
-      var instanceIds = new Set();
-      var renderIds = new Set();
-      var instanceRecords = [];
+    var instancesByInvocationByGraph = validated.graphs.map(function (graph, graphIndex) {
       var instancesByInvocation = new Map();
-      var instancesById = new Map();
-      var classesByRender = new Map();
-      graph.componentInstances.forEach(function (record, index) {
-        var where = "graphs[" + graphIndex + "].componentInstances[" + index + "]";
-        exactKeys(record, ["classId", "instanceId", "invocationId", "parentRenderId", "renderId", "transparent"], where);
-        uniqueId(instanceIds, record.instanceId, where + ".instanceId");
-        var render = record.renderId;
-        if (!/^[a-z0-9_-]+$/.test(render)) {
-          throw new TypeError("[Citry] graph: render ID must be safe for a case-insensitive HTML attribute name.");
-        }
-        if (renderIds.has(render)) throw new TypeError("[Citry] graph: duplicate render id.");
-        renderIds.add(render);
-        var classId = record.classId;
-        if (!classIds.has(classId)) throw new TypeError("[Citry] graph: instance class is unknown.");
-        nullableInteger(record.invocationId, where + ".invocationId", 1);
-        if (typeof record.transparent !== "boolean") throw new TypeError("[Citry] graph: transparent must be boolean.");
-        expectedCaps.add(graphIndex + ":i:" + record.instanceId);
-        instanceRecords.push(record);
-        if (record.invocationId != null) {
-          var invocationTargets = instancesByInvocation.get(record.invocationId) || [];
-          invocationTargets.push(record);
-          instancesByInvocation.set(record.invocationId, invocationTargets);
-        }
-        instancesById.set(record.instanceId, { render: render, classId: classId });
-        classesByRender.set(render, classId);
-      });
-      instanceRecords.forEach(function (record) {
-        var parent = record.parentRenderId;
-        if (parent != null && !renderIds.has(parent)) {
-          throw new TypeError("[Citry] graph: instance parent is unknown.");
+      graph.componentInstances.forEach(function (instance) {
+        expectedCaps.add(graphIndex + ":i:" + instance.instanceId);
+        if (instance.invocationId !== null) {
+          instancesByInvocation.set(instance.invocationId, instance);
         }
       });
-      var logicalParents = new Map();
-      instanceRecords.forEach(function (record) {
-        logicalParents.set(record.renderId, record.parentRenderId);
+      graph.slotRegions.forEach(function (region) {
+        expectedCaps.add(graphIndex + ":r:" + region.regionId);
       });
-      var visitingInstances = new Set();
-      var visitedInstances = new Set();
-      var visitInstance = function (renderId) {
-        if (visitingInstances.has(renderId)) {
-          throw new TypeError("[Citry] graph: logical instance ancestry contains a cycle.");
-        }
-        if (visitedInstances.has(renderId)) return;
-        visitingInstances.add(renderId);
-        var parentRenderId = logicalParents.get(renderId);
-        if (parentRenderId != null) visitInstance(parentRenderId);
-        visitingInstances.delete(renderId);
-        visitedInstances.add(renderId);
-      };
-      renderIds.forEach(visitInstance);
-      var renderRef = function (value, where, nullable) {
-        if (value == null) {
-          if (nullable) return null;
-          throw new TypeError("[Citry] graph: " + where + " is an unknown render.");
-        }
-        if (!renderIds.has(value)) {
-          throw new TypeError("[Citry] graph: " + where + " is an unknown render.");
-        }
-        return value;
-      };
-      var classRef = function (value, where, nullable) {
-        if (value == null) {
-          if (nullable) return null;
-          throw new TypeError("[Citry] graph: " + where + " is an unknown class.");
-        }
-        if (!classIds.has(value)) {
-          throw new TypeError("[Citry] graph: " + where + " is an unknown class.");
-        }
-        return value;
-      };
-      // Empty in production (asserted above), so this loop runs only in development.
-      var locations = new Set();
-      var locationRecords = new Map();
-      graph.sourceLocations.forEach(function (record, index) {
-        var where = "graphs[" + graphIndex + "].sourceLocations[" + index + "]";
-        exactKeys(record, ["carrierInstanceId", "kind", "locationId", "mappingIndex", "mappingKey", "origin", "ownerClassId", "ownerRenderId", "sourceOffset", "sourcePos"], where);
-        uniqueId(locations, record.locationId, where + ".locationId");
-        var carrierId = integer(record.carrierInstanceId, where + ".carrierInstanceId", 1);
-        if (!instanceIds.has(carrierId)) throw new TypeError("[Citry] graph: unknown source carrier.");
-        var locationClass = record.ownerClassId;
-        var locationOwner = record.ownerRenderId;
-        if (!classIds.has(locationClass) || !renderIds.has(locationOwner)) throw new TypeError("[Citry] graph: source owner is unknown.");
-        if (classesByRender.get(locationOwner) !== locationClass) {
-          throw new TypeError("[Citry] graph: source owner and class do not match.");
-        }
-        var carrier = instancesById.get(carrierId);
-        if (!carrier || carrier.render !== locationOwner) {
-          throw new TypeError("[Citry] graph: source carrier and owner do not match.");
-        }
-        if (["component-call", "component-tag-client-binding", "implicit-fill", "named-fill", "fallback-fill", "slot-outlet"].indexOf(record.kind) === -1) {
-          throw new TypeError("[Citry] graph: source location kind is invalid.");
-        }
-        nullableInteger(record.mappingIndex, where + ".mappingIndex", 0);
-        exactKeys(record.sourceOffset, ["end", "start"], where + ".sourceOffset");
-        integer(record.sourceOffset.start, where + ".sourceOffset.start", 0);
-        integer(record.sourceOffset.end, where + ".sourceOffset.end", record.sourceOffset.start);
-        exactKeys(record.sourcePos, ["column", "line"], where + ".sourcePos");
-        integer(record.sourcePos.line, where + ".sourcePos.line", 1);
-        integer(record.sourcePos.column, where + ".sourcePos.column", 1);
-        locationRecords.set(record.locationId, { owner: locationOwner, classId: locationClass, kind: record.kind });
-      });
-      var invocationIds = new Set();
-      var invocationRecords = new Map();
-      graph.nestedComponents.forEach(function (record, index) {
-        var where = "graphs[" + graphIndex + "].nestedComponents[" + index + "]";
-        exactKeys(record, ["invocationId", "locationId", "parentRegionId", "clientBindings", "sourceClassId", "sourceRenderId", "tagName", "targetClassId", "targetRenderId"], where);
-        uniqueId(invocationIds, record.invocationId, where + ".invocationId");
-        if (provenance) {
-          if (!locations.has(integer(record.locationId, where + ".locationId", 1))) throw new TypeError("[Citry] graph: invocation location is unknown.");
-        } else if (record.locationId !== null) {
-          throw new TypeError("[Citry] graph: " + where + ".locationId must be null in production.");
-        }
-        var source = record.sourceRenderId;
-        var sourceClass = record.sourceClassId;
-        var target = record.targetRenderId;
-        var targetClass = record.targetClassId;
-        if (!renderIds.has(source) || !renderIds.has(target)) throw new TypeError("[Citry] graph: invocation endpoint is unknown.");
-        if (!classIds.has(sourceClass) || !classIds.has(targetClass)) throw new TypeError("[Citry] graph: invocation class is unknown.");
-        if (classesByRender.get(source) !== sourceClass || classesByRender.get(target) !== targetClass) {
-          throw new TypeError("[Citry] graph: invocation endpoint and class do not match.");
-        }
-        if (provenance) {
-          var invocationLocation = locationRecords.get(record.locationId);
-          if (!invocationLocation || invocationLocation.owner !== source || invocationLocation.classId !== sourceClass) {
-            throw new TypeError("[Citry] graph: invocation location has the wrong source owner.");
-          }
-          if (invocationLocation.kind !== "component-call") {
-            throw new TypeError("[Citry] graph: invocation location has the wrong kind.");
-          }
-        }
-        nullableInteger(record.parentRegionId, where + ".parentRegionId", 1);
-        if (!Array.isArray(record.clientBindings)) throw new TypeError("[Citry] graph: clientBindings must be an array.");
-        record.clientBindings.forEach(function (clientBinding, clientBindingIndex) {
-          validateClientBinding(clientBinding, locations, provenance, where + ".clientBindings[" + clientBindingIndex + "]");
-          if (provenance) {
-            var clientBindingLocation = locationRecords.get(clientBinding.locationId);
-            if (!clientBindingLocation || clientBindingLocation.owner !== source || clientBindingLocation.classId !== sourceClass) {
-              throw new TypeError("[Citry] graph: component-tag client binding location has the wrong source owner.");
-            }
-            if (clientBindingLocation.kind !== "component-tag-client-binding") {
-              throw new TypeError("[Citry] graph: component-tag client binding location has the wrong kind.");
-            }
-          }
-          if (
-            (clientBinding.payload.type === "citry-dom-event" || clientBinding.payload.type === "citry-poll") &&
-            clientBinding.payload.classId !== sourceClass
-          ) {
-            throw new TypeError("[Citry] graph: Citry client-binding handler class is not the source parent.");
-          }
-        });
-        invocationRecords.set(record.invocationId, { parent: source, child: target });
-      });
-      instanceRecords.forEach(function (record) {
-        var render = record.renderId;
-        var parent = record.parentRenderId;
-        if (record.invocationId == null) {
-          if (parent != null) throw new TypeError("[Citry] graph: an uninvoked instance cannot name a parent.");
-          return;
-        }
-        var invocation = invocationRecords.get(record.invocationId);
-        if (!invocation) throw new TypeError("[Citry] graph: instance invocation is unknown.");
-        if (invocation.child !== render || invocation.parent !== parent) {
-          throw new TypeError("[Citry] graph: instance endpoints do not match their invocation.");
-        }
-      });
-      invocationRecords.forEach(function (invocation, invocationId) {
-        var target = instancesByInvocation.get(invocationId) || [];
-        if (target.length !== 1) {
-          throw new TypeError("[Citry] graph: every invocation must bind exactly one target instance.");
-        }
-      });
-      var fillIds = new Set();
-      var fillRecords = new Map();
-      graph.fills.forEach(function (record, index) {
-        var where = "graphs[" + graphIndex + "].fills[" + index + "]";
-        exactKeys(record, ["fallbackLocationId", "fillId", "kind", "locationId", "ownerClassId", "ownerRenderId", "policy", "receiverClassId", "receiverRenderId", "slotName", "sourceInvocationId"], where);
-        uniqueId(fillIds, record.fillId, where + ".fillId");
-        if (["implicit", "named", "fallback", "python", "typed-default"].indexOf(record.kind) === -1) throw new TypeError("[Citry] graph: fill kind is invalid.");
-        if (["template", "python-detached", "typed-default-detached"].indexOf(record.policy) === -1) throw new TypeError("[Citry] graph: fill policy is invalid.");
-        var owner = renderRef(record.ownerRenderId, where + ".ownerRenderId", true);
-        var ownerClass = classRef(record.ownerClassId, where + ".ownerClassId", true);
-        var receiver = renderRef(record.receiverRenderId, where + ".receiverRenderId", true);
-        var receiverClass = classRef(record.receiverClassId, where + ".receiverClassId", true);
-        if ((owner == null) !== (ownerClass == null) || (owner != null && classesByRender.get(owner) !== ownerClass)) {
-          throw new TypeError("[Citry] graph: fill owner and class do not match.");
-        }
-        if (
-          (receiver == null) !== (receiverClass == null) ||
-          (receiver != null && classesByRender.get(receiver) !== receiverClass)
-        ) {
-          throw new TypeError("[Citry] graph: fill receiver and class do not match.");
-        }
-        if (provenance) {
-          ["locationId", "fallbackLocationId"].forEach(function (key) {
-            var value = nullableInteger(record[key], where + "." + key, 1);
-            if (value != null && !locations.has(value)) throw new TypeError("[Citry] graph: fill location is unknown.");
-          });
-        } else if (record.locationId !== null || record.fallbackLocationId !== null) {
-          throw new TypeError("[Citry] graph: fill location references must be null in production.");
-        }
-        var sourceLocation = record.locationId == null ? null : locationRecords.get(record.locationId);
-        var fallbackLocation = record.fallbackLocationId == null ? null : locationRecords.get(record.fallbackLocationId);
-        var sourceInvocation = nullableInteger(record.sourceInvocationId, where + ".sourceInvocationId", 1);
-        if (sourceInvocation != null && !invocationIds.has(sourceInvocation)) {
-          throw new TypeError("[Citry] graph: fill source invocation is unknown.");
-        }
-        // Source-location consistency lives only in development; production
-        // carries no locations, so these are checked only when provenance is on.
-        if (provenance) {
-          if ((owner == null) !== (sourceLocation == null)) {
-            throw new TypeError("[Citry] graph: fill owner and source location must be present together.");
-          }
-          if (sourceLocation && (sourceLocation.owner !== owner || sourceLocation.classId !== ownerClass)) {
-            throw new TypeError("[Citry] graph: fill source location has the wrong owner.");
-          }
-          if (fallbackLocation && (fallbackLocation.owner !== receiver || fallbackLocation.classId !== receiverClass)) {
-            throw new TypeError("[Citry] graph: fill fallback location has the wrong receiver.");
-          }
-        }
-        if (record.policy === "template") {
-          if (owner == null || receiver == null || ["implicit", "named", "fallback"].indexOf(record.kind) === -1) {
-            throw new TypeError("[Citry] graph: template fill ownership is inconsistent.");
-          }
-          if (provenance) {
-            var expectedSourceKind = {
-              implicit: "implicit-fill",
-              named: "named-fill",
-              fallback: "fallback-fill",
-            }[record.kind];
-            if (!sourceLocation || sourceLocation.kind !== expectedSourceKind) {
-              throw new TypeError("[Citry] graph: template fill source location has the wrong kind.");
-            }
-          }
-          if (record.kind === "fallback") {
-            // A fallback fill never names a source call; its slot-outlet source
-            // location is dev-only, so only its kind check is gated.
-            if (sourceInvocation != null) {
-              throw new TypeError("[Citry] graph: fallback fill source carrier is inconsistent.");
-            }
-            if (provenance && (!fallbackLocation || fallbackLocation.kind !== "slot-outlet")) {
-              throw new TypeError("[Citry] graph: fallback fill source carrier is inconsistent.");
-            }
-          } else {
-            var supplyInvocation = sourceInvocation == null ? null : invocationRecords.get(sourceInvocation);
-            if (
-              !supplyInvocation || supplyInvocation.parent !== owner ||
-              fallbackLocation != null
-            ) {
-              throw new TypeError("[Citry] graph: supplied fill source carrier is inconsistent.");
-            }
-          }
-        } else if (record.policy === "python-detached") {
-          if (
-            record.kind !== "python" || owner != null || receiver == null ||
-            sourceInvocation != null || fallbackLocation != null
-          ) {
-            throw new TypeError("[Citry] graph: detached Python fill ownership is inconsistent.");
-          }
-        } else if (
-          record.kind !== "typed-default" || owner != null || receiver == null ||
-          sourceInvocation != null || fallbackLocation != null
-        ) {
-          throw new TypeError("[Citry] graph: detached typed-default fill ownership is inconsistent.");
-        }
-        fillRecords.set(record.fillId, {
-          owner: owner,
-          receiver: receiver,
-          sourceLocation: record.locationId,
-          sourceInvocation: sourceInvocation,
-        });
-      });
-      var slotRegionIds = new Set();
-      var slotRegionRecords = new Map();
-      graph.slotRegions.forEach(function (record, index) {
-        var where = "graphs[" + graphIndex + "].slotRegions[" + index + "]";
-        exactKeys(record, ["fillId", "ownerRenderId", "parentRegionId", "receiverRenderId", "regionId", "resultOwnerRenderId", "slotLocationId", "sourceLocationId", "transitionFromRenderId"], where);
-        uniqueId(slotRegionIds, record.regionId, where + ".regionId");
-        if (!fillIds.has(integer(record.fillId, where + ".fillId", 1))) throw new TypeError("[Citry] graph: slot region fill is unknown.");
-        var owner = renderRef(record.ownerRenderId, where + ".ownerRenderId", true);
-        var receiver = renderRef(record.receiverRenderId, where + ".receiverRenderId", true);
-        renderRef(record.resultOwnerRenderId, where + ".resultOwnerRenderId", true);
-        var transitionFrom = renderRef(record.transitionFromRenderId, where + ".transitionFromRenderId", true);
-        if (provenance) {
-          ["slotLocationId", "sourceLocationId"].forEach(function (key) {
-            var value = nullableInteger(record[key], where + "." + key, 1);
-            if (value != null && !locations.has(value)) throw new TypeError("[Citry] graph: slot region location is unknown.");
-          });
-        } else if (record.slotLocationId !== null || record.sourceLocationId !== null) {
-          throw new TypeError("[Citry] graph: slot region location references must be null in production.");
-        }
-        nullableInteger(record.parentRegionId, where + ".parentRegionId", 1);
-        var fill = fillRecords.get(record.fillId);
-        if (!fill || fill.owner !== owner || fill.receiver !== receiver || fill.sourceLocation !== record.sourceLocationId) {
-          throw new TypeError("[Citry] graph: slot region ownership does not match its logical fill.");
-        }
-        if (provenance) {
-          var slotLocation = record.slotLocationId == null ? null : locationRecords.get(record.slotLocationId);
-          if (slotLocation && slotLocation.owner !== receiver) {
-            throw new TypeError("[Citry] graph: slot region location has the wrong receiver.");
-          }
-          if (slotLocation && slotLocation.kind !== "slot-outlet") {
-            throw new TypeError("[Citry] graph: slot region location has the wrong kind.");
-          }
-        }
-        slotRegionRecords.set(record.regionId, {
-          owner: owner,
-          receiver: receiver,
-          parent: record.parentRegionId,
-          transitionFrom: transitionFrom,
-        });
-        expectedCaps.add(graphIndex + ":r:" + record.regionId);
-      });
-      graph.slotRegions.forEach(function (record) {
-        if (record.parentRegionId != null && !slotRegionIds.has(record.parentRegionId)) throw new TypeError("[Citry] graph: parent slot region is unknown.");
-      });
-      graph.nestedComponents.forEach(function (record) {
-        if (record.parentRegionId != null && !slotRegionIds.has(record.parentRegionId)) throw new TypeError("[Citry] graph: nested component parent slot region is unknown.");
-      });
-      var executionConstraintsByParent = new Map();
-      graph.componentExecutionOrderConstraints.forEach(function (record, index) {
-        var where = "graphs[" + graphIndex + "].componentExecutionOrderConstraints[" + index + "]";
-        exactKeys(record, ["childRenderId", "invocationId", "parentRenderId"], where);
-        if (!invocationIds.has(integer(record.invocationId, where + ".invocationId", 1))) throw new TypeError("[Citry] graph: component execution order constraint references an unknown nested component.");
-        var parent = record.parentRenderId;
-        var child = record.childRenderId;
-        if (!renderIds.has(parent) || !renderIds.has(child)) throw new TypeError("[Citry] graph: component execution order constraint endpoint is unknown.");
-        var invocation = invocationRecords.get(record.invocationId);
-        if (!invocation || invocation.parent !== parent || invocation.child !== child) {
-          throw new TypeError(
-            "[Citry] graph: component execution order constraint does not match its invocation."
-          );
-        }
-        var children = executionConstraintsByParent.get(parent) || [];
-        children.push(child);
-        executionConstraintsByParent.set(parent, children);
-      });
-      var visiting = new Set();
-      var visited = new Set();
-      var visit = function (render) {
-        if (visiting.has(render)) {
-          throw new TypeError("[Citry] graph: component execution order contains a cycle.");
-        }
-        if (visited.has(render)) return;
-        visiting.add(render);
-        (executionConstraintsByParent.get(render) || []).forEach(visit);
-        visiting.delete(render);
-        visited.add(render);
-      };
-      renderIds.forEach(visit);
-      var visitingSlotRegions = new Set();
-      var visitedSlotRegions = new Set();
-      var visitSlotRegion = function (regionId) {
-        if (visitingSlotRegions.has(regionId)) throw new TypeError("[Citry] graph: slot region ancestry contains a cycle.");
-        if (visitedSlotRegions.has(regionId)) return;
-        visitingSlotRegions.add(regionId);
-        var region = slotRegionRecords.get(regionId);
-        if (region && region.parent != null) visitSlotRegion(region.parent);
-        visitingSlotRegions.delete(regionId);
-        visitedSlotRegions.add(regionId);
-      };
-      slotRegionIds.forEach(visitSlotRegion);
-      slotRegionRecords.forEach(function (region) {
-        var expectedTransition = region.parent == null ? region.receiver : slotRegionRecords.get(region.parent).owner;
-        if (region.transitionFrom !== expectedTransition) {
-          throw new TypeError("[Citry] graph: slot region scope transition does not match its ancestry.");
-        }
-      });
-      instancesByInvocationByGraph[graphIndex] = instancesByInvocation;
-      return graph;
+      return instancesByInvocation;
     });
-    var caps = validatePhysicalCaps(manifest.delimiters.format, manifest.revision, expectedCaps, capRoot || document);
-    stagedGraphs.forEach(function (graph, graphIndex) {
+    var caps = validatePhysicalCaps(validated.revision, expectedCaps, capRoot || document);
+    validated.graphs.forEach(function (graph, graphIndex) {
       graph.slotRegions.forEach(function (region) {
         var pair = caps.get(graphIndex + ":r:" + region.regionId);
         if (!pair || pair.parentRegion !== region.parentRegionId) {
           throw new TypeError("[Citry] graph: slot region ancestry does not match physical cap nesting.");
         }
       });
-      graph.nestedComponents.forEach(function (invocation) {
-        var targets = instancesByInvocationByGraph[graphIndex].get(invocation.invocationId) || [];
-        var target = targets[0];
+      graph.nestedComponents.forEach(function (nestedComponent) {
+        var target = instancesByInvocationByGraph[graphIndex].get(nestedComponent.invocationId);
         var pair = target && caps.get(graphIndex + ":i:" + target.instanceId);
-        if (!pair || pair.parentRegion !== invocation.parentRegionId) {
+        if (!pair || pair.parentRegion !== nestedComponent.parentRegionId) {
           throw new TypeError("[Citry] graph: nested component parent slot region does not match physical cap nesting.");
         }
       });
     });
     caps.forEach(Object.freeze);
-    stagedGraphs.forEach(deepFreeze);
-    return Object.freeze({ revision: manifest.revision, graphs: Object.freeze(stagedGraphs), caps: caps });
+    validated.graphs.forEach(deepFreeze);
+    return Object.freeze({
+      revision: validated.revision,
+      graphs: Object.freeze(validated.graphs),
+      caps: caps,
+    });
   };
 
   // A read-only Map-shaped view. Object.freeze(new Map()) does not prevent
@@ -1445,6 +828,9 @@
       scope: null,
       els: [],
       parentLogical: null,
+      morphKey: null,
+      morphMode: null,
+      childOrder: [],
     };
     var anchor = {};
     Object.defineProperties(anchor, {
@@ -1587,10 +973,17 @@
           sourceRenderId: record.sourceRenderId,
           sourceClassId: record.sourceClassId,
           tag: record.tagName,
+          morphKey: record.morphKey,
+          morphMode: record.morphMode,
           targetRenderId: record.targetRenderId,
           targetClassId: record.targetClassId,
           clientBindings: Object.freeze(clientBindings),
         }));
+        var targetLink = renderLinks.get(record.targetRenderId);
+        if (targetLink) {
+          targetLink.logicalState.morphKey = record.morphKey;
+          targetLink.logicalState.morphMode = record.morphMode;
+        }
       });
       graph.fills.forEach(function (record) {
         var key = qualifiedGraphId(graph.graphId, "f", record.fillId);
@@ -1674,6 +1067,10 @@
         executionOrderParentByChild.set(record.childRenderId, record.parentRenderId);
       });
     });
+    childrenByParent.forEach(function (children, parentRenderId) {
+      var parentLink = renderLinks.get(parentRenderId);
+      if (parentLink) parentLink.logicalState.childOrder = children.slice();
+    });
 
     renderLinks.forEach(function (link) {
       if (link.record.parentRenderId == null) return;
@@ -1750,6 +1147,7 @@
       executionOrderParentByChild: executionOrderParentByChild,
       rangeGroupStates: rangeGroupStates,
       graphCalls: new Map(),
+      retainedPhysicalKeys: new Set(),
       provisional: false,
       adoption: null,
     };
@@ -1954,41 +1352,71 @@
   var RANGE_ISLAND_ATTR = "data-citry-range-island";
   var rangeCapInfo = function (node) {
     if (!(node instanceof Comment)) return null;
-    var match = OWNERSHIP_COMMENT_RE.exec(node.data.trim());
-    if (match) {
+    var ownership = CitryClientGraphProtocol.parseOwnershipComment(node.data);
+    if (ownership) {
       return {
-        key: OWNERSHIP_COMMENT_PREFIX + ":" + match[1] + ":" + match[2] + ":" + match[3] + ":" + match[4],
-        side: match[5],
+        key: ownership.key,
+        revision: ownership.revision,
+        recordKey: qualifiedGraphId(
+          Number(ownership.graphId),
+          ownership.kind,
+          Number(ownership.recordId)
+        ),
+        side: ownership.side,
       };
     }
-    match = /^citry:p1:([0-9a-f]{64}):([A-Za-z0-9_-]+):(\d+):([ir]):(\d+):([se])$/.exec(node.data.trim());
+    var match = /^citry:p1:([0-9a-f]{64}):([A-Za-z0-9_-]+):([0-9]+):([ir]):([0-9]+):([se])$/.exec(node.data.trim());
     if (!match) return null;
     return {
       key: "citry:p1:" + match[1] + ":" + match[2] + ":" + match[3] + ":" + match[4] + ":" + match[5],
+      revision: match[1],
+      recordKey: qualifiedGraphId(Number(match[3]), match[4], Number(match[5])),
       side: match[6],
     };
   };
 
-  var directRangePairs = function (parent) {
+  var directRangePairs = function (parent, includeNested, boundary) {
     var stack = [];
     var pairs = [];
-    Array.prototype.slice.call(parent.childNodes).forEach(function (node) {
+    var childNodes = Array.prototype.slice.call(parent.childNodes);
+    if (boundary) {
+      if (boundary.start.parentNode !== parent || boundary.end.parentNode !== parent) {
+        throw new TypeError("[Citry] ownership range scan boundary must belong to its parent.");
+      }
+      var startIndex = childNodes.indexOf(boundary.start);
+      var endIndex = childNodes.indexOf(boundary.end);
+      if (startIndex < 0 || endIndex <= startIndex) {
+        throw new TypeError("[Citry] ownership range scan boundary is disconnected or reversed.");
+      }
+      childNodes = childNodes.slice(startIndex + 1, endIndex);
+    }
+    childNodes.forEach(function (node) {
       var info = rangeCapInfo(node);
       if (!info) return;
       if (info.side === "s") {
-        stack.push({ key: info.key, start: node });
+        stack.push({ key: info.key, start: node, revision: info.revision, recordKey: info.recordKey });
         return;
       }
       var opened = stack.pop();
       if (!opened || opened.key !== info.key) {
-        throw new TypeError("[Citry] range morph received crossed or unmatched ownership caps near " + info.key + ".");
+        throw new TypeError(
+          "[Citry] range morph received crossed or unmatched ownership caps near " + info.key +
+            " (open cap: " + (opened ? opened.key : "none") + ")."
+        );
       }
-      pairs.push({ key: info.key, start: opened.start, end: node, depth: stack.length });
+      pairs.push({
+        key: info.key,
+        start: opened.start,
+        end: node,
+        depth: stack.length,
+        revision: opened.revision,
+        recordKey: opened.recordKey,
+      });
     });
     if (stack.length) {
       throw new TypeError("[Citry] range morph received an ownership opening cap without its closing cap.");
     }
-    return pairs.filter(function (pair) { return pair.depth === 0; });
+    return includeNested ? pairs : pairs.filter(function (pair) { return pair.depth === 0; });
   };
 
   var collapseRangePair = function (pair, stableAnchor) {
@@ -2144,6 +1572,853 @@
     });
   };
 
+  var PLANNED_RANGE_HOLDER_ATTR = "data-citry-range-holder";
+  var PLANNED_RANGE_SLOT_ATTR = "data-citry-range-slot";
+  var PLANNED_RANGE_PORTABLE_ATTR = "data-citry-range-portable";
+  var PLANNED_RANGE_SENTINEL_ATTR = "data-citry-range-sentinel";
+  var plannedRangeSlotCounter = 0;
+
+  var nodesInsidePair = function (pair) {
+    var nodes = [];
+    if (!pair.start || !pair.end || pair.start.parentNode !== pair.end.parentNode) return nodes;
+    for (var node = pair.start.nextSibling; node && node !== pair.end; node = node.nextSibling) nodes.push(node);
+    return nodes;
+  };
+
+  var pairContainsPair = function (outer, inner) {
+    return outer !== inner && nodePrecedes(outer.start, inner.start) && nodePrecedes(inner.end, outer.end);
+  };
+
+  var rangePairsUnder = function (root, boundary) {
+    var pairs = [];
+    var seen = new Set();
+    var visit = function (parent, window) {
+      directRangePairs(parent, true, window).forEach(function (pair) {
+        if (seen.has(pair.start)) return;
+        if (boundary && !pairContainsPair(boundary, pair)) return;
+        seen.add(pair.start);
+        pairs.push(pair);
+      });
+      var children = window
+        ? nodesInsidePair(window).filter(function (node) { return node instanceof Element; })
+        : Array.prototype.slice.call(parent.children || []);
+      children.forEach(function (child) { visit(child, null); });
+    };
+    visit(root, boundary && boundary.start.parentNode === root ? boundary : null);
+    return pairs;
+  };
+
+  var pairForRecord = function (pairs, revision, recordKey) {
+    return pairs.find(function (pair) {
+      return pair.revision === revision && pair.recordKey === recordKey;
+    }) || null;
+  };
+
+  var collapsePlannedRange = function (pair, slot, kind, match) {
+    if (!pair.start || !pair.end || pair.start.parentNode !== pair.end.parentNode) {
+      throw new TypeError("[Citry] planned component range has unsupported cap topology.");
+    }
+    var holder = document.createElement("template");
+    holder.setAttribute(PLANNED_RANGE_HOLDER_ATTR, kind);
+    holder.setAttribute(PLANNED_RANGE_SLOT_ATTR, slot);
+    if (match) {
+      holder.setAttribute(PLANNED_RANGE_PORTABLE_ATTR, slot);
+      holder._citryRangeMatch = match;
+    }
+    pair.start.before(holder);
+    for (var node = pair.start; node;) {
+      var next = node.nextSibling;
+      holder.content.append(node);
+      if (node === pair.end) break;
+      node = next;
+    }
+    return holder;
+  };
+
+  var insertPlannedSentinel = function (pair, slot, side, before) {
+    var sentinel = document.createElement("template");
+    sentinel.setAttribute(PLANNED_RANGE_SENTINEL_ATTR, side);
+    sentinel.setAttribute(PLANNED_RANGE_SLOT_ATTR, slot);
+    if (before) pair.start.before(sentinel);
+    else pair.end.after(sentinel);
+    return sentinel;
+  };
+
+  var plannedElementKey = function (element, options) {
+    if (!(element instanceof Element)) return null;
+    return typeof options.key === "function"
+      ? options.key(element)
+      : element.getAttribute("data-citry-key");
+  };
+
+  var plannedPathSegment = function (element, options, boundarySiblings) {
+    var key = plannedElementKey(element, options);
+    if (key !== null) return element.localName + "#" + JSON.stringify(key);
+    var siblings = boundarySiblings ||
+      Array.prototype.slice.call((element.parentNode && element.parentNode.childNodes) || []);
+    return element.localName + "@" + siblings.indexOf(element);
+  };
+
+  var plannedParentPath = function (pair, boundary, options) {
+    var boundaryParent = boundary.start ? boundary.start.parentNode : boundary;
+    if (pair.start.parentNode === boundaryParent) return "";
+    var boundarySiblings = boundary.start
+      ? nodesInsidePair(boundary)
+      : Array.prototype.slice.call(boundary.childNodes || []);
+    var segments = [];
+    var current = pair.start.parentElement;
+    while (current && current !== boundaryParent) {
+      segments.push(plannedPathSegment(
+        current,
+        options,
+        current.parentNode === boundaryParent ? boundarySiblings : null
+      ));
+      current = current.parentElement;
+    }
+    return current === boundaryParent ? segments.reverse().join("/") : null;
+  };
+
+  var plannedWindowSignature = function (target, pairs, normalize, boundary, options) {
+    var byStart = new Map();
+    pairs.forEach(function (pair) {
+      if (pair && pair.start.parentNode === target.start.parentNode) byStart.set(pair.start, pair);
+    });
+    var tokens = [];
+    var boundaryParent = boundary.start ? boundary.start.parentNode : boundary;
+    var boundedByPair = boundary.start && target.start.parentNode === boundaryParent;
+    var stop = boundedByPair ? boundary.end : null;
+    var node = boundedByPair
+      ? boundary.start.nextSibling
+      : target.start.parentNode === boundaryParent
+        ? boundary.firstChild
+        : target.start.parentNode.firstChild;
+    for (; node && node !== stop;) {
+      var range = byStart.get(node);
+      if (range) {
+        if (range === target) {
+          tokens.push("TARGET");
+          break;
+        }
+        tokens.push("RANGE:" + normalize(range));
+        node = range.end.nextSibling;
+        continue;
+      }
+      if (node instanceof Element) {
+        tokens.push("ELEMENT:" + node.localName + ":" + JSON.stringify(plannedElementKey(node, options)));
+      } else if (node.nodeType === Node.TEXT_NODE) {
+        tokens.push("TEXT");
+      } else if (node.nodeType === Node.COMMENT_NODE) {
+        tokens.push("COMMENT");
+      } else {
+        tokens.push("NODE:" + node.nodeType + ":" + node.nodeName);
+      }
+      node = node.nextSibling;
+    }
+    return JSON.stringify(tokens);
+  };
+
+  var elementsInsidePair = function (pair, selector) {
+    var result = [];
+    nodesInsidePair(pair).forEach(function (node) {
+      if (!(node instanceof Element)) return;
+      if (node.matches(selector)) result.push(node);
+      node.querySelectorAll(selector).forEach(function (element) { result.push(element); });
+    });
+    return result;
+  };
+
+  var expandPlannedHolders = function (pair) {
+    var selector = "template[" + PLANNED_RANGE_HOLDER_ATTR + "]:not([" + PLANNED_RANGE_PORTABLE_ATTR + "])";
+    while (true) {
+      var holder = elementsInsidePair(pair, selector)[0];
+      if (!holder) return;
+      holder.before(holder.content);
+      holder.remove();
+    }
+  };
+
+  var removePlannedSentinels = function (pair) {
+    elementsInsidePair(pair, "template[" + PLANNED_RANGE_SENTINEL_ATTR + "]").forEach(function (sentinel) {
+      sentinel.remove();
+    });
+  };
+
+  var plannedSentinelWindows = function (root, boundary) {
+    var selector = "template[" + PLANNED_RANGE_SENTINEL_ATTR + "]";
+    var sentinels = boundary
+      ? elementsInsidePair(boundary, selector)
+      : Array.prototype.slice.call(root.querySelectorAll(selector));
+    return sentinels.filter(function (sentinel) {
+      return sentinel.getAttribute(PLANNED_RANGE_SENTINEL_ATTR) === "start";
+    }).map(function (start) {
+      var startSlot = start.getAttribute(PLANNED_RANGE_SLOT_ATTR);
+      var endSlot = startSlot && startSlot.replace(/:start$/, ":end");
+      var end = sentinels.find(function (candidate) {
+        return (
+          candidate.parentNode === start.parentNode &&
+          candidate.getAttribute(PLANNED_RANGE_SENTINEL_ATTR) === "end" &&
+          candidate.getAttribute(PLANNED_RANGE_SLOT_ATTR) === endSlot &&
+          nodePrecedes(start, candidate)
+        );
+      });
+      return end ? { start: start, end: end } : null;
+    }).filter(Boolean);
+  };
+
+  var pairInsidePlannedWindows = function (pair, windows) {
+    return windows.some(function (window) { return pairContainsPair(window, pair); });
+  };
+
+  var elementInsidePlannedWindows = function (element, windows) {
+    return windows.some(function (window) { return physicalRangeContainsNode(window, element); });
+  };
+
+  var skipPlannedSentinelWindow = function (from, to, skipUntil) {
+    if (
+      !(from instanceof Element) ||
+      !(to instanceof Element) ||
+      from.getAttribute(PLANNED_RANGE_SENTINEL_ATTR) !== "start" ||
+      to.getAttribute(PLANNED_RANGE_SENTINEL_ATTR) !== "start" ||
+      from.getAttribute(PLANNED_RANGE_SLOT_ATTR) !== to.getAttribute(PLANNED_RANGE_SLOT_ATTR)
+    ) return false;
+    var endSlot = from.getAttribute(PLANNED_RANGE_SLOT_ATTR).replace(/:start$/, ":end");
+    skipUntil(function (node) {
+      return node instanceof Element &&
+        node.getAttribute(PLANNED_RANGE_SENTINEL_ATTR) === "end" &&
+        node.getAttribute(PLANNED_RANGE_SLOT_ATTR) === endSlot;
+    });
+    return true;
+  };
+
+  var freshContentsForPair = function (pair, oldPair) {
+    var parent = oldPair.start.parentElement;
+    var container = parent ? parent.cloneNode(false) : document.createElement("div");
+    if (container.removeAttribute) container.removeAttribute("id");
+    nodesInsidePair(pair).forEach(function (node) { container.append(node.cloneNode(true)); });
+    return container;
+  };
+
+  var rangeRecordKind = function (pair) {
+    return typeof pair.recordKey === "string" ? pair.recordKey.split(":")[1] : null;
+  };
+
+  var directSlotRegionPairs = function (pairs) {
+    var componentPairs = pairs.filter(function (pair) { return rangeRecordKind(pair) === "i"; });
+    return pairs.filter(function (pair) {
+      return (
+        rangeRecordKind(pair) === "r" &&
+        !componentPairs.some(function (componentPair) { return pairContainsPair(componentPair, pair); })
+      );
+    });
+  };
+
+  var slotRegionIdentity = function (pair, boundary, options, peerPairs) {
+    var state = ownershipStates.get(pair.revision);
+    var region = state && state.slotRegions.get(pair.recordKey);
+    if (!state || !region) return null;
+    var receiver = state.renderLinks.get(region.receiverRenderId);
+    var resultOwner = state.renderLinks.get(region.resultOwnerRenderId);
+    var fill = state.registry.fills.get(qualifiedGraphId(region.graphId, "f", region.fillId));
+    return JSON.stringify([
+      plannedParentPath(pair, boundary, options),
+      plannedWindowSignature(
+        pair,
+        peerPairs,
+        function (candidate) { return rangeRecordKind(candidate) || "unknown"; },
+        boundary,
+        options
+      ),
+      receiver ? receiver.record.classId : null,
+      fill ? fill.slot : null,
+      fill ? fill.kind : null,
+      fill ? fill.policy : null,
+      fill ? fill.ownerClassId : null,
+      fill ? fill.receiverClassId : null,
+      resultOwner ? resultOwner.record.classId : null,
+    ]);
+  };
+
+  var morphOrdinaryRangeContents = function (oldPair, fresh, options) {
+    var oldParent = oldPair.start.parentNode;
+    if (!oldParent || oldParent !== oldPair.end.parentNode) {
+      throw new TypeError("[Citry] correlated slot-region morph needs same-parent operational caps.");
+    }
+    if (oldPair.start._citryOperationalDocumentStart) {
+      var boundaryWhitespace = function (node) {
+        return node && node.nodeType === Node.TEXT_NODE && !node.nodeValue.trim();
+      };
+      var oldFirst = oldPair.start.nextSibling;
+      var freshFirst = fresh.firstChild;
+      if (boundaryWhitespace(freshFirst) && !boundaryWhitespace(oldFirst)) {
+        while (boundaryWhitespace(freshFirst)) {
+          oldParent.insertBefore(freshFirst.cloneNode(true), oldFirst);
+          freshFirst = freshFirst.nextSibling;
+        }
+      }
+      while (boundaryWhitespace(oldFirst) && !boundaryWhitespace(fresh.firstChild)) {
+        var nextOld = oldFirst.nextSibling;
+        oldFirst.remove();
+        oldFirst = nextOld;
+      }
+      var oldLast = oldPair.end.previousSibling;
+      var freshLast = fresh.lastChild;
+      var freshTrailing = [];
+      while (freshFirst && boundaryWhitespace(freshLast)) {
+        freshTrailing.unshift(freshLast);
+        freshLast = freshLast.previousSibling;
+      }
+      if (freshTrailing.length && !boundaryWhitespace(oldLast)) {
+        freshTrailing.forEach(function (node) { oldParent.insertBefore(node.cloneNode(true), oldPair.end); });
+      }
+      while (boundaryWhitespace(oldLast) && !boundaryWhitespace(fresh.lastChild)) {
+        var previousOld = oldLast.previousSibling;
+        oldLast.remove();
+        oldLast = previousOld;
+      }
+    }
+    var inheritedOldWindows = plannedSentinelWindows(oldParent, oldPair);
+    var inheritedFreshWindows = plannedSentinelWindows(fresh, null);
+    rangePairsUnder(oldParent, oldPair)
+      .filter(function (pair) { return !pairInsidePlannedWindows(pair, inheritedOldWindows); })
+      .sort(function (left, right) {
+        return pairContainsPair(left, right) ? 1 : pairContainsPair(right, left) ? -1 : 0;
+      })
+      .forEach(function (pair) {
+        plannedRangeSlotCounter += 1;
+        collapsePlannedRange(pair, "old:" + plannedRangeSlotCounter.toString(36), "old-unmatched", null);
+      });
+    rangePairsUnder(fresh, null)
+      .filter(function (pair) { return !pairInsidePlannedWindows(pair, inheritedFreshWindows); })
+      .sort(function (left, right) {
+        return pairContainsPair(left, right) ? 1 : pairContainsPair(right, left) ? -1 : 0;
+      })
+      .forEach(function (pair) {
+        plannedRangeSlotCounter += 1;
+        collapsePlannedRange(pair, "new:" + plannedRangeSlotCounter.toString(36), "new-unmatched", null);
+      });
+    alpineOwner.morphBetween(oldPair.start, oldPair.end, fresh, {
+      key: function (element) {
+        if (
+          element.hasAttribute(PLANNED_RANGE_HOLDER_ATTR) ||
+          element.hasAttribute(PLANNED_RANGE_SENTINEL_ATTR)
+        ) {
+          return element.getAttribute(PLANNED_RANGE_SLOT_ATTR);
+        }
+        return typeof options.key === "function" ? options.key(element) : element.getAttribute("data-citry-key");
+      },
+      keyMapFilter: function (element) {
+        return !elementInsidePlannedWindows(element, inheritedOldWindows);
+      },
+      updating: function (from, to, childrenOnly, skip, skipChildren, skipUntil) {
+        if (skipPlannedSentinelWindow(from, to, skipUntil)) return;
+        if (typeof options.updating === "function") {
+          options.updating(from, to, childrenOnly, skip, skipChildren, skipUntil);
+        }
+      },
+    });
+    expandPlannedHolders(oldPair);
+    removePlannedSentinels(oldPair);
+  };
+
+  var physicalForPlannedMatch = function (match, outer) {
+    var state = ownershipStates.get(match.fromRevision);
+    if (!state) return null;
+    return physicalRangesForKey(state, match.fromKey).find(function (physical) {
+      var operationallyLive =
+        physical.start.parentNode === outer.start.parentNode &&
+        physical.end.parentNode === outer.end.parentNode &&
+        physical.start.data === physical.startMarker &&
+        physical.end.data === physical.endMarker;
+      return (
+        physical.start !== outer.start &&
+        (physicalRangeIsLive(state, physical) || operationallyLive) &&
+        physicalRangeContainsNode(outer, physical.start) &&
+        physicalRangeContainsNode(outer, physical.end)
+      );
+    }) || null;
+  };
+
+  var morphPlannedRangeContents = function (oldPair, fresh, currentMatch, plan, options) {
+    var physicalMatches = plan.matches.concat(plan.retainedMatches || []);
+    var directMatches = physicalMatches.filter(function (match) {
+      return (
+        match.preserveLogical &&
+        match.parentFromRenderId === currentMatch.fromRenderId &&
+        match.parentToRenderId === currentMatch.toRenderId
+      );
+    });
+    var oldParent = oldPair.start.parentNode;
+    if (!oldParent || oldParent !== oldPair.end.parentNode) {
+      throw new TypeError("[Citry] planned range morph needs same-parent operational caps.");
+    }
+    var oldPairs = rangePairsUnder(oldParent, oldPair);
+    var freshPairs = rangePairsUnder(fresh, null);
+    var retainedIncomingRenderIds = new Set((plan.retainedCorrespondences || []).map(function (match) {
+      return match.toRenderId;
+    }));
+    var retainedIncomingSlotKeys = new Set((plan.retainedSlotMatches || []).map(function (match) {
+      return match.toKey;
+    }));
+    var excludedFreshPairs = freshPairs.filter(function (pair) {
+      var instance = plan.state.registry.componentInstances.get(pair.recordKey);
+      if (instance) {
+        return plan.excludedIncomingRenderIds.has(instance.renderId) && !retainedIncomingRenderIds.has(instance.renderId);
+      }
+      return plan.excludedIncomingPhysicalKeys.has(pair.recordKey) && !retainedIncomingSlotKeys.has(pair.recordKey);
+    }).filter(function (pair, _index, excluded) {
+      return !excluded.some(function (outer) { return pairContainsPair(outer, pair); });
+    });
+    excludedFreshPairs.forEach(function (pair) {
+      for (var node = pair.start; node;) {
+        var next = node.nextSibling;
+        node.remove();
+        if (node === pair.end) break;
+        node = next;
+      }
+    });
+    if (excludedFreshPairs.length) freshPairs = rangePairsUnder(fresh, null);
+    var inheritedOldWindows = plannedSentinelWindows(oldParent, oldPair);
+    var inheritedFreshWindows = plannedSentinelWindows(fresh, null);
+    var portable = [];
+    var stationary = [];
+    var correlatedRegions = [];
+
+    var oldChildren = (currentMatch.oldDirectChildren || []).map(function (record) {
+      var state = ownershipStates.get(record.revision);
+      var pair = state && physicalRangesForKey(state, record.key).find(function (physical) {
+        return (
+          physicalRangeIsLive(state, physical) &&
+          physicalRangeContainsNode(oldPair, physical.start) &&
+          physicalRangeContainsNode(oldPair, physical.end)
+        );
+      });
+      return pair
+        ? { record: record, pair: { start: pair.start, end: pair.end, revision: record.revision, recordKey: pair.key } }
+        : null;
+    }).filter(Boolean);
+    var newChildren = (currentMatch.newDirectChildren || []).map(function (record) {
+      var pair = pairForRecord(freshPairs, record.revision, record.key);
+      return pair ? { record: record, pair: pair } : null;
+    }).filter(Boolean);
+    var byPosition = function (left, right) {
+      return nodePrecedes(left.pair.start, right.pair.start)
+        ? -1
+        : nodePrecedes(right.pair.start, left.pair.start)
+          ? 1
+          : 0;
+    };
+    oldChildren.sort(byPosition);
+    newChildren.sort(byPosition);
+    var matchByOldRange = new Map();
+    physicalMatches.forEach(function (match) {
+      if (!match.preserveLogical) return;
+      matchByOldRange.set(match.fromRevision + "\n" + match.fromKey, match.toRevision + "\n" + match.toKey);
+    });
+    var normalizeOldRange = function (pair) {
+      var identity = pair.revision + "\n" + pair.recordKey;
+      return matchByOldRange.get(identity) || "old-only:" + identity;
+    };
+    var normalizeNewRange = function (pair) {
+      return pair.revision + "\n" + pair.recordKey;
+    };
+    var insideIgnoredOldBarrier = function (pair) {
+      return plan.ordinaryPairs.some(function (ordinary) {
+        var element = ordinary.from;
+        return element instanceof Element && element.getAttribute("data-citry-morph") === "ignore" &&
+          element.contains(pair.start) && element.contains(pair.end);
+      });
+    };
+    var intermediateRanges = function (target, pairs) {
+      return pairs.filter(function (pair) { return pairContainsPair(pair, target); }).sort(function (left, right) {
+        if (pairContainsPair(left, right)) return -1;
+        if (pairContainsPair(right, left)) return 1;
+        return 0;
+      });
+    };
+    var normalizedIntermediateRange = function (pair, side) {
+      var kind = rangeRecordKind(pair);
+      if (kind === "i") {
+        var identity = pair.revision + "\n" + pair.recordKey;
+        var mappedIdentity = side === "old" ? matchByOldRange.get(identity) : identity;
+        return mappedIdentity ? "i:" + mappedIdentity : null;
+      }
+      if (kind === "r") {
+        var boundary = side === "old" ? oldPair : fresh;
+        var peers = side === "old" ? oldPairs : freshPairs;
+        var regionIdentity = slotRegionIdentity(pair, boundary, options, peers);
+        return regionIdentity === null ? null : "r:" + regionIdentity;
+      }
+      return null;
+    };
+    var hasEquivalentIntermediateRanges = function (oldDirectPair, newDirectPair) {
+      var oldIntermediate = intermediateRanges(oldDirectPair, oldPairs);
+      var newIntermediate = intermediateRanges(newDirectPair, freshPairs);
+      return oldIntermediate.length === newIntermediate.length && oldIntermediate.every(function (pair, index) {
+        var oldIdentity = normalizedIntermediateRange(pair, "old");
+        return oldIdentity !== null && oldIdentity === normalizedIntermediateRange(newIntermediate[index], "new");
+      });
+    };
+
+    // A stationary range stays connected behind paired sentinels. A real move
+    // uses portable holders so Alpine can land the new wrapper structure before
+    // Citry transplants the old physical range into its new destination.
+    var plannedEntries = directMatches.map(function (match) {
+      var oldPhysical = physicalForPlannedMatch(match, oldPair);
+      var newPair = pairForRecord(freshPairs, match.toRevision, match.toKey);
+      if (!oldPhysical || !newPair) {
+        throw new TypeError(
+          "[Citry] planned keyed component range is absent from one physical parent range" +
+            " (old=" + Boolean(oldPhysical) + ", new=" + Boolean(newPair) +
+            ", fresh=" + freshPairs.map(function (pair) { return pair.recordKey; }).join(",") + ")."
+        );
+      }
+      plannedRangeSlotCounter += 1;
+      var token = "p" + plannedRangeSlotCounter.toString(36);
+      var oldChildIndex = oldChildren.findIndex(function (child) {
+        return child.record.revision === match.fromRevision && child.record.key === match.fromKey;
+      });
+      var newChildIndex = newChildren.findIndex(function (child) {
+        return child.record.revision === match.toRevision && child.record.key === match.toKey;
+      });
+      var oldDirectPair = oldChildIndex < 0 ? null : oldChildren[oldChildIndex].pair;
+      var newDirectPair = newChildIndex < 0 ? null : newChildren[newChildIndex].pair;
+      var oldPath = oldDirectPair && plannedParentPath(oldDirectPair, oldPair, options);
+      var newPath = newDirectPair && plannedParentPath(newDirectPair, fresh, options);
+      var sameWindow = oldPath !== null && oldPath === newPath;
+      var staysConnected = Boolean(
+        oldDirectPair &&
+        newDirectPair &&
+        hasEquivalentIntermediateRanges(oldDirectPair, newDirectPair) &&
+        oldChildIndex === newChildIndex &&
+        sameWindow &&
+        plannedWindowSignature(
+          oldDirectPair,
+          oldChildren.map(function (child) { return child.pair; }),
+          normalizeOldRange,
+          oldPair,
+          options
+        ) === plannedWindowSignature(
+          newDirectPair,
+          newChildren.map(function (child) { return child.pair; }),
+          normalizeNewRange,
+          fresh,
+          options
+        )
+      );
+      return {
+        match: match,
+        token: token,
+        oldPhysical: oldPhysical,
+        oldPair: oldDirectPair,
+        newPair: newDirectPair,
+        staysConnected: staysConnected,
+      };
+    }).filter(function (entry) {
+      return !(entry.match.retained && insideIgnoredOldBarrier(entry.oldPhysical));
+    });
+
+    // Discover every boundary before moving any of them into template
+    // fragments. Enclosing portable holders are created first, so a nested
+    // holder travels with its parent and the parent destination becomes
+    // reachable before the nested range is transplanted.
+    plannedEntries.sort(function (left, right) {
+      if (
+        (left.oldPair && right.oldPair && pairContainsPair(left.oldPair, right.oldPair)) ||
+        (left.newPair && right.newPair && pairContainsPair(left.newPair, right.newPair))
+      ) return -1;
+      if (
+        (right.oldPair && left.oldPair && pairContainsPair(right.oldPair, left.oldPair)) ||
+        (right.newPair && left.newPair && pairContainsPair(right.newPair, left.newPair))
+      ) return 1;
+      return 0;
+    });
+    plannedEntries.forEach(function (entry) {
+      if (!entry.staysConnected) return;
+      entry.staysConnected = !plannedEntries.some(function (candidate) {
+        return candidate !== entry && !candidate.staysConnected && (
+          (candidate.oldPair && entry.oldPair && pairContainsPair(candidate.oldPair, entry.oldPair)) ||
+          (candidate.newPair && entry.newPair && pairContainsPair(candidate.newPair, entry.newPair))
+        );
+      });
+    });
+    plannedEntries.forEach(function (entry) {
+      if (entry.staysConnected) {
+        stationary.push({
+          match: entry.match,
+          token: entry.token,
+          oldPair: entry.oldPair,
+          newPair: entry.newPair,
+        });
+        return;
+      }
+      var oldHolder = collapsePlannedRange(
+        { start: entry.oldPhysical.start, end: entry.oldPhysical.end },
+        entry.token + ":old",
+        "portable-old",
+        entry.match
+      );
+      var newHolder = collapsePlannedRange(
+        entry.newPair,
+        entry.token + ":new",
+        "portable-new",
+        entry.match
+      );
+      portable.push({ match: entry.match, oldHolder: oldHolder, newHolder: newHolder });
+    });
+
+    // A logically direct sibling may be physically nested inside a stationary
+    // range (for example through supplied-slot placement). Install every real
+    // portable move first, then patch stationary ranges from the inside out.
+    // Each completed inner pass gains paired sentinels, so the enclosing pass
+    // can keep it connected and opaque while matching the wrapper structure.
+    stationary.sort(function (left, right) {
+      if (pairContainsPair(left.oldPair, right.oldPair) || pairContainsPair(left.newPair, right.newPair)) return 1;
+      if (pairContainsPair(right.oldPair, left.oldPair) || pairContainsPair(right.newPair, left.newPair)) return -1;
+      return 0;
+    });
+    stationary.forEach(function (entry) {
+      if (!entry.match.retained) {
+        morphPlannedRangeContents(
+          entry.oldPair,
+          freshContentsForPair(entry.newPair, entry.oldPair),
+          entry.match,
+          plan,
+          options
+        );
+      }
+      entry.oldStartSentinel = insertPlannedSentinel(entry.oldPair, entry.token + ":start", "start", true);
+      entry.oldEndSentinel = insertPlannedSentinel(entry.oldPair, entry.token + ":end", "end", false);
+      entry.newStartSentinel = insertPlannedSentinel(entry.newPair, entry.token + ":start", "start", true);
+      entry.newEndSentinel = insertPlannedSentinel(entry.newPair, entry.token + ":end", "end", false);
+    });
+
+    // Recursive stationary-component morphs can replace slot-region caps that
+    // were present in the pre-morph scan. Re-scan both sides before correlating
+    // regions so identity planning never reads a detached, stale cap pair.
+    oldPairs = rangePairsUnder(oldParent, oldPair);
+    freshPairs = rangePairsUnder(fresh, null);
+    var oldRegionsByIdentity = new Map();
+    directSlotRegionPairs(oldPairs).forEach(function (pair) {
+      var identity = slotRegionIdentity(pair, oldPair, options, oldPairs);
+      if (identity === null) return;
+      var queue = oldRegionsByIdentity.get(identity) || [];
+      queue.push(pair);
+      oldRegionsByIdentity.set(identity, queue);
+    });
+    directSlotRegionPairs(freshPairs).forEach(function (newPair) {
+      var identity = slotRegionIdentity(newPair, fresh, options, freshPairs);
+      var queue = identity === null ? null : oldRegionsByIdentity.get(identity);
+      if (!queue || !queue.length) return;
+      var oldRegionPair = queue.shift();
+      var oldRegionIdentity = oldRegionPair.revision + "\n" + oldRegionPair.recordKey;
+      if (plan.retainedOldPhysicalRecords.has(oldRegionIdentity) && insideIgnoredOldBarrier(oldRegionPair)) return;
+      var oldState = ownershipStates.get(oldRegionPair.revision);
+      var oldPhysical = oldState && physicalRangesForKey(oldState, oldRegionPair.recordKey).find(function (physical) {
+        return physical.start === oldRegionPair.start && physical.end === oldRegionPair.end;
+      });
+      if (!oldPhysical) return;
+      plannedRangeSlotCounter += 1;
+      correlatedRegions.push({
+        oldPair: oldRegionPair,
+        newPair: newPair,
+        oldPhysical: oldPhysical,
+        retained: plan.retainedOldPhysicalRecords.has(oldRegionIdentity),
+        token: "r" + plannedRangeSlotCounter.toString(36),
+      });
+    });
+    correlatedRegions.sort(function (left, right) {
+      if (pairContainsPair(left.oldPair, right.oldPair) || pairContainsPair(left.newPair, right.newPair)) return 1;
+      if (pairContainsPair(right.oldPair, left.oldPair) || pairContainsPair(right.newPair, left.newPair)) return -1;
+      return 0;
+    });
+    correlatedRegions.forEach(function (entry) {
+      if (!entry.retained) {
+        morphOrdinaryRangeContents(
+          entry.oldPair,
+          freshContentsForPair(entry.newPair, entry.oldPair),
+          options
+        );
+        var transfers = plan.state.adoption.transfers.get(entry.newPair.recordKey) || [];
+        if (transfers.indexOf(entry.oldPhysical) === -1) transfers.push(entry.oldPhysical);
+        plan.state.adoption.transfers.set(entry.newPair.recordKey, transfers);
+      }
+      insertPlannedSentinel(entry.oldPair, entry.token + ":start", "start", true);
+      insertPlannedSentinel(entry.oldPair, entry.token + ":end", "end", false);
+      insertPlannedSentinel(entry.newPair, entry.token + ":start", "start", true);
+      insertPlannedSentinel(entry.newPair, entry.token + ":end", "end", false);
+      stationary.push(entry);
+    });
+
+    var insideStationary = function (pair, side) {
+      var inherited = side === "old" ? inheritedOldWindows : inheritedFreshWindows;
+      return pairInsidePlannedWindows(pair, inherited) || stationary.some(function (entry) {
+        var boundary = side === "old" ? entry.oldPair : entry.newPair;
+        return pair.start === boundary.start || pairContainsPair(boundary, pair);
+      });
+    };
+
+    // Every other ownership range is an unmatched virtual node for this
+    // level. Keep its comments atomic while Alpine patches ordinary DOM.
+    rangePairsUnder(oldParent, oldPair)
+      .filter(function (pair) { return !insideStationary(pair, "old"); })
+      .sort(function (left, right) {
+        return pairContainsPair(left, right) ? 1 : pairContainsPair(right, left) ? -1 : 0;
+      })
+      .forEach(function (pair) {
+        plannedRangeSlotCounter += 1;
+        collapsePlannedRange(pair, "old:" + plannedRangeSlotCounter.toString(36), "old-unmatched", null);
+      });
+    rangePairsUnder(fresh, null)
+      .filter(function (pair) { return !insideStationary(pair, "new"); })
+      .sort(function (left, right) {
+        return pairContainsPair(left, right) ? 1 : pairContainsPair(right, left) ? -1 : 0;
+      })
+      .forEach(function (pair) {
+        plannedRangeSlotCounter += 1;
+        collapsePlannedRange(pair, "new:" + plannedRangeSlotCounter.toString(36), "new-unmatched", null);
+      });
+
+    alpineOwner.morphBetween(oldPair.start, oldPair.end, fresh, {
+      key: function (element) {
+        if (
+          element.hasAttribute(PLANNED_RANGE_HOLDER_ATTR) ||
+          element.hasAttribute(PLANNED_RANGE_SENTINEL_ATTR)
+        ) {
+          return element.getAttribute(PLANNED_RANGE_SLOT_ATTR);
+        }
+        return typeof options.key === "function" ? options.key(element) : element.getAttribute("data-citry-key");
+      },
+      // Alpine builds one keyed map from all flat element siblings before its
+      // updating hook can call skipUntil. Exclude roots inside stationary cap
+      // windows from that map so they cannot escape across neighboring ranges;
+      // the paired sentinels still drive traversal while the live range stays
+      // connected and untouched at this level.
+      keyMapFilter: function (element) {
+        return !elementInsidePlannedWindows(element, inheritedOldWindows) && !stationary.some(function (entry) {
+          return physicalRangeContainsNode(entry.oldPair, element);
+        });
+      },
+      updating: function (from, to, childrenOnly, skip, skipChildren, skipUntil) {
+        if (skipPlannedSentinelWindow(from, to, skipUntil)) return;
+        if (typeof options.updating === "function") {
+          options.updating(from, to, childrenOnly, skip, skipChildren, skipUntil);
+        }
+      },
+    });
+
+    expandPlannedHolders(oldPair);
+    portable.forEach(function (entry) {
+      var selector =
+        "template[" + PLANNED_RANGE_PORTABLE_ATTR + '="' + CSS.escape(entry.newHolder.getAttribute(
+          PLANNED_RANGE_PORTABLE_ATTR
+        )) + '"]';
+      var destination = elementsInsidePair(oldPair, selector).find(function (candidate) {
+        return candidate.getAttribute(PLANNED_RANGE_HOLDER_ATTR) === "portable-new";
+      });
+      if (!destination) {
+        throw new TypeError("[Citry] keyed component range destination vanished during morph.");
+      }
+      var oldNested = pairForRecord(
+        rangePairsUnder(entry.oldHolder.content, null),
+        entry.match.fromRevision,
+        entry.match.fromKey
+      );
+      var newNested = pairForRecord(
+        rangePairsUnder(destination.content, null),
+        entry.match.toRevision,
+        entry.match.toKey
+      );
+      if (!oldNested || !newNested) {
+        throw new TypeError("[Citry] keyed component holder lost one of its cap pairs.");
+      }
+      if (!entry.match.retained) {
+        morphPlannedRangeContents(
+          oldNested,
+          freshContentsForPair(newNested, oldNested),
+          entry.match,
+          plan,
+          options
+        );
+      }
+      destination.replaceWith(entry.oldHolder);
+      entry.oldHolder.before(entry.oldHolder.content);
+      entry.oldHolder.remove();
+    });
+    removePlannedSentinels(oldPair);
+  };
+
+  var morphPlannedOwnershipRange = function (physical, html, options) {
+    var plan = options.adoptionPlan;
+    var rootMatch = plan && plan.matches.find(function (match) {
+      return match.fromKey === physical.key && match.preserveLogical;
+    });
+    if (!rootMatch) return false;
+    var morphStart = physical.start;
+    var cursor = null;
+    var operationalDocumentStarts = [];
+    if (physical.topology === "document-body") {
+      cursor = document.createComment("citry:range-morph-cursor");
+      document.body.insertBefore(cursor, document.body.firstChild);
+      morphStart = cursor;
+      // Nested ranges can share the parser's split Document/body topology:
+      // each opening cap precedes <html>, while its closing cap lives in
+      // body. The planner operates on one sibling window, so temporarily
+      // bring those nested openings behind the body cursor. Correlated caps
+      // that remain at the document root are restored after the patch;
+      // ranges moved into an authored wrapper keep their new same-parent
+      // topology and adoption reclassifies them from the committed DOM.
+      ownershipStates.forEach(function (candidateState) {
+        candidateState.physicalPlacements.forEach(function (placements) {
+          placements.forEach(function (candidate) {
+            if (
+              candidate !== physical &&
+              candidate.topology === "document-body" &&
+              physicalRangeIsLive(candidateState, candidate) &&
+              physicalRangeContainsNode(physical, candidate.start) &&
+              physicalRangeContainsNode(physical, candidate.end) &&
+              operationalDocumentStarts.every(function (entry) { return entry.start !== candidate.start; })
+            ) {
+              operationalDocumentStarts.push({ start: candidate.start, end: candidate.end });
+            }
+          });
+        });
+      });
+      operationalDocumentStarts.sort(function (left, right) {
+        return nodePrecedes(left.start, right.start) ? -1 : nodePrecedes(right.start, left.start) ? 1 : 0;
+      });
+      var operationalTail = cursor;
+      operationalDocumentStarts.forEach(function (entry) {
+        entry.start._citryOperationalDocumentStart = true;
+        operationalTail.after(entry.start);
+        operationalTail = entry.start;
+      });
+    }
+    try {
+      var container = contextualRangeContainer(morphStart, physical.end, html);
+      morphPlannedRangeContents(
+        { start: morphStart, end: physical.end },
+        container,
+        rootMatch,
+        plan,
+        options
+      );
+    } finally {
+      operationalDocumentStarts.forEach(function (entry) {
+        if (
+          entry.start.isConnected &&
+          entry.end.isConnected &&
+          entry.start.parentNode === document.body &&
+          entry.end.parentNode === document.body
+        ) {
+          document.insertBefore(entry.start, document.documentElement);
+        }
+        delete entry.start._citryOperationalDocumentStart;
+      });
+      if (cursor && cursor.isConnected) cursor.remove();
+    }
+    return true;
+  };
+
   var morphOwnershipRange = function (revision, physicalKey, html, options) {
     if (typeof revision !== "string" || typeof physicalKey !== "string" || typeof html !== "string") {
       throw new TypeError("[Citry] range morph needs a revision, physical range key, and HTML string.");
@@ -2156,6 +2431,15 @@
     }
     if (!alpineOwner || typeof alpineOwner.morphBetween !== "function") {
       throw pointedAlpineError("range morph was requested before the pinned morphBetween adapter installed.");
+    }
+    if (options.adoptionPlan) {
+      rangeMorphDepth += 1;
+      try {
+        if (morphPlannedOwnershipRange(physical, html, options)) return physical;
+      } finally {
+        rangeMorphDepth -= 1;
+        if (rangeMorphDepth === 0 && ownershipAdoptionDepth === 0) reconcileComponentLifecycles();
+      }
     }
     var livePlaceholders = [];
     var nestedRanges = nestedPhysicalRanges(state, physical);
@@ -2215,6 +2499,33 @@
         rangeMorphDepth -= 1;
         if (rangeMorphDepth === 0 && ownershipAdoptionDepth === 0) reconcileComponentLifecycles();
       }
+    }
+    return physical;
+  };
+
+  var replaceOwnershipRange = function (revision, physicalKey, html, options) {
+    var state = ownershipStates.get(revision);
+    var physical = options && options.physical;
+    if (!state || !physical || physical.key !== physicalKey || !physicalRangeIsLive(state, physical)) {
+      throw new TypeError("[Citry] range replacement target is unknown, retired, or corrupt.");
+    }
+    var start = physical.start;
+    var cursor = null;
+    if (physical.topology === "document-body") {
+      cursor = document.createComment("citry:range-replace-cursor");
+      document.body.insertBefore(cursor, document.body.firstChild);
+      start = cursor;
+    }
+    try {
+      var container = contextualRangeContainer(start, physical.end, html);
+      for (var node = start.nextSibling; node && node !== physical.end;) {
+        var next = node.nextSibling;
+        node.remove();
+        node = next;
+      }
+      while (container.firstChild) physical.end.before(container.firstChild);
+    } finally {
+      if (cursor && cursor.isConnected) cursor.remove();
     }
     return physical;
   };
@@ -3104,11 +3415,23 @@
     return physical && physical.start.parentElement;
   };
 
-  var preflightGraphFillSources = function (state) {
+  var preflightGraphFillSources = function (state, acceptedRenderIds, excludedPhysicalKeys) {
     var plans = [];
     state.registry.fills.values().forEach(function (fill) {
+      if (
+        acceptedRenderIds &&
+        ((fill.ownerRenderId != null && !acceptedRenderIds.has(fill.ownerRenderId)) ||
+          (fill.receiverRenderId != null && !acceptedRenderIds.has(fill.receiverRenderId)))
+      ) return;
       var groupState = state.rangeGroupStates.get(fill.key);
       if (!groupState || !groupState.slotRegions.length) return;
+      var acceptedSlotRegions = excludedPhysicalKeys
+        ? groupState.slotRegions.filter(function (region) { return !excludedPhysicalKeys.has(region.key); })
+        : groupState.slotRegions.slice();
+      if (!acceptedSlotRegions.length) return;
+      if (acceptedSlotRegions.length !== groupState.slotRegions.length) {
+        throw pointedAlpineError("a shared fill was only partially accepted by the ownership plan.");
+      }
       var sourceInvocation = fill.sourceInvocationId == null
         ? null
         : state.registry.nestedComponents.get(qualifiedGraphId(fill.graphId, "v", fill.sourceInvocationId));
@@ -3125,7 +3448,7 @@
         groupState: groupState,
         sourceInvocation: sourceInvocation,
         sourcePhysical: sourcePhysical,
-        slotRegions: groupState.slotRegions.slice(),
+        slotRegions: acceptedSlotRegions,
       };
       plan.slotRegions.forEach(function (region) {
         fillRegionDirectElements(state, region).forEach(function (element) {
@@ -3635,11 +3958,15 @@
     return true;
   };
 
+  var boundarySourceRenderId = function (boundary) {
+    return boundary.sourceLifecycle.renderId || boundary.invocation.sourceRenderId;
+  };
+
   var boundaryEventsScope = function (boundary, carrier) {
     var events = globalThis.Citry && globalThis.Citry.events;
     if (events && events._internal && typeof events._internal.boundaryScope === "function") {
       return events._internal.boundaryScope(
-        boundary.invocation.sourceRenderId,
+        boundarySourceRenderId(boundary),
         carrier || null,
         function () { return boundaryIsLive(boundary, carrier || null); }
       );
@@ -3647,7 +3974,7 @@
     return {
       $state: Object.freeze({}),
       $loading: function () { return false; },
-      $error: null,
+      $error: function () { return null; },
       $sendEvent: function () {
         return Promise.reject(new Error("[Citry] the source component declares no Events runtime."));
       },
@@ -3833,7 +4160,7 @@
             throw new Error("the Events runtime is not available.");
           }
           var promise = events._internal.sendBoundary(
-            boundary.invocation.sourceRenderId,
+            boundarySourceRenderId(boundary),
             payload.handler,
             args,
             payload.type === "citry-poll"
@@ -3861,7 +4188,7 @@
     var sharedSourceRoot = targetRoot && (targetRoot.getAttribute("data-cid") || "")
       .trim()
       .split(/\s+/)
-      .indexOf(boundary.invocation.sourceRenderId) !== -1;
+      .indexOf(boundarySourceRenderId(boundary)) !== -1;
     var origin = sourceOrigin || (
       targetRoot && (sharedSourceRoot ? targetRoot : targetRoot._x_teleportBack || targetRoot.parentElement || targetRoot)
     );
@@ -3944,6 +4271,8 @@
       if (
         candidate.destroyed ||
         candidate.revision === state.publicRevision.revision ||
+        (state.adoption.retainedOldRenderIds &&
+          state.adoption.retainedOldRenderIds.has(candidate.invocation.targetRenderId)) ||
         !incomingSources.has(candidate.sourceLifecycle)
       ) return;
       var successor = null;
@@ -3953,6 +4282,7 @@
         var targetLink = state.renderLinks.get(invocation.targetRenderId);
         if (
           sourceLink && targetLink &&
+          sourceLink.link.active && targetLink.link.active &&
           sourceLink.logicalState.lifecycle === candidate.sourceLifecycle &&
           targetLink.logicalState.lifecycle === candidate.targetLifecycle
         ) successor = invocation;
@@ -4011,11 +4341,15 @@
     if (scheduleOwnershipPrune) scheduleOwnershipPrune();
   };
 
-  var activateGraphClientBindings = function (revision) {
+  var activateGraphClientBindings = function (revision, acceptedRenderIds) {
     var state = ownershipStates.get(revision);
     if (!state) return;
     state.registry.nestedComponents.values().forEach(function (invocation) {
       if (!invocation.clientBindings.length) return;
+      if (
+        acceptedRenderIds &&
+        (!acceptedRenderIds.has(invocation.sourceRenderId) || !acceptedRenderIds.has(invocation.targetRenderId))
+      ) return;
       var sourceLifecycle = null;
       var targetLifecycle = null;
       try {
@@ -4127,6 +4461,7 @@
       }]);
       return;
     }
+    if (source && target && source.link === target.link) return;
     var lifecycle = null;
     ownershipStates.forEach(function (state) {
       if (lifecycle) return;
@@ -4216,6 +4551,909 @@
     return live;
   };
 
+  var livePhysicalPlacementsForAnchor = function (generalAnchor) {
+    var placements = [];
+    ownershipStates.forEach(function (state, revision) {
+      if (!ownershipGraphs.has(revision)) return;
+      state.renderLinks.forEach(function (link) {
+        if (!link.link.active || link.link.anchor !== generalAnchor) return;
+        physicalRangesForKey(state, link.record.key).forEach(function (physical) {
+          if (!physicalRangeIsLive(state, physical)) {
+            throw new TypeError(
+              "[Citry] ownership transaction rejected because one physical placement of shared range '" +
+                physical.key + "' is missing or corrupt."
+            );
+          }
+          placements.push({ physical: physical, link: link });
+        });
+      });
+    });
+    return placements;
+  };
+
+  var activeCommittedLink = function (renderId) {
+    var found = null;
+    ownershipStates.forEach(function (state, revision) {
+      if (found || !ownershipGraphs.has(revision)) return;
+      var link = state.renderLinks.get(renderId);
+      if (link && link.link.active) found = { revision: revision, state: state, link: link };
+    });
+    return found;
+  };
+
+  var componentRangeIdentity = function (link) {
+    return JSON.stringify([link.record.classId, link.logicalState.morphKey]);
+  };
+
+  var ownershipPlanningMatches = function (plan) {
+    var pooled = new Map();
+    [plan.candidateMatches || [], plan.discoveredMatches || [], plan.matches || []].forEach(function (matches) {
+      matches.forEach(function (match) {
+        pooled.set(match.fromRenderId + "\n" + match.toRenderId, match);
+      });
+    });
+    return Array.from(pooled.values());
+  };
+
+  // Historical candidates remain available only to close retention over the
+  // incoming endpoint they originally corresponded with. Physical planning
+  // must use the latest recomputed correspondence plus explicit retained
+  // pairs; otherwise an endpoint removed by ignore closure can re-enter the
+  // ordinary planner and retain descendants of a range final matching replaces.
+  var physicalPlanningMatches = function (plan) {
+    var pooled = new Map();
+    [plan.matches || [], plan.retainedMatches || []].forEach(function (matches) {
+      matches.forEach(function (match) {
+        pooled.set(match.fromRenderId + "\n" + match.toRenderId, match);
+      });
+    });
+    return Array.from(pooled.values());
+  };
+
+  var directLogicalChildren = function (parentLogical, provisionalState) {
+    var found = [];
+    var collect = function (state, revision) {
+      state.renderLinks.forEach(function (link) {
+        if (
+          link.link.active &&
+          link.logicalState.parentLogical === parentLogical
+        ) found.push({ revision: revision, state: state, link: link });
+      });
+    };
+    if (provisionalState) {
+      collect(provisionalState, provisionalState.publicRevision.revision);
+    } else {
+      ownershipStates.forEach(function (state, revision) {
+        if (ownershipGraphs.has(revision)) collect(state, revision);
+      });
+    }
+    var order = [];
+    var states = provisionalState
+      ? [[provisionalState.publicRevision.revision, provisionalState]]
+      : Array.from(ownershipStates.entries()).filter(function (entry) { return ownershipGraphs.has(entry[0]); });
+    states.some(function (entry) {
+      var parentLink = Array.from(entry[1].renderLinks.values()).find(function (link) {
+        return link.link.active && link.link.logical === parentLogical;
+      });
+      if (!parentLink) return false;
+      order = parentLink.logicalState.childOrder.slice();
+      return true;
+    });
+    var orderIndex = new Map();
+    order.forEach(function (renderId, index) { orderIndex.set(renderId, index); });
+    found.sort(function (left, right) {
+      var leftIndex = orderIndex.has(left.link.record.renderId)
+        ? orderIndex.get(left.link.record.renderId)
+        : Number.MAX_SAFE_INTEGER;
+      var rightIndex = orderIndex.has(right.link.record.renderId)
+        ? orderIndex.get(right.link.record.renderId)
+        : Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex;
+    });
+    return found;
+  };
+
+  // Build the complete virtual-component correspondence without mutating
+  // either revision. Explicitly addressed roots correlate first. Their direct
+  // logical children then match top-down by (class, non-null key); an
+  // unmatched component is opaque, so its descendants never leak outward.
+  var planOwnershipAdoption = function (transaction, explicitRoots, options) {
+    if (!transaction || transaction.status !== "prepared") {
+      throw new TypeError("[Citry] graph: ownership adoption transaction is not prepared.");
+    }
+    if (!Array.isArray(explicitRoots)) {
+      throw new TypeError("[Citry] graph: ownership adoption roots must be an array.");
+    }
+    var targetState = transaction.state;
+    options = options || {};
+    var matches = [];
+    var replacements = [];
+    var usedOld = new Set();
+    var usedNew = new Set();
+
+    var addPair = function (oldEntry, newEntry, explicit, parentMatch) {
+      var oldId = oldEntry.link.record.renderId;
+      var newId = newEntry.link.record.renderId;
+      if (usedOld.has(oldId) || usedNew.has(newId)) {
+        throw new TypeError("[Citry] graph: component range correspondence repeats an endpoint.");
+      }
+      usedOld.add(oldId);
+      usedNew.add(newId);
+      var preserveLogical = oldEntry.link.record.classId === newEntry.link.record.classId;
+      var preserveExternalParent = Boolean(
+        explicit &&
+        preserveLogical &&
+        newEntry.link.record.parentRenderId == null &&
+        oldEntry.link.logicalState.parentLogical
+      );
+      replacements.push({
+        fromRevision: oldEntry.revision,
+        fromRenderId: oldId,
+        toRevision: transaction.revision,
+        toRenderId: newId,
+        preserveLogical: preserveLogical,
+        preserveExternalParent: preserveExternalParent,
+      });
+      matches.push({
+        fromRevision: oldEntry.revision,
+        fromRenderId: oldId,
+        fromKey: oldEntry.link.record.key,
+        toRevision: transaction.revision,
+        toRenderId: newId,
+        toKey: newEntry.link.record.key,
+        preserveLogical: preserveLogical,
+        preserveExternalParent: preserveExternalParent,
+        parentFromRenderId: parentMatch ? parentMatch.fromRenderId : null,
+        parentToRenderId: parentMatch ? parentMatch.toRenderId : null,
+      });
+      var currentMatch = matches[matches.length - 1];
+      if (!preserveLogical) return;
+
+      var oldChildren = directLogicalChildren(oldEntry.link.logicalState, null);
+      var newChildren = directLogicalChildren(newEntry.link.logicalState, targetState);
+      // Physical morphing runs after logical transfer deactivates the source
+      // endpoints. Freeze each parent's direct-child order into the read-only
+      // plan so the connected-range classifier never consults mutated state.
+      currentMatch.oldDirectChildren = oldChildren.map(function (child) {
+        return { revision: child.revision, key: child.link.record.key };
+      });
+      currentMatch.newDirectChildren = newChildren.map(function (child) {
+        return { revision: child.revision, key: child.link.record.key };
+      });
+      var oldByIdentity = new Map();
+      oldChildren.forEach(function (child) {
+        if (child.link.logicalState.morphKey === null) return;
+        var identity = componentRangeIdentity(child.link);
+        var queue = oldByIdentity.get(identity) || [];
+        queue.push(child);
+        oldByIdentity.set(identity, queue);
+      });
+      newChildren.forEach(function (child) {
+        if (child.link.logicalState.morphKey === null) return;
+        var identity = componentRangeIdentity(child.link);
+        var queue = oldByIdentity.get(identity);
+        if (!queue || !queue.length) return;
+        addPair(queue.shift(), child, false, currentMatch);
+      });
+      var remainingOld = oldChildren.filter(function (child) {
+        return !usedOld.has(child.link.record.renderId);
+      });
+      var remainingNew = newChildren.filter(function (child) {
+        return !usedNew.has(child.link.record.renderId);
+      });
+      var positionalLength = Math.max(remainingOld.length, remainingNew.length);
+      for (var position = 0; position < positionalLength; position += 1) {
+        var oldChild = remainingOld[position];
+        var newChild = remainingNew[position];
+        if (!oldChild || !newChild) continue;
+        if (
+          oldChild.link.logicalState.morphKey === null &&
+          newChild.link.logicalState.morphKey === null &&
+          oldChild.link.record.classId === newChild.link.record.classId
+        ) addPair(oldChild, newChild, false, currentMatch);
+      }
+    };
+
+    explicitRoots.forEach(function (root, index) {
+      if (!root || typeof root !== "object") {
+        throw new TypeError("[Citry] graph: explicit adoption root[" + index + "] must be an object.");
+      }
+      var oldEntry = activeCommittedLink(root.fromRenderId);
+      var newLink = targetState.renderLinks.get(root.toRenderId);
+      if (!oldEntry || !newLink || !newLink.link.active) {
+        throw new TypeError("[Citry] graph: explicit adoption root is unknown or inactive.");
+      }
+      addPair(oldEntry, { revision: transaction.revision, state: targetState, link: newLink }, true, null);
+    });
+
+    var plan = {
+      transaction: transaction,
+      state: targetState,
+      matches: matches,
+      candidateMatches: matches.slice(),
+      discoveredMatches: matches.slice(),
+      replacements: replacements,
+      candidateReplacements: replacements.slice(),
+      retainedOldRenderIds: new Set(),
+      pinnedOldRenderIds: new Set(),
+      unmatchedOldRenderIds: new Set(),
+      unmatchedIncomingRenderIds: new Set(),
+      excludedIncomingRenderIds: new Set(),
+      retainedOldPhysicalRecords: new Set(),
+      pinnedOldPhysicalRecords: new Set(),
+      excludedIncomingPhysicalKeys: new Set(),
+      candidateSlotMatches: [],
+      ordinaryPairs: [],
+      ordinaryAdditions: [],
+      ordinaryRemovals: [],
+      acceptedIncomingRenderIds: new Set(targetState.renderLinks.keys()),
+      retainedRootFromRenderIds: new Set(),
+      warnedDuplicateComponentKeys: new Set(),
+      applied: false,
+    };
+    if (!options.bypassIgnore) {
+      matches.forEach(function (match) {
+        var oldEntry = activeCommittedLink(match.fromRenderId);
+        // A nested ignored range is retained only when the ancestor-ordered
+        // physical walk reaches its atom through matched ordinary ancestors.
+        // Seeding it here would let a keyed atom escape a replaced wrapper.
+        // The explicit root has no enclosing ordinary ancestor in this
+        // planning window, so its policy is known immediately.
+        if (
+          match.parentFromRenderId === null &&
+          match.preserveLogical &&
+          oldEntry &&
+          oldEntry.link.logicalState.morphMode === "ignore"
+        ) {
+          plan.retainedOldRenderIds.add(match.fromRenderId);
+          if (match.parentFromRenderId === null) plan.retainedRootFromRenderIds.add(match.fromRenderId);
+        }
+      });
+    }
+    applyOwnershipRetentionClosure(plan, plan.retainedOldRenderIds);
+    transaction.plan = plan;
+    return plan;
+  };
+
+  var addIncomingSubtreeToExclusion = function (plan, renderId) {
+    var queue = [renderId];
+    while (queue.length) {
+      var current = queue.shift();
+      if (plan.excludedIncomingRenderIds.has(current)) continue;
+      plan.excludedIncomingRenderIds.add(current);
+      plan.acceptedIncomingRenderIds.delete(current);
+      (plan.state.childrenByParent.get(current) || []).forEach(function (child) { queue.push(child); });
+    }
+  };
+
+  var recomputeActiveOwnershipMatches = function (plan) {
+    var matches = [];
+    var replacements = [];
+    var usedOld = new Set();
+    var usedNew = new Set();
+    var targetState = plan.state;
+
+    var availableOld = function (entry) {
+      return entry && entry.link.link.active &&
+        !plan.retainedOldRenderIds.has(entry.link.record.renderId) &&
+        !plan.unmatchedOldRenderIds.has(entry.link.record.renderId) &&
+        !usedOld.has(entry.link.record.renderId);
+    };
+    var availableNew = function (entry) {
+      return entry && entry.link.link.active &&
+        !plan.excludedIncomingRenderIds.has(entry.link.record.renderId) &&
+        !plan.unmatchedIncomingRenderIds.has(entry.link.record.renderId) &&
+        !usedNew.has(entry.link.record.renderId);
+    };
+    var addPair = function (oldEntry, newEntry, explicit, parentMatch) {
+      if (!availableOld(oldEntry) || !availableNew(newEntry)) return;
+      var oldId = oldEntry.link.record.renderId;
+      var newId = newEntry.link.record.renderId;
+      usedOld.add(oldId);
+      usedNew.add(newId);
+      var preserveLogical = oldEntry.link.record.classId === newEntry.link.record.classId;
+      var preserveExternalParent = Boolean(
+        explicit && preserveLogical && newEntry.link.record.parentRenderId == null && oldEntry.link.logicalState.parentLogical
+      );
+      var match = {
+        fromRevision: oldEntry.revision,
+        fromRenderId: oldId,
+        fromKey: oldEntry.link.record.key,
+        toRevision: plan.transaction.revision,
+        toRenderId: newId,
+        toKey: newEntry.link.record.key,
+        preserveLogical: preserveLogical,
+        preserveExternalParent: preserveExternalParent,
+        parentFromRenderId: parentMatch ? parentMatch.fromRenderId : null,
+        parentToRenderId: parentMatch ? parentMatch.toRenderId : null,
+      };
+      matches.push(match);
+      replacements.push({
+        fromRevision: oldEntry.revision,
+        fromRenderId: oldId,
+        toRevision: plan.transaction.revision,
+        toRenderId: newId,
+        preserveLogical: preserveLogical,
+        preserveExternalParent: preserveExternalParent,
+      });
+      if (!preserveLogical) return;
+
+      var oldChildren = directLogicalChildren(oldEntry.link.logicalState, null);
+      var newChildren = directLogicalChildren(newEntry.link.logicalState, targetState);
+      match.oldDirectChildren = oldChildren.map(function (child) {
+        return { revision: child.revision, key: child.link.record.key };
+      });
+      match.newDirectChildren = newChildren.map(function (child) {
+        return { revision: child.revision, key: child.link.record.key };
+      });
+
+      var oldByIdentity = new Map();
+      oldChildren.forEach(function (child) {
+        if (!availableOld(child) || child.link.logicalState.morphKey === null) return;
+        var identity = componentRangeIdentity(child.link);
+        var queue = oldByIdentity.get(identity) || [];
+        queue.push(child);
+        oldByIdentity.set(identity, queue);
+      });
+      newChildren.forEach(function (child) {
+        if (!availableNew(child) || child.link.logicalState.morphKey === null) return;
+        var queue = oldByIdentity.get(componentRangeIdentity(child.link));
+        if (queue && queue.length) addPair(queue.shift(), child, false, match);
+      });
+
+      var remainingOld = oldChildren.filter(availableOld);
+      var remainingNew = newChildren.filter(availableNew);
+      var positionalLength = Math.max(remainingOld.length, remainingNew.length);
+      for (var position = 0; position < positionalLength; position += 1) {
+        var oldChild = remainingOld[position];
+        var newChild = remainingNew[position];
+        if (!oldChild || !newChild) continue;
+        if (
+          oldChild.link.logicalState.morphKey === null &&
+          newChild.link.logicalState.morphKey === null &&
+          oldChild.link.record.classId === newChild.link.record.classId
+        ) addPair(oldChild, newChild, false, match);
+      }
+    };
+
+    (plan.candidateMatches || []).filter(function (match) {
+      return match.parentFromRenderId === null && match.parentToRenderId === null;
+    }).forEach(function (root) {
+      var oldEntry = activeCommittedLink(root.fromRenderId);
+      var newLink = targetState.renderLinks.get(root.toRenderId);
+      if (oldEntry && newLink) {
+        addPair(oldEntry, { revision: plan.transaction.revision, state: targetState, link: newLink }, true, null);
+      }
+    });
+    matches.forEach(function (match) {
+      if (!(plan.discoveredMatches || []).some(function (candidate) {
+        return candidate.fromRenderId === match.fromRenderId && candidate.toRenderId === match.toRenderId;
+      })) plan.discoveredMatches.push(match);
+    });
+    plan.matches = matches;
+    plan.replacements = replacements;
+  };
+
+  var retainOldSlotGroup = function (plan, revision, key, pinned) {
+    var state = ownershipStates.get(revision);
+    var region = state && state.registry.slotRegions.get(key);
+    if (!state || !region) return;
+    var fillKey = qualifiedGraphId(region.graphId, "f", region.fillId);
+    var group = state.registry.rangeGroups.get(fillKey);
+    (group ? group.slotRegions : [region]).forEach(function (sharedRegion) {
+      var identity = revision + "\n" + sharedRegion.key;
+      plan.retainedOldPhysicalRecords.add(identity);
+      if (pinned && sharedRegion.key === key) plan.pinnedOldPhysicalRecords.add(identity);
+    });
+  };
+
+  var excludeIncomingSlotGroup = function (plan, key) {
+    var region = plan.state.registry.slotRegions.get(key);
+    if (!region) return;
+    var fillKey = qualifiedGraphId(region.graphId, "f", region.fillId);
+    var group = plan.state.registry.rangeGroups.get(fillKey);
+    (group ? group.slotRegions : [region]).forEach(function (sharedRegion) {
+      plan.excludedIncomingPhysicalKeys.add(sharedRegion.key);
+    });
+  };
+
+  function applyOwnershipRetentionClosure(plan, retainedSeeds, pinnedSeeds) {
+    var matchByOld = new Map();
+    ownershipPlanningMatches(plan).forEach(function (match) { matchByOld.set(match.fromRenderId, match); });
+    var queue = Array.from(retainedSeeds || []);
+    var expanded = new Set();
+    while (queue.length) {
+      var renderId = queue.shift();
+      if (expanded.has(renderId)) continue;
+      expanded.add(renderId);
+      plan.retainedOldRenderIds.add(renderId);
+      if (pinnedSeeds && pinnedSeeds.has(renderId)) plan.pinnedOldRenderIds.add(renderId);
+      var oldEntry = activeCommittedLink(renderId);
+      if (oldEntry) {
+        directLogicalChildren(oldEntry.link.logicalState, null).forEach(function (child) {
+          var childId = child.link.record.renderId;
+          if (plan.pinnedOldRenderIds.has(renderId)) plan.pinnedOldRenderIds.add(childId);
+          if (!expanded.has(childId)) queue.push(childId);
+        });
+      }
+      var match = matchByOld.get(renderId);
+      if (match) addIncomingSubtreeToExclusion(plan, match.toRenderId);
+    }
+    Array.from(plan.retainedOldPhysicalRecords).forEach(function (identity) {
+      var separator = identity.indexOf("\n");
+      if (separator < 0) return;
+      retainOldSlotGroup(plan, identity.slice(0, separator), identity.slice(separator + 1), false);
+    });
+    plan.retainedOldPhysicalRecords.forEach(function (identity) {
+      plan.candidateSlotMatches.filter(function (candidate) {
+        return candidate.fromRevision + "\n" + candidate.fromKey === identity;
+      }).forEach(function (slotMatch) {
+        excludeIncomingSlotGroup(plan, slotMatch.toKey);
+      });
+    });
+    plan.retainedCorrespondences = ownershipPlanningMatches(plan).filter(function (match) {
+      return (
+        match.preserveLogical &&
+        plan.retainedOldRenderIds.has(match.fromRenderId) &&
+        plan.excludedIncomingRenderIds.has(match.toRenderId)
+      );
+    });
+    plan.retainedMatches = plan.retainedCorrespondences.map(function (match) {
+      return Object.assign({}, match, { retained: true });
+    });
+    plan.retainedSlotMatches = plan.candidateSlotMatches.filter(function (match) {
+      return plan.retainedOldPhysicalRecords.has(match.fromRevision + "\n" + match.fromKey) &&
+        plan.excludedIncomingPhysicalKeys.has(match.toKey);
+    });
+    recomputeActiveOwnershipMatches(plan);
+    return plan;
+  }
+
+  var clonePlanningNode = function (source, planningDocument) {
+    var clone;
+    if (source.nodeType === Node.ELEMENT_NODE) {
+      clone = planningDocument.createElementNS(source.namespaceURI, source.localName);
+      Array.prototype.slice.call(source.attributes || []).forEach(function (attribute) {
+        clone.setAttributeNodeNS(planningDocument.importNode(attribute, true));
+      });
+    } else if (source.nodeType === Node.TEXT_NODE) {
+      clone = planningDocument.createTextNode(source.data);
+    } else if (source.nodeType === Node.COMMENT_NODE) {
+      clone = planningDocument.createComment(source.data);
+    } else {
+      clone = planningDocument.importNode(source, false);
+    }
+    clone._citryPlanningSource = source;
+    if (source._x_bindings) clone._x_bindings = source._x_bindings;
+    Array.prototype.slice.call(source.childNodes || []).forEach(function (child) {
+      clone.appendChild(clonePlanningNode(child, planningDocument));
+    });
+    return clone;
+  };
+
+  var clonePlanningBoundary = function (boundary) {
+    var planningDocument = document.implementation.createHTMLDocument("");
+    var container = planningDocument.createElement("div");
+    var nodes;
+    if (boundary.topology === "document-body") {
+      nodes = [];
+      for (var documentNode = boundary.start.nextSibling;
+        documentNode && documentNode !== document.documentElement;
+        documentNode = documentNode.nextSibling) nodes.push(documentNode);
+      for (var bodyNode = document.body.firstChild;
+        bodyNode && bodyNode !== boundary.end;
+        bodyNode = bodyNode.nextSibling) nodes.push(bodyNode);
+    } else {
+      nodes = boundary.start && boundary.end
+        ? nodesInsidePair(boundary)
+        : Array.prototype.slice.call(boundary.childNodes || []);
+    }
+    nodes.forEach(function (node) { container.appendChild(clonePlanningNode(node, planningDocument)); });
+    return container;
+  };
+
+  var replacePlanningRange = function (pair, token) {
+    if (!pair.start.parentNode || pair.start.parentNode !== pair.end.parentNode) return;
+    var atom = document.createElement("template");
+    atom.setAttribute("data-citry-planning-range", token);
+    pair.start.before(atom);
+    for (var node = pair.start; node;) {
+      var next = node.nextSibling;
+      node.remove();
+      if (node === pair.end) break;
+      node = next;
+    }
+  };
+
+  var atomizePlanningRanges = function (plan, oldContainer, newContainer, options) {
+    var oldPairs = rangePairsUnder(oldContainer, null);
+    var newPairs = rangePairsUnder(newContainer, null);
+    var oldTokens = new Map();
+    var newTokens = new Map();
+    var candidateMatches = physicalPlanningMatches(plan);
+    var oldComponentMatches = new Map();
+    var newComponentMatches = new Map();
+    candidateMatches.forEach(function (match) {
+      oldComponentMatches.set(match.fromRevision + "\n" + match.fromKey, match);
+      newComponentMatches.set(match.toRevision + "\n" + match.toKey, match);
+    });
+    oldPairs.forEach(function (pair) {
+      var match = oldComponentMatches.get(pair.revision + "\n" + pair.recordKey);
+      if (match) oldTokens.set(pair, "component:" + match.fromRenderId + ":" + match.toRenderId);
+    });
+    newPairs.forEach(function (pair) {
+      var match = newComponentMatches.get(pair.revision + "\n" + pair.recordKey);
+      if (match) newTokens.set(pair, "component:" + match.fromRenderId + ":" + match.toRenderId);
+    });
+
+    var oldRegionsByIdentity = new Map();
+    directSlotRegionPairs(oldPairs).forEach(function (pair) {
+      var identity = slotRegionIdentity(pair, oldContainer, options, oldPairs);
+      if (identity === null) return;
+      var queue = oldRegionsByIdentity.get(identity) || [];
+      queue.push(pair);
+      oldRegionsByIdentity.set(identity, queue);
+    });
+    directSlotRegionPairs(newPairs).forEach(function (newPair) {
+      var identity = slotRegionIdentity(newPair, newContainer, options, newPairs);
+      var queue = identity === null ? null : oldRegionsByIdentity.get(identity);
+      if (!queue || !queue.length) return;
+      var oldPair = queue.shift();
+      var token = "slot:" + oldPair.revision + ":" + oldPair.recordKey + ":" + newPair.recordKey;
+      oldTokens.set(oldPair, token);
+      newTokens.set(newPair, token);
+      if (!plan.candidateSlotMatches.some(function (candidate) {
+        return candidate.fromRevision === oldPair.revision &&
+          candidate.fromKey === oldPair.recordKey && candidate.toKey === newPair.recordKey;
+      })) {
+        plan.candidateSlotMatches.push({
+          fromRevision: oldPair.revision,
+          fromKey: oldPair.recordKey,
+          toRevision: newPair.revision,
+          toKey: newPair.recordKey,
+        });
+      }
+    });
+
+    var replaceAll = function (pairs, tokens, side) {
+      pairs.slice().sort(function (left, right) {
+        return pairContainsPair(left, right) ? -1 : pairContainsPair(right, left) ? 1 : 0;
+      }).forEach(function (pair) {
+        replacePlanningRange(
+          pair,
+          tokens.get(pair) || side + ":" + pair.revision + ":" + pair.recordKey
+        );
+      });
+    };
+    replaceAll(oldPairs, oldTokens, "old");
+    replaceAll(newPairs, newTokens, "new");
+  };
+
+  var collectOldBarrierRecords = function (plan, element, retainedSeeds, pinnedSeeds) {
+    ownershipStates.forEach(function (state, revision) {
+      if (!ownershipGraphs.has(revision)) return;
+      state.physicalPlacements.forEach(function (placements, key) {
+        if (!placements.some(function (physical) {
+          return physicalRangeIsLive(state, physical) &&
+            element.contains(physical.start) && element.contains(physical.end);
+        })) return;
+        var instance = state.registry.componentInstances.get(key);
+        if (instance) {
+          retainedSeeds.add(instance.renderId);
+          pinnedSeeds.add(instance.renderId);
+          return;
+        }
+        if (state.registry.slotRegions.get(key)) {
+          retainOldSlotGroup(plan, revision, key, true);
+        }
+      });
+    });
+  };
+
+  var collectIncomingBarrierRecords = function (plan, element) {
+    rangePairsUnder(element, null).forEach(function (pair) {
+      var instance = plan.state.registry.componentInstances.get(pair.recordKey);
+      if (instance) {
+        addIncomingSubtreeToExclusion(plan, instance.renderId);
+        return;
+      }
+      if (plan.state.registry.slotRegions.get(pair.recordKey)) {
+        excludeIncomingSlotGroup(plan, pair.recordKey);
+      }
+    });
+  };
+
+  var planOrdinaryBarrierPairs = function (
+    plan,
+    oldBoundary,
+    newBoundary,
+    options,
+    retainedSeeds,
+    pinnedSeeds
+  ) {
+    if (!alpineOwner || typeof alpineOwner._citryPlanBetween !== "function") {
+      throw pointedAlpineError("the pinned morph planner is unavailable.");
+    }
+    var oldContainer = clonePlanningBoundary(oldBoundary);
+    var newContainer = clonePlanningBoundary(newBoundary);
+    atomizePlanningRanges(plan, oldContainer, newContainer, options);
+    var ordinaryAncestorsMatched = function (from, to) {
+      var oldAncestor = from.parentElement;
+      var newAncestor = to.parentElement;
+      while (oldAncestor !== oldContainer || newAncestor !== newContainer) {
+        if (!oldAncestor || !newAncestor || oldAncestor === oldContainer || newAncestor === newContainer) {
+          return false;
+        }
+        var oldSource = oldAncestor._citryPlanningSource || oldAncestor;
+        var newSource = newAncestor._citryPlanningSource || newAncestor;
+        if (!plan.ordinaryPairs.some(function (pair) {
+          return pair.from === oldSource && pair.to === newSource;
+        })) return false;
+        oldAncestor = oldAncestor.parentElement;
+        newAncestor = newAncestor.parentElement;
+      }
+      return true;
+    };
+    alpineOwner._citryPlanBetween(oldContainer, newContainer, {
+      key: function (element) {
+        return element.getAttribute("data-citry-planning-range") || plannedElementKey(element, options);
+      },
+      updating: function (from, to, _childrenOnly, skip) {
+        var oldElement = from && from._citryPlanningSource;
+        var incomingElement = to && to._citryPlanningSource;
+        plan.ordinaryPairs.push({ from: oldElement || from, to: incomingElement || to });
+        var rangeToken = from && from.getAttribute && from.getAttribute("data-citry-planning-range");
+        if (rangeToken && rangeToken.indexOf("component:") === 0) {
+          var rangeMatch = physicalPlanningMatches(plan).find(function (candidate) {
+            return rangeToken === "component:" + candidate.fromRenderId + ":" + candidate.toRenderId;
+          });
+          var oldRange = rangeMatch && activeCommittedLink(rangeMatch.fromRenderId);
+          if (
+            rangeMatch &&
+            oldRange &&
+            oldRange.link.logicalState.morphMode === "ignore"
+          ) {
+            if (ordinaryAncestorsMatched(from, to)) {
+              retainedSeeds.add(rangeMatch.fromRenderId);
+              skip();
+            } else {
+              // An ignored range may move through matched wrappers, but an
+              // unmatched ancestor replaces the complete old branch. Reserve
+              // both endpoints so final rematching cannot recreate the pair.
+              plan.unmatchedOldRenderIds.add(rangeMatch.fromRenderId);
+              plan.unmatchedIncomingRenderIds.add(rangeMatch.toRenderId);
+            }
+          }
+          return;
+        }
+        if (
+          !(oldElement instanceof Element) || !(incomingElement instanceof Element) ||
+          oldElement.getAttribute("data-citry-morph") !== "ignore"
+        ) return;
+        collectOldBarrierRecords(plan, oldElement, retainedSeeds, pinnedSeeds);
+        collectIncomingBarrierRecords(plan, incomingElement);
+        skip();
+      },
+      adding: function (node) {
+        plan.ordinaryAdditions.push(node._citryPlanningSource || node);
+      },
+      removing: function (node) {
+        plan.ordinaryRemovals.push(node._citryPlanningSource || node);
+      },
+    });
+    physicalPlanningMatches(plan).forEach(function (rangeMatch) {
+      if (rangeMatch.parentFromRenderId === null || plan.retainedOldRenderIds.has(rangeMatch.fromRenderId)) return;
+      var oldRange = activeCommittedLink(rangeMatch.fromRenderId);
+      if (!oldRange || oldRange.link.logicalState.morphMode !== "ignore") return;
+      var oldState = ownershipStates.get(rangeMatch.fromRevision);
+      var oldPhysical = oldState && physicalRangesForKey(oldState, rangeMatch.fromKey).find(function (physical) {
+        return physicalRangeIsLive(oldState, physical) &&
+          physicalRangeContainsNode(oldBoundary, physical.start) &&
+          physicalRangeContainsNode(oldBoundary, physical.end);
+      });
+      if (!oldPhysical) return;
+      var boundaryParent = oldBoundary.start ? oldBoundary.start.parentNode : oldBoundary;
+      var oldAncestor = oldPhysical.start.parentElement;
+      var unmatchedAncestor = false;
+      while (oldAncestor && oldAncestor !== boundaryParent) {
+        if (!plan.ordinaryPairs.some(function (pair) { return pair.from === oldAncestor; })) {
+          unmatchedAncestor = true;
+          break;
+        }
+        oldAncestor = oldAncestor.parentElement;
+      }
+      if (!unmatchedAncestor) return;
+      plan.unmatchedOldRenderIds.add(rangeMatch.fromRenderId);
+      plan.unmatchedIncomingRenderIds.add(rangeMatch.toRenderId);
+    });
+  };
+
+  var selectAnchorPhysicalPlacement = function (generalAnchor, index) {
+    var selected = null;
+    ownershipStates.forEach(function (state, revision) {
+      if (selected || !ownershipGraphs.has(revision)) return;
+      state.renderLinks.forEach(function (link) {
+        if (selected || !link.link.active || link.link.anchor !== generalAnchor) return;
+        var placements = physicalRangesForKey(state, link.record.key).filter(function (physical) {
+          return physicalRangeIsLive(state, physical);
+        });
+        if (placements[index]) selected = { state: state, revision: revision, link: link, physical: placements[index] };
+      });
+    });
+    return selected;
+  };
+
+  var warnDuplicateActiveComponentKeys = function (plan) {
+    (plan.matches || []).forEach(function (parentMatch) {
+      if (!parentMatch.preserveLogical) return;
+      var oldParent = activeCommittedLink(parentMatch.fromRenderId);
+      var newParent = plan.state.renderLinks.get(parentMatch.toRenderId);
+      if (!oldParent || !newParent) return;
+      var oldCounts = new Map();
+      var newCounts = new Map();
+      directLogicalChildren(oldParent.link.logicalState, null).forEach(function (child) {
+        if (
+          child.link.logicalState.morphKey === null ||
+          plan.retainedOldRenderIds.has(child.link.record.renderId) ||
+          plan.unmatchedOldRenderIds.has(child.link.record.renderId)
+        ) return;
+        var identity = componentRangeIdentity(child.link);
+        oldCounts.set(identity, (oldCounts.get(identity) || 0) + 1);
+      });
+      directLogicalChildren(newParent.logicalState, plan.state).forEach(function (child) {
+        if (
+          child.link.logicalState.morphKey === null ||
+          plan.excludedIncomingRenderIds.has(child.link.record.renderId) ||
+          plan.unmatchedIncomingRenderIds.has(child.link.record.renderId)
+        ) return;
+        var identity = componentRangeIdentity(child.link);
+        newCounts.set(identity, (newCounts.get(identity) || 0) + 1);
+      });
+      oldCounts.forEach(function (oldCount, identity) {
+        var newCount = newCounts.get(identity) || 0;
+        if (!newCount || (oldCount < 2 && newCount < 2)) return;
+        var warningKey = parentMatch.fromRenderId + "\n" + parentMatch.toRenderId + "\n" + identity;
+        if (plan.warnedDuplicateComponentKeys.has(warningKey)) return;
+        plan.warnedDuplicateComponentKeys.add(warningKey);
+        console.warn(
+          "[Citry] graph: duplicate component key " + identity +
+            " among one logical parent's direct children; matched in invocation order."
+        );
+      });
+    });
+  };
+
+  var planOwnershipPlacement = function (plan, generalAnchor, index, html, options) {
+    if (!plan || !plan.transaction || plan.transaction.status !== "prepared" || plan.applied) {
+      throw new TypeError("[Citry] graph: ownership adoption plan is not ready for physical planning.");
+    }
+    var selected = selectAnchorPhysicalPlacement(generalAnchor, index);
+    if (!selected) throw new TypeError("[Citry] graph: physical planning target is not live.");
+    options = options || {};
+    var fresh;
+    if (selected.physical.topology === "document-body") {
+      var range = document.createRange();
+      range.selectNodeContents(document.body);
+      range.collapse(true);
+      fresh = document.createElement("div");
+      fresh.append(range.createContextualFragment(html));
+    } else {
+      fresh = contextualRangeContainer(selected.physical.start, selected.physical.end, html);
+    }
+    var freshPairs = rangePairsUnder(fresh, null);
+    var retainedSeeds = new Set(plan.retainedOldRenderIds);
+    var pinnedSeeds = new Set(plan.pinnedOldRenderIds);
+    var matchSignature = function () {
+      return (plan.matches || []).map(function (match) {
+        return match.fromRenderId + "\n" + match.toRenderId;
+      }).sort().join("\n\n");
+    };
+    var stable = false;
+    var iterationLimit = plan.state.renderLinks.size * 2 + ownershipPlanningMatches(plan).length + 4;
+    for (var iteration = 0; iteration < iterationLimit; iteration += 1) {
+      var signatureBefore = matchSignature();
+      var candidateMatches = physicalPlanningMatches(plan);
+      var rootMatch = candidateMatches.find(function (match) {
+        return match.fromRenderId === selected.link.record.renderId;
+      });
+      if (!rootMatch || !rootMatch.preserveLogical) return plan;
+      var matchedBoundaries = [{
+        match: rootMatch,
+        oldBoundary: selected.physical,
+        newBoundary: fresh,
+      }];
+      candidateMatches.forEach(function (match) {
+        if (match === rootMatch || !match.preserveLogical) return;
+        var oldState = ownershipStates.get(match.fromRevision);
+        var oldPhysical = oldState && physicalRangesForKey(oldState, match.fromKey).find(function (physical) {
+          return (
+            physicalRangeIsLive(oldState, physical) &&
+            physicalRangeContainsNode(selected.physical, physical.start) &&
+            physicalRangeContainsNode(selected.physical, physical.end)
+          );
+        });
+        var newPair = pairForRecord(freshPairs, match.toRevision, match.toKey);
+        if (oldPhysical && newPair) {
+          matchedBoundaries.push({ match: match, oldBoundary: oldPhysical, newBoundary: newPair });
+        }
+      });
+      matchedBoundaries.sort(function (left, right) {
+        return pairContainsPair(left.oldBoundary, right.oldBoundary)
+          ? -1
+          : pairContainsPair(right.oldBoundary, left.oldBoundary)
+            ? 1
+            : 0;
+      });
+      var correspondenceChanged = false;
+      for (var boundaryIndex = 0; boundaryIndex < matchedBoundaries.length; boundaryIndex += 1) {
+        var entry = matchedBoundaries[boundaryIndex];
+        if (!plan.retainedOldRenderIds.has(entry.match.fromRenderId)) {
+          planOrdinaryBarrierPairs(
+            plan,
+            entry.oldBoundary,
+            entry.newBoundary,
+            options,
+            retainedSeeds,
+            pinnedSeeds
+          );
+        }
+        applyOwnershipRetentionClosure(plan, retainedSeeds, pinnedSeeds);
+        if (matchSignature() !== signatureBefore) {
+          correspondenceChanged = true;
+          break;
+        }
+      }
+      if (correspondenceChanged) continue;
+      applyOwnershipRetentionClosure(plan, retainedSeeds, pinnedSeeds);
+      if (matchSignature() === signatureBefore) {
+        stable = true;
+        break;
+      }
+    }
+    if (!stable) {
+      throw new TypeError("[Citry] graph: ownership correspondence did not stabilize during physical planning.");
+    }
+    warnDuplicateActiveComponentKeys(plan);
+    return plan;
+  };
+
+  var applyOwnershipAdoptionPlan = function (plan) {
+    if (!plan || !plan.transaction || plan.transaction.status !== "prepared" || plan.applied) {
+      throw new TypeError("[Citry] graph: ownership adoption plan is not ready to apply.");
+    }
+    if (plan.replacements.length) replaceOwnership(plan.replacements);
+    plan.state.adoption.acceptedIncomingRenderIds = new Set(plan.acceptedIncomingRenderIds);
+    plan.state.adoption.retainedOldRenderIds = new Set(plan.retainedOldRenderIds);
+    plan.excludedIncomingRenderIds.forEach(function (renderId) {
+      var link = plan.state.renderLinks.get(renderId);
+      if (!link) return;
+      link.link.active = false;
+      link.anchorState.active = false;
+      link.logicalState.active = false;
+    });
+    var retainedByIncoming = new Map();
+    (plan.retainedCorrespondences || plan.retainedMatches || []).forEach(function (match) {
+      retainedByIncoming.set(match.toRenderId, match.fromRenderId);
+    });
+    plan.matches.forEach(function (match) {
+      var link = plan.state.renderLinks.get(match.toRenderId);
+      if (!link) return;
+      link.logicalState.childOrder = link.logicalState.childOrder.map(function (renderId) {
+        return retainedByIncoming.get(renderId) || renderId;
+      }).filter(function (renderId) {
+        return !plan.excludedIncomingRenderIds.has(renderId) || retainedByIncoming.has(renderId);
+      });
+    });
+    plan.matches.forEach(function (match) {
+      if (match.preserveExternalParent) {
+        var link = plan.state.renderLinks.get(match.toRenderId);
+        if (link) plan.state.adoption.externalParents.add(link.logicalState);
+      }
+    });
+    plan.applied = true;
+    return plan.matches.slice();
+  };
+
   // A8 supplies these explicit correspondences from its atomic DOM+graph
   // transaction. The complete proposal is validated first and correspondence
   // is never guessed from class or DOM position.
@@ -4269,6 +5507,7 @@
         to: to,
         toState: toState,
         preserveLogical: record.preserveLogical === true,
+        preserveExternalParent: record.preserveExternalParent === true,
       });
     });
     toLinks.forEach(function (link) {
@@ -4330,12 +5569,20 @@
       from.anchorState.renderId = to.record.renderId;
       from.anchorState.classId = to.record.classId;
       if (record.preserveLogical) {
+        var incomingChildOrder = provisionalLogicalState.childOrder.slice();
+        var incomingMorphKey = provisionalLogicalState.morphKey;
+        var incomingMorphMode = provisionalLogicalState.morphMode;
         provisionalLogicalState.active = false;
         to.link.logical = from.link.logical;
         to.logicalState = from.logicalState;
         from.logicalState.active = true;
         from.logicalState.revision = from.anchorState.revision;
         from.logicalState.renderId = to.record.renderId;
+        from.logicalState.childOrder = incomingChildOrder;
+        if (!record.preserveExternalParent) {
+          from.logicalState.morphKey = incomingMorphKey;
+          from.logicalState.morphMode = incomingMorphMode;
+        }
         record.toState.logicalInstances.delete(provisionalLogical.id);
         record.toState.logicalInstances.set(from.link.logical.id, from.link.logical);
         if (sourceLifecycle) {
@@ -4407,7 +5654,7 @@
     while ((node = comments.nextNode())) {
       var text = node.data.trim();
       if (text.indexOf(prefix) !== 0) continue;
-      var match = /^citry:p1:([0-9a-f]{64}):([A-Za-z0-9_-]+):(\d+):([ir]):(\d+):([se])$/.exec(text);
+      var match = /^citry:p1:([0-9a-f]{64}):([A-Za-z0-9_-]+):([0-9]+):([ir]):([0-9]+):([se])$/.exec(text);
       if (!match || match[1] !== revision) {
         throw new TypeError("[Citry] graph: malformed runtime placement cap.");
       }
@@ -4513,9 +5760,78 @@
     });
   };
 
-  var adoptLivePhysicalPlacements = function (state) {
-    var expected = new Set(state.caps.keys());
-    var canonical = validatePhysicalCaps(OWNERSHIP_COMMENT_PREFIX, state.publicRevision.revision, expected, document);
+  var removeExcludedAdoptionCaps = function (state, expected) {
+    var known = new Set(state.caps.keys());
+    var revision = state.publicRevision.revision;
+    var canonicalPrefix = OWNERSHIP_COMMENT_PREFIX + ":" + revision + ":";
+    var runtimePrefix = "citry:p1:" + revision + ":";
+    var comments = document.createTreeWalker(document, NodeFilter.SHOW_COMMENT);
+    var excluded = [];
+    for (var node = comments.nextNode(); node; node = comments.nextNode()) {
+      var text = node.data.trim();
+      var key = null;
+      var ownership = CitryClientGraphProtocol.parseOwnershipComment(text);
+      if (ownership && ownership.revision === revision) {
+        key = ownership.graphId + ":" + ownership.kind + ":" + ownership.recordId;
+      } else if (text.indexOf(canonicalPrefix) === 0) {
+        throw new TypeError("[Citry] graph: malformed excluded incoming physical cap.");
+      } else if (text.indexOf(runtimePrefix) === 0) {
+        var runtime = /^citry:p1:([0-9a-f]{64}):([A-Za-z0-9_-]+):([0-9]+):([ir]):([0-9]+):([se])$/.exec(text);
+        if (!runtime || runtime[1] !== revision) {
+          throw new TypeError("[Citry] graph: malformed excluded incoming runtime cap.");
+        }
+        key = runtime[3] + ":" + runtime[4] + ":" + runtime[5];
+      }
+      if (key === null || expected.has(key)) continue;
+      if (!known.has(key)) {
+        throw new TypeError("[Citry] graph: physical cap names an unknown record " + key + ".");
+      }
+      excluded.push(node);
+    }
+    // A stationary retained range can leave the incoming endpoints crossed
+    // with its accepted parent cap even though its incoming contents never
+    // land. Remove those known-excluded endpoints first; the strict scan below
+    // then validates every accepted range and rejects any remaining damage.
+    excluded.forEach(function (cap) { cap.remove(); });
+  };
+
+  var adoptLivePhysicalPlacements = function (state, acceptedRenderIds, plan) {
+    var expected = new Set();
+    var excludedPhysicalKeys = state.adoption && state.adoption.excludedIncomingPhysicalKeys;
+    state.caps.forEach(function (_pair, key) {
+      var parts = key.split(":");
+      var recordKey = qualifiedGraphId(Number(parts[0]), parts[1], Number(parts[2]));
+      if (excludedPhysicalKeys && excludedPhysicalKeys.has(recordKey)) return;
+      var instance = state.registry.componentInstances.get(recordKey);
+      if (instance) {
+        if (!acceptedRenderIds || acceptedRenderIds.has(instance.renderId)) expected.add(key);
+        return;
+      }
+      var region = state.registry.slotRegions.get(recordKey);
+      if (!region || !acceptedRenderIds) {
+        expected.add(key);
+        return;
+      }
+      if (
+        (region.ownerRenderId == null || acceptedRenderIds.has(region.ownerRenderId)) &&
+        (region.receiverRenderId == null || acceptedRenderIds.has(region.receiverRenderId)) &&
+        (region.resultOwnerRenderId == null || acceptedRenderIds.has(region.resultOwnerRenderId))
+      ) expected.add(key);
+    });
+    (plan && (plan.retainedCorrespondences || plan.retainedMatches) || []).forEach(function (match) {
+      var retainedState = ownershipStates.get(match.fromRevision);
+      if (!retainedState) return;
+      physicalRangesForKey(retainedState, match.fromKey).forEach(function (physical) {
+        if (!physical.start.isConnected || !physical.end.isConnected) return;
+        // Alpine's comment walk may reuse the retained Comment objects for
+        // their excluded incoming counterparts. Restore the old revision's
+        // exact marker text before removing any remaining incoming endpoints.
+        physical.start.data = physical.startMarker;
+        physical.end.data = physical.endMarker;
+      });
+    });
+    removeExcludedAdoptionCaps(state, expected);
+    var canonical = validatePhysicalCaps(state.publicRevision.revision, expected, document);
     var runtime = validateRuntimePlacementCaps(state.publicRevision.revision, expected);
     var byKey = new Map();
     var canonicalPhysical = buildPhysicalPlacementSet(canonical, null);
@@ -4560,20 +5876,13 @@
     normalized.adoption = {
       transfers: new Map(),
       markerTransfers: [],
+      externalParents: new Set(),
       status: "prepared",
       activated: false,
+      excludedIncomingPhysicalKeys: new Set(),
     };
     ownershipStates.set(staged.revision, normalized);
     ownershipAdoptionDepth += 1;
-    try {
-      normalized.renderIds.forEach(function (instance) {
-        ensureLifecycle(resolveOwnershipRoute(staged.revision, instance.renderId, instance.classId), false);
-      });
-    } catch (err) {
-      ownershipStates.delete(staged.revision);
-      ownershipAdoptionDepth = Math.max(0, ownershipAdoptionDepth - 1);
-      throw err;
-    }
     return {
       revision: staged.revision,
       state: normalized,
@@ -4587,9 +5896,16 @@
     }
     var state = transaction.state;
     if (state.adoption.activated) return;
-    var fillPlans = preflightGraphFillSources(state);
+    var accepted = transaction.plan && transaction.plan.acceptedIncomingRenderIds;
+    if (!(accepted instanceof Set)) accepted = new Set(state.renderLinks.keys());
+    accepted.forEach(function (renderId) {
+      var link = state.renderLinks.get(renderId);
+      if (link && link.link.active) ensureLifecycle(resolveOwnershipRoute(transaction.revision, renderId, link.record.classId), false);
+    });
+    var excludedPhysicalKeys = transaction.plan && transaction.plan.excludedIncomingPhysicalKeys;
+    var fillPlans = preflightGraphFillSources(state, accepted, excludedPhysicalKeys);
     activateGraphFillSources(state, fillPlans);
-    activateGraphClientBindings(transaction.revision);
+    activateGraphClientBindings(transaction.revision, accepted);
     state.adoption.activated = true;
   };
 
@@ -4642,7 +5958,20 @@
       });
       var eventsTransaction = graphEvents.get(revision);
       if (eventsTransaction && eventsTransaction.state === "pending") active = true;
+      state.retainedPhysicalKeys.forEach(function (key) {
+        var stillLive = physicalRangesForKey(state, key).some(function (physical) {
+          return physicalRangeIsLive(state, physical);
+        });
+        if (stillLive) active = true;
+        else state.retainedPhysicalKeys.delete(key);
+      });
       if (active) return;
+      var eventsRuntime = globalThis.Citry && globalThis.Citry.events;
+      if (
+        eventsRuntime &&
+        typeof eventsRuntime._pruneDescriptorRevision === "function" &&
+        eventsRuntime._pruneDescriptorRevision(revision, true) === false
+      ) return;
       ownershipGraphs.delete(revision);
       ownershipStates.delete(revision);
       graphEvents.delete(revision);
@@ -4688,6 +6017,24 @@
     failOwnershipManifest(transaction.revision, failure);
   };
 
+  var discardOwnershipAdoption = function (transaction) {
+    if (!transaction || transaction.status !== "prepared") return;
+    var state = transaction.state;
+    deactivateOwnershipAdoption(state);
+    state.renderLinks.forEach(function (link) {
+      if (link.logicalState.lifecycle) destroyLifecycle(link.logicalState.lifecycle, "an incoming transaction was excluded");
+      link.link.active = false;
+      link.anchorState.active = false;
+      link.logicalState.active = false;
+    });
+    ownershipStates.delete(transaction.revision);
+    seenOwnershipRevisions.add(transaction.revision);
+    ownershipAdoptionDepth = Math.max(0, ownershipAdoptionDepth - 1);
+    transaction.status = "discarded";
+    state.adoption.status = "discarded";
+    scheduleOwnershipPrune();
+  };
+
   var forceAdoptionRootMarkers = function (state) {
     state.adoption.markerTransfers.forEach(function (transfer) {
       var physicals = physicalRangesForKey(state, transfer.targetKey);
@@ -4714,19 +6061,29 @@
       throw new TypeError("[Citry] graph: ownership adoption transaction is not prepared.");
     }
     var state = transaction.state;
+    if (transaction.plan) {
+      state.adoption.excludedIncomingPhysicalKeys = new Set(transaction.plan.excludedIncomingPhysicalKeys);
+      transaction.plan.retainedOldPhysicalRecords.forEach(function (identity) {
+        var separator = identity.indexOf("\n");
+        var retainedState = separator < 0 ? null : ownershipStates.get(identity.slice(0, separator));
+        if (retainedState) retainedState.retainedPhysicalKeys.add(identity.slice(separator + 1));
+      });
+    }
     applyAdoptionTransfers(state);
     retireSupersededComponentBoundaries(state);
     state.renderLinks.forEach(function (link) {
       var parent = link.record.parentRenderId == null ? null : state.renderLinks.get(link.record.parentRenderId);
-      link.logicalState.parentLogical = parent && parent.link.active ? parent.logicalState : null;
+      if (parent && parent.link.active) link.logicalState.parentLogical = parent.logicalState;
+      else if (!state.adoption.externalParents.has(link.logicalState)) link.logicalState.parentLogical = null;
     });
-    adoptLivePhysicalPlacements(state);
+    var accepted = transaction.plan && transaction.plan.acceptedIncomingRenderIds;
+    adoptLivePhysicalPlacements(state, accepted instanceof Set ? accepted : null, transaction.plan);
     forceAdoptionRootMarkers(state);
     if (!state.adoption.activated) activateOwnershipAdoption(transaction);
     ownershipGraphs.set(transaction.revision, state.publicRevision);
     seenOwnershipRevisions.add(transaction.revision);
     state.anchors.forEach(function (anchor, anchorId) {
-      browserAnchors.set(anchorId, anchor);
+      if (anchor.active) browserAnchors.set(anchorId, anchor);
     });
     state.provisional = false;
     state.adoption.status = "committed";
@@ -4824,6 +6181,16 @@
     });
     if (descriptor.content) el.textContent = descriptor.content;
     return el;
+  };
+
+  var validateDescriptorStructure = function (descriptor) {
+    var validationDocument = document.implementation.createDocument("urn:citry:dependency-validation", "validation", null);
+    var element = validationDocument.createElementNS("urn:citry:dependency-validation", descriptor.tag);
+    Object.keys(descriptor.attrs || {}).forEach(function (name) {
+      var value = descriptor.attrs[name];
+      if (value === true) element.setAttribute(name, "");
+      else if (value !== false && value != null) element.setAttribute(name, String(value));
+    });
   };
 
   // Append a <script> descriptor to <body>; resolves once it has loaded.
@@ -4992,7 +6359,7 @@
       route: route,
       status: "waiting",
       dependenciesReady: true,
-      parentCall: null,
+      dependencyCalls: [],
       heldRoots: new Set(),
       lifecycle: lifecycle,
     };
@@ -5015,7 +6382,9 @@
         return false;
       }
     }
-    if (call.parentCall && call.parentCall.status !== "settled" && call.parentCall.status !== "cancelled") return false;
+    if (call.dependencyCalls.some(function (dependency) {
+      return dependency.status !== "settled" && dependency.status !== "cancelled";
+    })) return false;
     if (!componentRegistrations.has(call.classId)) return false;
     if (call.dataKey != null && !componentData.has(call.dataKey)) return false;
     if (call.lifecycle) {
@@ -5756,7 +7125,7 @@
         route: null,
         status: revision ? "staged" : "waiting",
         dependenciesReady: !revision,
-        parentCall: null,
+        dependencyCalls: [],
         heldRoots: new Set(),
         lifecycle: null,
       };
@@ -5795,7 +7164,7 @@
         visited.add(parentRenderId);
         var parentCall = local.get(parentRenderId) || state.graphCalls.get(parentRenderId);
         if (parentCall) {
-          call.parentCall = parentCall;
+          call.dependencyCalls.push(parentCall);
           break;
         }
         var parentLink = state.renderLinks.get(parentRenderId);
@@ -5807,6 +7176,31 @@
       call.lifecycle.calls.add(call);
       retainCallData(call);
       pendingCalls.push(call);
+    });
+    calls.forEach(function (call) {
+      var childRange = lifecyclePhysicalRange(call.lifecycle);
+      if (!childRange.state) return;
+      calls.forEach(function (candidate) {
+        if (candidate === call || call.dependencyCalls.indexOf(candidate) !== -1) return;
+        var parentRange = lifecyclePhysicalRange(candidate.lifecycle);
+        if (!parentRange.state) return;
+        var parentContainsChild = childRange.physicals.length > 0 && childRange.physicals.every(
+          function (childPhysical) {
+            return parentRange.physicals.some(function (parentPhysical) {
+              return ambientRangeContainsRange(parentPhysical, childPhysical);
+            });
+          }
+        );
+        if (!parentContainsChild) return;
+        var childContainsParent = parentRange.physicals.length > 0 && parentRange.physicals.every(
+          function (parentPhysical) {
+            return childRange.physicals.some(function (childPhysical) {
+              return ambientRangeContainsRange(childPhysical, parentPhysical);
+            });
+          }
+        );
+        if (!childContainsParent) call.dependencyCalls.push(candidate);
+      });
     });
     // This synchronous pass is what places per-root Alpine holds before the
     // owned Alpine MutationObserver sees a just-inserted fragment.
@@ -5945,6 +7339,24 @@
       }
       return fromBase64(value);
     };
+    var decodeDescriptor = function (encoded, label) {
+      var descriptor = JSON.parse(decode(encoded, label));
+      if (
+        !descriptor || typeof descriptor !== "object" || Array.isArray(descriptor) ||
+        typeof descriptor.tag !== "string" ||
+        (descriptor.attrs != null && (typeof descriptor.attrs !== "object" || Array.isArray(descriptor.attrs))) ||
+        (descriptor.content != null && typeof descriptor.content !== "string")
+      ) {
+        throw new TypeError("[Citry] dependency asset descriptor is invalid.");
+      }
+      // Prove tag and attribute names in a non-HTML namespace. An HTML
+      // custom-element constructor can run at document.createElement time,
+      // before ownership adoption has committed, even while detached.
+      validateDescriptorStructure(descriptor);
+      return descriptor;
+    };
+    var state = ownershipStates.get(revision);
+    if (!state) throw new TypeError("[Citry] dependency manifest refers to an unknown prepared graph.");
     var seen = new Set();
     requireArray(manifest.calls, "calls").forEach(function (call) {
       if (!Array.isArray(call) || call.length !== 3) {
@@ -5977,23 +7389,81 @@
     });
 
     var fetch = requireObject(manifest.fetch, "fetch");
+    var preparedFetch = { css: [], js: [] };
     ["css", "js"].forEach(function (kind) {
-      requireArray(fetch[kind], "fetch." + kind).forEach(function (encoded) {
-        var descriptor = JSON.parse(decode(encoded, "fetch." + kind));
-        if (
-          !descriptor || typeof descriptor !== "object" || Array.isArray(descriptor) ||
-          typeof descriptor.tag !== "string" ||
-          (descriptor.attrs != null && (typeof descriptor.attrs !== "object" || Array.isArray(descriptor.attrs))) ||
-          (descriptor.content != null && typeof descriptor.content !== "string")
-        ) {
-          throw new TypeError("[Citry] dependency asset descriptor is invalid.");
+      requireArray(fetch[kind], "fetch." + kind).forEach(function (entry) {
+        if (!Array.isArray(entry) || entry.length !== 2) {
+          throw new TypeError("[Citry] graph-linked dependency fetch must be a two-item tuple.");
         }
-        // Prove tag and attribute names while the element is detached. Script
-        // and stylesheet execution still starts only after graph commit.
-        createElement(descriptor);
+        var encoded = entry[0];
+        var descriptor = decodeDescriptor(encoded, "fetch." + kind);
+        var owners = entry[1];
+        var decodedOwners = null;
+        if (owners !== null) {
+          if (!Array.isArray(owners) || !owners.length) {
+            throw new TypeError("[Citry] graph-linked dependency owners must be null or a non-empty array.");
+          }
+          decodedOwners = owners.map(function (owner) { return decode(owner, "fetch." + kind + ".owners"); });
+          var priorOwner = null;
+          decodedOwners.forEach(function (owner) {
+            if (!state.renderLinks.has(owner)) {
+              throw new TypeError("[Citry] graph-linked dependency owner '" + owner + "' is absent from its graph.");
+            }
+            if (priorOwner !== null && owner <= priorOwner) {
+              throw new TypeError("[Citry] graph-linked dependency owners must be unique and sorted.");
+            }
+            priorOwner = owner;
+          });
+        }
+        preparedFetch[kind].push({ encoded: encoded, descriptor: descriptor, owners: decodedOwners });
       });
     });
-    return manifest;
+    if (!Array.isArray(manifest.beforeManifest)) {
+      throw new TypeError("[Citry] graph-linked dependency field 'beforeManifest' must be an array.");
+    }
+    var preparedBeforeManifest = manifest.beforeManifest.map(function (encoded) {
+      return decodeDescriptor(encoded, "beforeManifest");
+    });
+    return {
+      graph: revision,
+      markLoaded: manifest.markLoaded,
+      fetch: preparedFetch,
+      calls: manifest.calls,
+      cssInstances: manifest.cssInstances,
+      beforeManifest: preparedBeforeManifest,
+    };
+  };
+
+  var acceptedDependencyManifest = function (transaction, prepared) {
+    var accepted = transaction.plan && transaction.plan.acceptedIncomingRenderIds;
+    if (!(accepted instanceof Set)) accepted = new Set(transaction.state.renderLinks.keys());
+    var hasAccepted = accepted.size > 0;
+    var keepOwned = function (entry) {
+      if (entry.owners === null) return hasAccepted;
+      return entry.owners.some(function (owner) { return accepted.has(owner); });
+    };
+    var keepRenderTuple = function (entry) {
+      return Array.isArray(entry) && typeof entry[1] === "string" && accepted.has(fromBase64(entry[1]));
+    };
+    return {
+      graph: prepared.graph,
+      markLoaded: hasAccepted ? prepared.markLoaded : { js: [], css: [] },
+      fetch: {
+        js: prepared.fetch.js.filter(keepOwned).map(function (entry) { return entry.encoded; }),
+        css: prepared.fetch.css.filter(keepOwned).map(function (entry) { return entry.encoded; }),
+      },
+      calls: prepared.calls.filter(keepRenderTuple),
+      cssInstances: prepared.cssInstances.filter(keepRenderTuple),
+      beforeManifest: hasAccepted ? prepared.beforeManifest : [],
+    };
+  };
+
+  var activateBeforeManifest = function (descriptors, tag) {
+    descriptors.forEach(function (descriptor) {
+      var element = createElement(descriptor);
+      if (tag && tag.parentNode) tag.parentNode.insertBefore(element, tag);
+      else document.body.appendChild(element);
+    });
   };
 
   var applyAdoptionDependency = function (transaction, manifest, tag) {
@@ -6008,8 +7478,10 @@
       tag.dataset.citryProcessed = "";
     }
     consumedGraphDependencies.add(transaction.revision);
-    var calls = stageManifestCalls(manifest, transaction.revision);
-    return applyGraphComponentScripts(manifest, calls);
+    var acceptedManifest = acceptedDependencyManifest(transaction, manifest);
+    var calls = stageManifestCalls(acceptedManifest, transaction.revision);
+    activateBeforeManifest(acceptedManifest.beforeManifest, tag);
+    return applyGraphComponentScripts(acceptedManifest, calls);
   };
 
   var beginGraphEvents = function (revision) {
@@ -6073,12 +7545,26 @@
       if (consumedGraphDependencies.has(manifest.graph)) {
         throw new TypeError("[Citry] dependency manifest repeats ownership graph " + manifest.graph + ".");
       }
+      var graphFetch = manifest.fetch;
+      var hasOwnerAwareFetch = graphFetch && typeof graphFetch === "object" && ["js", "css"].some(function (kind) {
+        return Array.isArray(graphFetch[kind]) && graphFetch[kind].some(Array.isArray);
+      });
+      var isTransactionalDependency = hasOwnerAwareFetch || Object.prototype.hasOwnProperty.call(manifest, "beforeManifest");
+      var acceptedManifest = manifest;
+      if (isTransactionalDependency) {
+        var prepared = preflightAdoptionDependency(manifest, manifest.graph);
+        acceptedManifest = acceptedDependencyManifest({
+          plan: null,
+          state: ownershipStates.get(manifest.graph),
+        }, prepared);
+      }
       consumedGraphDependencies.add(manifest.graph);
       // Activate and hold every callback branch in this observer turn. The
       // actual assets and Events adoption may settle in later tasks.
       var calls;
       try {
-        calls = stageManifestCalls(manifest, manifest.graph);
+        calls = stageManifestCalls(acceptedManifest, manifest.graph);
+        if (isTransactionalDependency) activateBeforeManifest(acceptedManifest.beforeManifest, null);
       } catch (err) {
         console.error("[Citry] discarded graph-linked dependency manifest:", err);
         return;
@@ -6090,7 +7576,7 @@
       // fragment-insertion promise settle normally.
       setTimeout(function () {
         Promise.resolve().then(function () {
-          return applyGraphComponentScripts(manifest, calls);
+          return applyGraphComponentScripts(acceptedManifest, calls);
         }).then(
           function () {},
           function (err) {
@@ -6240,42 +7726,24 @@
       _morphRange: morphOwnershipRange,
       _prepareAdoption: prepareOwnershipAdoption,
       _adoptionRoot: adoptionRoot,
+      _planAdoption: planOwnershipAdoption,
+      _planPlacement: planOwnershipPlacement,
+      _applyAdoptionPlan: applyOwnershipAdoptionPlan,
       _activateAdoption: activateOwnershipAdoption,
       _commitAdoption: commitOwnershipAdoption,
       _abortAdoption: abortOwnershipAdoption,
+      _discardAdoption: discardOwnershipAdoption,
       _rejectAdoption: failOwnershipManifest,
       _mintPlacement: mintRuntimePlacementId,
       _placementIds: function (generalAnchor) {
-        var ids = [];
-        ownershipStates.forEach(function (state, revision) {
-          if (!ownershipGraphs.has(revision)) return;
-          state.renderLinks.forEach(function (link) {
-            if (link.link.anchor !== generalAnchor) return;
-            physicalRangesForKey(state, link.record.key).forEach(function (physical) {
-              if (physicalRangeIsLive(state, physical)) ids.push(physical.placementId);
-            });
-          });
+        return livePhysicalPlacementsForAnchor(generalAnchor).map(function (entry) {
+          return entry.physical.placementId;
         });
-        return ids;
       },
       _placementRoots: function (generalAnchor) {
-        var placements = [];
-        ownershipStates.forEach(function (state, revision) {
-          if (!ownershipGraphs.has(revision)) return;
-          state.renderLinks.forEach(function (link) {
-            if (!link.link.active || link.link.anchor !== generalAnchor) return;
-            physicalRangesForKey(state, link.record.key).forEach(function (physical) {
-              // Provisional adoption ranges are structurally valid but still
-              // detached. Instance-target actions patch only the currently
-              // live DOM placements, never the incoming fragment itself.
-              if (!physical.start.isConnected || !physical.end.isConnected || !physicalRangeIsLive(state, physical)) {
-                return;
-              }
-              placements.push(physicalRangeRoots(physical, link.record.renderId));
-            });
-          });
+        return livePhysicalPlacementsForAnchor(generalAnchor).map(function (entry) {
+          return physicalRangeRoots(entry.physical, entry.link.record.renderId);
         });
-        return placements;
       },
       _hasPlacements: function (generalAnchor) {
         return this._placementIds(generalAnchor).length > 0;
@@ -6307,33 +7775,6 @@
         });
         return related;
       },
-      _classForRender: function (renderId) {
-        var classId = null;
-        ownershipStates.forEach(function (state) {
-          var link = state.renderLinks.get(renderId);
-          if (link && link.link.active) classId = link.record.classId;
-        });
-        return classId;
-      },
-      _correspond: function (fromRenderId, toRenderId) {
-        var source = null;
-        var target = null;
-        ownershipStates.forEach(function (state, revision) {
-          var from = state.renderLinks.get(fromRenderId);
-          if (from && from.link.active && ownershipGraphs.has(revision)) source = { revision: revision, link: from };
-          var to = state.renderLinks.get(toRenderId);
-          if (to && to.link.active && state.provisional) target = { revision: revision, link: to };
-        });
-        if (!source || !target || source.link.record.classId !== target.link.record.classId) return null;
-        replaceOwnership([{
-          fromRevision: source.revision,
-          fromRenderId: fromRenderId,
-          toRevision: target.revision,
-          toRenderId: toRenderId,
-          preserveLogical: true,
-        }]);
-        return target.link.link.anchor;
-      },
       _morphPlacement: function (generalAnchor, index, html, options) {
         var selected = null;
         ownershipStates.forEach(function (state, revision) {
@@ -6351,7 +7792,29 @@
         if (!selected) throw new TypeError("[Citry] graph: runtime placement morph target is not live.");
         options = options || {};
         options.physical = selected.physical;
-        return morphOwnershipRange(selected.revision, selected.link.record.key, html, options);
+        alpineHookCounts.morph += 1;
+        var physical = morphOwnershipRange(selected.revision, selected.link.record.key, html, options);
+        return { end: physical.end, roots: physicalRangeElements(physical) };
+      },
+      _replacePlacement: function (generalAnchor, index, html) {
+        var selected = null;
+        ownershipStates.forEach(function (state, revision) {
+          if (selected || !ownershipGraphs.has(revision)) return;
+          state.renderLinks.forEach(function (link) {
+            if (selected || link.link.anchor !== generalAnchor) return;
+            var placements = physicalRangesForKey(state, link.record.key).filter(function (physical) {
+              return physicalRangeIsLive(state, physical);
+            });
+            if (placements[index]) {
+              selected = { state: state, revision: revision, link: link, physical: placements[index] };
+            }
+          });
+        });
+        if (!selected) throw new TypeError("[Citry] graph: runtime placement replacement target is not live.");
+        var physical = replaceOwnershipRange(selected.revision, selected.link.record.key, html, {
+          physical: selected.physical,
+        });
+        return { end: physical.end, roots: physicalRangeElements(physical) };
       },
       _expectRetirement: function (renderIds) {
         var wanted = new Set(Array.isArray(renderIds) ? renderIds : []);
@@ -6392,6 +7855,7 @@
       _isLive: isOwnershipAnchorLive,
       _beginEvents: beginGraphEvents,
       _finishEvents: finishGraphEvents,
+      _schedulePrune: scheduleOwnershipPrune,
     },
     _loadComponentScripts: loadComponentScripts,
     _stageOwnershipManifest: stageOwnershipManifest,

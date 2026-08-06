@@ -19,8 +19,9 @@
 //! | (inline string) | Plain text, static HTML | `"""text"""` |
 //! | `ExprNode` | `{{ expr }}` | `ExprNode(source, (start, end,), """expr""", ("var1",))` |
 //! | `TemplateNode` | Nested template on an HTML tag's dynamic attr | `TemplateNode(source, (start, end,), """expr""", ("var1",))` |
-//! | `ElementAttrsNode` | An HTML tag's attribute region when any attr is dynamic | `ElementAttrsNode(source, (start, end,), (attrs,), (used_vars,))` |
-//! | `ComponentNode` | `<c-Card>`, `<c-component>`, any `<c-*>` | `ComponentNode(source, (start, end,), (attrs,), [body], (used_vars,), """name""", contains_fills)` - a tag carrying `#c-key` appends one trailing argument, the key expression as an `ExprHtmlAttr` |
+//! | `ElementAttrsNode` | An HTML tag's structured attribute region | `ElementAttrsNode(source, (start, end,), (attrs,), (used_vars,))` |
+//! | `ElementKeyNode` | `#c-key="expr"` on a plain element | `ElementKeyNode(ExprHtmlAttr(source, (start, end,), """#c-key""", """expr""", ("var1",)))` |
+//! | `ComponentNode` | `<c-Card>`, `<c-component>`, any `<c-*>` | `ComponentNode(source, (start, end,), (attrs,), [body], (used_vars,), """name""", contains_fills)` - range/element metadata appends one tagged tuple argument |
 //! | `IfNode` | `<c-if>/<c-elif>/<c-else>` | `IfNode(source, (branch, ...,), (used_vars,))` |
 //! | `ForNode` | `<c-for>/<c-empty>` | `ForNode(source, (branch, ...,), (used_vars,))` |
 //! | `SlotNode` | `<c-slot>` | `SlotNode(source, (start, end,), (attrs,), [body], (used_vars,), (introduced_vars,))` |
@@ -39,14 +40,15 @@
 //! | `TemplateHtmlAttr` | `c-body="<div>...</div>"` | `TemplateHtmlAttr(source, (start, end,), """key""", """template""", (used_vars,))` |
 //!
 //! On regular HTML tags (not components), the attribute region compiles in
-//! one of two forms. A purely static tag flattens its attributes into the
-//! surrounding plain-HTML strings. When any attribute is dynamic (a `c-*`
-//! expression or template value, `c-bind` included), the compiler emits one
-//! `ElementAttrsNode` covering the whole ordinary attribute region, static
-//! attributes included in source order, each wrapped in a `*HtmlAttr` call;
-//! the node resolves the set to a single attribute string at render time
-//! (spreads, `True`/`False`/`None` values, and `class`/`style` merging are
-//! runtime decisions).
+//! one of two forms. An ordinary purely static tag flattens its attributes
+//! into the surrounding plain-HTML strings. When any attribute is dynamic (a
+//! `c-*` expression or template value, `c-bind` included), or when an
+//! extension-owned binding/output name must remain structurally visible, the
+//! compiler emits one `ElementAttrsNode` covering the whole ordinary
+//! attribute region. Static attributes stay included in source order, each
+//! wrapped in a `*HtmlAttr` call. Runtime attributes resolve the set to one
+//! attribute string; extensions may transform parser-proven static bindings
+//! and collapse the region back to text before rendering.
 //!
 //! ## Formatting conventions (Python output)
 //!
@@ -63,11 +65,12 @@
 //! - `<c-raw>` compiles its body to a single literal text part; the inner
 //!   content is emitted verbatim, with no template processing.
 //! - `#c-*` framework metadata never joins the attribute set. On a plain
-//!   element, `#c-key="expr"` emits ` data-citry-key=":` + `ExprNode(expr)` +
-//!   `"` (an empty scope segment before the colon) and `#c-ignore` emits the
-//!   literal ` data-citry-morph="ignore"`, both after the ordinary
-//!   attributes. On a component tag, `#c-key` rides as the `ComponentNode`'s
-//!   trailing key argument (see the table above), never as a kwarg.
+//!   element, `#c-key="expr"` emits an `ElementKeyNode` after the ordinary
+//!   attributes. That node emits ` data-citry-key=":<key>"` (an empty scope
+//!   segment before the colon), or nothing when the expression evaluates to
+//!   `None`. `#c-ignore` emits the literal ` data-citry-morph="ignore"`. On a
+//!   component tag, `#c-key` and `#c-ignore` ride in the `ComponentNode`'s
+//!   tagged trailing metadata tuple (see the table above), never as kwargs.
 //!
 //! ## Determinism
 //!
@@ -83,13 +86,16 @@ use std::vec::IntoIter;
 use unicode_normalization::UnicodeNormalization;
 
 use crate::ast::{
-    HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template, TemplateElement, Token,
+    HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Node, Template, TemplateElement, Text, Token,
 };
 use crate::constants::{
-    COMPONENT_NODE, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELEMENT_TAG,
-    C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG,
-    ELEMENT_ATTRS_NODE, EXPR_ATTR_NODE, EXPR_NODE, FILL_DATA_BINDING, FILL_NODE, FOR_NODE,
-    HTML_VOID_ELEMENTS, IF_NODE, KEY_OUTPUT_ATTR, META_ATTR_IGNORE, META_ATTR_KEY,
+    citry_component_tag_eq, has_citry_component_prefix, is_dynamic_target_expr_attr,
+    is_dynamic_target_static_attr, is_html_void_element, COMPONENT_METADATA_ENTRY_KEY,
+    COMPONENT_METADATA_ENTRY_MORPH, COMPONENT_METADATA_LOCUS_ELEMENT,
+    COMPONENT_METADATA_LOCUS_RANGE, COMPONENT_NODE, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS,
+    C_COMPONENT_TAG, C_ELEMENT_TAG, C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG,
+    C_IF_TAG, C_RAW_TAG, C_SLOT_TAG, ELEMENT_ATTRS_NODE, ELEMENT_KEY_NODE, EXPR_ATTR_NODE,
+    EXPR_NODE, FILL_DATA_BINDING, FILL_NODE, FOR_NODE, IF_NODE, META_ATTR_IGNORE, META_ATTR_KEY,
     MORPH_OUTPUT_ATTR, MORPH_OUTPUT_IGNORE_VALUE, SLOT_NODE, STATIC_ATTR_NODE, TAG_ATTR_RULES,
     TEMPLATE_ATTR_NODE,
 };
@@ -237,30 +243,30 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                     C_FOR_TAG => {
                         // Collect c-for and c-empty nodes into a group
                         let mut for_group = vec![node];
-                        let (for_empty_nodes, trailing_text) =
+                        let (for_empty_nodes, trailing_whitespace) =
                             consume_nodes_into_group(&mut elements_iter, &[C_EMPTY_TAG]);
                         for_group.extend(for_empty_nodes);
 
                         let for_node = compile_control_flow_node(for_group, FOR_NODE, C_FOR_TAG)?;
                         body_items.push(for_node);
                         // Whitespace read past the end of the group is content
-                        // after it, so it is emitted in place.
-                        if let Some(TemplateElement::Text(text)) = trailing_text {
+                        // after it, so every text node is emitted in place.
+                        for text in trailing_whitespace {
                             body_items.push(LangSpecArgument::UnsafeString(text.token.content));
                         }
                     }
                     C_IF_TAG => {
                         // Collect c-if, c-elif, and c-else nodes into a group
                         let mut if_group = vec![node];
-                        let (elif_and_else_nodes, trailing_text) =
+                        let (elif_and_else_nodes, trailing_whitespace) =
                             consume_nodes_into_group(&mut elements_iter, &[C_ELIF_TAG, C_ELSE_TAG]);
                         if_group.extend(elif_and_else_nodes);
 
                         let if_node = compile_control_flow_node(if_group, IF_NODE, C_IF_TAG)?;
                         body_items.push(if_node);
                         // Whitespace read past the end of the group is content
-                        // after it, so it is emitted in place.
-                        if let Some(TemplateElement::Text(text)) = trailing_text {
+                        // after it, so every text node is emitted in place.
+                        for text in trailing_whitespace {
                             body_items.push(LangSpecArgument::UnsafeString(text.token.content));
                         }
                     }
@@ -293,7 +299,7 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                     }
 
                     // Component nodes (render user-defined components)
-                    C_COMPONENT_TAG => {
+                    tag_name if citry_component_tag_eq(tag_name, C_COMPONENT_TAG) => {
                         reject_is_attr_conflict(&node)?;
 
                         // A static `is` can bypass the dynamic component only when no
@@ -324,21 +330,23 @@ pub fn compile_template_body(template: Template) -> Result<Vec<LangSpecArgument>
                         }
 
                         // Finally, create a ComponentNode, whether we've got `<c-component>` or `<c-MyComp>`
-                        let comp_node = compile_component_node(node)?;
+                        let comp_node =
+                            compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE)?;
                         body_items.push(comp_node);
                     }
 
                     // Dynamic HTML elements (render a plain element whose tag
                     // name is decided at render time), e.g.
                     // `<c-element c-is="form_content_tag" class="x">...</c-element>`.
-                    C_ELEMENT_TAG => {
+                    tag_name if citry_component_tag_eq(tag_name, C_ELEMENT_TAG) => {
                         let element_items = compile_element_node(node)?;
                         body_items.extend(element_items);
                     }
                     // Unknown c-* tag => user-defined component
                     // This contains also c-provide, c-js, c-css
-                    tag_name if tag_name.starts_with("c-") => {
-                        let comp_node = compile_component_node(node)?;
+                    tag_name if has_citry_component_prefix(tag_name) => {
+                        let comp_node =
+                            compile_component_node(node, COMPONENT_METADATA_LOCUS_RANGE)?;
                         body_items.push(comp_node);
                     }
 
@@ -470,7 +478,7 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
         Node::SelfClosing { .. } => true,
     };
 
-    let is_void_element = HTML_VOID_ELEMENTS.contains(&tag_name);
+    let is_void_element = is_html_void_element(tag_name);
 
     // Start tag: `<tag`
     // The tag name can technically contain quote characters, so we escape the string.
@@ -485,18 +493,24 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
         .iter()
         .partition(|attr| attr.kind == HtmlAttrKind::Meta);
 
-    // When any attribute is dynamic (a `c-*` expression/template value, which
-    // includes `c-bind`), the whole attribute set must stay structured until
-    // render time: spreads, True/False/None values, and class/style merging
-    // are all decided by runtime values (docs/design/template_html_attrs.md section 5).
-    // Emit one ElementAttrsNode covering the attribute region; it renders to
-    // ` key="value" ...` (with a leading space) or to an empty string.
-    // Purely static tags keep the flattened fast path below.
-    let has_dynamic_attr = ordinary_attrs
-        .iter()
-        .any(|attr| matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template));
+    // Dynamic attributes must stay structured until render time. Literal
+    // Events bindings also stay structured long enough for the Events
+    // extension's compiled-node hook to validate and replace only attributes
+    // the parser proved were real. Compiler-owned output names stay visible
+    // for the same hook to reject authored spoofing. The hook collapses an
+    // otherwise-static region back to text after transforming it.
+    let has_structured_attr = ordinary_attrs.iter().any(|attr| {
+        matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
+            || attr.key.content.starts_with("@c-")
+            || attr.key.content.starts_with(":c-")
+            || attr
+                .key
+                .content
+                .get(..9)
+                .is_some_and(|prefix| prefix.eq_ignore_ascii_case("data-cev-"))
+    });
 
-    if has_dynamic_attr {
+    if has_structured_attr {
         let start_tag = node.start_tag();
         let attr_args: Vec<LangSpecArgument> = ordinary_attrs
             .iter()
@@ -592,13 +606,12 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
 /// Emit the rendered form of one `#c-*` attribute on a plain HTML element,
 /// appending output fragments to the element's start-tag items.
 ///
-/// - `#c-key="expr"` emits ` data-citry-key=":` + `ExprNode(expr)` + `"`.
-///   The attribute value is composite: a scope segment, a colon, then the
-///   evaluated key. On a plain element the scope segment is empty, which
-///   keeps element keys and component instance keys (whose scope is the
-///   child's class id) from ever pairing with each other during a morph.
-///   The expression evaluates at render time (per loop iteration inside
-///   `<c-for>`), and the runtime escapes its result like any expression.
+/// - `#c-key="expr"` emits an `ElementKeyNode` that evaluates the expression
+///   and owns the complete ` data-citry-key=":<key>"` attribute. The attribute
+///   value begins with an empty scope segment and a colon. Component-tag keys
+///   live on virtual ownership ranges rather than DOM attributes, so they can
+///   never pair with an element key. The node emits nothing when the expression
+///   evaluates to `None`; every other value is escaped and kept as a key.
 /// - `#c-ignore` emits the literal ` data-citry-morph="ignore"` marker the
 ///   client's morph hook reads to leave the subtree untouched.
 fn compile_meta_attr_on_element(
@@ -608,23 +621,20 @@ fn compile_meta_attr_on_element(
     match attr.key.content.as_str() {
         META_ATTR_KEY => {
             // The parser guarantees the key carries a non-empty expression.
-            let inner_value = attr.inner_value.as_ref().ok_or_else(|| {
-                CompileError::Generic(format!(
+            if !attr
+                .inner_value
+                .as_ref()
+                .is_some_and(|value| !value.content.trim().is_empty())
+            {
+                return Err(CompileError::Generic(format!(
                     "Internal error: '{}' reached the compiler without its expression value",
                     META_ATTR_KEY
-                ))
-            })?;
-            items.push(LangSpecArgument::UnsafeString(format!(
-                " {}=\":",
-                KEY_OUTPUT_ATTR
-            )));
-            items.push(format_expr_node(
-                EXPR_NODE,
-                &attr.token,
-                &inner_value.content,
-                &attr.used_variables,
-            ));
-            items.push(LangSpecArgument::UnsafeString("\"".to_string()));
+                )));
+            }
+            items.push(LangSpecArgument::Struct(LangSpecStruct {
+                name: ELEMENT_KEY_NODE.to_string(),
+                arguments: vec![build_attr_struct(EXPR_ATTR_NODE, attr)],
+            }));
         }
         META_ATTR_IGNORE => {
             items.push(LangSpecArgument::UnsafeString(format!(
@@ -648,8 +658,14 @@ fn compile_meta_attr_on_element(
 /// would collapse onto one kwarg at render time with the later one silently
 /// winning, so the conflict is rejected here, where both are still visible.
 fn reject_is_attr_conflict(node: &Node) -> Result<(), CompileError> {
-    let has_is = node.attrs().iter().any(|attr| attr.key.content == "is");
-    let has_c_is = node.attrs().iter().any(|attr| attr.key.content == "c-is");
+    let has_is = node
+        .attrs()
+        .iter()
+        .any(|attr| is_dynamic_target_static_attr(node.tag_name(), &attr.key.content));
+    let has_c_is = node
+        .attrs()
+        .iter()
+        .any(|attr| is_dynamic_target_expr_attr(node.tag_name(), &attr.key.content));
     if has_is && has_c_is {
         return Err(CompileError::Syntax(format!(
             "<{}> accepts either 'is' or 'c-is', not both",
@@ -673,7 +689,7 @@ fn find_static_is_rewrite_value(node: &Node) -> Option<String> {
     }
 
     for attr in node.attrs() {
-        if attr.key.content == "is" {
+        if is_dynamic_target_static_attr(node.tag_name(), &attr.key.content) {
             if let Some(inner_value) = &attr.inner_value {
                 if !inner_value.content.is_empty() {
                     return Some(inner_value.content.clone());
@@ -931,7 +947,10 @@ fn compile_simple_node(
 /// This is used to determine whether we need to "pre-render" the body to collect the fill nodes.
 /// If yes, we will "pre-render" the body to collect the fill nodes.
 /// If no, the entire body is the "default" slot, and we can render it as is.
-fn compile_component_node(node: Node) -> Result<LangSpecArgument, CompileError> {
+fn compile_component_node(
+    node: Node,
+    metadata_locus: &'static str,
+) -> Result<LangSpecArgument, CompileError> {
     let start_tag = node.start_tag();
 
     // Get token positions from the start tag
@@ -944,20 +963,21 @@ fn compile_component_node(node: Node) -> Result<LangSpecArgument, CompileError> 
     // Extract component name from tag name (before moving node)
     // Remove "c-" prefix and escape it
     let tag_name = node.tag_name();
-    if !tag_name.starts_with("c-") {
+    if !has_citry_component_prefix(tag_name) {
         return Err(CompileError::Generic(format!(
             "Component node must start with 'c-' prefix: {}",
             tag_name
         )));
     }
-    let comp_name = tag_name[2..].to_lowercase();
+    let comp_name = tag_name[2..].to_ascii_lowercase();
 
     // Get has_fills boolean (before moving node)
     let has_fills = node.contains_fills();
 
     // `#c-*` attributes are framework metadata: they never become the child's
-    // kwargs, so they are split off from the ordinary attributes here. The
-    // parser only lets `#c-key` through on a component tag.
+    // kwargs, so they are split off from the ordinary attributes here. Both
+    // members ride the component range envelope; for a dynamic `<c-element>`,
+    // the same tagged data is private ordinary-element metadata.
     let (meta_attrs, ordinary_attrs): (Vec<HtmlAttr>, Vec<HtmlAttr>) = node
         .attrs()
         .iter()
@@ -990,7 +1010,7 @@ fn compile_component_node(node: Node) -> Result<LangSpecArgument, CompileError> 
     //    ("var1", "var2", ...),
     //    "comp-name",
     //    has_fills,
-    //    ExprHtmlAttr(...),     # only when the tag carries `#c-key`
+    //    ("range", ...),       # only when the tag carries metadata
     // )`
     let mut arguments = vec![
         // Argument 1: `source` - original template source string as variable used for error reporting
@@ -1017,23 +1037,47 @@ fn compile_component_node(node: Node) -> Result<LangSpecArgument, CompileError> 
         LangSpecArgument::Bool(has_fills),
     ];
 
-    // Argument 8 (only when the tag is keyed): the `#c-key` expression as an
-    // `ExprHtmlAttr`, resolved by the runtime and stamped onto the child's
-    // root element(s) as the composite key attribute. It rides as its own
-    // trailing argument, never inside the attrs tuple, so it can never become
-    // a kwarg (plain `key` and `c-key` inputs stay completely ordinary).
-    // Unkeyed tags emit no argument, so their generated code is unchanged and
-    // the runtime class defaults the parameter to None.
-    for attr in &meta_attrs {
-        if attr.key.content == META_ATTR_KEY {
-            arguments.push(build_attr_struct(EXPR_ATTR_NODE, attr));
-        } else {
-            // The parser rejects every other `#c-*` name on component tags.
-            return Err(CompileError::Generic(format!(
-                "Internal error: unexpected '#c-*' attribute '{}' on component tag",
-                attr.key.content
-            )));
+    // Argument 8 (only when metadata is present): a tagged tuple whose locus
+    // distinguishes a logical component range from a dynamic ordinary
+    // element. Entry order is canonical regardless of source order.
+    if !meta_attrs.is_empty() {
+        let mut key_attr = None;
+        let mut morph_mode = None;
+        for attr in &meta_attrs {
+            match attr.key.content.as_str() {
+                META_ATTR_KEY if key_attr.is_none() => key_attr = Some(attr),
+                META_ATTR_IGNORE if morph_mode.is_none() => {
+                    morph_mode = Some(MORPH_OUTPUT_IGNORE_VALUE)
+                }
+                META_ATTR_KEY | META_ATTR_IGNORE => {
+                    return Err(CompileError::Generic(format!(
+                        "Internal error: duplicate '{}' metadata on component tag",
+                        attr.key.content
+                    )));
+                }
+                other => {
+                    return Err(CompileError::Generic(format!(
+                        "Internal error: unexpected '#c-*' attribute '{}' on component tag",
+                        other
+                    )));
+                }
+            }
         }
+
+        let mut metadata = vec![LangSpecArgument::SafeString(metadata_locus.to_string())];
+        if let Some(attr) = key_attr {
+            metadata.push(LangSpecArgument::Tuple(vec![
+                LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_KEY.to_string()),
+                build_attr_struct(EXPR_ATTR_NODE, attr),
+            ]));
+        }
+        if let Some(mode) = morph_mode {
+            metadata.push(LangSpecArgument::Tuple(vec![
+                LangSpecArgument::SafeString(COMPONENT_METADATA_ENTRY_MORPH.to_string()),
+                LangSpecArgument::SafeString(mode.to_string()),
+            ]));
+        }
+        arguments.push(LangSpecArgument::Tuple(metadata));
     }
 
     Ok(LangSpecArgument::Struct(LangSpecStruct {
@@ -1062,7 +1106,10 @@ fn compile_element_node(mut node: Node) -> Result<Vec<LangSpecArgument>, Compile
 
     // Dynamic path: resolved at render time by the built-in.
     let Some(element_name) = static_name else {
-        return Ok(vec![compile_component_node(node)?]);
+        return Ok(vec![compile_component_node(
+            node,
+            COMPONENT_METADATA_LOCUS_ELEMENT,
+        )?]);
     };
 
     // Static path: rewrite the node into the plain element.
@@ -1079,15 +1126,17 @@ fn compile_element_node(mut node: Node) -> Result<Vec<LangSpecArgument>, Compile
     match &mut node {
         Node::WithBody { start_tag, .. } | Node::SelfClosing { start_tag, .. } => {
             start_tag.name.content = element_name.clone();
-            start_tag.attrs.retain(|attr| attr.key.content != "is");
+            start_tag
+                .attrs
+                .retain(|attr| !attr.key.content.eq_ignore_ascii_case("is"));
         }
     }
 
     // A void element cannot have children. An empty body is formatting, not
     // content; rebuild the node as self-closing so the output stays compact
-    // (`<br/>`), matching a statically written tag. The check is exact-match
-    // like compile_html_node's, so `is="BR"` behaves like a literal `<BR>`.
-    if HTML_VOID_ELEMENTS.contains(&element_name.as_str()) {
+    // (`<br/>`), matching a statically written tag. HTML tag identity is
+    // ASCII-case-insensitive, so `is="BR"` behaves like a literal `<BR>`.
+    if is_html_void_element(&element_name) {
         node = match node {
             Node::WithBody {
                 start_tag,
@@ -1574,24 +1623,30 @@ fn format_expr_node(
 /// - The next element is not a Node (ignoring whitespace-only text)
 /// - The next element is a Node, but does not match `node_names`
 ///
-/// Returns the consumed nodes, plus a buffered whitespace-only text element
-/// when one was read but turned out to FOLLOW the group rather than separate
-/// two branches; the caller must emit it after the group so output order is
-/// preserved.
+/// Returns the consumed nodes, plus all buffered whitespace-only text elements
+/// when they were read but turned out to FOLLOW the group rather than separate
+/// two branches; the caller must emit them after the group so output order is
+/// preserved. There can be more than one text element because non-rendering
+/// template comments split the source whitespace on either side of them.
 fn consume_nodes_into_group(
     elements_iter: &mut Peekable<IntoIter<TemplateElement>>,
     node_names: &[&str],
-) -> (Vec<Node>, Option<TemplateElement>) {
+) -> (Vec<Node>, Vec<Text>) {
     let mut group = Vec::new();
 
     loop {
-        // Buffer one whitespace-only text element; whether it is dropped
-        // (between two branches) or returned (after the group) depends on
-        // what comes next.
-        let mut pending_whitespace: Option<TemplateElement> = None;
-        if let Some(TemplateElement::Text(text)) = elements_iter.peek() {
-            if text.token.content.trim().is_empty() {
-                pending_whitespace = elements_iter.next();
+        // Buffer the complete whitespace run; template comments are omitted
+        // from `elements`, so an authored newline-comment-newline sequence is
+        // represented by multiple adjacent whitespace-only Text elements.
+        // Whether the run is dropped (between two branches) or returned
+        // (after the group) depends on what comes next.
+        let mut pending_whitespace = Vec::new();
+        while matches!(
+            elements_iter.peek(),
+            Some(TemplateElement::Text(text)) if text.token.content.trim().is_empty()
+        ) {
+            if let Some(TemplateElement::Text(text)) = elements_iter.next() {
+                pending_whitespace.push(text);
             }
         }
 
@@ -1599,7 +1654,7 @@ fn consume_nodes_into_group(
             Some(TemplateElement::Node(next_node))
                 if node_names.contains(&next_node.tag_name()) =>
             {
-                // Part of the group; any buffered whitespace sat between two
+                // Part of the group; all buffered whitespace sat between two
                 // branches and is dropped.
                 if let Some(TemplateElement::Node(node)) = elements_iter.next() {
                     group.push(node);

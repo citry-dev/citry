@@ -351,6 +351,16 @@ mod tests {
     }
 
     #[test]
+    fn test_template_comment_and_surrounding_whitespace_between_branches_are_allowed() {
+        parse_template(
+            "<c-if cond=\"a\">A</c-if>\n{# why this branch exists #}\n<c-else>B</c-else>",
+            None,
+            None,
+        )
+        .expect("a non-rendering template comment must not break a branch group");
+    }
+
+    #[test]
     fn test_text_between_branches_is_rejected() {
         assert_parse_error(
             r#"<c-if cond="a">A</c-if>text<c-else>B</c-else>"#,
@@ -367,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn test_comment_between_branches_is_rejected() {
+    fn test_html_comment_between_branches_is_rejected() {
         // An HTML comment renders to the output (it parses as a Text
         // element), so it counts as content, not formatting.
         assert_parse_error(

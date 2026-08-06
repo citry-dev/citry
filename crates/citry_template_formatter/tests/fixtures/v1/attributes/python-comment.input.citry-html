@@ -1,0 +1,2 @@
+<c-card c-data="[first,  # keep the first item
+second]" />

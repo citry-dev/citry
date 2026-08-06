@@ -75,7 +75,7 @@ from citry.assets import load_css, load_js, load_template, validate_asset_pairs
 from citry.assets import reset_files as _reset_files_impl
 from citry.assets import reset_template as _reset_template_impl
 from citry.citry import Citry, citry
-from citry.citry_element import CitryElement
+from citry.citry_element import CitryElement, _ElementMorphMetadata
 from citry.ext.dependencies import get_dependencies as _get_dependencies_impl
 from citry.introspection import _new_definition_id
 from citry.library_component import (
@@ -666,6 +666,32 @@ class Component(metaclass=ComponentMeta):
     its parent's State declaration.
     """
 
+    Events: ClassVar[type | None] = None
+    """Optional server event handlers for this component.
+
+    Define ``Events`` as a nested class. Every public method is an event
+    handler; underscore-prefixed methods and attributes are private helpers or
+    configuration::
+
+        class Counter(Component):
+            class State:
+                count: int = 0
+
+            class Events:
+                def increment(self, state):
+                    state.count += 1
+
+    Citry combines inherited ``Events`` declarations in component C3 order.
+    A child method overrides a same-named parent method, while ``Events = None``
+    stops inherited declarations. The built-in Events extension rebuilds the
+    effective nested class on its runtime config base.
+
+    A plain nested class works without imports. To type handler attributes such
+    as ``self.state`` and ``self.request``, subclass the generic
+    [`Events`][citry.Events] base and parameterize it with the component's State
+    class. See [`event`][citry.ext.events.event] for per-handler options.
+    """
+
     TemplateData: ClassVar[type | None] = None
     """Optional typed template data output, inherited like [`Kwargs`][citry.Component.Kwargs]."""
 
@@ -760,6 +786,9 @@ class Component(metaclass=ComponentMeta):
     _component_tag_client_bindings: tuple[ComponentTagClientBindingRecord, ...]
     """Client bindings from the nested component tag, kept separate from kwargs."""
 
+    _element_morph_metadata: _ElementMorphMetadata | None
+    """Private metadata for the dynamic ordinary-element built-in."""
+
     _ownership_invocation_id: ComponentInvocationId | None
     """Internal invocation record selected for this rendered instance."""
 
@@ -829,6 +858,7 @@ class Component(metaclass=ComponentMeta):
         # use neither. Readers guard with truthiness, so `None` reads the same
         # as an empty dict.
         self._provides_own = None
+        self._element_morph_metadata = None
 
     def _finalize_inputs(self) -> None:
         """Normalize hook-mutated slots and publish both typed inputs atomically."""
@@ -855,8 +885,9 @@ class Component(metaclass=ComponentMeta):
         is available to the template as ``{{ title }}``. Override this to map
         the inputs to a different set of variables. The returned value may be a
         dict, a ``NamedTuple``, or the typed ``TemplateData`` instance, and a
-        declared ``TemplateData`` validates it either way; the result is what
-        the template's expressions see.
+        declared ``TemplateData`` validates and normalizes it either way.
+        Schema defaults and coercions are materialized in the mapping that the
+        template's expressions see.
 
         A returned variable wins over a ``template_globals`` entry of the same
         name, so an input shadows a same-named global (globals act as
@@ -965,14 +996,17 @@ class Component(metaclass=ComponentMeta):
         """
         Hook to replace or post-process this component's rendered output.
 
-        Called on every render of this component, after ``template_data`` and
-        just before the template renders. Return ``None`` (the default) to
-        render the template as usual. Return content to use it as the
-        component's whole output instead; the template is then not rendered
-        at all. Accepted content:
+        Called when this component is rendered without a successful component
+        cache hit, after ``template_data`` and just before the template
+        renders. A cache hit reuses the completed output and skips data
+        methods, slots, the template, and this hook. Return ``None`` (the
+        default) to render the template as usual. Return content to use it as
+        the component's whole output instead; the template is then not
+        rendered at all. Accepted content:
 
         - a ``str``, used as-is (NOT autoescaped: it is this component's own
-          output, the same trust as its template)
+          output, the same trust as its template; never concatenate untrusted
+          input into it)
         - a composed element (``OtherComponent(title="hi")``), rendered in
           this component's place
         - an already-rendered ``CitryRender``, inlined
@@ -984,7 +1018,9 @@ class Component(metaclass=ComponentMeta):
 
         Everything the hook needs is on ``self``: ``kwargs``, ``slots``,
         ``parent``, ``inject()``. To pass data to the template, use
-        ``template_data``; this hook is for replacing output.
+        ``template_data``; this hook is for replacing output. If the hook
+        depends on ambient data while component caching is enabled, include
+        that data in the cache variation inputs.
 
         For example, render a placeholder instead of the template when there
         is no data::

@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "protocol_version": 1,
+  "pyodide": {
+    "version": "314.0.3",
+    "python": "3.14.2",
+    "index_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/",
+    "module_url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/pyodide.mjs"
+  },
+  "citry": {
+    "version": "0.3.1",
+    "core_version": "1.4.0"
+  },
+  "packages": [
+    {
+      "name": "citry-core",
+      "version": "1.4.0",
+      "url": "https://files.pythonhosted.org/packages/9b/2e/7e3505ff7c085c3d8eae715976520306c9689bb570909451edf79f8f78de/citry_core-1.4.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+    },
+    {
+      "name": "MarkupSafe",
+      "version": "3.0.3",
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/markupsafe-3.0.3-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+    },
+    {
+      "name": "typing-extensions",
+      "version": "4.15.0",
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/typing_extensions-4.15.0-py3-none-any.whl"
+    },
+    {
+      "name": "wrapt",
+      "version": "2.1.2",
+      "url": "https://cdn.jsdelivr.net/pyodide/v314.0.3/full/wrapt-2.1.2-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+    },
+    {
+      "name": "citry",
+      "version": "0.3.1",
+      "url": "https://files.pythonhosted.org/packages/98/61/5199900c193b7d42f491ac64454b4b9c98f4a1a53b3c70e49610c6747453/citry-0.3.1-py3-none-any.whl"
+    }
+  ]
+}

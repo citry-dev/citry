@@ -1,0 +1,5 @@
+<main>
+  <script>const value = {{ value }};</script>
+  <script type="application/json">{"value": 1}</script>
+  {# fmt: off #}<style>.card { color: red; }</style>{# fmt: on #}
+</main>

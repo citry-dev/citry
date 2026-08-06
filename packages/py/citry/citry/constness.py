@@ -104,7 +104,7 @@ if TYPE_CHECKING:
     from weakref import ReferenceType
 
     from citry.component import Component
-    from citry.nodes import BodyItem, ElementAttrsNode, ExprNode, FillNode, ForNode, IfNode
+    from citry.nodes import BodyItem, ElementAttrsNode, ElementKeyNode, ExprNode, FillNode, ForNode, IfNode
 
 _T = TypeVar("_T")
 
@@ -455,6 +455,9 @@ def precompute_const_parts(
       because baking the region would hide it from the extension. A region
       holding a nested-template attribute value also stays live (it renders
       fresh parts each time).
+    - An element ``#c-key`` whose variables are all const is evaluated once.
+      This remains safe even when ordinary attribute precomputation is off,
+      because framework metadata never enters ``on_attrs_resolved``.
     - A ``<c-if>`` whose branch conditions use only const variables is
       decided once: only the matching branch's content remains (itself
       precomputed), the other branches are dropped.
@@ -581,6 +584,7 @@ def _precompute_item(
     from citry.nodes import (  # noqa: PLC0415
         ComponentNode,
         ElementAttrsNode,
+        ElementKeyNode,
         ExprNode,
         FillNode,
         ForNode,
@@ -599,6 +603,13 @@ def _precompute_item(
     if isinstance(item, ElementAttrsNode):
         if precompute_attrs and set(item.used_vars) <= const_names:
             out.append(_precompute_element_attrs(item, precompute_context))
+        else:
+            out.append(item)
+        return
+
+    if isinstance(item, ElementKeyNode):
+        if set(item.used_vars) <= const_names:
+            out.append(_precompute_element_key(item, precompute_context))
         else:
             out.append(item)
         return
@@ -626,7 +637,7 @@ def _precompute_item(
                 item.used_vars,
                 item.name,
                 item.contains_fills,
-                item.key,
+                item.metadata,
             )
         out.append(item)
         return
@@ -770,6 +781,14 @@ def _precompute_element_attrs(node: ElementAttrsNode, precompute_context: CitryC
     if isinstance(rendered, str):
         return str(rendered)
     return node
+
+
+def _precompute_element_key(node: ElementKeyNode, precompute_context: CitryContext) -> BodyItem:
+    """Render an all-const element key once, deferring any evaluation error."""
+    try:
+        return str(node.render(precompute_context))
+    except Exception:  # noqa: BLE001 (defer the error to the normal render path)
+        return node
 
 
 def _body_changed(old: list[BodyItem], new: list[BodyItem]) -> bool:
@@ -928,7 +947,7 @@ def _statically_precomputable(body: list[BodyItem], names: frozenset[str], *, pr
     so the body fails.
     """
     # Imported lazily to break the import cycle; see the NOTE above precompute_const_parts.
-    from citry.nodes import ElementAttrsNode, ExprNode, IfNode  # noqa: PLC0415
+    from citry.nodes import ElementAttrsNode, ElementKeyNode, ExprNode, IfNode  # noqa: PLC0415
 
     for item in body:
         if isinstance(item, str):
@@ -936,6 +955,8 @@ def _statically_precomputable(body: list[BodyItem], names: frozenset[str], *, pr
         if isinstance(item, ExprNode) and set(item.used_vars) <= names:
             continue
         if precompute_attrs and isinstance(item, ElementAttrsNode) and set(item.used_vars) <= names:
+            continue
+        if isinstance(item, ElementKeyNode) and set(item.used_vars) <= names:
             continue
         if (
             isinstance(item, IfNode)

@@ -170,13 +170,12 @@ Required cases:
 
 ## 4. Visual design and customization
 
-### 4.1 Scenario catalog and Storybook
+### 4.1 Scenario catalog and live documentation
 
 One [Python-owned scenario catalog](scenario-catalog.md) contains all supported
 states, sizes, variants, densities, content lengths, responsive layouts, and
-compound configurations. The same authored scenarios feed Storybook,
-standalone pages, documentation, axe, interaction tests, screenshots, and
-design review.
+compound configurations. The same authored scenarios feed standalone pages,
+docs live examples, axe, interaction tests, screenshots, and design review.
 
 Standalone routes must include complete pages:
 
@@ -186,27 +185,23 @@ Standalone routes must include complete pages:
   states;
 - a server-backed async selection workflow.
 
-Storybook is the planned maintainer state browser, subject to the
-`@storybook/server-webpack5` versus `@storybook/html-vite` feasibility gate.
-It must project the Python scenarios rather than introduce a second authored
-story source. A custom gallery is fallback work only after Storybook fails a
-documented requirement. Contributor Storybook tooling may require Node; the
-Python package, consumer runtime, and standalone scenario runner may not.
+The docs site's live-component host is the first-party public preview surface.
+It may present deliberate component examples without becoming the quality
+runner. Direct Playwright executes interactions, waits, semantic assertions,
+screenshots, lifecycle checks, and host comparisons against standalone
+scenario routes.
 
-Storybook is a previewer, not the browser-automation or conformance runner. It
-does not run scenario journeys or generate `play` functions. Direct Playwright
-executes interactions, waits, semantic assertions, screenshots, lifecycle
-checks, and host comparisons against standalone scenario routes. Small
-Storybook adapter smoke tests may verify preview mounting, Controls, assets,
-and cleanup.
+Storybook is an optional contributor previewer tracked in
+[`../extensions_storybook.md`](../extensions_storybook.md). If it advances, it
+must project Python examples rather than introduce a second authored story
+source. Its adapter smoke tests may verify preview mounting, Controls, assets,
+and cleanup, but its availability and adapter choice do not gate Citry UI.
 
 Standalone complete pages remain required for Lighthouse, performance traces,
 manual keyboard and assistive-technology work, and direct Playwright. They are
-quality surfaces, not a second gallery. Storybook's accessibility addon may
-supplement axe feedback inside the state browser, but the direct quality suite
-remains authoritative
-([accessibility docs](https://storybook.js.org/docs/writing-tests/accessibility-testing),
-[visual-test docs](https://storybook.js.org/docs/writing-tests/visual-testing)).
+quality surfaces, not a separate public gallery. Optional preview-tool
+accessibility feedback may supplement the direct quality suite, but the direct
+suite remains authoritative.
 
 ### 4.2 Screenshot policy
 
@@ -242,9 +237,9 @@ prototype failure, not a documentation omission.
 
 ## 5. Interaction, server rendering, and lifecycle
 
-The same behavioral suite runs against the styled and headless forms. For
-headless components, the test renderer supplies the minimum documented
-structure and attributes; for styled components, the library supplies them.
+Phase 7 runs the behavioral suite against the styled production component.
+Historical headless pressure components are outside the release matrix until
+real application usage justifies a supported headless API.
 
 Every stateful family should test:
 
@@ -264,14 +259,13 @@ Every stateful family should test:
 - two instances with the same values but distinct identity;
 - no client activation or JS asset for a static-only component.
 
-Theme state will probably require a client ambient-context mechanism. Before
-nested-provider, caller-slot, or teleport readiness cases and before the UI
-prototype relies on it, a focused Citry spike must compare
-`provide()`/`inject()` methods available inside `$component.init()` with
-`$provide`/`$inject` Alpine magics. The spike must prove logical graph
+Theme state uses Citry's implemented client ambient-context contract:
+`$provide`, `$inject`, and `$unprovide` plus matching methods available inside
+`$component.init()`. Production-family tests must verify logical graph
 ancestry, caller-owned slot content, teleports, reactive updates, morph
 continuity, defaults, shadowing, cleanup, and diagnostics. DOM-parent walking
-alone is not sufficient because Citry's logical and physical trees can differ.
+is not an allowed substitute because Citry's logical and physical trees can
+differ.
 
 ## 6. Forms and progressive enhancement
 
@@ -391,7 +385,7 @@ system.
 - all themes, RTL, forced colors, reduced motion, zoom, touch emulation, and
   responsive fixtures;
 - every Citry host adapter;
-- the full Storybook and standalone-scenario visual matrix;
+- the full component-state and standalone composed-page visual matrix;
 - scaling, memory, lifecycle, Lighthouse CI, and clean-package matrices.
 
 ### Release candidate
@@ -410,7 +404,7 @@ system.
 
 A component family is supported only when its dossier contains:
 
-1. public styled and headless contracts;
+1. public styled component contracts;
 2. all supported states and variants;
 3. native HTML and APG behavior decision;
 4. automated semantic, interaction, accessibility, visual, lifecycle, and

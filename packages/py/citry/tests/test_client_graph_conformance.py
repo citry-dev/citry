@@ -42,7 +42,8 @@ if TYPE_CHECKING:
 
 import citry.assets as citry_assets
 import citry.component as citry_component
-from citry import Citry, Component
+from citry import Citry, Component, Extension
+from citry.nodes import ComponentNode
 
 _ROOT = Path(__file__).resolve().parents[4]
 _FIXTURES = _ROOT / "packages" / "protocol" / "client_graph" / "v1" / "tests"
@@ -104,10 +105,36 @@ def scenario_minimal() -> str:
 def scenario_component_tag_client_bindings() -> str:
     """One nested component carrying all four component-tag client binding payloads."""
     with _pinned_identity():
-        engine = Citry(mode="development")
+
+        class AddRangeIgnore(Extension):
+            name = "fixture_range_ignore"
+
+            def on_template_compiled(self, ctx):
+                if ctx.component_class is not Page:
+                    return
+                index, node = next(
+                    (index, node) for index, node in enumerate(ctx.nodes) if isinstance(node, ComponentNode)
+                )
+                assert node.metadata is not None
+                assert node.metadata[0] == "range"
+                ctx.nodes[index] = ComponentNode(
+                    node.source,
+                    node.position,
+                    node.attrs,
+                    node.body,
+                    node.used_vars,
+                    node.name,
+                    node.contains_fills,
+                    (*node.metadata, ("morph", "ignore")),
+                )
+
+        engine = Citry(mode="development", extensions=[AddRangeIgnore])
 
         class Child(Component):
             citry = engine
+            js = """
+              $component(() => {});
+            """
             template = """
               <section>child</section>
             """
@@ -127,6 +154,7 @@ def scenario_component_tag_client_bindings() -> str:
             # whose name merely starts with "poll" stays a DOM event.
             template = """
               <c-child
+                #c-key="graph_key"
                 $c-props="{n: 1}"
                 @click="open = true"
                 @c-click.prevent="save({x: 1})"
@@ -135,6 +163,9 @@ def scenario_component_tag_client_bindings() -> str:
                 @c-poll.5s="tick()"
               />
             """
+
+            def template_data(self, kwargs, slots):
+                return {"graph_key": '</script><x>&"π'}
 
         return _render_html(engine, Page)
 
@@ -146,6 +177,9 @@ def scenario_dynamic_spread_loop() -> str:
 
         class Item(Component):
             citry = engine
+            js = """
+              $component(() => {});
+            """
             template = """
               <button><c-slot /></button>
             """

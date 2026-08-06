@@ -88,6 +88,9 @@ class TestRegistration:
         # The class the weaving uses and the typing base are the same class.
         assert EventsExtension.Config is citry_module.Events
 
+    def test_render_cache_version_tracks_the_binding_schema_hard_cut(self):
+        assert EventsExtension.render_cache_version == 1
+
 
 class TestStateCapture:
     def test_component_exposes_the_optional_state_declaration(self):

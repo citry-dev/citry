@@ -14,7 +14,9 @@ from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
 from docs_site._internal.examples import ExampleInfo, get_example_registry
 from docs_site._internal.guards import (
+    anchor,
     api_symbols,
+    asset,
     authored_reference,
     blog,
     blog_feed,
@@ -29,13 +31,15 @@ from docs_site._internal.guards import (
     make_context,
     nav,
     redirect_target,
+    rendered_css,
+    rendered_markdown,
     run_guards,
     single_h1,
     snippet_path,
 )
 from docs_site._internal.guards.base import GuardContext, GuardResult, Severity
 from docs_site._internal.guards.site_index import SiteIndex
-from docs_site._internal.reference_pages import CATEGORIES
+from docs_site._internal.project import load_docs_project
 
 # A page that carries the generator marker is treated as a real doc page.
 _DOC = (
@@ -93,7 +97,8 @@ def _write_builtin_tags_page(root: Path, *, omit: str = "") -> None:
 def _write_browser_api_page(root: Path, *, omit: str = "") -> None:
     reference = root / "reference"
     reference.mkdir(exist_ok=True)
-    cat = next(cat for cat in CATEGORIES if cat.slug == "browser-apis")
+    cat = load_docs_project().reference.category("browser-apis")
+    assert cat is not None
     lines = [f'<h3 id="{entry.anchor}"><code>{entry.key}</code></h3>' for entry in cat.entries]
     (reference / "browser-apis.md").write_text(
         "\n".join(line for line in lines if not omit or omit not in line),
@@ -281,6 +286,19 @@ def test_frontmatter_accepts_a_clean_page(tmp_path: Path) -> None:
     assert list(frontmatter.check(_content_ctx(tmp_path))) == []
 
 
+def test_frontmatter_flags_unknown_layout(tmp_path: Path) -> None:
+    (tmp_path / "page.md").write_text(
+        "---\ntitle: Hi\nlayout: dashboard\n---\n# Hi\n",
+        encoding="utf-8",
+    )
+
+    results = list(frontmatter.check(_content_ctx(tmp_path)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "not a known layout" in results[0].message
+
+
 def test_frontmatter_defers_dated_blog_posts_to_blog_guard(tmp_path: Path) -> None:
     post_dir = tmp_path / "blog"
     post_dir.mkdir()
@@ -373,6 +391,48 @@ def test_internal_link_flags_broken_and_accepts_valid(tmp_path: Path) -> None:
     assert "/gone/" in errors[0].message
 
 
+def test_link_and_anchor_guards_strip_the_deployment_base_path(tmp_path: Path) -> None:
+    build = tmp_path / "site"
+    build.mkdir()
+    body = '<a href="/citry/ok/#target">ok</a><a href="/citry/gone/">gone</a>'
+    (build / "index.html").write_text(_DOC.format(body=body), encoding="utf-8")
+    (build / "ok").mkdir()
+    (build / "ok" / "index.html").write_text(_DOC.format(body='<h2 id="target">Target</h2>'), encoding="utf-8")
+    context = _index_ctx(tmp_path, build)
+    context.base_path = "/citry"
+
+    link_errors = [result for result in internal_link.check(context) if result.severity is Severity.ERROR]
+    anchor_warnings = list(anchor.check(context))
+
+    assert len(link_errors) == 1
+    assert "/citry/gone/" in link_errors[0].message
+    assert anchor_warnings == []
+
+
+def test_asset_guard_uses_the_configured_pagefind_directory(tmp_path: Path) -> None:
+    settings = tmp_path / "settings.yml"
+    settings.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/pagefind/pagefind.js",
+            "/custom-search/pagefind.js",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    project = load_docs_project(DocsConfig(settings_config=settings))
+    build = tmp_path / "site"
+    build.mkdir()
+    body = '<script src="/custom-search/pagefind.js"></script><script src="/pagefind/pagefind.js"></script>'
+    (build / "index.html").write_text(_DOC.format(body=body), encoding="utf-8")
+    context = _index_ctx(tmp_path, build)
+    context.project = project
+
+    errors = [result for result in asset.check(context) if result.severity is Severity.ERROR]
+
+    assert len(errors) == 1
+    assert "/pagefind/pagefind.js" in errors[0].message
+
+
 def test_single_h1_flags_pages_without_exactly_one(tmp_path: Path) -> None:
     build = tmp_path / "site"
     build.mkdir()
@@ -413,6 +473,12 @@ def test_single_h1_flags_a_blog_post_heading_expanded_from_a_snippet(tmp_path: P
         content_dir=content,
         site_dir=output,
         repo_root=tmp_path,
+        settings_config=default_config.settings_config,
+        reference_config=default_config.reference_config,
+        ui_library_config=default_config.ui_library_config,
+        redirects_config=default_config.redirects_config,
+        versions_config=default_config.versions_config,
+        people_sources_config=default_config.people_sources_config,
     )
 
     outcome = build_site(config=config, minify=False, search=False, social_cards=False)
@@ -599,3 +665,75 @@ def test_example_contract_flags_colliding_public_slugs(tmp_path: Path) -> None:
     results = list(example_contract.check(_example_contract_ctx(tmp_path, registry)))
 
     assert any("share public slug" in result.message for result in results)
+
+
+def test_rendered_markdown_guard_catches_a_wrapper_missing_markdown_attribute(tmp_path: Path) -> None:
+    """A block the markdown pass skipped shows source to the reader; the build must fail."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><article>"
+        "<div><h3>Real heading</h3><p>Rendered fine.</p></div>"
+        "<div>### Choose Citry when</div>"
+        "<div>[Compatibility](/about/compatibility/)</div>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+
+    results = list(rendered_markdown.check(_index_ctx(tmp_path, build)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "### Choose Citry when" in results[0].message
+    assert "[Compatibility](/about/compatibility/)" in results[0].message
+
+
+def test_rendered_markdown_guard_ignores_markdown_shown_on_purpose(tmp_path: Path) -> None:
+    """Documenting Markdown inside code or a heading element is not a leak."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><article>"
+        "<pre><code>### A heading example\n[a link](/x/)</code></pre>"
+        "<p>Write <code>[text](url)</code> to make a link.</p>"
+        "<h3>An ordinary rendered heading</h3>"
+        "<p>A sentence mentioning C# and a #hashtag.</p>"
+        "</article></body></html>",
+        encoding="utf-8",
+    )
+
+    assert list(rendered_markdown.check(_index_ctx(tmp_path, build))) == []
+
+
+def test_rendered_css_guard_catches_a_custom_property_glued_to_its_value(tmp_path: Path) -> None:
+    """`var(--x)0%` is invalid, and the browser drops the whole declaration."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><style>"
+        ".a{background:linear-gradient(90deg,var(--bg)0%,transparent)}"
+        ".b{grid-template-columns:var(--rail)minmax(0,1fr)}"
+        "</style></body></html>",
+        encoding="utf-8",
+    )
+
+    results = list(rendered_css.check(_index_ctx(tmp_path, build)))
+
+    assert len(results) == 1
+    assert results[0].severity is Severity.ERROR
+    assert "var(--bg)0%" in results[0].message
+
+
+def test_rendered_css_guard_accepts_correctly_spaced_values(tmp_path: Path) -> None:
+    """A space after the custom property is all that is required."""
+    build = tmp_path / "site"
+    build.mkdir()
+    (build / "index.html").write_text(
+        "<html><body><style>"
+        ".a{background:linear-gradient(90deg, var(--bg) 0%, transparent)}"
+        ".b{color:var(--fg);margin:var(--gap)}"
+        "</style></body></html>",
+        encoding="utf-8",
+    )
+
+    assert list(rendered_css.check(_index_ctx(tmp_path, build))) == []

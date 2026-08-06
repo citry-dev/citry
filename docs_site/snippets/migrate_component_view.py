@@ -18,10 +18,11 @@ class ThankYouMessage(Component):
     class Kwargs:
         name: str
 
-    class Slots:
-        pass
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         return {"name": kwargs.name}
 
     template = """
@@ -38,12 +39,6 @@ class ContactIn:
 class ContactForm(Component):
     citry = citry_app
 
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
-
     class Events(ViewEvents):
         def post(self, data: ContactIn):
             return actions.Render(
@@ -52,7 +47,7 @@ class ContactForm(Component):
                 swap="inner",
             )
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(self, kwargs, slots) -> dict[str, Any]:
         submit_url = self.citry.build_url(f"ext/events/e/{type(self).class_id}")
         return {"submit_url": submit_url}
 
@@ -72,12 +67,6 @@ class ContactForm(Component):
 class NamedContactForm(Component):
     citry = citry_app
 
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
-
     class Events:
         def submit(self, data: ContactIn):
             return actions.Render(
@@ -86,7 +75,7 @@ class NamedContactForm(Component):
                 swap="inner",
             )
 
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(self, kwargs, slots) -> dict[str, Any]:
         return {"submit_url": self.events.url("submit")}
 
     template = """
@@ -112,10 +101,11 @@ class LoadedFragment(Component):
     class Kwargs:
         kind: str
 
-    class Slots:
-        pass
-
-    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:
+    def template_data(
+        self,
+        kwargs: Kwargs,
+        slots,
+    ) -> dict[str, Any]:
         return {"kind": kwargs.kind}
 
     template = """
@@ -127,12 +117,6 @@ class LoadedFragment(Component):
 
 class FragmentLoader(Component):
     citry = citry_app
-
-    class Kwargs:
-        pass
-
-    class Slots:
-        pass
 
     class Events:
         @event(methods=("GET",))

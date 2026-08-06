@@ -8,6 +8,7 @@ import re
 import pytest
 
 from citry import Citry, Component
+from citry._protocol import client_graph
 from citry.ownership_manifest import COMMENT_PREFIX, PROTOCOL, OwnershipManifestArtifact
 
 _GRAPH_RE = re.compile(
@@ -35,6 +36,9 @@ def test_document_manifest_is_deterministic_discriminated_and_ordered():
 
     class Child(Component):
         citry = c
+        js = """
+          $component(() => {});
+        """
         template = "<span>child</span>"
 
     class Page(Component):
@@ -311,6 +315,9 @@ def test_runtime_dynamic_selector_is_transparent_in_the_wire_graph():
 
     class Target(Component):
         citry = c
+        js = """
+          $component(() => {});
+        """
         template = "<button>target</button>"
 
     class Page(Component):
@@ -585,6 +592,9 @@ def test_realistic_manifest_stays_within_the_large_graph_regression_budget():
 
     class Item(Component):
         citry = c
+        js = """
+          $component(() => {});
+        """
         template = "<button><c-slot /></button>"
 
     class Page(Component):
@@ -620,9 +630,29 @@ def test_realistic_manifest_stays_within_the_large_graph_regression_budget():
 
 
 def test_manifest_artifact_does_not_impose_a_protocol_size_limit():
+    graph = client_graph.build_graph(
+        graph_id=0,
+        component_classes=[client_graph.build_component_class("Page_1", "x" * 1_100_000)],
+        component_instances=[
+            client_graph.build_component_instance(
+                instance_id=1,
+                render_id="page_1",
+                class_id="Page_1",
+                invocation_id=None,
+                parent_render_id=None,
+                transparent=False,
+            )
+        ],
+        source_locations=[],
+        nested_components=[],
+        component_execution_order_constraints=[],
+        fills=[],
+        slot_regions=[],
+    )
+    manifest = client_graph.build_manifest("production", [graph])
     artifact = OwnershipManifestArtifact(
-        revision="0" * 64,
-        manifest={"payload": "x" * 1_100_000},
+        revision=manifest["revision"],
+        manifest=manifest,
         captures=(),
         graph_indexes={},
         instance_ids={},

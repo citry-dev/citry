@@ -1,0 +1,14 @@
+{
+	"name": "Python test host",
+	"scopeName": "source.python",
+	"patterns": [
+		{ "begin": "#", "end": "$", "name": "comment.line.number-sign.python" },
+		{ "begin": "\"\"\"", "end": "\"\"\"", "name": "string.quoted.multi.double.python" },
+		{ "begin": "'''", "end": "'''", "name": "string.quoted.multi.single.python" },
+		{ "begin": "\"", "end": "\"", "name": "string.quoted.double.python" },
+		{ "begin": "'", "end": "'", "name": "string.quoted.single.python" },
+		{ "match": "\\b(?:and|as|class|else|for|if|in|not|or)\\b", "name": "keyword.control.python" },
+		{ "match": "[A-Za-z_\\p{L}][\\w\\p{L}]*", "name": "variable.other.readwrite.python" },
+		{ "match": "[{}()\\[\\].,:]", "name": "punctuation.python" }
+	]
+}

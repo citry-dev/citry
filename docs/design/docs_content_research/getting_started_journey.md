@@ -19,7 +19,7 @@ Install Citry
   -> Serve the page with FastAPI
   -> Call Python from a click
   -> Events state
-  -> Handle and validate a form
+  -> Handle and validate forms
   -> Replace part of the page from Python
        -> choose a next goal in Examples, Docs, or Reference
 ```
@@ -118,7 +118,7 @@ where the current address would misname the new page.
 | 8 | **Serve the page with FastAPI** at a new `/getting-started/fastapi/` URL | The same page running from a minimal FastAPI application | The exact Citry instance, imports before initialization, FastAPI lifespan setup, `HTMLResponse`, mounting, and a signing secret | The page and a Citry-owned route both return successfully from the ASGI server |
 | 9 | **Call Python from a click** at a new `/getting-started/call-python/` URL | A browser action that visibly completes after a Python handler runs | `class Events`, one `@c-click`, the request-handler-response path, loading feedback, and `actions.Dispatch` | The click reaches Python and the returned browser event changes the intended result without replacing HTML or reloading the page |
 | 10 | **Events state** at a new `/getting-started/state/` URL | A value that survives repeated server-handled actions | `class State`, deriving initial State from `Kwargs`, a refreshed signed token, and a dispatch carrying the visible result | Repeated actions use the previous signed value, the returned browser event shows the new value without replacing HTML, and a fresh page load starts from the stated initial value |
-| 11 | **Handle and validate a form** at a new `/getting-started/forms/` URL | A small form with a success result and an inline validation error | Typed handler data, `@c-submit.prevent`, `EventError`, `$error`, `$loading`, and a success dispatch | Invalid input shows the promised field error; corrected input reports success without replacing HTML or reloading the page |
+| 11 | **Handle and validate forms** at a new `/getting-started/forms/` URL | A small form with a success result and an inline validation error | Typed handler data, `@c-submit.prevent`, `EventError`, `$error`, `$loading`, and a success dispatch | Invalid input shows the promised field error; corrected input reports success without replacing HTML or reloading the page |
 | 12 | **Replace part of the page from Python** at a new `/getting-started/server-rendered-updates/` URL | A chosen panel replaced with freshly rendered HTML | `actions.Render`, an explicit target and one swap mode, fragment asset delivery, and the boundary between a component return and a targeted render | The action replaces only the intended panel and any required Citry assets continue to work after insertion |
 
 Use action-led navigation labels, even when the source filename remains for URL
@@ -143,7 +143,7 @@ sequence table above owns each page's observable acceptance check.
 | Serve the page with FastAPI | `JOB-005`, integrating the tutorial application | The standalone page, FastAPI and an ASGI server, and control of application startup | **Docs > Getting started**, eighth | Exact Citry instance, import and registration order, lifespan initialization, mounting, runtime routes, and signing configuration |
 | Call Python from a click | `JOB-010`, entering server-handled behavior | The mounted FastAPI application and the browser execution model | **Docs > Getting started**, ninth | Mounted Events routes, same-origin and host security behavior, handler discovery, returned dispatch, and a tested stateless round trip |
 | Events state | `JOB-010`, adding server-handled continuity | The first stateless Event and a render input that can seed State | **Docs > Getting started**, tenth | State schema, token signing and validation, automatic token refresh, and a returned dispatch without a render action |
-| Handle and validate a form | `JOB-010` and `JOB-012`, collecting and checking user input | The mounted Events path and the State security boundary | **Docs > Getting started**, eleventh | Typed form data, validation errors, loading and error magics, success dispatch, and host security responsibilities |
+| Handle and validate forms | `JOB-010` and `JOB-012`, collecting and checking user input | The mounted Events path and the State security boundary | **Docs > Getting started**, eleventh | Typed form data, validation errors, loading and error magics, success dispatch, and host security responsibilities |
 | Replace part of the page from Python | `JOB-009` and `JOB-010`, updating a chosen region | The mounted application, returned values, and the component used as the replacement | **Docs > Getting started**, twelfth and final | `actions.Render`, target resolution, one swap mode, fragment dependencies, and a journey browser test |
 
 Installation remains the Docs top-navigation destination. Every page in this
@@ -443,7 +443,7 @@ application record.
 Prefer a small continuity task over a toy API tour. The visible checkpoint
 must prove that the second action received the value produced by the first.
 
-### Handle and validate a form
+### Handle and validate forms
 
 Use a form whose fields have an obvious useful meaning. Show a typed handler
 input, `@c-submit.prevent`, a loading state, one `EventError`, and an inline

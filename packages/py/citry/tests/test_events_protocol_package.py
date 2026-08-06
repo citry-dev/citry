@@ -202,6 +202,26 @@ def test_open_application_values_still_have_to_be_strict_json():
     assert checker.schema_errors(result, RESULT_SCHEMA)
 
 
+@pytest.mark.parametrize("use_builtin_checker", [False, True])
+def test_data_actions_reject_non_blocking_timing(monkeypatch, use_builtin_checker):
+    if use_builtin_checker:
+        monkeypatch.setattr(checker, "jsonschema", None)
+    result = {
+        "protocol": "citry-events/1",
+        "requestId": "r1",
+        "results": [
+            {
+                "ok": True,
+                "actions": [{"action": "data", "value": {"saved": True}, "delay": 0.25}],
+            }
+        ],
+    }
+    assert checker.schema_errors(result, RESULT_SCHEMA) == []
+
+    result["results"][0]["actions"][0]["wait"] = False
+    assert checker.schema_errors(result, RESULT_SCHEMA)
+
+
 def test_a_broken_exchange_is_reported_by_name(tmp_path):
     tests_copy = tmp_path / "tests"
     shutil.copytree(checker.TESTS_DIR, tests_copy)

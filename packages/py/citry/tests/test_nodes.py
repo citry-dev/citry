@@ -2,7 +2,7 @@
 Tests for the value nodes: ExprNode and TemplateNode (component_rendering.md phase 2).
 
 Covers expression evaluation via safe_eval, autoescaping in both body-text and
-attribute positions, the None/SafeString rules, and the embedded-CitryRender /
+attribute positions, the None/Markup rules, and the embedded-CitryRender /
 CitryElement detection. Also covers the value layer underneath rendering, where
 `ExprNode.evaluate` and `ExprHtmlAttr.resolve` hand back the Python value
 untouched. The remaining HTML-attr nodes (StaticHtmlAttr/TemplateHtmlAttr) are
@@ -11,11 +11,10 @@ phase 3 (they resolve to component kwargs).
 
 # ruff: noqa: ANN
 
-from citry import Citry, CitryContext, Component, Const
+from citry import Citry, CitryContext, Component, Const, Markup
 from citry import nodes as nodes_module
 from citry.constness import is_const
 from citry.nodes import ExprHtmlAttr, ExprNode
-from citry.util.html import SafeString
 
 # The nodes keep `source` and `position` only for error messages, so any
 # stand-in works when a test builds a node by hand.
@@ -88,7 +87,7 @@ class TestExprNodeEscaping:
         assert _html("<p>{{ x }}</p>", x=None) == '<p data-cid-c1=""></p>'
 
     def test_safestring_passes_through_unescaped(self):
-        assert _html("<p>{{ x }}</p>", x=SafeString("<b>bold</b>")) == '<p data-cid-c1=""><b>bold</b></p>'
+        assert _html("<p>{{ x }}</p>", x=Markup("<b>bold</b>")) == '<p data-cid-c1=""><b>bold</b></p>'
 
     def test_const_value_is_escaped_transparently(self):
         # Const is a transparent proxy: escape sees the underlying value.
@@ -127,7 +126,7 @@ class TestExprRawValue:
 
     def test_evaluate_returns_safestring_unchanged(self):
         node = ExprNode(_SOURCE, (0, 0), "x", ("x",))
-        safe = SafeString("<b>bold</b>")
+        safe = Markup("<b>bold</b>")
         assert node.evaluate({"x": safe}) is safe
 
     def test_evaluate_compiles_the_expression_once(self, monkeypatch):

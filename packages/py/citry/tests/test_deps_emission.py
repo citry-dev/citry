@@ -2,10 +2,10 @@
 
 import pytest
 
-from citry import Citry, Component, Extension, InMemoryCache
+from citry import Citry, Component, Extension, InMemoryCache, Markup
+from citry._inline_assets import normalize_inline_asset
 from citry.ext.dependencies import Script, Style
 from citry.ext.dependencies.scripts import gen_cache_key, get_component_script
-from citry.util.html import SafeString
 
 PAGE_TEMPLATE = "<html><head><title>t</title></head><body><p>hi</p></body></html>"
 
@@ -422,7 +422,7 @@ class TestDependenciesEntries:
 
     def test_prerendered_tags_emit_verbatim(self):
         c = Citry()
-        tag = SafeString('<script type="speculationrules">{}</script>')
+        tag = Markup('<script type="speculationrules">{}</script>')
 
         class Deps:
             js = [tag]
@@ -433,7 +433,7 @@ class TestDependenciesEntries:
     @pytest.mark.parametrize(
         "tag",
         [
-            SafeString('<link href="safe.css" rel="stylesheet">'),
+            Markup('<link href="safe.css" rel="stylesheet">'),
             type(
                 "HtmlTag",
                 (),
@@ -636,8 +636,8 @@ class TestScriptCacheLifecycle:
 
         str(Card())
         class_id = Card.class_id
-        assert get_component_script("js", Card).content == Card.js
-        assert get_component_script("css", Card).content == Card.css
+        assert get_component_script("js", Card).content == normalize_inline_asset(Card.js)
+        assert get_component_script("css", Card).content == normalize_inline_asset(Card.css)
 
         c.unregister(Card)
 
@@ -655,8 +655,8 @@ class TestScriptCacheLifecycle:
 
         assert Card.class_id == class_id
         str(Card())
-        assert get_component_script("js", Card).content == Card.js
-        assert get_component_script("css", Card).content == Card.css
+        assert get_component_script("js", Card).content == normalize_inline_asset(Card.js)
+        assert get_component_script("css", Card).content == normalize_inline_asset(Card.css)
 
     def test_retired_class_cannot_poison_same_id_assets_in_shared_cache(self):
         cache = InMemoryCache()
@@ -756,8 +756,8 @@ class TestScriptCacheLifecycle:
             js = "console.log('card');"
             css = ".card {}"
 
-        assert get_component_script("js", Card).content == Card.js
-        assert get_component_script("css", Card).content == Card.css
+        assert get_component_script("js", Card).content == normalize_inline_asset(Card.js)
+        assert get_component_script("css", Card).content == normalize_inline_asset(Card.css)
         js_key = gen_cache_key(Card.class_id, "js")
         css_key = gen_cache_key(Card.class_id, "css")
         target.cache.set(js_key, "target js")

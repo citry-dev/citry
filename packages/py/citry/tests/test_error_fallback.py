@@ -7,7 +7,7 @@ attribute or the ``fallback`` fill instead.
 
 import pytest
 
-from citry import AlreadyRegistered, Citry, Component
+from citry import AlreadyRegistered, Citry, Component, Markup
 
 
 def _make_failing(c):
@@ -127,6 +127,26 @@ class TestErrorFallback:
 
         caught = error_fallback(fallback="FB", slots={"default": lambda _ctx: failing()}).render().serialize()
         assert caught == "FB"
+
+    def test_fallback_text_is_escaped_unless_explicitly_safe(self):
+        c = Citry()
+        failing = _make_failing(c)
+        error_fallback = c.get("error-fallback")
+
+        escaped = error_fallback(
+            fallback="<b>plain</b>",
+            slots={"default": lambda _ctx: failing()},
+        )
+        trusted = error_fallback(
+            fallback=Markup("<b>trusted</b>"),
+            slots={"default": lambda _ctx: failing()},
+        )
+
+        assert escaped.render().serialize() == "&lt;b&gt;plain&lt;/b&gt;"
+        trusted_html = trusted.render().serialize()
+        assert trusted_html.startswith("<b ")
+        assert trusted_html.endswith(">trusted</b>")
+        assert "&lt;b" not in trusted_html
 
     def test_fallback_slot_suppressed_from_python_when_content_is_safe(self):
         # The slot form of the fallback stays unrendered on the Python path

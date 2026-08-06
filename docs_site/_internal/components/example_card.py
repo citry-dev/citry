@@ -48,7 +48,11 @@ class ExampleCard(Component):
         # The citry lexer highlights the HTML/JS/CSS embedded in the example's
         # template/js/css strings, not just the Python around them.
         lexer = CitryPythonLexer()
-        component_code = highlight((info.example_dir / "component.py").read_text(encoding="utf-8"), lexer, formatter)
+        component_code = highlight(
+            (info.example_dir / "component.py").read_text(encoding="utf-8"),
+            lexer,
+            formatter,
+        )
         page_code = highlight((info.example_dir / "page.py").read_text(encoding="utf-8"), lexer, formatter)
 
         # self.id is unique per render, so two cards for the same example on one
@@ -154,7 +158,7 @@ class ExampleCard(Component):
               c-src="demo_url"
               c-title="demo_title"
               c-class="frame_class"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-forms allow-scripts allow-same-origin"
               loading="lazy"
             ></iframe>
           </div>

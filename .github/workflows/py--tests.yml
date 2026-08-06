@@ -20,6 +20,8 @@ on:
       - "packages/protocol/**"
       - "crates/**"
       - "third_party/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
       - ".github/**"
       - ".gitmodules"
   pull_request:
@@ -29,6 +31,8 @@ on:
       - "packages/protocol/**"
       - "crates/**"
       - "third_party/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
       - ".github/**"
       - ".gitmodules"
   workflow_dispatch:
@@ -82,11 +86,10 @@ jobs:
       - name: Run Python tests
         run: uv run --no-sync pytest
 
-  # Browser end-to-end tests (packages/py/citry/tests/e2e), chromium only for
-  # PR-time speed; the weekly py--tests-cross-browser workflow runs the same
-  # suite on all three browsers. The `test` job above does not sync `e2e`, so
-  # those tests skip there (they importorskip pytest-playwright); this job
-  # installs the group and the browser and runs them.
+  # Browser end-to-end tests, including Citry UI's co-located component tests,
+  # run in Chromium for PR-time speed. The weekly cross-browser workflow runs
+  # the same paths on all three engines. The `test` job above does not sync
+  # `e2e`, so those tests skip there (they importorskip pytest-playwright).
   e2e:
     runs-on: ubuntu-latest
     steps:
@@ -119,8 +122,252 @@ jobs:
       - name: Install the chromium browser
         run: uv run --no-sync playwright install --with-deps chromium
 
+      - name: Set up pnpm for the pinned axe runtime
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Set up Java for the pinned Nu checker
+        uses: actions/setup-java@v5
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Install the root browser quality tools
+        run: pnpm install --frozen-lockfile --filter citry-dev-tooling
+
+      - name: Compile the pinned Tailwind coexistence fixture
+        run: pnpm run citry-ui:quality-css
+
+      - name: Validate every shared Citry UI route with Nu
+        shell: bash
+        run: |
+          rendered_dir="$RUNNER_TEMP/citry-ui-html"
+          mkdir -p "$rendered_dir"
+          uv run --no-sync python - <<'PY' > "$rendered_dir/scenarios.txt"
+          from citry_ui.quality.scenarios import SCENARIOS, QualityTool
+
+          for scenario in SCENARIOS:
+              if QualityTool.HTML in scenario.tools:
+                  print(scenario.id)
+          PY
+          while IFS= read -r scenario; do
+            rendered="$rendered_dir/${scenario//./-}.html"
+            uv run --no-sync python -m citry_ui.quality.routes "$scenario" --output "$rendered"
+            uv run --no-sync python -m citry_ui.quality.validate_html \
+              "$rendered" \
+              --scenario "$scenario" \
+              > "$rendered_dir/${scenario//./-}.nu.json"
+          done < "$rendered_dir/scenarios.txt"
+
       - name: Run the browser e2e tests
-        run: uv run --no-sync pytest packages/py/citry/tests/e2e --browser chromium
+        run: >-
+          uv run --no-sync pytest
+          packages/py/citry/tests/e2e
+          packages/py/citry_ui/citry_ui/components
+          packages/py/citry_ui/citry_ui/quality/tests/e2e
+          -m e2e
+          --browser chromium
+
+      - name: Build the Citry UI qualification record
+        shell: bash
+        run: |
+          report_dir="$RUNNER_TEMP/citry-ui-quality"
+          mkdir -p "$report_dir"
+          cp -R "$RUNNER_TEMP/citry-ui-html" "$report_dir/html"
+          uv run --no-sync python -m citry_ui.quality.scenarios > "$report_dir/scenarios.json"
+          uv run --no-sync python -m citry_ui.quality.asset_report > "$report_dir/assets.json"
+          uv run --no-sync python -m citry_ui.quality.exit_record \
+            --inspect-browser \
+            --result scenario-catalog=passed \
+            --result chromium-accessibility=passed \
+            --result css-coexistence=passed \
+            --result nu-html=passed \
+            --result assets=passed \
+            --output "$report_dir/phase-7.5.json"
+
+      - name: Upload Citry UI qualification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: citry-ui-pr-quality
+          path: ${{ runner.temp }}/citry-ui-quality/
+          if-no-files-found: error
+
+  citry-ui-wheel-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Build the Citry UI wheel once
+        run: uv build --package citry-ui --wheel --out-dir dist
+
+      - name: Check the exact wheel inventory
+        run: >-
+          python packages/py/citry_ui/citry_ui/quality/qualify_wheel.py
+          dist/citry_ui-*.whl
+
+      - name: Upload the exact Citry UI wheel
+        uses: actions/upload-artifact@v4
+        with:
+          name: citry-ui-wheel
+          path: dist/citry_ui-*.whl
+          if-no-files-found: error
+
+  citry-ui-wheel-install:
+    needs: citry-ui-wheel-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.14"]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: citry-ui-wheel
+          path: dist
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Prepare an offline wheelhouse
+        shell: bash
+        run: |
+          python -m pip download --dest "$RUNNER_TEMP/wheelhouse" dist/citry_ui-*.whl
+
+      - name: Install and exercise the wheel with pip outside the checkout
+        shell: bash
+        run: |
+          test_dir="$RUNNER_TEMP/citry-ui-pip-test"
+          python -m venv "$test_dir"
+          "$test_dir/bin/python" -m pip install \
+            --no-index \
+            --find-links "$RUNNER_TEMP/wheelhouse" \
+            dist/citry_ui-*.whl
+          cd "$RUNNER_TEMP"
+          "$test_dir/bin/python" - <<'PY'
+          import importlib.util
+
+          import citry_ui
+          from citry import Citry, Component
+
+          app = Citry(autodiscover=False)
+          app.register_library(citry_ui)
+
+          class Page(Component):
+              citry = app
+              template = """
+                <c-CButton>
+                  Installed wheel
+                </c-CButton>
+              """
+
+          html = str(Page())
+          assert "Installed wheel" in html
+          assert importlib.util.find_spec("citry_ui.quality") is None
+          assert importlib.util.find_spec("citry_ui.components.ctabs.tests") is None
+          PY
+          "$test_dir/bin/python" -m pip install \
+            --force-reinstall \
+            --no-index \
+            --find-links "$RUNNER_TEMP/wheelhouse" \
+            "$GITHUB_WORKSPACE"/dist/citry_ui-*.whl
+          "$test_dir/bin/python" -m pip uninstall --yes citry-ui
+          cd "$RUNNER_TEMP"
+          "$test_dir/bin/python" -c "import citry; import importlib.util; assert importlib.util.find_spec('citry_ui') is None"
+
+      - name: Add the wheel to a clean uv project offline
+        shell: bash
+        run: |
+          project_dir="$RUNNER_TEMP/citry-ui-uv-project"
+          mkdir -p "$project_dir"
+          cd "$project_dir"
+          uv init --bare --python "${{ matrix.python-version }}"
+          uv add \
+            --offline \
+            --find-links "$RUNNER_TEMP/wheelhouse" \
+            "$GITHUB_WORKSPACE"/dist/citry_ui-*.whl
+          uv run --offline python -c "import citry_ui; from citry import Citry; Citry(autodiscover=False).register_library(citry_ui)"
+
+  citry-ui-wheel-browser:
+    needs: citry-ui-wheel-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: citry-ui-wheel
+          path: dist
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install the wheel and pinned browser tools
+        run: python -m pip install dist/citry_ui-*.whl "playwright==1.61.0"
+
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Smoke-test the installed artifact in Chromium
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
+          python - <<'PY'
+          import citry_ui
+          from citry import Citry, Component
+          from playwright.sync_api import sync_playwright
+
+          app = Citry(autodiscover=False)
+          app.register_library(citry_ui)
+
+          class Page(Component):
+              citry = app
+              template = """
+                <!doctype html>
+                <html lang="en">
+                  <head><meta charset="utf-8" /><c-css /></head>
+                  <body>
+                    <c-CTabs default_value="one" aria_label="Installed Tabs">
+                      <c-CTab value="one">One</c-CTab>
+                      <c-CTab value="two">Two</c-CTab>
+                      <c-CTabPanel value="one">First panel</c-CTabPanel>
+                      <c-CTabPanel value="two">Second panel</c-CTabPanel>
+                    </c-CTabs>
+                    <c-js />
+                  </body>
+                </html>
+              """
+
+          with sync_playwright() as playwright:
+              browser = playwright.chromium.launch(headless=True)
+              page = browser.new_page()
+              page.set_content(str(Page()), wait_until="load")
+              page.wait_for_selector("[data-citry-tabs-initialized]")
+              page.get_by_role("tab", name="Two").click()
+              assert page.get_by_role("tabpanel", name="Two").is_visible()
+              browser.close()
+          PY
 
   # Keep the compact graph/cap/growth contract in every supported engine on
   # pull requests. The scheduled cross-browser workflow retains the broader

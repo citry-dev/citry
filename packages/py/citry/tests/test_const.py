@@ -697,6 +697,26 @@ class TestConstThroughTypedKwargs:
 
 
 class TestConstPrecomputeInsideKeptNodes:
+    def test_component_clone_preserves_the_original_metadata_tuple(self):
+        key = ExprHtmlAttr("", (0, 0), "#c-key", "item", ("item",))
+        metadata = ("range", ("key", key), ("morph", "ignore"))
+        node = ComponentNode(
+            "",
+            (0, 0),
+            (),
+            [ExprNode("", (0, 0), "label", ("label",))],
+            ("label", "item"),
+            "card",
+            False,  # noqa: FBT003
+            metadata,
+        )
+
+        (precomputed,) = precompute_const_parts([node], {"label": Const("fixed")})
+
+        assert precomputed is not node
+        assert precomputed.body == ["fixed"]
+        assert precomputed.metadata is metadata
+
     def test_precomputes_inside_dynamic_if_branches(self):
         c = Citry()
 

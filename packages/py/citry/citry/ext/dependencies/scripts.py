@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import base64
 import json
-import re
 from dataclasses import dataclass
 from hashlib import md5, sha256
 from typing import TYPE_CHECKING
@@ -44,9 +43,403 @@ if TYPE_CHECKING:
 
 _CACHE_PREFIX = "citry"
 
-# `$component(` in a component's JS is sugar for registering the callback
-# with the client-side manager under this component's class id.
-_COMPONENT_RE = re.compile(r"\$component\s*\(")
+_REGEX_PREFIX_KEYWORDS = frozenset(
+    {
+        "await",
+        "case",
+        "delete",
+        "do",
+        "else",
+        "in",
+        "instanceof",
+        "new",
+        "return",
+        "throw",
+        "typeof",
+        "void",
+        "yield",
+    }
+)
+_CONTROL_PAREN_KEYWORDS = frozenset({"catch", "for", "if", "switch", "while", "with"})
+_CLASS_EXPRESSION_PREFIX_TOKENS = _REGEX_PREFIX_KEYWORDS | frozenset(
+    {
+        "!",
+        "%",
+        "&",
+        "(",
+        "*",
+        "+",
+        ",",
+        "-",
+        "/",
+        ":",
+        "<",
+        "=",
+        ">",
+        "?",
+        "[",
+        "^",
+        "|",
+        "~",
+        "=>",
+    }
+)
+
+
+def _is_identifier_start(char: str) -> bool:
+    """Approximate ECMAScript IdentifierStart without decoding escapes."""
+    return char in "_$" or char.isidentifier()
+
+
+def _is_identifier_part(char: str) -> bool:
+    """Approximate ECMAScript IdentifierPart without decoding escapes."""
+    return _is_identifier_start(char) or char.isdigit() or char in "\u200c\u200d" or f"a{char}".isidentifier()
+
+
+def _skip_quoted(js_content: str, index: int, quote: str) -> int:
+    """Return the first position after one JS string literal."""
+    index += 1
+    while index < len(js_content):
+        char = js_content[index]
+        if char == "\\":
+            index += 2
+        elif char == quote:
+            return index + 1
+        else:
+            index += 1
+    return index
+
+
+def _skip_line_comment(js_content: str, index: int) -> int:
+    newline = js_content.find("\n", index + 2)
+    return len(js_content) if newline == -1 else newline
+
+
+def _skip_block_comment(js_content: str, index: int) -> int:
+    end = js_content.find("*/", index + 2)
+    return len(js_content) if end == -1 else end + 2
+
+
+def _skip_regex(js_content: str, index: int) -> int:
+    """Return the first position after one JS regex literal and its flags."""
+    index += 1
+    in_character_class = False
+    while index < len(js_content):
+        char = js_content[index]
+        if char == "\\":
+            index += 2
+            continue
+        if char == "[":
+            in_character_class = True
+        elif char == "]":
+            in_character_class = False
+        elif char == "/" and not in_character_class:
+            index += 1
+            while index < len(js_content) and _is_identifier_part(js_content[index]):
+                index += 1
+            return index
+        elif char in "\r\n":
+            return index
+        index += 1
+    return index
+
+
+def _skip_space_and_comments(js_content: str, index: int) -> int:
+    while index < len(js_content):
+        if js_content[index].isspace():
+            index += 1
+        elif js_content.startswith("//", index):
+            index = _skip_line_comment(js_content, index)
+        elif js_content.startswith("/*", index):
+            index = _skip_block_comment(js_content, index)
+        else:
+            break
+    return index
+
+
+def _followed_by_block(js_content: str, call_open: int) -> bool:
+    """Whether the parenthesized expression is followed by ``{``."""
+    index = call_open
+    depth = 0
+    can_start_regex = True
+    while index < len(js_content):
+        char = js_content[index]
+        if char.isspace():
+            index += 1
+            continue
+        if js_content.startswith("//", index):
+            index = _skip_line_comment(js_content, index)
+            continue
+        if js_content.startswith("/*", index):
+            index = _skip_block_comment(js_content, index)
+            continue
+        if char in "'\"":
+            index = _skip_quoted(js_content, index, char)
+            can_start_regex = False
+            continue
+        if char == "`":
+            index = _scan_template_literal(js_content, index, [])
+            can_start_regex = False
+            continue
+        if char == "/" and can_start_regex:
+            index = _skip_regex(js_content, index)
+            can_start_regex = False
+            continue
+        if _is_identifier_start(char):
+            start = index
+            index += 1
+            while index < len(js_content) and _is_identifier_part(js_content[index]):
+                index += 1
+            can_start_regex = js_content[start:index] in _REGEX_PREFIX_KEYWORDS
+            continue
+        if char.isdigit():
+            index += 1
+            while index < len(js_content) and (js_content[index].isalnum() or js_content[index] in "._"):
+                index += 1
+            can_start_regex = False
+            continue
+        if char == "(":
+            depth += 1
+            can_start_regex = True
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                next_token = _skip_space_and_comments(js_content, index + 1)
+                return next_token < len(js_content) and js_content[next_token] == "{"
+            can_start_regex = False
+        elif char in "]}":
+            can_start_regex = False
+        elif char in "[{,;:?~=!%^&*+-|<>":
+            can_start_regex = True
+        else:
+            can_start_regex = False
+        index += 1
+    return False
+
+
+def _is_component_declaration(
+    recent_tokens: list[str],
+    brace_contexts: list[str],
+) -> bool:
+    """Whether ``$component`` occupies a function or method name position."""
+    if recent_tokens[-1:] == ["function"]:
+        return True
+    if recent_tokens[-2:] == ["function", "*"]:
+        return True
+
+    if brace_contexts[-1:] == ["class"]:
+        return True
+    if brace_contexts[-1:] != ["object"]:
+        return False
+
+    index = len(recent_tokens) - 1
+    while index >= 0 and recent_tokens[index] in {
+        "*",
+        "async",
+        "get",
+        "set",
+        "static",
+    }:
+        index -= 1
+    return index >= 0 and recent_tokens[index] in {"{", "}", ",", ";"}
+
+
+def _scan_template_literal(
+    js_content: str,
+    index: int,
+    spans: list[tuple[int, int, int]],
+) -> int:
+    """Skip template text while scanning each ``${...}`` expression."""
+    index += 1
+    while index < len(js_content):
+        char = js_content[index]
+        if char == "\\":
+            index += 2
+        elif char == "`":
+            return index + 1
+        elif js_content.startswith("${", index):
+            index = _scan_js_code(js_content, index + 2, spans, stop_at_brace=True)
+        else:
+            index += 1
+    return index
+
+
+def _scan_js_code(
+    js_content: str,
+    index: int,
+    spans: list[tuple[int, int, int]],
+    *,
+    stop_at_brace: bool = False,
+) -> int:
+    """Find live ``$component(...)`` calls in one bounded JS code region."""
+    can_start_regex = True
+    brace_depth = 0
+    brace_contexts: list[str] = []
+    paren_contexts: list[bool] = []
+    bracket_depth = 0
+    previous_identifier: str | None = None
+    property_access = False
+    recent_tokens: list[str] = []
+    pending_class_depth: tuple[int, int, int] | None = None
+
+    while index < len(js_content):
+        char = js_content[index]
+
+        if char.isspace():
+            index += 1
+            continue
+        if js_content.startswith("//", index):
+            index = _skip_line_comment(js_content, index)
+            continue
+        if js_content.startswith("/*", index):
+            index = _skip_block_comment(js_content, index)
+            continue
+        if char in "'\"":
+            index = _skip_quoted(js_content, index, char)
+            can_start_regex = False
+            previous_identifier = None
+            recent_tokens.append("value")
+            continue
+        if char == "`":
+            index = _scan_template_literal(js_content, index, spans)
+            can_start_regex = False
+            previous_identifier = None
+            recent_tokens.append("value")
+            continue
+        if char == "/" and can_start_regex:
+            index = _skip_regex(js_content, index)
+            can_start_regex = False
+            previous_identifier = None
+            recent_tokens.append("value")
+            continue
+        if _is_identifier_start(char):
+            start = index
+            is_property_access = property_access
+            index += 1
+            while index < len(js_content) and _is_identifier_part(js_content[index]):
+                index += 1
+            identifier_end = index
+            identifier = js_content[start:index]
+            call_open = _skip_space_and_comments(js_content, index)
+            if (
+                identifier == "$component"
+                and not property_access
+                and call_open < len(js_content)
+                and js_content[call_open] == "("
+                and not (
+                    _followed_by_block(js_content, call_open)
+                    and _is_component_declaration(
+                        recent_tokens,
+                        brace_contexts,
+                    )
+                )
+            ):
+                spans.append((start, identifier_end, call_open + 1))
+            can_start_regex = identifier in _REGEX_PREFIX_KEYWORDS
+            previous_identifier = identifier
+            property_access = False
+            if (
+                identifier == "class"
+                and not is_property_access
+                and not (call_open < len(js_content) and js_content[call_open] == "(")
+                and (
+                    brace_contexts[-1:] != ["class"]
+                    or (recent_tokens[-1:] and recent_tokens[-1] in _CLASS_EXPRESSION_PREFIX_TOKENS)
+                )
+            ):
+                pending_class_depth = (
+                    len(paren_contexts),
+                    bracket_depth,
+                    len(brace_contexts),
+                )
+            recent_tokens.append(identifier)
+            continue
+        if char.isdigit():
+            index += 1
+            while index < len(js_content):
+                if js_content[index].isalnum() or js_content[index] in "._":
+                    index += 1
+                else:
+                    break
+            can_start_regex = False
+            previous_identifier = None
+            recent_tokens.append("value")
+            continue
+        if char == "{":
+            brace_depth += 1
+            current_depth = (
+                len(paren_contexts),
+                bracket_depth,
+                len(brace_contexts),
+            )
+            if pending_class_depth == current_depth:
+                brace_contexts.append("class")
+                pending_class_depth = None
+            elif recent_tokens[-1:] == ["=>"]:
+                brace_contexts.append("block")
+            elif recent_tokens[-1:] and recent_tokens[-1] in {
+                "(",
+                ",",
+                ":",
+                "=",
+                "[",
+                "return",
+                "yield",
+            }:
+                brace_contexts.append("object")
+            else:
+                brace_contexts.append("block")
+            can_start_regex = True
+        elif char == "}":
+            if stop_at_brace and brace_depth == 0:
+                return index + 1
+            brace_depth -= 1
+            if brace_contexts:
+                brace_contexts.pop()
+            can_start_regex = False
+        elif char == "(":
+            paren_contexts.append(previous_identifier in _CONTROL_PAREN_KEYWORDS)
+            can_start_regex = True
+        elif char == ")":
+            can_start_regex = paren_contexts.pop() if paren_contexts else False
+        elif char in "]":
+            bracket_depth -= 1
+            can_start_regex = False
+        elif char in ".[":
+            can_start_regex = char == "["
+            property_access = char == "."
+            if char == "[":
+                bracket_depth += 1
+        elif char in ",;:?~=!%^&*+-|<>":
+            can_start_regex = True
+            property_access = False
+            if char in ",:;=" and pending_class_depth == (
+                len(paren_contexts),
+                bracket_depth,
+                len(brace_contexts),
+            ):
+                pending_class_depth = None
+        else:
+            can_start_regex = False
+            property_access = False
+        if js_content.startswith("=>", index):
+            recent_tokens.append("=>")
+            index += 2
+            previous_identifier = None
+            property_access = False
+            can_start_regex = True
+            continue
+        recent_tokens.append(char)
+        previous_identifier = None
+        index += 1
+    return index
+
+
+def _component_call_spans(js_content: str) -> list[tuple[int, int, int]]:
+    """Return source spans for live, bare ``$component(...)`` calls."""
+    spans: list[tuple[int, int, int]] = []
+    _scan_js_code(js_content, 0, spans)
+    return spans
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,7 +473,19 @@ def transform_component(js_content: str, class_id: str) -> str:
     instance of this component (the elements carrying the instance's
     ``data-cid-<id>`` marker, with the instance's ``js_data()`` result).
     """
-    return _COMPONENT_RE.sub(f'Citry.manager.registerComponent("{class_id}", ', js_content)
+    spans = _component_call_spans(js_content)
+    if not spans:
+        return js_content
+
+    replacement = f'Citry.manager.registerComponent("{class_id}", '
+    parts: list[str] = []
+    previous_end = 0
+    for start, identifier_end, end in spans:
+        trivia = js_content[identifier_end : end - 1]
+        parts.extend((js_content[previous_end:start], replacement, trivia))
+        previous_end = end
+    parts.append(js_content[previous_end:])
+    return "".join(parts)
 
 
 def _component_content(script_type: ScriptType, comp_cls: type[Component]) -> str | None:
@@ -97,7 +502,7 @@ def has_component_asset(script_type: ScriptType, comp_cls: type[Component]) -> b
 def uses_component(comp_cls: type[Component]) -> bool:
     """Whether the class's JS registers a per-instance callback via ``$component``."""
     content = _component_content("js", comp_cls)
-    return content is not None and "$component" in content
+    return content is not None and bool(_component_call_spans(content))
 
 
 def _component_script(script_type: ScriptType, comp_cls: type[Component]) -> Script | Style | None:

@@ -15,11 +15,11 @@ from markupsafe import Markup
 
 from citry import Component
 from docs_site._internal.blog import (
-    BLOG_FEED_PATH,
     BLOG_LIST_END,
     BLOG_LIST_START,
     current_blog_catalog,
 )
+from docs_site._internal.project import current_docs_project
 from docs_site._internal.util import lstrip_outside_pre
 
 
@@ -80,7 +80,7 @@ class BlogListView(Component):
 
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         return {
-            "feed_path": BLOG_FEED_PATH,
+            "feed_path": current_docs_project().settings.blog.feed_path,
             "posts": kwargs.posts,
         }
 

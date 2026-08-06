@@ -1,0 +1,7 @@
+# Published clean-URL redirects. Each list item accepts exactly `from` and `to`,
+# both literal root-relative paths with one leading and one trailing `/` and no
+# whitespace, percent escapes, drive separators, query, fragment, backslash, or
+# dot segment.
+# Sources must be unique and vacant, destinations must be published, and chains
+# and cycles are rejected. See docs_site/_internal/redirects.py for validation.
+redirects: []

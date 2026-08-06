@@ -38,6 +38,121 @@ const INSTRUMENTED_DIRECTIVE_HANDLER = `        handler.inline && runCitryAmbien
 
         isDeferringHandlers ? directiveHandlerStacks.get(currentHandlerStackKey).push(runHandler) : runHandler()`;
 
+const MORPH_CONTEXT_ENTRY = `function createMorphContext(options = {}) {`;
+
+const PLANNING_ENTRY = `function cloneCitryPlanningTree(source, sources) {
+  let clone = source.cloneNode(false);
+  sources.set(clone, source);
+  if (source._x_bindings) clone._x_bindings = source._x_bindings;
+  Array.from(source.childNodes).forEach((child) => clone.appendChild(cloneCitryPlanningTree(child, sources)));
+  return clone;
+}
+function planBetween(from, to, options = {}) {
+  let fromSources = new WeakMap();
+  let toSources = new WeakMap();
+  let fromClone = cloneCitryPlanningTree(from, fromSources);
+  let toClone = cloneCitryPlanningTree(to, toSources);
+  let updating = options.updating || (() => {
+  });
+  let adding = options.adding || (() => {
+  });
+  let removing = options.removing || (() => {
+  });
+  let context = createMorphContext({
+    ...options,
+    planning: true,
+    adding(node, skip) {
+      let source = toSources.get(node);
+      if (source) return adding(source, skip);
+    },
+    added: () => {
+    },
+    removing(node, skip) {
+      let source = fromSources.get(node);
+      if (source) return removing(source, skip);
+    },
+    removed: () => {
+    },
+    updated: () => {
+    },
+    updating(fromNode, toNode, childrenOnly, skip, skipChildren, skipUntil) {
+      let sourceFrom = fromSources.get(fromNode);
+      let sourceTo = toSources.get(toNode);
+      if (!sourceFrom || !sourceTo) return;
+      return updating(sourceFrom, sourceTo, childrenOnly, skip, skipChildren, skipUntil);
+    }
+  });
+  context.patchChildren(fromClone, toClone);
+}`;
+
+const MORPH_CONTEXT_OPTIONS = `  let context = {
+    key: options.key || defaultGetKey,`;
+
+const PLANNING_CONTEXT_OPTIONS = `  let context = {
+    planning: options.planning || false,
+    key: options.key || defaultGetKey,
+    keyMapFilter: options.keyMapFilter || (() => true),`;
+
+const MORPH_KEY_MAP_LOOP = `    for (let el of els) {
+      let theKey = context.getKey(el);`;
+
+const FILTERED_KEY_MAP_LOOP = `    for (let el of els) {
+      if (!context.keyMapFilter(el)) continue;
+      let theKey = context.getKey(el);`;
+
+const MORPH_PATCH_BODY = `    if (from.nodeType === 1 && window.Alpine) {
+      window.Alpine.cloneNode(from, to);
+      if (from._x_teleport && to._x_teleport) {
+        context.patch(from._x_teleport, to._x_teleport);
+      }
+    }
+    if (textOrComment(to)) {
+      context.patchNodeValue(from, to);
+      context.updated(from, to);
+      return;
+    }
+    if (!updateChildrenOnly) {
+      context.patchAttributes(from, to);
+    }
+    context.updated(from, to);`;
+
+const PLANNING_PATCH_BODY = `    if (!context.planning && from.nodeType === 1 && window.Alpine) {
+      window.Alpine.cloneNode(from, to);
+      if (from._x_teleport && to._x_teleport) {
+        context.patch(from._x_teleport, to._x_teleport);
+      }
+    }
+    if (textOrComment(to)) {
+      if (!context.planning) {
+        context.patchNodeValue(from, to);
+        context.updated(from, to);
+      }
+      return;
+    }
+    if (!context.planning) {
+      if (!updateChildrenOnly) {
+        context.patchAttributes(from, to);
+      }
+      context.updated(from, to);
+    }`;
+
+const MORPH_SWAP_ADD = `    if (shouldSkip(context.adding, toCloned))
+      return;`;
+
+const PLANNING_SWAP_ADD = `    if (shouldSkip(context.adding, context.planning ? to : toCloned))
+      return;`;
+
+const MORPH_ALPINE_BRIDGE = `function src_default(Alpine) {
+  Alpine.morph = morph;
+  Alpine.morphBetween = morphBetween;
+}`;
+
+const PLANNING_ALPINE_BRIDGE = `function src_default(Alpine) {
+  Alpine.morph = morph;
+  Alpine.morphBetween = morphBetween;
+  Alpine._citryPlanBetween = planBetween;
+}`;
+
 const replaceExactlyOnce = function (source, before, after, label) {
   const first = source.indexOf(before);
   if (first === -1 || source.indexOf(before, first + before.length) !== -1) {
@@ -62,6 +177,31 @@ export const instrumentAlpineDirectives = function (source) {
   return instrumented;
 };
 
+export const instrumentAlpineMorphPlanner = function (source) {
+  let instrumented = replaceExactlyOnce(
+    source,
+    MORPH_CONTEXT_ENTRY,
+    `${PLANNING_ENTRY}\n${MORPH_CONTEXT_ENTRY}`,
+    "morph planner entry",
+  );
+  instrumented = replaceExactlyOnce(
+    instrumented,
+    MORPH_CONTEXT_OPTIONS,
+    PLANNING_CONTEXT_OPTIONS,
+    "morph context options",
+  );
+  instrumented = replaceExactlyOnce(instrumented, MORPH_KEY_MAP_LOOP, FILTERED_KEY_MAP_LOOP, "morph keyed-map filter");
+  instrumented = replaceExactlyOnce(instrumented, MORPH_PATCH_BODY, PLANNING_PATCH_BODY, "morph planning patch body");
+  instrumented = replaceExactlyOnce(instrumented, MORPH_ALPINE_BRIDGE, PLANNING_ALPINE_BRIDGE, "morph Alpine bridge");
+  instrumented = replaceExactlyOnce(
+    instrumented,
+    MORPH_SWAP_ADD,
+    PLANNING_SWAP_ADD,
+    "morph planning swap classification",
+  );
+  return instrumented;
+};
+
 export const alpineDirectiveInstrumentation = {
   name: "citry-alpine-directive-instrumentation",
   setup(build) {
@@ -69,6 +209,19 @@ export const alpineDirectiveInstrumentation = {
       const source = await readFile(args.path, "utf8");
       return {
         contents: instrumentAlpineDirectives(source),
+        loader: "js",
+      };
+    });
+  },
+};
+
+export const alpineMorphPlannerInstrumentation = {
+  name: "citry-alpine-morph-planner-instrumentation",
+  setup(build) {
+    build.onLoad({ filter: /[\\/]@alpinejs[\\/]morph[\\/]dist[\\/]module\.esm\.js$/ }, async function (args) {
+      const source = await readFile(args.path, "utf8");
+      return {
+        contents: instrumentAlpineMorphPlanner(source),
         loader: "js",
       };
     });
@@ -86,7 +239,7 @@ export const citryClientBuildOptions = function (overrides = {}) {
     define: { ALPINE_VERSION: JSON.stringify(ALPINE_VERSION) },
     banner: { js: GENERATED_BANNER },
     outfile: fileURLToPath(new URL("../../py/citry/citry/ext/events/client/citry-events.js", import.meta.url)),
-    plugins: [alpineDirectiveInstrumentation],
+    plugins: [alpineDirectiveInstrumentation, alpineMorphPlannerInstrumentation],
     ...overrides,
   };
 };

@@ -32,6 +32,21 @@ def test_interpolation_boundary_skips_string_literals():
     assert (String.Double, "}}") in toks  # the "}}" is part of a Python string
 
 
+def test_interpolation_comment_text_does_not_change_host_boundary():
+    for source in (
+        "{{ user.name # show the person's name }}",
+        "{{ x # } note }}",
+        "{{ x # { note }}",
+        '{{ x # say "}}" then stop }}',
+    ):
+        tokens = lex_html(source)
+        comments = [value for token, value in tokens if token in Comment]
+
+        assert comments
+        assert all("}}" not in value for value in comments)
+        assert tokens.count((Punctuation, "}}")) == 1
+
+
 def test_template_comment():
     toks = lex_template("<i>{# note #}</i>")
     assert (Comment, "{# note #}") in toks

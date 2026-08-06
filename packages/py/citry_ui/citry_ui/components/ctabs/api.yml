@@ -1,0 +1,560 @@
+schema_version: 1
+family: tabs
+
+components:
+  - CTabs
+  - CTab
+  - CTabPanel
+
+inputs:
+  - id: ctabs-server
+    component: CTabs
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - id: default-value
+        name: default_value
+        type: non-empty str
+        default:
+          kind: required
+        effect: Sets uncontrolled initial selection and the server fallback.
+      - id: value
+        name: value
+        type: str | None
+        default:
+          kind: literal
+          value: null
+        effect: Selects the server-controlled value for this render and wins over `default_value`.
+      - id: activation
+        name: activation
+        type:
+          display: '"automatic" | "manual"'
+          interfaces:
+            - CTabsActivation
+        default:
+          kind: literal
+          value: automatic
+        effect: Selects keyboard activation behavior.
+      - id: orientation
+        name: orientation
+        type:
+          display: '"horizontal" | "vertical"'
+          interfaces:
+            - CTabsOrientation
+        default:
+          kind: literal
+          value: horizontal
+        effect: Sets layout, ARIA orientation, and keyboard axis.
+      - id: direction
+        name: direction
+        type:
+          display: '"ltr" | "rtl" | None'
+          interfaces:
+            - CTabsDirection
+        default:
+          kind: literal
+          value: null
+        effect: Sets explicit direction or inherits computed browser direction.
+      - id: loop
+        name: loop
+        type: bool
+        default:
+          kind: literal
+          value: true
+        effect: Controls arrow-key wrapping.
+      - id: disabled
+        name: disabled
+        type: bool
+        default:
+          kind: literal
+          value: false
+        effect: Disables every Tab without losing selected state.
+      - id: variant
+        name: variant
+        type:
+          display: '"underline" | "pill"'
+          interfaces:
+            - CTabsVariant
+        default:
+          kind: literal
+          value: underline
+        effect: Selects the active treatment.
+      - id: density
+        name: density
+        type:
+          display: '"default" | "comfortable" | "compact"'
+          interfaces:
+            - CTabsDensity
+        default:
+          kind: literal
+          value: default
+        effect: Selects Tab padding and minimum height.
+      - id: align
+        name: align
+        type:
+          display: '"start" | "center" | "end"'
+          interfaces:
+            - CTabsAlign
+        default:
+          kind: literal
+          value: start
+        effect: Aligns Tabs on the list's main axis.
+      - id: grow
+        name: grow
+        type: bool
+        default:
+          kind: literal
+          value: false
+        effect: Makes Tabs share the available main-axis size.
+      - id: id
+        name: id
+        type: str | None
+        default:
+          kind: generated
+        effect: Sets the root and relationship prefix. Explicit values cannot be blank or contain ASCII whitespace.
+      - id: aria-label
+        name: aria_label
+        type: str | None
+        default:
+          kind: literal
+          value: null
+        effect: Directly names the generated Tab list. Required unless `aria_labelledby` is supplied.
+      - id: aria-labelledby
+        name: aria_labelledby
+        type: str | None
+        default:
+          kind: literal
+          value: null
+        effect: Names the generated Tab list through another element's ID. Required unless `aria_label` is supplied.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds Tabs-root classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds Tabs-root inline styles from CSS text, a property mapping, or a nested sequence and merges them with `attrs`.'}
+      - id: attrs
+        name: attrs
+        type: dict[str, object] | None
+        default:
+          kind: literal
+          value: null
+        effect: Adds allowed attributes to the Tabs root; prefer the top-level inputs for class and style.
+      - id: tab-list-attrs
+        name: tab_list_attrs
+        type: dict[str, object] | None
+        default:
+          kind: literal
+          value: null
+        effect: Adds allowed attributes to the generated `role="tablist"` element.
+
+  - id: ctabs-client
+    component: CTabs
+    channel: client
+    column_widths: [fit, 12rem, 10rem, auto]
+    entries:
+      - id: value
+        name: value
+        type: string
+        omitted: Continues uncontrolled from the current selection.
+        effect: Controls selection while supplied.
+      - id: activation
+        name: activation
+        type:
+          display: '"automatic" | "manual"'
+          interfaces:
+            - CTabsActivation
+        omitted: Uses the server input.
+        effect: Reactively controls keyboard activation.
+      - id: orientation
+        name: orientation
+        type:
+          display: '"horizontal" | "vertical"'
+          interfaces:
+            - CTabsOrientation
+        omitted: Uses the server input.
+        effect: Reactively controls layout, ARIA, and keyboard axis.
+      - id: direction
+        name: direction
+        type:
+          display: '"ltr" | "rtl" | null'
+          interfaces:
+            - CTabsDirection
+        omitted: Uses the server input.
+        effect: Sets direction; `null` explicitly restores inherited browser direction.
+      - id: loop
+        name: loop
+        type: boolean
+        omitted: Uses the server input.
+        effect: Reactively controls wrapping.
+      - id: disabled
+        name: disabled
+        type: boolean
+        omitted: Uses the server input.
+        effect: Reactively controls root disabled state.
+      - id: variant
+        name: variant
+        type:
+          display: '"underline" | "pill"'
+          interfaces:
+            - CTabsVariant
+        omitted: Uses the server input.
+        effect: Reactively controls presentation.
+      - id: density
+        name: density
+        type:
+          display: '"default" | "comfortable" | "compact"'
+          interfaces:
+            - CTabsDensity
+        omitted: Uses the server input.
+        effect: Reactively controls geometry.
+      - id: align
+        name: align
+        type:
+          display: '"start" | "center" | "end"'
+          interfaces:
+            - CTabsAlign
+        omitted: Uses the server input.
+        effect: Reactively controls alignment.
+      - id: grow
+        name: grow
+        type: boolean
+        omitted: Uses the server input.
+        effect: Reactively controls equal growth.
+
+  - id: ctab-server
+    component: CTab
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - id: value
+        name: value
+        type: non-empty str
+        default:
+          kind: required
+        effect: Pairs this Tab with one Panel.
+      - id: disabled
+        name: disabled
+        type: bool
+        default:
+          kind: literal
+          value: false
+        effect: Natively disables this Tab and removes it from selection and focus movement.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds native Tab classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds native Tab inline styles from CSS text, a property mapping, or a nested sequence and merges them with `attrs`.'}
+      - id: attrs
+        name: attrs
+        type: dict[str, object] | None
+        default:
+          kind: literal
+          value: null
+        effect: Adds allowed attributes to the native Tab Button; prefer the top-level inputs for class and style.
+
+  - id: ctabpanel-server
+    component: CTabPanel
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - id: value
+        name: value
+        type: non-empty str
+        default:
+          kind: required
+        effect: Pairs this Panel with one Tab.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds Panel classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds Panel inline styles from CSS text, a property mapping, or a nested sequence and merges them with `attrs`.'}
+      - id: attrs
+        name: attrs
+        type: dict[str, object] | None
+        default:
+          kind: literal
+          value: null
+        effect: Adds allowed attributes to the Panel; prefer the top-level inputs for class and style.
+
+slots:
+  - id: ctabs
+    component: CTabs
+    entries:
+      - id: default
+        name: default
+        required: true
+        data:
+          display: "{}"
+          interfaces:
+            - CTabsDefaultSlotData
+        fallback: none
+  - id: ctab
+    component: CTab
+    entries:
+      - id: default
+        name: default
+        required: true
+        data:
+          display: "{value: str, is_selected: bool, is_disabled: bool}"
+          interfaces:
+            - CTabDefaultSlotData
+        fallback: none
+  - id: ctabpanel
+    component: CTabPanel
+    entries:
+      - id: default
+        name: default
+        required: true
+        data:
+          display: "{value: str, is_selected: bool}"
+          interfaces:
+            - CTabPanelDefaultSlotData
+        fallback: none
+
+events:
+  - id: ctabs
+    component: CTabs
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: "(value: string, detail: object) => void"
+        trigger: A different enabled value is requested by pointer, keyboard, or removal. Runs before an uncontrolled commit; initial and owner updates are excluded.
+        detail: '{value: string, previousValue: string, source: "pointer" | "keyboard" | "removal"}'
+        behavior: Controlled Tabs wait for `value` to update. Return values do not cancel the request.
+
+methods: []
+
+css:
+  - id: ctabs
+    component: CTabs
+    entries:
+      - id: accent
+        name: --cui-tabs-accent
+        type: color
+        purpose: Selected indicator and text.
+        default: '`LinkText`'
+      - id: border-color
+        name: --cui-tabs-border-color
+        type: color
+        purpose: TabList divider.
+        default: 22% `currentColor`
+      - id: muted-color
+        name: --cui-tabs-muted-color
+        type: color
+        purpose: Inactive Tab text.
+        default: 68% `currentColor`
+      - id: list-background
+        name: --cui-tabs-list-background
+        type: color
+        purpose: TabList or pill track.
+        default: transparent; pill derives a 12% accent mix
+      - id: active-background
+        name: --cui-tabs-active-background
+        type: color
+        purpose: Selected pill background.
+        default: '`Canvas`'
+      - id: hover-background
+        name: --cui-tabs-hover-background
+        type: color
+        purpose: Enabled Tab hover background.
+        default: 8% `currentColor`
+      - id: focus-color
+        name: --cui-tabs-focus-color
+        type: color
+        purpose: Tab and Panel focus-visible outline.
+        default: '`Highlight`'
+      - id: radius
+        name: --cui-tabs-radius
+        type: length
+        purpose: Pill list and Tab radius basis.
+        default: '`0.5rem`'
+      - id: gap
+        name: --cui-tabs-gap
+        type: length
+        purpose: Gap between TabList and Panels.
+        default: '`1rem`'
+      - id: tab-inline-padding
+        name: --cui-tabs-tab-inline-padding
+        type: length
+        purpose: Tab logical inline padding.
+        default: density-derived
+      - id: tab-block-padding
+        name: --cui-tabs-tab-block-padding
+        type: length
+        purpose: Tab logical block padding.
+        default: density-derived
+      - id: panel-padding
+        name: --cui-tabs-panel-padding
+        type: length
+        purpose: Panel padding.
+        default: '`1rem`'
+
+attributes:
+  - id: ctabs
+    component: CTabs
+    entries:
+      - id: data-value
+        name: data-value
+        element: Tabs root
+        type: non-empty string or absent
+        meaning: Effective selected value.
+      - id: data-activation
+        name: data-activation
+        element: Tabs root
+        type: automatic | manual
+        meaning: Effective activation behavior.
+      - id: data-orientation
+        name: data-orientation
+        element: Tabs root
+        type: horizontal | vertical
+        meaning: Effective layout and keyboard axis.
+      - id: data-direction
+        name: data-direction
+        element: Tabs root
+        type: ltr | rtl or absent
+        meaning: Explicit effective direction. Absence means direction is inherited.
+      - id: data-loop
+        name: data-loop
+        element: Tabs root
+        type: boolean attribute
+        meaning: Whether focus movement wraps.
+      - id: data-density
+        name: data-density
+        element: Tabs root
+        type: default | comfortable | compact
+        meaning: Effective density.
+      - id: data-variant
+        name: data-variant
+        element: Tabs root
+        type: underline | pill
+        meaning: Effective visual variant.
+      - id: data-align
+        name: data-align
+        element: Tabs root
+        type: start | center | end
+        meaning: Effective Tab alignment.
+      - id: data-grow
+        name: data-grow
+        element: Tabs root
+        type: boolean attribute
+        meaning: Whether Tabs share available space.
+      - id: data-disabled
+        name: data-disabled
+        element: Tabs root
+        type: boolean attribute
+        meaning: Whether the whole group is disabled.
+      - id: list-data-orientation
+        name: data-orientation
+        element: Generated Tab list
+        type: horizontal | vertical
+        meaning: Effective list orientation.
+
+  - id: ctab
+    component: CTab
+    entries:
+      - id: data-state
+        name: data-state
+        element: Tab Button
+        type: active | inactive
+        meaning: Whether this Tab is selected.
+      - id: data-value
+        name: data-value
+        element: Tab Button
+        type: non-empty string
+        meaning: Immutable server-rendered Tab-to-Panel pairing identity.
+      - id: data-disabled
+        name: data-disabled
+        element: Tab Button
+        type: boolean attribute
+        meaning: Effective per-Tab or root disabled state.
+
+  - id: ctabpanel
+    component: CTabPanel
+    entries:
+      - id: data-state
+        name: data-state
+        element: Tab Panel
+        type: active | inactive
+        meaning: Whether this Panel is selected.
+      - id: data-value
+        name: data-value
+        element: Tab Panel
+        type: non-empty string
+        meaning: Immutable server-rendered Panel-to-Tab pairing identity.
+
+selectors:
+  - id: ctabs
+    component: CTabs
+    entries:
+      - id: tabs
+        selector: '[data-citry-ui-part="tabs"]'
+        element: Root `<div>`
+        purpose: Owns effective configuration and selected-value attributes.
+      - id: tab-list
+        selector: '[data-citry-ui-part="tab-list"]'
+        element: Generated `<div role="tablist">`
+        purpose: Groups, names, and arranges the Tab controls.
+  - id: ctab
+    component: CTab
+    entries:
+      - id: tab
+        selector: '[data-citry-ui-part="tab"]'
+        element: Native `<button role="tab">`
+        purpose: Tab activation, focus, selected, hover, and disabled styling.
+  - id: ctabpanel
+    component: CTabPanel
+    entries:
+      - id: tab-panel
+        selector: '[data-citry-ui-part="tab-panel"]'
+        element: '`<div role="tabpanel">`'
+        purpose: Contains one mounted Panel's content.
+
+interfaces:
+  - id: input-types
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - id: ctabs-activation
+        name: CTabsActivation
+        definition: Literal["automatic", "manual"]
+      - id: ctabs-orientation
+        name: CTabsOrientation
+        definition: Literal["horizontal", "vertical"]
+      - id: ctabs-direction
+        name: CTabsDirection
+        definition: Literal["ltr", "rtl"]
+      - id: ctabs-variant
+        name: CTabsVariant
+        definition: Literal["underline", "pill"]
+      - id: ctabs-density
+        name: CTabsDensity
+        definition: Literal["default", "comfortable", "compact"]
+      - id: ctabs-align
+        name: CTabsAlign
+        definition: Literal["start", "center", "end"]
+
+  - id: ctabs-default-slot-data
+    kind: record
+    name: CTabsDefaultSlotData
+    entries: []
+
+  - id: ctab-default-slot-data
+    kind: record
+    name: CTabDefaultSlotData
+    entries:
+      - id: value
+        name: value
+        type: str
+        meaning: This Tab's pairing value.
+      - id: is-selected
+        name: is_selected
+        type: bool
+        meaning: Whether this Tab is selected in the server render.
+      - id: is-disabled
+        name: is_disabled
+        type: bool
+        meaning: Effective disabled state in the server render.
+
+  - id: ctabpanel-default-slot-data
+    kind: record
+    name: CTabPanelDefaultSlotData
+    entries:
+      - id: value
+        name: value
+        type: str
+        meaning: This Panel's pairing value.
+      - id: is-selected
+        name: is_selected
+        type: bool
+        meaning: Whether this Panel is selected in the server render.

@@ -4,7 +4,7 @@ import {
 } from "../../src/html-adapter.js";
 
 const meta = {
-  title: "Citry UI/Tabs/Server-selected",
+  title: "Citry UI/Tabs/Interactive",
   argTypes: {
   "selected": {
     "control": {
@@ -20,7 +20,7 @@ const meta = {
     "control": {
       "type": "select"
     },
-    "description": "Tab-list orientation metadata.",
+    "description": "Tab-list orientation and keyboard axis.",
     "options": [
       "horizontal",
       "vertical"
@@ -40,7 +40,7 @@ const meta = {
     "control": {
       "type": "select"
     },
-    "description": "Activation metadata only in this static component.",
+    "description": "Whether focus selects or Enter and Space activate.",
     "options": [
       "automatic",
       "manual"
@@ -49,18 +49,20 @@ const meta = {
 },
   parameters: {
   "citry": {
-    "catalogSchemaVersion": 2,
-    "clientInteractive": false,
+    "catalogSchemaVersion": 1,
+    "clientInteractive": true,
     "generatorVersion": 1,
     "scenarioId": "tabs/server-selected",
-    "sourceDigest": "f30a1a3bf159799b5a348c7689ce27b9cf167171a6ea2f6c4c143be18b6776dd"
+    "sourceDigest": "321764a7d9c70fcba6b729459e64fb4115f9208c4d9e3952801c9f7fefba41e7",
+    "readySelector": "[data-citry-tabs-root][data-citry-tabs-initialized]",
+    "readyTimeoutMs": 10000
   },
   "docs": {
     "description": {
-      "component": "Static ARIA relationships and server-selected state; keyboard behavior is not implemented yet."
+      "component": "Server-rendered ARIA relationships with pointer and keyboard selection."
     },
     "source": {
-      "code": "from citry import Component\n\nclass AccountTabs(Component):\n    template = \"\"\"\n      <c-CTabs default_value=\"account\">\n        {# CTabList, CTab, and CTabPanel children #}\n      </c-CTabs>\n    \"\"\"",
+      "code": "from citry import Component\n\nclass AccountTabs(Component):\n    template = \"\"\"\n      <c-CTabs default_value=\"account\" aria_label=\"Account settings\">\n        {# CTab and CTabPanel declarations #}\n      </c-CTabs>\n    \"\"\"",
       "language": "python"
     }
   }

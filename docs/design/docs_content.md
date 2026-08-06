@@ -264,6 +264,10 @@ sentences, explained project terms, descriptive headings, no private internals
 or roadmap in user docs, and wrong/right examples when warning about a natural
 mistake.
 
+Use **insert** for template substitution: `{{ value }}` inserts a value where
+the expression appears. Reserve **print** for an actual `print()` call, command
+output, or another operation that writes text to a stream.
+
 ## Content principles
 
 ### Lead with the reader's job
@@ -324,6 +328,24 @@ says "each Card keeps its own color." An Example points to the line that
 changes the color. Reference can then name `css_data()`, its accepted values,
 and its error behavior precisely. Precision belongs everywhere; API vocabulary
 appears only where it helps that reader finish the job.
+
+### Make a tutorial's progression visible
+
+When a tutorial crosses Python, HTML, and browser JavaScript, follow the action
+in the order the reader experiences it. Say where each part runs, what it sends
+across the boundary, and which part receives it next. Do not make the reader
+reconstruct that path from separate descriptions of each API.
+
+When one lesson changes files from an earlier lesson, introduce the change
+before showing the next complete version. Mark the new lines in that source,
+then repeat the important new fragment below and explain it without the
+unchanged code around it. A returning reader can spot the delta, while a reader
+who entered on this page still receives a complete example.
+
+At the first meaningful use of an API or syntax feature on each page, link to
+the place that owns its full contract. Use Reference for an exact public API
+and the canonical Docs page for a broader concept. Later repetitions on the
+same page do not need the same link.
 
 ### Use progressive disclosure at three levels
 

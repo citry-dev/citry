@@ -1,14 +1,14 @@
 ---
-title: Handle and validate a form
+title: Handle and validate forms
 description: Turn named form controls into typed Python data and return a useful field error.
 ---
 
-# Handle and validate a form
+# Handle and validate forms
 
 Buttons are only one way to call Python. A Citry event can also receive the
 named values from a form.
 
-You will add an email form, reject the wrong domain in Python, and show the
+You will build an email form, reject the wrong domain in Python, and show the
 field error beside the input without clearing what the reader typed.
 
 Continue from [Keep a value between
@@ -16,24 +16,20 @@ calls](/getting-started/state/). Keep `citry_setup.py` and `app.py` unchanged.
 
 ## Add the form
 
-Replace `components.py` with this version:
-
-The choice components are carried over unchanged. Follow the `New in this
-step` comments from `SignupIn`, through `SignupForm`, to the line that places
-the form on `TutorialPage`.
+Replace `components.py` with this version. Here we replace the ChoicePicker with a sign-in form:
 
 <c-include-file path="docs_site/snippets/getting_started/components_step11.py" language="citry" />
 
 Open `http://127.0.0.1:8000/` and enter `ada@elsewhere.test`. The address is
 valid enough for the browser, so the form reaches Python. Citry then shows
-“Use an @example.com address.” below the input.
+“Use an `@example.com` address.” below the input.
 
 Change the value to `ada@example.com` and submit again. The page reports that
 the address was accepted.
 
-## Send named controls to Python
+## Submit form to event handler
 
-The form calls the `submit` handler instead of performing the browser's usual
+The form calls the `submit` Python event handler instead of performing the browser's usual
 full-page submission:
 
 ```citry-html
@@ -58,14 +54,13 @@ typed value its field name.
 The browser checks that the input looks like an email address and is not empty.
 The application-specific `@example.com` rule still belongs in Python.
 
-## Describe the data Python receives
+## Declare form data
 
-`SignupIn` names the fields expected by the handler:
+On the server, `SignupIn` names the fields expected by the handler:
 
 ```python
 class SignupIn:
     email: str
-
 
 class Events:
     def submit(self, data: SignupIn):
@@ -75,6 +70,9 @@ class Events:
 The input's `name="email"` matches `SignupIn.email`, so the handler can read
 `data.email`. A larger form can add more named controls and matching fields to
 the input class.
+
+The Python type hint `SignupIn` describes the expected input shape. The [Forms guide](/events/forms/) covers larger input
+shapes and validation patterns.
 
 ## Reject input in Python
 
@@ -90,29 +88,32 @@ if not email.endswith("@example.com"):
 ```
 
 The first string is the overall error message, available as
-[`$error.message`][$error] if you want a message for the whole form. The
+[`$error('submit')?.message`][$error] if you want a message for the whole
+form. The
 [`fields`][citry.ext.events.EventError.fields] mapping adds messages for
 specific inputs. Its `email` key matches both `SignupIn.email` and the input's
 `name="email"`.
 
-## Show the error beside the input
+## Show handler error in UI
 
-The span beside the input reads that field message from `$error`:
+The span beside the input reads that field message from `$error('submit')`:
 
 ```citry-html
 <span
   class="signup-form__error"
   role="alert"
-  x-show="$error?.fieldErrors?.email"
-  x-text="$error?.fieldErrors?.email || ''"
+  x-show="$error('submit')?.fieldErrors?.email"
+  x-text="$error('submit')?.fieldErrors?.email || ''"
 ></span>
 ```
 
-Before an error occurs, `$error` is empty and the span stays hidden. After the
-failed call, `fieldErrors.email` contains “Use an @example.com address.” The
-form itself remains in place, so the input keeps the address that needs fixing.
+Before an error occurs, `$error('submit')` returns `null` and the span stays
+hidden. After the failed call, `fieldErrors.email` contains `"Use an
+@example.com address."` The form itself remains in place, so the input keeps
+the address that needs fixing. Naming the handler matters when one component
+contains several forms: a successful call clears only that handler's error.
 
-## Show while the request is running
+## Show handler loading in UI
 
 The submit button reads the same handler name through
 [`$loading('submit')`][$loading]:
@@ -157,16 +158,34 @@ Alpine:
 </section>
 ```
 
+The listener is on the `SignupForm` root on purpose. [`Dispatch`][citry.ext.events.actions.Dispatch] fires the
+bubbling event from that first root, so the root receives it. Moving
+`@signup:sent` inside the `<form>` would not work because the event does not
+bubble down into descendants. When root placement is awkward, use
+[`$onEvent`][$onEvent] or the `onEvent` member from
+[`$component`][$component] to listen by component instance instead. The
+[event actions guide](/events/actions/#choose-where-to-listen-for-dispatch)
+explains the complete targeting rules.
+
+Using `$component` would have looked like this:
+
+```js
+$component(({ onEvent, scope }) => {
+  // Set initial Alpine state, replaces root x-data
+  scope.acceptedEmail = '';
+
+  // Update Alpine state on server event
+  onEvent('signup:sent', (detail) => {
+    scope.acceptedEmail = detail.email;
+  });
+});
+```
+
 The success path updates Alpine data, so it does not need new HTML from
 Python. The next lesson will keep the same form and change only that success
 result.
 
-Python type hints describe the expected input shape. Continue to validate
-untrusted values and check permissions in the handler before changing data or
-calling another service. The [Forms guide](/events/forms/) covers larger input
-shapes and validation patterns.
-
-## Return new HTML
+## Next steps
 
 An event does not have to stop at an error or browser event. Next, [replace
 part of the page from Python](/getting-started/server-rendered-updates/).

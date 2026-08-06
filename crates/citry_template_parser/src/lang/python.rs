@@ -66,7 +66,9 @@ impl LangImpl for PythonLang {
         // the result come from this one wrapped clause.
         let prefix = "(None for ";
         let prefix_len = prefix.len();
-        let wrapped_expr = format!("{}{})", prefix, source);
+        // The physical newline keeps a trailing Python comment in the authored
+        // clause from swallowing the synthetic closing parenthesis.
+        let wrapped_expr = format!("{}{}\n)", prefix, source);
 
         // --- Introduced (loop target) variables ---
         // Parse the comprehension and walk each generator's target. (Parsing

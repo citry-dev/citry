@@ -21,7 +21,7 @@ from citry._nested_declarations import (
     _compose_nested_declaration_class,
 )
 from citry.ext.events._introspection import capture_handler_introspection, inspect_events
-from citry.ext.events.bindings import rewrite_resolved_attrs, rewrite_template
+from citry.ext.events.bindings import compile_template_bindings, rewrite_resolved_attrs
 from citry.ext.events.cache import export_events_cache, stage_events_cache
 from citry.ext.events.config import Events
 from citry.ext.events.emission import capture_instance, emit_events_dependencies, merge_instance_entries
@@ -64,7 +64,8 @@ if TYPE_CHECKING:
         OnRenderCacheExportContext,
         OnRenderCacheStageContext,
         OnRenderContextMergeContext,
-        OnTemplateLoadedContext,
+        OnTemplateCompiledContext,
+        OnTemplateResetContext,
         StagedRenderCacheContribution,
     )
     from citry.util.routing import URLRoute
@@ -207,6 +208,7 @@ class EventsExtension(Extension):
 
     introspection_version = 1
     render_cache_mode = "payload"
+    # Pre-1.0 payload corrections update version 1 in place.
     render_cache_version = 1
 
     Config = Events
@@ -231,8 +233,8 @@ class EventsExtension(Extension):
         # handler functions whose closures refer back to that component; a
         # class-owned cycle remains collectible after registry removal, while
         # a WeakKeyDictionary value referring to its key would not.
-        # The two-way binding target fields per class, filled by the stage-one
-        # binding rewrite after each target has been validated against _model.
+        # The two-way binding target fields per class, filled by the compiled-
+        # node binding transform after each target is validated against _model.
         # The aggregate remains available for diagnostics and introspection.
         self._two_way_targets: WeakKeyDictionary[type, frozenset[str]] = WeakKeyDictionary()
 
@@ -358,15 +360,15 @@ class EventsExtension(Extension):
             raise RuntimeError(msg)
         return inspect_events(info)
 
-    def on_template_loaded(self, ctx: OnTemplateLoadedContext) -> str:
+    def on_template_compiled(self, ctx: OnTemplateCompiledContext) -> list[Any]:
         """
         Validate and compile literal ``@c-*`` and ``:c-*`` bindings.
 
         Args:
-            ctx: The template-load context carrying the component and source.
+            ctx: The compiled template body and its owning component.
 
         Returns:
-            The template source with its Events bindings compiled.
+            The body with parser-proven element bindings compiled.
 
         Raises:
             ValueError: When a binding names an unknown handler or State field,
@@ -374,9 +376,20 @@ class EventsExtension(Extension):
 
         """
         comp_cls = ctx.component_class
-        rewrite = rewrite_template(self.resolve(comp_cls), comp_cls.class_id, comp_cls.__name__, ctx.content)
-        self._two_way_targets[comp_cls] = rewrite.two_way_fields
-        return rewrite.content
+        compiled = compile_template_bindings(
+            self.resolve(comp_cls),
+            comp_cls.class_id,
+            comp_cls.__name__,
+            ctx.nodes,
+        )
+        self._two_way_targets[comp_cls] = self._two_way_targets.get(comp_cls, frozenset()).union(
+            compiled.two_way_fields
+        )
+        return compiled.nodes
+
+    def on_template_reset(self, ctx: OnTemplateResetContext) -> None:
+        """Discard binding diagnostics derived from the previous compiled body."""
+        self._two_way_targets.pop(ctx.component_class, None)
 
     def on_attrs_resolved(self, ctx: OnAttrsResolvedContext) -> dict[str, Any] | None:
         """
@@ -437,11 +450,11 @@ class EventsExtension(Extension):
         """
         The State fields bound two-way in a component's template.
 
-        Populated when the template first loads (the stage-one binding
-        rewrite), so it is empty for a component whose template has not been
-        loaded yet or that has no two-way bindings. Each individual target was
-        already validated against ``_model`` during the rewrite; this aggregate
-        is exposed for diagnostics and introspection.
+        Populated when the template first compiles, so it is empty for a
+        component whose template has not been compiled yet or that has no
+        two-way bindings. Each individual target was already validated against
+        ``_model`` during compilation; this aggregate is exposed for
+        diagnostics and introspection.
 
         Args:
             comp_cls: The component class to look up.

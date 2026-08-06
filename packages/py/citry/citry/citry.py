@@ -49,6 +49,7 @@ from weakref import WeakValueDictionary, ref
 
 from citry._class_introspection import _static_class_dict
 from citry._component_introspection import _build_component_catalog, _build_component_info
+from citry.analysis import TemplateAnalysis
 from citry.autodiscovery import import_component_modules
 from citry.cache import CitryCache, InMemoryCache
 from citry.component_registry import (
@@ -271,7 +272,13 @@ class Citry:
         # The extension/hook system, scoped to this Citry instance (DJC #1413).
         # Extensions are present from construction, so hooks fire immediately.
         self.extensions = ExtensionManager(self, self.settings.extensions)
-        self.extensions.on_extension_created()
+        try:
+            self.extensions.on_extension_created()
+        except BaseException:
+            self.extensions._rollback_extension_ownership()
+            raise
+        else:
+            self.extensions._commit_extension_ownership()
 
     def __repr__(self) -> str:
         return f"Citry(components={len(self._registry)})"
@@ -1182,6 +1189,30 @@ class Citry:
         """
         with self._registry._lifecycle.operation("Citry.initialize()", reentrant=False):
             self._ensure_tag_rules()
+
+    def template_analysis(self) -> TemplateAnalysis:
+        """
+        Capture the complete component contracts used to analyze templates.
+
+        The method completes normal component discovery and built-in
+        registration under the engine's lifecycle guard. The returned snapshot
+        keeps normalized registered names and parse-time input and slot rules
+        together, so tooling cannot observe a partial registry. Call it again
+        after component registration or reload to capture the new state.
+
+        Returns:
+            An immutable [`TemplateAnalysis`][citry.TemplateAnalysis] snapshot.
+
+        Raises:
+            CitryLifecycleInProgress: If another thread is changing component
+                lifecycle state.
+            RuntimeError: If discovery or component initialization fails.
+
+        """
+        with self._registry._lifecycle.operation("Citry.template_analysis()", reentrant=False):
+            tag_rules = self._ensure_tag_rules()
+            component_names = frozenset(self._registry._all())
+        return TemplateAnalysis._create(component_names, tag_rules)
 
     def autodiscover(self, dirs: Sequence[str | Path] | None = None) -> list[str]:
         """

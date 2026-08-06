@@ -6,17 +6,13 @@ description: Add signed Citry State so Python can load the next set of choices o
 # Events state
 
 The last handler ran the same database query on every click. This time Python
-will remember how many sets the current page has loaded and choose the next
-set.
-
-The choices will still appear in Alpine, but Python will decide which set comes
-next.
+will remember server-side state across calls, so we can count how many times we called the endpoint.
 
 Continue from [Call Python from a
 click](/getting-started/call-python/). Keep `citry_setup.py` and `app.py`
 unchanged.
 
-## Add State to the choice picker
+## Add server-side state
 
 Replace `components.py` with this version:
 
@@ -34,7 +30,7 @@ loads “Ocean” and “Forest.” The second loads “History” and “Scienc
 “Sets loaded” moves from one to two. Reload the whole page and the sequence
 starts over.
 
-## Choose what Python remembers
+## Declare State
 
 The server needs one value from the previous call: how many choice sets have
 already been loaded. Use [`State`][citry.Component.State] to store that info:
@@ -66,7 +62,7 @@ How Citry builds the initial State:
 With `<c-ChoicePicker />`, both declarations use their own `0` default. If a caller
 passes `batches_loaded=3`, that value starts both the render and its State.
 
-The following fails, because `other_field` has no default
+The following would fail, because `other_field` has no default
 and is not on `Kwargs`:
 
 ```python
@@ -115,7 +111,7 @@ some render inputs should not travel through the browser.
 The choices themselves do not need to be in State. Python can load them again,
 and Alpine already holds the selected choice for the browser interaction.
 
-## Choose a batch with the counter
+## State decides server behavior
 
 The example now has two possible database results:
 
@@ -217,7 +213,7 @@ The `batches_loaded` counter travels in State because Python needs it to
 choose the next batch. Reloading the page creates a new picker at its starting
 value of zero.
 
-## Know what the signature protects
+## State secrets
 
 Signed State lets the server detect whether its browser-carried value was
 changed. It does not hide the value, sign a person in, or decide what that
@@ -230,8 +226,8 @@ person may do.
      production, keep `CITRY_SECRET` stable and give every worker the same value so
      they can read one another's signed State.
 
-## Send structured input
+## Next steps
 
 State is useful for values a component carries from one call to the next.
-Next, [handle and validate a form](/getting-started/forms/) whose values come
+Next, [handle and validate forms](/getting-started/forms/) whose values come
 from named browser controls.

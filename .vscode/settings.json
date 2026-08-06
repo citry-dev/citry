@@ -3,5 +3,7 @@
     // Avoid linting third-party Rust code
     // NOTE: `ruff` was especially slow.
     "third_party/**"
-  ]
+  ],
+  // "citry.python": "/Users/mac/repos/citry/.venv/bin/python",
+  "citry.app": "citry_ui_ide:app"
 }

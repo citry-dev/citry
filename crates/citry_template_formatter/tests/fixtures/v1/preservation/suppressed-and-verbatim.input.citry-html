@@ -1,0 +1,1 @@
+{# fmt: off #}<main>{{foo( 1 )}}</main>{# fmt: on #}<pre>{{bar( 2 )}}</pre>

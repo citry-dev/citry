@@ -187,7 +187,7 @@ def _capture_event_requests(page: Any) -> list[dict[str, Any]]:
     captured: list[dict[str, Any]] = []
 
     def record(request: Any) -> None:
-        if "/ext/events/" not in request.url or request.url.endswith("/runtime.js"):
+        if "/ext/events/" not in request.url or "/runtime.js" in request.url:
             return
         captured.append({"url": request.url, "body": json.loads(request.post_data or "null")})
 
@@ -229,7 +229,8 @@ def test_alpine_boundary_handler_uses_parent_lexical_and_child_physical_scope(pa
             <c-child
               @click="(window.__alpineClientBinding = {
                 owner, ref: $refs.parentRef.id, root: $root.id, el: $el.className,
-                target: $event.target.className, current: $event.currentTarget.className
+                target: $event.target.className, current: $event.currentTarget.className,
+                loading: [typeof $loading, $loading()], error: [typeof $error, $error()]
               }, hits += 1, $dispatch('physical-ping'))"
             />
           </main>
@@ -252,6 +253,8 @@ def test_alpine_boundary_handler_uses_parent_lexical_and_child_physical_scope(pa
         "el": "alpine-child",
         "target": "alpine-trigger",
         "current": "alpine-child",
+        "loading": ["function", False],
+        "error": ["function", None],
     }
     assert page.locator(".parent-hits").inner_text() == "1"
     assert page.evaluate("window.__physicalPing") == "alpine-child"
@@ -333,6 +336,126 @@ def test_citry_boundary_handler_evaluates_only_args_and_dispatches_from_parent(p
         "ref": "citry-source",
         "physical": "citry-child",
     }
+
+
+def test_retained_component_boundary_keeps_old_props_and_routes_handler_through_current_parent(
+    page: Any,
+    serve_live: Any,
+) -> None:
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Child(Component):
+        citry = c
+        js = """
+          $component({
+            props: { value: { type: Number, required: true } },
+            init: ({ props, effect, els }) => {
+              window.__retainedPropSnapshots = window.__retainedPropSnapshots || [];
+              effect(() => {
+                window.__retainedPropSnapshots.push(props.value);
+                els[0].dataset.retainedValue = String(props.value);
+              });
+            },
+          });
+        """
+        template = """
+          <section class="retained-boundary-child">
+            <button class="retained-boundary-trigger">save</button>
+          </section>
+        """
+
+    class Parent(Component):
+        citry = c
+
+        class SaveIn:
+            value: int = 0
+
+        class Events:
+            def refresh(self):
+                return None
+
+            def save(self, data: SaveIn):  # noqa: F821
+                return None
+
+        template = """
+          <main class="retained-boundary-parent" x-data="{ sourceValue: 1, incomingOnly: 99 }">
+            <button class="retained-boundary-increment" @click="sourceValue += 1">increment</button>
+            <c-child
+              #c-ignore
+              c-$c-props="props_expression"
+              @c-click="save({ value: sourceValue })"
+            />
+          </main>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"props_expression": kwargs.get("props_expression", "{ value: sourceValue }")}
+
+    class Page(Component):
+        citry = c
+        template = "<html><body><c-parent /></body></html>"
+
+    messages: list[str] = []
+    page.on("console", lambda message: messages.append(f"{message.type}:{message.text}"))
+    captured = _capture_event_requests(page)
+    base = serve_live(c, str(Page()), "")
+    page.goto(base + "/")
+    page.wait_for_function(READY)
+    page.wait_for_function("document.querySelector('.retained-boundary-child')?.dataset.retainedValue === '1'")
+
+    incoming = Parent(props_expression="{ value: incomingOnly }").render().serialize(deps_strategy="fragment")
+    adopted = page.evaluate(
+        """
+        async ([html]) => {
+          const internal = Citry.events._internal;
+          const oldRoot = document.querySelector(".retained-boundary-child");
+          const oldParentId = document.querySelector(".retained-boundary-parent").getAttribute("data-cid");
+          const anchor = internal.getAnchor(oldParentId);
+          anchor.epoch = 1;
+          await internal.applyResult(
+            {
+              ok: true,
+              sendSequence: 1,
+              actions: [{ action: "render", target: "render:" + oldParentId, swap: "morph", html }],
+            },
+            { anchor, instance: oldParentId, event: "refresh" },
+          );
+          await new Promise((resolve) => setTimeout(resolve, 0));
+          const currentRoot = document.querySelector(".retained-boundary-child");
+          return {
+            oldParentId,
+            currentParentId: anchor.componentId,
+            stableAnchor: internal.getAnchor(anchor.componentId) === anchor,
+            oldRouteRetired: internal.getAnchor(oldParentId) === null,
+            sameChildRoot: currentRoot === oldRoot,
+            retainedValue: currentRoot.dataset.retainedValue,
+            snapshots: window.__retainedPropSnapshots.slice(),
+          };
+        }
+        """,
+        [incoming],
+    )
+    assert adopted["currentParentId"] != adopted["oldParentId"]
+    assert adopted["stableAnchor"] is True
+    assert adopted["oldRouteRetired"] is True
+    assert adopted["sameChildRoot"] is True
+    assert adopted["retainedValue"] == "1"
+    assert 99 not in adopted["snapshots"]  # the excluded incoming supplier never became authoritative
+
+    # The retained old supplier remains reactive through the parent's stable
+    # scope after adoption, rather than becoming a one-morph snapshot.
+    page.locator(".retained-boundary-increment").click()
+    page.wait_for_function("document.querySelector('.retained-boundary-child')?.dataset.retainedValue === '2'")
+    assert 99 not in page.evaluate("window.__retainedPropSnapshots")
+
+    page.locator(".retained-boundary-trigger").click()
+    _wait_requests(page, captured, 1)
+    request = captured[0]
+    assert f"/e/{Parent.class_id}/save" in request["url"]
+    assert request["body"]["calls"][0]["callerRenderId"] == adopted["currentParentId"]
+    assert request["body"]["calls"][0]["args"] == {"value": 2}
+    assert not [message for message in messages if message.startswith("error:")]
 
 
 def test_citry_boundary_submit_merges_form_fields_with_explicit_args(page: Any, serve_live: Any) -> None:

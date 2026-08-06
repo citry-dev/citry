@@ -8,6 +8,17 @@ description: Runnable Citry components, each rendered live with its source.
 Each recipe is executable Citry code. The component source opens first; switch
 tabs to see the complete page and its live result.
 
+## Try an example
+
+This complete module uses component State and a Python event handler. Select
+**Try live** to edit it in the page, run it in your browser, and interact with
+the rendered result.
+
+<c-live-code
+  path="docs_site/live_snippets/welcome.py"
+  title="Welcome card with State and Events"
+/>
+
 ## Components
 
 - [Card](/examples/card/) - accept an input, render content, and add CSS.

@@ -6,8 +6,10 @@ a conforming consumer accepts or rejects it. This suite holds the browser
 runtime to those declarations:
 
 - every invalid fixture must be rejected by manifest staging (or, for entries
-  marked ``"harness": "adoption"``, by adoption preparation) with the error
-  the index records, and never by the missing-physical-cap fallback;
+  marked ``"harness": "adoption"``, by adoption preparation) with a protocol
+  issue, and never by the missing-physical-cap fallback;
+- every shared structural mutation must produce its exact protocol issue path
+  and category at the real browser staging boundary;
 - every valid fixture's canonical scenario, rendered live, must commit in the
   browser under exactly the revision the frozen fixture carries.
 
@@ -26,12 +28,17 @@ from typing import Any
 
 import pytest
 
+from citry._protocol.client_graph import canonical_json
+
 pytest.importorskip("pytest_playwright")
 
 pytestmark = pytest.mark.e2e
 
 _TESTS_DIR = Path(__file__).resolve().parents[1]
 _FIXTURES = _TESTS_DIR.parents[3] / "packages" / "protocol" / "client_graph" / "v1" / "tests"
+sys.path.insert(0, str(_TESTS_DIR.parents[3]))
+
+from packages.protocol._tooling import apply_operations, load_cases  # noqa: E402
 
 
 def _load_conformance() -> Any:
@@ -52,6 +59,7 @@ conformance = _load_conformance()
 INDEX = json.loads((_FIXTURES / "index.json").read_text(encoding="utf8"))
 STAGE_ENTRIES = [entry for entry in INDEX if entry["expect"] == "invalid" and entry.get("harness", "stage") == "stage"]
 ADOPTION_ENTRIES = [entry for entry in INDEX if entry["expect"] == "invalid" and entry.get("harness") == "adoption"]
+CONFORMANCE_CASES = load_cases(_FIXTURES / "conformance-cases.json")
 
 
 def _host_html() -> str:
@@ -78,7 +86,7 @@ def _fixture(name: str) -> dict:
 
 def _resign(manifest: dict) -> None:
     unsigned = {key: value for key, value in manifest.items() if key != "revision"}
-    canonical = json.dumps(unsigned, separators=(",", ":"), sort_keys=True).encode("utf8")
+    canonical = canonical_json(unsigned).encode("utf8")
     manifest["revision"] = hashlib.sha256(canonical).hexdigest()
 
 
@@ -94,7 +102,11 @@ def test_staging_rejects_invalid_fixture(page: Any, serve_document: Any, entry: 
             Citry.manager._stageOwnershipManifest(manifest, document.createElement("div"));
             return { threw: false, message: "" };
           } catch (error) {
-            return { threw: true, message: String((error && error.message) || error) };
+            return {
+              threw: true,
+              message: String((error && error.message) || error),
+              issue: error && error.issue ? error.issue : null,
+            };
           }
         }
         """,
@@ -105,9 +117,31 @@ def test_staging_rejects_invalid_fixture(page: Any, serve_document: Any, entry: 
     # A missing-cap throw would mean the fixture's JSON defect never fired and
     # the empty cap root failed the staging instead, proving nothing.
     assert "missing physical cap" not in result["message"], result["message"]
-    expected = entry.get("browserProblem")
-    if expected is not None:
-        assert expected in result["message"], f"{entry['manifest']}: {result['message']}"
+    assert result["issue"] is not None, f"{entry['manifest']}: {result['message']}"
+
+
+@pytest.mark.parametrize("case", CONFORMANCE_CASES, ids=lambda case: case.case_id)
+def test_browser_staging_returns_the_shared_conformance_issue(page: Any, serve_document: Any, case: Any) -> None:
+    manifest = apply_operations(_fixture(case.seed), case.operations)
+    page.goto(serve_document(_host_html()) + "/")
+    page.wait_for_function("window.Citry && Citry.manager && !!Citry.manager._stageOwnershipManifest")
+
+    issue = page.evaluate(
+        """
+        (candidate) => {
+          try {
+            Citry.manager._stageOwnershipManifest(candidate, document.createElement("div"));
+            return null;
+          } catch (error) {
+            return error && error.issue ? error.issue : null;
+          }
+        }
+        """,
+        manifest,
+    )
+
+    assert issue is not None, f"{case.case_id} did not reach protocol validation"
+    assert {"path": issue["path"], "category": issue["category"]} == case.expected.to_dict()
 
 
 @pytest.mark.parametrize(
@@ -151,7 +185,11 @@ def test_staging_rejects_wrong_client_binding_string_field_type(
             Citry.manager._stageOwnershipManifest(candidate, document.createElement("div"));
             return { threw: false, message: "" };
           } catch (error) {
-            return { threw: true, message: String((error && error.message) || error) };
+            return {
+              threw: true,
+              message: String((error && error.message) || error),
+              issue: error && error.issue ? error.issue : null,
+            };
           }
         }
         """,
@@ -159,7 +197,10 @@ def test_staging_rejects_wrong_client_binding_string_field_type(
     )
 
     assert result["threw"], f"{field_path} accepted {bad_value!r}"
-    assert f"{field_path} must be a string" in result["message"]
+    expected_suffix = "/key" if field_path == "key" else f"/payload/{field_path.removeprefix('payload.')}"
+    assert result["issue"] is not None, result["message"]
+    assert result["issue"]["category"] == "type"
+    assert result["issue"]["path"].endswith(expected_suffix)
 
 
 @pytest.mark.parametrize("entry", ADOPTION_ENTRIES, ids=lambda entry: entry["manifest"])
@@ -191,7 +232,11 @@ def test_adoption_rejects_invalid_fixture(page: Any, serve_document: Any, entry:
             Citry.manager.ownership._prepareAdoption(manifest, template.content);
             return { threw: false, message: "" };
           } catch (error) {
-            return { threw: true, message: String((error && error.message) || error) };
+            return {
+              threw: true,
+              message: String((error && error.message) || error),
+              issue: error && error.issue ? error.issue : null,
+            };
           }
         }
         """,
@@ -200,9 +245,7 @@ def test_adoption_rejects_invalid_fixture(page: Any, serve_document: Any, entry:
 
     assert result["threw"], f"{entry['manifest']} prepared for adoption but must be rejected"
     assert "missing physical cap" not in result["message"], result["message"]
-    expected = entry.get("browserProblem")
-    if expected is not None:
-        assert expected in result["message"], f"{entry['manifest']}: {result['message']}"
+    assert result["issue"] is not None, f"{entry['manifest']}: {result['message']}"
 
 
 def test_browser_accepts_a_valid_manifest_larger_than_one_megabyte(page: Any, serve_document: Any) -> None:
@@ -229,6 +272,55 @@ def test_browser_accepts_a_valid_manifest_larger_than_one_megabyte(page: Any, se
 
     assert result["revision"] == manifest["revision"]
     assert result["bytes"] > 1_000_000
+
+
+def test_physical_cap_reader_ignores_other_revisions_and_rejects_malformed_current_caps(
+    page: Any,
+    serve_document: Any,
+) -> None:
+    manifest = _fixture("minimal.manifest.json")
+    page.goto(serve_document(_host_html()) + "/")
+    page.wait_for_function("window.Citry && Citry.manager && !!Citry.manager._stageOwnershipManifest")
+
+    result = page.evaluate(
+        """
+        (manifest) => {
+          const instance = manifest.graphs[0].componentInstances[0];
+          const key =
+            manifest.delimiters.format + ":" + manifest.revision +
+            ":0:i:" + instance.instanceId;
+          const validRoot = document.createElement("div");
+          validRoot.append(
+            document.createComment("citry:g1:" + "f".repeat(64) + ":0:i:1:s"),
+            document.createComment(key + ":s"),
+            document.createComment(key + ":e"),
+          );
+          Citry.manager._stageOwnershipManifest(manifest, validRoot);
+
+          const malformedRoot = document.createElement("div");
+          malformedRoot.append(
+            document.createComment(manifest.delimiters.format + ":" + manifest.revision + ":not-a-cap"),
+            document.createComment(key + ":s"),
+            document.createComment(key + ":e"),
+          );
+          try {
+            Citry.manager._stageOwnershipManifest(manifest, malformedRoot);
+            return { otherRevisionAccepted: true, malformedMessage: null };
+          } catch (error) {
+            return {
+              otherRevisionAccepted: true,
+              malformedMessage: String((error && error.message) || error),
+            };
+          }
+        }
+        """,
+        manifest,
+    )
+
+    assert result == {
+        "otherRevisionAccepted": True,
+        "malformedMessage": "[Citry] graph: malformed physical cap.",
+    }
 
 
 @pytest.mark.parametrize("name", sorted(conformance.SCENARIOS))

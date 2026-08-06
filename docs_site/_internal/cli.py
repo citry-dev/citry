@@ -12,7 +12,9 @@ The ``citry-docs`` command line.
 - ``versions-check``: validate the committed ``versions/`` tree (manifest,
   aliases, build stamps, cross-version links) without building.
 - ``build-all``: bootstrap / disaster-recovery rebuild of every version selected
-  by ``docs_versions.toml`` (walks the git tags in throwaway worktrees).
+  by ``docs_versions.yml`` (walks the git tags in throwaway worktrees).
+- ``build-tag``: build one release snapshot from its exact git tag in a
+  throwaway worktree, then register it in the committed version tree.
 
 Run via ``python -m docs_site <command>``.
 """
@@ -26,7 +28,13 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from docs_site._internal.build import build_site
+from docs_site._internal.build import _replace_output_directory, build_site
+from docs_site._internal.versioning import (
+    BUILD_INFO_NAME,
+    materialize_alias,
+    update_manifest,
+    validate_tree_identifier,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -48,6 +56,11 @@ def main(argv: list[str] | None = None) -> int:
         "--docs-version", default="", help="Build a version snapshot into versions/<version>/ instead of the root."
     )
     build_parser.add_argument("--alias", default="", help="Materialize an alias (e.g. 'latest') for --docs-version.")
+    build_parser.add_argument(
+        "--no-update-versions-manifest",
+        action="store_true",
+        help="Build a detached snapshot without changing versions.json (requires --docs-version and no alias).",
+    )
 
     serve_parser = sub.add_parser("serve", help="Run the development server (live render, auto-reload).")
     serve_parser.add_argument("--host", default="127.0.0.1", help="Bind host (default: 127.0.0.1).")
@@ -76,16 +89,28 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     ba_parser = sub.add_parser(
-        "build-all", help="Rebuild every version selected by docs_versions.toml into versions/ (bootstrap)."
+        "build-all", help="Rebuild every version selected by docs_versions.yml into versions/ (bootstrap)."
     )
     ba_parser.add_argument(
-        "--config", type=Path, default=None, help="Path to docs_versions.toml (default: docs_site/docs_versions.toml)."
+        "--config", type=Path, default=None, help="Path to docs_versions.yml (default: docs_site/docs_versions.yml)."
     )
     ba_parser.add_argument(
         "--versions-dir", type=Path, default=None, help="Output root (default: docs_site/versions)."
     )
     ba_parser.add_argument(
         "--dry-run", action="store_true", help="List selected tags + rebuild status without building anything."
+    )
+
+    bt_parser = sub.add_parser(
+        "build-tag",
+        help="Build one Citry release snapshot from its exact git tag and register it.",
+    )
+    bt_parser.add_argument("tag", help="Package-scoped release tag, e.g. citry@1.2.3.")
+    bt_parser.add_argument(
+        "--versions-dir",
+        type=Path,
+        default=None,
+        help="Output root (default: docs_site/versions).",
     )
 
     args = parser.parse_args(argv)
@@ -98,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
             social_cards=not args.no_social_cards,
             docs_version=args.docs_version,
             alias=args.alias,
+            update_versions_manifest=not args.no_update_versions_manifest,
         )
     if args.command == "build-check":
         return _run_build_check(strict=args.strict)
@@ -109,11 +135,20 @@ def main(argv: list[str] | None = None) -> int:
         return _run_versions_check(strict=args.strict, versions_dir=args.versions_dir)
     if args.command == "build-all":
         return _run_build_all(args.versions_dir, args.config, dry_run=args.dry_run)
+    if args.command == "build-tag":
+        return _run_build_tag(args.tag, args.versions_dir)
     return _run_serve(args.host, args.port, reload=not args.no_reload)
 
 
 def _run_build(
-    output: Path | None, *, minify: bool, search: bool, social_cards: bool, docs_version: str = "", alias: str = ""
+    output: Path | None,
+    *,
+    minify: bool,
+    search: bool,
+    social_cards: bool,
+    docs_version: str = "",
+    alias: str = "",
+    update_versions_manifest: bool = True,
 ) -> int:
     outcome = build_site(
         output_dir=output,
@@ -122,6 +157,7 @@ def _run_build(
         social_cards=social_cards,
         docs_version=docs_version,
         alias=alias,
+        update_versions_manifest=update_versions_manifest,
     )
     label = f" (version {docs_version})" if docs_version else ""
     print(f"Built {outcome.built} page(s){label} to {outcome.output_dir} in {outcome.elapsed:.2f}s.")
@@ -147,22 +183,45 @@ def _run_build(
 def _run_build_check(*, strict: bool) -> int:
     # Imported here so a plain `build` does not pull in lxml (a guard dependency).
     from docs_site._internal.config import config as default_config  # noqa: PLC0415
-    from docs_site._internal.guards import format_report, make_context, run_guards  # noqa: PLC0415
+    from docs_site._internal.guards import (  # noqa: PLC0415
+        POST_BUILD_GUARDS,
+        SOURCE_GUARDS,
+        format_report,
+        make_context,
+        make_source_context,
+        run_guards,
+    )
+    from docs_site._internal.project import load_docs_project, use_docs_project  # noqa: PLC0415
 
-    with tempfile.TemporaryDirectory() as tmp:
-        out = Path(tmp) / "site"
-        outcome = build_site(output_dir=out)
-        if outcome.failed:
-            print(f"{outcome.failed} page(s) failed to render:")
-            for rel, message in outcome.errors:
-                print(f"  - {rel}: {message}")
+    project = load_docs_project(default_config)
+    with use_docs_project(project):
+        source_results, source_ok = run_guards(
+            make_source_context(config=project.runtime, project=project),
+            strict=strict,
+            guards=SOURCE_GUARDS,
+        )
+        if not source_ok:
+            print(format_report(source_results))
             return 1
-        if not outcome.search_ok:
-            print(f"Search index failed: {outcome.search_message}")
-            return 1
-        results, ok = run_guards(make_context(out, config=default_config), strict=strict)
 
-    print(format_report(results))
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "site"
+            outcome = build_site(output_dir=out, project=project)
+            if outcome.failed:
+                print(f"{outcome.failed} page(s) failed to render:")
+                for rel, message in outcome.errors:
+                    print(f"  - {rel}: {message}")
+                return 1
+            if not outcome.search_ok:
+                print(f"Search index failed: {outcome.search_message}")
+                return 1
+            results, ok = run_guards(
+                make_context(out, config=project.runtime, project=project),
+                strict=strict,
+                guards=POST_BUILD_GUARDS,
+            )
+
+    print(format_report([*source_results, *results]))
     return 0 if ok else 1
 
 
@@ -242,7 +301,17 @@ def _git_tag_ref_map(repo_root: Path) -> dict[str, str]:
     ``repo_root`` is not a checkout; the caller turns that into a clean message.
     """
     raw = [line for line in _git(repo_root, "tag").stdout.splitlines() if line.strip()]
-    return {_normalize_tag(tag): tag for tag in raw}
+    refs: dict[str, str] = {}
+    output_refs: dict[str, str] = {}
+    for tag in raw:
+        version = _normalize_tag(tag)
+        output_version = version.removeprefix("v")
+        previous = output_refs.get(output_version)
+        if previous is not None:
+            raise ValueError(f"git tags {previous!r} and {tag!r} both produce docs version {output_version!r}")
+        refs[version] = tag
+        output_refs[output_version] = tag
+    return refs
 
 
 def _has_docs_builder(docs_dir: Path) -> bool:
@@ -273,11 +342,17 @@ def _make_build_one(repo_root: Path, ref_map: dict[str, str]) -> Callable[[str, 
             # is a deferred decision).
             if not _has_docs_builder(wt_docs):
                 return "skipped_no_builder"
+            _git(worktree, "submodule", "update", "--init", "--recursive")
             # `uv run --project <worktree>` resolves that checkout's own dependencies
             # (an old tag may pin different ones), and cwd=<worktree> lets
             # `python -m docs_site` import the builder from the checkout.
-            proc = subprocess.run(
-                [  # noqa: S607 - `uv` from PATH is fine for a dev/CI tool
+            version_dir.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.TemporaryDirectory(
+                prefix=f".{version}.build-",
+                dir=version_dir.parent,
+            ) as temporary:
+                staged_dir = Path(temporary)
+                command = [  # `uv` from PATH is fine for a dev/CI tool
                     "uv",
                     "run",
                     "--project",
@@ -291,16 +366,26 @@ def _make_build_one(repo_root: Path, ref_map: dict[str, str]) -> Callable[[str, 
                     "--no-search",
                     "--no-social-cards",
                     "-o",
-                    str(version_dir),
-                ],
-                cwd=str(worktree),
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if proc.returncode != 0:
-                msg = (proc.stderr or proc.stdout)[-600:]
-                raise RuntimeError(f"docs build exited {proc.returncode}: {msg}")
+                    str(staged_dir),
+                ]
+                cli_source = wt_docs / "_internal" / "cli.py"
+                if not cli_source.is_file():
+                    cli_source = wt_docs / "cli.py"
+                if cli_source.is_file() and "--no-update-versions-manifest" in cli_source.read_text(encoding="utf-8"):
+                    command.append("--no-update-versions-manifest")
+                proc = subprocess.run(
+                    command,
+                    cwd=str(worktree),
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                if proc.returncode != 0:
+                    msg = (proc.stderr or proc.stdout)[-600:]
+                    raise RuntimeError(f"docs build exited {proc.returncode}: {msg}")
+                if not (staged_dir / BUILD_INFO_NAME).is_file():
+                    raise RuntimeError("docs build succeeded without writing a version build stamp")
+                _replace_output_directory(staged_dir, version_dir)
             return "built"
         finally:
             # Always unregister and delete the worktree, even on failure.
@@ -308,6 +393,41 @@ def _make_build_one(repo_root: Path, ref_map: dict[str, str]) -> Callable[[str, 
             shutil.rmtree(tmp_parent, ignore_errors=True)
 
     return build_one
+
+
+def _run_build_tag(raw_tag: str, versions_dir: Path | None, *, repo_root: Path | None = None) -> int:
+    """Build one package-scoped tag in a worktree and publish it to the version tree."""
+    from docs_site._internal.config import config as default_config  # noqa: PLC0415
+
+    if not raw_tag.startswith(_DOCS_TAG_PREFIX):
+        print(f"Release docs tag must start with {_DOCS_TAG_PREFIX!r}: {raw_tag!r}")
+        return 1
+    version = _normalize_tag(raw_tag)
+    try:
+        validate_tree_identifier(version, "release docs version")
+    except ValueError as error:
+        print(error)
+        return 1
+
+    repo = repo_root if repo_root is not None else default_config.repo_root
+    versions_root = versions_dir if versions_dir is not None else default_config.versions_dir
+    try:
+        ref_map = _git_tag_ref_map(repo)
+        if ref_map.get(version) != raw_tag:
+            print(f"Git tag does not exist in this checkout: {raw_tag}")
+            return 1
+        status = _make_build_one(repo, {version: raw_tag})(version, version, versions_root / version)
+        if status != "built":
+            print(f"Git tag {raw_tag} does not contain the docs builder")
+            return 1
+        update_manifest(versions_root, version, aliases=("latest",))
+        redirects = materialize_alias(versions_root, "latest", version)
+    except (OSError, RuntimeError, ValueError, subprocess.CalledProcessError) as error:
+        print(f"Could not build docs from {raw_tag}: {error}")
+        return 1
+
+    print(f"Built {raw_tag} as docs version {version}; latest has {redirects} redirect(s).")
+    return 0
 
 
 def _run_build_all(
@@ -323,7 +443,7 @@ def _run_build_all(
 
     try:
         ref_map = _git_tag_ref_map(repo)
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as e:
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError, ValueError) as e:
         print(f"build-all needs a git checkout with tags ({repo}): {e}")
         return 1
 
@@ -389,5 +509,8 @@ def _run_serve(host: str, port: int, *, reload: bool) -> int:
     # importing the CLI) does not require it.
     import uvicorn  # noqa: PLC0415
 
-    uvicorn.run("docs_site._internal.serve:app", host=host, port=port, reload=reload)
+    options = {"host": host, "port": port, "reload": reload, "factory": True}
+    if reload:
+        options["reload_includes"] = ["*.py", "*.yml", "*.yaml", "*.toml"]
+    uvicorn.run("docs_site._internal.serve:create_local_app", **options)
     return 0

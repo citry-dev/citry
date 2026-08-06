@@ -1,0 +1,37 @@
+# Version selection, publication, and crawler policy. All mappings and fields
+# are optional; omitted values use VersionsConfig defaults. Unknown fields fail
+# validation, but this manifest file itself is required. See VersionsConfig in
+# docs_site/_internal/bootstrap.py and the field table in docs_site/README.md
+# under "Configuration".
+#
+# `docs build-all` is the bootstrap and disaster-recovery command. It removes
+# Citry's `citry@` prefix from repository tags, applies this policy to those
+# normalized identifiers, checks each selected tag out, and runs `docs build`.
+# Normal releases build one version. Tags without the docs builder are skipped.
+
+versions:
+  # Non-empty Python regex matched against normalized Citry tag identifiers.
+  pattern: "^v?\\d+\\.\\d+\\.\\d+$"
+  # Unique normalized single-segment identifiers included even when the pattern
+  # or oldest/newest bounds do not match. They start/end with a letter or digit;
+  # internal `.`, `_`, and `-` are accepted.
+  include: []
+  # Unique normalized single-segment identifiers always excluded, with the same
+  # character policy as include. An identifier cannot be in both lists.
+  exclude: []
+  # Empty string or a full major.minor.patch lower bound.
+  oldest: "0.1.0"
+  # Empty string or a full major.minor.patch upper bound.
+  newest: ""
+
+aliases:
+  # Empty string selects the newest build; otherwise use major.minor.patch.
+  latest: ""
+
+publish:
+  # Non-negative integer count of newest releases to publish; 0 publishes all.
+  window: 15
+
+indexing:
+  # Non-negative integer count of newest snapshots to index; 0 indexes all.
+  keep_recent: 2

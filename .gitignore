@@ -77,11 +77,6 @@ poetry.lock
 .DS_Store
 .python-version
 site
-# Ephemeral docs-site CI output dirs (the lighthouse and external-link
-# workflows), in case a maintainer runs those build commands locally.
-lhsite/
-link-check-site/
-.lighthouseci/
 .direnv/
 .envrc
 
@@ -97,17 +92,17 @@ jspm_packages/
 # Rope
 .ropeproject
 
+# Ephemeral docs-site CI output dirs (the lighthouse and external-link
+# workflows), in case a maintainer runs those build commands locally.
+lhsite/
+link-check-site/
+.lighthouseci/
+
 # Claude Code: per-user local overrides (operating rules and shared
 # settings/hooks ARE tracked: CLAUDE.md, AGENTS.md, .claude/settings.json,
 # .claude/hooks/).
 .claude/settings.local.json
 /CLAUDE.local.md
-
-# Vendored django-components reference snapshots (migration source). Large
-# third-party copies; reproduce with scripts/vendor_djc_reference.sh, which
-# records the pinned upstream commit.
-/packages/py/citry/_djc_reference/
-/packages/py/citry/_djc_reference_docs_site/
 
 # Local scratch archives of pre-fork reference codebases (kept out of git
 # because they are hundreds of MB and are not needed to build anything).

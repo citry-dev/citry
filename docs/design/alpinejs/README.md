@@ -89,6 +89,14 @@ boundary where the browser applies it.
   composition.
 - [`spike-keyed-morph.md`](spike-keyed-morph.md): key matching, keyed moves,
   preservation costs, and the contextual key fallback.
+- [`spike-keyed-component-ranges.md`](spike-keyed-component-ranges.md),
+  [`keyed_component_range_adapter.js`](keyed_component_range_adapter.js),
+  [`keyed_component_range_scenarios.js`](keyed_component_range_scenarios.js),
+  and
+  [`keyed_component_range_harness.py`](keyed_component_range_harness.py):
+  component keys as virtual comment-bounded nodes, recursive fresh-content
+  morphing, independent element keys, stationary preservation, explicit range
+  transplants, shape changes, and self-render continuity.
 - [`a9_client_instantiation.md`](a9_client_instantiation.md): A9's decision to
   reject cloned server component identity and the full inventory required by
   any future named client target or browser blueprint.

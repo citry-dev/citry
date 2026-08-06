@@ -11,7 +11,7 @@ examples pass at, or under, their design-doc line counts).
   and caret while the list changes under it (design section 2's trace, step
   10).
 - The contact form: a failed submit answers the 422 ``fields`` map, the
-  inline ``$error?.fieldErrors.email`` display shows it, nothing re-renders (the
+  inline ``$error('submit')?.fieldErrors?.email`` display shows it, nothing re-renders (the
   typed input survives), and a corrected submit renders the success branch.
 
 The components are the design doc's code blocks verbatim; the one line added
@@ -155,7 +155,7 @@ class ContactForm(Component):
         <form @c-submit.prevent="submit">
           <input name="name">
           <input name="email">
-          <span x-text="$error?.fieldErrors.email"></span>
+          <span x-text="$error('submit')?.fieldErrors?.email"></span>
           <button type="submit" :disabled="$loading()">Send</button>
         </form>
       </c-else>
@@ -205,7 +205,7 @@ def _collect_event_requests(page: Any) -> list[dict]:
     captured: list[dict] = []
 
     def record(request: Any) -> None:
-        if "/ext/events/" not in request.url or request.url.endswith("/runtime.js"):
+        if "/ext/events/" not in request.url or "/runtime.js" in request.url:
             return
         body = None
         try:

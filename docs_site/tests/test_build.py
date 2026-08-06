@@ -10,8 +10,28 @@ from xml.etree import ElementTree as ET
 import pytest
 import yaml
 
-from docs_site._internal.build import BuildOutcome, build_site
+from docs_site._internal.build import BuildOutcome, _is_unsafe_output, _replace_output_directory, build_site
 from docs_site._internal.config import DocsConfig
+from docs_site._internal.config import config as default_config
+from docs_site._internal.config_loading import DocsConfigError
+from docs_site._internal.pagefind import PagefindOutcome
+from docs_site._internal.pipeline import render_page
+from docs_site._internal.project import load_docs_project
+from docs_site._internal.versioning import materialize_alias, update_manifest
+
+
+def _default_declarations() -> dict[str, Path]:
+    return {
+        name: getattr(default_config, name)
+        for name in (
+            "settings_config",
+            "reference_config",
+            "ui_library_config",
+            "redirects_config",
+            "versions_config",
+            "people_sources_config",
+        )
+    }
 
 
 def _write_blog(content: Path) -> Path:
@@ -56,6 +76,260 @@ def _config(tmp_path: Path) -> tuple[DocsConfig, Path, Path]:
     return DocsConfig(content_dir=content, site_dir=out, repo_root=tmp_path), content, out
 
 
+def test_output_safety_rejects_source_ancestors_and_descendants(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    docs = repo / "docs_site"
+    content = docs / "content"
+    examples = docs / "examples"
+    versions = docs / "versions"
+    for directory in (content, examples, versions):
+        directory.mkdir(parents=True, exist_ok=True)
+    config = DocsConfig(
+        base_dir=docs,
+        repo_root=repo,
+        content_dir=content,
+        examples_dir=examples,
+        versions_dir=versions,
+        site_dir=repo / "site",
+    )
+
+    for unsafe in (
+        tmp_path,
+        repo,
+        docs,
+        content,
+        content / "nested",
+        examples,
+        versions,
+        versions / "existing",
+    ):
+        assert _is_unsafe_output(unsafe, content, config)
+
+    assert not _is_unsafe_output(repo / "site", content, config)
+    assert not _is_unsafe_output(versions / "1.0.0", content, config, docs_version="1.0.0")
+
+
+@pytest.mark.parametrize("target_kind", ["file", "symlink"])
+def test_staged_publish_rejects_non_directory_targets(tmp_path: Path, target_kind: str) -> None:
+    staged = tmp_path / "staged"
+    staged.mkdir()
+    (staged / "new.txt").write_text("new", encoding="utf-8")
+    target = tmp_path / "target"
+    if target_kind == "file":
+        target.write_text("known good", encoding="utf-8")
+    else:
+        actual = tmp_path / "actual"
+        actual.mkdir()
+        (actual / "keep.txt").write_text("known good", encoding="utf-8")
+        target.symlink_to(actual, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="output target must be a directory"):
+        _replace_output_directory(staged, target)
+
+    assert (staged / "new.txt").read_text(encoding="utf-8") == "new"
+    if target_kind == "file":
+        assert target.read_text(encoding="utf-8") == "known good"
+    else:
+        assert target.is_symlink()
+        assert (target / "keep.txt").read_text(encoding="utf-8") == "known good"
+    assert not list(tmp_path.glob(".target.backup-*"))
+
+
+@pytest.mark.parametrize("base_path", ["/", "/preview/"])
+def test_invalid_base_path_fails_before_existing_output_is_cleared(tmp_path: Path, base_path: str) -> None:
+    config, content, out = _config(tmp_path)
+    config.base_path = base_path
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match="DOCS_BASE_PATH"):
+        build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_build_rejects_symlink_output_without_touching_its_target(tmp_path: Path) -> None:
+    config, content, _out = _config(tmp_path)
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    actual = tmp_path / "actual-output"
+    actual.mkdir()
+    sentinel = actual / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    linked = tmp_path / "linked-output"
+    linked.symlink_to(actual, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="symlink output"):
+        build_site(config=config, output_dir=linked, minify=False, search=False, social_cards=False)
+
+    assert linked.is_symlink()
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize(
+    ("docs_version", "alias"),
+    [
+        ("../_internal", ""),
+        ("/absolute", ""),
+        ("1.0.0/child", ""),
+        ("1.0.0", "../content"),
+        ("1.0.0", "/absolute"),
+        ("1.0.0", "nested/latest"),
+    ],
+)
+def test_version_identifiers_fail_before_existing_output_is_cleared(
+    tmp_path: Path,
+    docs_version: str,
+    alias: str,
+) -> None:
+    config, content, out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match="single segment"):
+        build_site(
+            config=config,
+            output_dir=out,
+            docs_version=docs_version,
+            alias=alias,
+            minify=False,
+            search=False,
+            social_cards=False,
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize("alias", ["1.0.0", "2.0.0"])
+def test_alias_version_collision_fails_before_snapshot_output_is_cleared(tmp_path: Path, alias: str) -> None:
+    config, content, _out = _config(tmp_path)
+    versions = tmp_path / "versions"
+    config.versions_dir = versions
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    target = versions / "1.0.0"
+    target.mkdir(parents=True)
+    sentinel = target / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    update_manifest(versions, "2.0.0")
+
+    with pytest.raises(DocsConfigError, match=r"target version|versions\.json"):
+        build_site(
+            config=config,
+            docs_version="1.0.0",
+            alias=alias,
+            minify=False,
+            search=False,
+            social_cards=False,
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_docs_version_cannot_overwrite_an_existing_alias(tmp_path: Path) -> None:
+    config, content, _out = _config(tmp_path)
+    versions = tmp_path / "versions"
+    config.versions_dir = versions
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    alias_dir = versions / "latest"
+    alias_dir.mkdir(parents=True)
+    sentinel = alias_dir / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    update_manifest(versions, "1.0.0", aliases=("latest",))
+
+    with pytest.raises(DocsConfigError, match="existing alias"):
+        build_site(
+            config=config,
+            docs_version="latest",
+            minify=False,
+            search=False,
+            social_cards=False,
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_custom_version_output_requires_a_detached_build_before_clearing(tmp_path: Path) -> None:
+    config, content, _out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    custom = tmp_path / "custom"
+    custom.mkdir()
+    sentinel = custom / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match="custom docs-version output"):
+        build_site(
+            config=config,
+            output_dir=custom,
+            docs_version="1.0.0",
+            minify=False,
+            search=False,
+            social_cards=False,
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize(
+    ("docs_version", "alias"),
+    [("", ""), ("1.0.0", "latest")],
+)
+def test_detached_version_build_rejects_missing_version_or_alias_before_clearing(
+    tmp_path: Path,
+    docs_version: str,
+    alias: str,
+) -> None:
+    config, content, out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match=r"requires docs_version|cannot materialize an alias"):
+        build_site(
+            config=config,
+            output_dir=out,
+            docs_version=docs_version,
+            alias=alias,
+            update_versions_manifest=False,
+            minify=False,
+            search=False,
+            social_cards=False,
+        )
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_detached_version_build_supports_a_custom_output_without_manifest_mutation(tmp_path: Path) -> None:
+    config, content, _out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "_nav.yml").write_text(
+        "areas:\n  - label: Docs\n    items: [{ title: Docs, path: /docs/ }]\n",
+        encoding="utf-8",
+    )
+    (content / "docs.md").write_text("---\ntitle: Docs\n---\n\n# Docs\n", encoding="utf-8")
+    custom = tmp_path / "custom"
+
+    outcome = build_site(
+        config=config,
+        output_dir=custom,
+        docs_version="1.0.0",
+        update_versions_manifest=False,
+        minify=False,
+        search=False,
+        social_cards=False,
+    )
+
+    assert outcome.failed == 0
+    assert (custom / "docs" / "index.html").is_file()
+    assert not (config.versions_dir / "versions.json").exists()
+
+
 def test_build_writes_clean_urls(tmp_path: Path) -> None:
     config, content, out = _config(tmp_path)
     (content / "index.md").write_text("---\ntitle: Home\n---\n\nHome page.\n", encoding="utf-8")
@@ -95,11 +369,344 @@ def test_build_copies_static_assets(tmp_path: Path) -> None:
     static_css.mkdir(parents=True)
     (static_css / "site.css").write_text("body{}", encoding="utf-8")
     # base_dir points at tmp so the build finds tmp/static.
-    config = DocsConfig(content_dir=content, site_dir=tmp_path / "site", repo_root=tmp_path, base_dir=tmp_path)
+    config = DocsConfig(
+        content_dir=content,
+        site_dir=tmp_path / "site",
+        repo_root=tmp_path,
+        base_dir=tmp_path,
+        **_default_declarations(),
+    )
 
     build_site(config=config)
 
     assert (config.site_dir / "static" / "css" / "site.css").read_text(encoding="utf-8") == "body{}"
+
+
+def test_redirect_cannot_overwrite_an_orphan_authored_page(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "_nav.yml").write_text(
+        "areas:\n  - label: Docs\n    items: [{ title: Home, path: / }]\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (content / "orphan.md").write_text("# Orphan\n", encoding="utf-8")
+    redirects = tmp_path / "redirects.yml"
+    redirects.write_text("redirects:\n  - { from: /orphan/, to: / }\n", encoding="utf-8")
+    output = tmp_path / "site"
+    output.mkdir()
+    sentinel = output / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    cfg = DocsConfig(
+        content_dir=content,
+        site_dir=output,
+        redirects_config=redirects,
+    )
+
+    with pytest.raises(DocsConfigError, match="collides"):
+        build_site(config=cfg, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_ui_projection_preflight_preserves_existing_output(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: UI\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "    groups:\n"
+        "      - label: Components\n"
+        "        source: ui_library\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (tmp_path / "button.md").write_text("---\ntitle: Button\n---\n\n# Button\n", encoding="utf-8")
+    ui_manifest = tmp_path / "ui_library.yml"
+    ui_manifest.write_text(
+        "components:\n  - family: button\n    slug: button\n    source: button.md\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "site"
+    output.mkdir()
+    sentinel = output / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+    cfg = DocsConfig(
+        repo_root=tmp_path,
+        content_dir=content,
+        site_dir=output,
+        ui_library_config=ui_manifest,
+    )
+
+    with pytest.raises(DocsConfigError, match="title and description"):
+        build_site(config=cfg, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_build_renders_ui_library_source_directly_to_its_catalog_route(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: UI\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "    groups:\n"
+        "      - label: Components\n"
+        "        source: ui_library\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text("---\ntitle: Home\ndescription: Home.\n---\n\n# Home\n", encoding="utf-8")
+    source = tmp_path / "packages/py/citry_ui/citry_ui/components/button/api.md"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        "---\ntitle: Button\ndescription: Button docs.\n---\n\n"
+        "# Button\n\n## Use Button\n\nDirect source marker.\n\n"
+        '<c-ui-demo path="packages/py/citry_ui/citry_ui/components/button/snippets/build_preview.py" '
+        'title="Build preview" />\n',
+        encoding="utf-8",
+    )
+    source.with_suffix(".yml").write_text(
+        "schema_version: 1\n"
+        "family: button\n"
+        "components: [CButton]\n"
+        "inputs: []\n"
+        "slots: []\n"
+        "events: []\n"
+        "methods: []\n"
+        "attributes: []\n"
+        "selectors: []\n"
+        "css: []\n"
+        "interfaces: []\n",
+        encoding="utf-8",
+    )
+    snippet = tmp_path / "packages/py/citry_ui/citry_ui/components/button/snippets/build_preview.py"
+    snippet.parent.mkdir(parents=True, exist_ok=True)
+    snippet.write_text(
+        "from citry import Component\n\n"
+        "class BuildPreviewSmoke(Component):\n"
+        "    template = '<button>Rendered build preview</button>'\n"
+        "    css = '''\n"
+        "      button {\n"
+        "        color: green;\n"
+        "      }\n"
+        "    '''\n\n"
+        "preview_controls = (\n"
+        "    {\n"
+        "        'name': 'tone',\n"
+        "        'label': 'Tone',\n"
+        "        'type': 'select',\n"
+        "        'default': 'quiet',\n"
+        "        'options': (('quiet', 'Quiet'), ('bold', 'Bold')),\n"
+        "    },\n"
+        "    {\n"
+        "        'name': 'disabled',\n"
+        "        'label': 'Disabled',\n"
+        "        'type': 'checkbox',\n"
+        "        'default': False,\n"
+        "    },\n"
+        ")\n\n"
+        "preview = BuildPreviewSmoke()\n"
+        "preview\n",
+        encoding="utf-8",
+    )
+    ui_manifest = tmp_path / "ui_library.yml"
+    ui_manifest.write_text(
+        "components:\n"
+        "  - family: button\n"
+        "    slug: button\n"
+        "    source: packages/py/citry_ui/citry_ui/components/button/api.md\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "site"
+    cfg = DocsConfig(
+        repo_root=tmp_path,
+        content_dir=content,
+        site_dir=output,
+        ui_library_config=ui_manifest,
+    )
+
+    outcome = build_site(config=cfg, minify=False, search=False, social_cards=False)
+
+    page = output / "ui-library/components/button/index.html"
+    companion = output / "ui-library/components/button/index.md"
+    assert outcome.failed == 0
+    assert outcome.ui_library == 1
+    assert outcome.ui_previews == 1
+    assert "Direct source marker." in page.read_text(encoding="utf-8")
+    page_source = page.read_text(encoding="utf-8")
+    companion_source = companion.read_text(encoding="utf-8")
+    assert 'src="/ui-library/components/button/_previews/build-preview/"' in page_source
+    assert 'title="Build preview rendered preview"' in page_source
+    assert 'sandbox="allow-forms allow-scripts"' in page_source
+    assert 'class="example-demo-frame--theme-sync"' in page_source
+    assert 'loading="lazy"' in page_source
+    assert page_source.index("data-ui-preview-controls") < page_source.index("data-ui-preview-frame")
+    assert page_source.index("data-ui-preview-frame") < page_source.index("citry-ui-demo__source")
+    assert "Customize example" in page_source
+    assert 'aria-label="Build preview controls"' in page_source
+    assert '<option value="quiet" selected>Quiet</option>' in page_source
+    assert 'name="disabled"' in page_source
+    assert "Show code" in page_source
+    assert "BuildPreviewSmoke" in page_source
+    assert "data-citry-live-code" not in page_source
+    assert "Try live" not in page_source
+    assert "/static/playground/live_code.js" not in page_source
+    assert "Direct source marker." in companion_source
+    assert "## API reference" in companion_source
+    assert "### Interfaces" in companion_source
+    assert "[Open the rendered preview](/ui-library/components/button/_previews/build-preview/)" in companion_source
+    assert "class BuildPreviewSmoke(Component):" in companion_source
+    preview_page = output / "ui-library/components/button/_previews/build-preview/index.html"
+    preview_source = preview_page.read_text(encoding="utf-8")
+    assert "Rendered build preview" in preview_source
+    assert "color: green" in preview_source
+    assert 'content="noindex,nofollow"' in preview_source
+    assert 'type: "citry-ui-preview-height"' in preview_source
+    assert 'type === "citry-ui-preview-theme"' in preview_source
+    assert 'type === "citry-ui-preview-controls"' in preview_source
+    assert 'new CustomEvent("citry-ui-preview-controls"' in preview_source
+    assert "font-size: 87.5%" in preview_source
+    assert "new ResizeObserver(publish)" in preview_source
+    assert not (output / "ui-library/components/button/_previews/build-preview/index.md").exists()
+    assert all(record.url != "ui-library/components/button/_previews/build-preview/" for record in outcome.records)
+    llms_full = (output / "llms-full.txt").read_text(encoding="utf-8")
+    assert "class BuildPreviewSmoke(Component):" in llms_full
+    assert "<iframe" not in llms_full
+    assert not (content / "ui-library/components/button.md").exists()
+    assert any(record.source_md == source for record in outcome.records)
+
+
+def test_custom_repository_identity_reaches_every_generated_surface(tmp_path: Path) -> None:
+    settings_source = default_config.settings_config.read_text(encoding="utf-8")
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        settings_source.replace("owner: citry-dev", "owner: acme", 1)
+        .replace("name: citry", "name: widgets", 1)
+        .replace(
+            "url: https://github.com/citry-dev/citry",
+            "url: https://github.com/acme/widgets",
+            1,
+        )
+        .replace(
+            "issues_url: https://github.com/citry-dev/citry/issues",
+            "issues_url: https://github.com/acme/widgets/issues",
+            1,
+        )
+        .replace(
+            "sponsors_url: https://github.com/sponsors/JuroOravec",
+            "sponsors_url: https://github.com/sponsors/acme",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    cfg = DocsConfig(
+        site_dir=tmp_path / "site",
+        settings_config=settings_path,
+        site_url="https://docs.acme.test/widgets/",
+    )
+    project = load_docs_project(cfg)
+
+    outcome = build_site(
+        project=project,
+        minify=False,
+        search=False,
+        social_cards=False,
+    )
+    direct = render_page(
+        "Repository: [{{ repo_full_name }}]({{ repo_url }}). Issue #123.",
+        project=project,
+        wrap_in_layout=False,
+    ).html
+    home = (outcome.output_dir / "index.html").read_text(encoding="utf-8")
+    authored = (outcome.output_dir / "concepts" / "components" / "index.html").read_text(encoding="utf-8")
+    generated = (outcome.output_dir / "reference" / "component" / "index.html").read_text(encoding="utf-8")
+    not_found = (outcome.output_dir / "404.html").read_text(encoding="utf-8")
+    contributing = (outcome.output_dir / "community" / "contributing" / "index.html").read_text(encoding="utf-8")
+
+    assert outcome.failed == 0
+    assert "https://github.com/acme/widgets" in home
+    assert "https://github.com/acme/widgets/edit/main/docs_site/content/concepts/components.md" in authored
+    assert "https://github.com/acme/widgets/blob/main/packages/py/citry/citry/component.py" in generated
+    assert "https://github.com/acme/widgets/issues" in not_found
+    assert "https://github.com/sponsors/acme" in contributing
+    assert "https://github.com/sponsors/JuroOravec" not in contributing
+    assert 'data-search-site-target="docs.acme.test/widgets"' in authored
+    assert '<a href="https://github.com/acme/widgets">acme/widgets</a>' in direct
+    assert "https://github.com/acme/widgets/issues/123" in direct
+
+
+def test_custom_pagefind_path_configures_the_generated_bundle(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config, content, _out = _config(tmp_path)
+    (content / "index.md").write_text("---\ntitle: Home\n---\n\nHome.\n", encoding="utf-8")
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/pagefind/pagefind.js",
+            "/custom-search/pagefind.js",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    config.settings_config = settings_path
+    called_with: list[str] = []
+
+    def fake_pagefind(_output_dir: Path, output_subdir: str) -> PagefindOutcome:
+        called_with.append(output_subdir)
+        return PagefindOutcome(ok=True, message="built")
+
+    monkeypatch.setattr("docs_site._internal.build.run_pagefind", fake_pagefind)
+
+    outcome = build_site(config=config, minify=False, search=True, social_cards=False)
+
+    assert outcome.search_ok
+    assert called_with == ["custom-search"]
+    home = (config.site_dir / "index.html").read_text(encoding="utf-8")
+    assert 'data-pagefind-path="/custom-search/pagefind.js"' in home
+
+
+@pytest.mark.parametrize(
+    "pagefind_path",
+    [
+        "/static/pagefind.js",
+        "/Static/pagefind.js",
+        "/meta/pagefind.js",
+        "/Meta/pagefind.js",
+        "/og/pagefind.js",
+        "/citry/pagefind.js",
+        "/v/pagefind.js",
+        "/Docs/pagefind.js",
+    ],
+)
+def test_pagefind_output_collision_fails_before_existing_output_is_cleared(
+    tmp_path: Path,
+    pagefind_path: str,
+) -> None:
+    config, content, out = _config(tmp_path)
+    (content / "index.md").write_text("---\ntitle: Home\n---\n\nHome.\n", encoding="utf-8")
+    (content / "docs.md").write_text("---\ntitle: Docs\n---\n\nDocs.\n", encoding="utf-8")
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/pagefind/pagefind.js",
+            pagefind_path,
+            1,
+        ),
+        encoding="utf-8",
+    )
+    config.settings_config = settings_path
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match=r"search\.pagefind_path collides"):
+        build_site(config=config, minify=False, search=True, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
 
 
 def test_build_records_failures_without_aborting(tmp_path: Path, monkeypatch) -> None:
@@ -128,6 +735,52 @@ def test_build_records_failures_without_aborting(tmp_path: Path, monkeypatch) ->
     assert (out / "ok" / "index.html").is_file()
     assert outcome.errors
     assert outcome.errors[0][0] == "bad.md"
+
+
+def test_failed_version_build_preserves_snapshot_manifest_and_alias(tmp_path: Path, monkeypatch) -> None:
+    config, content, _out = _config(tmp_path)
+    versions = tmp_path / "versions"
+    config.versions_dir = versions
+    (content / "_nav.yml").write_text(
+        "areas:\n  - label: Docs\n    items: [{ title: Fine, path: /ok/ }]\n",
+        encoding="utf-8",
+    )
+    (content / "ok.md").write_text("# Fine\n", encoding="utf-8")
+    (content / "bad.md").write_text("BOOM\n", encoding="utf-8")
+
+    snapshot = versions / "1.0.0"
+    snapshot.mkdir(parents=True)
+    (snapshot / "index.html").write_text("old snapshot", encoding="utf-8")
+    (snapshot / "keep.txt").write_text("keep", encoding="utf-8")
+    update_manifest(versions, "1.0.0", aliases=("latest",))
+    materialize_alias(versions, "latest", "1.0.0")
+    original_files = {path.relative_to(versions): path.read_bytes() for path in versions.rglob("*") if path.is_file()}
+
+    import docs_site._internal.build as build_mod
+
+    real_render = build_mod.render_page
+
+    def fake_render(source, **kwargs):
+        if "BOOM" in source:
+            raise RuntimeError("kaboom")
+        return real_render(source, **kwargs)
+
+    monkeypatch.setattr(build_mod, "render_page", fake_render)
+
+    outcome = build_site(
+        config=config,
+        docs_version="1.0.0",
+        alias="latest",
+        minify=False,
+        search=False,
+        social_cards=False,
+    )
+
+    assert outcome.failed == 1
+    assert outcome.output_dir == snapshot.resolve()
+    assert {
+        path.relative_to(versions): path.read_bytes() for path in versions.rglob("*") if path.is_file()
+    } == original_files
 
 
 def test_build_writes_404_and_runtime(tmp_path: Path) -> None:
@@ -212,7 +865,13 @@ def test_build_generates_social_cards_from_a_running_event_loop(tmp_path: Path) 
     # A fresh base_dir means an empty OG cache, so a card is actually rendered
     # this run (not copied from a prior run's cache) and the sync-Playwright path
     # is exercised under the running loop.
-    config = DocsConfig(content_dir=content, site_dir=tmp_path / "site", repo_root=tmp_path, base_dir=tmp_path)
+    config = DocsConfig(
+        content_dir=content,
+        site_dir=tmp_path / "site",
+        repo_root=tmp_path,
+        base_dir=tmp_path,
+        **_default_declarations(),
+    )
 
     async def _build() -> BuildOutcome:
         # A loop is now running in the calling thread: the failure condition.
@@ -284,6 +943,7 @@ def test_build_expands_snippets_in_markdown_outputs(tmp_path: Path) -> None:
         site_dir=out,
         repo_root=tmp_path,
         site_url="https://citry.dev/",
+        **_default_declarations(),
     )
     (content / "_nav.yml").write_text(
         "areas:\n  - label: Docs\n    items:\n      - { title: Home, path: / }\n",
@@ -305,6 +965,45 @@ def test_build_expands_snippets_in_markdown_outputs(tmp_path: Path) -> None:
         text = output.read_text(encoding="utf-8")
         assert "class IncludedFromSnippet:" in text
         assert '--8<-- "snippet.py:example"' not in text
+
+
+def test_build_projects_base_path_in_markdown_outputs(tmp_path: Path) -> None:
+    content = tmp_path / "content"
+    content.mkdir()
+    out = tmp_path / "site"
+    config = DocsConfig(
+        base_dir=tmp_path,
+        base_path="/citry",
+        content_dir=content,
+        site_dir=out,
+        repo_root=tmp_path,
+        site_url="https://owner.github.io/citry/",
+        **_default_declarations(),
+    )
+    (content / "_nav.yml").write_text(
+        "areas:\n  - label: Docs\n    items:\n      - { title: Home, path: / }\n",
+        encoding="utf-8",
+    )
+    (content / "index.md").write_text(
+        "# Home\n\n"
+        "[Guide](/guide/?view=all#part)\n\n"
+        "[Guide reference]: /guide/reference/\n\n"
+        '<a href="/guide/raw/">Raw link</a>\n\n'
+        '<img src="/static/image.png">\n\n'
+        "```markdown\n[Literal](/guide/)\n```\n",
+        encoding="utf-8",
+    )
+
+    outcome = build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert outcome.failed == 0
+    for output in (out / "index.md", out / "llms-full.txt"):
+        text = output.read_text(encoding="utf-8")
+        assert "[Guide](/citry/guide/?view=all#part)" in text
+        assert "[Guide reference]: /citry/guide/reference/" in text
+        assert '<a href="/citry/guide/raw/">Raw link</a>' in text
+        assert 'src="/citry/static/image.png"' in text
+        assert "[Literal](/guide/)" in text
 
 
 def test_build_publishes_blog_at_stable_routes_with_feed_and_companions(tmp_path: Path) -> None:
@@ -345,6 +1044,166 @@ def test_build_publishes_blog_at_stable_routes_with_feed_and_companions(tmp_path
     assert entry is not None
     assert entry.findtext("atom:title", namespaces=ns) == "First post"
     assert entry.find("atom:link", ns).attrib["href"] == "https://citry.dev/blog/first-post/"
+
+
+def test_blog_feed_collision_fails_before_existing_output_is_cleared(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    _write_blog(content)
+    (content / "blog" / "feed.xml").write_text("authored collision", encoding="utf-8")
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match=r"blog\.feed_path collides"):
+        build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_blog_feed_rejects_a_redirect_source_collision(tmp_path: Path) -> None:
+    config, content, _out = _config(tmp_path)
+    _write_blog(content)
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/blog/feed.xml",
+            "/blog/legacy.xml",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    redirects_path = tmp_path / "redirects.yml"
+    redirects_path.write_text(
+        "redirects:\n  - { from: /blog/legacy.xml/, to: /blog/ }\n",
+        encoding="utf-8",
+    )
+    config.settings_config = settings_path
+    config.redirects_config = redirects_path
+
+    with pytest.raises(DocsConfigError, match=r"blog\.feed_path collides"):
+        build_site(config=config, minify=False, search=False, social_cards=False)
+
+
+def test_blog_feed_rejects_a_descendant_redirect_before_clearing_output(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    _write_blog(content)
+    redirects_path = tmp_path / "redirects.yml"
+    redirects_path.write_text(
+        "redirects:\n  - { from: /blog/feed.xml/legacy/, to: /blog/ }\n",
+        encoding="utf-8",
+    )
+    config.redirects_config = redirects_path
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match=r"blog\.feed_path collides"):
+        build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+@pytest.mark.parametrize(
+    "feed_path",
+    [
+        "/blog/index.html/feed.xml",
+        "/blog/index.md/feed.xml",
+    ],
+)
+def test_blog_feed_rejects_generated_file_ancestor_collisions(tmp_path: Path, feed_path: str) -> None:
+    config, content, out = _config(tmp_path)
+    _write_blog(content)
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/blog/feed.xml",
+            feed_path,
+            1,
+        ),
+        encoding="utf-8",
+    )
+    config.settings_config = settings_path
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match=r"blog\.feed_path collides"):
+        build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_blog_feed_rejects_a_copied_asset_ancestor_before_clearing_output(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    _write_blog(content)
+    (content / "blog" / "logo.svg").write_text("<svg/>", encoding="utf-8")
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/blog/feed.xml",
+            "/blog/logo.svg/feed.xml",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    config.settings_config = settings_path
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match=r"blog\.feed_path collides"):
+        build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_blog_feed_rejects_a_unicode_normalization_asset_collision(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    _write_blog(content)
+    (content / "blog" / "caf\N{LATIN SMALL LETTER E WITH ACUTE}.xml").write_text(
+        "authored asset",
+        encoding="utf-8",
+    )
+    decomposed = "cafe\N{COMBINING ACUTE ACCENT}.xml"
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        default_config.settings_config.read_text(encoding="utf-8").replace(
+            "/blog/feed.xml",
+            f"/blog/{decomposed}",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    config.settings_config = settings_path
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match=r"blog\.feed_path collides"):
+        build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
+
+
+def test_blog_feed_and_pagefind_output_may_not_overlap(tmp_path: Path) -> None:
+    config, content, out = _config(tmp_path)
+    _write_blog(content)
+    settings_path = tmp_path / "settings.yml"
+    settings_path.write_text(
+        default_config.settings_config.read_text(encoding="utf-8")
+        .replace("/pagefind/pagefind.js", "/blog/search/pagefind.js", 1)
+        .replace("/blog/feed.xml", "/blog/search/pagefind.js/feed.xml", 1),
+        encoding="utf-8",
+    )
+    config.settings_config = settings_path
+    out.mkdir()
+    sentinel = out / "keep.txt"
+    sentinel.write_text("keep", encoding="utf-8")
+
+    with pytest.raises(DocsConfigError, match=r"blog\.feed_path collides"):
+        build_site(config=config, minify=False, search=False, social_cards=False)
+
+    assert sentinel.read_text(encoding="utf-8") == "keep"
 
 
 def test_blog_companion_quotes_catalog_metadata_as_valid_yaml(tmp_path: Path) -> None:
@@ -524,16 +1383,65 @@ def test_scope_drives_snapshot_pages_assets_links_and_picker(tmp_path: Path) -> 
     assert "djc-version-picker" not in news_html
 
 
+def test_site_scoped_playground_is_built_only_at_the_root(tmp_path: Path) -> None:
+    config, content, root_out = _config(tmp_path)
+    config.versions_dir = tmp_path / "versions"
+    (content / "index.md").write_text("# Home\n", encoding="utf-8")
+    (content / "playground.md").write_text(
+        "---\ntitle: Try Citry\nlayout: playground\n---\n\nHelp.\n",
+        encoding="utf-8",
+    )
+    (content / "_nav.yml").write_text(
+        "areas:\n"
+        "  - label: Docs\n"
+        "    scope: versioned\n"
+        "    items: [{ title: Home, path: / }]\n"
+        "  - label: Try it\n"
+        "    scope: site\n"
+        "    items: [{ title: Playground, path: /playground/ }]\n",
+        encoding="utf-8",
+    )
+
+    root = build_site(
+        config=config,
+        output_dir=root_out,
+        minify=False,
+        search=False,
+        social_cards=False,
+    )
+    snapshot_out = config.versions_dir / "1.2.3"
+    snapshot = build_site(
+        config=config,
+        output_dir=snapshot_out,
+        docs_version="1.2.3",
+        minify=False,
+        search=False,
+        social_cards=False,
+        update_versions_manifest=False,
+    )
+
+    assert root.failed == 0
+    assert snapshot.failed == 0
+    assert (root_out / "playground" / "index.html").is_file()
+    assert not (snapshot_out / "playground").exists()
+    snapshot_home = (snapshot_out / "index.html").read_text(encoding="utf-8")
+    assert 'href="/playground/"' in snapshot_home
+    assert 'href="/v/1.2.3/playground/"' not in snapshot_home
+
+
 def test_site_scoped_landing_gets_a_version_snapshot_home_redirect(tmp_path: Path) -> None:
     config, content, out = _config(tmp_path)
     config.versions_dir = tmp_path / "versions"
     (content / "index.md").write_text("# Project landing\n", encoding="utf-8")
     (content / "guide.md").write_text("# Versioned guide\n", encoding="utf-8")
     (content / "_nav.yml").write_text(
+        "home:\n"
+        "  title: Project\n"
+        "  path: /\n"
+        "  scope: site\n"
         "areas:\n"
         "  - label: Docs\n"
         "    items:\n"
-        "      - { title: Project, path: /, scope: site }\n"
         "      - { title: Guide, path: /guide/ }\n",
         encoding="utf-8",
     )

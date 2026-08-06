@@ -2,8 +2,9 @@
 Build the search index after the site is built.
 
 Pagefind is a static search engine: once the HTML is on disk, it scans the
-output directory and writes a compact, chunked index under ``<output>/pagefind/``
-that the browser queries directly, with no server involved.
+output directory and writes a compact, chunked index under a configured output
+subdirectory (``<output>/pagefind/`` by default) that the browser queries
+directly, with no server involved.
 
 What gets indexed is controlled by the page markup, not from here:
 
@@ -40,19 +41,28 @@ class PagefindOutcome:
     output: str = ""
 
 
-def run_pagefind(output_dir: Path) -> PagefindOutcome:
+def run_pagefind(output_dir: Path, output_subdir: str = PAGEFIND_OUTPUT_SUBDIR) -> PagefindOutcome:
     """
     Build the search index over an already-built site directory.
 
     Returns a ``PagefindOutcome`` instead of raising, so a search-index failure
-    is reported without discarding an otherwise successful build.
+    is reported without discarding an otherwise successful build. The output
+    subdirectory comes from the validated browser module path in ``settings.yml``.
     """
     if not output_dir.is_dir():
         return PagefindOutcome(ok=False, message=f"Site directory not found: {output_dir}")
 
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "pagefind", "--site", str(output_dir)],
+            [
+                sys.executable,
+                "-m",
+                "pagefind",
+                "--site",
+                str(output_dir),
+                "--output-subdir",
+                output_subdir,
+            ],
             capture_output=True,
             text=True,
             check=False,
@@ -73,11 +83,18 @@ def run_pagefind(output_dir: Path) -> PagefindOutcome:
             ok=False, message=f"pagefind exited with code {proc.returncode}", output=combined.strip()
         )
 
-    bundle = output_dir / PAGEFIND_OUTPUT_SUBDIR
+    bundle = output_dir / output_subdir
     if not bundle.is_dir():
         return PagefindOutcome(
             ok=False,
             message=f"pagefind reported success but no index was written to {bundle}",
+            output=combined.strip(),
+        )
+    entrypoint = bundle / "pagefind.js"
+    if not entrypoint.is_file():
+        return PagefindOutcome(
+            ok=False,
+            message=f"pagefind reported success but no browser entrypoint was written to {entrypoint}",
             output=combined.strip(),
         )
 

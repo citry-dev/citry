@@ -1,0 +1,126 @@
+{
+  "format": "citry-protocol-constraint-ownership/1",
+  "families": [
+    {
+      "id": "client-graph-manifest",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [""],
+      "schemaPointerPrefixes": ["/properties"],
+      "pythonValidators": ["python/citry_client_graph/manifests.py:validate_manifest", "python/citry_client_graph/manifests.py:validate_revision"],
+      "javascriptValidators": ["js/src/manifests.ts:validateManifest", "js/src/manifests.ts:validateRevision"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_package.py"],
+      "constraintCount": 16,
+      "constraintSha256": "afc5fac99c76cec8830ccd6ded6b82f26f9453893a5fbfaaa13c959b036491d0"
+    },
+    {
+      "id": "client-graph-shared-scalars",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/id", "/$defs/nullableId", "/$defs/nullableStr", "/$defs/str"],
+      "pythonValidators": ["python/citry_client_graph/records.py:_integer_issue", "python/citry_client_graph/records.py:_nullable_integer_issue", "python/citry_client_graph/records.py:_nullable_string_issue", "python/citry_client_graph/records.py:_string_issue"],
+      "javascriptValidators": ["js/src/records.ts:integerIssue", "js/src/records.ts:nullableIntegerIssue", "js/src/records.ts:nullableStringIssue", "js/src/records.ts:stringIssue"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 12,
+      "constraintSha256": "0af31367972c1a53a253d183a3e65ac5edac29e2137ec22820c8054c56e31668"
+    },
+    {
+      "id": "client-graph-component-classes",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/componentClass"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_component_class"],
+      "javascriptValidators": ["js/src/records.ts:validateComponentClass"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 6,
+      "constraintSha256": "fb371fdd8ae544e96e8a30f39d0ba0ac9e86d2d07a92fb4cf3d5d6463c9a051d"
+    },
+    {
+      "id": "client-graph-component-instances",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/componentInstance"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_component_instance"],
+      "javascriptValidators": ["js/src/records.ts:validateComponentInstance"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 12,
+      "constraintSha256": "51e79ef365e2a53aaed7b4858d59787a2aa4209e158301fa9b37e90e62d4ec88"
+    },
+    {
+      "id": "client-graph-source-locations",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/sourceLocation", "/$defs/sourceOffset", "/$defs/sourcePos", "/$defs/offset"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_source_location"],
+      "javascriptValidators": ["js/src/records.ts:validateSourceLocation"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 37,
+      "constraintSha256": "3b6df3fb9a36ce7817ba6fbde7810519d3ee2a7d01a7a4fc498d09fa8a9035b8"
+    },
+    {
+      "id": "client-graph-client-bindings",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/componentTagClientBinding", "/$defs/expressionPayload", "/$defs/domPayload", "/$defs/pollPayload"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_client_binding", "python/citry_client_graph/records.py:validate_client_binding_payload"],
+      "javascriptValidators": ["js/src/records.ts:validateClientBinding", "js/src/records.ts:validateClientBindingPayload"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 60,
+      "constraintSha256": "01e19ec60d8db8c93d744f8d817de47635b93bca50b638f483b02286a045530d"
+    },
+    {
+      "id": "client-graph-nested-components",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/nestedComponent"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_nested_component"],
+      "javascriptValidators": ["js/src/records.ts:validateNestedComponent"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 22,
+      "constraintSha256": "98cf268a12c275c0fec51bb27512382132da2b01b2a5e9a36fdf8128a6d1cd99"
+    },
+    {
+      "id": "client-graph-execution-order",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/componentExecutionOrderConstraint"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_execution_constraint"],
+      "javascriptValidators": ["js/src/records.ts:validateExecutionConstraint"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 7,
+      "constraintSha256": "4b307272048cd4f08d19a8b1a9b4cb7b3e2c1184b8a1e765fbfdc525eabc4b47"
+    },
+    {
+      "id": "client-graph-fills",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/fill"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_fill"],
+      "javascriptValidators": ["js/src/records.ts:validateFill"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 16,
+      "constraintSha256": "1fb7f43a7b245afefe4f844f87eb65683109719b686e98412717bb6996930965"
+    },
+    {
+      "id": "client-graph-slot-regions",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/slotRegion"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_slot_region"],
+      "javascriptValidators": ["js/src/records.ts:validateSlotRegion"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 11,
+      "constraintSha256": "683e4e1af5603493cca52be425da020c36e87882af5fa86e002d1ae8cf602f05"
+    },
+    {
+      "id": "client-graph-record",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/graph"],
+      "pythonValidators": ["python/citry_client_graph/records.py:validate_graph"],
+      "javascriptValidators": ["js/src/records.ts:validateGraph"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_client_graph_protocol_runtime.py"],
+      "constraintCount": 20,
+      "constraintSha256": "3be01bd483cc14a06ecb516a092323bbf2c999e2482b0f03d033a7e06c96f7b2"
+    }
+  ]
+}

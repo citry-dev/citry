@@ -184,6 +184,46 @@ class TestComponentCacheLookup:
         key = component_cache_key(Card, vary={"name": "Ada"})
         assert _decode_artifact(app.cache.get(key))
 
+    def test_cache_hit_keeps_current_boundary_invocation_metadata(self):
+        app = Citry()
+        renders = 0
+
+        class Cached(Component):
+            citry = app
+
+            class Cache:
+                enabled = True
+
+            template = """
+            <p>cached</p>
+            """
+
+            def template_data(self, kwargs, slots):
+                nonlocal renders
+                renders += 1
+                return {}
+
+        class Page(Component):
+            citry = app
+            template = """
+            <c-cached #c-key="call_key" />
+            """
+
+            def template_data(self, kwargs, slots):
+                return {"call_key": kwargs.get("call_key")}
+
+        Page(call_key="first").render()
+        replayed = Page(call_key="second").render()
+        invocation = next(
+            record
+            for record in replayed.context.ownership.snapshot().component_invocations
+            if record.target_class_id == Cached.class_id and record.state == OwnershipState.ACTIVE
+        )
+
+        assert renders == 1
+        assert invocation.morph_key == "second"
+        assert invocation.morph_mode is None
+
     def test_disabled_component_never_touches_backend(self):
         backend = _RecordingCache()
         app = Citry(cache=backend)
@@ -967,13 +1007,16 @@ class TestComponentCacheDiagnostics:
         assert "corrupt-entry" in [record.citry_cache_outcome for record in _cache_records(caplog)]
 
         artifact_wire = json.loads(app.cache.get(key))
-        artifact_wire["artifact_version"] += 1
+        artifact_wire["artifact_version"] = 9
         app.cache.set(key, json.dumps(artifact_wire))
         caplog.clear()
         with caplog.at_level(logging.DEBUG, logger="citry"):
             str(Card())
         assert "incompatible-entry" in [record.citry_cache_outcome for record in _cache_records(caplog)]
-        assert _decode_artifact(app.cache.get(key))
+        refreshed = app.cache.get(key)
+        assert refreshed is not None
+        assert json.loads(refreshed)["artifact_version"] == 1
+        assert _decode_artifact(refreshed)
 
     def test_stale_css_capture_is_rejected_against_current_whitespace_css(self, caplog):
         backend = InMemoryCache()

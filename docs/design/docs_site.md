@@ -29,7 +29,7 @@ site needs:
   `</head>`, JS before `</body>`, or into `<c-js>`/`<c-css>` placeholders), with
   `simple`/`fragment`/`ignore` variants. A full HTML page with working component
   assets comes out of one call, so interactive examples need no extra plumbing
-  ([`extensions/dependencies/`](../../packages/py/citry/citry/extensions/dependencies/)).
+  ([`ext/dependencies/`](../../packages/py/citry/citry/ext/dependencies/)).
 - A framework-agnostic web layer is built:
   [`contrib/asgi.py`](../../packages/py/citry/citry/contrib/asgi.py) and
   [`contrib/fastapi.py`](../../packages/py/citry/citry/contrib/fastapi.py)
@@ -75,6 +75,30 @@ citry / FastAPI replacement.
    django-components). These are citry's canonical channels; the README carries
    the matching badges and the header renders them as social icons (workstream
    G, feature 5d.2). No other channels exist yet.
+
+---
+
+## Configuration ownership and command snapshot
+
+Maintainer-owned product declarations live at the top of `docs_site/`, not in
+the Python implementation. `settings.yml` owns site and repository identity,
+links, Markdown profiles, search, Blog, git metadata, SEO, inventory, and
+release-note policy. `reference.yml`, `ui_library.yml`, `redirects.yml`, and
+`docs_versions.yml` own the build's ordered catalogs and workflow policy.
+`people_sources.yml` separately owns the inputs used only by
+`docs_site/scripts/people.py`. In particular, UI-family API heading contracts
+belong to `ui_library.yml`; adding a family does not require a second Python
+registry.
+
+`_internal/config.py` is limited to runtime paths and environment overrides.
+Each build, check, assemble, or server process loads its five runtime manifests
+into one validated `DocsProject` and keeps that project active through nested
+renderers, components, generated pages, and guards. The People generator loads
+and validates `people_sources.yml` at its own command boundary. Mutating
+commands validate the source files they will consume, generated Python symbols,
+projection front matter, and route collisions before clearing or writing
+output. The operational commands and edit locations are documented in
+`docs_site/README.md`.
 
 ---
 
@@ -140,8 +164,8 @@ the PR #1664 branch `jo-docs-mkdocs-migrate`. When a feature needs one of these,
 fetch and port it from there (for example with
 `gh api repos/django-components/django-components/contents/<path>?ref=jo-docs-mkdocs-migrate`),
 rather than reinventing it. Citry already ports `supported_versions.py`, and
-`docs_site/scripts/people.py` (extended to merge citry and django-components contributor
-counts) with its `repo--docs-people.yml` workflow.
+`docs_site/scripts/people.py` (extended to merge the repositories declared in
+`docs_site/people_sources.yml`) with its `repo--docs-people.yml` workflow.
 
 ---
 
@@ -287,6 +311,12 @@ to script the bulk conversion and hand-fix the remainder. Prose stays as-is.
 
 ## Phased plan
 
+> **Status note (August 2026):** The slice log below records the order in which
+> the port was implemented. Phrases such as "deferred" and "still open" inside
+> a slice describe that historical checkpoint, not the current site. The
+> configuration snapshot above, `docs_site/README.md`, the current code and
+> tests, and the parity audit are authoritative for present behavior.
+
 **Phase 0: vendor. (Done.)** Refreshed `_djc_reference` and vendored
 `docs_site/` (minus history and generated output) as two gitignored snapshots,
 reproducible via [`scripts/vendor_djc_reference.sh`](../../scripts/vendor_djc_reference.sh);
@@ -315,8 +345,8 @@ gitignored `_djc_reference_docs_site/` it ports from). Progress:
   nav with per-page active state, breadcrumbs, content, prev/next, footer,
   right-rail TOC, back-to-top). Django filters and loop-position logic moved
   into `template_data`; the `djc-*` class hooks are kept so the vendored CSS/JS
-  work unchanged. Deferred: search modal, version picker, JSON-LD, the mobile
-  overflow menu, and the eventual `djc-*` to `citry-*` rebrand.
+  work unchanged. At that checkpoint, search, versioning, structured data, and
+  mobile navigation remained for later slices.
 - *Slice 4a (done):* the pass 0/1 directive pipeline. `fence_protection`
   protects code (fenced and inline) by wrapping it in `<c-raw>`;
   `pipeline.render_content` renders the page body as a citry template (a
@@ -329,9 +359,9 @@ gitignored `_djc_reference_docs_site/` it ports from). Progress:
   component/page pairs under `examples/<name>/`, build-time pre-render of each
   demo to `examples/<slug>/demo/index.html`, and a dev-server route for it. The
   authored recipe remains at `examples/<slug>/`. The card shows a live-demo
-  iframe plus the Pygments-highlighted source. Still open
-  directives: `<c-docstring />` (Phase 3), `<c-image />`, `<c-people />`, and
-  example fragment variants.
+  iframe plus the Pygments-highlighted source. At that checkpoint,
+  `<c-docstring />`, `<c-image />`, `<c-people />`, and example fragment
+  variants remained for later slices.
 
   Notes:
   - The tabbed card is a citry component (`docs_site/_internal/components/example_card.py`). The
@@ -340,46 +370,47 @@ gitignored `_djc_reference_docs_site/` it ports from). Progress:
     loop; only its dynamic form needs `c-bind`, because `c-for` is the loop
     directive). The `<c-example />` directive renders it and flushes it left
     (`_lstrip_outside_pre`) so the markdown pass treats it as block HTML.
-  - Open follow-up: the shipped `card` example is CSS-only. citry's client
-    runtime (`citry.js`) and dependency manager are built and serve correctly
-    under the live `serve` (the `/citry` mount), so a JS demo works there. The
-    *static build* does not yet set a mount prefix or write citry's dependency
-    assets (the runtime plus the per-instance scripts) to disk, so a JS demo
-    served as flat files has no runtime to load. Exporting those assets at build
-    time is the open asset-loading work (Phase 4).
+  - Current follow-through: the static build now exports `citry.js`, the Events
+    runtime, and fragment JS/CSS under the same `/citry` mount used by the dev
+    server. JavaScript examples therefore work from flat files as well as in
+    live development. Unit and Chromium tests cover runtime export, fragment
+    assets, and interactive example behavior.
 
 The slices above were the execution unit and do not line up one-to-one with the
 phase numbers below: slices 1-3 plus 4a are Phase 1, and **slice 4b is Phase 2**.
 
-**Phase 2: live examples. (Done - delivered as slice 4b.)** `<c-example>` and
-the example card on citry, with example component/page pairs and build-time
-pre-render. Remaining within this phase: more examples, JS-interactive demos
-(need the client runtime in the static build), example fragment variants, and
-an examples gallery index.
+**Phase 2: live examples. (Done, delivered as slice 4b and later follow-ups.)**
+`<c-example>` and the example card run on citry, with example component/page
+pairs, build-time pre-rendering, JavaScript-interactive demos, fragment
+variants, and the Examples cookbook/gallery.
 
 **Phase 3: API reference.** Introspect citry with griffe and render symbols
-through citry components, a page per category.
+through citry components, a page per category. The ordered catalog now lives in
+`docs_site/reference.yml`; `_internal/reference_pages.py` strictly loads it and
+owns generation mechanics.
 
-The categories were re-derived from citry's public surface (74 names in
-`citry.__all__`), not ported from DJC's Django-shaped pages (`template_tags`,
-`management_command`, `tag_formatters`, `signals`, `template_variables`, which
-citry does not have): **Component**, **Citry & config**, **Rendering**,
-**Slots**, **Nodes**, **Extensions** (one page: the classes, the hook methods,
-and the 18 `On*Context` objects), **Dependencies**, **HTML attributes**, **Web
-integration**, and **Built-in tags**. Scope is `citry.*` only (no
-`citry_core` Rust internals). Renderer kinds drop to `class` / `function` /
-`component-class` / `setting` / `extension-hook` / `hook-context` / `instance`.
+The categories were re-derived from citry's public surface, not ported from
+DJC's Django-shaped pages (`template_tags`, `management_command`,
+`tag_formatters`, `signals`, and `template_variables`, which citry does not
+have). The 17 ordered categories are **Component**, **Component
+introspection**, **Component libraries**, **Citry instance and config**,
+**Rendering**, **Slots**, **Nodes**, **Template analysis**, **Extensions**,
+**Dependencies**, **Render cache keys**, **Events**, **Browser APIs**, **HTML
+attributes**, **Web integration**, **Contrib integrations**, and **Built-in
+tags**. `docs_site/reference.yml` is the authoritative list. Scope is
+`citry.*` only, with no `citry_core` Rust internals.
 
 - *Slice 3a (done):* `reference.py` (griffe introspection into a render-ready
   structure: signature, docstring sections, parameters/returns/raises/
   attributes, nested members), the recursive `ReferenceSymbol` citry component
   (a class renders its members by recursing into itself), and the
   `<c-docstring path="citry.X" />` directive.
-- *Slice 3b (done):* `reference_pages.py` (the 10 categories, page generation
-  via `<c-docstring>` / `<c-builtin>`, and the `reference` navigation source),
+- *Slice 3b (done):* `reference.yml` (the current ordered categories and public
+  symbols) plus `reference_pages.py` (strict loading, page generation via
+  `<c-docstring>` / `<c-builtin>`, and the `reference` navigation source),
   the `extract_builtin` runtime introspection plus the `<c-builtin>` directive for
-  the dynamically created `<c-*>` tags, build/serve generation of the 11
-  reference pages with the `/reference/` nav, and `reference.css` for the
+  the dynamically created `<c-*>` tags, build/serve generation of the 17
+  category pages plus the Reference index, and `reference.css` for the
   `.doc-*` classes. A guard test asserts every category symbol resolves and that
   the categories cover all of `citry.__all__`.
 - *Slice 3d (done): unified built-in tag reference.*
@@ -493,8 +524,9 @@ do not render the picker. The site starts at a single
 version and the manifest grows as citry releases.
 
 A snapshot shares the root build's `/static`, client runtime, and search index
-(its pages reference those at the site root), which keeps the committed tree
-small. One consequence: searching from inside an old `/v/<version>/` page
+(assembly rewrites its search attribute to the root build's configured
+`search.pagefind_path`), which keeps the committed tree small. One consequence:
+searching from inside an old `/v/<version>/` page
 queries the current version's index, since per-version search (a `pagefind_path`
 the picker would point at the snapshot's own index) is not wired yet.
 
@@ -511,6 +543,7 @@ Current ownership is:
 
 | Surface or output | Owner |
 | --- | --- |
+| Project landing page at `/` | Site content declared by `home` |
 | Docs, Examples, Reference, release notes | Versioned content |
 | Community, Blog index, posts, and feed | Site content |
 | Pagefind, sitemap, robots, LLM files, redirects, static files, Citry runtime, generated social cards | Root build |
@@ -529,8 +562,10 @@ targets are projected under `/v/<version>/` and site targets remain at the root;
 the final base-path pass then prefixes both for project Pages. The same resolver
 controls authored-page discovery, generated outputs, content assets, picker
 visibility, sidebar and breadcrumb links, clean Markdown links, and generated
-HTML links. If the root landing page is site-scoped later, each snapshot writes
-a home redirect to its first successfully built versioned page.
+HTML links. The site-scoped project home is declared separately from visible
+primary areas with `home: {title, path, scope}`. Its path must be `/` and its
+scope must be `site`; Docs therefore starts at `/docs/`. Each snapshot writes a
+home redirect to its first successfully built versioned page.
 This changes the snapshot output contract, so new snapshots carry docs builder
 version `1.1.0`. Their `_build_info.json` also records the site-route patterns
 used during that build. The cross-version guard reads that frozen scope
@@ -554,16 +589,15 @@ backward compatibility. Snapshots retain baked social metadata and do not get a
 per-version generated card set. Per-version search, version-pinned shared
 assets, and dynamic historical chrome remain deferred.
 
-Landed but still requiring first-release review: the disaster-recovery
+Landed but still requiring first-release authorization review: the disaster-recovery
 `build-all` (rebuild every
 release tag via git worktrees), the two version-tree guards (`versions_manifest`,
 `cross_version_link`) with a `versions-check` command, and the
 `repo--docs-release.yml` workflow that on a `citry@X.Y.Z` tag builds that version
-into `versions/<v>/`, runs the guards, commits it, and deploys. Before the first
-real release, the workflow must build versioned snapshot content from the tag
-commit, then assemble the current root from `main`; its present `origin/main`
-snapshot source can diverge after tagging. Commit-back authorization for a
-protected default branch is the other release blocker. Still deferred: the
+from the exact tag commit in a detached worktree, stages and registers it under
+`versions/<v>/`, runs the guards, commits it from `main`, and then assembles the
+current root from `main`. Commit-back authorization for a protected default
+branch remains the release blocker. Still deferred: the
 ephemeral per-deploy `dev` snapshot, and per-version search (a `pagefind_path`
 the picker would point at the snapshot's own index).
 
@@ -709,7 +743,8 @@ repeated here.
   ported from the upstream script, counts merged PRs across **both** citry and
   django-components and merges the totals (citry continues django-components, so
   a contributor to either is credited), writing `docs_site/data/people.yml` that
-  the `<c-people />` component renders. The
+  the `<c-people />` component renders. Repository order, featured people, and
+  ignored bots are declared in `docs_site/people_sources.yml`. The
   [`repo--docs-people.yml`](../../.github/workflows/repo--docs-people.yml)
   workflow runs it monthly and opens a PR when the data changes. Built now rather
   than deferred, because the django-components merge means there is already a real
@@ -740,11 +775,11 @@ why. This phase is the deliberate authoring pass. Approach:
   contributor). Pick a tone per page/section for its audience; several tones
   across the site is correct, not inconsistent. Personas give a concrete frame of
   reference for who each page is written to.
-- **TODO: revisit sharing components.** After the reader personas and site voice
-  are defined, rewrite `docs_site/content/advanced/share-components.md`. Preserve
-  its verified technical contract, but remove discussion-specific assumptions,
-  incidental implementation notes, and recommendations that do not serve the
-  page's eventual reader and purpose.
+- **Component reuse pages.** The Advanced authoring pass separates two reader
+  jobs: `Component libraries` covers packaging and publishing reusable
+  components, while `Custom component values` explains the `ComponentLike`
+  integration contract. Both keep implementation detail behind the task it
+  helps the reader complete.
 - **Intent-driven and concise.** Every reader arrives with a reason. Lead them to
   it and respect their time. Avoid jargon. Cut anything that does not serve the
   reader's goal on that page.
@@ -839,12 +874,23 @@ Grow Examples beyond the current component demos. Candidate families include:
 - one group for **Alpine**, with a focused page for each supported Alpine magic
   or integration pattern;
 - cross-cutting recipes for passing JavaScript/CSS data, events, fragments,
-  dependencies, state, and other common tasks.
+  dependencies, state, and other common tasks; and
+- richer showcase applications such as games, public-data dashboards,
+  visualizations, spreadsheets, and creative tools. The candidate portfolio,
+  data/asset requirements, and landing-page selection contract live in the
+  [landing-page design](docs_landing_page.md#example-showcase-backlog).
 
 The final taxonomy and the relationship between gallery cards, recipe pages,
 and standalone live demos remain implementation questions. Every recipe should
 still be runnable/tested and should point readers toward the deeper Docs and API
 Reference pages instead of duplicating them.
+
+Examples owns each showcase's runnable code, canonical page, showcase manifest,
+and generated preview. The project landing page selects example IDs and order
+for a small accepted subset, but it must link back to Examples rather than
+becoming a second source for the title, demo, attribution, or explanation. The
+manifest and landing selection contract are defined in the
+[landing-page design](docs_landing_page.md#landing-page-selection-contract).
 
 #### Add Blog as a top-level area
 
@@ -880,14 +926,14 @@ visual design. Define how UI Kit pages and general Examples cross-link before
 deciding whether current Card/Tabs recipes move, narrow their focus, or stay as
 framework-level examples.
 
-The public catalog must consume Citry UI's accepted
-[Python scenario catalog](ui_research/scenario-catalog.md), which is already the
-single authored source for documentation examples, generated Storybook stories,
-standalone quality routes, and tests. Do not create a second hand-authored UI
-gallery or a competing scenario format in the docs site. The public UI pages are
-another projection/consumer of that catalog; Storybook remains the planned
-maintainer state browser and the standalone routes remain quality/debugging
-surfaces, as defined in the [Citry UI plan](ui_library_plan.md).
+The public catalog should consume Citry UI's accepted
+[Python scenario catalog](ui_research/scenario-catalog.md) and canonical
+component examples rather than creating a competing scenario format or
+duplicating hand-authored snippets. The docs site's live-component host is the
+first-party public preview surface. Standalone routes remain quality and
+debugging surfaces, as defined in the [Citry UI plan](ui_library_plan.md).
+Storybook is a separate optional contributor extension tracked in
+[`extensions_storybook.md`](extensions_storybook.md).
 
 #### Fix Examples theme compatibility
 
@@ -905,11 +951,12 @@ check for readable foreground/background colors.
 - re docstrings - preferably, most of public API symbols should include usage examples in their docstrings, so that the usage examples show up in the reference too.
 
 - The primary navigation is declared entirely by the top-level `areas` in
-  `_nav.yml`: Docs, Examples, Reference, Community, and Blog. Header order, active
-  area, scoped sidebar, breadcrumbs, and prev/next navigation all use that
-  tree. Reference and Release notes use explicit generated sources in the same
-  declaration. Blog uses the generated `blog` source. The future UI Kit addition
-  is tracked in the decision record above.
+  `_nav.yml`: Docs, Reference, Examples, Try it, Citry UI, IDE, Community, and
+  Blog. Header order, active area, scoped sidebar, breadcrumbs, and prev/next
+  navigation all use that tree. Reference and Release notes use explicit
+  generated sources in the same declaration. Blog uses the generated `blog`
+  source. Item review state and area badges remain structured navigation
+  metadata so page titles stay clean for every other consumer.
 
 - Keep About. It contains Compatibility, Benchmarks, and Security. Command line
   lives under Advanced.

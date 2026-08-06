@@ -13,9 +13,8 @@ from weakref import ref
 import pytest
 
 import citry.ext.dependencies
-from citry import Citry, Component, Extension
+from citry import Citry, Component, Extension, Markup
 from citry.ext.dependencies import CitryDependencies, DependenciesExtension, Script, get_dependencies
-from citry.util.html import SafeString
 
 
 @pytest.fixture
@@ -395,7 +394,7 @@ class TestShapes:
 
     def test_prerendered_str_subclass_passes_through(self):
         c = Citry()
-        tag = SafeString('<link href="pre.css" rel="stylesheet">')
+        tag = Markup('<link href="pre.css" rel="stylesheet">')
 
         class Card(Component):
             citry = c
@@ -403,7 +402,7 @@ class TestShapes:
             class Dependencies:
                 css = [tag]
 
-        # A str subclass with __html__ (e.g. SafeString) is a pre-rendered
+        # A str subclass with __html__ (e.g. Markup) is a pre-rendered
         # tag, not a path, and is kept as the very same object.
         deps = Card.get_dependencies()
         assert deps.css == {"all": (tag,)}
@@ -437,7 +436,7 @@ class TestShapes:
         (tmp_path / "b.js").write_text("")
         c = Citry(dirs=[tmp_path])
         script = Script(url="https://cdn.example.com/lib.js")
-        tag = SafeString("<script>inline</script>")
+        tag = Markup("<script>inline</script>")
 
         class Card(Component):
             citry = c

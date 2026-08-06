@@ -10,6 +10,40 @@ you four things to work with when that happens: render errors that name the
 failing component, verbose logs of the render walk, visual component and slot
 boundaries, and a way to capture the exact HTML a component produced.
 
+## Debug the editor integration
+
+The VS Code status bar shows the active Citry analysis level for each workspace
+folder. `registry` means the server imported the configured Citry app and can
+check component names, inputs, and slots. `syntax only` means parser diagnostics
+still run, but registry-backed checks and component intelligence are disabled.
+
+If the status is `syntax only` unexpectedly:
+
+1. Install `citry-lsp` in the Python environment selected for the workspace:
+
+   ```console
+   python -m pip install citry-lsp
+   ```
+
+2. Set `citry.app` to the same `module:attribute` Citry instance the application
+   starts, for example `myproject.app:engine`.
+3. Run **Citry: Show Language Server Status**. Check the reported interpreter,
+   app spec, Citry version, protocol version, and discovery message.
+4. If the interpreter is wrong, select the intended Python environment or set
+   `citry.python` to its executable. Then run **Citry: Restart Language Server**.
+
+App discovery has a five-second startup limit and runs in a child process. An
+import exception, `SystemExit`, process crash, startup timeout, unsupported
+Citry version, or catalog mismatch therefore degrades that workspace to syntax
+only without breaking the editor's language-server connection. Fix the first
+reported discovery error, then restart the server. Output printed by project
+imports is captured and included in status instead of entering the LSP stream.
+
+Ordinary HTML files are not claimed globally because Citry permits any
+`template_file` name. Registry mode analyzes files resolved from the component
+catalog. For an unassociated standalone template, select the **Citry Template**
+language mode or add a project-specific `files.associations` rule.
+
 ## Read browser diagnostics first
 
 Client failures start with a `[Citry]` message in the browser console. Use the
@@ -17,9 +51,9 @@ first error in the chain:
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| A second or foreign Alpine warning | The page or a dependency loads Alpine separately | Remove that script and use [Citry's plugin hook](/advanced/alpine-runtime/#register-a-plugin-before-startup) |
+| A second or foreign Alpine warning | The page or a dependency loads Alpine separately | Remove that script and use [Citry's plugin hook](/advanced/alpine-runtime/#add-an-alpine-plugin) |
 | Props initialization was skipped | `$c-props` is missing, invalid, asynchronous, or has the wrong declared type | Return a synchronous plain object and follow the named prop diagnostic |
-| Missing or changed physical cap | A minifier, CDN, sanitizer, or DOM update changed ownership comments | Preserve the complete [client graph marker contract](/advanced/alpine-runtime/#preserve-client-graph-markers) |
+| Missing or changed ownership marker | A minifier, CDN, sanitizer, or DOM update changed ownership comments | Preserve all [client-active HTML](/advanced/alpine-runtime/#preserve-client-active-html) |
 | Fragment graph or asset adoption failed | Citry routes are not mounted, or one manifest or asset is incomplete | Mount the integration and inspect the first network or graph error |
 | Native `x-for`, `x-if`, or `x-teleport` clone was rejected | The template tries to clone a server-rendered active Citry component | Render component lists on the server or keep the structural directive inside the component |
 
@@ -218,8 +252,8 @@ with open("result.html", "w", encoding="utf-8") as f:
 
 If you need to serialize with specific options, render first and call
 `serialize()` on the result: `HomePage().render().serialize()` returns the same
-string and lets you choose how JS and CSS dependencies are placed (see
-[JS and CSS dependencies](/advanced/js-and-css-dependencies/)).
+string and lets you choose how JavaScript and CSS are placed (see
+[Asset placement](/advanced/asset-placement/)).
 
 ## Debug with an AI coding agent
 

@@ -75,6 +75,25 @@ class TestIfNode:
         assert _html(tpl3, a=False, b=True) == "B"
         assert _html(tpl3, a=False, b=False) == "C"
 
+    def test_branches_group_across_template_comments_and_whitespace(self):
+        tpl = """<c-if cond="a">A</c-if>
+{# explain the middle branch #}
+<c-elif cond="b">B</c-elif>
+  {# explain the fallback #}
+<c-else>C</c-else>"""
+        assert _html(tpl, a=False, b=True) == "B"
+        assert _html(tpl, a=False, b=False) == "C"
+
+        shorthand = """<p c-if="x">yes</p>
+{# fallback #}
+<p c-else>no</p>"""
+        rendered_if = _html(shorthand, x=True)
+        rendered_else = _html(shorthand, x=False)
+        assert rendered_if.startswith("<p data-cid-")
+        assert rendered_if.endswith(">yes</p>")
+        assert rendered_else.startswith("<p data-cid-")
+        assert rendered_else.endswith(">no</p>")
+
     def test_content_between_branches_is_a_parse_error(self):
         with pytest.raises(SyntaxError, match="must follow one of"):
             _html('<c-if cond="x">yes</c-if>text<c-else>no</c-else>', x=True)
@@ -96,6 +115,13 @@ class TestForNode:
         # Same rule as if/else: whitespace-only text between the branches is
         # formatting and is dropped when the branches group.
         tpl = '<c-for each="i in items">[{{ i }}]</c-for>\n<c-empty>none</c-empty>'
+        assert _html(tpl, items=[]) == "none"
+        assert _html(tpl, items=[1, 2]) == "[1][2]"
+
+    def test_empty_branch_groups_across_template_comment_and_whitespace(self):
+        tpl = """<c-for each="i in items">[{{ i }}]</c-for>
+{# shown when there are no rows #}
+<c-empty>none</c-empty>"""
         assert _html(tpl, items=[]) == "none"
         assert _html(tpl, items=[1, 2]) == "[1][2]"
 

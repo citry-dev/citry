@@ -16,11 +16,12 @@ from __future__ import annotations
 
 import re
 import zlib
+from collections import defaultdict
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from docs_site._internal.inventory import external_inventory
-from docs_site._internal.reference_pages import CATEGORIES
+from docs_site._internal.project import current_docs_project
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -33,7 +34,6 @@ _SYMBOL_CLEAN_RE = re.compile(r"[`\s]")
 _FENCED_CODE_RE = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
 
 
-@lru_cache(maxsize=1)
 def symbol_url_index() -> dict[str, str]:
     """
     Map a cross-ref key to a reference URL+anchor.
@@ -41,38 +41,54 @@ def symbol_url_index() -> dict[str, str]:
     Keyed by dotted path, short name, and member forms (``Component.render`` and
     ``citry.Component.render``), mirroring the anchors the pages render.
     """
+    return _symbol_url_index(current_docs_project().reference.categories)
+
+
+@lru_cache(maxsize=8)
+def _symbol_url_index(categories: tuple) -> dict[str, str]:
     # Lazy: reference imports this module (for docstring rendering), so importing
     # it back at module load would be a cycle. By call time it is fully loaded.
-    from docs_site._internal.reference import anchor, reference_anchor_map, resolve_symbol  # noqa: PLC0415
+    from docs_site._internal.reference import (  # noqa: PLC0415
+        anchor,
+        is_external_alias,
+        reference_anchor_map,
+        resolve_symbol,
+    )
 
     # The same per-page-unique anchors the reference pages render, so a link and
     # its target id always match (e.g. the citry instance, not the Citry class).
     anchors = reference_anchor_map()
     index: dict[str, str] = {}
+    generated: dict[str, dict[str, str]] = defaultdict(dict)
 
     # Pass 1: entry-level keys (a symbol's own page wins over a same-named member).
-    for cat in CATEGORIES:
+    for cat in categories:
         base = f"/reference/{cat.slug}/"
         if cat.source != "griffe":
             for entry in cat.entries:
                 url = f"{base}#{entry.anchor}"
-                index.setdefault(entry.key, url)
+                index[entry.key] = url
                 for alias in entry.aliases:
-                    index.setdefault(alias, url)
+                    index[alias] = url
             continue
         for path in cat.symbols:
             url = f"{base}#{anchors.get(path, anchor(path))}"
-            index[path] = url
-            index.setdefault(path.split(".")[-1], url)
+            generated[path][path] = url
+            generated[path.split(".")[-1]][path] = url
 
     # Pass 2: member keys (classes only).
-    for cat in CATEGORIES:
+    for cat in categories:
         if cat.source != "griffe":
             continue
         base = f"/reference/{cat.slug}/"
         for path in cat.symbols:
             obj = resolve_symbol(path)
-            if obj is None or getattr(obj, "kind", None) is None or obj.kind.value != "class":
+            if (
+                obj is None
+                or getattr(obj, "kind", None) is None
+                or obj.kind.value != "class"
+                or is_external_alias(obj)
+            ):
                 continue
             leaf = path.split(".")[-1]
             for member_name, member in obj.members.items():
@@ -80,8 +96,15 @@ def symbol_url_index() -> dict[str, str]:
                     continue
                 member_path = f"{path}.{member_name}"
                 member_url = f"{base}#{anchors.get(member_path, anchor(member_path))}"
-                index.setdefault(f"{leaf}.{member_name}", member_url)
-                index.setdefault(member_path, member_url)
+                generated[f"{leaf}.{member_name}"][member_path] = member_url
+                generated[member_path][member_path] = member_url
+
+    # A short name shared by multiple public surfaces is intentionally absent;
+    # callers must use its fully qualified key. This keeps manifest order from
+    # deciding which page wins.
+    for key, owners in generated.items():
+        if len(owners) == 1:
+            index[key] = next(iter(owners.values()))
 
     return index
 
@@ -176,7 +199,7 @@ def build_objects_inv(version: str, *, project: str = "citry") -> bytes:
     """Build a Sphinx v2 ``objects.inv`` for citry's symbols (so other sites can link in)."""
     index = symbol_url_index()
     entries = {name: ("py:obj", url.lstrip("/")) for name, url in index.items() if name.startswith("citry.")}
-    for cat in CATEGORIES:
+    for cat in current_docs_project().reference.categories:
         for entry in cat.entries:
             entries[entry.key] = (
                 entry.inventory_role,

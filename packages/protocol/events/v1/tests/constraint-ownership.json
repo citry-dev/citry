@@ -1,0 +1,137 @@
+{
+  "format": "citry-protocol-constraint-ownership/1",
+  "families": [
+    {
+      "id": "events-call-envelope",
+      "schema": "call.schema.json",
+      "exactSchemaPointers": [""],
+      "schemaPointerPrefixes": ["/properties"],
+      "pythonValidators": ["python/citry_events/calls.py:validate_call_envelope"],
+      "javascriptValidators": ["js/src/calls.ts:validateCallEnvelope"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_package.py"],
+      "constraintCount": 11,
+      "constraintSha256": "0f1efc526fd574cca77bae576b88357804250dd5b89318cee8fc4fc853c3dc87"
+    },
+    {
+      "id": "events-call-record",
+      "schema": "call.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/call"],
+      "pythonValidators": ["python/citry_events/calls.py:validate_call"],
+      "javascriptValidators": ["js/src/calls.ts:validateCall"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
+      "constraintCount": 18,
+      "constraintSha256": "c38c668bb1fa114f81d015407192c8d744a53036456d9c5eb7a2dd75302dbffc"
+    },
+    {
+      "id": "events-call-capabilities",
+      "schema": "call.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/capabilities", "/$defs/actionKind", "/$defs/swap"],
+      "pythonValidators": ["python/citry_events/calls.py:validate_capabilities"],
+      "javascriptValidators": ["js/src/calls.ts:validateCapabilities"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
+      "constraintCount": 8,
+      "constraintSha256": "f7e00a6d086451c1242533e276d86aa67f68204f0e74977acf730fbebaf83565"
+    },
+    {
+      "id": "events-descriptor",
+      "schema": "descriptor.schema.json",
+      "exactSchemaPointers": [""],
+      "schemaPointerPrefixes": ["/properties"],
+      "pythonValidators": ["python/citry_events/manifests.py:validate_descriptor"],
+      "javascriptValidators": ["js/src/manifests.ts:validateDescriptor"],
+      "tests": ["tests/descriptors/index.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_package.py"],
+      "constraintCount": 12,
+      "constraintSha256": "b2f6dbd5a8ab0392f452bfcf082c5fc39af7849427082764c92dabb71bcebc34"
+    },
+    {
+      "id": "events-handler-descriptor",
+      "schema": "descriptor.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/eventHandler"],
+      "pythonValidators": ["python/citry_events/manifests.py:validate_handler_descriptor"],
+      "javascriptValidators": ["js/src/manifests.ts:validateHandlerDescriptor"],
+      "tests": ["tests/descriptors/index.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_package.py"],
+      "constraintCount": 12,
+      "constraintSha256": "3d4e1ce15a2bb79eabe83dd5b287c736ab22f625fedc660a79d989ac5b5e3250"
+    },
+    {
+      "id": "events-manifest-envelope",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [""],
+      "schemaPointerPrefixes": ["/properties"],
+      "pythonValidators": ["python/citry_events/manifests.py:validate_manifest"],
+      "javascriptValidators": ["js/src/manifests.ts:validateManifest"],
+      "tests": ["tests/manifests/index.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_package.py"],
+      "constraintCount": 11,
+      "constraintSha256": "c673d5e91a9d9e40d289291d2761d2fe01e3467eaba5990ddee1a621c89bc132"
+    },
+    {
+      "id": "events-manifest-component-class",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/componentClass", "/$defs/eventHandler"],
+      "pythonValidators": ["python/citry_events/manifests.py:validate_descriptor", "python/citry_events/manifests.py:validate_handler_descriptor"],
+      "javascriptValidators": ["js/src/manifests.ts:validateDescriptor", "js/src/manifests.ts:validateHandlerDescriptor"],
+      "tests": ["tests/manifests/index.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
+      "constraintCount": 24,
+      "constraintSha256": "9b2ee4a772694890a630d82af73fdae731c9d25c02c061d1f7df6adf56d4337f"
+    },
+    {
+      "id": "events-manifest-component-instance",
+      "schema": "manifest.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/componentInstance"],
+      "pythonValidators": ["python/citry_events/manifests.py:validate_component_instance"],
+      "javascriptValidators": ["js/src/manifests.ts:validateComponentInstance"],
+      "tests": ["tests/manifests/index.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
+      "constraintCount": 14,
+      "constraintSha256": "e0a7ddb12765bb4f263230249b022a6bdc421a7d91a07d2389abb12b5c18b862"
+    },
+    {
+      "id": "events-result-envelope",
+      "schema": "result.schema.json",
+      "exactSchemaPointers": [""],
+      "schemaPointerPrefixes": ["/properties", "/allOf"],
+      "pythonValidators": ["python/citry_events/results.py:validate_result_envelope"],
+      "javascriptValidators": ["js/src/results.ts:validateResultEnvelope"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
+      "constraintCount": 12,
+      "constraintSha256": "f6e6b2583b51238b4e66e23a0ac633b8efcbd58a08d8c927013935ca3b1869a1"
+    },
+    {
+      "id": "events-result-records",
+      "schema": "result.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/result", "/$defs/okResult", "/$defs/errorResult", "/$defs/edgeErrorResult"],
+      "pythonValidators": ["python/citry_events/results.py:validate_result"],
+      "javascriptValidators": ["js/src/results.ts:validateResult"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
+      "constraintCount": 21,
+      "constraintSha256": "468068ff626f2baac8d59a3934b67bc0ba03e8a6d2dfb6cc6580b84013af079d"
+    },
+    {
+      "id": "events-result-errors",
+      "schema": "result.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/error", "/$defs/edgeError"],
+      "pythonValidators": ["python/citry_events/results.py:validate_error", "python/citry_events/results.py:validate_result_envelope"],
+      "javascriptValidators": ["js/src/results.ts:validateError", "js/src/results.ts:validateResultEnvelope"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
+      "constraintCount": 56,
+      "constraintSha256": "f66f402b5591838af7bd7035d3d32752711fae1b3d3a190b393552dbdeb1f7e8"
+    },
+    {
+      "id": "events-result-actions",
+      "schema": "result.schema.json",
+      "exactSchemaPointers": [],
+      "schemaPointerPrefixes": ["/$defs/action", "/$defs/renderAction", "/$defs/dataAction", "/$defs/stateAction", "/$defs/eventAction", "/$defs/redirectAction", "/$defs/urlAction", "/$defs/target", "/$defs/swap", "/$defs/delay", "/$defs/wait"],
+      "pythonValidators": ["python/citry_events/results.py:validate_action"],
+      "javascriptValidators": ["js/src/results.ts:validateAction"],
+      "tests": ["tests/conformance-cases.json", "js/test/runtime.test.mjs", "../../../py/citry/tests/test_events_protocol_runtime.py"],
+      "constraintCount": 58,
+      "constraintSha256": "1b0fe5bb5f640f6a5ef8b8b11f7c73ee507c879bfa137ff69266ba2e511ee096"
+    }
+  ]
+}

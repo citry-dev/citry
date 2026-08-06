@@ -1,155 +1,168 @@
 ---
 title: Dynamic components and elements
-description: Choose a component or an HTML tag name at render time with c-component c-is and c-element c-is in citry templates.
+description: Choose a component or an HTML tag at render time with c-component and c-element.
 ---
 
 # Dynamic components and elements
 
-Sometimes you do not know until render time which component to show, or which
-HTML tag to wrap your content in. Citry gives you two built-in tags for this:
-`<c-component>` picks a component, and `<c-element>` picks a plain HTML tag.
-Both read their target from a `c-is` attribute, which takes an expression just
-like any other [dynamic attribute](/syntax/dynamic-attributes/).
+Sometimes data decides what to show. A dashboard may choose one of several
+cards, while an article may choose whether a heading is an `h2` or an `h3`.
 
-## Pick a component with c-component
+Use `<c-component>` to choose a Citry component. Use `<c-element>` to choose a
+plain HTML tag. In both cases, `c-is` contains the Python expression that
+selects the result.
 
-Write `<c-component c-is="expr">`. The `expr` is evaluated against your
-`template_data`, and its value chooses which component renders in that spot.
-Every other attribute is passed to the target as a keyword argument, and the
-body (including any fills) becomes the target's slots.
+Their component-name suffix is case-insensitive, so `<c-Component>` and
+`<c-Element>` are equivalent spellings. The framework prefix must still be
+the exact lowercase `c-`.
+
+## Choose a component
+
+This page chooses a component by its registered name:
 
 ```citry
-from citry import Citry, Component
+from citry import Component, SlotInput
 
-c = Citry()
 
 class Card(Component):
-    citry = c
+    class Kwargs:
+        title: str = "Untitled"
+
+    class Slots:
+        default: SlotInput
+
     template = """
-        <div class="card">{{ title }}: <c-slot /></div>
+      <article class="card">
+        <h2>{{ title }}</h2>
+        <c-slot />
+      </article>
     """
 
-    def template_data(self, kwargs, slots):
-        return {"title": kwargs.get("title", "untitled")}
 
 class Page(Component):
-    citry = c
-    template = """
-        <c-component c-is="comp" c-title="'Hi'">body</c-component>
-    """
-
     def template_data(self, kwargs, slots):
-        # Resolved to a registered component name at render time.
-        return {"comp": "card"}
+        return {"chosen_component": "card"}
 
-# Page renders roughly:
-# <div class="card">Hi: body</div>
+    template = """
+      <c-component
+        c-is="chosen_component"
+        c-title="'Hello'"
+      >
+        This content goes inside the card.
+      </c-component>
+    """
 ```
 
-Because `c-title` is passed straight through, `Card` sees it as a kwarg, and
-`body` becomes its default slot. The target's own kwarg and slot validation
-still applies, so passing an attribute the target does not expect raises from
-the target.
+`c-is` selects `Card`. The Python input `c-title` becomes its `title` kwarg,
+and the body fills its default slot. The selected component checks its own
+[`Kwargs`][citry.Component.Kwargs] and
+[`Slots`][citry.Component.Slots] declarations as usual.
 
-### What c-is accepts
+Browser-side bindings follow the usual component-boundary rules. They do not
+become Python kwargs. See
+[Client interactivity](/concepts/client-interactivity/) for `$c-props`, Alpine
+handlers, and Citry event handlers.
 
-The resolved value of `c-is` on `<c-component>` must be one of two things:
+### What `c-is` accepts
 
-- A **registered component name** as a string, looked up in this component's
-  [`citry`][citry.Citry] instance.
-- A **component class** (a [`Component`][citry.Component] subclass), used
-  directly.
+For `<c-component>`, the expression must produce either:
+
+- a registered component name, such as `"card"`; or
+- a [`Component`][citry.Component] subclass, such as `Card`.
+
+To pass a class directly, return it from `template_data()`:
+
+```python
+def template_data(self, kwargs, slots):
+    return {"chosen_component": Card}
+```
+
+A component instance is not accepted. Insert an existing
+[`CitryElement`][citry.CitryElement] with `{{ ... }}`, or pass its class and
+let `<c-component>` create it. An unknown name raises
+[`NotRegistered`][citry.NotRegistered]. Citry never treats an unknown
+component name as an HTML tag.
+
+## Choose an HTML tag
+
+Use `<c-element>` when only the HTML tag changes:
 
 ```citry
-class Page(Component):
-    citry = c
+from citry import Component
+
+
+class Heading(Component):
+    class Kwargs:
+        level: int = 2
+        text: str
+
+    def template_data(self, kwargs: Kwargs, slots):
+        return {
+            "tag": f"h{kwargs.level}",
+            "text": kwargs.text,
+        }
+
     template = """
-        <c-component c-is="comp">body</c-component>
-    """
-
-    def template_data(self, kwargs, slots):
-        # A Component class works just as well as a name string.
-        return {"comp": Card}
-```
-
-An already-constructed component instance is not accepted. If you have a
-rendered [`CitryElement`][citry.CitryElement] you want to place, print it with
-`{{ ... }}` instead, or pass the class and let `<c-component>` construct it. A
-falsy or `None` value raises a `TypeError` asking for an `is` value, and an
-unregistered name raises [`NotRegistered`][citry.NotRegistered] with a hint to
-use `<c-element>` if you meant a plain HTML tag. `<c-component>` never falls
-back to rendering an HTML element.
-
-## Pick an HTML tag with c-element
-
-Write `<c-element c-is="expr">`. Here the resolved value is a **tag name
-string**, and citry renders a plain HTML element with that name. Every other
-attribute becomes an HTML attribute, formatted exactly like a statically
-written element: `class` and `style` are normalized, `False` and `None` values
-are dropped, and all values are escaped. The body becomes the element's
-children.
-
-```citry
-class Page(Component):
-    citry = c
-    template = """
-        <c-element c-is="tag" class="x">hello {{ w }}</c-element>
-    """
-
-    def template_data(self, kwargs, slots):
-        return {"tag": "section", "w": "world"}
-
-# Page renders roughly:
-# <section class="x">hello world</section>
-```
-
-Any syntactically valid tag name works, including custom elements like
-`my-widget` and SVG camelCase names like `clipPath`. The tag name must start
-with a letter and contain only letters, digits, hyphens, underscores, or dots.
-This is validated because the name lands verbatim in the output, so the check
-doubles as an injection guard (attribute values are always escaped).
-
-### Limits of c-element
-
-- **Void elements reject a body.** A void tag (`br`, `img`, and the rest)
-  renders compact and self-closing, so giving it a body raises a `ValueError`.
-- **Only the default slot is allowed.** `<c-element>` accepts the tag's body
-  as its content and nothing more; a named fill raises a `ValueError`.
-- **No nested-template attribute values on the dynamic path.** An attribute
-  value that is itself a template fragment (for example
-  `c-foo="<b>{{ x }}</b>"`) resolves to a [`CitryRender`][citry.CitryRender]
-  and raises a `TypeError`. Precompute the value in `template_data` instead, or
-  use a static `is="..."` on a plain element.
-
-## The static and dynamic forms
-
-Writing a plain `is` (for example `<c-component is="card">` or
-`<c-element is="div">`) is resolved by the citry compiler ahead of time, so it
-never touches the runtime machinery described here. The rendered output is the
-same. Use the dynamic `c-is` form (or supply `is` through a
-[`c-bind` spread](/syntax/dynamic-attributes/)) whenever the target depends on
-your data:
-
-```citry
-class Page(Component):
-    citry = c
-    template = """
-        <c-component c-bind="{'is': 'card', 'title': 'Spread'}" />
+      <c-element c-is="tag" class="heading">
+        {{ text }}
+      </c-element>
     """
 ```
 
-The `is` key in the spread selects the target; the remaining keys are passed
-through just like written attributes.
+`Heading(level=3, text="Details")` inserts:
 
-## Both tags are transparent wrappers
+```html
+<h3 class="heading">Details</h3>
+```
 
-`<c-component>` and `<c-element>` add no markup of their own beyond the element
-they render. [Provide and inject](/concepts/provide-and-inject/) flow straight
-through them, so a value provided above a dynamic tag reaches the component it
-renders. The names `component` and `element` are reserved on each
-[`Citry`][citry.Citry] instance, so you cannot register your own component
-under those names.
+The tag name must start with a letter. The remaining characters may be
+letters, digits, hyphens, underscores, or dots. Custom elements such as
+`my-widget` and SVG names such as `clipPath` are valid. HTML void-element
+identity is ASCII-case-insensitive, so selecting `BR` produces compact
+`<BR/>` output and rejects children just like selecting `br`.
 
-For choosing markup based on data without swapping the whole tag, see
-[Control flow](/syntax/control-flow/); for the attribute syntax `c-is` builds
-on, see [Dynamic attributes](/syntax/dynamic-attributes/).
+`<c-element>` also applies HTML attribute identity to its selector. `IS`,
+`c-IS`, and an `Is` key supplied by `c-bind` therefore mean the same thing as
+`is` / `c-is`. `<c-component>` inputs remain case-sensitive and use the exact
+lowercase selector spellings.
+
+Other attributes use the normal HTML formatting rules. `class` and `style`
+are normalized, and `False` and `None` leave an attribute out. Values are
+escaped unless they explicitly provide trusted HTML through `__html__()`.
+`$c-props` belongs to component boundaries and is not valid on an HTML
+element.
+
+### Limits of `c-element`
+
+- Void elements such as `br` and `img` cannot have a body.
+- Only the default slot is accepted. A named fill raises `ValueError`.
+- A dynamic attribute cannot produce a template fragment. Precompute a plain
+  value in `template_data()` instead.
+
+When you already know the tag, write that HTML tag directly. It is clearer
+than asking `<c-element>` to select a fixed name.
+
+## Use a fixed or calculated target
+
+Use `is="card"` when the target is written directly in the template. Use
+`c-is="chosen_component"` when a Python expression calculates it.
+
+You can also include `is` in a
+[`c-bind` mapping](/syntax/dynamic-attributes/):
+
+```citry-html
+<c-component
+  c-bind="{'is': chosen_component, 'title': heading}"
+/>
+```
+
+`c-bind` is applied in source order with the other attributes. If more than
+one value supplies `is`, the rightmost one wins.
+
+Neither built-in adds wrapper HTML. A selected component may have one root,
+several roots, text, or no output. Values from
+[Provide and inject](/concepts/provide-and-inject/) continue through the
+selection normally.
+
+For choosing content without changing the whole tag, see
+[Control flow](/syntax/control-flow/).

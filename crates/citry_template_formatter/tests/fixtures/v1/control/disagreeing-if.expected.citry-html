@@ -1,0 +1,1 @@
+<main><c-if cond="show"><section></section></c-if><c-else><span>none</span></c-else><footer></footer></main>

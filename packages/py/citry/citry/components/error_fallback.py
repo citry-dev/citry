@@ -31,6 +31,9 @@ boundary renders nothing when the content fails. Errors raised by the
 fallback content itself are not caught here; they continue to the next
 boundary up, which is the right behavior for nested boundaries.
 
+An ordinary fallback string is escaped before it becomes output. Use the
+fallback fill when the fallback needs markup.
+
 The whole behavior is the ``on_render`` generator hook
 (docs/design/component_on_render.md sections 3.2 and 7): the yield receives the
 rendered content or the error, and returning fallback content swallows the
@@ -46,6 +49,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 from citry.component import Component
+from citry.util.html import escape
 
 if TYPE_CHECKING:
     from citry.citry import Citry
@@ -62,14 +66,13 @@ def make_error_fallback_component(citry_instance: Citry) -> type[Component]:
 
         The guarded content is the tag body (the default slot). The fallback
         is the ``fallback`` attribute (a string), or the ``fallback`` fill,
-        which receives the error as slot data (``data.error``).
+        which receives the error as slot data (``data.error``). Ordinary
+        fallback strings are escaped; use the fill when the fallback needs
+        markup.
         """
 
         citry = citry_instance
         name = "error-fallback"
-        template = """
-          <c-slot />
-        """.strip()
 
         class Kwargs:
             fallback: str | None = None
@@ -97,6 +100,10 @@ def make_error_fallback_component(citry_instance: Citry) -> type[Component]:
                 # narrows away the broader part type).
                 part = fallback_slot({"error": error}, provides=self._provides_inherited)
                 return cast("RenderReplacement", part)
-            return fallback_text if fallback_text is not None else ""
+            return escape(fallback_text) if fallback_text is not None else ""
+
+        template = """
+          <c-slot />
+        """.strip()
 
     return ErrorFallback

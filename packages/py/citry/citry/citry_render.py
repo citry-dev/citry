@@ -380,7 +380,7 @@ def _render_value(
     - A ``CitryRender`` (an already-rendered subtree) is inlined as-is; it is
       trusted HTML, and the surrounding ``_render_body`` merges its dependencies.
     - Anything else is autoescaped. ``escape`` respects the ``__html__``
-      protocol, so a ``SafeString`` (trusted HTML) passes through unescaped.
+      protocol, so ``Markup`` (trusted HTML) passes through unescaped.
 
     ``provides`` are the provide/inject entries active where the value was
     found; an element rendered here inherits them, so a component embedded

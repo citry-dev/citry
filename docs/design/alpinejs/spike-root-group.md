@@ -86,20 +86,20 @@ Alpine's real `on.js` path.
 ### Citry `@c-*` handlers
 
 Citry's compiled modifier set is smaller: key, self, once, prevent, stop,
-debounce, and throttle. Its current runtime keeps timing and once state per
-element and binding slot, then executes through one delegated document
+debounce, and throttle. At the time of this spike, its runtime kept timing and
+once state per element and binding slot, then executed through one delegated
 listener. See `runElementEventBindings` and `scheduleEventBinding` in
 [`citry-events.ts`](../../../packages/js/citry-client/src/citry-events.ts).
 
 The prototype therefore has a separate Citry profile. It shares state across
 the group while retaining Citry's key, self, once, prevent, stop, and timing
-order. It does not claim that Alpine and Citry currently have identical
-`currentTarget` behavior: a direct grouped client binding reports the real child root,
-whereas today's delegated plain-element `@c-*` listener reports `document`.
-The recommended stage-two contract is direct-root semantics for a
-client binding, because its child roots are the designed physical
-event carriers. Existing plain-element delegation can remain an internal
-optimization and is not changed by this spike.
+order. The historical comparison did not claim identical `currentTarget`
+behavior: the direct grouped client binding reported the real child root,
+whereas the then-current delegated plain-element listener reported `document`.
+Production plain-element bindings have since moved to one native listener per
+element and event type, so both paths now follow direct-element semantics. The
+spike remains evidence for the grouped component-boundary path, not the current
+plain-element listener architecture.
 
 ## Evidence matrix
 
