@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any, ClassVar
 
-from pygments.lexer import bygroups, using
+from pygments.lexer import ExtendedRegexLexer, bygroups
 from pygments.lexers.css import CssLexer
 from pygments.lexers.javascript import JavascriptLexer
 from pygments.lexers.python import PythonLexer
@@ -27,9 +27,9 @@ from pygments.token import Name, Operator, Punctuation, String, Text
 
 from pygments_citry.citry_html import CitryHtmlLexer
 
-# Matches `template = """` or the typed `template: some.Type = """` (and the ''' form).
+# Matches one exact quote family for `template = """` or the typed form.
 # The nine capture groups are highlighted individually by the bygroups action below.
-_CAPTURE = r'({name})(\s*)(?:(:)(\s*)([^\s=]+))?(\s*)(=)(\s*)((?:"""|\'\'\'))'
+_CAPTURE = r"({name})(\s*)(?:(:)(\s*)([^\s=]+))?(\s*)(=)(\s*)({quote})"
 
 # Highlights the nine groups of _CAPTURE. Reused for all three openers, which
 # differ only in the attribute name and the state they push.
@@ -46,7 +46,44 @@ _OPENER = bygroups(
 )
 
 
-class CitryPythonLexer(PythonLexer):
+def _embedded_string_state(delimiter: str, lexer: type[Any]) -> list[tuple[Any, ...]]:
+    """Build an embedded state that closes on an unescaped opening delimiter."""
+    embedded = lexer()
+
+    def body(_lexer: Any, match: Any, ctx: Any) -> Any:
+        text = match.string
+        start = match.start()
+        search_from = start
+        close = None
+        while True:
+            candidate = text.find(delimiter, search_from)
+            if candidate < 0:
+                break
+            backslashes = 0
+            cursor = candidate - 1
+            while cursor >= start and text[cursor] == "\\":
+                backslashes += 1
+                cursor -= 1
+            if backslashes % 2 == 0:
+                close = candidate
+                break
+            search_from = candidate + len(delimiter)
+
+        end = close if close is not None else len(text)
+        for offset, token, value in embedded.get_tokens_unprocessed(text[start:end]):
+            yield start + offset, token, value
+        if close is not None:
+            yield close, String.Doc, delimiter
+            ctx.pos = close + len(delimiter)
+            if len(ctx.stack) > 1:
+                ctx.stack.pop()
+        else:
+            ctx.pos = len(text)
+
+    return [(r"[\s\S]", body)]
+
+
+class CitryPythonLexer(ExtendedRegexLexer, PythonLexer):
     """Lexer for Citry component code: Python plus the embedded template/js/css."""
 
     name = "Citry Python"
@@ -55,25 +92,20 @@ class CitryPythonLexer(PythonLexer):
     tokens: ClassVar[dict[str, Any]] = {
         **PythonLexer.tokens,
         # The three openers are prepended to Python's root so they win over its
-        # own string handling; each pushes a state that re-lexes the body.
+        # own string handling. Each quote family gets its own closing state.
         "root": [
-            (_CAPTURE.format(name="template"), _OPENER, "template_string"),
-            (_CAPTURE.format(name="js"), _OPENER, "js_string"),
-            (_CAPTURE.format(name="css"), _OPENER, "css_string"),
+            (_CAPTURE.format(name="template", quote='"""'), _OPENER, "template_double_string"),
+            (_CAPTURE.format(name="template", quote="'''"), _OPENER, "template_single_string"),
+            (_CAPTURE.format(name="js", quote='"""'), _OPENER, "js_double_string"),
+            (_CAPTURE.format(name="js", quote="'''"), _OPENER, "js_single_string"),
+            (_CAPTURE.format(name="css", quote='"""'), _OPENER, "css_double_string"),
+            (_CAPTURE.format(name="css", quote="'''"), _OPENER, "css_single_string"),
             *PythonLexer.tokens["root"],
         ],
-        # Inside a body: the closing triple quote pops (first, so it wins);
-        # otherwise the run up to the close is handed to the embedded lexer.
-        "template_string": [
-            (r'(?:"""|\'\'\')', String.Doc, "#pop"),
-            (r'((?!"""|\'\'\')(?:.|\n))+', using(CitryHtmlLexer)),
-        ],
-        "js_string": [
-            (r'(?:"""|\'\'\')', String.Doc, "#pop"),
-            (r'((?!"""|\'\'\')(?:.|\n))+', using(JavascriptLexer)),
-        ],
-        "css_string": [
-            (r'(?:"""|\'\'\')', String.Doc, "#pop"),
-            (r'((?!"""|\'\'\')(?:.|\n))+', using(CssLexer)),
-        ],
+        "template_double_string": _embedded_string_state(r'"""', CitryHtmlLexer),
+        "template_single_string": _embedded_string_state(r"'''", CitryHtmlLexer),
+        "js_double_string": _embedded_string_state(r'"""', JavascriptLexer),
+        "js_single_string": _embedded_string_state(r"'''", JavascriptLexer),
+        "css_double_string": _embedded_string_state(r'"""', CssLexer),
+        "css_single_string": _embedded_string_state(r"'''", CssLexer),
     }

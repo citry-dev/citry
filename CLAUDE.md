@@ -287,6 +287,20 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   grep CI workflows when changing a pin because a job may select groups or
   extras explicitly. This is the landed uv workspace model from
   [#8](https://github.com/citry-dev/citry/issues/8).
+- **The C3 logo is drawn once and generated everywhere else.** The artwork is
+  two SVGs in [`docs_site/static/img/`](docs_site/static/img/); every PNG the
+  project ships (favicons, the README wordmark, the profile picture, the VS Code
+  icon) is a screenshot of one of them produced by
+  [`docs_site/scripts/icons.py`](docs_site/scripts/icons.py), so an
+  image-editor export is overwritten on the next run. To place the logo in a
+  page, use `<c-citry-mark />`
+  ([`brand.py`](docs_site/_internal/components/brand.py)) rather than pasting
+  the path data. Sizes, the lockup proportion, and what has to be uploaded by
+  hand are in [`docs/codebase.md`](docs/codebase.md) ("Brand assets").
+- **A README that ships outside the repository needs absolute URLs.** PyPI and
+  the VS Code Marketplace render these files on their own domain, where a
+  repo-relative link or image 404s while looking fine on GitHub. The
+  `published_readme_links` validator fails the gate on one.
 
 ## Code conventions
 
@@ -298,9 +312,25 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   the top of the file. Only move an import inline (lazy) when there is a
   concrete circular dependency or a measured issue. Do not defensively
   lazy-import "just in case."
-- **Inline comments explain intent, not mechanics.** Non-obvious code gets a
-  short comment on *why* it exists: why this approach, why this guard, why
-  this value. One line is almost always enough.
+- **Inline comments explain intent, not mechanics.** Comment as you write, not
+  as a pass afterwards. Each meaningful step gets a short comment on *why* it
+  exists: why this approach, why this guard, why this value, why here rather
+  than a step earlier. One line is almost always enough, and the code beside it
+  already says *what* it does, so do not restate it.
+
+  Reach for a comment even when the line looks self-explanatory, because the
+  reason a step is there is rarely visible from the step itself. A reader (or
+  a later agent) following a function should be able to track the flow from
+  the comments alone and see why one step leads to the next. Concretely, say
+  what makes this branch the one that fires, what would break without the
+  guard, where a magic value came from, and what the caller is relying on.
+
+  ```python
+  # The engine hands us bytes, and a lone surrogate here would only
+  # surface much later as a render failure, so reject it at the door.
+  if not text.isascii() and _has_lone_surrogate(text):
+      raise ValueError(...)
+  ```
 - **Name booleans and flags as positive actions.** Prefer `restart=True`
   over `suppress_restart=False`; double negatives (`not suppress_restart`)
   are harder to read than direct positives.
@@ -331,6 +361,14 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 - **Version numbers use full major.minor.patch format.** Write `1.3.0`, not
   `1.3`, in changelogs, commit messages, and anywhere a version is
   referenced.
+- **Pre-1.0 contracts stay at version 1.** While the owning published package
+  is below `1.0.0`, keep product protocol, schema, manifest, cache-payload,
+  render-cache, and runtime compatibility version constants at `1`. Apply
+  breaking corrections to version 1 in place and update every producer,
+  consumer, fixture, test, and current doc together. Increment these contract
+  versions only after the owning package reaches `1.0.0`, unless the user
+  explicitly directs otherwise. Generic tests for version-mismatch machinery
+  may still use several arbitrary values; this rule governs product contracts.
 - **Run checks repo-wide before declaring done.** Scoping a linter or test run
   to the files you touched is fine for iteration, but a final pass must run the
   whole gate, the same way CI does: `python scripts/check.py`. That one command
@@ -442,6 +480,22 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
     template-only examples. Use `html` only for plain HTML without Citry or
     Alpine syntax. The ordinary HTML lexer marks valid attributes such as
     `$c-props` as errors.
+  - Keep component examples focused on the contracts the page uses. In
+    ordinary documentation, omit an empty `Kwargs` when the component neither
+    uses nor discusses inputs, and omit an empty `Slots` when it neither uses
+    nor discusses slots. Omitting a schema makes that contract permissive;
+    declaring an empty schema rejects every name, so keep the declaration when
+    that rejection is part of the lesson. Data methods still receive both
+    `kwargs` and `slots` when either declaration is omitted, so retain both
+    parameters and remove only annotations that name a missing declaration.
+    Also keep explicit schemas in the Getting Started examples after the
+    minimal installation check, where the guided journey establishes
+    component contracts, and in Examples recipes, where an empty schema
+    deliberately shows that the component accepts no kwargs or slots. This is
+    an editorial convention for reader-facing examples, including docs/example
+    source files that the docs machinery imports or executes. Production
+    component implementations and generated scaffolds still follow the
+    explicit-schema convention in the component-authoring guide.
   - Lead with the symptom, not the mechanism. Frame a gotcha around what
     the reader will see ("the second render shows stale text"), not the
     internal cause; mention the mechanism only when the reader needs it to
@@ -530,6 +584,8 @@ commit history already records it.
 - Cross-crate architecture -> [`docs/agent/INDEX.md`](docs/agent/INDEX.md)
 - Why the rules exist -> [`docs/agent/RATIONALE.md`](docs/agent/RATIONALE.md)
 - Monorepo dev / build / release -> [`docs/codebase.md`](docs/codebase.md)
+- Brand assets (the C3 logo, favicons, icons) ->
+  [`docs/codebase.md`](docs/codebase.md) "Brand assets"
 - Current status snapshot -> [`TODO/project_status_june_2026.md`](TODO/project_status_june_2026.md)
 - Python `citry` changelog -> [`CHANGELOG.md`](CHANGELOG.md); auxiliary package
   changelogs live with their packages

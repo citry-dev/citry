@@ -66,3 +66,35 @@ def test_full_component_highlights_all_three_and_stays_python():
     assert (Name.Variable, "css") in toks
     # the class itself is still ordinary Python
     assert (Name.Class, "Card") in toks
+
+
+def test_embeds_close_only_with_their_opening_quote_family():
+    cases = (
+        ("template", '"""', "'''", "<p>''' {{ after }}</p>", (Name, "after")),
+        ("template", "'''", '"""', '<p>""" {{ after }}</p>', (Name, "after")),
+        ("js", '"""', "'''", "const before = 1; /* ''' */ const after = 2;", (Name.Other, "after")),
+        ("js", "'''", '"""', 'const before = 1; /* """ */ const after = 2;', (Name.Other, "after")),
+        ("css", '"""', "'''", "a { /* ''' */ border-color: red; }", (Keyword, "border-color")),
+        ("css", "'''", '"""', 'a { /* """ */ border-color: red; }', (Keyword, "border-color")),
+    )
+
+    for attribute, opener, other, body, expected in cases:
+        source = f"class C(Component):\n    {attribute} = {opener}{body}{opener}\n    sentinel = 1\n"
+        toks = lex(source)
+        assert other in body
+        assert expected in toks
+        assert toks.count((String.Doc, opener)) == 2
+        assert (Name, "sentinel") in toks
+
+
+def test_escaped_matching_delimiter_stays_inside_template_with_exact_offsets():
+    lexer = get_lexer_by_name("citry")
+    for opener in ('"""', "'''"):
+        body = f"<p>\\{opener} {{{{ after }}}}</p>"
+        source = f"class C(Component):\n    template = {opener}{body}{opener}\n    sentinel = 1\n"
+        stream = list(lexer.get_tokens_unprocessed(source))
+        quotes = [(offset, value) for offset, token, value in stream if token is String.Doc and value == opener]
+
+        assert quotes == [(source.index(opener), opener), (source.rindex(opener), opener)]
+        assert any(token is Name and value == "after" for _, token, value in stream)
+        assert any(token is Name and value == "sentinel" for _, token, value in stream)
