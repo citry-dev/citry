@@ -37,7 +37,7 @@ dependencies = [
     # `citry.nodes` read the source citry-core's compiler emits, so the two
     # move together: raise this in the same change that releases citry-core.
     "citry-core==1.4.0",
-    "wrapt>=1.16",
+    "wrapt>=2.3.0",
     "markupsafe>=2.1",
     "typing-extensions>=4.6",
 ]
