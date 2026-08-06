@@ -1,3 +1,13 @@
+//! Every way this crate admits it cannot format a template.
+//!
+//! The categories split along who has to act. `Syntax` and `Suppression` are the
+//! author's to fix and carry a byte range an editor can underline. `Provider`
+//! points at an embedded formatter that returned something unusable. `Unsupported`
+//! is a shape this crate declines to touch. `InvalidSpan` and `Invariant` are
+//! bugs in the formatter itself, which is why they share one error code: from
+//! outside, both mean the formatter caught itself doing something wrong and
+//! refused to write the result.
+
 use std::ops::Range;
 
 use citry_template_parser::{ParseDiagnostic, ParseError};
@@ -32,6 +42,9 @@ impl FormatError {
     }
 
     /// Return the stable formatter error code.
+    ///
+    /// These strings are a public contract that editors and the CLI match on, so
+    /// they outlive any renaming of the variants above.
     pub const fn code(&self) -> &'static str {
         match self.kind {
             FormatErrorKind::Syntax => "citry.format.syntax",

@@ -112,7 +112,7 @@ jobs:
         uses: pnpm/action-setup@v4
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "pnpm"
@@ -129,7 +129,7 @@ jobs:
       # Reuse rendered cards across deploys: they are content-addressed, so only
       # new or changed pages launch the browser.
       - name: Cache social-card images
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: docs_site/.cache/og
           key: og-cards-${{ hashFiles('docs_site/_internal/components/og_card.py', 'docs_site/content/**') }}
@@ -169,7 +169,7 @@ jobs:
         run: uv run --no-sync python -m docs_site assemble
 
       - name: Upload the Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
@@ -185,4 +185,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

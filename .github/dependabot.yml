@@ -3,6 +3,17 @@
 # Please see the documentation for all configuration options:
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
+#
+# Two settings appear on the noisy ecosystems below and are worth knowing about.
+#
+# `open-pull-requests-limit` raises Dependabot's default of 5 open pull requests
+# per ecosystem. At the default, npm and github-actions both sat at exactly 5
+# and the rest of their queue stayed invisible, so the list of outstanding
+# updates looked shorter than it was.
+#
+# `groups` collects related updates into one pull request instead of one per
+# dependency. Storybook ships its packages in lockstep, so five separate pull
+# requests all moved the same manifest to the same version.
 version: 2
 updates:
   ######################################
@@ -21,11 +32,29 @@ updates:
     schedule:
       interval: "weekly"
 
-  # JS - root package.json (the pinned pyright the check gate runs; pnpm lockfile)
+  # JS - root package.json (the pinned pyright the check gate runs; pnpm lockfile).
+  # This one entry reaches every pnpm workspace member listed in
+  # pnpm-workspace.yaml, so a workspace package needs no entry of its own.
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Storybook releases its packages together, so they update together.
+      storybook:
+        patterns:
+          - "storybook"
+          - "@storybook/*"
+      # Everything else that stays on its major line. A patch or minor bump of a
+      # dev tool is rarely worth reviewing one at a time.
+      js-minor-and-patch:
+        exclude-patterns:
+          - "storybook"
+          - "@storybook/*"
+        update-types:
+          - "minor"
+          - "patch"
 
   # GitHub Actions
   - package-ecosystem: github-actions
@@ -34,6 +63,12 @@ updates:
     directory: "/"
     schedule:
       interval: monthly
+    open-pull-requests-limit: 10
+    groups:
+      # Workflow action bumps are reviewed as one change to CI, not five.
+      github-actions:
+        patterns:
+          - "*"
 
   ######################################
   # PYTHON PACKAGES

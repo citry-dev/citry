@@ -1,4 +1,14 @@
 //! Formatter-owned HTML display and whitespace-boundary contracts.
+//!
+//! This module is pure judgment about how browsers render, and it is the one
+//! place in the crate the invariant checks cannot protect. Everything else is
+//! verified by comparing the template against itself, but those comparisons use
+//! the answers given here, so a wrong entry below is wrong on both sides and
+//! passes every check while changing the rendered page.
+//!
+//! Treat the tables as a contract with the reader's browser rather than as
+//! configuration, and pair any change with corpus coverage that would fail if
+//! the judgment were reverted.
 
 /// HTML elements whose default rendering provides a structural edge.
 ///

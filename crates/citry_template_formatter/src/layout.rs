@@ -1,10 +1,20 @@
 //! Shared rendered-edge analysis for structural whitespace decisions.
+//!
+//! Whether a gap between two items may become a line break depends on what the
+//! browser sees at the facing edges of those items, not on what the tags are
+//! called. A `<c-if>` renders nothing itself, so its edges are whatever its
+//! branches produce, and an element whose first child is inline puts inline
+//! content at its own leading edge.
+//!
+//! This module answers that question once per element so the model does not
+//! have to re-derive it per gap.
 
 use citry_template_parser::{Node, Template, TemplateElement};
 
 use crate::html::{EdgeKind, edge_kind_for_tag_in_parent, merge_branch_edges};
 use crate::source::is_html_space_text;
 
+/// What the browser meets at each end of one item.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct ItemEdges {
     pub(crate) first: EdgeKind,
@@ -20,6 +30,12 @@ pub(crate) enum ControlBranch {
     Empty,
 }
 
+/// One element's contribution to the whitespace decision.
+///
+/// `edges` is absent for something that renders nothing at all, such as a
+/// whitespace-only text run. `physical_control` marks an element that may or may
+/// not render at all, which is what makes the whitespace around it unknowable
+/// until render time.
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct ElementLayout {
     pub(crate) edges: Option<ItemEdges>,
@@ -36,10 +52,18 @@ pub(crate) fn analyze_elements(
         .iter()
         .map(|element| analyze_element(element, parent_tag_name))
         .collect::<Vec<_>>();
+    // An if/elif/else or for/empty chain renders as one alternative, so its
+    // branches are merged afterwards: whichever branch runs, the surrounding
+    // whitespace has to be safe for all of them.
     apply_control_group_edges(&mut layouts);
     layouts
 }
 
+/// The edges a whole body presents to its parent.
+///
+/// Taken from the first and last children that render anything, so leading and
+/// trailing blank lines inside a body do not hide what it really begins and
+/// ends with.
 pub(crate) fn body_edges(template: &Template, parent_tag_name: Option<&str>) -> Option<ItemEdges> {
     let layouts = analyze_elements(template, parent_tag_name);
     Some(ItemEdges {
@@ -56,6 +80,9 @@ pub(crate) fn body_edges(template: &Template, parent_tag_name: Option<&str>) -> 
 fn analyze_element(element: &TemplateElement, parent_tag_name: Option<&str>) -> ElementLayout {
     match element {
         TemplateElement::Node(node) => analyze_node(node, parent_tag_name),
+        // An expression's value is unknown until render time, so it could put
+        // text right against its neighbours. Treating it as sensitive keeps the
+        // spacing around `{{ x }}` exactly as written.
         TemplateElement::Expr(_) => sensitive_layout(),
         TemplateElement::Text(text) if is_html_space_text(&text.token.content) => ElementLayout {
             edges: None,

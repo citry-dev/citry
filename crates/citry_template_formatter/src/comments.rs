@@ -1,3 +1,13 @@
+//! Decides which piece of the template each comment belongs to.
+//!
+//! A comment has no owner in the parse tree, only a position, so moving the code
+//! around it would otherwise strand it. Attaching each one to a neighbour lets
+//! it travel with whatever it was written about.
+//!
+//! The map doubles as the inventory the formatter checks itself against: every
+//! comment must still be present, and every one must have been claimed, which
+//! is how a comment silently dropped by a bad edit gets caught.
+
 use std::collections::HashMap;
 
 use citry_template_parser::{Comment, HtmlEndTag, HtmlStartTag, Template, Token};
@@ -5,6 +15,9 @@ use citry_template_parser::{Comment, HtmlEndTag, HtmlStartTag, Template, Token};
 use crate::error::FormatError;
 use crate::source::{Span, direct_template_comments, element_span, is_html_space_text};
 
+/// Which syntax the comment is written in. They are not interchangeable:
+/// a `{# ... #}` may be a directive, `<!-- ... -->` is rendered to the browser,
+/// and a Python `#` comment belongs to the expression provider.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub(crate) enum CommentKind {
     Template,
@@ -12,6 +25,8 @@ pub(crate) enum CommentKind {
     Python,
 }
 
+/// Where a comment ended up attached. `Unassigned` is the starting state, and
+/// any left that way when the walk finishes means a region was missed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum CommentPlacement {
     Unassigned,
@@ -48,6 +63,10 @@ impl CommentMap {
         for comment in comments {
             validate_token(source, &comment.token, "comment")?;
             let kind = comment_kind(&comment.token.content);
+            // Only template comments need placing. An HTML comment is rendered
+            // text and moves with the text around it, and a Python comment
+            // belongs to the expression its provider formats, so both are
+            // settled the moment they are seen.
             let placement = match kind {
                 CommentKind::Html => CommentPlacement::HtmlText,
                 CommentKind::Python => CommentPlacement::ProviderOwned,
@@ -66,6 +85,11 @@ impl CommentMap {
         Ok(Self { entries })
     }
 
+    /// Attach each template comment in one body to a neighbouring element.
+    ///
+    /// The rule follows how people write comments: one on the same line as the
+    /// element before it is a trailing note about that element, and one on its
+    /// own line introduces whatever comes next.
     pub(crate) fn associate_body(
         &mut self,
         source: &str,
@@ -74,6 +98,9 @@ impl CommentMap {
         body_span: Span,
         base: usize,
     ) -> Result<(), FormatError> {
+        // Whitespace-only text cannot anchor a comment. Allowing it would attach
+        // the comment to the blank line beside it rather than to the element the
+        // author was describing.
         let anchors = template
             .elements
             .iter()
@@ -92,6 +119,9 @@ impl CommentMap {
                 .take_while(|item| item.end <= span.start)
                 .last();
             let following = anchors.iter().copied().find(|item| item.start >= span.end);
+            // No line break between the previous element and this comment means
+            // they were written on one line, so the comment is about that
+            // element. Otherwise it introduces the element that follows.
             let (placement, anchor) = if preceding.is_some_and(|item| {
                 source[base + item.end..base + span.start]
                     .chars()
@@ -192,6 +222,11 @@ impl CommentMap {
         Ok(())
     }
 
+    /// The comment inventory, as content rather than positions.
+    ///
+    /// Sorted so the comparison ignores the order comments were collected in,
+    /// and Python comments are left out because their provider owns them and may
+    /// legitimately re-wrap the expression they sit in.
     pub(crate) fn markup_fingerprint(&self) -> Vec<(CommentKind, String)> {
         let mut result = self
             .entries
@@ -203,6 +238,11 @@ impl CommentMap {
         result
     }
 
+    /// Fail if any comment was never claimed.
+    ///
+    /// An unassigned comment means the walk did not reach the region holding it,
+    /// so the model does not fully describe the template. Formatting from an
+    /// incomplete model is how a comment gets dropped.
     pub(crate) fn validate_complete(&self) -> Result<(), FormatError> {
         let unassigned = self
             .entries

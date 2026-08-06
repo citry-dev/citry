@@ -824,6 +824,9 @@ def _run_provider(
             unavailable_is_config=unavailable_is_config,
             invalid=True,
         )
+    # Annotated because mypy prunes the branch that does not match the platform
+    # it runs on, so without this the two arms disagree when checked on Linux.
+    pass_fds: tuple[int, ...]
     if executable_descriptor is not None and sys.platform == "linux":
         os.lseek(executable_descriptor, 0, os.SEEK_SET)
         descriptor_root = "/dev/fd" if Path("/dev/fd").is_dir() else "/proc/self/fd"

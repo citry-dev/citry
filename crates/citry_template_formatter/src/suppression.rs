@@ -1,3 +1,15 @@
+//! Reads the `fmt:` comment directives and marks the bytes they protect.
+//!
+//! Three directives, matched on exact comment text: `fmt: off` and `fmt: on`
+//! bracket a region, and `fmt: skip` exempts the one thing after it. Because
+//! only comments the parser recognized as comments are examined, the same
+//! characters inside an attribute value, a `<c-raw>` body, or a Python string
+//! stay ordinary content.
+//!
+//! A directive's effect is inherited downward: a region turned off at one level
+//! stays off inside the elements it contains, so each level does not have to
+//! re-check its ancestors.
+
 use citry_template_parser::{
     Comment, HtmlAttr, HtmlAttrKind, HtmlEndTag, HtmlStartTag, Template, TemplateElement,
 };
@@ -7,6 +19,7 @@ use crate::source::{
     Span, direct_template_comments, element_span, is_html_space_text, nested_template_source,
 };
 
+/// Bytes the printer may not touch.
 #[derive(Clone, Debug)]
 pub(crate) struct ProtectedRange {
     pub(crate) span: Span,
@@ -15,17 +28,27 @@ pub(crate) struct ProtectedRange {
 }
 
 impl ProtectedRange {
+    /// Whether an insertion at `at` would land inside protected text.
+    ///
+    /// The end offset is the interesting case. For an `fmt: off` region the end
+    /// is still protected, or the formatter could append at the boundary. For
+    /// `fmt: skip` it is not, so the gap after the skipped item can still be
+    /// re-indented.
     pub(crate) fn blocks_insertion(&self, at: usize) -> bool {
         self.span.start <= at
             && (at < self.span.end || (at == self.span.end && !self.allow_insertion_at_end))
     }
 }
 
+/// Per-element verdicts for one body, plus whether formatting is still on at
+/// the end. The trailing flag is what carries an unclosed `fmt: off` outward.
 pub(crate) struct BodySuppression {
     pub(crate) element_enabled: Vec<bool>,
     pub(crate) terminal_enabled: bool,
 }
 
+/// Per-attribute verdicts for one start tag, so a directive written between
+/// attributes governs only the attributes after it.
 pub(crate) struct StartTagSuppression {
     pub(crate) attribute_enabled: Vec<bool>,
 }
@@ -65,6 +88,12 @@ impl StartTagEvent<'_> {
     }
 }
 
+/// Walk one body in source order, tracking whether formatting is on.
+///
+/// Directives take effect from where they are written, so comments and elements
+/// have to be merged into one ordered sequence. The parser keeps them in
+/// separate lists, which is why they are interleaved here rather than read off
+/// the tree directly.
 pub(crate) fn scan_body(
     template: &Template,
     document_comments: &[Comment],
@@ -86,6 +115,9 @@ pub(crate) fn scan_body(
         (span.start, span.end)
     });
 
+    // `cursor` trails the walk so the whitespace between two events can be
+    // protected too. Without it, a disabled region would keep its elements but
+    // lose the spacing between them.
     let mut state = initial_enabled;
     let mut cursor = body_span.start;
     let mut element_enabled = vec![initial_enabled; template.elements.len()];
@@ -111,6 +143,10 @@ pub(crate) fn scan_body(
             }
             BodyEvent::Element(index, element) => {
                 element_enabled[index] = state;
+                // A node's own bytes are not blanket-protected here, because the
+                // walk descends into it and decides tag by tag. Anything else
+                // (text, an expression) has no inside to visit, so it is
+                // protected whole.
                 if !matches!(element, TemplateElement::Node(_)) {
                     protect_when_disabled(span.start, span.end, base, state, protected);
                 }
@@ -118,6 +154,8 @@ pub(crate) fn scan_body(
             }
         }
     }
+    // The tail after the last event, so a trailing `fmt: off` covers the rest of
+    // the body rather than stopping at the final element.
     protect_when_disabled(cursor, body_span.end, base, state, protected);
 
     Ok(BodySuppression {
@@ -126,6 +164,10 @@ pub(crate) fn scan_body(
     })
 }
 
+/// The same walk for the inside of one start tag.
+///
+/// A directive between attributes governs the attributes after it, so the tag
+/// needs its own ordered pass rather than a single verdict for the whole tag.
 pub(crate) fn scan_start_tag(
     tag: &HtmlStartTag,
     base: usize,
@@ -144,12 +186,16 @@ pub(crate) fn scan_start_tag(
         (span.start, span.end)
     });
 
+    // Where the closing `>` or `/>` begins. The scan stops here so the
+    // delimiter itself is never swept into a protected range.
     let delimiter_start = tag.token.end_index
         - if tag.is_self_closing {
             "/>".len()
         } else {
             ">".len()
         };
+    // Start after the tag name: the name is never editable, so protecting it
+    // would only add a range nothing consults.
     let mut state = initial_enabled;
     let mut cursor = tag.name.end_index;
     let mut attribute_enabled = vec![initial_enabled; tag.attrs.len()];
@@ -237,6 +283,14 @@ pub(crate) fn scan_end_tag(
     Ok(())
 }
 
+/// Apply an `fmt: off` / `fmt: on` and reject a pairing that makes no sense.
+///
+/// Both mistakes are errors rather than no-ops on purpose. A second `fmt: off`
+/// reads as if it opened a scope that a later `fmt: on` would close, when the
+/// `on` would in fact re-enable everything; and an `fmt: on` with nothing to
+/// resume is usually a directive written in the wrong place. Failing loudly
+/// tells the author, where ignoring it would quietly format what they meant to
+/// protect.
 fn transition_state(comment: &Comment, base: usize, enabled: bool) -> Result<bool, FormatError> {
     match directive(comment) {
         Some(Directive::Off) if !enabled => Err(suppression_error(
@@ -314,6 +368,12 @@ fn protect_local(
     });
 }
 
+/// Find what an `fmt: skip` applies to: the next thing after it.
+///
+/// Whitespace between the directive and its target is skipped over, so a
+/// directive on its own line still reaches the element below it. A directive
+/// with nothing after it is an error, since silently applying to nothing would
+/// leave the author believing something is protected.
 fn skip_body_target(
     template: &Template,
     comments: &[&Comment],

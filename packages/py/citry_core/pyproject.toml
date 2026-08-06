@@ -33,7 +33,7 @@ license = { text = "MIT" }
 dependencies = []
 
 [dependency-groups]
-dev = ["maturin>=1.10.2", "pytest>=8.3.5"]
+dev = ["maturin>=1.14.1", "pytest>=9.1.1"]
 
 # See https://docs.pypi.org/project_metadata/#icons
 [project.urls]

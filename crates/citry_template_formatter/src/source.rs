@@ -1,3 +1,16 @@
+//! The document model: everything the printer is allowed to touch.
+//!
+//! Walking the parsed template produces lists of spans rather than a tree to
+//! render. Each list answers one question about the original text: which start
+//! tags can be re-laid out, which gaps between elements may become line breaks,
+//! which expressions have a canonical form, and which bytes are off limits.
+//! Anything that does not end up in one of these lists is never edited, so the
+//! decision about what is safe to change is made once, here, instead of being
+//! rediscovered by the printer.
+//!
+//! The model also holds the fingerprints the formatter checks its own output
+//! against, which is why it is built for the source and again for the result.
+
 use citry_template_parser::{
     Comment, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlStartTag, Node, Template,
     TemplateElement, Token, parse_template,
@@ -18,6 +31,7 @@ use crate::python::{
 };
 use crate::suppression::{ProtectedRange, scan_body, scan_end_tag, scan_start_tag};
 
+/// A byte range in the source. Every edit and every protected region is one.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Span {
     pub(crate) start: usize,
@@ -32,6 +46,11 @@ impl Span {
         }
     }
 
+    /// Rebase a span onto the outer document.
+    ///
+    /// A nested template inside an attribute value is parsed on its own, so its
+    /// spans start at zero. They have to be shifted by where that value sits
+    /// before they mean anything to the printer.
     pub(crate) fn offset(self, base: usize) -> Self {
         Self {
             start: base + self.start,
@@ -44,6 +63,9 @@ impl Span {
     }
 }
 
+/// One attribute, split so the printer can tighten around its `=` without
+/// disturbing the key or the value. `value` is absent for a bare attribute
+/// such as `disabled`.
 #[derive(Clone, Debug)]
 pub(crate) struct AttrModel {
     pub(crate) span: Span,
@@ -51,6 +73,8 @@ pub(crate) struct AttrModel {
     pub(crate) value: Option<Span>,
 }
 
+/// Something occupying a slot inside a start tag. Comments count, because a
+/// comment written between attributes has to keep its place when the tag wraps.
 #[derive(Clone, Debug)]
 pub(crate) enum TagItemModel {
     Attr(AttrModel),
@@ -66,6 +90,12 @@ impl TagItemModel {
     }
 }
 
+/// A start tag the printer may re-lay out.
+///
+/// `layout_column` is where the tag begins on its line, which fixes both the
+/// indent of wrapped attributes and the width still available. `adjacent_end_tag`
+/// is set when the end tag sits right beside it, as in `<div></div>`, so the
+/// pair is measured as the one line it occupies.
 #[derive(Clone, Debug)]
 pub(crate) struct StartTagModel {
     pub(crate) span: Span,
@@ -76,18 +106,28 @@ pub(crate) struct StartTagModel {
     pub(crate) layout_column: usize,
 }
 
+/// Whitespace between two elements that was proven safe to replace with a line
+/// break and indent. Gaps where whitespace is rendered never become one of
+/// these, which is how inline and mixed content keeps its spacing.
 #[derive(Clone, Debug)]
 pub(crate) struct BodyGapModel {
     pub(crate) span: Span,
     pub(crate) indent: usize,
 }
 
+/// An expression region together with the text it should become. The canonical
+/// form is computed while building the model, so the printer only substitutes.
 #[derive(Clone, Debug)]
 pub(crate) struct ExpressionModel {
     pub(crate) span: Span,
     pub(crate) canonical: String,
 }
 
+/// A `<script>` or `<style>` body, which this crate does not format itself.
+///
+/// `has_interpolation` matters because a body containing `{{ ... }}` is not
+/// valid standalone JavaScript or CSS, so handing it to one of those formatters
+/// would corrupt it.
 #[derive(Clone, Debug)]
 pub(crate) struct EmbeddedBodyModel {
     pub(crate) span: Span,
@@ -97,6 +137,8 @@ pub(crate) struct EmbeddedBodyModel {
     pub(crate) has_interpolation: bool,
 }
 
+/// Everything one pass needs: the three editable lists, the bytes that are off
+/// limits, and the fingerprints used to verify the result.
 #[derive(Clone)]
 pub(crate) struct SourceModel {
     pub(crate) tags: Vec<StartTagModel>,
@@ -139,7 +181,14 @@ impl SourceModel {
             true,
             &mut model,
         )?;
+        // Every comment must have been claimed by something. An unclaimed one
+        // means the walk missed a region, and formatting a template the model
+        // does not fully describe is how comments get lost.
         model.comments.validate_complete()?;
+        // Nested templates are visited inside their parent, so the lists come
+        // back out of source order. The printer needs them sorted, and
+        // overlapping protected ranges are merged so containment tests are a
+        // simple scan.
         model.tags.sort_by_key(|tag| tag.span.start);
         model.body_gaps.sort_by_key(|gap| gap.span.start);
         model
@@ -153,6 +202,11 @@ impl SourceModel {
         self.comments.markup_fingerprint()
     }
 
+    /// The text of every protected range, in order.
+    ///
+    /// Compared as content rather than spans, because formatting legitimately
+    /// moves protected text around on the page. What must not change is what it
+    /// says.
     pub(crate) fn protected_fingerprint(&self, source: &str) -> Result<Vec<String>, FormatError> {
         self.protected
             .iter()
@@ -179,6 +233,13 @@ impl SourceModel {
     }
 }
 
+/// What the walk needs to know at each level.
+///
+/// The two source fields differ only inside a nested template: `local_source` is
+/// the attribute value being parsed on its own, `root_source` the whole
+/// document, and `base` converts between them. `editable` and `provider_editable`
+/// are inherited, so an `fmt: off` on an ancestor keeps everything below it from
+/// being edited without each level having to re-check.
 struct VisitContext<'a> {
     root_source: &'a str,
     local_source: &'a str,
@@ -202,6 +263,10 @@ struct NodeLayout {
     body_editable: bool,
 }
 
+/// Walk one template body, collecting everything editable inside it.
+///
+/// Returns whether formatting is still enabled on the way out, so an `fmt: off`
+/// that a body opened carries on into the elements that follow it.
 fn visit_template(
     context: &VisitContext<'_>,
     template: &Template,
@@ -210,6 +275,9 @@ fn visit_template(
     initial_formatting_enabled: bool,
     model: &mut SourceModel,
 ) -> Result<bool, FormatError> {
+    // Check the parser's spans against this source before trusting them. A bad
+    // offset here would become a bad edit later, where it is much harder to
+    // attribute.
     validate_local_span(
         context.local_source,
         body_span,
@@ -224,6 +292,8 @@ fn visit_template(
             "template element",
         )?;
     }
+    // Suppression is resolved before anything is collected, so a directive can
+    // take a region out of play before the walk offers it to the printer.
     let suppression = scan_body(
         template,
         context.document_comments,
@@ -826,6 +896,11 @@ struct BodyLayoutItem {
     element_index: Option<usize>,
 }
 
+/// Decide which gaps between the children of one body may become line breaks.
+///
+/// This is where indentation is actually won or lost. A gap only becomes a
+/// `BodyGapModel` if the classification proves nothing rendered depends on it,
+/// so the default is to leave whitespace exactly as the author wrote it.
 fn collect_body_layout(
     context: &VisitContext<'_>,
     template: &Template,
@@ -840,6 +915,8 @@ fn collect_body_layout(
         let local_span = element_span(element);
         let global_span = local_span.offset(context.base);
         match element {
+            // Whitespace-only text is the gap, not an item beside it. Keeping it
+            // in the list would leave no gap to rewrite between its neighbours.
             TemplateElement::Text(text) if is_html_space_text(&text.token.content) => {}
             _ => items.push(BodyLayoutItem {
                 span: global_span,
@@ -848,6 +925,8 @@ fn collect_body_layout(
             }),
         }
     }
+    // Comments are items too, so a gap is never measured straight through one.
+    // They carry no rendered edges, hence `edges: None`.
     for comment in direct_template_comments(template, context.document_comments, body_span) {
         items.push(BodyLayoutItem {
             span: Span::from_token(&comment.token).offset(context.base),
@@ -861,6 +940,11 @@ fn collect_body_layout(
     let container = parent.map_or(ContainerKind::Root, |layout| {
         container_kind_for_tag(layout.name)
     });
+    // Two reasons to treat a whole body as untouchable rather than judging each
+    // gap on its own. A control-flow element that may or may not render leaves
+    // the surrounding whitespace unknowable unless both its edges are block-like;
+    // and one item with a sensitive edge makes the spacing around its siblings
+    // load-bearing too.
     let optional_physical_control = element_layouts.iter().any(|layout| {
         layout.physical_control
             && !layout.edges.is_some_and(|edges| {

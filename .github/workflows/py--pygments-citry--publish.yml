@@ -114,7 +114,7 @@ jobs:
           name: pygments-citry-dist
           path: dist
       - name: Generate build provenance attestation
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: "dist/*"
       # Trusted Publishing (OIDC): no token. PyPI verifies the workflow's OIDC

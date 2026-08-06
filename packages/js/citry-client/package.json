@@ -18,7 +18,7 @@
     "alpinejs": "3.15.12"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.3",
+    "@biomejs/biome": "2.5.7",
     "esbuild": "0.28.1",
     "typescript": "7.0.2"
   }

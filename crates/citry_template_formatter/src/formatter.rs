@@ -1,3 +1,12 @@
+//! Orchestrates one formatting run and proves the result before returning it.
+//!
+//! Formatting proper lives in `format_once`; everything in `verify_candidate`
+//! exists so this crate never hands back text it cannot vouch for. The checks
+//! compare the template against itself before and after, so they catch a
+//! printer that moved bytes it should not have. They cannot catch a wrong
+//! judgment in `html.rs` about where whitespace matters, because both sides
+//! would then be wrong the same way.
+
 use citry_template_parser::parse_template;
 
 use crate::error::FormatError;
@@ -5,17 +14,26 @@ use crate::printer::EditPlan;
 use crate::projection::{ProjectionCapability, verify_contract_projection};
 use crate::source::SourceModel;
 
+/// Format `source`, then refuse to return the result unless it verifies.
 pub(crate) fn format(source: &str) -> Result<String, FormatError> {
     let (candidate, before_model) = format_once(source)?;
     verify_candidate(source, &candidate, &before_model)?;
     Ok(candidate)
 }
 
+/// Check the six properties a formatted template has to have.
+///
+/// Every failure here is an `Invariant` error rather than a formatting result:
+/// the formatter got something wrong, and returning the text anyway would hand
+/// the caller a corrupted template.
 fn verify_candidate(
     source: &str,
     candidate: &str,
     before_model: &SourceModel,
 ) -> Result<(), FormatError> {
+    // 1. The edit plan is a pure function of the input. Re-deriving it from the
+    // original source must land on the same bytes, which is what rules out a
+    // printer that depends on iteration order or leftover state.
     let (planned_candidate, _) = format_once(source).map_err(|error| {
         FormatError::invariant(format!(
             "formatter could not reproduce its edit plan during verification: {error}"
@@ -27,6 +45,10 @@ fn verify_candidate(
         ));
     }
 
+    // 2. Re-laying out markup must not change what the markup means. The
+    // projection keeps only the parts a reader's browser reacts to, so two
+    // templates with the same projection render the same however differently
+    // they are indented.
     verify_contract_projection(source, candidate, ProjectionCapability::PythonExpressions)
         .map_err(|error| {
             FormatError::invariant(format!(
@@ -34,15 +56,24 @@ fn verify_candidate(
             ))
         })?;
 
+    // 3. Output that no longer parses is always a bug, never a result. The
+    // model rebuilt here is also what the remaining fingerprint checks read.
     let parsed_candidate = parse_template(candidate, None, None).map_err(|error| {
         FormatError::invariant(format!("formatted template did not reparse: {error}"))
     })?;
     let after_model = SourceModel::build(candidate, &parsed_candidate)?;
+    // 4. Comments carry author intent and several of them are directives, so
+    // losing, duplicating, or reordering one is never an acceptable trade for
+    // nicer layout.
     if before_model.markup_comment_fingerprint() != after_model.markup_comment_fingerprint() {
         return Err(FormatError::invariant(
             "formatted template changed the canonical markup comment inventory",
         ));
     }
+    // 5. Two kinds of bytes the author put off limits: ranges behind a
+    // suppression directive, and verbatim bodies such as `<c-raw>`. Both are
+    // compared as fingerprints rather than spans because the surrounding text
+    // may legitimately have moved.
     if before_model.protected_fingerprint(source)?
         != after_model.protected_fingerprint(candidate)?
     {
@@ -56,6 +87,9 @@ fn verify_candidate(
         ));
     }
 
+    // 6. Formatting an already formatted template must be a no-op. Without
+    // this, formatting on every save could walk a file a little further each
+    // time and show up as endless diff noise.
     let (second_pass, _) = format_once(candidate).map_err(|error| {
         FormatError::invariant(format!(
             "formatted template failed its second pass: {error}"
@@ -69,7 +103,14 @@ fn verify_candidate(
     Ok(())
 }
 
+/// Apply edit passes until the text stops changing.
+///
+/// Returns the formatted text together with the model built from the *original*
+/// source, which is what the fingerprint checks above compare against.
 fn format_once(source: &str) -> Result<(String, SourceModel), FormatError> {
+    // Parsing first is what makes the rest safe: only spans the parse
+    // identified are ever edited, so a `{# fmt: on #}` sitting inside an
+    // attribute value or a `<c-raw>` body stays ordinary text.
     let template =
         parse_template(source, None, None).map_err(|error| FormatError::from_parse(&error))?;
     let mut model = SourceModel::build(source, &template)?;
@@ -87,12 +128,19 @@ fn format_once(source: &str) -> Result<(String, SourceModel), FormatError> {
 
     for _ in 0..max_passes {
         let plan = EditPlan::build(&current, &model)?;
+        // Check the plan against the protected ranges before touching anything,
+        // so an edit that would reach into suppressed bytes never runs.
         plan.validate_for_source(&current, &model.protected)?;
         let candidate = plan.apply(&current)?;
+        // A pass that changes nothing is the fixed point: everything that could
+        // move has moved, and the columns it depended on have settled.
         if candidate == current {
             return Ok((candidate, before_model));
         }
 
+        // Edits shift every offset after them, so the model is rebuilt from the
+        // new text rather than patched. A failure here means the formatter
+        // produced something it cannot read back, which is a bug in the plan.
         current = candidate;
         let template = parse_template(&current, None, None).map_err(|error| {
             FormatError::invariant(format!(
@@ -106,6 +154,9 @@ fn format_once(source: &str) -> Result<(String, SourceModel), FormatError> {
         })?;
     }
 
+    // Reaching here means two passes kept undoing each other. That is a
+    // formatter bug, so stop rather than return whichever text the loop
+    // happened to end on.
     Err(FormatError::invariant(format!(
         "formatter did not converge after {max_passes} passes"
     )))

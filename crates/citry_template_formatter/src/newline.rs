@@ -1,6 +1,17 @@
+//! Keeps a file's line-ending style its own.
+//!
+//! Line breaks the formatter inserts use whatever the file already uses, so a
+//! CRLF document does not come back with mixed endings and a diff on every line.
+//! Internal comparisons run on a copy normalized to LF, so a rule never has to
+//! account for three spellings of the same break.
+
 use std::borrow::Cow;
 
 /// Select the first physical newline sequence in the document.
+///
+/// First rather than most common: a mixed file is already inconsistent, and
+/// following whatever it opens with is predictable and cheap to reason about.
+/// A file with no break at all gets LF.
 pub(crate) fn detect_newline(source: &str) -> &'static str {
     let bytes = source.as_bytes();
     let mut index = 0;
@@ -17,6 +28,7 @@ pub(crate) fn detect_newline(source: &str) -> &'static str {
 
 /// Normalize all physical newline spellings for internal line processing.
 pub(crate) fn normalize_to_lf(source: &str) -> Cow<'_, str> {
+    // The common case is a file that is already LF, so borrow rather than copy.
     if !source.contains('\r') {
         return Cow::Borrowed(source);
     }

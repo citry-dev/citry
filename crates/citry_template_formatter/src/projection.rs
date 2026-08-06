@@ -1,4 +1,19 @@
 //! Capability-aware projections used to verify formatter invariants.
+//!
+//! A projection is the template with everything the formatter is allowed to
+//! change deliberately thrown away. Two templates with equal projections differ
+//! only in ways that do not reach the reader, so comparing the projection before
+//! and after formatting answers the question that matters: did re-laying this
+//! out change what it means?
+//!
+//! What gets discarded depends on the capability in play, which is why the
+//! projection is built to order rather than once. Under `OpeningTags` only
+//! spacing inside a start tag is ignored; `StructuralLayout` additionally
+//! ignores gaps the whitespace rules proved insignificant; `PythonExpressions`
+//! additionally compares expressions as syntax trees rather than text.
+//!
+//! The comparison is only ever as good as what it keeps. Anything dropped here
+//! is, by construction, something the formatter may silently change.
 
 use std::collections::HashSet;
 
@@ -20,6 +35,11 @@ use crate::html::{
 };
 use crate::layout::{ItemEdges, analyze_elements};
 
+/// How much the projection is willing to ignore.
+///
+/// Each level subsumes the one before it, so the check tightens as the formatter
+/// is given less freedom. `StructuralLayout` is only reachable from tests today,
+/// since the live formatter always runs with expression formatting on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ProjectionCapability {
     OpeningTags,
@@ -174,6 +194,12 @@ struct ProjectedBody {
     projection: BodyProjection,
 }
 
+/// Confirm that formatting did not change what the template means.
+///
+/// Both sides are projected independently from text, so this never trusts the
+/// formatter's own model of what it did. On a mismatch the two projections are
+/// rendered into the error, because the useful question when this fires is which
+/// field differs.
 pub(crate) fn verify_contract_projection(
     before: &str,
     after: &str,
@@ -265,6 +291,10 @@ fn project_body(
             }
             TemplateElement::Text(text) => {
                 validate_token(source, &text.token, "text")?;
+                // Whitespace-only text is dropped from the projection because
+                // it is exactly what the formatter rewrites. Non-whitespace text
+                // is kept verbatim, so a single changed character fails the
+                // comparison.
                 if is_html_space_text(&text.token.content) {
                     continue;
                 }
@@ -277,6 +307,9 @@ fn project_body(
         }
     }
 
+    // The parser reports every comment on the document, so a body has to pick
+    // out the ones that are directly its own: inside this body, not inside one
+    // of its elements (that element projects its own), and not already taken.
     let mut seen_direct_comments = HashSet::new();
     for comment in document_comments {
         if comment_kind(&comment.token.content) != CommentKind::Template {
@@ -505,9 +538,18 @@ fn project_attr(
     })
 }
 
+/// How much of an expression the comparison keeps.
+///
+/// Each level gives up a little more text in exchange for allowing the formatter
+/// a little more freedom, ending at the syntax tree, which lets Ruff re-wrap the
+/// expression however it likes while still catching a change in meaning.
 fn project_expression(expr: &Expr, mode: ProjectionCapability) -> Result<String, ContractError> {
     match mode {
+        // Expressions are untouched at this level, so compare them byte for byte.
         ProjectionCapability::OpeningTags => Ok(expr.token.content.clone()),
+        // Only the padding inside `{{ }}` is negotiable here, and only for a
+        // short single-line expression with no comments, where trimming cannot
+        // lose anything. Anything else stays exact.
         ProjectionCapability::StructuralLayout
             if expr.comments.is_empty()
                 && !expr.value.content.contains('\n')
@@ -525,6 +567,10 @@ fn project_expression(expr: &Expr, mode: ProjectionCapability) -> Result<String,
     }
 }
 
+/// Reduce Python to its syntax tree plus its comments.
+///
+/// Comments are carried separately because they are not part of the tree, so
+/// comparing trees alone would let a provider drop one unnoticed.
 fn project_python(source: &str, kind: &'static str) -> Result<AttrValueProjection, ContractError> {
     let parsed = parse_expression(source).map_err(|error| ContractError::Python {
         kind,
@@ -536,6 +582,12 @@ fn project_python(source: &str, kind: &'static str) -> Result<AttrValueProjectio
     })
 }
 
+/// Fingerprint each Python comment by what it says and what it sits next to.
+///
+/// Position alone would change whenever the expression is re-wrapped, and text
+/// alone would not notice a comment moving to a different line of a multi-line
+/// expression. Anchoring to the neighbouring tokens, plus whether it shares
+/// their line, survives re-wrapping while still catching a move.
 fn python_comments(source: &str, tokens: &Tokens) -> Vec<String> {
     CommentRanges::from(tokens)
         .iter()
@@ -627,6 +679,11 @@ fn normalize_python_comment(comment: &str) -> String {
         .to_string()
 }
 
+/// Project the whitespace between items, keeping only what the reader can see.
+///
+/// This is the heart of the comparison. A gap the whitespace rules call
+/// structural collapses to one marker, so any amount of indentation compares
+/// equal; a gap that renders is kept byte for byte, so touching it fails.
 fn project_gaps(
     source: &str,
     body_span: Span,
@@ -635,6 +692,9 @@ fn project_gaps(
     items: &[SourceItem],
 ) -> Result<Vec<GapProjection>, ContractError> {
     let mut gaps = Vec::with_capacity(items.len() + 1);
+    // One item with a sensitive edge makes the whole body's spacing meaningful,
+    // so every gap in it is compared exactly. Judging each gap alone would let
+    // whitespace next to an inline neighbour be treated as free.
     let preserve_mixed_body = items.iter().any(|item| {
         item.edges.is_some_and(|edges| {
             edges.first == EdgeKind::Sensitive || edges.last == EdgeKind::Sensitive
@@ -647,6 +707,9 @@ fn project_gaps(
             .map_or(body_span.end, |item| item.span.start);
         let gap_span = Span { start: cursor, end };
         let gap = source_slice(source, gap_span, "body gap")?;
+        // Anything other than whitespace between two items means the items did
+        // not account for all the source, so the projection would be comparing
+        // an incomplete picture and quietly ignoring the remainder.
         if !is_html_space_text(gap) {
             return Err(ContractError::NonWhitespaceGap {
                 start: gap_span.start,
@@ -654,6 +717,8 @@ fn project_gaps(
             });
         }
 
+        // Look past items that render nothing to find the edges that actually
+        // face each other across this gap.
         let left = items[..index]
             .iter()
             .rev()

@@ -1,4 +1,15 @@
 //! Validated formatting adapters for Citry's Python expression regions.
+//!
+//! Ruff formats Python modules, but a Citry template holds bare fragments: the
+//! inside of `{{ ... }}`, or the clause of a `c-for`. Each adapter wraps the
+//! fragment in the smallest valid Python that makes it a module, formats that,
+//! then extracts the fragment back out.
+//!
+//! Nothing Ruff returns is trusted on its word. The result is reparsed and its
+//! syntax tree compared with the original, and the Python comments are
+//! fingerprinted on both sides, so a provider that quietly rewrites meaning is
+//! rejected instead of written to the file. The pinned identity below is part of
+//! the contract: change it and the corpus's expected bytes change with it.
 
 use ruff_formatter::{IndentWidth, LineWidth, printer::LineEnding};
 use ruff_python_ast::{
@@ -13,7 +24,11 @@ use ruff_python_trivia::{CommentRanges, SuppressionKind};
 use crate::error::FormatError;
 use crate::newline::normalize_to_lf;
 
+/// Wraps a bare expression as `x((<expr>))` so Ruff sees a module. The call
+/// parentheses also give it somewhere to break long lines.
 const EXPRESSION_WRAPPER: &str = "x";
+/// Turns a `c-for` clause into a comprehension, the only Python construct where
+/// `item in items` is valid on its own.
 const CLAUSE_PREFIX: &str = "None for ";
 
 /// Stable identity for the Python formatter pinned by this workspace.
@@ -30,10 +45,16 @@ pub(crate) fn format_expression(
         ))
     })?;
     let before_comments = comment_fingerprint(source, before.tokens());
+    // A `# fmt: skip` inside the expression is the author telling Ruff to leave
+    // it alone, so return the region untouched rather than formatting it and
+    // then failing a comparison.
     if has_provider_suppression(source, before.tokens()) {
         return Ok(source.to_string());
     }
     let wrapped = format!("{EXPRESSION_WRAPPER}(({newline}{source}{newline})){newline}");
+    // Ruff measures the wrapped text, so the budget is widened by the wrapper it
+    // will strip. Without this the expression would be wrapped earlier than the
+    // template's own width calls for.
     let wrapper_width = available_width
         .saturating_add(EXPRESSION_WRAPPER.len() + 1)
         .clamp(1, u16::MAX as usize);
@@ -67,6 +88,10 @@ pub(crate) fn format_expression(
             "Python expression provider returned invalid syntax: {error}"
         ))
     })?;
+    // Compare syntax trees, not text: reformatting is expected to move bytes
+    // around, but the expression has to still mean the same thing. This is the
+    // check that would catch a provider bug rewriting `a or b` into something
+    // subtly different.
     if ComparableExpr::from(before.syntax().body.as_ref())
         != ComparableExpr::from(after.syntax().body.as_ref())
     {

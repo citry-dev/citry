@@ -1,4 +1,16 @@
 //! Two-pass orchestration for JavaScript and CSS embedded in Citry templates.
+//!
+//! This crate formats neither language, and deliberately so: the caller already
+//! has a JavaScript and CSS formatter, and bundling another would mean a second
+//! opinion about the same files. So the work is split. `prepare_embedded_format`
+//! reports which regions want formatting and hands over their text;
+//! the caller formats them however it likes; `finish_embedded_format` checks
+//! what comes back and splices it in.
+//!
+//! The plan carries an id derived from the formatted source, which is what makes
+//! the handoff safe across a process or editor boundary. A result computed
+//! against a document that has since changed no longer matches its plan and is
+//! rejected, rather than being pasted into text it was never formatted for.
 
 use std::collections::{BTreeSet, HashMap};
 use std::fmt::Write as _;
@@ -272,6 +284,9 @@ impl EmbeddedFormatOutcome {
 
 /// Prepare deterministic M2 source and its safe expression-free JS/CSS bodies.
 pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, FormatError> {
+    // Structural formatting runs first, so the offsets in the plan refer to the
+    // text the caller will splice into. Preparing against the unformatted source
+    // would hand back positions that move the moment anything else is applied.
     let formatted_source = formatter::format(source)?;
     let template = parse_template(&formatted_source, None, None)
         .map_err(|error| FormatError::from_parse(&error))?;
@@ -281,6 +296,9 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
     let mut requests = Vec::new();
     let mut notices = Vec::new();
 
+    // A region that cannot be handed over produces a notice rather than an
+    // error: the rest of the document still formats, and the caller can tell the
+    // author which blocks were left alone and why.
     for (index, body) in model.embedded_bodies().iter().enumerate() {
         let region_id = format!("{}-{index}", body.kind.as_str());
         if body_is_protected(body, &model) {
@@ -309,6 +327,10 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
                     body.span.start..body.span.end,
                 )
             })?;
+        // A body holding `{{ ... }}` or `{# ... #}` is not valid standalone
+        // JavaScript or CSS, so a formatter for those languages would either
+        // reject it or mangle it. The textual check backs up the parsed flag,
+        // since the sequence can appear in places the parse did not mark.
         if body.has_interpolation || exact.contains("{{") || exact.contains("{#") {
             notices.push(notice(
                 "citry.format.embedded-interpolation-unsupported",
@@ -361,6 +383,12 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
 }
 
 /// Validate and atomically compose all provider results for a prepared plan.
+///
+/// Atomically because a document with some regions formatted and others not is
+/// worse than one left alone: nothing is spliced until every result has been
+/// checked. The four checks below are all about identity rather than content,
+/// since a result that belongs to the wrong document will still look like
+/// perfectly good JavaScript.
 pub fn finish_embedded_format(
     plan: &EmbeddedFormatPlan,
     results: &[EmbeddedFormatResult],
@@ -370,6 +398,8 @@ pub fn finish_embedded_format(
         .iter()
         .map(|request| (request.id.as_str(), request))
         .collect::<HashMap<_, _>>();
+    // Requiring an exact count catches a caller that dropped a region as well as
+    // one that invented an extra.
     if results.len() != requests.len() {
         return Err(provider_error(format!(
             "embedded result count {} does not match request count {}",
