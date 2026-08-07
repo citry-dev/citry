@@ -29,7 +29,7 @@ def check() -> list[str]:
     if not _PYPROJECT.exists():
         return [f"{_PYPROJECT} not found"]
 
-    maturin = tomllib.loads(_PYPROJECT.read_text()).get("tool", {}).get("maturin", {})
+    maturin = tomllib.loads(_PYPROJECT.read_text(encoding="utf-8")).get("tool", {}).get("maturin", {})
     module_name = maturin.get("module-name")
     manifest_path = maturin.get("manifest-path", ".")
     if not module_name:
@@ -48,7 +48,7 @@ def check() -> list[str]:
     if not lib_rs.exists():
         return [f"Rust crate lib.rs not found at {lib_rs} (from manifest-path '{manifest_path}')"]
 
-    lib_src = lib_rs.read_text()
+    lib_src = lib_rs.read_text(encoding="utf-8")
     problems: list[str] = []
 
     pymodule_fn = _PYMODULE_FN_RE.search(lib_src)
@@ -65,7 +65,7 @@ def check() -> list[str]:
         return problems
 
     rust_modules = set(_PYMODULE_NEW_RE.findall(lib_src))
-    stub_classes = set(_STUB_CLASS_RE.findall(stub.read_text()))
+    stub_classes = set(_STUB_CLASS_RE.findall(stub.read_text(encoding="utf-8")))
     for module in sorted(rust_modules - stub_classes):
         problems.append(
             f"Rust submodule '{module}' is registered in lib.rs but has no `class {module}:` in {stub.name}"

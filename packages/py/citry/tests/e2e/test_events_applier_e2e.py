@@ -206,12 +206,12 @@ def test_wp5_fixtures_replay_through_the_applier(page: Any, serve_live: Any) -> 
     messages = _goto(page, serve_live, c, str(Page()))
     page.evaluate("() => { document.addEventListener('counter:renamed', (e) => window.__log.events.push(e.detail)); }")
 
-    index = json.loads((TESTS_DIR / "index.json").read_text())
+    index = json.loads((TESTS_DIR / "index.json").read_text(encoding="utf-8"))
     assert len(index) == 19  # every protocol example replays; add new examples here too
     render_fixtures = 0
     data_values: list[Any] = []
     for entry in index:
-        result_doc = json.loads((TESTS_DIR / entry["result"]).read_text())
+        result_doc = json.loads((TESTS_DIR / entry["result"]).read_text(encoding="utf-8"))
         live_id = page.evaluate("() => document.querySelector('.counter').getAttribute('data-cid')")
         fresh_html = _fragment(Counter(count=1, name="Counter"))
         substituted = _substituted_result(result_doc, entry["dynamic_fields"], live_id, fresh_html)

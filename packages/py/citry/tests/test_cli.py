@@ -354,7 +354,7 @@ class TestCreateComponent:
         assert code == 0
         created = tmp_path / "my_button.py"
         assert created.exists()
-        text = created.read_text()
+        text = created.read_text(encoding="utf-8")
         assert "class MyButton(Component):" in text
         assert "    class Kwargs:\n" in text
         assert "    class Slots:\n" in text
@@ -380,7 +380,7 @@ class TestCreateComponent:
         run(build_cli(engine), ["create", "my-fancy-card", "--path", str(tmp_path)], citry=engine)
         created = tmp_path / "my_fancy_card.py"
         assert created.exists()
-        assert "class MyFancyCard(Component):" in created.read_text()
+        assert "class MyFancyCard(Component):" in created.read_text(encoding="utf-8")
 
     def test_refuses_to_overwrite(self, tmp_path):
         engine = _Citry()
@@ -388,7 +388,7 @@ class TestCreateComponent:
         existing.write_text("# existing\n")
         with pytest.raises(SystemExit):
             run(build_cli(engine), ["create", "MyButton", "--path", str(tmp_path)], citry=engine)
-        assert existing.read_text() == "# existing\n"  # left untouched
+        assert existing.read_text(encoding="utf-8") == "# existing\n"  # left untouched
 
     def test_preserves_pascalcase_acronym(self, tmp_path):
         engine = _Citry()
@@ -396,7 +396,7 @@ class TestCreateComponent:
         created = tmp_path / "http_server.py"
         assert created.exists()
         # The user's acronym casing is kept on the class; the file is snake_case.
-        assert "class HTTPServer(Component):" in created.read_text()
+        assert "class HTTPServer(Component):" in created.read_text(encoding="utf-8")
 
     def test_rejects_python_keyword_name(self, tmp_path):
         engine = _Citry()

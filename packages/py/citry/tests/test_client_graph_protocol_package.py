@@ -92,12 +92,12 @@ def test_golden_fixtures_match_their_index_expectations():
 
 def test_wire_constants_are_locked_across_producer_schema_fixture_and_browser_consumer():
     fixture = checker.load_json(checker.TESTS / "minimal.manifest.json")
-    runtime = (_ROOT / "packages/py/citry/citry/ext/dependencies/client/citry.js").read_text()
+    runtime = (_ROOT / "packages/py/citry/citry/ext/dependencies/client/citry.js").read_text(encoding="utf-8")
     javascript = _ROOT / "packages/protocol/client_graph/v1/js/src"
-    canonical_source = (javascript / "canonical.ts").read_text()
-    comments_source = (javascript / "comments.ts").read_text()
-    manifests_source = (javascript / "manifests.ts").read_text()
-    core_embed_source = (javascript / "core-embed.ts").read_text()
+    canonical_source = (javascript / "canonical.ts").read_text(encoding="utf-8")
+    comments_source = (javascript / "comments.ts").read_text(encoding="utf-8")
+    manifests_source = (javascript / "manifests.ts").read_text(encoding="utf-8")
+    core_embed_source = (javascript / "core-embed.ts").read_text(encoding="utf-8")
 
     assert PROTOCOL == "citry-client-graph/1"
     assert COMMENT_PREFIX == "citry:g1"

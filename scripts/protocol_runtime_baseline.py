@@ -228,7 +228,9 @@ def main() -> int:
         },
         "schemas": {
             path: _sha256(
-                json.dumps(json.loads((ROOT / path).read_text()), sort_keys=True, separators=(",", ":")).encode()
+                json.dumps(
+                    json.loads((ROOT / path).read_text(encoding="utf-8")), sort_keys=True, separators=(",", ":")
+                ).encode()
             )
             for path in SCHEMAS
         },

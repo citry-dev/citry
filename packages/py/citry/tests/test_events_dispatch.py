@@ -133,7 +133,7 @@ def _counter(c):
 
 def test_counter_template_is_pinned_to_protocol_spec_conformance_component():
     spec_path = Path(__file__).resolve().parents[4] / "packages" / "protocol" / "events" / "v1" / "spec.md"
-    section = spec_path.read_text().split("## The conformance component", 1)[1]
+    section = spec_path.read_text(encoding="utf-8").split("## The conformance component", 1)[1]
     match = re.search(r'template = """(.*?)"""', section, re.DOTALL)
     assert match is not None, "spec.md section 10 no longer contains the Counter template assignment"
     assert _counter(_citry()).template == match.group(1)
@@ -1978,7 +1978,7 @@ class TestCapabilities:
         # CAPABILITIES_BASELINE_V1; this is the test-time binding that keeps
         # the protocol package out of the runtime dependency graph.
         spec = Path(__file__).resolve().parents[4] / "packages" / "protocol" / "events" / "v1" / "spec.md"
-        text = spec.read_text()
+        text = spec.read_text(encoding="utf-8")
         match = re.search(r"`CAPABILITIES_BASELINE_V1`:\s*```json\s*(\{.*?\})\s*```", text, re.DOTALL)
         assert match is not None, "spec.md no longer defines CAPABILITIES_BASELINE_V1 as a JSON block"
         baseline = json.loads(match.group(1))

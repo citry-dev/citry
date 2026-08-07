@@ -149,7 +149,9 @@ def write_outputs(*, check: bool) -> bool:
         *(_GENERATED / "html").glob("*.stories.js"),
     }
     stale_paths = existing_paths - expected_paths
-    changed_paths = {path for path, content in outputs.items() if not path.exists() or path.read_text() != content}
+    changed_paths = {
+        path for path, content in outputs.items() if not path.exists() or path.read_text(encoding="utf-8") != content
+    }
     if check:
         return not stale_paths and not changed_paths
 

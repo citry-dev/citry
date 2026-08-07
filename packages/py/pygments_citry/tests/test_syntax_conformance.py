@@ -13,7 +13,7 @@ FIXTURE_PATH = Path(__file__).parents[3] / "editors" / "syntax-fixtures" / "temp
 
 
 def _load_cases() -> list[dict[str, object]]:
-    fixture = json.loads(FIXTURE_PATH.read_text())
+    fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
     assert fixture["schema_version"] == 1
     return fixture["cases"]
 

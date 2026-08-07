@@ -22,9 +22,9 @@ def check() -> list[str]:
     if not _WORKFLOW_FILE.exists():
         return [f"{_WORKFLOW_FILE} not found"]
 
-    channel = tomllib.loads(_TOOLCHAIN_FILE.read_text()).get("toolchain", {}).get("channel", "")
+    channel = tomllib.loads(_TOOLCHAIN_FILE.read_text(encoding="utf-8")).get("toolchain", {}).get("channel", "")
 
-    content = _WORKFLOW_FILE.read_text()
+    content = _WORKFLOW_FILE.read_text(encoding="utf-8")
     action = re.search(r"dtolnay/rust-toolchain", content)
     if action is None:
         return ["could not find 'dtolnay/rust-toolchain' in rust--tests.yml"]

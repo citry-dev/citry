@@ -398,7 +398,7 @@ def test_envelope_locked_against_protocol_examples_and_send_sequence(page: Any, 
     sent = captured[0]["body"]
     # The envelope's top-level vocabulary is the examples' (batch_two carries
     # the optional capabilities field; the runtime always advertises).
-    fixture_envelope = json.loads((TESTS_DIR / "batch_two.call.json").read_text())
+    fixture_envelope = json.loads((TESTS_DIR / "batch_two.call.json").read_text(encoding="utf-8"))
     assert set(sent) == set(fixture_envelope) == {"protocol", "requestId", "capabilities", "calls"}
     assert sent["protocol"] == fixture_envelope["protocol"] == "citry-events/1"
     assert sent["requestId"].startswith("r_")
@@ -1224,7 +1224,7 @@ def test_stale_state_error_fires_version_skew_and_the_prompt_is_configurable(pag
     # rides the skew event). The default handling is a soft reload prompt
     # (window.confirm), asked at most once per page; preventDefault on the
     # stale event replaces the default and suppresses the prompt.
-    stale_fixture = json.loads((TESTS_DIR / "error_stale_state.result.json").read_text())
+    stale_fixture = json.loads((TESTS_DIR / "error_stale_state.result.json").read_text(encoding="utf-8"))
     stale_error = stale_fixture["results"][0]["error"]
 
     # Page one: default handling. The confirm dialog appears once, and a
@@ -1258,7 +1258,7 @@ def test_stale_default_is_replaceable_and_unknown_actions_are_rejected_strictly(
     page.on("dialog", lambda dialog: (dialogs.append(f"{dialog.type}:{dialog.message}"), dialog.dismiss()))
     page.evaluate("window.__preventStaleDefault = true")
 
-    stale_fixture = json.loads((TESTS_DIR / "error_stale_state.result.json").read_text())
+    stale_fixture = json.loads((TESTS_DIR / "error_stale_state.result.json").read_text(encoding="utf-8"))
     _intercept_events(page, result_envelope=stale_fixture)
     outcome = page.evaluate(_SEND_AND_WAIT, ["save", {}, None])
     assert outcome == ["err", stale_fixture["results"][0]["error"]]
@@ -1456,7 +1456,7 @@ def test_content_disposition_response_takes_the_blob_download_path(page: Any, se
     # WebKit may expose the platform's decomposed Unicode spelling even when
     # the download attribute used the equivalent composed spelling.
     assert unicodedata.normalize("NFC", download.suggested_filename) == "přehled;2026.txt"
-    assert Path(download.path()).read_text() == "file-bytes"
+    assert Path(download.path()).read_text(encoding="utf-8") == "file-bytes"
     assert outcome == ["ok", "__undefined__"]
     log = page.evaluate("window.__log")
     assert log["after"] == [{"event": "save", "ok": True}]
@@ -1705,7 +1705,7 @@ def test_download_action_round_trips_through_the_real_server(page: Any, serve_li
     download = download_info.value
     assert result == "__undefined__"
     assert unicodedata.normalize("NFC", download.suggested_filename) == "přehled.csv"
-    assert Path(download.path()).read_text() == "name\nAda"
+    assert Path(download.path()).read_text(encoding="utf-8") == "name\nAda"
     assert _citry_errors(messages) == []
 
 
