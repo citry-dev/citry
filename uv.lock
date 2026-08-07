@@ -307,7 +307,7 @@ requires-dist = [
     { name = "markupsafe", specifier = ">=2.1" },
     { name = "typing-extensions", specifier = ">=4.10" },
     { name = "watchdog", marker = "extra == 'watcher-watchdog'", specifier = ">=4.0" },
-    { name = "watchfiles", marker = "extra == 'watcher-watchfiles'", specifier = ">=1.0" },
+    { name = "watchfiles", marker = "extra == 'watcher-watchfiles'", specifier = ">=1.2.0" },
     { name = "wrapt", specifier = ">=1.16" },
 ]
 provides-extras = ["watcher-watchfiles", "watcher-watchdog"]
