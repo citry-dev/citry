@@ -65,7 +65,7 @@ dependencies = [
 # have. citry.reload imports only `watchfiles.watch`, and watchdog's
 # `FileSystemEventHandler` and `Observer`, which every release in range provides.
 [project.optional-dependencies]
-watcher-watchfiles = ["watchfiles>=1.0"]   # recommended native backend
+watcher-watchfiles = ["watchfiles>=1.2.0"]   # recommended native backend
 watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
 
 # The `citry` console script (the CLI entry point); see citry/__main__.py.
