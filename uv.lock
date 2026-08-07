@@ -321,7 +321,7 @@ benchmark = [
 dev = [
     { name = "django", marker = "python_full_version >= '3.12'", specifier = ">=5.2" },
     { name = "fastapi", specifier = ">=0.110" },
-    { name = "httpx", specifier = ">=0.27" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "jsonschema", specifier = ">=4.23" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pytest", specifier = ">=8.3.5" },
