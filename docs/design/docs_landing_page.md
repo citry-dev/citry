@@ -623,7 +623,7 @@ publication rather than preserving an absolute claim.
 
 Use this as the reliability-section heading:
 
-> Catch UI mistakes early.
+> Catch mistakes early.
 
 The earlier "Python frontend that catches mistakes early" was distinctive but
 could classify Citry as a linter or testing tool. The reliability section has

@@ -40,7 +40,7 @@ license-files = ["LICENSE"]
 # Only Pygments. The floor is where the plugin lexer API we rely on is stable;
 # the docs environment keeps its own upper pin (see the root pyproject `docs`
 # extra), which resolves against this floor.
-dependencies = ["pygments>=2.15"]
+dependencies = ["pygments>=2.20"]
 
 # Registers the lexers as Pygments plugins: any environment with this package
 # installed resolves ```citry (full component) and ```citry-html (template only)
@@ -53,7 +53,7 @@ citry-html = "pygments_citry.citry_html:CitryHtmlLexer"
 # them on `uv sync --all-packages`, so the shared venv and CI get them with no
 # separate root-level copy to keep in step.
 [dependency-groups]
-dev = ["pytest>=8.3.5"]
+dev = ["pytest>=9.1.1"]
 
 [project.urls]
 Homepage = "https://citry.dev"

@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 # it lives in the C ``_speedups`` module, with a pure-Python ``_native`` twin;
 # we resolve whichever is present and fall back to the public ``escape`` if a
 # future markupsafe drops the name, so this stays a one-line behaviour change.
+# NOTE: Imports work on 3.X, falls through on 2.X.
 _escape_to_str_impl: Callable[[str], str] | None
 try:
     from markupsafe._speedups import _escape_inner as _escape_to_str_impl
@@ -43,6 +44,7 @@ except ImportError:  # pragma: no cover - depends on the installed wheel
     try:
         from markupsafe._native import _escape_inner as _escape_to_str_impl
     except ImportError:  # pragma: no cover - very old markupsafe
+        # v2.X
         _escape_to_str_impl = None
 
 

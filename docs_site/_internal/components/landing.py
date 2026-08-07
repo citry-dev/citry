@@ -62,8 +62,8 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
         "anchor": "class State",
         "title": "State that survives a call",
         "text": (
-            "State available across Python event handler calls. "
-            "Travels encrypted between the server and the browser. "
+            "Server-side state available across Python event handler calls. "
+            "Travels between the server and the browser. "
             "Inheriting <code>Kwargs</code> makes the <code>State</code> "
             "carry the same fields."
         ),
@@ -86,11 +86,11 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
         "label": "Data",
         "lines": (23, 33),
         "anchor": "def template_data",
-        "title": "Three methods, three destinations",
+        "title": "Use Python variables in templates, JS, and CSS",
         "text": (
-            "<code>template_data</code> prepares what the markup renders, "
-            "<code>js_data</code> is handed to the browser script, and "
-            "<code>css_data</code> becomes CSS custom properties scoped to this "
+            "<code>template_data</code> prepares template variables, "
+            "<code>js_data</code> sends data to JS script as JSON, and "
+            "<code>css_data</code> creates CSS variables scoped to this "
             "one instance."
         ),
     },

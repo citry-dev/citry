@@ -1,0 +1,16 @@
+# Line endings in the working tree.
+#
+# Git otherwise decides this per machine, through `core.autocrlf`. Git for
+# Windows turns it on by default, so a Windows checkout rewrites text files to
+# CRLF and a test that reads its own input from disk sees different bytes than
+# the author committed.
+#
+# `text eol=lf` pins the working tree to LF on every platform, Windows
+# included, rather than only normalizing what goes into the repository.
+
+# The template formatter's corpus is byte-exact test data. Each case pins the
+# formatter's output down to the newline it detected, so translating the input
+# on checkout changes the answer the test is checking. CRLF behavior is covered
+# separately by the `input_text` cases in index.json, which carry their own
+# escapes and are unaffected by checkout.
+crates/citry_template_formatter/tests/fixtures/** text eol=lf

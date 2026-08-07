@@ -61,7 +61,7 @@ Point at any marked line below to see what it does:
 </section>
 
 <section class="landing-section" id="reliability" markdown="1">
-## Catch UI mistakes early.
+## Catch mistakes early.
 
 <!-- Every message below is the real one. Building this page applies each mistake
 to the component above, renders it, and prints back exactly what Citry raised.
