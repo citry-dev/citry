@@ -45,7 +45,7 @@ dependencies = [
     # lines serve. Raising the floor would force wrapt 2 on every installation
     # for no gain here.
     "wrapt>=1.16",
-    "markupsafe>=2.1",
+    "markupsafe>=3.0.3",
     # 4.10 is the first release with `TypeIs` (PEP 742), which citry.util.misc
     # imports. The other symbols used here (`TypeAliasType`, `Unpack`,
     # `override`, and `TypeVar` with a PEP 696 default) all land earlier.
