@@ -60,8 +60,8 @@ dependencies = [
 # `watcher-*` are hot-reload file-watcher backends (docs/design/hot_reload.md);
 # the polling fallback in citry.reload needs no extra.
 [project.optional-dependencies]
-watcher-watchfiles = ["watchfiles>=1.0"]   # recommended native backend
-watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
+watcher-watchfiles = ["watchfiles>=1.2.0"]   # recommended native backend
+watcher-watchdog = ["watchdog>=6.0.0"]       # alternate native backend
 
 # The `citry` console script (the CLI entry point); see citry/__main__.py.
 [project.scripts]
@@ -80,7 +80,7 @@ dev = [
     # matching django 6's floor; on older pythons those tests skip.
     "django>=5.2; python_version >= '3.12'",
     "pydantic>=2.13.4", # test-only: components may use Pydantic Kwargs/Slots
-    "fastapi>=0.110",  # test-only: FastAPI contrib tests (Starlette TestClient)
+    "fastapi>=0.141.1",  # test-only: FastAPI contrib tests (Starlette TestClient)
     "httpx>=0.28.1",     # TestClient needs httpx
     "jsonschema>=4.26.0", # test-only: protocol conformance validates every emitted envelope
 ]
@@ -89,7 +89,7 @@ dev = [
 # `playwright install`). The e2e CI jobs install this group and the browsers.
 e2e = [
     "playwright>=1.62.0",
-    "pytest-playwright>=0.5",
+    "pytest-playwright>=0.8.0",
 ]
 # Benchmark baselines (docs/design/benchmarking.md), pinned exactly so a bump is
 # a deliberate re-baseline; skipped when absent (tests/conftest.py).
