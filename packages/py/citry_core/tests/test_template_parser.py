@@ -102,9 +102,10 @@ class TemplateHtmlAttr:
 
 
 class ComponentNode:
-    # The trailing `key` argument is emitted only when the tag carries
-    # `#c-key`, so it defaults here like in the real runtime class.
-    def __init__(self, source, position, attrs, body, used_vars, name, contains_fills, key=None):
+    # The tagged trailing metadata envelope is emitted only when the tag
+    # carries ComponentRange metadata, so it defaults here like in the real
+    # runtime class.
+    def __init__(self, source, position, attrs, body, used_vars, name, contains_fills, metadata=None):
         self.source = source
         self.position = position
         self.attrs = attrs
@@ -112,7 +113,7 @@ class ComponentNode:
         self.used_vars = used_vars
         self.name = name
         self.contains_fills = contains_fills
-        self.key = key
+        self.metadata = metadata
 
 
 class IfNode:
@@ -370,18 +371,23 @@ class TestRoundTrip:
         body = self._exec_template('<c-Card #c-key="item.id" title="Hi" />')
         comp = body[0]
         assert isinstance(comp, ComponentNode)
-        # The key rides as the trailing argument, never inside attrs (so it
-        # can never become a kwarg).
-        assert isinstance(comp.key, ExprHtmlAttr)
-        assert comp.key.key == "#c-key"
-        assert comp.key.expr == "item.id"
-        assert comp.key.used_vars == ("item",)
+        # ComponentRange metadata rides in the tagged trailing envelope,
+        # never inside attrs (so it can never become a kwarg).
+        assert comp.metadata is not None
+        locus, key_entry = comp.metadata
+        kind, key = key_entry
+        assert locus == "range"
+        assert kind == "key"
+        assert isinstance(key, ExprHtmlAttr)
+        assert key.key == "#c-key"
+        assert key.expr == "item.id"
+        assert key.used_vars == ("item",)
         assert len(comp.attrs) == 1
         assert isinstance(comp.attrs[0], StaticHtmlAttr)
 
     def test_unkeyed_component_key_defaults_none(self):
         body = self._exec_template("<c-Card />")
-        assert body[0].key is None
+        assert body[0].metadata is None
 
     def test_element_meta_key(self):
         body = self._exec_template('<li #c-key="item.id">x</li>')

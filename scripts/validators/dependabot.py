@@ -28,7 +28,7 @@ def check() -> list[str]:
     if not dependabot.exists():
         return [f"{dependabot} not found"]
 
-    entries = set(_DIRECTORY_RE.findall(dependabot.read_text()))
+    entries = set(_DIRECTORY_RE.findall(dependabot.read_text(encoding="utf-8")))
     packages = _python_packages()
 
     problems: list[str] = []

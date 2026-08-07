@@ -402,6 +402,18 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   `fail_under` in [`pyproject.toml`](pyproject.toml), with every test passing.
   The `details` field distinguishes the two cases; treat a coverage shortfall as
   a call for tests, and lower the ratchet only as a deliberate, stated decision.
+- **A green local gate does not promise a green CI gate.** CI runs on Linux
+  from a lockfile, and a developer machine differs in two ways that each hide a
+  real failure:
+  - **mypy prunes branches for the platform it runs on**, so a
+    `sys.platform == "linux"` branch is never checked on macOS and its type
+    errors surface only in CI. Run the mypy phase a second time with
+    `--platform linux` before calling a change done.
+  - **A locally installed extra masks a missing declaration.** `uv sync
+    --locked --all-packages` installs each package's `[dependency-groups].dev`
+    and no extras, so a test importing something that only the root `docs`
+    extra provides passes locally and fails collection in CI. A package's
+    test-only import belongs in that package's own dev group.
 - **Don't preserve incorrect behavior to keep tests passing.** When a fix makes
   the more correct choice, update the failing tests to match the new contract,
   and call the update out explicitly. A failing test under a deliberate change

@@ -26,7 +26,7 @@ def check() -> list[str]:
     if not cargo.exists():
         return [f"{cargo} not found"]
 
-    declared = tomllib.loads(cargo.read_text()).get("workspace", {}).get("members", [])
+    declared = tomllib.loads(cargo.read_text(encoding="utf-8")).get("workspace", {}).get("members", [])
     members = {member.strip("/") for member in declared}
     crates = _crates_on_disk()
 

@@ -84,11 +84,11 @@ def fetch_supported_python() -> set[PyVersion]:
 
 
 def declared_classifiers(pyproject: Path) -> set[PyVersion]:
-    return {(int(a), int(b)) for a, b in _CLASSIFIER_RE.findall(pyproject.read_text())}
+    return {(int(a), int(b)) for a, b in _CLASSIFIER_RE.findall(pyproject.read_text(encoding="utf-8"))}
 
 
 def matrix_versions(workflow: Path) -> set[PyVersion]:
-    match = _MATRIX_RE.search(workflow.read_text())
+    match = _MATRIX_RE.search(workflow.read_text(encoding="utf-8"))
     if not match:
         return set()
     return {(int(a), int(b)) for a, b in _QUOTED_VERSION_RE.findall(match.group(1))}

@@ -158,6 +158,14 @@ ignore = [
     "G004", # Logging statement uses f-string
 ]
 
+[tool.ruff.lint.flake8-bandit]
+# These are the exact qualified imports used for MarkupSafe's trusted-HTML
+# class. Listing both lets S704 check public application code and Citry itself.
+extend-markup-names = [
+    "citry.Markup",
+    "citry.util.html.Markup",
+]
+
 [tool.ruff.lint.per-file-ignores]
 "packages/py/**/tests/*" = [
     "ARG001",  # Unused function argument (mock/callback signatures in tests)
