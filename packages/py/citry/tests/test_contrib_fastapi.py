@@ -6,8 +6,8 @@ import re
 
 import pytest
 
-fastapi = pytest.importorskip("fastapi", reason="the web-integration tests need fastapi + httpx")
-pytest.importorskip("httpx", reason="Starlette's TestClient needs httpx")
+fastapi = pytest.importorskip("fastapi", reason="the web-integration tests need fastapi + httpx2")
+pytest.importorskip("httpx2", reason="Starlette's TestClient needs httpx2")
 
 from fastapi.testclient import TestClient  # noqa: E402
 

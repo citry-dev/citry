@@ -86,7 +86,9 @@ dev = [
     "django>=5.2; python_version >= '3.12'",
     "pydantic>=2.13.4", # test-only: components may use Pydantic Kwargs/Slots
     "fastapi>=0.141.1",  # test-only: FastAPI contrib tests (Starlette TestClient)
-    "httpx>=0.28.1",     # TestClient needs httpx
+    # Starlette's TestClient moved to httpx2 and deprecates the httpx transport,
+    # so the warning it emits is a real instruction rather than noise.
+    "httpx2>=2.9.1",   # test-only: the transport Starlette's TestClient uses
     "jsonschema>=4.26.0", # test-only: protocol conformance validates every emitted envelope
 ]
 # Browser end-to-end tests (tests/e2e). A separate group, NOT installed by

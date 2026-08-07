@@ -23,7 +23,7 @@ import pytest
 
 django = pytest.importorskip("django", reason="the Events host-parity tests need Django")
 fastapi = pytest.importorskip("fastapi", reason="the Events host-parity tests need FastAPI")
-pytest.importorskip("httpx", reason="Starlette's TestClient needs httpx")
+pytest.importorskip("httpx2", reason="Starlette's TestClient needs httpx2")
 
 from django.conf import settings  # noqa: E402
 

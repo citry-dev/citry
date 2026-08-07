@@ -2018,6 +2018,10 @@ class TestSchemaAdapter:
         finally:
             annotation.__args__ = original_arguments
 
+    @pytest.mark.skipif(
+        sys.version_info >= (3, 14),
+        reason="typing.Union objects have a read-only __args__ from 3.14, so this input cannot be built",
+    )
     def test_typing_union_with_mutated_empty_arguments_is_unavailable(self):
         annotation = typing.Union[int, str]  # noqa: UP007 - mutate the typing union runtime object
         original_arguments = annotation.__args__

@@ -637,7 +637,7 @@ class TestInvalidateAll:
 class TestReloadLifespan:
     def test_starts_on_startup_stops_on_shutdown(self, tmp_path):
         fastapi = pytest.importorskip("fastapi")
-        pytest.importorskip("httpx")
+        pytest.importorskip("httpx2")
         from fastapi.testclient import TestClient
 
         from citry.contrib.asgi import reload_lifespan

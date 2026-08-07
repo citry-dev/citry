@@ -65,6 +65,11 @@ def test_build_check_fails_when_search_index_fails(
             search_message="pagefind failed",
         ),
     )
+    # The source guards run before the build and, under `strict`, a warning from
+    # any page fails them. That returns early and never reaches the search-index
+    # branch this test is about, so the guards are stubbed to pass and the test
+    # covers only its own subject.
+    monkeypatch.setattr("docs_site._internal.guards.run_guards", lambda *_args, **_kwargs: ([], True))
 
     assert cli._run_build_check(strict=True) == 1
     assert "Search index failed: pagefind failed" in capsys.readouterr().out

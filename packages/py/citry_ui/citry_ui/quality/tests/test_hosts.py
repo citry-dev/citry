@@ -27,7 +27,7 @@ def _asset_urls(html: str, prefix: str) -> tuple[str, ...]:
 @pytest.mark.parametrize("scenario_id", _REPRESENTATIVE_SCENARIOS)
 def test_fastapi_serves_shared_page_and_every_referenced_citry_asset(scenario_id):
     fastapi = pytest.importorskip("fastapi")
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx2")
     from fastapi.responses import HTMLResponse
     from fastapi.testclient import TestClient
 
@@ -100,7 +100,7 @@ def test_django_serves_shared_page_and_every_referenced_citry_asset(scenario_id)
 
 
 def test_generic_asgi_adapter_serves_assets_for_the_shared_tabs_scenario():
-    pytest.importorskip("httpx")
+    pytest.importorskip("httpx2")
     from starlette.testclient import TestClient
 
     rendered = build_scenario(
