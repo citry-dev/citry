@@ -26,11 +26,21 @@ updates:
   # ROOT / TOOLING
   ######################################
 
-  # Rust workspace (all crates share dependencies from root Cargo.toml)
+  # Rust workspace (all crates share dependencies from root Cargo.toml).
+  #
+  # third_party/ holds the vendored Ruff submodule, which declares a workspace
+  # of its own (`members = ["crates/*"]`). Without the exclusion Dependabot walks
+  # into it, treats it as the workspace root, and then looks for this repo's
+  # members underneath it: it aborts on
+  # `third_party/rust/ruff/crates/citry_core_py/Cargo.toml not found` before
+  # proposing anything, so the cargo ecosystem gets no coverage at all. Ruff is
+  # updated through the submodule pointer, not through Cargo.
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
       interval: "weekly"
+    exclude-paths:
+      - "third_party/**"
 
   # Python - root pyproject.toml (tooling dependencies)
   - package-ecosystem: "pip"
@@ -117,13 +127,32 @@ updates:
     groups:
       # One pull request for all development dependencies. They are tooling, not
       # anything a user installs, so they are reviewed together and kept current.
+      #
+      # Careful with `[project.optional-dependencies]`: Dependabot counts an
+      # extra as a development dependency, so a runtime extra lands in this group
+      # despite being something a user installs. watchdog and watchfiles arrived
+      # that way. A new runtime extra needs adding to the exclusions here and to
+      # the ignore list below.
       dev-dependencies:
         dependency-type: "development"
-    # Both of these are runtime dependencies, so their floors say what a user
-    # must install, not what this repo develops against. Each is set to the
-    # lowest version that actually works and the reason is recorded beside the
-    # dependency in pyproject.toml, so a proposal to raise them is noise.
+        exclude-patterns:
+          - "watchdog"
+          - "watchfiles"
+    # These say what a user must install, not what this repo develops against.
+    # Each is set to the lowest version that actually works and the reason is
+    # recorded beside the dependency in pyproject.toml, so a proposal to raise
+    # them is noise.
     ignore:
+      - dependency-name: "watchdog"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
+      - dependency-name: "watchfiles"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
       - dependency-name: "wrapt"
         update-types:
           - "version-update:semver-major"
