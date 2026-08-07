@@ -854,6 +854,14 @@ class TestConcurrentLoading:
             template = "<p>Concurrent</p>"
             js = "console.log('conc')"
 
+        # What this test is about starts after startup. Citry documents that a
+        # thread meeting lifecycle work another thread owns gets
+        # `CitryLifecycleInProgress`, and that a server calls `initialize()`
+        # before it starts request threads. Without this the eight threads race
+        # lazy initialization instead of the template resolution under test, and
+        # whether they win depends on how warm the imports happen to be.
+        c.initialize()
+
         thread_count = 8
         barrier = threading.Barrier(thread_count)
         results: list[str] = []

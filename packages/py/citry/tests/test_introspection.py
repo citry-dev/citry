@@ -2886,6 +2886,12 @@ class TestExtensionMetadataQueries:
         class Card(Component):
             citry = app
 
+        # Startup work belongs before the threads. Lazy initialization takes the
+        # lifecycle exclusively, so without this the second thread is turned away
+        # with `CitryLifecycleInProgress` before it reaches the barrier, and the
+        # test measures that race rather than whether introspection serializes.
+        app.initialize()
+
         with ThreadPoolExecutor(max_workers=2) as executor:
             futures = [
                 executor.submit(app.inspect_component, Card, include_extensions=("concurrent",)) for _index in range(2)

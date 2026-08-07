@@ -1223,7 +1223,10 @@ def test_atomic_replace_failure_leaves_original_bytes(
     def fail_replace(_source: Path | str, _target: Path | str) -> None:
         raise OSError("replace refused")
 
-    monkeypatch.setattr(os, "replace", fail_replace)
+    # Patch `Path.replace`, which is what `_atomic_replace` calls. Patching
+    # `os.replace` instead only works from 3.11: on 3.10 pathlib binds it at
+    # import time, so a later patch is invisible and the failure never happens.
+    monkeypatch.setattr(Path, "replace", fail_replace)
 
     assert _run_main(["format", str(target)]) == 2
     assert target.read_bytes() == source

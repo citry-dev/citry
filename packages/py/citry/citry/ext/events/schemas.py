@@ -216,13 +216,38 @@ class _FieldSpec(NamedTuple):
     required: bool
 
 
+def _field_hints(converted: type) -> dict[str, Any]:
+    """Resolve the annotations of the dataclass fields, and nothing else."""
+    wanted = {field.name for field in fields(converted)}
+    # Base-first so a subclass annotation wins, matching how `get_type_hints`
+    # walks the MRO.
+    collected: dict[str, Any] = {
+        name: annotation
+        for base in reversed(converted.__mro__)
+        for name, annotation in getattr(base, "__annotations__", {}).items()
+        if name in wanted
+    }
+    # A throwaway carrier so the strings resolve against the same module
+    # namespace the real class would have used.
+    carrier = type(converted.__name__, (), {"__annotations__": collected, "__module__": converted.__module__})
+    return get_type_hints(carrier)
+
+
 @functools.cache
 def _schema_info(schema_cls: type) -> tuple[type, tuple[_FieldSpec, ...]]:
     """The converted class and field specs of a non-Pydantic schema, computed once."""
     converted = convert_schema_class(schema_cls)
     # Resolved annotation objects, not strings: user modules may use
     # ``from __future__ import annotations``.
-    hints = get_type_hints(converted)
+    try:
+        hints = get_type_hints(converted)
+    except TypeError:
+        # Python 3.10 refuses to resolve a bare, unsubscripted `ClassVar` written
+        # as a deferred annotation, and one bad entry fails the whole class. Such
+        # an attribute is not a dataclass field, so its annotation was never
+        # wanted here; resolve the fields on their own and let a field whose own
+        # annotation is genuinely broken still raise.
+        hints = _field_hints(converted)
     specs = tuple(
         _FieldSpec(
             name=field.name,
