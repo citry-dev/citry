@@ -2,6 +2,9 @@
 
 ## 0.1.0 - Unreleased
 
+- Require VS Code 1.101.0 or newer. That release is the first to embed Node 22,
+  which the extension bundle now targets.
+
 - Add one `citry-lsp` client per workspace folder, using that folder's selected
   Python environment and optional `citry.app` setting.
 - Surface registry, syntax-only, interpreter, app, and protocol status with

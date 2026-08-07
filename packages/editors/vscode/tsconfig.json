@@ -4,6 +4,10 @@
 		"module": "Node16",
 		"moduleResolution": "Node16",
 		"lib": ["ES2022"],
+		// TypeScript 7 does not pull in every installed @types package on its
+		// own, so the ambient globals this extension uses (setTimeout,
+		// AbortController, URLSearchParams) have to be requested by name.
+		"types": ["node", "vscode"],
 		"outDir": "out",
 		"rootDir": "src",
 		"sourceMap": true,

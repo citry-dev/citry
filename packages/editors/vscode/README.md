@@ -227,6 +227,36 @@ The grammar adapter consumes the shared behavior cases in
 `packages/editors/syntax-fixtures/`. The Pygments and future browser-editor
 adapters consume the same cases with their own native token vocabulary.
 
+### What `engines.vscode` decides
+
+`package.json` takes no comments, so the reasoning lives here. `engines.vscode`
+declares the oldest VS Code this extension supports, and three other values
+follow from it. They move together, in one change, and never on their own:
+
+| Value | Today | Why |
+|---|---|---|
+| `engines.vscode` | `^1.101.0` | the decision |
+| `@types/vscode` | `1.101.0` | matches the floor exactly |
+| esbuild `--target` | `node22` | VS Code 1.101 embeds Node 22.15.1 |
+| `@types/node` | `22.x` | describes that same embedded Node |
+
+Each one breaks differently if set on its own. A newer **`@types/vscode`** lets
+code compile against editor APIs that are absent at run time on the oldest
+supported version, so the extension fails only for the users still on it. A
+newer **esbuild target** lets esbuild emit syntax the embedded Node cannot run,
+and skip the downleveling that would have made it safe. A newer **`@types/node`**
+describes APIs that embedded Node does not provide.
+
+The embedded Node comes from the editor, not from Node's own release schedule,
+so a Node version reaching end of life is not by itself a reason to raise the
+target. Look up what a given VS Code release embeds at
+[ewanharris/vscode-versions](https://github.com/ewanharris/vscode-versions), and
+pick the floor from the oldest editor you intend to support.
+
+Dependabot proposes the two type packages regularly;
+`.github/dependabot.yml` ignores them so the decision is made here rather than
+re-argued weekly.
+
 For an M3 smoke test, use a workspace whose selected Python interpreter has
 the local `citry` and `citry-lsp` builds installed. Open a component with a
 direct `js` or `css` triple-string, or an expression-free `<script>` or

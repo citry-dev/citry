@@ -40,6 +40,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
+    # Both pins follow from the VS Code extension's `engines.vscode`, which
+    # declares the oldest editor it supports. They move when that decision moves,
+    # in the same change, not on their own. The reasoning is in
+    # packages/editors/vscode/README.md.
+    ignore:
+      - dependency-name: "@types/vscode"
+      - dependency-name: "@types/node"
     groups:
       # Storybook releases its packages together, so they update together.
       storybook:
@@ -83,6 +90,13 @@ updates:
     directory: "packages/py/citry"
     schedule:
       interval: weekly
+    # Both of these are runtime dependencies, so their floors say what a user
+    # must install, not what this repo develops against. Each is set to the
+    # lowest version that actually works and the reason is recorded beside the
+    # dependency in pyproject.toml, so a proposal to raise them is noise.
+    ignore:
+      - dependency-name: "wrapt"
+      - dependency-name: "typing-extensions"
 
   - package-ecosystem: "pip"
     directory: "packages/py/citry_lsp"

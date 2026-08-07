@@ -63,7 +63,7 @@ jobs:
           version: "latest"
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -103,7 +103,7 @@ jobs:
           version: "latest"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -123,7 +123,7 @@ jobs:
         run: uv run --no-sync playwright install --with-deps chromium
 
       - name: Set up pnpm for the pinned axe runtime
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Set up Node
         uses: actions/setup-node@v7
@@ -191,7 +191,7 @@ jobs:
             --output "$report_dir/phase-7.5.json"
 
       - name: Upload Citry UI qualification evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: citry-ui-pr-quality
           path: ${{ runner.temp }}/citry-ui-quality/
@@ -208,7 +208,7 @@ jobs:
           version: "latest"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -221,7 +221,7 @@ jobs:
           dist/citry_ui-*.whl
 
       - name: Upload the exact Citry UI wheel
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: citry-ui-wheel
           path: dist/citry_ui-*.whl
@@ -235,7 +235,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.14"]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: citry-ui-wheel
           path: dist
@@ -246,7 +246,7 @@ jobs:
           version: "latest"
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -313,13 +313,13 @@ jobs:
     needs: citry-ui-wheel-build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: citry-ui-wheel
           path: dist
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 
@@ -389,7 +389,7 @@ jobs:
           version: "latest"
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: "3.13"
 

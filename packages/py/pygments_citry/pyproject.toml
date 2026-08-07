@@ -1,6 +1,8 @@
 [build-system]
-# The `license-files` field below needs setuptools 77 or newer.
-requires = ["setuptools>=77"]
+# Tracks a current setuptools. 77 is the true minimum, where PEP 639 license
+# metadata and `license-files` arrived, but only a build from source reads this
+# and pip supplies a recent setuptools there anyway.
+requires = ["setuptools>=83.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
