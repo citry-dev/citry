@@ -334,7 +334,8 @@ class TestShapes:
             class Dependencies:
                 js = pattern
 
-        with pytest.raises(FileNotFoundError, match=r"missing/.+\.js"):
+        # The message carries a real path, so the separator is the platform's.
+        with pytest.raises(FileNotFoundError, match=r"missing[/\\].+\.js"):
             Card.get_dependencies()
 
     def test_relative_path_glob_ignores_directory_only_matches(self, tmp_path):

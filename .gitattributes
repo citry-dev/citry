@@ -14,3 +14,11 @@
 # separately by the `input_text` cases in index.json, which carry their own
 # escapes and are unaffected by checkout.
 crates/citry_template_formatter/tests/fixtures/** text eol=lf
+
+# The browser runtimes ship inside the citry wheel and are inlined into rendered
+# pages, so their bytes are the product rather than a local working copy. A CRLF
+# checkout made the wheel differ by one byte per line, 17475 of them, which is
+# what pushed the runtime past its size budget on Windows while the same commit
+# passed everywhere else.
+packages/py/citry/citry/ext/dependencies/client/*.js text eol=lf
+packages/py/citry/citry/ext/events/client/*.js text eol=lf

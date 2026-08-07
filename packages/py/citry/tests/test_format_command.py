@@ -58,6 +58,26 @@ def _component_source(template: str) -> str:
     return f"from citry import Component\n\nclass Card(Component):\n    template = {template!r}\n"
 
 
+def _lock_directory_or_skip(directory: Path) -> None:
+    """
+    Make the directory unreadable, or skip when the filesystem ignores the request.
+
+    Windows grants access through ACLs rather than the mode bits, so clearing them
+    there leaves the directory perfectly readable and a test that expects the scan
+    to fail instead watches it succeed. Asking the filesystem whether the lock took
+    is more honest than checking the platform name, and it also covers running as
+    root or a mounted share that ignores permissions.
+    """
+    directory.chmod(0)
+    try:
+        list(directory.iterdir())
+    except OSError:
+        return
+    # The lock did not take, so put the directory back before bowing out.
+    directory.chmod(0o700)
+    pytest.skip("filesystem does not enforce directory permissions")
+
+
 def _write_component_with_file(path: Path, template_file: str) -> None:
     path.write_text(
         f"from citry import Component\n\nclass Card(Component):\n    template_file = {template_file!r}\n",
@@ -540,7 +560,9 @@ def test_directory_discovers_only_proven_js_and_css_file_assets(
     assert css.read_text(encoding="utf-8") == ".card{ color: red }\n"
     assert unrelated.read_text(encoding="utf-8") == "const  untouched = 1;\n"
     captured = capsys.readouterr()
-    assert captured.out == "formatted: assets/card.asset\nformatted: assets/card.style\n"
+    assert captured.out == (
+        f"formatted: {Path('assets') / 'card.asset'}\nformatted: {Path('assets') / 'card.style'}\n"
+    )
 
 
 def test_no_path_scans_current_directory_without_claiming_unrelated_html(
@@ -590,7 +612,7 @@ def test_directory_discovers_direct_template_files_and_deduplicates_overlapping_
 
     assert template.read_text(encoding="utf-8") == '<article class="card"></article>'
     captured = capsys.readouterr()
-    assert captured.out == "formatted: templates/card.tpl\n"
+    assert captured.out == f"formatted: {Path('templates') / 'card.tpl'}\n"
     assert captured.err == "citry format: 1 formatted, 0 unchanged, 1 skipped, 0 errored\n"
 
 
@@ -721,7 +743,7 @@ def test_unreadable_declared_template_is_a_file_error_not_a_crash(
     original = '<div  id = "card" ></div>'
     template.write_text(original, encoding="utf-8")
     _write_component_with_file(tmp_path / "component.py", "_locked/card.tpl")
-    locked.chmod(0)
+    _lock_directory_or_skip(locked)
 
     try:
         assert _run_main(["format", "."]) == 2
@@ -745,7 +767,7 @@ def test_unreadable_explicit_directory_is_not_reported_clean(
     component = locked / "component.py"
     original = _component_source('<div  id = "card" ></div>')
     component.write_text(original, encoding="utf-8")
-    locked.chmod(0)
+    _lock_directory_or_skip(locked)
 
     try:
         assert _run_main(["format", str(locked)]) == 2
@@ -791,7 +813,7 @@ def test_overlapping_directory_arguments_use_the_outer_normalized_scope(
     assert _run_main(["format", "--check", ".", "sub"]) == 1
 
     captured = capsys.readouterr()
-    assert captured.out == "would format: templates/card.tpl\n"
+    assert captured.out == f"would format: {Path('templates') / 'card.tpl'}\n"
     assert "escapes directory root" not in captured.err
     assert template.read_text(encoding="utf-8") == '<div  id = "card" ></div>'
 
@@ -815,7 +837,7 @@ def test_explicit_excluded_subdirectory_is_not_collapsed_into_outer_scan(
 
     assert '<div id="card"></div>' in component.read_text(encoding="utf-8")
     captured = capsys.readouterr()
-    assert captured.out == f"formatted: {excluded_name}/card.py\n"
+    assert captured.out == f"formatted: {Path(excluded_name) / 'card.py'}\n"
     assert captured.err == "citry format: 1 formatted, 0 unchanged, 0 skipped, 0 errored\n"
 
 
@@ -1132,6 +1154,11 @@ def test_atomic_write_preserves_crlf_bom_and_file_mode(
     source = _component_source("""<div  class = "card" ></div>""").replace("\n", "\r\n")
     target.write_bytes(b"\xef\xbb\xbf" + source.encode("utf-8"))
     target.chmod(0o640)
+    # Windows maps the mode bits onto ACLs and reports 0o666 back, so only assert
+    # the mode carries over where the filesystem actually stored what we asked for.
+    # The CRLF and BOM checks below stay active everywhere, and Windows is the
+    # platform whose line endings they exist to protect.
+    mode_is_honored = stat.S_IMODE(target.stat().st_mode) == 0o640
 
     assert _run_main(["format", str(target)]) == 0
 
@@ -1139,7 +1166,8 @@ def test_atomic_write_preserves_crlf_bom_and_file_mode(
     assert output.startswith(b"\xef\xbb\xbf")
     assert b"\r\n" in output
     assert b'<div class="card"></div>' in output
-    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+    if mode_is_honored:
+        assert stat.S_IMODE(target.stat().st_mode) == 0o640
     capsys.readouterr()
 
 
