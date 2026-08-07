@@ -68,7 +68,7 @@ citry = "citry.__main__:main"
 # and CI get them with no separate root-level copy to keep in step.
 [dependency-groups]
 dev = [
-    "pytest>=8.3.5",
+    "pytest>=9.1.1",
     "pytest-cov>=7.1.0",  # coverage gate in scripts/check.py
     # test-only: the django contrib adapter tests (test_contrib_django.py) need a
     # real django. A range, not the benchmark group's exact pin: benchmarks need a
