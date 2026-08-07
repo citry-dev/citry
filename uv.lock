@@ -304,7 +304,7 @@ e2e = [
 [package.metadata]
 requires-dist = [
     { name = "citry-core", editable = "packages/py/citry_core" },
-    { name = "markupsafe", specifier = ">=2.1" },
+    { name = "markupsafe", specifier = ">=3.0.3" },
     { name = "typing-extensions", specifier = ">=4.10" },
     { name = "watchdog", marker = "extra == 'watcher-watchdog'", specifier = ">=4.0" },
     { name = "watchfiles", marker = "extra == 'watcher-watchfiles'", specifier = ">=1.0" },
