@@ -12,8 +12,18 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+# Alpine's three attribute spellings, all of which Nu reports as not allowed
+# because HTML permits no attribute outside `data-*` and its own fixed set:
+# the `x-` directives, `@event` for `x-on:event`, and `:attr` for `x-bind:attr`.
+#
+# `@c-` is deliberately left out. That prefix is Citry's own event syntax, which
+# the server consumes and never renders, so meeting one in output means it
+# leaked rather than that Nu failed to recognize Alpine. `@citry-...` is
+# unaffected: only the exact `@c-` prefix is excluded.
+_ALPINE_ATTRIBUTE = r"(?:x-[a-z][a-z0-9_.:-]*|@(?!c-)[a-z][a-z0-9_.:-]*|:[a-z][a-z0-9_.-]*)"
 _ALPINE_ATTRIBUTE_ERROR = re.compile(
-    r"^Attribute “x-[a-z][a-z0-9_.:-]*” not allowed on element “[a-z][a-z0-9-]*” at this point\.$"
+    rf"^Attribute “(?P<attribute>{_ALPINE_ATTRIBUTE})” "
+    r"not allowed on element “[a-z][a-z0-9-]*” at this point\.$"
 )
 
 
@@ -44,10 +54,11 @@ def qualify_nu_result(result: dict[str, Any], *, scenario: str) -> HtmlReport:
         if finding_type != "error":
             information += 1
             continue
-        if _ALPINE_ATTRIBUTE_ERROR.fullmatch(message):
-            match = re.search(r"“(?P<attribute>x-[a-z][a-z0-9_.:-]*)”", message)
-            if match is not None:
-                alpine_directives.add(match.group("attribute"))
+        alpine = _ALPINE_ATTRIBUTE_ERROR.fullmatch(message)
+        if alpine is not None:
+            # Recorded rather than discarded: the report lists every directive
+            # that was tolerated, so the exemption stays visible in CI output.
+            alpine_directives.add(alpine.group("attribute"))
             continue
         unexpected.append(finding)
 

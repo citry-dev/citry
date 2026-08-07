@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -99,8 +99,8 @@ def test_render_page_puts_git_dates_in_the_article_json_ld(monkeypatch: Any) -> 
     from docs_site._internal.git_metadata import PageGitMeta
 
     meta = PageGitMeta(
-        created=datetime(2026, 6, 1, tzinfo=UTC),
-        last_updated=datetime(2026, 7, 2, tzinfo=UTC),
+        created=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        last_updated=datetime(2026, 7, 2, tzinfo=timezone.utc),
         authors=("Ada",),
     )
     monkeypatch.setattr(pipeline_mod, "get_page_git_meta", lambda _root, _path: meta)

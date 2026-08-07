@@ -26,21 +26,40 @@ updates:
   # ROOT / TOOLING
   ######################################
 
-  # Rust workspace (all crates share dependencies from root Cargo.toml).
+  # Rust workspace. Turned off, because Dependabot cannot read it, and a job that
+  # fails every run is worse than one that does not run: it reports nothing while
+  # looking like coverage. Kept here rather than deleted so the next person finds
+  # the reasoning instead of re-enabling it.
   #
-  # third_party/ holds the vendored Ruff submodule, which declares a workspace
-  # of its own (`members = ["crates/*"]`). Without the exclusion Dependabot walks
-  # into it, treats it as the workspace root, and then looks for this repo's
-  # members underneath it: it aborts on
-  # `third_party/rust/ruff/crates/citry_core_py/Cargo.toml not found` before
-  # proposing anything, so the cargo ecosystem gets no coverage at all. Ruff is
-  # updated through the submodule pointer, not through Cargo.
-  - package-ecosystem: "cargo"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    exclude-paths:
-      - "third_party/**"
+  # Tracking issue: https://github.com/citry-dev/citry/issues/76
+  #
+  # The root Cargo.toml declares 17 path dependencies pointing into
+  # third_party/rust/ruff, which is a git submodule and a second cargo workspace.
+  # In this repository that submodule is one gitlink, so its manifests are not in
+  # the tree Dependabot reads. Both settings therefore dead-end:
+  #
+  #   without exclude-paths  file fetching aborts on
+  #                          `third_party/rust/ruff/crates/citry_core_py/
+  #                          Cargo.toml not found`, our own workspace member
+  #                          looked up under the submodule's root
+  #   with exclude-paths     fetching succeeds and cargo fails instead, on
+  #                          `failed to read third_party/rust/ruff/crates/
+  #                          ruff_python_ast/Cargo.toml`, because the path
+  #                          dependencies have nothing to resolve against
+  #
+  # Upstream: https://github.com/dependabot/dependabot-core/issues/11861
+  #
+  # Consequence to keep in mind: no Rust dependency updates and no Rust security
+  # updates arrive automatically. Ruff itself moves through the submodule
+  # pointer. Re-enable when the upstream issue is fixed, or replace with a
+  # scheduled `cargo update` pull request.
+  #
+  # - package-ecosystem: "cargo"
+  #   directory: "/"
+  #   schedule:
+  #     interval: "weekly"
+  #   exclude-paths:
+  #     - "third_party/**"
 
   # Python - root pyproject.toml (tooling dependencies)
   - package-ecosystem: "pip"

@@ -11,7 +11,7 @@ with a comment saying what changed and why.
 
 import pytest
 
-from citry import Markup, format_attrs, merge_attrs, normalize_class, normalize_style, parse_string_style
+from citry import Const, Markup, format_attrs, merge_attrs, normalize_class, normalize_style, parse_string_style
 
 
 class TestFormatAttrs:
@@ -55,6 +55,14 @@ class TestFormatAttrs:
 
     def test_true_value_renders_bare_attribute(self):
         assert format_attrs({"required": True}) == "required"
+
+    @pytest.mark.parametrize(("value", "expected"), [(True, "required"), (False, ""), (None, "")])
+    def test_const_marked_booleans_render_like_plain_ones(self, value, expected):
+        # Every kwarg reaching a template is Const-wrapped, and a transparent
+        # proxy is never identical to True, False, or None. Before the unwrap in
+        # format_attrs, `required=False` rendered `required="False"`, which a
+        # browser reads as required because the attribute is present at all.
+        assert format_attrs({"required": Const(value)}) == expected
 
     def test_number_value(self):
         assert format_attrs({"data-id": 3}) == 'data-id="3"'

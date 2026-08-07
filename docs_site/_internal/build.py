@@ -27,7 +27,7 @@ import shutil
 import tempfile
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from html import escape
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as get_version
@@ -549,7 +549,7 @@ def _build_site_to_output(
             output_dir,
             site_url=project.site_url,
             version=version,
-            generated_at=datetime.now(tz=UTC),
+            generated_at=datetime.now(tz=timezone.utc),
             repo_root=config.repo_root,
             # robots.txt disallows old /v/<version>/ trees; read the committed
             # versions/ manifest, whose disallow paths are stable whether or not

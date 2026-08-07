@@ -14,7 +14,7 @@ import re
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
@@ -213,7 +213,7 @@ def load_blog_catalog(content_dir: Path, *, now: datetime | None = None) -> Blog
         raise BlogCatalogError(blog_dir, "Blog directory must contain index.md")
     _validate_index(index_path)
 
-    clock = now or datetime.now(UTC)
+    clock = now or datetime.now(timezone.utc)
     if clock.tzinfo is None or clock.utcoffset() is None:
         raise ValueError("Blog catalog clock must include an explicit timezone")
 

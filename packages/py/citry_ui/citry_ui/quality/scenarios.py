@@ -5,7 +5,15 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import asdict, dataclass
-from enum import StrEnum
+from enum import Enum
+
+
+# `enum.StrEnum` is Python 3.11 and later, and this package supports 3.10, so the
+# mixin spelling stands in for it. The one difference is that `str()` on a member
+# gives `ScenarioStatus.READY` rather than `ready`; these values are compared and
+# serialized through `.value`, never interpolated, so it does not reach output.
+class StrEnum(str, Enum):
+    """A string-valued enum that compares equal to its plain string value."""
 
 
 class ScenarioStatus(StrEnum):

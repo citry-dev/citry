@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from docs_site._internal.build import PageRecord
@@ -58,7 +58,7 @@ def test_sitemap_includes_git_lastmod_for_pages_with_a_source(tmp_path: Path, mo
 
     # A page with a source file gets a <lastmod> from git; one without gets none.
     src = tmp_path / "page.md"
-    meta = PageGitMeta(created=None, last_updated=datetime(2026, 7, 1, 9, 0, tzinfo=UTC), authors=())
+    meta = PageGitMeta(created=None, last_updated=datetime(2026, 7, 1, 9, 0, tzinfo=timezone.utc), authors=())
     monkeypatch.setattr(seo_mod, "get_page_git_meta", lambda _root, _path: meta)
     records = [_rec("guide/", source_md=src), _rec("nosrc/")]
 
@@ -80,7 +80,7 @@ def test_sitemap_prefers_blog_editorial_date_over_git(tmp_path: Path, monkeypatc
     record = _rec(
         "blog/post/",
         source_md=tmp_path / "post.md",
-        editorial_updated=datetime(2026, 7, 27, 10, 0, tzinfo=UTC),
+        editorial_updated=datetime(2026, 7, 27, 10, 0, tzinfo=timezone.utc),
     )
 
     write_sitemap([record], tmp_path, site_url="https://x.test", repo_root=tmp_path)
@@ -103,7 +103,7 @@ def test_generate_seo_writes_robots_and_indexing(tmp_path: Path) -> None:
         tmp_path,
         site_url="https://x.test/",
         version="1.2.3",
-        generated_at=datetime.now(tz=UTC),
+        generated_at=datetime.now(tz=timezone.utc),
         repo_root=tmp_path,
         versions_root=tmp_path / "versions",
     )

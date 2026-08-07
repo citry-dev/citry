@@ -16,6 +16,7 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/py.typed",
     "citry_ui/components/__init__.py",
     "citry_ui/components/_aria.py",
+    "citry_ui/components/_attrs.py",
     "citry_ui/components/_context.py",
     "citry_ui/components/_validation.py",
     "citry_ui/components/cbutton/__init__.py",

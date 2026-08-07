@@ -331,6 +331,12 @@ def format_attrs(attrs: Mapping[str, Any]) -> Markup:
     parts: list[str] = []
     coalesced = _coalesce_html_attrs((attrs,), normalize_accumulators=False)
     for key, value in coalesced.items():
+        # The boolean tests below compare identity, and a transparent proxy is
+        # never identical to `True`, `False`, or `None` however faithfully it
+        # reports their type. Every kwarg reaching a template is `Const`-wrapped,
+        # so without this a `disabled=False` input rendered `disabled="False"`,
+        # which a browser reads as disabled because the attribute is present.
+        value = _underlying(value)  # noqa: PLW2901
         identity = _html_attr_identity(key)
         if identity == "class" and value is not None:
             if not isinstance(value, str):

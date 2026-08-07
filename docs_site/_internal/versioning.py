@@ -27,7 +27,7 @@ import os
 import re
 import shutil
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from unicodedata import normalize
 
@@ -234,7 +234,7 @@ def write_build_info(
         "version": version,
         "source_sha": source_sha,
         "source_tag": source_tag if source_tag is not None else version,
-        "built_at": built_at if built_at is not None else datetime.now(UTC).isoformat(),
+        "built_at": built_at if built_at is not None else datetime.now(timezone.utc).isoformat(),
         "builder_version": builder_version,
     }
     if site_routes is not None:
