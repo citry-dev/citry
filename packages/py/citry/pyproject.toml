@@ -84,7 +84,7 @@ dev = [
 # default, so the normal test run skips them (they need browser binaries from
 # `playwright install`). The e2e CI jobs install this group and the browsers.
 e2e = [
-    "playwright>=1.49",
+    "playwright>=1.62.0",
     "pytest-playwright>=0.5",
 ]
 # Benchmark baselines (docs/design/benchmarking.md), pinned exactly so a bump is
