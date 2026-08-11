@@ -995,8 +995,9 @@ body {
   letter-spacing: 0.06em;
   line-height: 1.35;
   text-transform: uppercase;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   margin-left: -12px;
+  width: 16px;
 }
 
 .djc-header__nav a.is-active {
@@ -1280,8 +1281,9 @@ a.djc-sidebar__label:hover {
 .djc-sidebar__link {
   display: block;
   position: relative;
-  padding: 0.25rem 0.75rem;
+  padding: 0.4rem 0.75rem;
   font-size: 0.85rem;
+  line-height: 1.4;
   color: var(--c-fg-muted);
   text-decoration: none;
   border-radius: 0.25rem;

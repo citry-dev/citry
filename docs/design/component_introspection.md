@@ -301,6 +301,15 @@ The complete version 1 shape is:
           "resolved_path": "/work/shop/components/card.html",
           "searched_paths": ["/work/shop/components/card.html"]
         },
+        "messages": {
+          "kind": "none",
+          "declared_on": null,
+          "owner_file": null,
+          "declared_path": null,
+          "resolution": "not-applicable",
+          "resolved_path": null,
+          "searched_paths": []
+        },
         "js": {
           "kind": "none",
           "declared_on": null,
@@ -553,11 +562,23 @@ internal private builders remain the normal construction path.
 Field provenance names the authored class whose own annotation declares that
 effective field. It is deliberately per-field: a composed C3 schema can contain
 fields from several base declarations even though `SchemaInfo.import_path`
-names one effective receiving schema. Citry walks the already-created schema
-MRO, skips implementation-only synthesized declaration shells, and reads only
-already-loaded module paths. It does not import modules or scan source to invent
-provenance. Dynamically produced or otherwise unprovable declarations may
-therefore leave all three values absent. A local class can retain a module,
+names one effective receiving schema. When Citry builds an effective dataclass,
+it snapshots both each field annotation and its authored class before the
+generated schema merges those annotations. Python 3.10 through 3.13 use
+`inspect.get_annotations(..., eval_str=False)`. Python 3.14 uses
+`annotationlib.Format.FORWARDREF`, which keeps an unavailable name as a
+`ForwardRef` while retaining values available in the declaration's original
+namespace. A previously materialized exact annotation mapping or Python 3.14
+annotation cache is reused, so one schema build does not run a deferred
+annotation function twice. The generated schema stores the owner snapshot as
+private runtime metadata; this does not change catalog v1.
+
+For an explicitly adapted schema without that snapshot, Citry uses the same
+version-neutral reader while walking the already-created schema MRO. It skips
+implementation-only synthesized declaration shells and reads only already-loaded
+module paths. It does not import modules or scan source to invent provenance.
+Dynamically produced or otherwise unprovable declarations may therefore leave
+all three values absent. A local class can retain a module,
 `<locals>` qualified name, and file while still lacking a stable source join;
 `exec` and REPL classes commonly have no usable file. A tooling consumer may
 conservatively join a non-local qualified class and field name to an exact
@@ -569,8 +590,11 @@ the same qualified class and field identity.
 The recognized adapters remain the current ones: dataclasses, Pydantic v2,
 Pydantic v1, and NamedTuple. Fields stay in declaration order. Runtime
 inspection does not call `typing.get_type_hints()`, resolve forward references,
-or evaluate annotation strings. Those operations can import modules or execute
-user code.
+or evaluate stored annotation strings. Python 3.14 may run Python's generated
+annotation function when no exact mapping has yet been materialized. An
+unresolved name survives as a `ForwardRef`; another exception from that function
+fails component schema construction or inspection rather than producing a
+partial field list.
 
 For dataclasses, the adapter describes constructor inputs: inherited fields and
 `InitVar` entries with `init=True` are included, while `ClassVar` entries and
@@ -583,10 +607,10 @@ and the documented v2 `is_required()` method. A custom duck-typed schema can
 therefore execute descriptor or method code while being inspected. Such schema
 protocol implementations are trusted component code. The adapter does not
 promise a no-Python-execution sandbox; its narrower guarantees are that it does
-not evaluate annotations, call default factories, or use arbitrary default and
-annotation representations. Dataclass and NamedTuple adapters use their
-standard runtime field metadata. Default and description extraction follows
-the same trusted adapter boundary.
+not evaluate stored annotation strings, call default factories, or use arbitrary
+default and annotation representations. Dataclass and NamedTuple adapters use
+their standard runtime field metadata. Default and description extraction
+follows the same trusted adapter boundary.
 
 The initial Pydantic adapter exposes each model field's canonical Python name.
 It does not yet expand `alias`, `validation_alias`, `AliasChoices`, or
@@ -667,6 +691,7 @@ Each primary asset is described independently:
 @dataclass(frozen=True, slots=True)
 class ComponentAssets:
     template: AssetInfo
+    messages: AssetInfo
     js: AssetInfo
     css: AssetInfo
 
@@ -728,7 +753,8 @@ time. The frozen record keeps that historical value even if the file is later
 removed.
 
 Asset inspection uses the same MRO ownership and search-order helpers as normal
-loading, but it does not call `get_template()`, `get_js()`, or `get_css()`.
+loading, but it does not call `get_template()`, `get_messages()`, `get_js()`,
+or `get_css()`.
 Those accessors read content, run extension hooks, publish caches, and update
 the hot-reload file index. A metadata query must not make a class look rendered
 or loaded.
@@ -1116,7 +1142,7 @@ properties:
 |---|---|
 | Registry | Foreign registration is rejected before introspection ships; aliases group into one record; primary-name selection and ordering are stable; built-ins are marked and filtered; discovery runs; an unregistered class disappears from a fresh catalog; same-path definitions in two engines share `class_id` but differ in runtime tokens; a hot replacement keeps `class_id`, changes `definition_id`, and cannot be mistaken for the retained generation; identities cannot be forged during class-created hooks; generated class names still produce route-safe IDs. |
 | Lifetime | Retaining a core-only catalog or a catalog with bundled compliant extension metadata after final unregister does not keep the component class alive or file-indexed; closure-bearing Events and Dependencies declarations remain collectible after unregister and `Citry.clear()`. |
-| Schemas | Absent, closed-empty, closed-with-fields, and opaque are distinct; component-schema omission, compatible C3 composition, reset/reopen ordering, and explicit-`None` shadowing match runtime behavior; adapter-incompatible branch combinations fail explicitly; inherited dataclass, Pydantic v1/v2, and NamedTuple order and requiredness match `TagRules`; synthesized paths name the receiving component's effective schema; string annotations are not evaluated; default factories never run. |
+| Schemas | Absent, closed-empty, closed-with-fields, and opaque are distinct; component-schema omission, compatible C3 composition, reset/reopen ordering, and explicit-`None` shadowing match runtime behavior; adapter-incompatible branch combinations fail explicitly; inherited dataclass, Pydantic v1/v2, and NamedTuple order and requiredness match `TagRules`; synthesized paths name the receiving component's effective schema; eager and Python 3.14 deferred annotations preserve each composed field's authored owner; unresolved deferred names remain available as forward references; one schema build evaluates an annotation expression once; stored string annotations are not evaluated; default factories never run. |
 | Defaults | Values are omitted by default; requested portable values are copied and frozen; JSON null remains distinguishable from omission; safe-integer boundaries are exact; larger integers, unsupported objects, and cycles are reported without the copier invoking custom methods; factories never run. |
 | Types and docs | Every supported normalized type form has an exact expected string; unsupported or unsafe forms are unavailable without calling custom representations; own component docstrings do not inherit; Pydantic and dataclass descriptions use only the documented sources. |
 | Assets | Inline, file, none, explicit-`None` shadowing, inherited owners, absolute paths, configured-directory resolution, missing files, and no-resolution mode are covered. Arbitrary `PathLike` implementations are rejected without calling `__fspath__`. Inspection does not read content, run load hooks, fill asset caches, compile templates, update the file index, or execute custom component-metaclass attribute hooks. |

@@ -145,9 +145,8 @@ existing parameter.
 Comments (`{# ... #}` and `<!-- ... -->`) are collected with spans at every
 level (`Template.comments`, `Node.comments`, `HtmlAttr.comments`,
 `Expr.comments`), and template comments do not appear in the element tree
-(`ast.rs:813-830`; design decision recorded in
-`TODO/project_status_june_2026.md:596-598`). That flat collection is
-sufficient for highlighting. The *formatter* additionally needs a comment
+(`ast.rs:813-830`). That flat collection is sufficient for highlighting. The
+*formatter* additionally needs a comment
 association pass (attaching each comment to a neighboring node), which is
 identified as the hard part of the formatter and does not exist yet
 ([#22](https://github.com/citry-dev/citry/issues/22)).
@@ -248,9 +247,8 @@ non-incremental, non-error-recovering parsers by design; there is no
 tree-edit or reuse machinery. In practice citry templates are
 component-sized (a class attribute, not a 5000-line document), so a full
 reparse per keystroke is very likely affordable; but no parse-latency
-numbers exist in the repo (the benchmark work measured *render*
-performance, `TODO/project_status_june_2026.md:543-553`), so this should be
-measured, not assumed, in the design doc.
+numbers exist in the repo, so this should be measured, not assumed, in the
+design doc.
 
 The already-recorded mitigation direction: ship a **tree-sitter grammar**
 for citry-HTML alongside (or instead of) a TextMate grammar. Tree-sitter is
@@ -291,9 +289,8 @@ publicly, a small additive API.
 
 - **Formatter** ([#22](https://github.com/citry-dev/citry/issues/22)): not
   built; needs the comment-association pass (section 2.5); the old
-  `v2_template_formatter.rs` notes are harvested into the issue (the file
-  itself is no longer in the tree; `TODO/project_status_june_2026.md:529-530`
-  still points at it by name).
+  `v2_template_formatter.rs` notes are harvested into the issue, and the file
+  itself is no longer in the tree.
 - **LSP / linter** ([#23](https://github.com/citry-dev/citry/issues/23)):
   not built; issue carries the variable-inference notes and the
   `[tool.citry]` config design.
@@ -398,9 +395,8 @@ parser reuse, the Python-registry bridge), which that doc leaves open
 JS/TS bindings are planned but not started: issue
 [#27](https://github.com/citry-dev/citry/issues/27) records the mechanism
 survey (JS/TS via `wasm-bindgen` + `wasm-pack`, with `--target web` vs
-`--target nodejs` builds; PHP/Go via C ABI), and the status report lists it
-as longer-term (`TODO/project_status_june_2026.md:536-537`). `packages/`
-contains only `py`. Note the two distinct roles a JS binding could play:
+`--target nodejs` builds; PHP/Go via C ABI). `packages/` contains only `py`.
+Note the two distinct roles a JS binding could play:
 (a) a *host binding* for rendering citry in JS apps (issue #27's framing,
 which also needs real `LangImpl` expression parsing for JS), and (b) a
 *tooling vehicle*: running the existing parser, with the Python `LangImpl`,
@@ -512,7 +508,7 @@ Repo sources are cited inline as `file:line` above; the load-bearing ones:
 `packages/py/citry_core/citry_core/_rust.pyi`,
 `packages/py/citry/citry/{component.py,assets.py}`,
 `docs/design/{template_grammar.md,source_languages.md,hot_reload.md,pygments_citry.md}`,
-`TODO/project_status_june_2026.md`, and GitHub issues
+and GitHub issues
 [#22](https://github.com/citry-dev/citry/issues/22),
 [#23](https://github.com/citry-dev/citry/issues/23),
 [#24](https://github.com/citry-dev/citry/issues/24),

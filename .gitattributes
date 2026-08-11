@@ -22,3 +22,7 @@ crates/citry_template_formatter/tests/fixtures/** text eol=lf
 # passed everywhere else.
 packages/py/citry/citry/ext/dependencies/client/*.js text eol=lf
 packages/py/citry/citry/ext/events/client/*.js text eol=lf
+
+# This parser research fixture intentionally contains trailing ASCII spaces in
+# the `trimmed` message so the spike can measure authored-span preservation.
+docs/design/i18n_research/span_parser/fixtures/adversarial.ftl whitespace=-blank-at-eol

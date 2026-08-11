@@ -87,8 +87,9 @@ top-level variables therefore stay private to that script.
 ## Send data to JavaScript
 
 [`js_data()`][citry.Component.js_data] returns the data for one render. Citry
-serializes it as strict JSON and gives it to that render's `$component()`
-callback.
+serializes it as strict JSON, seeds its top-level keys into that render's
+Alpine scope, and gives a fresh instance-local graph to that render's
+`$component()` callback when one exists.
 
 The returned mapping must follow these rules:
 
@@ -96,8 +97,11 @@ The returned mapping must follow these rules:
 - every value is JSON-serializable;
 - numbers are finite, so `NaN` and infinity are rejected.
 
-Primary JavaScript without a live `$component()` call has nowhere to receive
-this data, so Citry does not send it.
+An Alpine expression can read those keys directly, so `$component()` is not
+required only to copy server data into scope. A render with neither Alpine
+expressions nor a live `$component()` call does not send the data. Identical
+payloads are transported once, but nested arrays and objects are not shared
+between instances.
 
 Python names normally use `snake_case`. Assign them to `camelCase` names when
 browser code keeps using them:

@@ -1,18 +1,16 @@
 """
-Asset loading: resolving and reading a component's template, JS, and CSS.
+Asset loading: resolving and reading a component's template, messages, JS, and CSS.
 
-A component declares its primary assets as class fields, in three inline/file
-pairs (``template``/``template_file``, ``js``/``js_file``, ``css``/``css_file``).
+A component declares its primary assets as class fields, in four inline/file
+pairs (``template``/``template_file``, ``messages``/``messages_file``,
+``js``/``js_file``, ``css``/``css_file``).
 The fields are declarations and are never rewritten; the loaded values are read
-through classmethods on ``Component`` (``Card.get_template()``,
-``Card.get_js()``, ``Card.get_css()``), which delegate to this module's
-``load_template`` / ``load_js`` / ``load_css``.
+through matching classmethods on ``Component``.
 
 Resolution is lazy and cached once per class (in the class's own ``__dict__``).
 File paths resolve relative to the directory of the class that declared the
 file value first, then relative to each entry of the requesting component's
-``Citry.settings.dirs``. Content loading fires the ``on_template_loaded`` /
-``on_js_loaded`` / ``on_css_loaded`` extension hooks, and every resolved file
+``Citry.settings.dirs``. Content loading fires its matching extension hook, and every resolved file
 is registered in the requesting Citry instance's file-to-component index that
 hot reload queries.
 
@@ -77,6 +75,7 @@ def dedupe(items: Iterable[Any]) -> tuple[Any, ...]:
 
 ASSET_PAIRS: tuple[tuple[str, str], ...] = (
     ("template", "template_file"),
+    ("messages", "messages_file"),
     ("js", "js_file"),
     ("css", "css_file"),
 )
@@ -86,6 +85,7 @@ ASSET_PAIRS: tuple[tuple[str, str], ...] = (
 # template cache holds the CitryTemplate, which also carries the compiled
 # form once first rendered (one object, one invalidation).
 _TEMPLATE_CACHE = "_citry_template"
+_MESSAGES_CACHE = "_resolved_messages"
 _JS_CACHE = "_resolved_js"
 _CSS_CACHE = "_resolved_css"
 
@@ -308,6 +308,83 @@ def load_js(comp_cls: type[Component]) -> str | None:
     return _load_asset_content(comp_cls, "js", "js_file", _JS_CACHE)
 
 
+def load_messages(comp_cls: type[Component]) -> str | None:
+    """The component's loaded source-locale Fluent messages, or ``None``."""
+    declaration_owner, _inline_value, _file_value = _find_pair_declaration(
+        comp_cls,
+        "messages",
+        "messages_file",
+    )
+    with comp_cls.citry._messages_source_lock:
+        cached_source = comp_cls.citry._messages_source_cache.get(declaration_owner)
+        if cached_source is not None:
+            cached_content, _origin = cached_source
+            if _file_value is not None:
+                cached_path = resolve_asset_file(
+                    _file_value,
+                    declaration_owner,
+                    search_dirs=comp_cls.citry.settings.dirs,
+                )
+                comp_cls.citry._register_component_file(cached_path, comp_cls)
+            setattr(comp_cls, _MESSAGES_CACHE, cached_content)
+            return cached_content
+
+        if declaration_owner in comp_cls.citry._messages_sources_loading:
+            msg = (
+                f"Re-entrant messages loading for source unit {declaration_owner.__module__}::"
+                f"{declaration_owner.__qualname__}."
+            )
+            raise RuntimeError(msg)
+        comp_cls.citry._messages_sources_loading.add(declaration_owner)
+        try:
+            try:
+                content, path = _load_pair(comp_cls, "messages", "messages_file")
+                origin: str | None = None
+                if content is not None:
+                    origin = str(path) if path is not None else f"{_inline_origin(declaration_owner)}.messages"
+                    content = comp_cls.citry.extensions.on_messages_loaded(
+                        declaration_owner,
+                        declaration_owner,
+                        content,
+                        origin,
+                    )
+            except Exception:
+                previous = comp_cls.citry._messages_reload_fallbacks.pop(
+                    declaration_owner,
+                    None,
+                )
+                if previous is not None:
+                    comp_cls.citry._messages_source_cache[declaration_owner] = previous
+                    setattr(comp_cls, _MESSAGES_CACHE, previous[0])
+                raise
+
+            comp_cls.citry._messages_reload_fallbacks.pop(declaration_owner, None)
+            comp_cls.citry._messages_source_cache[declaration_owner] = (content, origin)
+            setattr(comp_cls, _MESSAGES_CACHE, content)
+            return content
+        finally:
+            comp_cls.citry._messages_sources_loading.discard(declaration_owner)
+
+
+def messages_declaration_owner(comp_cls: type[Component]) -> type:
+    """Return the class that owns ``comp_cls``'s inherited messages pair."""
+    owner, _inline_value, _file_value = _find_pair_declaration(comp_cls, "messages", "messages_file")
+    return owner
+
+
+def loaded_messages_source(comp_cls: type[Component]) -> tuple[type, str, str] | None:
+    """Describe an already loaded messages source without running hooks again."""
+    owner, _inline_value, _file_value = _find_pair_declaration(comp_cls, "messages", "messages_file")
+    with comp_cls.citry._messages_source_lock:
+        shared = comp_cls.citry._messages_source_cache.get(owner)
+        if shared is None:
+            return None
+        content, origin = shared
+        if content is None or origin is None:
+            return None
+        return owner, content, origin
+
+
 def load_css(comp_cls: type[Component]) -> str | None:
     """
     The component's primary CSS content, or ``None``.
@@ -377,7 +454,7 @@ def reset_template(comp_cls: type[Component]) -> None:
 
 def reset_files(comp_cls: type[Component]) -> None:
     """
-    Clear the class's loaded JS/CSS so the next access re-reads them.
+    Clear the class's loaded messages, JS, and CSS so the next access re-reads them.
 
     Fires the ``on_files_reset`` hook so extensions evict their own per-class
     state too: the built-in ``dependencies`` extension drops its merged
@@ -385,7 +462,14 @@ def reset_files(comp_cls: type[Component]) -> None:
     ``Card.reset_files()``.
     """
     with comp_cls.citry.extensions._render_cache_invalidation():
-        for attr in (_JS_CACHE, _CSS_CACHE):
-            if attr in comp_cls.__dict__:
-                delattr(comp_cls, attr)
-        comp_cls.citry.extensions.on_files_reset(comp_cls)
+        with comp_cls.citry._messages_source_lock:
+            owner = messages_declaration_owner(comp_cls)
+            previous = comp_cls.citry._messages_source_cache.pop(owner, None)
+            if previous is not None:
+                comp_cls.citry._messages_reload_fallbacks[owner] = previous
+            for attr in (_MESSAGES_CACHE, _JS_CACHE, _CSS_CACHE):
+                if attr in comp_cls.__dict__:
+                    delattr(comp_cls, attr)
+            # Keep source invalidation and extension state invalidation atomic
+            # with respect to a concurrent first reload of this source unit.
+            comp_cls.citry.extensions.on_files_reset(comp_cls)

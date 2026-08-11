@@ -1211,7 +1211,7 @@ var require_cancellation = __commonJS({
         }
       }
     };
-    var CancellationTokenSource = class {
+    var CancellationTokenSource2 = class {
       _token;
       get token() {
         if (!this._token) {
@@ -1234,7 +1234,7 @@ var require_cancellation = __commonJS({
         }
       }
     };
-    exports2.CancellationTokenSource = CancellationTokenSource;
+    exports2.CancellationTokenSource = CancellationTokenSource2;
   }
 });
 
@@ -3443,7 +3443,7 @@ var init_main = __esm({
       }
       uinteger2.is = is;
     })(uinteger || (uinteger = {}));
-    (function(Position2) {
+    (function(Position3) {
       function create(line, character) {
         if (line === Number.MAX_VALUE) {
           line = uinteger.MAX_VALUE;
@@ -3453,12 +3453,12 @@ var init_main = __esm({
         }
         return { line, character };
       }
-      Position2.create = create;
+      Position3.create = create;
       function is(value) {
         const candidate = value;
         return Is.objectLiteral(candidate) && Is.uinteger(candidate.line) && Is.uinteger(candidate.character);
       }
-      Position2.is = is;
+      Position3.is = is;
     })(Position || (Position = {}));
     (function(Range3) {
       function create(one, two, three, four) {
@@ -3661,24 +3661,24 @@ var init_main = __esm({
       }
       Command2.is = is;
     })(Command || (Command = {}));
-    (function(TextEdit2) {
+    (function(TextEdit3) {
       function replace(range, newText) {
         return { range, newText };
       }
-      TextEdit2.replace = replace;
+      TextEdit3.replace = replace;
       function insert(position, newText) {
         return { range: { start: position, end: position }, newText };
       }
-      TextEdit2.insert = insert;
+      TextEdit3.insert = insert;
       function del(range) {
         return { range, newText: "" };
       }
-      TextEdit2.del = del;
+      TextEdit3.del = del;
       function is(value) {
         const candidate = value;
         return Is.objectLiteral(candidate) && Is.string(candidate.newText) && Range.is(candidate.range);
       }
-      TextEdit2.is = is;
+      TextEdit3.is = is;
     })(TextEdit || (TextEdit = {}));
     (function(ChangeAnnotation2) {
       function create(label, needsConfirmation, description) {
@@ -4270,17 +4270,17 @@ var init_main = __esm({
       }
       CompletionItemLabelDetails2.is = is;
     })(CompletionItemLabelDetails || (CompletionItemLabelDetails = {}));
-    (function(CompletionItem2) {
+    (function(CompletionItem3) {
       function create(label) {
         return { label };
       }
-      CompletionItem2.create = create;
+      CompletionItem3.create = create;
     })(CompletionItem || (CompletionItem = {}));
-    (function(CompletionList2) {
+    (function(CompletionList3) {
       function create(items, isIncomplete) {
         return { items: items ? items : [], isIncomplete: !!isIncomplete };
       }
-      CompletionList2.create = create;
+      CompletionList3.create = create;
     })(CompletionList || (CompletionList = {}));
     (function(MarkedString2) {
       function fromPlainText(plainText) {
@@ -22842,24 +22842,9 @@ var import_python_extension = __toESM(require_main());
 var vscode = __toESM(require("vscode"));
 var import_node = __toESM(require_main4());
 
-// src/completionRetrigger.ts
-var partialTagPattern = /<\/?c-[A-Za-z0-9_.-]*$/;
-var manualRetriggerCharacterPattern = /^[A-Za-z0-9_]$/;
-function advanceTagCompletionRetrigger(postEditSource, change, pendingOffset) {
-  const resultingOffset = change.startOffset + change.insertedText.length;
-  const remainsInPartialTag = partialTagPattern.test(postEditSource.slice(0, resultingOffset));
-  if (change.history) {
-    return remainsInPartialTag ? { triggerOffset: resultingOffset } : {};
-  }
-  if (change.removedLength > 0 && change.insertedText.length === 0) {
-    return remainsInPartialTag ? { pendingOffset: resultingOffset } : {};
-  }
-  const continuesPendingTag = pendingOffset === change.startOffset && change.removedLength === 0 && manualRetriggerCharacterPattern.test(change.insertedText) && remainsInPartialTag;
-  return continuesPendingTag ? { triggerOffset: resultingOffset } : {};
-}
-
 // src/embedded.ts
 var assignmentPattern = /^[\t ]*(template|js|css)[\t ]*(?::[^=\r\n]+?)?[\t ]*=[\t ]*("""|''')/gm;
+var templateLiteralAssignmentPattern = /^[\t ]*template[\t ]*(?::[^=\r\n]+?)?[\t ]*=[\t ]*[rRuU]?("""|'''|"|')/gm;
 var languageByAttribute = {
   template: "html",
   js: "javascript",
@@ -22896,15 +22881,51 @@ function embeddedLanguageAt(source, languageId, offset) {
   }
   return pythonEmbeddedRegions(source).find((region) => region.start <= offset && offset <= region.end)?.language;
 }
+function pythonTemplatePrefixAt(source, offset) {
+  if (offset < 0 || offset > source.length) {
+    return void 0;
+  }
+  const { excluded, strings } = scanPython(source);
+  for (const match of source.matchAll(templateLiteralAssignmentPattern)) {
+    const delimiter = match[1];
+    if (match.index === void 0 || delimiter !== '"""' && delimiter !== "'''" && delimiter !== '"' && delimiter !== "'" || spanContaining(excluded, match.index) !== void 0) {
+      continue;
+    }
+    const quoteStart = match.index + match[0].lastIndexOf(delimiter);
+    const string = strings.find((span) => span.start === quoteStart && span.delimiter === delimiter);
+    if (string !== void 0 && string.bodyStart <= offset && offset <= string.bodyEnd) {
+      return source.slice(string.bodyStart, offset);
+    }
+  }
+  return void 0;
+}
 function virtualDocumentSource(source, languageId, language) {
   if (languageId === "citry-html" && language === "html") {
     return source;
   }
-  const masked = source.split("").map((character) => character === "\n" || character === "\r" ? character : " ");
   if (languageId !== "python") {
-    return masked.join("");
+    return source.split("").map((character) => character === "\n" || character === "\r" ? character : " ").join("");
   }
-  for (const region of pythonEmbeddedRegions(source)) {
+  return virtualDocumentSourceFromRegions(source, language, pythonEmbeddedRegions(source));
+}
+function virtualDocumentSourceAt(source, languageId, language, offset) {
+  const view = embeddedVirtualDocumentAt(source, languageId, offset);
+  return view?.language === language ? view.source : void 0;
+}
+function embeddedVirtualDocumentAt(source, languageId, offset) {
+  if (languageId === "citry-html") {
+    return offset >= 0 && offset <= source.length ? { language: "html", source } : void 0;
+  }
+  if (languageId !== "python") {
+    return void 0;
+  }
+  const regions = pythonEmbeddedRegions(source);
+  const region = regions.find((candidate) => candidate.start <= offset && offset <= candidate.end);
+  return region === void 0 ? void 0 : { language: region.language, source: virtualDocumentSourceFromRegions(source, region.language, regions) };
+}
+function virtualDocumentSourceFromRegions(source, language, regions) {
+  const masked = source.split("").map((character) => character === "\n" || character === "\r" ? character : " ");
+  for (const region of regions) {
     if (region.language !== language) {
       continue;
     }
@@ -22969,6 +22990,618 @@ function spanContaining(spans, offset) {
   return spans.find((span) => span.start <= offset && offset < span.end);
 }
 
+// src/browserRouting.ts
+var rawTextTags = /* @__PURE__ */ new Set(["script", "style", "textarea", "title", "c-raw"]);
+function browserProjectionCandidateAt(source, languageId, offset) {
+  if (languageId === "javascript") {
+    return offset >= 0 && offset <= source.length;
+  }
+  const view = embeddedVirtualDocumentAt(source, languageId, offset);
+  if (view?.language === "javascript") {
+    return true;
+  }
+  const html = languageId === "html" ? source : view?.language === "html" ? view.source : void 0;
+  if (html === void 0) {
+    return false;
+  }
+  return browserRanges(html, 0, html.length).some(({ start, end }) => start <= offset && offset <= end);
+}
+function browserRanges(source, start, end) {
+  const ranges = [];
+  let index = start;
+  while (index < end) {
+    const tagStart = source.indexOf("<", index);
+    if (tagStart < 0 || tagStart >= end) {
+      break;
+    }
+    if (source.startsWith("<!--", tagStart)) {
+      const close = source.indexOf("-->", tagStart + 4);
+      index = close < 0 ? end : close + 3;
+      continue;
+    }
+    if (!isAsciiLetter(source[tagStart + 1])) {
+      index = tagStart + 1;
+      continue;
+    }
+    const scanned = scanStartTag(source, tagStart, end, ranges);
+    if (scanned === void 0) {
+      index = tagStart + 1;
+      continue;
+    }
+    index = scanned.end;
+    if (rawTextTags.has(scanned.name) && !scanned.selfClosing) {
+      const closing = source.toLowerCase().indexOf(`</${scanned.name}`, index);
+      index = closing < 0 ? end : closing;
+    }
+  }
+  return ranges;
+}
+function scanStartTag(source, start, limit, ranges) {
+  let index = start + 1;
+  const nameStart = index;
+  while (isTagNameCharacter(source[index])) {
+    index += 1;
+  }
+  if (index === nameStart) {
+    return void 0;
+  }
+  const name = source.slice(nameStart, index).toLowerCase();
+  while (index < limit) {
+    index = skipWhitespace(source, index);
+    if (source.startsWith("{#", index)) {
+      const close = source.indexOf("#}", index + 2);
+      if (close < 0 || close >= limit) {
+        return { name, end: limit, selfClosing: false };
+      }
+      index = close + 2;
+      continue;
+    }
+    if (source.startsWith("/>", index)) {
+      return { name, end: index + 2, selfClosing: true };
+    }
+    if (source[index] === ">") {
+      return { name, end: index + 1, selfClosing: false };
+    }
+    const attributeStart = index;
+    while (isAttributeNameCharacter(source[index])) {
+      index += 1;
+    }
+    if (index === attributeStart) {
+      index += 1;
+      continue;
+    }
+    const attributeName = source.slice(attributeStart, index);
+    index = skipWhitespace(source, index);
+    if (source[index] !== "=") {
+      continue;
+    }
+    index = skipWhitespace(source, index + 1);
+    const quote = source[index];
+    let valueStart = index;
+    let valueEnd = index;
+    if (quote === '"' || quote === "'") {
+      valueStart = index + 1;
+      const close = source.indexOf(quote, valueStart);
+      valueEnd = close < 0 || close > limit ? limit : close;
+      index = valueEnd < limit ? valueEnd + 1 : limit;
+    } else {
+      valueStart = index;
+      while (index < limit && !isWhitespace(source[index]) && source[index] !== ">") {
+        index += 1;
+      }
+      valueEnd = index;
+    }
+    if (isBrowserAttribute(attributeName)) {
+      ranges.push({ start: valueStart, end: valueEnd });
+    }
+    if (source.slice(valueStart, valueEnd).trimStart().startsWith("<")) {
+      ranges.push(...browserRanges(source, valueStart, valueEnd));
+    }
+  }
+  return { name, end: limit, selfClosing: false };
+}
+function isBrowserAttribute(name) {
+  const base = name.split(".", 1)[0] ?? name;
+  return name === "$c-props" || name.startsWith("@") || name.startsWith(":") || base.startsWith("x-");
+}
+function skipWhitespace(source, index) {
+  while (/\s/u.test(source[index] ?? "")) {
+    index += 1;
+  }
+  return index;
+}
+function isWhitespace(character) {
+  return character !== void 0 && /\s/u.test(character);
+}
+function isAsciiLetter(character) {
+  return character !== void 0 && /[A-Za-z]/u.test(character);
+}
+function isTagNameCharacter(character) {
+  return character !== void 0 && /[A-Za-z0-9:._-]/u.test(character);
+}
+function isAttributeNameCharacter(character) {
+  return character !== void 0 && !/[\s=/>]/u.test(character);
+}
+
+// src/clientLifecycle.ts
+var RestartCoordinator = class {
+  constructor(restart) {
+    this.restart = restart;
+  }
+  restart;
+  requested = false;
+  running;
+  request() {
+    this.requested = true;
+    if (this.running === void 0) {
+      this.running = this.run();
+    }
+    return this.running;
+  }
+  settled() {
+    return this.running ?? Promise.resolve();
+  }
+  async run() {
+    try {
+      while (this.requested) {
+        this.requested = false;
+        await this.restart();
+      }
+    } finally {
+      this.running = void 0;
+    }
+  }
+};
+var WatchedFileChangeBatcher = class {
+  constructor(send, delayMs = 100) {
+    this.send = send;
+    this.delayMs = delayMs;
+  }
+  send;
+  delayMs;
+  pending = /* @__PURE__ */ new Map();
+  timer;
+  push(uri, type) {
+    this.pending.set(uri, type);
+    if (this.timer === void 0) {
+      this.timer = setTimeout(() => this.flush(), this.delayMs);
+    }
+  }
+  flush() {
+    if (this.timer !== void 0) {
+      clearTimeout(this.timer);
+      this.timer = void 0;
+    }
+    if (this.pending.size === 0) {
+      return;
+    }
+    const changes = [...this.pending].map(([uri, type]) => ({ uri, type }));
+    this.pending.clear();
+    this.send(changes);
+  }
+  dispose() {
+    if (this.timer !== void 0) {
+      clearTimeout(this.timer);
+      this.timer = void 0;
+    }
+    this.pending.clear();
+  }
+};
+async function stopLanguageClient(client, timeoutMs = 2e3) {
+  if (!client.needsStop()) {
+    return;
+  }
+  const process2 = client.serverProcess;
+  try {
+    await client.stop(timeoutMs);
+  } catch {
+    if (process2 === void 0 || process2.exitCode !== null || process2.signalCode !== null) {
+      return;
+    }
+    process2.kill("SIGTERM");
+    const escalation = setTimeout(() => {
+      if (process2.exitCode === null && process2.signalCode === null) {
+        process2.kill("SIGKILL");
+      }
+    }, 250);
+    escalation.unref();
+  }
+}
+
+// src/completionRetrigger.ts
+var partialTagPattern = /<\/?c-[A-Za-z0-9_.-]*$/;
+var manualRetriggerCharacterPattern = /^[A-Za-z0-9_]$/;
+function advanceTagCompletionRetrigger(postEditSource, change, pendingOffset) {
+  const resultingOffset = change.startOffset + change.insertedText.length;
+  const remainsInPartialTag = partialTagPattern.test(postEditSource.slice(0, resultingOffset));
+  if (change.history) {
+    return remainsInPartialTag ? { triggerOffset: resultingOffset } : {};
+  }
+  if (change.removedLength > 0 && change.insertedText.length === 0) {
+    return remainsInPartialTag ? { pendingOffset: resultingOffset } : {};
+  }
+  const continuesPendingTag = pendingOffset === change.startOffset && change.removedLength === 0 && manualRetriggerCharacterPattern.test(change.insertedText) && remainsInPartialTag;
+  return continuesPendingTag ? { triggerOffset: resultingOffset } : {};
+}
+function advanceExpressionCompletionRetrigger(postEditSource, languageId, change, pendingOffset) {
+  const resultingOffset = change.startOffset + change.insertedText.length;
+  const deletion = change.removedLength > 0 && change.insertedText.length === 0;
+  let insertCanTrigger = false;
+  if (!change.history && !deletion) {
+    const insertedCharacters = [...change.insertedText];
+    if (insertedCharacters.length !== 1 || !isPythonIdentifierStart(insertedCharacters[0] ?? "")) {
+      return {};
+    }
+    const preceding = [...postEditSource.slice(0, change.startOffset)].at(-1);
+    const startsIdentifier = preceding === void 0 || !isPythonIdentifierContinue(preceding) && preceding !== " ";
+    insertCanTrigger = startsIdentifier || pendingOffset === change.startOffset;
+    if (!insertCanTrigger) {
+      return {};
+    }
+  }
+  const templatePrefix = templatePrefixAt(postEditSource, languageId, resultingOffset);
+  const insideExpression = templatePrefix !== void 0 && hasOpenPythonHost(templatePrefix);
+  if (change.history) {
+    return insideExpression ? { triggerOffset: resultingOffset } : {};
+  }
+  if (deletion) {
+    return insideExpression ? { pendingOffset: resultingOffset } : {};
+  }
+  return insideExpression && insertCanTrigger ? { triggerOffset: resultingOffset } : {};
+}
+function templatePrefixAt(source, languageId, offset) {
+  if (languageId === "citry-html") {
+    return source.slice(0, offset);
+  }
+  if (languageId === "python") {
+    return pythonTemplatePrefixAt(source, offset);
+  }
+  return void 0;
+}
+function hasOpenPythonHost(source) {
+  let index = 0;
+  while (index < source.length) {
+    if (source.startsWith("{#", index)) {
+      const end2 = source.indexOf("#}", index + 2);
+      if (end2 < 0) {
+        return false;
+      }
+      index = end2 + 2;
+      continue;
+    }
+    if (source.startsWith("{{", index)) {
+      const expression = scanTemplateExpression(source, index);
+      if (expression.end === void 0) {
+        return expression.codeAtEnd;
+      }
+      index = expression.end;
+      continue;
+    }
+    if (source.startsWith("<!--", index)) {
+      const end2 = source.indexOf("-->", index + 4);
+      if (end2 < 0) {
+        return false;
+      }
+      index = end2 + 3;
+      continue;
+    }
+    if (source[index] !== "<") {
+      index += 1;
+      continue;
+    }
+    const end = tagEnd(source, index);
+    if (end === void 0) {
+      const tagText2 = source.slice(index);
+      if (/^<\s*[A-Za-z][\w:.-]*/u.test(tagText2)) {
+        return unfinishedTagHasPythonValue(tagText2);
+      }
+      index += 1;
+      continue;
+    }
+    const tagText = source.slice(index, end + 1);
+    const tag = /^<\s*(\/?)\s*([A-Za-z][\w:.-]*)/u.exec(tagText);
+    const tagName = tag?.[2]?.toLowerCase();
+    if (tag?.[1] !== "/" && tagName !== void 0 && rawTextTagNames.has(tagName)) {
+      const rawEnd = rawTextEnd(source, end + 1, tagName);
+      if (rawEnd === void 0) {
+        return false;
+      }
+      const closeEnd = tagEnd(source, rawEnd);
+      if (closeEnd === void 0) {
+        return false;
+      }
+      index = closeEnd + 1;
+      continue;
+    }
+    index = end + 1;
+  }
+  return false;
+}
+function unfinishedTagHasPythonValue(tagText) {
+  const current = unfinishedAttributeValue(tagText);
+  if (current === void 0) {
+    return false;
+  }
+  if (current.value.trimStart().startsWith("<")) {
+    return hasOpenPythonHost(current.value);
+  }
+  const tagName = /^<\s*([A-Za-z][\w:.-]*)/u.exec(tagText)?.[1]?.toLowerCase();
+  if (tagName === "c-fill" && (current.name === "name" || current.name === "data")) {
+    return true;
+  }
+  const expressionAttribute = current.name === "#c-key" || current.name === "cond" || current.name === "each" || current.name.startsWith("c-");
+  const browserBaseName = current.name.split(".", 1)[0] ?? current.name;
+  const browserExpressionAttribute = current.name === "$c-props" || current.name.startsWith("@") || current.name.startsWith(":") || browserBaseName === "x-for" || current.name.startsWith("x-bind:") || current.name.startsWith("x-on:") || browserBaseName.startsWith("x-intersect:") || (/* @__PURE__ */ new Set([
+    "x-bind",
+    "x-data",
+    "x-effect",
+    "x-html",
+    "x-id",
+    "x-if",
+    "x-init",
+    "x-intersect",
+    "x-model",
+    "x-modelable",
+    "x-on",
+    "x-show",
+    "x-text"
+  ])).has(browserBaseName);
+  return (expressionAttribute || browserExpressionAttribute) && pythonPrefixIsCode(current.value);
+}
+function unfinishedAttributeValue(tagText) {
+  let quote;
+  let quoteStart;
+  let escaped = false;
+  for (let index = 0; index < tagText.length; index += 1) {
+    if (quote === void 0 && tagText.startsWith("{#", index)) {
+      const commentEnd = tagText.indexOf("#}", index + 2);
+      if (commentEnd < 0) {
+        return void 0;
+      }
+      index = commentEnd + 1;
+      continue;
+    }
+    const character = tagText[index];
+    if (escaped) {
+      escaped = false;
+    } else if (character === "\\") {
+      escaped = true;
+    } else if (quote === void 0 && (character === '"' || character === "'")) {
+      quote = character;
+      quoteStart = index;
+    } else if (character === quote) {
+      quote = void 0;
+      quoteStart = void 0;
+    }
+  }
+  if (quoteStart === void 0) {
+    const unquoted = /(?:^|\s)([#$@:A-Za-z_][\w:.$@#-]*)\s*=\s*([^\s>]*)$/u.exec(tagText);
+    const name2 = unquoted?.[1];
+    const value = unquoted?.[2];
+    return name2 === void 0 || value === void 0 ? void 0 : { name: name2, value };
+  }
+  const assignment = /([#$@:A-Za-z_][\w:.$@#-]*)\s*=\s*$/u.exec(tagText.slice(0, quoteStart));
+  const name = assignment?.[1];
+  return name === void 0 ? void 0 : { name, value: tagText.slice(quoteStart + 1) };
+}
+function tagEnd(source, start) {
+  let quote;
+  for (let index = start + 1; index < source.length; index += 1) {
+    if (quote === void 0 && source.startsWith("{#", index)) {
+      const commentEnd = source.indexOf("#}", index + 2);
+      if (commentEnd < 0) {
+        return void 0;
+      }
+      index = commentEnd + 1;
+      continue;
+    }
+    const character = source[index];
+    if (character === '"' || character === "'") {
+      quote = quote === character ? void 0 : quote === void 0 ? character : quote;
+    } else if (character === ">" && quote === void 0) {
+      return index;
+    }
+  }
+  return void 0;
+}
+function scanTemplateExpression(source, start) {
+  let index = start + 2;
+  let quote;
+  let triple = false;
+  let escaped = false;
+  let comment = false;
+  let roundDepth = 0;
+  let squareDepth = 0;
+  let curlyDepth = 0;
+  while (index < source.length) {
+    if (comment) {
+      if (source.startsWith("}}", index)) {
+        return { end: index + 2, codeAtEnd: false };
+      }
+      if (source[index] === "\r" || source[index] === "\n") {
+        comment = false;
+      }
+      index += 1;
+      continue;
+    }
+    if (quote !== void 0) {
+      const delimiter = quote.repeat(triple ? 3 : 1);
+      if (!escaped && source.startsWith(delimiter, index)) {
+        index += delimiter.length;
+        quote = void 0;
+        triple = false;
+        continue;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (source[index] === "\\") {
+        escaped = true;
+      }
+      index += 1;
+      continue;
+    }
+    if (source.startsWith("}}", index) && roundDepth === 0 && squareDepth === 0 && curlyDepth === 0) {
+      return { end: index + 2, codeAtEnd: false };
+    }
+    const character = source[index];
+    if (character === "#") {
+      comment = true;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+      triple = source.startsWith(character.repeat(3), index);
+      if (triple) {
+        index += 2;
+      }
+    } else if (character === "(") {
+      roundDepth += 1;
+    } else if (character === ")" && roundDepth > 0) {
+      roundDepth -= 1;
+    } else if (character === "[") {
+      squareDepth += 1;
+    } else if (character === "]" && squareDepth > 0) {
+      squareDepth -= 1;
+    } else if (character === "{") {
+      curlyDepth += 1;
+    } else if (character === "}" && curlyDepth > 0) {
+      curlyDepth -= 1;
+    }
+    index += 1;
+  }
+  const expressionPrefix = source.slice(start + 2);
+  return { codeAtEnd: quote === void 0 && !comment || fStringReplacementIsCode(expressionPrefix) };
+}
+function pythonPrefixIsCode(source) {
+  let quote;
+  let triple = false;
+  let escaped = false;
+  let comment = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (comment) {
+      if (character === "\r" || character === "\n") {
+        comment = false;
+      }
+      continue;
+    }
+    if (quote !== void 0) {
+      const delimiter = quote.repeat(triple ? 3 : 1);
+      if (!escaped && source.startsWith(delimiter, index)) {
+        index += delimiter.length - 1;
+        quote = void 0;
+        triple = false;
+        continue;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      }
+      continue;
+    }
+    if (character === "#") {
+      comment = true;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+      triple = source.startsWith(character.repeat(3), index);
+      if (triple) {
+        index += 2;
+      }
+    }
+  }
+  return quote === void 0 && !comment || fStringReplacementIsCode(source);
+}
+function fStringReplacementIsCode(source) {
+  const starts = [...source.matchAll(/(?:^|[^\p{ID_Continue}])(?:[fF][rR]?|[rR][fF])("""|'''|"|')/gu)];
+  for (const match of starts.reverse()) {
+    const delimiter = match[1];
+    if (delimiter === void 0 || match.index === void 0) {
+      continue;
+    }
+    const quoteStart = match.index + match[0].lastIndexOf(delimiter);
+    const state = scanFString(source, quoteStart + delimiter.length, delimiter);
+    if (state !== void 0) {
+      return state;
+    }
+  }
+  return false;
+}
+function scanFString(source, start, delimiter) {
+  let depth = 0;
+  let quote;
+  let triple = false;
+  let escaped = false;
+  let comment = false;
+  for (let index = start; index < source.length; index += 1) {
+    const character = source[index];
+    if (depth === 0) {
+      if (source.startsWith(delimiter, index)) {
+        return void 0;
+      }
+      if (source.startsWith("{{", index) || source.startsWith("}}", index)) {
+        index += 1;
+        continue;
+      }
+      if (character === "{") {
+        depth = 1;
+      }
+      continue;
+    }
+    if (comment) {
+      if (character === "\r" || character === "\n") {
+        comment = false;
+      }
+      continue;
+    }
+    if (quote !== void 0) {
+      const innerDelimiter = quote.repeat(triple ? 3 : 1);
+      if (!escaped && source.startsWith(innerDelimiter, index)) {
+        index += innerDelimiter.length - 1;
+        quote = void 0;
+        triple = false;
+        continue;
+      }
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      }
+      continue;
+    }
+    if (character === "#") {
+      comment = true;
+    } else if (character === '"' || character === "'") {
+      quote = character;
+      triple = source.startsWith(character.repeat(3), index);
+      if (triple) {
+        index += 2;
+      }
+    } else if (character === "{") {
+      depth += 1;
+    } else if (character === "}") {
+      depth -= 1;
+    }
+  }
+  return depth > 0 && quote === void 0 && !comment;
+}
+var rawTextTagNames = /* @__PURE__ */ new Set(["script", "style", "textarea", "title", "c-raw"]);
+function rawTextEnd(source, start, tagName) {
+  const match = new RegExp(`</\\s*${tagName.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:\\s|>)`, "iu").exec(
+    source.slice(start)
+  );
+  return match?.index === void 0 ? void 0 : start + match.index;
+}
+function isPythonIdentifierStart(character) {
+  return character === "_" || new RegExp("^\\p{ID_Start}$", "u").test(character);
+}
+function isPythonIdentifierContinue(character) {
+  return character === "_" || new RegExp("^\\p{ID_Continue}$", "u").test(character);
+}
+
+// src/diagnosticCatalog.ts
+var FORMAT_PROVIDER_INVALID = "citry.format.provider-invalid";
+var FORMAT_STALE_DOCUMENT = "citry.format.stale-document";
+var FORMAT_CANCELLED = "citry.format.cancelled";
+
 // src/embeddedFormatting.ts
 var embeddedFormatterTimeoutMilliseconds = 3e4;
 function embeddedFormattingOptions(tabSize, insertSpaces) {
@@ -22994,13 +23627,13 @@ function embeddedFormattingDocumentIdentity(params, region, session) {
 }
 var EmbeddedFormattingStaleError = class extends Error {
   constructor() {
-    super("citry.format.stale-document: the document changed during embedded formatting");
+    super(`${FORMAT_STALE_DOCUMENT}: the document changed during embedded formatting`);
     this.name = "EmbeddedFormattingStaleError";
   }
 };
 var EmbeddedFormattingCancelledError = class extends Error {
   constructor() {
-    super("citry.format.cancelled: embedded formatting was cancelled");
+    super(`${FORMAT_CANCELLED}: embedded formatting was cancelled`);
     this.name = "EmbeddedFormattingCancelledError";
   }
 };
@@ -23362,8 +23995,19 @@ function workspaceOwnsDocument(workspaceUri, selectedWorkspaceUri) {
 
 // src/nativeHtmlAttributes.ts
 var citryDirectiveNames = /* @__PURE__ */ new Set(["c-if", "c-elif", "c-else", "c-for", "c-empty", "c-bind"]);
-var rawTextTagNames = /* @__PURE__ */ new Set(["script", "style", "textarea", "title", "c-raw"]);
+var rawTextTagNames2 = /* @__PURE__ */ new Set(["script", "style", "textarea", "title", "c-raw"]);
 function projectNativeHtmlAttributes(source) {
+  return scanHtml(source, []);
+}
+function htmlProjectionCandidateRangeAt(source, offset) {
+  if (offset < 0 || offset > source.length) {
+    return void 0;
+  }
+  const candidates = [];
+  scanHtml(source, candidates);
+  return candidates.filter(({ start, end }) => start <= offset && offset <= end).sort((left, right) => left.end - left.start - (right.end - right.start))[0];
+}
+function scanHtml(source, htmlCandidates) {
   const projected = source.split("");
   const attributes = [];
   let index = 0;
@@ -23404,13 +24048,13 @@ function projectNativeHtmlAttributes(source) {
       index = end;
       continue;
     }
-    const tag = scanStartTag(source, index, projected, attributes);
+    const tag = scanStartTag2(source, index, projected, attributes, htmlCandidates);
     if (tag === void 0) {
       index += 1;
       continue;
     }
     index = tag.end;
-    if (!tag.selfClosing && rawTextTagNames.has(tag.name)) {
+    if (!tag.selfClosing && rawTextTagNames2.has(tag.name)) {
       const closingStart = findRawTextClosingTag(source, index, tag.name);
       if (closingStart === void 0) {
         break;
@@ -23432,20 +24076,21 @@ function nativeDynamicAttributeHoverProjection(source, offset) {
   const providerOffset = Math.max(attribute.projectedStart, Math.min(offset, lastProviderOffset));
   return { ...attribute, source: projection.source, providerOffset };
 }
-function scanStartTag(source, start, projected, attributes) {
+function scanStartTag2(source, start, projected, attributes, htmlCandidates) {
   let index = start + 1;
-  if (!isAsciiLetter(source[index])) {
+  if (!isAsciiLetter2(source[index])) {
     return void 0;
   }
   const nameStart = index;
-  while (isTagNameCharacter(source[index])) {
+  while (isTagNameCharacter2(source[index])) {
     index += 1;
   }
   const authoredTagName = source.slice(nameStart, index);
   const name = asciiLowercase(authoredTagName);
   const eligibleTag = !authoredTagName.startsWith("c-");
+  const cElementCandidateStart = authoredTagName.startsWith("c-") && asciiLowercase(authoredTagName.slice(2)) === "element" ? index : void 0;
   while (index < source.length) {
-    index = skipWhitespace(source, index);
+    index = skipWhitespace2(source, index);
     if (source.startsWith("{#", index)) {
       const commentEnd = skipDelimited(source, index + 2, "#}");
       if (commentEnd === void 0) {
@@ -23455,16 +24100,22 @@ function scanStartTag(source, start, projected, attributes) {
       continue;
     }
     if (source.startsWith("/>", index)) {
+      if (cElementCandidateStart !== void 0) {
+        htmlCandidates.push({ start: cElementCandidateStart, end: index + 2 });
+      }
       return { name, end: index + 2, selfClosing: true };
     }
     if (source[index] === ">") {
+      if (cElementCandidateStart !== void 0) {
+        htmlCandidates.push({ start: cElementCandidateStart, end: index + 1 });
+      }
       return { name, end: index + 1, selfClosing: false };
     }
     if (source[index] === "<" || source.startsWith("{{", index)) {
       return { name, end: index + 1, selfClosing: false };
     }
     const attributeStart = index;
-    while (index < source.length && isAttributeNameCharacter(source, index)) {
+    while (index < source.length && isAttributeNameCharacter2(source, index)) {
       index += 1;
     }
     if (index === attributeStart) {
@@ -23490,25 +24141,41 @@ function scanStartTag(source, start, projected, attributes) {
         projectedEnd: index
       });
     }
-    index = skipWhitespace(source, index);
+    index = skipWhitespace2(source, index);
     if (source[index] !== "=") {
       continue;
     }
-    index = skipWhitespace(source, index + 1);
+    index = skipWhitespace2(source, index + 1);
     const quote = source[index];
     if (quote === '"' || quote === "'") {
       const closingQuote = source.indexOf(quote, index + 1);
       if (closingQuote < 0) {
         return { name, end: source.length, selfClosing: false };
       }
+      const valueStart = index + 1;
+      const value = source.slice(valueStart, closingQuote).trim();
+      if (authoredName.startsWith("c-") && nestedTemplateValue(value)) {
+        htmlCandidates.push({ start: valueStart, end: closingQuote });
+        const nestedCandidates = [];
+        scanHtml(source.slice(valueStart, closingQuote), nestedCandidates);
+        for (const candidate of nestedCandidates) {
+          htmlCandidates.push({
+            start: valueStart + candidate.start,
+            end: valueStart + candidate.end
+          });
+        }
+      }
       index = closingQuote + 1;
       continue;
     }
-    while (index < source.length && !isWhitespace(source[index]) && source[index] !== ">" && !source.startsWith("{#", index)) {
+    while (index < source.length && !isWhitespace2(source[index]) && source[index] !== ">" && !source.startsWith("{#", index)) {
       index += 1;
     }
   }
   return { name, end: source.length, selfClosing: false };
+}
+function nestedTemplateValue(value) {
+  return value.startsWith("<>") && value.endsWith("</>") || /^<[A-Za-z]/.test(value);
 }
 function skipPythonExpression(source, start) {
   const brackets = [];
@@ -23573,7 +24240,7 @@ function findRawTextClosingTag(source, start, name) {
     }
     const candidate = asciiLowercase(source.slice(index + 2, index + 2 + name.length));
     const boundary = source[index + 2 + name.length];
-    if (candidate === name && (boundary === void 0 || isWhitespace(boundary) || boundary === ">")) {
+    if (candidate === name && (boundary === void 0 || isWhitespace2(boundary) || boundary === ">")) {
       return index;
     }
   }
@@ -23610,9 +24277,9 @@ function skipNonStartTag(source, start) {
   }
   return void 0;
 }
-function skipWhitespace(source, start) {
+function skipWhitespace2(source, start) {
   let index = start;
-  while (isWhitespace(source[index])) {
+  while (isWhitespace2(source[index])) {
     index += 1;
   }
   return index;
@@ -23638,41 +24305,216 @@ function isEscaped2(source, index) {
 function openingBracketClose(character) {
   return character === "(" ? ")" : character === "[" ? "]" : character === "{" ? "}" : void 0;
 }
-function isAsciiLetter(character) {
+function isAsciiLetter2(character) {
   return character !== void 0 && /[A-Za-z]/.test(character);
 }
-function isTagNameCharacter(character) {
+function isTagNameCharacter2(character) {
   return character !== void 0 && /[A-Za-z0-9_:.-]/.test(character);
 }
-function isAttributeNameCharacter(source, index) {
+function isAttributeNameCharacter2(source, index) {
   const character = source[index];
-  return character !== void 0 && !isWhitespace(character) && character !== "=" && character !== "/" && character !== ">" && character !== "<" && !source.startsWith("{#", index);
+  return character !== void 0 && !isWhitespace2(character) && character !== "=" && character !== "/" && character !== ">" && character !== "<" && !source.startsWith("{#", index);
 }
-function isWhitespace(character) {
+function isWhitespace2(character) {
   return character === " " || character === "	" || character === "\r" || character === "\n";
 }
 function asciiLowercase(value) {
   return value.replace(/[A-Z]/g, (character) => character.toLowerCase());
 }
 
+// src/providerPipeline.ts
+var delegatedCompletionResolveCount = 0;
+var projectionTimeoutMs = 2e3;
+var virtualDocumentTimeoutMs = 1e3;
+var delegatedProviderTimeoutMs = 2e3;
+var ProviderTimeoutError = class extends Error {
+  constructor(stage) {
+    super(`Citry provider stage timed out: ${stage}`);
+    this.stage = stage;
+    this.name = "ProviderTimeoutError";
+  }
+  stage;
+};
+async function withTimeout(promise, timeoutMs, stage, onTimeout) {
+  let timer;
+  const timeout = new Promise((_resolve, reject) => {
+    timer = setTimeout(() => {
+      onTimeout?.();
+      reject(new ProviderTimeoutError(stage));
+    }, timeoutMs);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer !== void 0) {
+      clearTimeout(timer);
+    }
+  }
+}
+function linearlyMappedProjectionPosition(source, sourceOffset, sourceStart, sourceEnd, virtualStart, virtualEnd) {
+  const virtualStartOffset = textOffsetAt(source, virtualStart);
+  const virtualEndOffset = textOffsetAt(source, virtualEnd);
+  const virtualOffset = virtualStartOffset + sourceOffset - sourceStart;
+  if (sourceOffset < sourceStart || sourceOffset > sourceEnd || virtualOffset < virtualStartOffset || virtualOffset > virtualEndOffset) {
+    return void 0;
+  }
+  return textPositionAt(source, virtualOffset);
+}
+function textOffsetAt(source, position) {
+  let line = 0;
+  let offset = 0;
+  while (line < position.line) {
+    const newline = source.indexOf("\n", offset);
+    if (newline < 0) {
+      return source.length;
+    }
+    offset = newline + 1;
+    line += 1;
+  }
+  return Math.min(source.length, offset + position.character);
+}
+function textPositionAt(source, requestedOffset) {
+  const offset = Math.max(0, Math.min(source.length, requestedOffset));
+  const prefix = source.slice(0, offset);
+  const line = prefix.split("\n").length - 1;
+  const lastNewline = prefix.lastIndexOf("\n");
+  return { line, character: offset - lastNewline - 1 };
+}
+
 // src/extension.ts
 var protocolVersion = 1;
 var statusMethod = "citry/status";
 var reloadMethod = "citry/reload";
+var browserProjectionMethod = "citry/browserProjection";
+var htmlProjectionMethod = "citry/htmlProjection";
 var formatComponentAssetsMethod = "citry/formatComponentAssets";
 var formatEmbeddedMethod = "citry/formatEmbedded";
 var embeddedScheme = "citry-embedded";
+var browserScheme = "citry-browser";
 var embeddedFormattingScheme = "citry-embedded-format";
 var nativeHtmlAttributeHoverProjection = "native-html-attribute-hover";
 var sourceFormatKind = vscode.CodeActionKind.Source.append("format.citry");
 var clients = /* @__PURE__ */ new Map();
+var restartCoordinator = new RestartCoordinator(restartAllOnce);
 var statusBar;
 var formatterOutput;
+var performanceOutput;
 var lastQuietFormattingFailure;
 var activeEmbeddedFormatting = /* @__PURE__ */ new Set();
+var browserProjectionResponses = /* @__PURE__ */ new Map();
+var htmlProjectionResponses = /* @__PURE__ */ new Map();
+var projectionGeneration = 0;
+var embeddedDocuments;
 var embeddedFormattingDocuments;
-var pendingTagCompletionRetrigger;
-var pendingTagCompletionDispatch;
+var browserDocuments;
+var pendingCompletionRetrigger;
+var pendingCompletionDispatch;
+var nextPerformanceRequest = 0;
+function clearProjectionResponses() {
+  projectionGeneration += 1;
+  browserProjectionResponses.clear();
+  htmlProjectionResponses.clear();
+}
+var ProviderTrace = class {
+  constructor(enabled, request, route, operation, document, position) {
+    this.enabled = enabled;
+    this.request = request;
+    this.route = route;
+    this.operation = operation;
+    this.document = document;
+    this.position = position;
+  }
+  enabled;
+  request;
+  route;
+  operation;
+  document;
+  position;
+  started = performance.now();
+  stages = [];
+  finished = false;
+  async stage(name, action) {
+    const started = performance.now();
+    try {
+      const value = await action();
+      this.stages.push({ name, durationMs: performance.now() - started, outcome: "ok" });
+      return value;
+    } catch (error) {
+      this.stages.push({
+        name,
+        durationMs: performance.now() - started,
+        outcome: error instanceof Error ? error.name : "error"
+      });
+      throw error;
+    }
+  }
+  measure(name, action) {
+    const started = performance.now();
+    try {
+      const value = action();
+      this.stages.push({ name, durationMs: performance.now() - started, outcome: "ok" });
+      return value;
+    } catch (error) {
+      this.stages.push({
+        name,
+        durationMs: performance.now() - started,
+        outcome: error instanceof Error ? error.name : "error"
+      });
+      throw error;
+    }
+  }
+  finish(outcome) {
+    if (!this.enabled || this.finished) {
+      return;
+    }
+    this.finished = true;
+    performanceOutput.appendLine(
+      JSON.stringify({
+        kind: "citry.provider-timing",
+        request: this.request,
+        route: this.route,
+        operation: this.operation,
+        uri: this.document.uri.toString(),
+        version: this.document.version,
+        position: { line: this.position.line, character: this.position.character },
+        outcome,
+        totalMs: roundedMilliseconds(performance.now() - this.started),
+        stages: this.stages.map((stage) => ({
+          ...stage,
+          durationMs: roundedMilliseconds(stage.durationMs)
+        }))
+      })
+    );
+  }
+};
+function providerTrace(route, operation, document, position) {
+  nextPerformanceRequest += 1;
+  const enabled = vscode.workspace.getConfiguration("citry", document.uri).get("trace.performance", false);
+  return new ProviderTrace(enabled, nextPerformanceRequest, route, operation, document, position);
+}
+function roundedMilliseconds(value) {
+  return Math.round(value * 100) / 100;
+}
+var ProviderCancelledError = class extends Error {
+  constructor() {
+    super("Citry provider request was cancelled");
+    this.name = "ProviderCancelledError";
+  }
+};
+async function waitForProvider(promise, token, stage, timeoutMs = delegatedProviderTimeoutMs) {
+  let cancellation;
+  const cancelled = new Promise((_resolve, reject) => {
+    cancellation = token.onCancellationRequested(() => reject(new ProviderCancelledError()));
+    if (token.isCancellationRequested) {
+      reject(new ProviderCancelledError());
+    }
+  });
+  try {
+    return await withTimeout(Promise.race([Promise.resolve(promise), cancelled]), timeoutMs, stage);
+  } finally {
+    cancellation?.dispose();
+  }
+}
 async function activate(context) {
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
   statusBar.command = "citry.showStatus";
@@ -23680,16 +24522,27 @@ async function activate(context) {
   statusBar.tooltip = "Citry language server is starting";
   statusBar.show();
   formatterOutput = vscode.window.createOutputChannel("Citry Formatter");
+  performanceOutput = vscode.window.createOutputChannel("Citry Performance", { log: true });
+  embeddedDocuments = new EmbeddedContentProvider();
   embeddedFormattingDocuments = new EmbeddedFormattingContentProvider();
-  context.subscriptions.push(statusBar, formatterOutput, embeddedFormattingDocuments);
+  browserDocuments = new BrowserContentProvider();
+  context.subscriptions.push(
+    statusBar,
+    formatterOutput,
+    performanceOutput,
+    embeddedDocuments,
+    embeddedFormattingDocuments,
+    browserDocuments
+  );
   context.subscriptions.push(...registerEmbeddedLanguageProviders());
+  context.subscriptions.push(...registerBrowserLanguageProviders());
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(embeddedFormattingScheme, embeddedFormattingDocuments)
   );
   context.subscriptions.push(registerSourceFormattingAction());
   context.subscriptions.push(registerStandaloneFormattingProvider());
-  context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(handleTagCompletionChange));
-  context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(handleTagCompletionSelection));
+  context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(handleCompletionChange));
+  context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(handleCompletionSelection));
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     await startFolder(folder);
   }
@@ -23722,8 +24575,10 @@ async function activate(context) {
   }
 }
 async function deactivate() {
+  await restartCoordinator.settled();
   await Promise.all([...clients.values()].map((entry) => stopEntry(entry)));
   clients.clear();
+  clearProjectionResponses();
 }
 async function startFolder(folder) {
   if (folder.uri.scheme !== "file") {
@@ -23750,7 +24605,13 @@ async function startFolder(folder) {
   const documentSelector = [
     { language: "python", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*.py" } },
     { language: "citry-html", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
-    { language: "html", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } }
+    { language: "html", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
+    // Citry accepts any css_file name; the language ID and registry ownership
+    // provide the proof instead of a filename convention.
+    { language: "css", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
+    // As with css_file, registry ownership rather than an extension decides
+    // whether a JavaScript document belongs to a component.
+    { language: "javascript", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } }
   ];
   const ownsDocument = (document) => workspaceOwnsDocument(key, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.toString());
   const middleware = {
@@ -23760,6 +24621,9 @@ async function startFolder(folder) {
     provideCompletionItem: (document, position, context, token, next) => ownsDocument(document) ? next(document, position, context, token) : void 0,
     provideHover: (document, position, token, next) => ownsDocument(document) ? next(document, position, token) : void 0,
     provideDefinition: (document, position, token, next) => ownsDocument(document) ? next(document, position, token) : void 0,
+    provideReferences: (document, position, context, token, next) => ownsDocument(document) ? next(document, position, context, token) : void 0,
+    provideDeclaration: (document, position, token, next) => ownsDocument(document) ? next(document, position, token) : void 0,
+    provideTypeDefinition: (document, position, token, next) => ownsDocument(document) ? next(document, position, token) : void 0,
     provideDocumentSymbols: (document, token, next) => ownsDocument(document) ? next(document, token) : void 0
   };
   const clientOptions = {
@@ -23793,6 +24657,7 @@ async function startFolder(folder) {
   );
   client.onNotification(statusMethod, (status) => {
     entry.status = status;
+    clearProjectionResponses();
     updateStatusBar();
   });
   try {
@@ -23810,41 +24675,45 @@ async function startFolder(folder) {
   }
   updateStatusBar();
 }
-function handleTagCompletionChange(event) {
+function handleCompletionChange(event) {
   const document = event.document;
   const editor = vscode.window.activeTextEditor;
   const uri = document.uri.toString();
-  pendingTagCompletionDispatch = void 0;
+  pendingCompletionDispatch = void 0;
   const supportedLanguage = document.languageId === "python" || document.languageId === "citry-html" || document.languageId === "html";
   const entry = entryForUri(document.uri);
   if (editor?.document.uri.toString() !== uri || editor.selections.length !== 1 || event.contentChanges.length !== 1 || !supportedLanguage || entry === void 0 || !entry.client.isRunning()) {
-    pendingTagCompletionRetrigger = void 0;
+    pendingCompletionRetrigger = void 0;
     return;
   }
   const contentChange = event.contentChanges[0];
   if (contentChange === void 0) {
-    pendingTagCompletionRetrigger = void 0;
+    pendingCompletionRetrigger = void 0;
     return;
   }
   const source = document.getText();
-  const priorOffset = pendingTagCompletionRetrigger?.uri === uri ? pendingTagCompletionRetrigger.offset : void 0;
-  const decision = advanceTagCompletionRetrigger(
+  const priorOffset = pendingCompletionRetrigger?.uri === uri ? pendingCompletionRetrigger.offset : void 0;
+  const completionChange = {
+    startOffset: contentChange.rangeOffset,
+    removedLength: contentChange.rangeLength,
+    insertedText: contentChange.text,
+    history: event.reason !== void 0
+  };
+  const tagDecision = advanceTagCompletionRetrigger(source, completionChange, priorOffset);
+  const expressionDecision = advanceExpressionCompletionRetrigger(
     source,
-    {
-      startOffset: contentChange.rangeOffset,
-      removedLength: contentChange.rangeLength,
-      insertedText: contentChange.text,
-      history: event.reason !== void 0
-    },
+    document.languageId,
+    completionChange,
     priorOffset
   );
-  pendingTagCompletionRetrigger = void 0;
+  const decision = tagDecision.pendingOffset !== void 0 || tagDecision.triggerOffset !== void 0 ? tagDecision : expressionDecision;
+  pendingCompletionRetrigger = void 0;
   const decisionOffset = decision.pendingOffset ?? decision.triggerOffset;
   if (decisionOffset === void 0) {
     return;
   }
   if (decision.pendingOffset !== void 0) {
-    pendingTagCompletionRetrigger = { uri, offset: decision.pendingOffset };
+    pendingCompletionRetrigger = { uri, offset: decision.pendingOffset };
   }
   if (decision.triggerOffset === void 0) {
     return;
@@ -23852,39 +24721,39 @@ function handleTagCompletionChange(event) {
   const expectedVersion = document.version;
   const expectedPosition = document.positionAt(decision.triggerOffset);
   const dispatch = { uri, version: expectedVersion, position: expectedPosition };
-  pendingTagCompletionDispatch = dispatch;
-  setTimeout(() => dispatchTagCompletion(dispatch), 0);
+  pendingCompletionDispatch = dispatch;
+  setTimeout(() => dispatchCompletion(dispatch), 0);
   setTimeout(() => {
-    if (pendingTagCompletionDispatch === dispatch) {
-      pendingTagCompletionDispatch = void 0;
+    if (pendingCompletionDispatch === dispatch) {
+      pendingCompletionDispatch = void 0;
     }
   }, 250);
 }
-function handleTagCompletionSelection(event) {
+function handleCompletionSelection(event) {
   const uri = event.textEditor.document.uri.toString();
   const active = event.selections.length === 1 ? event.selections[0]?.active : void 0;
-  if (pendingTagCompletionRetrigger !== void 0 && (uri !== pendingTagCompletionRetrigger.uri || active === void 0 || event.textEditor.document.offsetAt(active) !== pendingTagCompletionRetrigger.offset)) {
-    pendingTagCompletionRetrigger = void 0;
+  if (pendingCompletionRetrigger !== void 0 && (uri !== pendingCompletionRetrigger.uri || active === void 0 || event.textEditor.document.offsetAt(active) !== pendingCompletionRetrigger.offset)) {
+    pendingCompletionRetrigger = void 0;
   }
-  const dispatch = pendingTagCompletionDispatch;
+  const dispatch = pendingCompletionDispatch;
   if (dispatch === void 0) {
     return;
   }
   if (uri !== dispatch.uri || event.textEditor.document.version !== dispatch.version || active === void 0 || !active.isEqual(dispatch.position)) {
-    pendingTagCompletionDispatch = void 0;
+    pendingCompletionDispatch = void 0;
     return;
   }
-  dispatchTagCompletion(dispatch);
+  dispatchCompletion(dispatch);
 }
-function dispatchTagCompletion(expected) {
-  if (pendingTagCompletionDispatch !== expected) {
+function dispatchCompletion(expected) {
+  if (pendingCompletionDispatch !== expected) {
     return;
   }
   const activeEditor = vscode.window.activeTextEditor;
   if (activeEditor?.document.uri.toString() !== expected.uri || activeEditor.document.version !== expected.version || activeEditor.selections.length !== 1 || !activeEditor.selection.active.isEqual(expected.position) || entryForUri(activeEditor.document.uri)?.client.isRunning() !== true) {
     return;
   }
-  pendingTagCompletionDispatch = void 0;
+  pendingCompletionDispatch = void 0;
   void vscode.commands.executeCommand("editor.action.triggerSuggest").then(void 0, () => void 0);
 }
 async function stopEntry(entry) {
@@ -23892,12 +24761,14 @@ async function stopEntry(entry) {
     disposable.dispose();
   }
   entry.disposables.length = 0;
-  if (entry.client.needsStop()) {
-    await entry.client.stop();
-  }
+  await stopLanguageClient(entry.client);
 }
 async function restartAll() {
+  return restartCoordinator.request();
+}
+async function restartAllOnce() {
   const folders = [...vscode.workspace.workspaceFolders ?? []];
+  clearProjectionResponses();
   await Promise.all([...clients.values()].map((entry) => stopEntry(entry)));
   clients.clear();
   for (const folder of folders) {
@@ -23907,16 +24778,18 @@ async function restartAll() {
 }
 function watchPythonFiles(entry) {
   const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(entry.folder, "**/*.py"));
-  const send = (uri, type) => {
+  const batcher = new WatchedFileChangeBatcher((changes) => {
     void entry.client.sendNotification(import_node.DidChangeWatchedFilesNotification.type, {
-      changes: [{ uri: uri.toString(), type }]
+      changes
     });
-  };
+  });
+  const collect = (uri, type) => batcher.push(uri.toString(), type);
   return [
     watcher,
-    watcher.onDidCreate((uri) => send(uri, import_node.FileChangeType.Created)),
-    watcher.onDidChange((uri) => send(uri, import_node.FileChangeType.Changed)),
-    watcher.onDidDelete((uri) => send(uri, import_node.FileChangeType.Deleted))
+    { dispose: () => batcher.dispose() },
+    watcher.onDidCreate((uri) => collect(uri, import_node.FileChangeType.Created)),
+    watcher.onDidChange((uri) => collect(uri, import_node.FileChangeType.Changed)),
+    watcher.onDidDelete((uri) => collect(uri, import_node.FileChangeType.Deleted))
   ];
 }
 async function resolvePython(folder) {
@@ -23970,6 +24843,7 @@ async function showStatus() {
   const choice = await vscode.window.showInformationMessage(detail, { modal: true }, "Reload registry");
   if (choice === "Reload registry") {
     entry.status = await entry.client.sendRequest(reloadMethod, {});
+    clearProjectionResponses();
     updateStatusBar();
   }
 }
@@ -24045,10 +24919,7 @@ async function applyCitryFormatting(document, scope, quiet) {
       apply: (edit) => vscode.workspace.applyEdit(edit)
     });
     if (outcome === "stale") {
-      await reportFormattingFailure(
-        "citry.format.stale-document: the document changed before formatting applied",
-        quiet
-      );
+      await reportFormattingFailure(`${FORMAT_STALE_DOCUMENT}: the document changed before formatting applied`, quiet);
       return;
     }
     if (outcome === "invalid") {
@@ -24083,7 +24954,7 @@ function recordFormatMetadata(response) {
 async function handleEmbeddedFormatting(params, token) {
   const key = `${params.textDocument?.uri ?? ""}\0${String(params.textDocument?.version)}\0${params.planId ?? ""}`;
   if (activeEmbeddedFormatting.has(key)) {
-    throw new Error("citry.format.provider-invalid: recursive embedded formatting request refused");
+    throw new Error(`${FORMAT_PROVIDER_INVALID}: recursive embedded formatting request refused`);
   }
   activeEmbeddedFormatting.add(key);
   const formattingSession = embeddedFormattingDocuments.createSession();
@@ -24151,7 +25022,7 @@ function registerStandaloneFormattingProvider() {
         });
         if (prepared.kind === "stale") {
           await reportFormattingFailure(
-            "citry.format.stale-document: the document changed before formatting applied",
+            `${FORMAT_STALE_DOCUMENT}: the document changed before formatting applied`,
             quiet
           );
           return void 0;
@@ -24212,23 +25083,82 @@ function errorMessage2(error) {
   return error instanceof Error ? error.message : String(error);
 }
 var EmbeddedContentProvider = class {
+  changes = new vscode.EventEmitter();
+  onDidChange = this.changes.event;
+  dispose() {
+    this.changes.dispose();
+  }
+  refresh(uri) {
+    this.changes.fire(uri);
+  }
   provideTextDocumentContent(uri) {
     const parameters = new URLSearchParams(uri.query);
     const sourceValue = parameters.get("source");
-    const requestedVersion = Number(parameters.get("version"));
     const language = embeddedLanguageFromAuthority(uri.authority);
-    if (sourceValue === null || language === void 0 || !Number.isInteger(requestedVersion)) {
+    if (sourceValue === null || language === void 0) {
       return "";
     }
     const sourceUri = vscode.Uri.parse(sourceValue);
     const document = vscode.workspace.textDocuments.find(
       (candidate) => candidate.uri.toString() === sourceUri.toString()
     );
-    if (document === void 0 || document.version !== requestedVersion) {
+    if (document === void 0) {
       return "";
     }
     const source = virtualDocumentSource(document.getText(), document.languageId, language);
     return language === "html" && parameters.get("projection") === nativeHtmlAttributeHoverProjection ? projectNativeHtmlAttributes(source).source : source;
+  }
+};
+var BrowserContentProvider = class {
+  sources = /* @__PURE__ */ new Map();
+  uriByIdentity = /* @__PURE__ */ new Map();
+  identityByUri = /* @__PURE__ */ new Map();
+  changes = new vscode.EventEmitter();
+  nextSession = 0;
+  onDidChange = this.changes.event;
+  dispose() {
+    this.changes.dispose();
+    this.sources.clear();
+    this.uriByIdentity.clear();
+    this.identityByUri.clear();
+  }
+  provideTextDocumentContent(uri) {
+    return this.sources.get(uri.toString()) ?? "";
+  }
+  refresh(uri) {
+    this.changes.fire(uri);
+  }
+  create(identity, source, language = "javascript") {
+    let uri = this.uriByIdentity.get(identity);
+    if (uri === void 0) {
+      this.nextSession += 1;
+      uri = vscode.Uri.from({
+        scheme: browserScheme,
+        authority: language,
+        path: `/projection-${this.nextSession}.${language === "html" ? "html" : "js"}`
+      });
+      this.uriByIdentity.set(identity, uri);
+      this.identityByUri.set(uri.toString(), identity);
+    }
+    const uriKey = uri.toString();
+    const changed = this.sources.get(uriKey) !== source;
+    this.sources.set(uriKey, source);
+    if (changed) {
+      this.changes.fire(uri);
+    }
+    while (this.sources.size > 64) {
+      const oldestUri = this.sources.keys().next().value;
+      if (oldestUri === void 0) {
+        break;
+      }
+      this.sources.delete(oldestUri);
+      const oldestIdentity = this.identityByUri.get(oldestUri);
+      if (oldestIdentity !== void 0) {
+        this.uriByIdentity.delete(oldestIdentity);
+        this.identityByUri.delete(oldestUri);
+      }
+    }
+    return uri;
   }
 };
 var EmbeddedFormattingContentProvider = class {
@@ -24334,30 +25264,468 @@ var EmbeddedFormattingContentProvider = class {
     return document;
   }
 };
-function registerEmbeddedLanguageProviders() {
-  const selector = [{ language: "python" }, { language: "citry-html" }];
-  const contentProvider = vscode.workspace.registerTextDocumentContentProvider(
-    embeddedScheme,
-    new EmbeddedContentProvider()
-  );
+function registerBrowserLanguageProviders() {
+  const selector = [
+    { language: "python", scheme: "file" },
+    { language: "citry-html", scheme: "file" },
+    { language: "html", scheme: "file" },
+    { language: "javascript", scheme: "file" }
+  ];
+  const contentProvider = vscode.workspace.registerTextDocumentContentProvider(browserScheme, browserDocuments);
   const completions = vscode.languages.registerCompletionItemProvider(
     selector,
     {
       async provideCompletionItems(document, position, token) {
+        const trace = providerTrace("browser", "completion", document, position);
+        try {
+          const candidate = trace.measure(
+            "lexical-routing",
+            () => browserProjectionCandidateAt(document.getText(), document.languageId, document.offsetAt(position))
+          );
+          if (!candidate) {
+            trace.finish("not-candidate");
+            return void 0;
+          }
+          const request = await trace.stage(
+            "projection-and-virtual-document",
+            () => browserProviderRequest(document, position, token, trace)
+          );
+          if (request === void 0 || request.projection.citryOwnsPosition) {
+            trace.finish(request?.projection.citryOwnsPosition === true ? "citry-owned" : "no-projection");
+            return void 0;
+          }
+          const result = await trace.stage(
+            "delegated-provider",
+            () => waitForProvider(
+              vscode.commands.executeCommand(
+                "vscode.executeCompletionItemProvider",
+                request.virtualUri,
+                new vscode.Position(request.projection.position.line, request.projection.position.character),
+                void 0,
+                delegatedCompletionResolveCount
+              ),
+              token,
+              "browser-completion"
+            )
+          );
+          if (token.isCancellationRequested || document.version !== request.sourceVersion) {
+            trace.finish("stale-or-cancelled");
+            return void 0;
+          }
+          const items = (result?.items ?? []).filter((item) => !request.projection.ownedRootNames.includes(completionLabel(item))).map((item) => mapProviderCompletion(item, request)).filter((item) => item !== void 0);
+          trace.finish(items.length === 0 ? "no-result" : "result");
+          return new vscode.CompletionList(items, result?.isIncomplete ?? false);
+        } catch (error) {
+          trace.finish(error instanceof Error ? error.name : "error");
+          return void 0;
+        }
+      }
+    },
+    ".",
+    " ",
+    "(",
+    "[",
+    "'",
+    '"',
+    "$"
+  );
+  const hovers = vscode.languages.registerHoverProvider(selector, {
+    async provideHover(document, position, token) {
+      const trace = providerTrace("browser", "hover", document, position);
+      try {
+        const candidate = trace.measure(
+          "lexical-routing",
+          () => browserProjectionCandidateAt(document.getText(), document.languageId, document.offsetAt(position))
+        );
+        if (!candidate) {
+          trace.finish("not-candidate");
+          return void 0;
+        }
+        const request = await trace.stage(
+          "projection-and-virtual-document",
+          () => browserProviderRequest(document, position, token, trace)
+        );
+        if (request === void 0 || request.projection.citryOwnsPosition) {
+          trace.finish(request?.projection.citryOwnsPosition === true ? "citry-owned" : "no-projection");
+          return void 0;
+        }
+        const results = await trace.stage(
+          "delegated-provider",
+          () => waitForProvider(
+            vscode.commands.executeCommand(
+              "vscode.executeHoverProvider",
+              request.virtualUri,
+              new vscode.Position(request.projection.position.line, request.projection.position.character)
+            ),
+            token,
+            "browser-hover"
+          )
+        );
+        if (token.isCancellationRequested || document.version !== request.sourceVersion || results === void 0) {
+          trace.finish("stale-or-cancelled");
+          return void 0;
+        }
+        const exact = results.map((hover) => {
+          const range = hover.range === void 0 ? void 0 : mapProviderRange(hover.range, request);
+          return hover.range === void 0 || range !== void 0 ? new vscode.Hover(hover.contents, range) : void 0;
+        }).filter((hover) => hover !== void 0);
+        trace.finish(exact.length === 0 ? "no-result" : "result");
+        return exact.length === 0 ? void 0 : new vscode.Hover(
+          exact.flatMap((hover) => hover.contents),
+          exact.find((hover) => hover.range !== void 0)?.range
+        );
+      } catch (error) {
+        trace.finish(error instanceof Error ? error.name : "error");
+        return void 0;
+      }
+    }
+  });
+  const definitions = vscode.languages.registerDefinitionProvider(selector, {
+    async provideDefinition(document, position, token) {
+      const trace = providerTrace("browser", "definition", document, position);
+      try {
+        const candidate = trace.measure(
+          "lexical-routing",
+          () => browserProjectionCandidateAt(document.getText(), document.languageId, document.offsetAt(position))
+        );
+        if (!candidate) {
+          trace.finish("not-candidate");
+          return void 0;
+        }
+        const request = await trace.stage(
+          "projection-and-virtual-document",
+          () => browserProviderRequest(document, position, token, trace)
+        );
+        if (request === void 0 || request.projection.citryOwnsPosition) {
+          trace.finish(request?.projection.citryOwnsPosition === true ? "citry-owned" : "no-projection");
+          return void 0;
+        }
+        const results = await trace.stage(
+          "delegated-provider",
+          () => waitForProvider(
+            vscode.commands.executeCommand(
+              "vscode.executeDefinitionProvider",
+              request.virtualUri,
+              new vscode.Position(request.projection.position.line, request.projection.position.character)
+            ),
+            token,
+            "browser-definition"
+          )
+        );
+        if (token.isCancellationRequested || document.version !== request.sourceVersion || results === void 0) {
+          trace.finish("stale-or-cancelled");
+          return void 0;
+        }
+        const mapped = results.map((result) => mapProviderDefinition(result, request)).filter((result) => result !== void 0);
+        trace.finish(mapped.length === 0 ? "no-result" : "result");
+        return mapped;
+      } catch (error) {
+        trace.finish(error instanceof Error ? error.name : "error");
+        return void 0;
+      }
+    }
+  });
+  return [contentProvider, completions, hovers, definitions];
+}
+function completionLabel(item) {
+  return typeof item.label === "string" ? item.label : item.label.label;
+}
+async function browserProviderRequest(document, position, token, trace) {
+  if (document.uri.scheme !== "file" || token.isCancellationRequested) {
+    return void 0;
+  }
+  const version = document.version;
+  const projection = await browserProjectionAt(document, position, token, trace);
+  if (projection === null || token.isCancellationRequested || document.version !== version) {
+    return void 0;
+  }
+  const identity = JSON.stringify([
+    document.uri.toString(),
+    projection.sourceRange.start.line,
+    projection.sourceRange.start.character
+  ]);
+  const virtualUri = browserDocuments.create(identity, projection.source);
+  let virtualDocument = await trace.stage(
+    "virtual-document-open",
+    () => waitForProvider(
+      vscode.workspace.openTextDocument(virtualUri),
+      token,
+      "browser-virtual-document-open",
+      virtualDocumentTimeoutMs
+    )
+  );
+  if (virtualDocument.getText() !== projection.source) {
+    try {
+      virtualDocument = await trace.stage(
+        "virtual-document-refresh",
+        () => waitForBrowserDocument(virtualUri, projection.source, token)
+      );
+    } catch {
+      return void 0;
+    }
+  }
+  if (virtualDocument.languageId !== "javascript") {
+    virtualDocument = await trace.stage(
+      "virtual-document-language",
+      () => waitForProvider(
+        vscode.languages.setTextDocumentLanguage(virtualDocument, "javascript"),
+        token,
+        "browser-virtual-document-language",
+        virtualDocumentTimeoutMs
+      )
+    );
+  }
+  return token.isCancellationRequested ? void 0 : { projection, sourceDocument: document, sourceVersion: version, virtualDocument, virtualUri };
+}
+async function browserProjectionAt(document, position, token, trace) {
+  const entry = entryForUri(document.uri);
+  if (entry === void 0 || !entry.client.isRunning()) {
+    return null;
+  }
+  const generation = projectionGeneration;
+  const key = JSON.stringify([
+    generation,
+    document.uri.toString(),
+    document.version,
+    position.line,
+    position.character
+  ]);
+  if (browserProjectionResponses.has(key)) {
+    return browserProjectionResponses.get(key) ?? null;
+  }
+  const linked = new vscode.CancellationTokenSource();
+  const cancellation = token.onCancellationRequested(() => linked.cancel());
+  try {
+    const response = await trace.stage(
+      "projection-rpc",
+      () => withTimeout(
+        entry.client.sendRequest(
+          browserProjectionMethod,
+          {
+            textDocument: { uri: document.uri.toString(), version: document.version },
+            position: { line: position.line, character: position.character }
+          },
+          linked.token
+        ),
+        projectionTimeoutMs,
+        "browser-projection",
+        () => linked.cancel()
+      )
+    );
+    if (token.isCancellationRequested || generation !== projectionGeneration) {
+      return null;
+    }
+    if (generation === projectionGeneration) {
+      browserProjectionResponses.set(key, response);
+      while (browserProjectionResponses.size > 256) {
+        const oldest = browserProjectionResponses.keys().next().value;
+        if (oldest === void 0) {
+          break;
+        }
+        browserProjectionResponses.delete(oldest);
+      }
+    }
+    return response;
+  } catch {
+    linked.cancel();
+    return null;
+  } finally {
+    cancellation.dispose();
+    linked.dispose();
+  }
+}
+async function waitForBrowserDocument(uri, source, token) {
+  const key = uri.toString();
+  return new Promise((resolve, reject) => {
+    let documentSubscription;
+    let cancellationSubscription;
+    let timeout;
+    const finish = (value) => {
+      documentSubscription?.dispose();
+      cancellationSubscription?.dispose();
+      if (timeout !== void 0) {
+        clearTimeout(timeout);
+      }
+      if (value instanceof Error) {
+        reject(value);
+      } else {
+        resolve(value);
+      }
+    };
+    documentSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.document.uri.toString() === key && event.document.getText() === source) {
+        finish(event.document);
+      }
+    });
+    cancellationSubscription = token.onCancellationRequested(
+      () => finish(new Error("browser provider request was cancelled"))
+    );
+    if (token.isCancellationRequested) {
+      finish(new Error("browser provider request was cancelled"));
+      return;
+    }
+    timeout = setTimeout(
+      () => finish(new Error("browser virtual document refresh timed out")),
+      virtualDocumentTimeoutMs
+    );
+    browserDocuments.refresh(uri);
+  });
+}
+function mapProviderCompletion(item, request) {
+  const mapped = Object.assign(new vscode.CompletionItem(item.label, item.kind), item);
+  if (item.textEdit !== void 0) {
+    const range = mapProviderRange(item.textEdit.range, request);
+    if (range === void 0) {
+      return void 0;
+    }
+    mapped.textEdit = new vscode.TextEdit(range, item.textEdit.newText);
+  }
+  if (item.range !== void 0) {
+    if (item.range instanceof vscode.Range) {
+      const range = mapProviderRange(item.range, request);
+      if (range === void 0) {
+        return void 0;
+      }
+      mapped.range = range;
+    } else {
+      const inserting = mapProviderRange(item.range.inserting, request);
+      const replacing = mapProviderRange(item.range.replacing, request);
+      if (inserting === void 0 || replacing === void 0) {
+        return void 0;
+      }
+      mapped.range = { inserting, replacing };
+    }
+  }
+  mapped.additionalTextEdits = void 0;
+  mapped.command = void 0;
+  return mapped;
+}
+function mapProviderDefinition(result, request) {
+  if (isLocationLink(result)) {
+    const selection = result.targetSelectionRange ?? result.targetRange;
+    if (result.targetUri.toString() !== request.virtualUri.toString()) {
+      return new vscode.Location(result.targetUri, selection);
+    }
+    const targetSelectionRange = mapProviderRange(selection, request);
+    if (targetSelectionRange === void 0) {
+      return void 0;
+    }
+    return new vscode.Location(request.sourceDocument.uri, targetSelectionRange);
+  }
+  if (result.uri.toString() !== request.virtualUri.toString()) {
+    return result;
+  }
+  const range = mapProviderRange(result.range, request);
+  return range === void 0 ? void 0 : new vscode.Location(request.sourceDocument.uri, range);
+}
+function mapProviderRange(range, request) {
+  const virtual = protocolRange(request.projection.virtualRange);
+  if (!virtual.contains(range.start) || !virtual.contains(range.end)) {
+    return void 0;
+  }
+  const source = protocolRange(request.projection.sourceRange);
+  const virtualBase = request.virtualDocument.offsetAt(virtual.start);
+  const sourceBase = request.sourceDocument.offsetAt(source.start);
+  const start = sourceBase + request.virtualDocument.offsetAt(range.start) - virtualBase;
+  const end = sourceBase + request.virtualDocument.offsetAt(range.end) - virtualBase;
+  if (start < sourceBase || end < start || end > request.sourceDocument.offsetAt(source.end)) {
+    return void 0;
+  }
+  return new vscode.Range(request.sourceDocument.positionAt(start), request.sourceDocument.positionAt(end));
+}
+function protocolRange(range) {
+  return new vscode.Range(
+    new vscode.Position(range.start.line, range.start.character),
+    new vscode.Position(range.end.line, range.end.character)
+  );
+}
+function registerEmbeddedLanguageProviders() {
+  const selector = [{ language: "python" }, { language: "citry-html" }];
+  const contentProvider = vscode.workspace.registerTextDocumentContentProvider(embeddedScheme, embeddedDocuments);
+  const completions = vscode.languages.registerCompletionItemProvider(
+    selector,
+    {
+      async provideCompletionItems(document, position, token) {
+        const trace = providerTrace("html", "completion", document, position);
+        let htmlRequest;
+        try {
+          htmlRequest = await trace.stage(
+            "projection-and-virtual-document",
+            () => htmlProviderRequest(document, position, token, trace)
+          );
+        } catch (error) {
+          trace.finish(error instanceof Error ? error.name : "error");
+          return void 0;
+        }
+        if (htmlRequest === null) {
+          trace.finish("no-projection");
+          return void 0;
+        }
+        if (htmlRequest !== void 0) {
+          try {
+            const result = await trace.stage(
+              "delegated-provider",
+              () => waitForProvider(
+                vscode.commands.executeCommand(
+                  "vscode.executeCompletionItemProvider",
+                  htmlRequest.virtualUri,
+                  htmlRequest.providerPosition,
+                  void 0,
+                  delegatedCompletionResolveCount
+                ),
+                token,
+                "html-completion"
+              )
+            );
+            if (token.isCancellationRequested || document.version !== htmlRequest.sourceVersion) {
+              trace.finish("stale-or-cancelled");
+              return void 0;
+            }
+            const items = (result?.items ?? []).map((item) => mapProviderCompletion(item, htmlRequest)).filter((item) => item !== void 0);
+            trace.finish(items.length === 0 ? "no-result" : "result");
+            return new vscode.CompletionList(items, result?.isIncomplete ?? false);
+          } catch {
+            trace.finish("provider-error");
+            return void 0;
+          }
+        }
         const request = embeddedRequest(document, position);
         if (request === void 0 || token.isCancellationRequested) {
+          trace.finish(token.isCancellationRequested ? "cancelled" : "not-embedded");
+          return void 0;
+        }
+        if (await typedBrowserProjectionOwnsRegion(document, position, request, token, trace)) {
+          trace.finish("typed-browser-owned");
           return void 0;
         }
         try {
-          const result = await vscode.commands.executeCommand(
-            "vscode.executeCompletionItemProvider",
-            request.virtualUri,
-            position,
-            void 0,
-            50
+          const prepared = await prepareEmbeddedRequest(document, request, token, trace);
+          if (!prepared) {
+            trace.finish("virtual-document-unavailable");
+            return void 0;
+          }
+          const result = await trace.stage(
+            "delegated-provider",
+            () => waitForProvider(
+              vscode.commands.executeCommand(
+                "vscode.executeCompletionItemProvider",
+                request.virtualUri,
+                position,
+                void 0,
+                delegatedCompletionResolveCount
+              ),
+              token,
+              "embedded-completion"
+            )
           );
+          if (document.version !== request.sourceVersion) {
+            trace.finish("stale");
+            return void 0;
+          }
+          trace.finish(result === void 0 ? "no-result" : "result");
           return token.isCancellationRequested ? void 0 : result;
         } catch {
+          trace.finish("provider-error");
           return void 0;
         }
       }
@@ -24375,18 +25743,94 @@ function registerEmbeddedLanguageProviders() {
   );
   const hovers = vscode.languages.registerHoverProvider(selector, {
     async provideHover(document, position, token) {
+      const trace = providerTrace("html", "hover", document, position);
       const version = document.version;
+      let htmlRequest;
+      try {
+        htmlRequest = await trace.stage(
+          "projection-and-virtual-document",
+          () => htmlProviderRequest(document, position, token, trace)
+        );
+      } catch (error) {
+        trace.finish(error instanceof Error ? error.name : "error");
+        return void 0;
+      }
+      if (htmlRequest === null) {
+        trace.finish("no-projection");
+        return void 0;
+      }
+      if (htmlRequest !== void 0) {
+        try {
+          const results = await trace.stage(
+            "delegated-provider",
+            () => waitForProvider(
+              vscode.commands.executeCommand(
+                "vscode.executeHoverProvider",
+                htmlRequest.virtualUri,
+                htmlRequest.providerPosition
+              ),
+              token,
+              "html-hover"
+            )
+          );
+          if (token.isCancellationRequested || document.version !== version || results === void 0 || results.length === 0) {
+            trace.finish(token.isCancellationRequested ? "cancelled" : "no-result");
+            return void 0;
+          }
+          if (htmlRequest.projectedAttributeRange !== void 0 && htmlRequest.sourceAttributeRange !== void 0) {
+            const projectedAttributeRange = htmlRequest.projectedAttributeRange;
+            const exact = results.filter(
+              (hover) => hover.range !== void 0 && sameRange(hover.range, projectedAttributeRange)
+            );
+            trace.finish(exact.length === 0 ? "no-result" : "result");
+            return exact.length === 0 ? void 0 : new vscode.Hover(
+              exact.flatMap((hover) => hover.contents),
+              htmlRequest.sourceAttributeRange
+            );
+          }
+          const mapped = results.map((hover) => {
+            const range = hover.range === void 0 ? void 0 : mapProviderRange(hover.range, htmlRequest);
+            return hover.range === void 0 || range !== void 0 ? new vscode.Hover(hover.contents, range) : void 0;
+          }).filter((hover) => hover !== void 0);
+          trace.finish(mapped.length === 0 ? "no-result" : "result");
+          return mapped.length === 0 ? void 0 : new vscode.Hover(
+            mapped.flatMap((hover) => hover.contents),
+            mapped.find((hover) => hover.range !== void 0)?.range
+          );
+        } catch {
+          trace.finish("provider-error");
+          return void 0;
+        }
+      }
       const request = embeddedHoverRequest(document, position);
       if (request === void 0 || token.isCancellationRequested) {
+        trace.finish(token.isCancellationRequested ? "cancelled" : "not-embedded");
+        return void 0;
+      }
+      if (await typedBrowserProjectionOwnsRegion(document, position, request, token, trace)) {
+        trace.finish("typed-browser-owned");
         return void 0;
       }
       try {
-        const results = await vscode.commands.executeCommand(
-          "vscode.executeHoverProvider",
-          request.virtualUri,
-          request.providerPosition
+        const prepared = await prepareEmbeddedRequest(document, request, token, trace);
+        if (!prepared) {
+          trace.finish("virtual-document-unavailable");
+          return void 0;
+        }
+        const results = await trace.stage(
+          "delegated-provider",
+          () => waitForProvider(
+            vscode.commands.executeCommand(
+              "vscode.executeHoverProvider",
+              request.virtualUri,
+              request.providerPosition
+            ),
+            token,
+            "embedded-hover"
+          )
         );
         if (token.isCancellationRequested || document.version !== version || results === void 0 || results.length === 0) {
+          trace.finish(token.isCancellationRequested ? "cancelled" : "no-result");
           return void 0;
         }
         if (request.projectedAttributeRange !== void 0 && request.sourceAttributeRange !== void 0) {
@@ -24394,45 +25838,287 @@ function registerEmbeddedLanguageProviders() {
           const exactResults = results.filter(
             (hover) => hover.range !== void 0 && sameRange(hover.range, projectedAttributeRange)
           );
+          trace.finish(exactResults.length === 0 ? "no-result" : "result");
           return exactResults.length === 0 ? void 0 : new vscode.Hover(
             exactResults.flatMap((hover) => hover.contents),
             request.sourceAttributeRange
           );
         }
+        trace.finish("result");
         return new vscode.Hover(
           results.flatMap((hover) => hover.contents),
           results.find((hover) => hover.range !== void 0)?.range
         );
       } catch {
+        trace.finish("provider-error");
         return void 0;
       }
     }
   });
   const definitions = vscode.languages.registerDefinitionProvider(selector, {
     async provideDefinition(document, position, token) {
+      const trace = providerTrace("html", "definition", document, position);
+      let htmlRequest;
+      try {
+        htmlRequest = await trace.stage(
+          "projection-and-virtual-document",
+          () => htmlProviderRequest(document, position, token, trace)
+        );
+      } catch (error) {
+        trace.finish(error instanceof Error ? error.name : "error");
+        return void 0;
+      }
+      if (htmlRequest === null) {
+        trace.finish("no-projection");
+        return void 0;
+      }
+      if (htmlRequest !== void 0) {
+        try {
+          const results = await trace.stage(
+            "delegated-provider",
+            () => waitForProvider(
+              vscode.commands.executeCommand(
+                "vscode.executeDefinitionProvider",
+                htmlRequest.virtualUri,
+                htmlRequest.providerPosition
+              ),
+              token,
+              "html-definition"
+            )
+          );
+          if (token.isCancellationRequested || document.version !== htmlRequest.sourceVersion || results === void 0) {
+            trace.finish(token.isCancellationRequested ? "cancelled" : "no-result");
+            return void 0;
+          }
+          const mapped = results.map((result) => mapProviderDefinition(result, htmlRequest)).filter((result) => result !== void 0);
+          trace.finish(mapped.length === 0 ? "no-result" : "result");
+          return mapped;
+        } catch {
+          trace.finish("provider-error");
+          return void 0;
+        }
+      }
       const request = embeddedRequest(document, position);
       if (request === void 0 || token.isCancellationRequested) {
+        trace.finish(token.isCancellationRequested ? "cancelled" : "not-embedded");
+        return void 0;
+      }
+      if (await typedBrowserProjectionOwnsRegion(document, position, request, token, trace)) {
+        trace.finish("typed-browser-owned");
         return void 0;
       }
       try {
-        const results = await vscode.commands.executeCommand(
-          "vscode.executeDefinitionProvider",
-          request.virtualUri,
-          position
+        const prepared = await prepareEmbeddedRequest(document, request, token, trace);
+        if (!prepared) {
+          trace.finish("virtual-document-unavailable");
+          return void 0;
+        }
+        const results = await trace.stage(
+          "delegated-provider",
+          () => waitForProvider(
+            vscode.commands.executeCommand(
+              "vscode.executeDefinitionProvider",
+              request.virtualUri,
+              position
+            ),
+            token,
+            "embedded-definition"
+          )
         );
-        if (token.isCancellationRequested || results === void 0) {
+        if (token.isCancellationRequested || document.version !== request.sourceVersion || results === void 0) {
+          trace.finish(token.isCancellationRequested ? "cancelled" : "no-result");
           return void 0;
         }
         if (results.every(isLocationLink)) {
-          return results.map((result) => mapEmbeddedDefinitionLink(result, request));
+          const mapped2 = results.map((result) => mapEmbeddedDefinitionLink(result, request));
+          trace.finish(mapped2.length === 0 ? "no-result" : "result");
+          return mapped2;
         }
-        return results.filter((result) => !isLocationLink(result)).map((result) => mapEmbeddedLocation(result, request));
+        const mapped = results.filter((result) => !isLocationLink(result)).map((result) => mapEmbeddedLocation(result, request));
+        trace.finish(mapped.length === 0 ? "no-result" : "result");
+        return mapped;
       } catch {
+        trace.finish("provider-error");
         return void 0;
       }
     }
   });
   return [contentProvider, completions, hovers, definitions];
+}
+async function htmlProviderRequest(document, position, token, trace) {
+  if (document.uri.scheme !== "file" || token.isCancellationRequested) {
+    return void 0;
+  }
+  const source = document.getText();
+  const sourceOffset = document.offsetAt(position);
+  const htmlSource = virtualDocumentSourceAt(source, document.languageId, "html", sourceOffset);
+  if (htmlSource === void 0) {
+    return void 0;
+  }
+  const candidate = htmlProjectionCandidateRangeAt(htmlSource, sourceOffset);
+  if (candidate === void 0) {
+    return void 0;
+  }
+  const version = document.version;
+  const projection = await htmlProjectionAt(document, position, candidate, token, trace);
+  if (projection === null || token.isCancellationRequested || document.version !== version) {
+    return null;
+  }
+  const nativeProjection = projectNativeHtmlAttributes(projection.source);
+  const identity = JSON.stringify([
+    "html",
+    document.uri.toString(),
+    projection.sourceRange.start.line,
+    projection.sourceRange.start.character
+  ]);
+  const virtualUri = browserDocuments.create(identity, nativeProjection.source, "html");
+  let virtualDocument = await trace.stage(
+    "virtual-document-open",
+    () => waitForProvider(
+      vscode.workspace.openTextDocument(virtualUri),
+      token,
+      "html-virtual-document-open",
+      virtualDocumentTimeoutMs
+    )
+  );
+  if (virtualDocument.getText() !== nativeProjection.source) {
+    try {
+      virtualDocument = await trace.stage(
+        "virtual-document-refresh",
+        () => waitForBrowserDocument(virtualUri, nativeProjection.source, token)
+      );
+    } catch {
+      return null;
+    }
+  }
+  if (virtualDocument.languageId !== "html") {
+    virtualDocument = await trace.stage(
+      "virtual-document-language",
+      () => waitForProvider(
+        vscode.languages.setTextDocumentLanguage(virtualDocument, "html"),
+        token,
+        "html-virtual-document-language",
+        virtualDocumentTimeoutMs
+      )
+    );
+  }
+  const projectedPosition = new vscode.Position(projection.position.line, projection.position.character);
+  const projectedOffset = virtualDocument.offsetAt(projectedPosition);
+  const dynamicAttribute = nativeDynamicAttributeHoverProjection(projection.source, projectedOffset);
+  const request = {
+    projection,
+    sourceDocument: document,
+    sourceVersion: version,
+    virtualDocument,
+    virtualUri,
+    providerPosition: dynamicAttribute === void 0 ? projectedPosition : virtualDocument.positionAt(dynamicAttribute.providerOffset)
+  };
+  if (dynamicAttribute !== void 0) {
+    request.projectedAttributeRange = new vscode.Range(
+      virtualDocument.positionAt(dynamicAttribute.projectedStart),
+      virtualDocument.positionAt(dynamicAttribute.projectedEnd)
+    );
+    const sourceAttributeRange = mapProviderRange(
+      new vscode.Range(
+        virtualDocument.positionAt(dynamicAttribute.sourceStart),
+        virtualDocument.positionAt(dynamicAttribute.sourceEnd)
+      ),
+      request
+    );
+    if (sourceAttributeRange === void 0) {
+      return null;
+    }
+    request.sourceAttributeRange = sourceAttributeRange;
+  }
+  return token.isCancellationRequested ? null : request;
+}
+async function htmlProjectionAt(document, position, candidate, token, trace) {
+  const entry = entryForUri(document.uri);
+  if (entry === void 0 || !entry.client.isRunning()) {
+    return null;
+  }
+  const generation = projectionGeneration;
+  const key = JSON.stringify([generation, document.uri.toString(), document.version, candidate.start, candidate.end]);
+  if (htmlProjectionResponses.has(key)) {
+    const cached = htmlProjectionResponses.get(key);
+    if (cached !== void 0 && cached !== null) {
+      const mapped = projectionAtCachedPosition(document, position, cached);
+      if (mapped !== null) {
+        return mapped;
+      }
+    }
+  }
+  const linked = new vscode.CancellationTokenSource();
+  const cancellation = token.onCancellationRequested(() => linked.cancel());
+  try {
+    const response = await trace.stage(
+      "projection-rpc",
+      () => withTimeout(
+        entry.client.sendRequest(
+          htmlProjectionMethod,
+          {
+            textDocument: { uri: document.uri.toString(), version: document.version },
+            position: { line: position.line, character: position.character }
+          },
+          linked.token
+        ),
+        projectionTimeoutMs,
+        "html-projection",
+        () => linked.cancel()
+      )
+    );
+    if (token.isCancellationRequested || generation !== projectionGeneration) {
+      return null;
+    }
+    if (response !== null && generation === projectionGeneration) {
+      htmlProjectionResponses.set(key, response);
+      while (htmlProjectionResponses.size > 256) {
+        const oldest = htmlProjectionResponses.keys().next().value;
+        if (oldest === void 0) {
+          break;
+        }
+        htmlProjectionResponses.delete(oldest);
+      }
+    }
+    return response;
+  } catch {
+    linked.cancel();
+    return null;
+  } finally {
+    cancellation.dispose();
+    linked.dispose();
+  }
+}
+function projectionAtCachedPosition(document, position, projection) {
+  if (projection === null) {
+    return null;
+  }
+  const sourceStart = document.offsetAt(protocolRange(projection.sourceRange).start);
+  const sourceEnd = document.offsetAt(protocolRange(projection.sourceRange).end);
+  const sourceOffset = document.offsetAt(position);
+  const mappedPosition = linearlyMappedProjectionPosition(
+    projection.source,
+    sourceOffset,
+    sourceStart,
+    sourceEnd,
+    projection.virtualRange.start,
+    projection.virtualRange.end
+  );
+  if (mappedPosition === void 0) {
+    return null;
+  }
+  return { ...projection, position: mappedPosition };
+}
+async function typedBrowserProjectionOwnsRegion(document, position, request, token, trace) {
+  if (request.virtualUri.authority !== "javascript") {
+    return false;
+  }
+  const version = document.version;
+  if (!browserProjectionCandidateAt(document.getText(), document.languageId, document.offsetAt(position))) {
+    return false;
+  }
+  const projection = await browserProjectionAt(document, position, token, trace);
+  return projection !== null && !token.isCancellationRequested && document.version === version;
 }
 function embeddedRequest(document, position) {
   if (document.uri.scheme === embeddedScheme) {
@@ -24443,12 +26129,12 @@ function embeddedRequest(document, position) {
     return void 0;
   }
   const parameters = new URLSearchParams({
-    source: document.uri.toString(),
-    version: String(document.version)
+    source: document.uri.toString()
   });
   return {
     providerPosition: position,
     sourceUri: document.uri,
+    sourceVersion: document.version,
     virtualUri: vscode.Uri.from({
       scheme: embeddedScheme,
       authority: language,
@@ -24456,6 +26142,80 @@ function embeddedRequest(document, position) {
       query: parameters.toString()
     })
   };
+}
+async function prepareEmbeddedRequest(document, request, token, trace) {
+  const version = document.version;
+  const language = embeddedLanguageFromAuthority(request.virtualUri.authority);
+  if (language === void 0) {
+    return false;
+  }
+  const parameters = new URLSearchParams(request.virtualUri.query);
+  let expected = virtualDocumentSource(document.getText(), document.languageId, language);
+  if (language === "html" && parameters.get("projection") === nativeHtmlAttributeHoverProjection) {
+    expected = projectNativeHtmlAttributes(expected).source;
+  }
+  let virtualDocument = await trace.stage(
+    "virtual-document-open",
+    () => waitForProvider(
+      vscode.workspace.openTextDocument(request.virtualUri),
+      token,
+      "embedded-virtual-document-open",
+      virtualDocumentTimeoutMs
+    )
+  );
+  if (virtualDocument.getText() !== expected) {
+    virtualDocument = await trace.stage(
+      "virtual-document-refresh",
+      () => waitForEmbeddedDocument(request.virtualUri, expected, token)
+    );
+  }
+  if (virtualDocument.languageId !== language) {
+    virtualDocument = await trace.stage(
+      "virtual-document-language",
+      () => waitForProvider(
+        vscode.languages.setTextDocumentLanguage(virtualDocument, language),
+        token,
+        "embedded-virtual-document-language",
+        virtualDocumentTimeoutMs
+      )
+    );
+  }
+  return !token.isCancellationRequested && document.version === version;
+}
+async function waitForEmbeddedDocument(uri, source, token) {
+  const key = uri.toString();
+  return new Promise((resolve, reject) => {
+    let documentSubscription;
+    let cancellationSubscription;
+    let timeout;
+    const finish = (value) => {
+      documentSubscription?.dispose();
+      cancellationSubscription?.dispose();
+      if (timeout !== void 0) {
+        clearTimeout(timeout);
+      }
+      if (value instanceof Error) {
+        reject(value);
+      } else {
+        resolve(value);
+      }
+    };
+    documentSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.document.uri.toString() === key && event.document.getText() === source) {
+        finish(event.document);
+      }
+    });
+    cancellationSubscription = token.onCancellationRequested(() => finish(new ProviderCancelledError()));
+    if (token.isCancellationRequested) {
+      finish(new ProviderCancelledError());
+      return;
+    }
+    timeout = setTimeout(
+      () => finish(new Error("embedded virtual document refresh timed out")),
+      virtualDocumentTimeoutMs
+    );
+    embeddedDocuments.refresh(uri);
+  });
 }
 function embeddedHoverRequest(document, position) {
   const request = embeddedRequest(document, position);

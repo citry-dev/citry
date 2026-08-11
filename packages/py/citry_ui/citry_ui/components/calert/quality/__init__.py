@@ -1,0 +1,1 @@
+"""Quality scenarios for Alert."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -91,28 +92,37 @@ class FormatCommand(ExtensionCommand):
         if check and diff:
             _usage_error("--check and --diff are mutually exclusive")
         mode: FormatMode = "check" if check else ("diff" if diff else "write")
+        javascript: BiomeEmbeddedProvider | None = None
+        css: BiomeEmbeddedProvider | None = None
         try:
-            javascript = (
-                BiomeEmbeddedProvider.from_spec(
-                    javascript_provider,
-                    language="javascript",
+            # A provider owns a locked executable copy, so every construction
+            # is registered for cleanup before another construction can fail.
+            with ExitStack() as providers:
+                javascript = (
+                    BiomeEmbeddedProvider.from_spec(
+                        javascript_provider,
+                        language="javascript",
+                    )
+                    if embedded != "off" and javascript_provider is not None
+                    else None
                 )
-                if embedded != "off" and javascript_provider is not None
-                else None
-            )
-            css = (
-                BiomeEmbeddedProvider.from_spec(css_provider, language="css")
-                if embedded != "off" and css_provider is not None
-                else None
-            )
-            report = format_paths(
-                paths,
-                mode=mode,
-                cwd=Path.cwd(),
-                embedded=embedded,
-                javascript_provider=javascript,
-                css_provider=css,
-            )
+                if javascript is not None:
+                    providers.callback(javascript.close)
+                css = (
+                    BiomeEmbeddedProvider.from_spec(css_provider, language="css")
+                    if embedded != "off" and css_provider is not None
+                    else None
+                )
+                if css is not None:
+                    providers.callback(css.close)
+                report = format_paths(
+                    paths,
+                    mode=mode,
+                    cwd=Path.cwd(),
+                    embedded=embedded,
+                    javascript_provider=javascript,
+                    css_provider=css,
+                )
         except (EmbeddedProviderConfigError, FormatUsageError) as error:
             _usage_error(str(error))
         if verbose:

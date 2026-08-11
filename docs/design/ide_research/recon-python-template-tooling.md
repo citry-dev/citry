@@ -24,8 +24,7 @@ Related repo context, read before this sweep:
   from the Rust parser (`docs/design/extensions_roadmap.md:110`).
 - The migration review carried over django-components' own language-server
   wish, noting citry's variable tracking in the AST already supports it
-  (`docs/design/migration_djc.md:148`,
-  `TODO/project_status_june_2026.md:532`).
+  (`docs/design/migration_djc.md:148`).
 
 ---
 

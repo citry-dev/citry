@@ -1,0 +1,24 @@
+{
+  "id": "citry-language-server",
+  "name": "Citry Language Server",
+  "url": "https://citry.dev/ide/pycharm/",
+  "programArgs": {
+    "windows": "$PROJECT_DIR$/.venv/Scripts/citry-lsp.exe",
+    "default": "$PROJECT_DIR$/.venv/bin/citry-lsp"
+  },
+  "workingDir": "$PROJECT_DIR$",
+  "languageMappings": [
+    {
+      "language": "Python",
+      "languageId": "python"
+    }
+  ],
+  "fileTypeMappings": [
+    {
+      "fileType": {
+        "patterns": ["*.citry-html"]
+      },
+      "languageId": "citry-html"
+    }
+  ]
+}

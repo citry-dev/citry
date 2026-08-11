@@ -32,12 +32,12 @@ instance (see ``Citry._tag_rules``).
 
 from __future__ import annotations
 
-import inspect
 import sys
 import types
 import typing
 from typing import TYPE_CHECKING, Any, get_args, get_origin, get_type_hints
 
+from citry._annotation_introspection import _own_annotations
 from citry.slots import SlotInput
 from citry.util.misc import get_fields
 from citry_core.template_parser import TagRules
@@ -134,7 +134,7 @@ def _resolved_schema_annotations(comp_cls: type[Component], schema_cls: type) ->
         if candidate is object:
             continue
         try:
-            candidate_annotations = inspect.get_annotations(candidate, eval_str=False)
+            candidate_annotations = _own_annotations(candidate)
         except (NameError, TypeError, ValueError):
             candidate_annotations = candidate.__dict__.get("__annotations__", {})
         if isinstance(candidate_annotations, dict):
@@ -214,7 +214,7 @@ def _data_shape_field_names(data_shape: object | None) -> list[str] | None:
         if candidate is object:
             continue
         try:
-            candidate_annotations = inspect.get_annotations(candidate, eval_str=False)
+            candidate_annotations = _own_annotations(candidate)
         except (NameError, TypeError, ValueError):
             candidate_annotations = candidate.__dict__.get("__annotations__", {})
         if not isinstance(candidate_annotations, dict):

@@ -11,7 +11,7 @@ source modules elsewhere in the repository.
 
 ## How a run reaches the preview
 
-1. `playground.js` or `live_code_runtime.js` reads the editor and asks
+1. `playground.js` or `live_code_runtime.js` reads source and asks
    `worker_session.js` to run it.
 2. `worker.js` loads `runtime.json`, Pyodide, the pinned wheels, and
    `executor.py`. The pinned Citry wheel supplies its matching Events client.
@@ -53,6 +53,7 @@ beside the error.
 | `playground.js` | Generated bundle for the full-page playground. | [`../../_internal/frontend/src/playground.js`](../../_internal/frontend/src/playground.js) and its imports. |
 | `live_code.js` | Generated lightweight activator loaded on pages that contain live examples. | [`../../_internal/frontend/src/live_code.js`](../../_internal/frontend/src/live_code.js). |
 | `live_code_runtime.js` | Generated deferred bundle containing the inline editor and runtime. | [`../../_internal/frontend/src/live_code_runtime.js`](../../_internal/frontend/src/live_code_runtime.js) and its imports. |
+| `landing_composer.js` | Generated landing-only component collection and sample-board controller. | [`../../_internal/frontend/src/landing_composer.js`](../../_internal/frontend/src/landing_composer.js). |
 
 The shared authored JavaScript modules live in
 [`../../_internal/frontend/src/`](../../_internal/frontend/src/):
@@ -96,6 +97,13 @@ and adds it to the published Citry tuple in `runtime.json`. It serves that local
 wheel without changing this committed directory. Static builds, CI, and
 deployed docs use only the exact published versions in the committed
 `runtime.json`. The pinned Citry wheel owns the Events client in both cases.
+
+The workspace `citry-ui` usually requires a Citry that is newer than the pinned
+release, for the whole stretch between releases. The server then prints which
+pair it rejected and serves this committed runtime unchanged, so every page
+still renders and Citry UI examples show their code without a live preview.
+Pinning a Citry release that the workspace `citry-ui` accepts brings the local
+wheel back.
 
 ## Update the pinned Python runtime
 

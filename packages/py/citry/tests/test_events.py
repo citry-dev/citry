@@ -81,7 +81,7 @@ def _events_introspection_catalog(app, *, include_default_values=False):
 class TestRegistration:
     def test_events_is_a_builtin(self):
         app = _Citry()
-        assert [ext.name for ext in app.extensions._extensions] == ["cache", "dependencies", "events"]
+        assert [ext.name for ext in app.extensions._extensions] == ["cache", "dependencies", "events", "i18n"]
         assert isinstance(_events_ext(app), EventsExtension)
 
     def test_config_is_the_typed_base(self):

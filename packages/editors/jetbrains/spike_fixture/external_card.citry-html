@@ -1,0 +1,11 @@
+<article :class="{ expanded }">
+  <h2>{{ title.capitalize() }}</h2>
+  <button @c-click="toggle">Toggle</button>
+  <ul>
+    <c-for each="item in items">
+      <li>{{ item.upper() }}</li>
+    </c-for>
+  </ul>
+  <c-Frame c-body="<><strong c-title='title'>{{ title }}</strong></>" />
+  <c-element is="input" c-value="title.lower()" />
+</article>

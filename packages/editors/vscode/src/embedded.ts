@@ -18,6 +18,7 @@ interface StringSpan extends SourceSpan {
 }
 
 const assignmentPattern = /^[\t ]*(template|js|css)[\t ]*(?::[^=\r\n]+?)?[\t ]*=[\t ]*("""|''')/gm;
+const templateLiteralAssignmentPattern = /^[\t ]*template[\t ]*(?::[^=\r\n]+?)?[\t ]*=[\t ]*[rRuU]?("""|'''|"|')/gm;
 
 const languageByAttribute: Readonly<Record<string, EmbeddedLanguage>> = {
 	template: "html",
@@ -58,17 +59,80 @@ export function embeddedLanguageAt(source: string, languageId: string, offset: n
 	return pythonEmbeddedRegions(source).find((region) => region.start <= offset && offset <= region.end)?.language;
 }
 
+export function pythonTemplatePrefixAt(source: string, offset: number): string | undefined {
+	if (offset < 0 || offset > source.length) {
+		return undefined;
+	}
+	const { excluded, strings } = scanPython(source);
+	for (const match of source.matchAll(templateLiteralAssignmentPattern)) {
+		const delimiter = match[1];
+		if (
+			match.index === undefined ||
+			(delimiter !== '"""' && delimiter !== "'''" && delimiter !== '"' && delimiter !== "'") ||
+			spanContaining(excluded, match.index) !== undefined
+		) {
+			continue;
+		}
+		const quoteStart = match.index + match[0].lastIndexOf(delimiter);
+		const string = strings.find((span) => span.start === quoteStart && span.delimiter === delimiter);
+		if (string !== undefined && string.bodyStart <= offset && offset <= string.bodyEnd) {
+			return source.slice(string.bodyStart, offset);
+		}
+	}
+	return undefined;
+}
+
 export function virtualDocumentSource(source: string, languageId: string, language: EmbeddedLanguage): string {
 	if (languageId === "citry-html" && language === "html") {
 		return source;
 	}
+	if (languageId !== "python") {
+		return source
+			.split("")
+			.map((character) => (character === "\n" || character === "\r" ? character : " "))
+			.join("");
+	}
+	return virtualDocumentSourceFromRegions(source, language, pythonEmbeddedRegions(source));
+}
+
+/** Build one virtual language view after proving the cursor's region once. */
+export function virtualDocumentSourceAt(
+	source: string,
+	languageId: string,
+	language: EmbeddedLanguage,
+	offset: number,
+): string | undefined {
+	const view = embeddedVirtualDocumentAt(source, languageId, offset);
+	return view?.language === language ? view.source : undefined;
+}
+
+export function embeddedVirtualDocumentAt(
+	source: string,
+	languageId: string,
+	offset: number,
+): { language: EmbeddedLanguage; source: string } | undefined {
+	if (languageId === "citry-html") {
+		return offset >= 0 && offset <= source.length ? { language: "html", source } : undefined;
+	}
+	if (languageId !== "python") {
+		return undefined;
+	}
+	const regions = pythonEmbeddedRegions(source);
+	const region = regions.find((candidate) => candidate.start <= offset && offset <= candidate.end);
+	return region === undefined
+		? undefined
+		: { language: region.language, source: virtualDocumentSourceFromRegions(source, region.language, regions) };
+}
+
+function virtualDocumentSourceFromRegions(
+	source: string,
+	language: EmbeddedLanguage,
+	regions: readonly EmbeddedRegion[],
+): string {
 	const masked: string[] = source
 		.split("")
 		.map((character) => (character === "\n" || character === "\r" ? character : " "));
-	if (languageId !== "python") {
-		return masked.join("");
-	}
-	for (const region of pythonEmbeddedRegions(source)) {
+	for (const region of regions) {
 		if (region.language !== language) {
 			continue;
 		}

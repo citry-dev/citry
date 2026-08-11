@@ -6,11 +6,11 @@ styled Phase 7 implementations targeting Vuetify-level configuration and
 browser behavior through native Citry APIs. The package remains pre-release
 while its repository and human qualification records are completed.
 
-The package develops against the released `citry>=0.3.1,<0.4.0` line,
-which contains `LibraryComponent`, `ComponentLibrary`, typed slot data, and
-the server and client context contracts used here, including the corrected
-Events browser asset. The current package remains experimental because its
-APIs and visual design have not completed release review.
+The package develops against the `citry>=0.3.2,<0.4.0` source line and
+`citry_core 1.5.0`. Those releases contain the framework contracts used by the
+current workspace but are not yet available as the released-artifact floor.
+The current package remains experimental because its dependency artifacts,
+APIs, and visual design have not completed release review.
 
 Application setup installs the package's explicit manifest into one Citry
 instance:
@@ -33,6 +33,19 @@ class Page(Component):
       </main>
     """
 ```
+
+For editor completion and diagnostics without a host application, point the
+Citry VS Code setting directly at the same manifest:
+
+```json
+{
+  "citry.app": "citry_ui:__citry_library__"
+}
+```
+
+This library-only editor registry includes Citry's built-ins and the Citry UI
+catalog. A configured application instance remains the right target when
+editing templates that also use application components or configuration.
 
 The public catalog ships styled components. Headless counterparts remain
 parked until applications provide concrete authoring requirements and

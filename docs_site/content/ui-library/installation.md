@@ -25,6 +25,19 @@ app.register_library(citry_ui)
 Registration makes tags such as [`<c-CButton>`](/ui-library/components/button/) and [`<c-CTabs>`](/ui-library/components/tabs/) available to
 components owned by that `Citry` instance.
 
+While working on Citry UI templates without a host application, select the
+library manifest directly in VS Code:
+
+```json
+{
+  "citry.app": "citry_ui:__citry_library__"
+}
+```
+
+The editor then reads the Citry UI component names, inputs, slots, and template
+data from the manifest. Select the application's configured `Citry` instance
+when its own components or configuration are also needed.
+
 ## Use a component in a template
 
 After the library is installed, you can reference the components in the template:

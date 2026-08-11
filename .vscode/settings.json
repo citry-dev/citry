@@ -4,6 +4,11 @@
     // NOTE: `ruff` was especially slow.
     "third_party/**"
   ],
+  // Keep Citry template literals from being changed into f-strings when `{` is typed.
+  "python.analysis.autoFormatStrings": false,
   // "citry.python": "/Users/mac/repos/citry/.venv/bin/python",
-  "citry.app": "citry_ui_ide:app"
+  // "citry.app": "citry_ui:__citry_library__"
+  "citry.app": "app:app",
+  "citry.trace.performance": true
+
 }

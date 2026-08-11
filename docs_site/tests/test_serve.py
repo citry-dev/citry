@@ -8,12 +8,15 @@ import re
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
+from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
+from docs_site._internal import serve
 from docs_site._internal.config import DocsConfig
 from docs_site._internal.config import config as default_config
 from docs_site._internal.local_playground_runtime import (
     LocalPlaygroundRuntime,
+    LocalPlaygroundRuntimeError,
     load_local_playground_runtime,
 )
 from docs_site._internal.serve import create_app
@@ -281,6 +284,71 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
     assert runtime_response.headers["cache-control"] == "no-store"
     assert wheel_response.headers["cache-control"] == "no-store"
     assert missing_wheel_response.status_code == 404
+
+
+def _record_create_app(monkeypatch) -> list[LocalPlaygroundRuntime | None]:
+    """Replace the app factory so the local-runtime tests never load the real docs project."""
+    seen: list[LocalPlaygroundRuntime | None] = []
+
+    def fake_create_app(*, local_playground_runtime: LocalPlaygroundRuntime | None = None) -> Starlette:
+        seen.append(local_playground_runtime)
+        return Starlette()
+
+    monkeypatch.setattr(serve, "create_app", fake_create_app)
+    return seen
+
+
+def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch) -> None:
+    built: list[Path] = []
+
+    def fake_build(*, repo_root: Path, output_dir: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
+        built.append(output_dir)
+        return LocalPlaygroundRuntime(
+            directory=output_dir,
+            manifest_path=output_dir / "runtime.json",
+            wheel_names=frozenset({"citry_ui-0.0.1-py3-none-any.whl"}),
+        )
+
+    monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
+    seen = _record_create_app(monkeypatch)
+
+    app = serve.create_local_app()
+
+    assert seen == [
+        LocalPlaygroundRuntime(
+            directory=built[0],
+            manifest_path=built[0] / "runtime.json",
+            wheel_names=frozenset({"citry_ui-0.0.1-py3-none-any.whl"}),
+        )
+    ]
+    # The wheels are served from this directory for as long as the app lives.
+    owner = app.state.local_playground_runtime_owner
+    assert owner.name == str(built[0])
+    assert built[0].is_dir()
+    owner.cleanup()
+
+
+def test_create_local_app_serves_the_committed_runtime_when_the_local_wheel_is_rejected(monkeypatch, capsys) -> None:
+    # The workspace Citry UI regularly needs an unreleased Citry, and the dev
+    # server has to keep serving every other page while that is true.
+    attempted: list[Path] = []
+
+    def fake_build(*, repo_root: Path, output_dir: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
+        attempted.append(output_dir)
+        raise LocalPlaygroundRuntimeError("local Citry UI 0.0.1 does not accept the playground's Citry 0.3.1")
+
+    monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
+    seen = _record_create_app(monkeypatch)
+
+    app = serve.create_local_app()
+
+    assert seen == [None]
+    assert not hasattr(app.state, "local_playground_runtime_owner")
+    # Nothing owns the half-built wheel directory now, so it must be gone.
+    assert not attempted[0].exists()
+    printed = capsys.readouterr().out
+    assert "does not accept the playground's Citry 0.3.1" in printed
+    assert "committed playground runtime" in printed
 
 
 def test_serve_404_for_unknown_page(tmp_path: Path) -> None:

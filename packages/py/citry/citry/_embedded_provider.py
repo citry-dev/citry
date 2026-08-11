@@ -97,6 +97,14 @@ class BiomeEmbeddedProvider:
         """Return the provider version and its per-target option policy."""
         return f"biome@{self.version}+effective-options:per-target"
 
+    def close(self) -> None:
+        """Release the secured executable and remove its private directory."""
+        # Windows keeps executable files locked through open handles, so close
+        # the stream before asking TemporaryDirectory to remove its contents.
+        with self._execution_lock:
+            self._private_executable_stream.close()
+            self._private_executable_owner.cleanup()
+
     @classmethod
     def from_spec(
         cls,
@@ -235,6 +243,9 @@ class BiomeEmbeddedProvider:
                     invocation._private_config_owner.cleanup()
 
     def _validate_executable(self) -> None:
+        if self._private_executable_stream.closed:
+            msg = f"{self.language} provider is closed"
+            raise EmbeddedProviderUnavailableError(msg)
         current, digest, _data = _read_executable(
             self.executable,
             language=self.language,

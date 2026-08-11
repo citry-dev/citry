@@ -15,6 +15,26 @@ server model, which applies while Citry renders HTML. The browser version uses
 the same nearest-provider idea after that HTML reaches the page, but it holds
 separate JavaScript values.
 
+## Provide a value at the render root
+
+Pass a mapping to `render()` when the value belongs to the whole tree:
+
+```python
+rendered = Page().render(
+    provides={"request": request},
+)
+```
+
+The root and its rendered descendants may inject that exact value. Citry copies
+the mapping before rendering and validates every key. A key must be a non-empty
+Python identifier.
+
+Each direct `render()` call starts a new root. If `template_data()` directly
+renders another component, that nested call must pass any required values
+again. Citry does not take them from the function's current render. The nested
+call's injected values therefore depend on that call, not on the outer tree's
+provided values.
+
 ## Provide a value to server-rendered descendants
 
 [`<c-provide>`](/reference/builtins/#c-provide) wraps the part of the render
@@ -119,7 +139,16 @@ class AccountPage(Component):
 ```
 
 The key argument is positional-only, so `key` may also be one of the provided
-field names.
+field names. Pass one positional value when you already have the complete
+object:
+
+```python
+self.provide("citry_i18n", locale_context)
+```
+
+The descendant receives that exact object. Pass keyword fields when Citry
+should build the immutable attribute payload shown in the account example. A
+call cannot mix a direct value with keyword fields.
 
 ## Follow the rendered path
 
@@ -234,9 +263,9 @@ Alpine expressions use [`$provide`][$provide], [`$inject`][$inject], and
 </section>
 ```
 
-The nearest-provider and outgoing-only rules match the server model. The value
-shape is different: JavaScript provides one value rather than a set of keyword
-fields, and `inject()` returns that exact value.
+The nearest-provider and outgoing-only rules match the server model. JavaScript
+uses only the direct-value form. The server also offers keyword fields as a
+convenient way to build one immutable payload.
 
 Establish or remove client providers during synchronous initialization. When
 the shared data must change later, provide one stable `reactive()` object and

@@ -1,16 +1,20 @@
 # Component taxonomy and staged breadth
 
-**Snapshot:** 2026-07-23. **Status:** complete; independent synthesis gate
-passed 2026-07-23. This report turns the approved Phase 4 corpus into a
-normalized catalog and prototype-selection rubric. It does not choose a
-Python API, provider syntax, visual language, or implementation architecture.
+**Snapshot:** 2026-07-23. **Status:** complete Phase 5 evidence snapshot;
+independent synthesis gate passed 2026-07-23. Current staging and family
+status live in the
+[active component inventory](../ui_component_inventory.md). This report turns
+the approved Phase 4 corpus into a normalized catalog and prototype-selection
+rubric. It does not choose a Python API, provider syntax, visual language, or
+implementation architecture.
 
-The controlling product constraints remain the
-[product charter](product-charter.md): `citry-ui` is a separate distribution
-installed directly with `uv add citry-ui`; it provides a useful styled default
-and a supported headless counterpart over shared behavior; it is server-first,
-uses Citry's client runtime, and requires no consumer Node build, CDN, or
-network download. Localization remains follow-up work.
+This snapshot evaluated the
+[product charter](product-charter.md) as ratified on 2026-07-23: `citry-ui` is
+a separate distribution installed directly with `uv add citry-ui`; it
+provides a useful styled default and a supported headless counterpart over
+shared behavior; it is server-first, uses Citry's client runtime, and requires
+no consumer Node build, CDN, or network download. The active plan owns later
+product decisions. Localization remains follow-up work.
 
 ## 1. Method and evidence boundary
 

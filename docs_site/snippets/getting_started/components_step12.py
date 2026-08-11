@@ -21,17 +21,13 @@ class Confirmation(Component):
       <section class="confirmation">
         <strong>Request received</strong>
         <p>We will write to {{ email }}.</p>
-        <p class="confirmation__status">
+        <p
+          class="confirmation__status"
+          x-text="'Confirmation ready for ' + email"
+        >
           Preparing confirmation...
         </p>
       </section>
-    """
-
-    js = """
-      $component(({ els, data }) => {
-        els[0].querySelector(".confirmation__status").textContent =
-          `Confirmation ready for ${data.email}`;
-      });
     """
 
     css = """

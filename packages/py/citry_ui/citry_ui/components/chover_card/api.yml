@@ -1,0 +1,134 @@
+schema_version: 1
+family: hover-card
+
+components:
+  - CHoverCard
+
+inputs:
+  - id: chover-card-server-inputs
+    component: CHoverCard
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets private surface identity and exposes it as slot data.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible initial state and uncontrolled fallback.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Suppresses visual opening without changing the activator itself.}
+      - {id: delay, name: delay, type: int, default: {kind: literal, value: 600}, effect: Sets the first fine-pointer hover delay in milliseconds from 0 through 60000. Focus remains immediate.}
+      - {id: close-delay, name: close_delay, type: int, default: {kind: literal, value: 300}, effect: Sets the pointer bridge delay in milliseconds from 0 through 60000.}
+      - id: placement
+        name: placement
+        type: {display: '"top-start" | "top" | "top-end" | "bottom-start" | "bottom" | "bottom-end"', interfaces: [CHoverCardPlacement]}
+        default: {kind: literal, value: bottom-start}
+        effect: Sets the preferred logical placement. Collision fallback may choose another rendered side.
+      - {id: arrow, name: arrow, type: bool, default: {kind: literal, value: true}, effect: Shows the owned decorative pointer arrow.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CHoverCardSize]}, default: {kind: literal, value: md}, effect: Selects preview width padding and text scale.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds surface classes and merges them with `attrs`.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds surface inline styles and merges them with `attrs`; Citry retains anchor ownership.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, Alpine, and data attributes to the HoverCard surface. Owned presence, semantics, focus, and relationships are rejected.'}
+
+  - id: chover-card-client-inputs
+    component: CHoverCard
+    channel: client
+    column_widths: [fit, 13rem, 12rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control and preserves the current committed state. `null` has the same effect., effect: Controls visual visibility while supplied as a Boolean. Disabled still dominates.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls HoverCard-local availability.}
+      - {id: delay, name: delay, type: integer, omitted: Uses the server input., effect: Controls future first-hover delay from 0 through 60000 milliseconds.}
+      - {id: close-delay, name: closeDelay, type: integer, omitted: Uses the server input., effect: Controls the pointer bridge from 0 through 60000 milliseconds.}
+      - id: placement
+        name: placement
+        type: {display: '"top-start" | "top" | "top-end" | "bottom-start" | "bottom" | "bottom-end"', interfaces: [CHoverCardPlacement]}
+        omitted: Uses the server input.
+        effect: Controls requested placement and `data-placement`.
+      - {id: arrow, name: arrow, type: boolean, omitted: Uses the server input., effect: Reactively shows or hides the decorative arrow.}
+      - {id: size, name: size, type: CHoverCardSize, omitted: Uses the server input., effect: Reactively changes card geometry.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a component callback., effect: "Receives hover, focus, dismissal, peer, press, and external-native visibility requests."}
+
+slots:
+  - id: chover-card-slots
+    component: CHoverCard
+    entries:
+      - id: activator
+        name: activator
+        required: true
+        data: {display: '{activator_attrs: dict[str, object], hover_card_id: str}', interfaces: [CHoverCardActivatorSlotData]}
+        fallback: none
+      - id: default
+        name: default
+        required: true
+        data: {display: '{}', interfaces: [CHoverCardDefaultSlotData]}
+        fallback: none
+
+events:
+  - id: chover-card-events
+    component: CHoverCard
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(requestedOpen: boolean, detail: CHoverCardOpenChangeDetail) => void', interfaces: [CHoverCardOpenChangeDetail]}
+        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer HoverCard, or external native visibility requests another state.
+        detail: {display: '{reason: "hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal", controlled: boolean, forced: boolean, source: EventTarget | null}', interfaces: [CHoverCardOpenChangeDetail]}
+        behavior: Uncontrolled requests commit before notification. Controlled requests wait for the owner. Owner commits do not notify.
+
+methods: []
+
+css:
+  - id: chover-card-css-variables
+    component: CHoverCard
+    entries:
+      - {id: cui-hover-card-background, name: --cui-hover-card-background, type: color, purpose: Surface background., default: Canvas}
+      - {id: cui-hover-card-foreground, name: --cui-hover-card-foreground, type: color, purpose: Surface text., default: CanvasText}
+      - {id: cui-hover-card-border-color, name: --cui-hover-card-border-color, type: color, purpose: Surface boundary., default: Subtle currentColor mix.}
+      - {id: cui-hover-card-radius, name: --cui-hover-card-radius, type: length, purpose: Surface corner radius., default: 0.75rem}
+      - {id: cui-hover-card-shadow, name: --cui-hover-card-shadow, type: shadow, purpose: Top-layer elevation., default: Scheme-aware layered shadow.}
+      - {id: cui-hover-card-inline-size, name: --cui-hover-card-inline-size, type: length, purpose: Preferred preview width., default: Size-derived.}
+      - {id: cui-hover-card-max-inline-size, name: --cui-hover-card-max-inline-size, type: length, purpose: Maximum preview width., default: 22rem}
+      - {id: cui-hover-card-padding, name: --cui-hover-card-padding, type: length, purpose: Content padding., default: Size-derived.}
+      - {id: cui-hover-card-offset, name: --cui-hover-card-offset, type: length, purpose: Gap between activator and surface., default: 0.375rem}
+      - {id: cui-hover-card-duration, name: --cui-hover-card-duration, type: time, purpose: Entry and exit duration; reduced motion resolves to zero., default: 100ms}
+      - {id: cui-hover-card-easing, name: --cui-hover-card-easing, type: easing, purpose: Entry and exit easing., default: 'cubic-bezier(0.2, 0.8, 0.2, 1)'}
+
+attributes:
+  - id: chover-card-attributes
+    component: CHoverCard
+    entries:
+      - {id: popover, name: popover, element: Surface, type: '"manual"', meaning: Uses native top-layer presence while Citry owns timing and dismissal.}
+      - {id: aria-hidden, name: aria-hidden, element: Surface, type: '"true"', meaning: Keeps supplementary visual content outside the accessibility tree.}
+      - {id: data-open, name: data-open, element: Surface, type: present | absent, meaning: Mirrors logical visual visibility; absent during exit.}
+      - {id: data-placement, name: data-placement, element: Surface, type: {display: six placement strings, interfaces: [CHoverCardPlacement]}, meaning: 'Mirrors requested placement, not the collision fallback result.'}
+      - {id: data-side, name: data-side, element: Surface, type: '"top" | "bottom"', meaning: Mirrors the collision-settled physical block side.}
+      - {id: data-size, name: data-size, element: Surface, type: CHoverCardSize, meaning: Reflects preview geometry.}
+      - {id: data-arrow, name: data-arrow, element: Surface, type: present | absent, meaning: Reflects decorative arrow visibility.}
+
+selectors:
+  - id: chover-card-selectors
+    component: CHoverCard
+    entries:
+      - {id: host, selector: '[data-citry-ui-part="host"]', element: Host div, purpose: Activator and surface ownership boundary.}
+      - {id: hover-card, selector: '[data-citry-ui-part="hover-card"]', element: Surface, purpose: Visual surface and attrs destination.}
+      - {id: content, selector: '[data-citry-ui-part="content"]', element: Content div, purpose: Supplementary flow content wrapper.}
+      - {id: arrow, selector: '[data-citry-ui-part="arrow"]', element: Decorative span, purpose: Collision-side pointer mark.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-chover-card-placement, name: CHoverCardPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]'}
+      - {id: input-type-aliases-chover-card-size, name: CHoverCardSize, definition: 'Literal["sm", "md", "lg"]'}
+  - id: chover-card-activator-slot-data
+    kind: record
+    name: CHoverCardActivatorSlotData
+    entries:
+      - {id: activator-attrs, name: activator_attrs, type: 'dict[str, object]', meaning: Owned trigger marker and CSS anchor style.}
+      - {id: hover-card-id, name: hover_card_id, type: str, meaning: Generated or authored surface identity.}
+  - {id: chover-card-default-slot-data, kind: record, name: CHoverCardDefaultSlotData, entries: []}
+  - id: chover-card-open-change-detail
+    kind: record
+    name: CHoverCardOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: '"hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal"', meaning: Source of the requested visibility change.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client `open` Boolean currently owns state.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether structural or modal safety required the component to close regardless of controlled ownership.}
+      - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source associated with the request.}

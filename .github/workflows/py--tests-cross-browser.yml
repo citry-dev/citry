@@ -34,7 +34,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -74,6 +74,9 @@ jobs:
           packages/py/citry_ui/citry_ui/quality/tests/e2e
           -m e2e
           --browser ${{ matrix.browser }}
+          -n 4
+          --dist loadfile
+          --durations 30
 
       - name: Capture Citry UI visual candidates
         if: matrix.browser == 'chromium'

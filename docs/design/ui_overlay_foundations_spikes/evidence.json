@@ -1,0 +1,808 @@
+{
+  "browsers": {
+    "chromium": {
+      "probes": {
+        "controlledLayerAndPresence": {
+          "cleanup": {
+            "activeAnimations": 0,
+            "open": 0,
+            "stack": 0
+          },
+          "declinedControlledClose": {
+            "innerInert": false,
+            "innerOpen": true,
+            "outerOpen": true,
+            "stack": [
+              "outer",
+              "inner"
+            ]
+          },
+          "log": [
+            "open:outer",
+            "open:inner",
+            "request:inner:escape",
+            "decline:inner",
+            "request:inner:escape",
+            "request:outer:escape",
+            "settled:inner",
+            "settled:outer",
+            "open:outer",
+            "request:outer:escape",
+            "open:outer",
+            "dispose"
+          ],
+          "ownershipReleasedDuringExit": {
+            "activeAnimations": 2,
+            "innerInert": true,
+            "innerOpen": true,
+            "outerInert": true,
+            "outerOpen": true,
+            "stack": []
+          },
+          "rapidReopen": {
+            "activeAnimations": 0,
+            "inert": false,
+            "open": true,
+            "stack": [
+              "outer"
+            ]
+          },
+          "settled": {
+            "activeAnimations": 0,
+            "innerOpen": false,
+            "outerOpen": false,
+            "stack": []
+          }
+        },
+        "drawerBoundary": {
+          "firstEscape": {
+            "dialog": true,
+            "popover": false
+          },
+          "modalTaskDrawer": {
+            "dialogModal": true,
+            "dialogOpen": true,
+            "focusContained": true,
+            "nestedPopoverInsideViewport": true,
+            "nestedPopoverOpen": true,
+            "sideGeometry": {
+              "heightDelta": 0,
+              "right": 0,
+              "top": 0
+            }
+          },
+          "persistentLayout": {
+            "mainFocusable": true,
+            "mainInert": false,
+            "persistentInTopLayer": false
+          },
+          "secondEscape": {
+            "dialog": false,
+            "popover": false
+          }
+        },
+        "layeringAndDismissal": {
+          "dialogFirstEscape": {
+            "dialog": true,
+            "popover": false
+          },
+          "dialogOpen": {
+            "dialog": true,
+            "popover": true
+          },
+          "dialogSecondEscape": {
+            "dialog": false,
+            "popover": false
+          },
+          "firstEscape": {
+            "inner": false,
+            "outer": true
+          },
+          "manualAfterEscape": true,
+          "manualAfterOutside": true,
+          "nestedOpen": {
+            "inner": true,
+            "outer": true
+          },
+          "secondEscape": {
+            "inner": false,
+            "outer": false
+          },
+          "toggleEvents": {
+            "closingBeforeToggleCancelable": false,
+            "count": 13,
+            "openingBeforeToggleCancelable": true
+          }
+        },
+        "physicalContext": {
+          "citryTeleportContract": "Lexical Citry/Alpine context follows the authored x-teleport origin; CSS inheritance, native containment, currentTarget, and bubbling follow the physical placement.",
+          "eventsAfterMove": [
+            "native-trigger",
+            "native"
+          ],
+          "nativeEvents": [
+            "native-trigger",
+            "native"
+          ],
+          "nativeTopLayer": {
+            "closestProvider": "provider",
+            "color": "rgb(77, 42, 130)",
+            "parent": "provider"
+          },
+          "physicallyMoved": {
+            "closestProvider": null,
+            "color": "rgb(1, 2, 3)",
+            "parent": "portal"
+          }
+        },
+        "platformAndPositioning": {
+          "edge": {
+            "anchor": {
+              "bottom": 716,
+              "top": 695
+            },
+            "flippedAbove": true,
+            "insideViewport": true,
+            "surface": {
+              "bottom": 695,
+              "top": 655
+            }
+          },
+          "ordinary": {
+            "anchor": {
+              "bottom": 104,
+              "height": 21,
+              "width": 148,
+              "x": 69,
+              "y": 83
+            },
+            "blockEndPlaced": true,
+            "clip": {
+              "bottom": 114,
+              "height": 74,
+              "width": 222,
+              "x": 48,
+              "y": 40
+            },
+            "escapedClip": true,
+            "hitOutsideClip": true,
+            "inheritedColor": "rgb(18, 92, 132)",
+            "open": true,
+            "parentPreserved": true,
+            "surface": {
+              "bottom": 144,
+              "height": 40,
+              "width": 148,
+              "x": 69,
+              "y": 104
+            },
+            "widthMatches": true
+          },
+          "support": {
+            "anchorName": true,
+            "anchorSize": true,
+            "flipBlock": true,
+            "hintPopover": true,
+            "popover": true,
+            "positionAnchor": true,
+            "positionArea": true,
+            "positionVisibility": true
+          }
+        },
+        "presence": {
+          "immediateAfterHide": {
+            "display": "block",
+            "height": 32,
+            "opacity": "1",
+            "open": false
+          },
+          "middleOfExit": {
+            "display": "block",
+            "height": 32,
+            "opacity": "0.479313",
+            "open": false
+          },
+          "ownershipAfterImmediateEscape": {
+            "child": false,
+            "parent": false
+          },
+          "settled": {
+            "display": "none",
+            "height": 0,
+            "opacity": "0",
+            "open": false
+          },
+          "support": {
+            "allowDiscrete": true,
+            "overlay": true,
+            "startingStyle": true
+          }
+        },
+        "runtimeHealth": {
+          "consoleErrors": [],
+          "pageErrors": []
+        },
+        "toastHost": {
+          "afterEscape": {
+            "manualOpen": true,
+            "modalOpen": false
+          },
+          "focusHandoff": {
+            "focusedToast": "one",
+            "hostStillConnected": true
+          },
+          "log": [
+            "show:one",
+            "show:one",
+            "show:two",
+            "pause:one",
+            "remove:two",
+            "resume:one",
+            "pause:one",
+            "resume:one",
+            "pause:one"
+          ],
+          "manualPopoverShownAfterModal": {
+            "manualOpen": true,
+            "manualPaintedAboveModal": false,
+            "modalOpen": true
+          },
+          "manualPopoverShownBeforeModal": {
+            "manualOpen": true,
+            "manualPaintedAboveModal": false,
+            "modalOpen": true
+          },
+          "pause": {
+            "onePresent": true,
+            "twoPresent": false
+          },
+          "persistentHost": {
+            "count": 2,
+            "firstText": "Updated",
+            "liveHostIdentity": true,
+            "producerIndependent": true
+          }
+        }
+      },
+      "version": "151.0.7922.34"
+    },
+    "firefox": {
+      "probes": {
+        "controlledLayerAndPresence": {
+          "cleanup": {
+            "activeAnimations": 0,
+            "open": 0,
+            "stack": 0
+          },
+          "declinedControlledClose": {
+            "innerInert": false,
+            "innerOpen": true,
+            "outerOpen": true,
+            "stack": [
+              "outer",
+              "inner"
+            ]
+          },
+          "log": [
+            "open:outer",
+            "open:inner",
+            "request:inner:escape",
+            "decline:inner",
+            "request:inner:escape",
+            "request:outer:escape",
+            "settled:inner",
+            "settled:outer",
+            "open:outer",
+            "request:outer:escape",
+            "open:outer",
+            "dispose"
+          ],
+          "ownershipReleasedDuringExit": {
+            "activeAnimations": 2,
+            "innerInert": true,
+            "innerOpen": true,
+            "outerInert": true,
+            "outerOpen": true,
+            "stack": []
+          },
+          "rapidReopen": {
+            "activeAnimations": 0,
+            "inert": false,
+            "open": true,
+            "stack": [
+              "outer"
+            ]
+          },
+          "settled": {
+            "activeAnimations": 0,
+            "innerOpen": false,
+            "outerOpen": false,
+            "stack": []
+          }
+        },
+        "drawerBoundary": {
+          "firstEscape": {
+            "dialog": true,
+            "popover": false
+          },
+          "modalTaskDrawer": {
+            "dialogModal": true,
+            "dialogOpen": true,
+            "focusContained": true,
+            "nestedPopoverInsideViewport": true,
+            "nestedPopoverOpen": true,
+            "sideGeometry": {
+              "heightDelta": 0,
+              "right": 0,
+              "top": 0
+            }
+          },
+          "persistentLayout": {
+            "mainFocusable": true,
+            "mainInert": false,
+            "persistentInTopLayer": false
+          },
+          "secondEscape": {
+            "dialog": false,
+            "popover": false
+          }
+        },
+        "layeringAndDismissal": {
+          "dialogFirstEscape": {
+            "dialog": true,
+            "popover": false
+          },
+          "dialogOpen": {
+            "dialog": true,
+            "popover": true
+          },
+          "dialogSecondEscape": {
+            "dialog": false,
+            "popover": false
+          },
+          "firstEscape": {
+            "inner": false,
+            "outer": true
+          },
+          "manualAfterEscape": true,
+          "manualAfterOutside": true,
+          "nestedOpen": {
+            "inner": true,
+            "outer": true
+          },
+          "secondEscape": {
+            "inner": false,
+            "outer": false
+          },
+          "toggleEvents": {
+            "closingBeforeToggleCancelable": false,
+            "count": 16,
+            "openingBeforeToggleCancelable": true
+          }
+        },
+        "physicalContext": {
+          "citryTeleportContract": "Lexical Citry/Alpine context follows the authored x-teleport origin; CSS inheritance, native containment, currentTarget, and bubbling follow the physical placement.",
+          "eventsAfterMove": [
+            "native-trigger",
+            "native"
+          ],
+          "nativeEvents": [
+            "native-trigger",
+            "native"
+          ],
+          "nativeTopLayer": {
+            "closestProvider": "provider",
+            "color": "rgb(77, 42, 130)",
+            "parent": "provider"
+          },
+          "physicallyMoved": {
+            "closestProvider": null,
+            "color": "rgb(1, 2, 3)",
+            "parent": "portal"
+          }
+        },
+        "platformAndPositioning": {
+          "edge": {
+            "anchor": {
+              "bottom": 716,
+              "top": 694
+            },
+            "flippedAbove": true,
+            "insideViewport": true,
+            "surface": {
+              "bottom": 694.0,
+              "top": 652.8
+            }
+          },
+          "ordinary": {
+            "anchor": {
+              "bottom": 105,
+              "height": 22,
+              "width": 148,
+              "x": 69,
+              "y": 83
+            },
+            "blockEndPlaced": true,
+            "clip": {
+              "bottom": 114,
+              "height": 74,
+              "width": 222,
+              "x": 48,
+              "y": 40
+            },
+            "escapedClip": true,
+            "hitOutsideClip": true,
+            "inheritedColor": "rgb(18, 92, 132)",
+            "open": true,
+            "parentPreserved": true,
+            "surface": {
+              "bottom": 146.2,
+              "height": 41.2,
+              "width": 148,
+              "x": 69,
+              "y": 105
+            },
+            "widthMatches": true
+          },
+          "support": {
+            "anchorName": true,
+            "anchorSize": true,
+            "flipBlock": true,
+            "hintPopover": true,
+            "popover": true,
+            "positionAnchor": true,
+            "positionArea": true,
+            "positionVisibility": true
+          }
+        },
+        "presence": {
+          "immediateAfterHide": {
+            "display": "none",
+            "height": 0,
+            "opacity": "0",
+            "open": false
+          },
+          "middleOfExit": {
+            "display": "none",
+            "height": 0,
+            "opacity": "0",
+            "open": false
+          },
+          "ownershipAfterImmediateEscape": {
+            "child": false,
+            "parent": false
+          },
+          "settled": {
+            "display": "none",
+            "height": 0,
+            "opacity": "0",
+            "open": false
+          },
+          "support": {
+            "allowDiscrete": true,
+            "overlay": false,
+            "startingStyle": true
+          }
+        },
+        "runtimeHealth": {
+          "consoleErrors": [],
+          "pageErrors": []
+        },
+        "toastHost": {
+          "afterEscape": {
+            "manualOpen": true,
+            "modalOpen": false
+          },
+          "focusHandoff": {
+            "focusedToast": "one",
+            "hostStillConnected": true
+          },
+          "log": [
+            "show:one",
+            "show:one",
+            "show:two",
+            "pause:one",
+            "remove:two",
+            "resume:one",
+            "pause:one",
+            "resume:one",
+            "pause:one"
+          ],
+          "manualPopoverShownAfterModal": {
+            "manualOpen": true,
+            "manualPaintedAboveModal": false,
+            "modalOpen": true
+          },
+          "manualPopoverShownBeforeModal": {
+            "manualOpen": true,
+            "manualPaintedAboveModal": false,
+            "modalOpen": true
+          },
+          "pause": {
+            "onePresent": true,
+            "twoPresent": false
+          },
+          "persistentHost": {
+            "count": 2,
+            "firstText": "Updated",
+            "liveHostIdentity": true,
+            "producerIndependent": true
+          }
+        }
+      },
+      "version": "153.0"
+    },
+    "webkit": {
+      "probes": {
+        "controlledLayerAndPresence": {
+          "cleanup": {
+            "activeAnimations": 0,
+            "open": 0,
+            "stack": 0
+          },
+          "declinedControlledClose": {
+            "innerInert": false,
+            "innerOpen": true,
+            "outerOpen": true,
+            "stack": [
+              "outer",
+              "inner"
+            ]
+          },
+          "log": [
+            "open:outer",
+            "open:inner",
+            "request:inner:escape",
+            "decline:inner",
+            "request:inner:escape",
+            "request:outer:escape",
+            "settled:inner",
+            "settled:outer",
+            "open:outer",
+            "request:outer:escape",
+            "open:outer",
+            "dispose"
+          ],
+          "ownershipReleasedDuringExit": {
+            "activeAnimations": 2,
+            "innerInert": true,
+            "innerOpen": true,
+            "outerInert": true,
+            "outerOpen": true,
+            "stack": []
+          },
+          "rapidReopen": {
+            "activeAnimations": 0,
+            "inert": false,
+            "open": true,
+            "stack": [
+              "outer"
+            ]
+          },
+          "settled": {
+            "activeAnimations": 0,
+            "innerOpen": false,
+            "outerOpen": false,
+            "stack": []
+          }
+        },
+        "drawerBoundary": {
+          "firstEscape": {
+            "dialog": true,
+            "popover": false
+          },
+          "modalTaskDrawer": {
+            "dialogModal": true,
+            "dialogOpen": true,
+            "focusContained": true,
+            "nestedPopoverInsideViewport": true,
+            "nestedPopoverOpen": true,
+            "sideGeometry": {
+              "heightDelta": 0,
+              "right": 0,
+              "top": 0
+            }
+          },
+          "persistentLayout": {
+            "mainFocusable": true,
+            "mainInert": false,
+            "persistentInTopLayer": false
+          },
+          "secondEscape": {
+            "dialog": false,
+            "popover": false
+          }
+        },
+        "layeringAndDismissal": {
+          "dialogFirstEscape": {
+            "dialog": true,
+            "popover": false
+          },
+          "dialogOpen": {
+            "dialog": true,
+            "popover": true
+          },
+          "dialogSecondEscape": {
+            "dialog": false,
+            "popover": false
+          },
+          "firstEscape": {
+            "inner": false,
+            "outer": true
+          },
+          "manualAfterEscape": true,
+          "manualAfterOutside": true,
+          "nestedOpen": {
+            "inner": true,
+            "outer": true
+          },
+          "secondEscape": {
+            "inner": false,
+            "outer": false
+          },
+          "toggleEvents": {
+            "closingBeforeToggleCancelable": false,
+            "count": 16,
+            "openingBeforeToggleCancelable": true
+          }
+        },
+        "physicalContext": {
+          "citryTeleportContract": "Lexical Citry/Alpine context follows the authored x-teleport origin; CSS inheritance, native containment, currentTarget, and bubbling follow the physical placement.",
+          "eventsAfterMove": [
+            "native-trigger",
+            "native"
+          ],
+          "nativeEvents": [
+            "native-trigger",
+            "native"
+          ],
+          "nativeTopLayer": {
+            "closestProvider": "provider",
+            "color": "rgb(77, 42, 130)",
+            "parent": "provider"
+          },
+          "physicallyMoved": {
+            "closestProvider": null,
+            "color": "rgb(1, 2, 3)",
+            "parent": "portal"
+          }
+        },
+        "platformAndPositioning": {
+          "edge": {
+            "anchor": {
+              "bottom": 716,
+              "top": 698
+            },
+            "flippedAbove": true,
+            "insideViewport": true,
+            "surface": {
+              "bottom": 698,
+              "top": 658
+            }
+          },
+          "ordinary": {
+            "anchor": {
+              "bottom": 101,
+              "height": 18,
+              "width": 148,
+              "x": 69,
+              "y": 83
+            },
+            "blockEndPlaced": true,
+            "clip": {
+              "bottom": 114,
+              "height": 74,
+              "width": 222,
+              "x": 48,
+              "y": 40
+            },
+            "escapedClip": true,
+            "hitOutsideClip": true,
+            "inheritedColor": "rgb(18, 92, 132)",
+            "open": true,
+            "parentPreserved": true,
+            "surface": {
+              "bottom": 141,
+              "height": 40,
+              "width": 148,
+              "x": 69,
+              "y": 101
+            },
+            "widthMatches": true
+          },
+          "support": {
+            "anchorName": true,
+            "anchorSize": true,
+            "flipBlock": true,
+            "hintPopover": false,
+            "popover": true,
+            "positionAnchor": true,
+            "positionArea": true,
+            "positionVisibility": true
+          }
+        },
+        "presence": {
+          "immediateAfterHide": {
+            "display": "none",
+            "height": 0,
+            "opacity": "0",
+            "open": false
+          },
+          "middleOfExit": {
+            "display": "none",
+            "height": 0,
+            "opacity": "0",
+            "open": false
+          },
+          "ownershipAfterImmediateEscape": {
+            "child": false,
+            "parent": false
+          },
+          "settled": {
+            "display": "none",
+            "height": 0,
+            "opacity": "0",
+            "open": false
+          },
+          "support": {
+            "allowDiscrete": true,
+            "overlay": false,
+            "startingStyle": true
+          }
+        },
+        "runtimeHealth": {
+          "consoleErrors": [],
+          "pageErrors": []
+        },
+        "toastHost": {
+          "afterEscape": {
+            "manualOpen": true,
+            "modalOpen": false
+          },
+          "focusHandoff": {
+            "focusedToast": "one",
+            "hostStillConnected": true
+          },
+          "log": [
+            "show:one",
+            "show:one",
+            "show:two",
+            "pause:one",
+            "remove:two",
+            "resume:one",
+            "pause:one",
+            "resume:one",
+            "pause:one"
+          ],
+          "manualPopoverShownAfterModal": {
+            "manualOpen": true,
+            "manualPaintedAboveModal": false,
+            "modalOpen": true
+          },
+          "manualPopoverShownBeforeModal": {
+            "manualOpen": true,
+            "manualPaintedAboveModal": false,
+            "modalOpen": true
+          },
+          "pause": {
+            "onePresent": true,
+            "twoPresent": false
+          },
+          "persistentHost": {
+            "count": 2,
+            "firstText": "Updated",
+            "liveHostIdentity": true,
+            "producerIndependent": true
+          }
+        }
+      },
+      "version": "26.5"
+    }
+  },
+  "playwright": "1.62.0",
+  "recordedAt": "2026-08-09T12:48:38.419050+00:00",
+  "viewport": {
+    "height": 720,
+    "width": 960
+  }
+}

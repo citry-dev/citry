@@ -1,0 +1,120 @@
+{
+  "environment": {
+    "cargo": "cargo 1.98.0-nightly (fbb61be30 2026-05-26)",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12",
+    "python_optimize": 0,
+    "rustc": "rustc 1.98.0-nightly (14210df0e 2026-05-31)"
+  },
+  "input_manifest": {
+    "docs/design/i18n_research/span_parser/Cargo.lock": "491c894fa5dfaa1f01a27523d74f0fb290ad6ed74e744f3199e1b542a729d208",
+    "docs/design/i18n_research/span_parser/Cargo.toml": "0d97b488f106cc95c20ce2315da65412a9de4e4ac6f8ff3d82892826c1a1436d",
+    "docs/design/i18n_research/span_parser/fixtures/adversarial.ftl": "7c08d0531f7cec2273bb0dd69acfc044bb4d1dfaf451c698f75ebe99f6ec359c",
+    "docs/design/i18n_research/span_parser/run_span_parser_spike.py": "671281f03150a9184442442903f4a7689337e9026e13e88d4779052554d06d01",
+    "docs/design/i18n_research/span_parser/src/main.rs": "5f1f9073f48ce128b8f703d4e001bba96ff03b3cf4581bcfaa7c7dc47001f8a3"
+  },
+  "probe": {
+    "counts": {
+      "attribute": 2,
+      "comment-line": 5,
+      "function-reference": 1,
+      "identifier": 23,
+      "message": 6,
+      "message-reference": 2,
+      "named-argument": 2,
+      "nested-placeable": 1,
+      "number-literal": 1,
+      "param-annotation": 3,
+      "pattern": 11,
+      "placeable": 11,
+      "resource": 1,
+      "select-expression": 1,
+      "string-literal": 2,
+      "term": 1,
+      "term-reference": 1,
+      "text": 13,
+      "variable-reference": 7,
+      "variant": 2,
+      "variant-key": 2
+    },
+    "fluent_syntax": "0.12.0",
+    "gates": {
+      "composite_operation_spans": true,
+      "crlf_offsets": true,
+      "custom_slice_preserved_ast_semantics": true,
+      "duplicate_named_argument_semantics": true,
+      "error_and_junk_ranges": true,
+      "nested_placeable_spans": true,
+      "param_comment_spans": true,
+      "repeated_occurrences_distinct": true,
+      "trimmed_text_range": true,
+      "utf8_byte_offsets": true
+    },
+    "limitations": [
+      "the prototype indexes the Fluent constructs used by the current Citry compiler design, not every legal Fluent AST shape",
+      "composite spans are reconstructed by a Citry adapter around exact positioned leaves because upstream AST nodes remain spanless",
+      "the probe does not benchmark large catalogs or concurrent compilation",
+      "the probe does not establish an upstream API design or submit any upstream change"
+    ],
+    "result": "PASS_BOUNDED",
+    "samples": {
+      "function": {
+        "end": 439,
+        "start": 399,
+        "text": "NUMBER($count, minimumFractionDigits: 2)"
+      },
+      "message_attribute": {
+        "end": 125,
+        "start": 107,
+        "text": "complex.aria-label"
+      },
+      "named_argument": {
+        "end": 438,
+        "start": 414,
+        "text": "minimumFractionDigits: 2"
+      },
+      "nested_placeable": {
+        "end": 542,
+        "start": 524,
+        "text": "{ \"nested\\u2069\" }"
+      },
+      "outer_nested_placeable": {
+        "end": 544,
+        "start": 522,
+        "text": "{ { \"nested\\u2069\" } }"
+      },
+      "param_annotation": {
+        "end": 326,
+        "start": 275,
+        "text": "@param {Slot} $terms_link - Application-owned link."
+      },
+      "select_expression": {
+        "end": 544,
+        "start": 456,
+        "text": "$count ->\n    [0] Nothing\n   *[other] { -brand(case: \"short\") } / { { \"nested\\u2069\" } }"
+      },
+      "term_call": {
+        "end": 517,
+        "start": 496,
+        "text": "-brand(case: \"short\")"
+      },
+      "trimmed_text": {
+        "end": 637,
+        "start": 622,
+        "text": "trailing spaces"
+      }
+    },
+    "schema_version": 1
+  },
+  "result": "PASS_BOUNDED",
+  "runner_has_no_assert_statements": true,
+  "schema_version": 1,
+  "upstream": {
+    "duplicate_span_issue": "https://github.com/projectfluent/fluent-rs/issues/346",
+    "existing_span_issue": "https://github.com/projectfluent/fluent-rs/issues/270",
+    "inspected_main_commit": "b822cfe0ac5f35099ee71d3cf6f43b7c01d5fc6d",
+    "main_ast_still_spanless": true,
+    "repository": "https://github.com/projectfluent/fluent-rs",
+    "slice_trait_public_on_main": true
+  }
+}

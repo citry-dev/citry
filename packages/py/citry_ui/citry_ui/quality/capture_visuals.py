@@ -133,7 +133,7 @@ def capture_visuals(
                     page = context.new_page()
                     page.set_content(render_scenario(entry.scenario_id), wait_until="load")
                     scenario = scenario_by_id(entry.scenario_id)
-                    page.wait_for_selector(scenario.ready_selector)
+                    page.wait_for_selector(scenario.ready_selector, state="attached")
                     if profile.direction == "rtl":
                         page.evaluate("document.documentElement.dir = 'rtl'")
                     page.add_style_tag(

@@ -60,7 +60,13 @@ def serve_citry_ui_live() -> Iterator[Callable[[Citry, str], str]]:
             handler_class=_QuietWSGIHandler,
         )
         servers.append(server)
-        threading.Thread(target=server.serve_forever, daemon=True).start()
+        # Avoid the stdlib's 0.5-second shutdown polling cost for every browser
+        # scenario while preserving the same local-server behavior.
+        threading.Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        ).start()
         return f"http://127.0.0.1:{server.server_address[1]}"
 
     yield factory

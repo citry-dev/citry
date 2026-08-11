@@ -33,6 +33,13 @@ def _unb64(value):
     return base64.b64decode(value).decode()
 
 
+def _decoded_calls(html):
+    return [
+        [_unb64(call[0]), _unb64(call[1]), None if call[2] is None else _unb64(call[2]), call[3]]
+        for call in _manifest(html)["calls"]
+    ]
+
+
 class TestJsVars:
     def test_vars_script_registers_the_data(self):
         c = Citry()
@@ -47,7 +54,7 @@ class TestJsVars:
 
         html = str(_page(c)())
         assert f'Citry.manager.registerComponentData("{Widget.class_id}"' in html
-        encoded = re.search(r'JSON\.parse\(atob\("([^"]+)"\)\)', html)
+        encoded = re.search(r'atob\("([^"]+)"\)', html)
         assert json.loads(_unb64(encoded.group(1))) == {"rows": 3}
 
     @pytest.mark.parametrize("key", [1, True, None])
@@ -129,16 +136,16 @@ class TestJsVars:
 
         registered = re.findall(
             rf'Citry\.manager\.registerComponentData\("{re.escape(Widget.class_id)}", "([^"]+)", '
-            r'JSON\.parse\(atob\("([^"]+)"\)\)\);',
+            r'atob\("([^"]+)"\)\);',
             html,
         )
         payloads_by_hash = {hash_: json.loads(_unb64(encoded)) for hash_, encoded in registered}
         assert payloads_by_hash == {hashes[0]: {"rows": 1}, hashes[1]: {"rows": 2}}
 
-        calls = [[_unb64(part) if part is not None else None for part in call] for call in _manifest(html)["calls"]]
+        calls = _decoded_calls(html)
         assert calls == [
-            [Widget.class_id, records[0].component_id, hashes[0]],
-            [Widget.class_id, records[1].component_id, hashes[1]],
+            [Widget.class_id, records[0].component_id, hashes[0], "init"],
+            [Widget.class_id, records[1].component_id, hashes[1], "init"],
         ]
 
     def test_data_round_trips_through_base64(self):
@@ -163,7 +170,7 @@ class TestJsVars:
 
         html = str(_page(c)())
         assert "</script><b>boom</b>" not in html
-        encoded = re.search(r'JSON\.parse\(atob\("([^"]+)"\)\)', html)
+        encoded = re.search(r'atob\("([^"]+)"\)', html)
         assert json.loads(_unb64(encoded.group(1))) == payload
 
     @pytest.mark.parametrize("asset_kind", ["js", "css"])
@@ -215,11 +222,11 @@ class TestJsVars:
         rendered = _page(c)().render()
         record = next(r for r in rendered.context.extra["dependencies"] if r.class_id == Widget.class_id)
         html = rendered.serialize()
-        calls = [[_unb64(part) if part is not None else None for part in call] for call in _manifest(html)["calls"]]
+        calls = _decoded_calls(html)
 
         assert record.js_vars_hash is None
         assert f'Citry.manager.registerComponentData("{Widget.class_id}"' not in html
-        assert calls == [[Widget.class_id, record.component_id, None]]
+        assert calls == [[Widget.class_id, record.component_id, None, "init"]]
 
     def test_js_data_without_component_js_is_not_delivered(self):
         c = Citry()
@@ -235,7 +242,7 @@ class TestJsVars:
         page = _page(c)
         rendered = page().render()
         record = next(r for r in rendered.context.extra["dependencies"] if r.class_id == Widget.class_id)
-        assert record.js_vars_hash is None
+        assert re.fullmatch(r"[0-9a-f]{32}", record.js_vars_hash)
         assert f'registerComponentData("{Widget.class_id}"' not in rendered.serialize()
 
     def test_js_data_with_plain_js_is_not_delivered(self):
@@ -269,9 +276,10 @@ class TestJsVars:
         html = rendered.serialize()
         vars_hash = records[Control.class_id].js_vars_hash
 
-        # No callback could receive the data, so no vars script is cached or emitted...
-        assert records[Widget.class_id].js_vars_hash is None
-        assert not c.cache.has(gen_cache_key(Widget.class_id, "js", vars_hash))
+        # No callback or Alpine expression consumes the data, so no vars
+        # script is emitted even though the render capture is cache-ready.
+        assert records[Widget.class_id].js_vars_hash == vars_hash
+        assert c.cache.has(gen_cache_key(Widget.class_id, "js", vars_hash))
         assert f'registerComponentData("{Widget.class_id}"' not in html
         # ...while the control with the same data gets both.
         assert c.cache.has(gen_cache_key(Control.class_id, "js", vars_hash))
@@ -281,6 +289,58 @@ class TestJsVars:
         css_vars_hash = records[Widget.class_id].css_vars_hash
         assert c.cache.has(gen_cache_key(Widget.class_id, "css", css_vars_hash))
         assert f"[data-ccss-{css_vars_hash}] {{\n  --row-color: red;\n}}" in html
+
+    def test_direct_alpine_expression_gets_an_explicit_seed_only_call(self):
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = '<span class="widget" x-text="label"></span>'
+
+            def js_data(self, kwargs, slots):
+                return {"label": "seeded"}
+
+        rendered = _page(c)().render()
+        record = next(r for r in rendered.context.extra["dependencies"] if r.class_id == Widget.class_id)
+        html = rendered.serialize()
+
+        assert "data-citry-root" in html
+        assert f'Citry.manager.registerComponentData("{Widget.class_id}"' in html
+        assert _decoded_calls(html) == [[Widget.class_id, record.component_id, record.js_vars_hash, "seed"]]
+
+    def test_direct_alpine_with_an_empty_js_data_result_gets_an_empty_seed_call(self):
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = '<span class="widget" x-data="{ label: \'local\' }" x-text="label"></span>'
+
+            def js_data(self, kwargs, slots):
+                return {}
+
+        rendered = _page(c)().render()
+        html = rendered.serialize()
+
+        assert "dependencies" not in rendered.context.extra
+        assert f'Citry.manager.registerComponentData("{Widget.class_id}"' not in html
+        calls = _decoded_calls(html)
+        assert len(calls) == 1
+        assert calls[0][0] == Widget.class_id
+        assert calls[0][2:] == [None, "seed"]
+
+    def test_direct_alpine_with_the_default_js_data_hook_needs_no_seed_call(self):
+        c = Citry()
+
+        class Widget(Component):
+            citry = c
+            template = '<span class="widget" x-data="{ label: \'local\' }" x-text="label"></span>'
+
+        rendered = _page(c)().render()
+        html = rendered.serialize()
+
+        assert "data-citry-root" in html
+        assert "dependencies" not in rendered.context.extra
+        assert _decoded_calls(html) == []
 
 
 class TestComponentTransform:
@@ -746,10 +806,11 @@ class TestManifestAndRuntime:
         record_ids = [r.component_id for r in rendered.context.extra["dependencies"]]
         manifest = _manifest(rendered.serialize())
         assert manifest is not None
-        calls = [[_unb64(part) if part is not None else None for part in call] for call in manifest["calls"]]
+        calls = _decoded_calls(rendered.serialize())
         assert [call[0] for call in calls] == [Widget.class_id, Widget.class_id]
         assert [call[1] for call in calls] == record_ids
         assert all(re.fullmatch(r"[0-9a-f]{32}", call[2]) for call in calls)
+        assert [call[3] for call in calls] == ["init", "init"]
 
     def test_manifest_marks_url_dependencies_as_loaded(self):
         c = Citry()

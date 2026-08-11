@@ -1,0 +1,89 @@
+schema_version: 1
+family: breadcrumbs
+components: [CBreadcrumbs]
+
+inputs:
+  - id: cbreadcrumbs-server-inputs
+    component: CBreadcrumbs
+    channel: server
+    column_widths: [fit, 17rem, 7rem, auto]
+    entries:
+      - {id: items, name: items, type: 'Sequence[CBreadcrumbItem]', default: {kind: required}, effect: Renders a nonempty hierarchy whose final record is current.}
+      - {id: label, name: label, type: str, default: {kind: literal, value: Breadcrumbs}, effect: Names the navigation landmark.}
+      - {id: separator, name: separator, type: str, default: {kind: literal, value: /}, effect: Sets hidden-from-AT visual separator fallback.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CBreadcrumbsSize]}, default: {kind: literal, value: md}, effect: Sets trail type scale.}
+      - {id: wrap, name: wrap, type: bool, default: {kind: literal, value: true}, effect: Wraps the trail; false keeps one horizontally scrollable row.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting nav metadata.}
+      - {id: list-attrs, name: list_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied trusted nonconflicting ordered-list metadata.}
+
+slots:
+  - id: cbreadcrumbs-slots
+    component: CBreadcrumbs
+    entries:
+      - {id: item, name: item, required: false, data: {display: '{item: CBreadcrumbItem, index: int, is_current: bool, attrs: Mapping[str, object]}', interfaces: [CBreadcrumbsItemSlotData]}, fallback: Renders the record as a native anchor or current span.}
+      - {id: separator, name: separator, required: false, data: {display: '{index: int}', interfaces: [CBreadcrumbsSeparatorSlotData]}, fallback: Renders the `separator` input inside its hidden wrapper.}
+
+events: []
+methods: []
+
+css:
+  - id: cbreadcrumbs-css-variables
+    component: CBreadcrumbs
+    entries:
+      - {id: cui-breadcrumbs-foreground, name: --cui-breadcrumbs-foreground, type: color, purpose: Root inherited foreground., default: CanvasText.}
+      - {id: cui-breadcrumbs-link-color, name: --cui-breadcrumbs-link-color, type: color, purpose: Ancestor link color., default: LinkText.}
+      - {id: cui-breadcrumbs-current-color, name: --cui-breadcrumbs-current-color, type: color, purpose: Current-page color., default: CanvasText.}
+      - {id: cui-breadcrumbs-separator-color, name: --cui-breadcrumbs-separator-color, type: color, purpose: Visual separator color., default: Scheme-aware muted foreground.}
+      - {id: cui-breadcrumbs-gap, name: --cui-breadcrumbs-gap, type: length, purpose: Item and separator spacing., default: 0.5rem.}
+      - {id: cui-breadcrumbs-focus-color, name: --cui-breadcrumbs-focus-color, type: color, purpose: Link keyboard focus ring., default: Highlight.}
+
+attributes:
+  - id: cbreadcrumbs-attributes
+    component: CBreadcrumbs
+    entries:
+      - {id: aria-label, name: aria-label, element: Nav root, type: nonempty string, meaning: Names the navigation landmark.}
+      - {id: href, name: href, element: Linked item anchor, type: nonempty string, meaning: Native ancestor or linked-current destination.}
+      - {id: aria-current, name: aria-current, element: Final anchor or span, type: '"page"', meaning: Marks the final item as current.}
+      - {id: data-size, name: data-size, element: Nav root, type: '"sm" | "md" | "lg"', meaning: Mirrors type scale.}
+      - {id: data-wrap, name: data-wrap, element: Nav root, type: boolean present or absent, meaning: Present while the trail wraps.}
+
+selectors:
+  - id: cbreadcrumbs-selectors
+    component: CBreadcrumbs
+    entries:
+      - {id: breadcrumbs, selector: '[data-citry-ui-part="breadcrumbs"]', element: Nav root, purpose: Landmark and root attrs destination.}
+      - {id: list, selector: '[data-citry-ui-part="list"]', element: Ordered list, purpose: Trail layout and list attrs destination.}
+      - {id: item, selector: '[data-citry-ui-part="item"]', element: List item, purpose: One hierarchy record.}
+      - {id: link, selector: '[data-citry-ui-part="link"]', element: Native anchor, purpose: Navigable ancestor or linked current item.}
+      - {id: current, selector: '[data-citry-ui-part="current"]', element: Span, purpose: Plain current-page item.}
+      - {id: separator, selector: '[data-citry-ui-part="separator"]', element: Hidden-from-AT span, purpose: Visual hierarchy separator.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: size, name: CBreadcrumbsSize, definition: 'Literal["sm", "md", "lg"]'}
+  - id: item
+    kind: record
+    name: CBreadcrumbItem
+    entries:
+      - {id: label, name: label, type: str, meaning: Visible nonempty item text.}
+      - {id: href, name: href, type: 'str | None', meaning: Native destination; None renders plain text.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', meaning: Copied trusted nonconflicting anchor/span attrs.}
+  - id: item-slot-data
+    kind: record
+    name: CBreadcrumbsItemSlotData
+    entries:
+      - {id: item, name: item, type: CBreadcrumbItem, meaning: Normalized item record.}
+      - {id: index, name: index, type: int, meaning: Zero-based hierarchy position.}
+      - {id: is-current, name: is_current, type: bool, meaning: True only for the final item.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object]', meaning: Required native href/current attrs plus record attrs.}
+  - id: separator-slot-data
+    kind: record
+    name: CBreadcrumbsSeparatorSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Zero-based preceding item index.}

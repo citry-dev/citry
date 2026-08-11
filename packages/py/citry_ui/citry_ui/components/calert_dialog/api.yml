@@ -1,0 +1,106 @@
+schema_version: 1
+family: alert-dialog
+
+components: [CAlertDialog]
+
+inputs:
+  - id: calert-dialog-server-inputs
+    component: CAlertDialog
+    channel: server
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Sets native Dialog identity and title, description, and activator relationships.'}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible initial modal state.}
+      - {id: close-on-escape, name: close_on_escape, type: bool, default: {kind: literal, value: true}, effect: Permits Escape and platform cancel requests.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CAlertDialogSize]}, default: {kind: literal, value: sm}, effect: Sets bounded decision-surface width.}
+      - {id: scroll, name: scroll, type: {display: '"body" | "dialog"', interfaces: [CAlertDialogScroll]}, default: {kind: literal, value: body}, effect: Chooses the overflow owner.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds native Dialog classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds native Dialog inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted native Dialog attributes without replacing owned modal semantics.}
+  - id: calert-dialog-client-inputs
+    component: CAlertDialog
+    channel: client
+    entries:
+      - {id: open, name: open, type: 'boolean | null | undefined', omitted: Releases control and preserves effective state., effect: Controls modal visibility while supplied as a Boolean.}
+      - {id: close-on-escape, name: closeOnEscape, type: 'boolean | undefined', omitted: Uses the server fallback., effect: Controls Escape and platform cancel behavior.}
+      - {id: size, name: size, type: '"sm" | "md" | "lg" | undefined', omitted: Uses the server fallback., effect: Controls `data-size` and width.}
+      - {id: scroll, name: scroll, type: '"body" | "dialog" | undefined', omitted: Uses the server fallback., effect: Controls `data-scroll` and overflow.}
+      - {id: on-open-change, name: onOpenChange, type: '((open, detail) => void) | undefined', omitted: No component callback., effect: 'Receives trigger, Escape, action, and native close requests.'}
+
+slots:
+  - id: calert-dialog-slots
+    component: CAlertDialog
+    entries:
+      - {id: activator, name: activator, required: false, data: {display: '{activator_attrs, activator_type}', interfaces: [CAlertDialogActivatorSlotData]}, fallback: No activator.}
+      - {id: title, name: title, required: true, data: {display: '{}', interfaces: [CAlertDialogTitleSlotData]}, fallback: none}
+      - {id: description, name: description, required: true, data: {display: '{}', interfaces: [CAlertDialogDescriptionSlotData]}, fallback: none}
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CAlertDialogDefaultSlotData]}, fallback: Supplemental body omitted.}
+      - {id: cancel, name: cancel, required: true, data: {display: '{cancel_attrs, cancel_type}', interfaces: [CAlertDialogCancelSlotData]}, fallback: none}
+      - {id: action, name: action, required: true, data: {display: '{action_attrs, action_type}', interfaces: [CAlertDialogActionSlotData]}, fallback: none}
+
+events:
+  - id: calert-dialog-events
+    component: CAlertDialog
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(requestedOpen: boolean, detail: CAlertDialogOpenChangeDetail) => void', interfaces: [CAlertDialogOpenChangeDetail]}
+        trigger: An owned trigger, Escape, explicit decision, or external native close requests a different visible state.
+        detail: {display: '{reason: "trigger" | "escape" | "action" | "native", controlled: boolean, source: Element | EventTarget | null, returnValue: string}', interfaces: [CAlertDialogOpenChangeDetail]}
+        behavior: Uncontrolled requests commit before notification. Controlled requests wait for the owner. Cancel and Action return `cancel` and `action` respectively.
+
+methods: []
+
+css:
+  - id: calert-dialog-css-variables
+    component: CAlertDialog
+    entries:
+      - {id: backdrop, name: --cui-alert-dialog-backdrop, type: color, purpose: Modal backdrop., default: rgb(15 23 42 / 58%)}
+      - {id: background, name: --cui-alert-dialog-background, type: color, purpose: Surface background., default: Canvas}
+      - {id: foreground, name: --cui-alert-dialog-foreground, type: color, purpose: Surface text., default: CanvasText}
+      - {id: border-color, name: --cui-alert-dialog-border-color, type: color, purpose: Surface boundary., default: Subtle CanvasText mix.}
+      - {id: radius, name: --cui-alert-dialog-radius, type: length, purpose: Surface radius., default: 0.875rem}
+      - {id: shadow, name: --cui-alert-dialog-shadow, type: shadow, purpose: Surface elevation., default: 0 1.5rem 4rem rgb(15 23 42 / 28%)}
+      - {id: inline-size, name: --cui-alert-dialog-inline-size, type: length, purpose: Preferred responsive width., default: Size derived; 26rem at sm.}
+      - {id: max-block-size, name: --cui-alert-dialog-max-block-size, type: length, purpose: Maximum surface height., default: calc(100dvb - 2rem)}
+      - {id: padding, name: --cui-alert-dialog-padding, type: length, purpose: Surface region padding., default: 1.25rem}
+      - {id: gap, name: --cui-alert-dialog-gap, type: length, purpose: Gap between regions., default: 1rem}
+
+attributes:
+  - id: calert-dialog-attributes
+    component: CAlertDialog
+    entries:
+      - {id: role, name: role, element: Native AlertDialog, type: alertdialog, meaning: Exposes the urgent modal decision role.}
+      - {id: aria-modal, name: aria-modal, element: Native AlertDialog, type: 'true', meaning: Matches native showModal modality.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Native AlertDialog, type: IDREF, meaning: References the required title.}
+      - {id: aria-describedby, name: aria-describedby, element: Native AlertDialog, type: IDREF, meaning: References the required alert message.}
+      - {id: open, name: data-open, element: Native AlertDialog, type: present-or-absent, meaning: Mirrors effective native open state.}
+      - {id: size, name: data-size, element: Native AlertDialog, type: '"sm" | "md" | "lg"', meaning: Mirrors effective responsive size.}
+      - {id: scroll, name: data-scroll, element: Native AlertDialog, type: '"body" | "dialog"', meaning: Mirrors effective overflow mode.}
+
+selectors:
+  - id: calert-dialog-selectors
+    component: CAlertDialog
+    entries:
+      - {id: alert-dialog, selector: '[data-citry-ui-part="alert-dialog"]', element: Native Dialog, purpose: Stable modal root and attrs destination.}
+      - {id: surface, selector: '[data-citry-ui-part="surface"]', element: Surface, purpose: Visual decision surface.}
+      - {id: header, selector: '[data-citry-ui-part="header"]', element: Header, purpose: Title layout.}
+      - {id: title, selector: '[data-citry-ui-part="title"]', element: Title, purpose: Required accessible name.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Description, purpose: Required alert message.}
+      - {id: body, selector: '[data-citry-ui-part="body"]', element: Body, purpose: Optional supplemental content.}
+      - {id: actions, selector: '[data-citry-ui-part="actions"]', element: Actions, purpose: Required Cancel and Action controls.}
+
+interfaces:
+  - id: calert-dialog-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: size, name: CAlertDialogSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: scroll, name: CAlertDialogScroll, definition: 'Literal["body", "dialog"]'}
+  - {id: activator-slot, kind: record, name: CAlertDialogActivatorSlotData, entries: [{id: attrs, name: activator_attrs, type: 'dict[str, object]', meaning: Owned trigger relationships and marker.}, {id: type, name: activator_type, type: 'Literal["button"]', meaning: Form-safe native Button type.}]}
+  - {id: title-slot, kind: record, name: CAlertDialogTitleSlotData, entries: []}
+  - {id: description-slot, kind: record, name: CAlertDialogDescriptionSlotData, entries: []}
+  - {id: default-slot, kind: record, name: CAlertDialogDefaultSlotData, entries: []}
+  - {id: cancel-slot, kind: record, name: CAlertDialogCancelSlotData, entries: [{id: attrs, name: cancel_attrs, type: 'dict[str, object]', meaning: 'Owned close marker, cancel return value, and autofocus.'}, {id: type, name: cancel_type, type: 'Literal["button"]', meaning: Form-safe native Button type.}]}
+  - {id: action-slot, kind: record, name: CAlertDialogActionSlotData, entries: [{id: attrs, name: action_attrs, type: 'dict[str, object]', meaning: Owned close marker and action return value.}, {id: type, name: action_type, type: 'Literal["button"]', meaning: Form-safe native Button type.}]}
+  - {id: open-change-detail, kind: record, name: CAlertDialogOpenChangeDetail, entries: [{id: reason, name: reason, type: '"trigger" | "escape" | "action" | "native"', meaning: Request origin.}, {id: controlled, name: controlled, type: boolean, meaning: Whether client open currently owns state.}, {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the request.}, {id: return-value, name: returnValue, type: string, meaning: 'cancel, action, or an empty string.'}]}

@@ -1,0 +1,79 @@
+{
+  "artifacts": {
+    "complete_payload": "13f4be1ee46bfcc9c99d4a68db6c815c909b49eba8689cbacbf64a52c9f9d266",
+    "harness": "93b3b24ed0aeb914700235c616a9463adae619d747880173025ed0f973e20bb3",
+    "pnpm_lock": "680bf1fe2f0bb85b1384f34325c33bbb0355690631308631ed241827080966ad",
+    "production_slice_evidence": "0fc5465ac406e57fbccb28c4f154ef4d8067de9b00407734e3bd8a9a675427a4",
+    "provider_candidate": "97dd62c43e914d866fcfe84728ba52675fd6b7e3e57e38e8deacf5103d2f20a4",
+    "provider_evidence": "05cc71a44f9e8d9dc89c3e2945e9e2c471c31c69cffb0157f21ba618d25d6bc3",
+    "provider_runner": "d3b556b2282c34ada0b94d016aa1523feca0cf0a1d825801d8b51796c5fdac27",
+    "rich_candidate": "51398f363d9c8c456553c94429687a02771d47718b84a5d745d3ae3fcbc7590d",
+    "switch_benchmark": "e66101f5d82bd968ca12096aacd064c49963f8135d52d4746707c68156961bdf"
+  },
+  "dependencies": {
+    "esbuild": "0.28.1",
+    "playwright": "1.62.0"
+  },
+  "environment": {
+    "machine": "arm64",
+    "node": "v26.5.0",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12"
+  },
+  "fixed_locale": {
+    "browser_i18n_bytes": 0,
+    "passes": true
+  },
+  "payload": {
+    "additional_locale": {
+      "gzip_bytes": 511,
+      "limit_bytes": 15360,
+      "message_count": 100,
+      "minified_bytes": 3833,
+      "passes": true,
+      "source_bytes": 3779
+    },
+    "complete_client": {
+      "catalog_parser_included": true,
+      "gzip_bytes": 11344,
+      "limit_bytes": 35840,
+      "message_count": 100,
+      "metafile_inputs": [
+        "../../phase0_completion/browser/complete_payload.mjs",
+        "../../provider_runtime/browser/candidate.js",
+        "../../rich_client_relocation/browser/candidate.js",
+        "entry.mjs",
+        "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/index.js"
+      ],
+      "minified_bytes": 36324,
+      "passes": true,
+      "source_bytes": 3779
+    }
+  },
+  "result": "PASS_BOUNDED",
+  "switch": {
+    "browser_versions": {
+      "chromium": "151.0.7922.34",
+      "firefox": "153.0",
+      "webkit": "26.5"
+    },
+    "gates": {
+      "chromium": {
+        "no_mixed_sampled_frames": true,
+        "p95_at_or_below_50_ms": true,
+        "thirty_samples": true
+      },
+      "firefox": {
+        "no_mixed_sampled_frames": true,
+        "p95_at_or_below_50_ms": true,
+        "thirty_samples": true
+      },
+      "webkit": {
+        "no_mixed_sampled_frames": true,
+        "p95_at_or_below_50_ms": true,
+        "thirty_samples": true
+      }
+    },
+    "result": "PASS"
+  }
+}

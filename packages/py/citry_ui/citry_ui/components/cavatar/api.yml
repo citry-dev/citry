@@ -1,0 +1,92 @@
+schema_version: 1
+family: avatar
+
+components:
+  - CAvatar
+
+inputs:
+  - id: cavatar-server-inputs
+    component: CAvatar
+    channel: server
+    column_widths: [fit, 15rem, 8rem, auto]
+    entries:
+      - {id: src, name: src, type: 'str | None', default: {kind: literal, value: null}, effect: 'Sets one escaped image URL. `None` shows the fallback only.'}
+      - {id: alt, name: alt, type: str, default: {kind: literal, value: ''}, effect: 'Names the Avatar as one image semantic. Empty text makes the Avatar decorative.'}
+      - {id: variant, name: variant, type: {display: '"soft" | "solid" | "outline"', interfaces: [CAvatarVariant]}, default: {kind: literal, value: soft}, effect: Selects fallback visual emphasis.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CAvatarSize]}, default: {kind: literal, value: md}, effect: Selects the size preset.}
+      - {id: shape, name: shape, type: {display: '"circle" | "rounded" | "square"', interfaces: [CAvatarShape]}, default: {kind: literal, value: circle}, effect: Selects clipping geometry.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted root attributes without replacing Avatar semantics, focus, children, reflections, or Citry runtime fields.'}
+      - {id: img-attrs, name: img_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied inert image attributes such as `loading`, `decoding`, and `referrerpolicy` without replacing source, alternative text, events, or ownership.'}
+
+  - id: cavatar-client-inputs
+    component: CAvatar
+    channel: client
+    column_widths: [fit, 14rem, 15rem, auto]
+    entries:
+      - {id: src, name: src, type: 'string | null', omitted: Uses the server input., effect: Replaces the current image URL or switches to fallback-only output.}
+      - {id: alt, name: alt, type: string, omitted: Uses the server input., effect: Updates the root accessible name; empty text makes it decorative.}
+      - {id: variant, name: variant, type: {display: '"soft" | "solid" | "outline"', interfaces: [CAvatarVariant]}, omitted: Uses the server input., effect: Controls fallback visual emphasis.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CAvatarSize]}, omitted: Uses the server input., effect: Controls size.}
+      - {id: shape, name: shape, type: {display: '"circle" | "rounded" | "square"', interfaces: [CAvatarShape]}, omitted: Uses the server input., effect: Controls clipping geometry.}
+
+slots:
+  - id: cavatar-slots
+    component: CAvatar
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CAvatarDefaultSlotData]}, fallback: Generic decorative person silhouette.}
+
+events:
+  - id: cavatar-events
+    component: CAvatar
+    entries:
+      - {id: on-status-change, name: onStatusChange, signature: '(detail: {status: CAvatarStatus, src: string | null}) => void', trigger: The committed image status changes., detail: '{status: "fallback" | "loading" | "loaded" | "error", src: string | null}', behavior: Runs after the image visibility and root status reflection synchronize; return values do not cancel the transition.}
+
+methods: []
+
+css:
+  - id: cavatar-css-variables
+    component: CAvatar
+    entries:
+      - {id: size, name: --cui-avatar-size, type: length, purpose: Root inline and block size., default: 'Size-derived 2rem, 2.5rem, or 3rem.'}
+      - {id: background, name: --cui-avatar-background, type: color, purpose: Fallback surface., default: Variant- and scheme-derived color.}
+      - {id: foreground, name: --cui-avatar-foreground, type: color, purpose: Fallback text and icon foreground., default: Variant- and scheme-derived color.}
+      - {id: border-color, name: --cui-avatar-border-color, type: color, purpose: Root boundary color., default: Transparent except outline.}
+      - {id: border-width, name: --cui-avatar-border-width, type: length, purpose: Root boundary width., default: 1px}
+      - {id: radius, name: --cui-avatar-radius, type: length, purpose: Root clipping radius., default: Shape-derived.}
+      - {id: font-size, name: --cui-avatar-font-size, type: length, purpose: Authored fallback text size., default: Size-derived.}
+      - {id: font-weight, name: --cui-avatar-font-weight, type: font-weight, purpose: Authored fallback text emphasis., default: '700'}
+      - {id: image-fit, name: --cui-avatar-image-fit, type: keyword, purpose: Internal image object fit., default: cover}
+      - {id: image-position, name: --cui-avatar-image-position, type: position, purpose: Internal image object position., default: center}
+
+attributes:
+  - id: cavatar-attributes
+    component: CAvatar
+    entries:
+      - {id: data-variant, name: data-variant, element: Root, type: '"soft" | "solid" | "outline"', meaning: Mirrors effective fallback emphasis.}
+      - {id: data-size, name: data-size, element: Root, type: '"sm" | "md" | "lg"', meaning: Mirrors effective size.}
+      - {id: data-shape, name: data-shape, element: Root, type: '"circle" | "rounded" | "square"', meaning: Mirrors effective clipping geometry.}
+      - {id: data-status, name: data-status, element: Root, type: {display: '"fallback" | "loading" | "loaded" | "error"', interfaces: [CAvatarStatus]}, meaning: Mirrors the current image lifecycle state.}
+      - {id: role, name: role, element: Named root, type: '"img"', meaning: Exposes the Avatar as one image semantic when `alt` is nonempty.}
+      - {id: aria-label, name: aria-label, element: Named root, type: string, meaning: Uses the exact nonempty `alt` input as the Avatar name.}
+
+selectors:
+  - id: cavatar-selectors
+    component: CAvatar
+    entries:
+      - {id: avatar, selector: '[data-citry-ui-part="avatar"]', element: Root span, purpose: 'Stable Avatar surface and `attrs` destination.'}
+      - {id: fallback, selector: '[data-citry-ui-part="fallback"]', element: Decorative fallback wrapper, purpose: Authored or generic fallback styling.}
+      - {id: image, selector: '[data-citry-ui-part="image"]', element: Decorative image, purpose: Image presentation and `img_attrs` destination.}
+
+interfaces:
+  - id: avatar-type-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: variant, name: CAvatarVariant, definition: 'Literal["soft", "solid", "outline"]'}
+      - {id: size, name: CAvatarSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: shape, name: CAvatarShape, definition: 'Literal["circle", "rounded", "square"]'}
+      - {id: status, name: CAvatarStatus, definition: 'Literal["fallback", "loading", "loaded", "error"]'}
+  - {id: default-slot-data, kind: record, name: CAvatarDefaultSlotData, entries: []}

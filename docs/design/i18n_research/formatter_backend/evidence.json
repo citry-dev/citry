@@ -1,0 +1,1035 @@
+{
+  "bounded_conclusion": {
+    "babel": "viable_subset_only",
+    "backend_ratified": false,
+    "intl": "browser_formatter_not_parser",
+    "pyicu": "capability_fit_with_native_packaging_cost"
+  },
+  "browser": {
+    "exact_decimal": {
+      "-0": "-0",
+      "1.2300": "1.23",
+      "9007199254740993": "9,007,199,254,740,993"
+    },
+    "locale_extensions": {
+      "devanagari_numbering": "deva",
+      "thai_calendar": "buddhist"
+    },
+    "locales": {
+      "ar-EG": {
+        "currency": "‏١٬٢٣٤٫٥٠ €",
+        "date": "٢٩‏/٠٣‏/٢٠٢٦",
+        "decimal": "١٬٢٣٤٫٥",
+        "list": "A وB وC",
+        "percent": "٥٦٪؜",
+        "plurals": {
+          "0": "zero",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "many",
+          "2": "two",
+          "2.5": "other",
+          "21": "many",
+          "5": "few"
+        },
+        "relative_day": "قبل ٣ أيام",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "ar-EG",
+          "numbering_system": "arab"
+        },
+        "unit": "١٬٢٣٤٫٥ كم"
+      },
+      "az-Arab": {
+        "currency": "1.234,50 €",
+        "date": "29 mar 2026",
+        "decimal": "1.234,5",
+        "list": "A, B və C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 gün öncə",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "az",
+          "numbering_system": "latn"
+        },
+        "unit": "1.234,5 km"
+      },
+      "az-Latn": {
+        "currency": "1.234,50 €",
+        "date": "29 mar 2026",
+        "decimal": "1.234,5",
+        "list": "A, B və C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 gün öncə",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "az-Latn",
+          "numbering_system": "latn"
+        },
+        "unit": "1.234,5 km"
+      },
+      "cs-CZ": {
+        "currency": "1 234,50 €",
+        "date": "29. 3. 2026",
+        "decimal": "1 234,5",
+        "list": "A, B a C",
+        "percent": "56 %",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "many",
+          "101": "other",
+          "11": "other",
+          "2": "few",
+          "2.5": "many",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "před 3 dny",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "cs-CZ",
+          "numbering_system": "latn"
+        },
+        "unit": "1 234,5 km"
+      },
+      "en-US": {
+        "currency": "€1,234.50",
+        "date": "Mar 29, 2026",
+        "decimal": "1,234.5",
+        "list": "A, B, and C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 days ago",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "en-US",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "hi-IN-u-nu-deva": {
+        "currency": "€१,२३४.५०",
+        "date": "२९ मार्च २०२६",
+        "decimal": "१,२३४.५",
+        "list": "A, B, और C",
+        "percent": "५६%",
+        "plurals": {
+          "0": "one",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "३ दिन पहले",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "hi-IN-u-nu-deva",
+          "numbering_system": "deva"
+        },
+        "unit": "१,२३४.५ कि॰मी॰"
+      },
+      "ja-JP": {
+        "currency": "€1,234.50",
+        "date": "2026/03/29",
+        "decimal": "1,234.5",
+        "list": "A、B、C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "other",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 日前",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "ja-JP",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "pl-PL": {
+        "currency": "1234,50 €",
+        "date": "29 mar 2026",
+        "decimal": "1234,5",
+        "list": "A, B i C",
+        "percent": "56%",
+        "plurals": {
+          "0": "many",
+          "1": "one",
+          "1.5": "other",
+          "101": "many",
+          "11": "many",
+          "2": "few",
+          "2.5": "other",
+          "21": "many",
+          "5": "many"
+        },
+        "relative_day": "3 dni temu",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "pl-PL",
+          "numbering_system": "latn"
+        },
+        "unit": "1234,5 km"
+      },
+      "ru-RU": {
+        "currency": "1 234,50 €",
+        "date": "29 мар. 2026 г.",
+        "decimal": "1 234,5",
+        "list": "A, B и C",
+        "percent": "56 %",
+        "plurals": {
+          "0": "many",
+          "1": "one",
+          "1.5": "other",
+          "101": "one",
+          "11": "many",
+          "2": "few",
+          "2.5": "other",
+          "21": "one",
+          "5": "many"
+        },
+        "relative_day": "3 дня назад",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "ru-RU",
+          "numbering_system": "latn"
+        },
+        "unit": "1 234,5 км"
+      },
+      "th-TH-u-ca-buddhist": {
+        "currency": "€1,234.50",
+        "date": "29 มี.ค. 2569",
+        "decimal": "1,234.5",
+        "list": "A B และC",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "other",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 วันที่ผ่านมา",
+        "resolved": {
+          "calendar": "buddhist",
+          "locale": "th-TH",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 กม."
+      }
+    },
+    "parsing": {
+      "has_number_parser": false,
+      "public_parse_methods": []
+    },
+    "runtime": {
+      "cldr": "48.0",
+      "icu": "78.3",
+      "node": "v26.5.0",
+      "tzdb": "2026a",
+      "unicode": "17.0"
+    }
+  },
+  "environment": {
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12",
+    "uv": "uv 0.12.0 (Homebrew 2026-07-28 aarch64-apple-darwin)"
+  },
+  "exact_output_differences": [
+    {
+      "intl": "29 мар. 2026 г.",
+      "kind": "date",
+      "locale": "ru-RU",
+      "pyicu": "29 мар. 2026 г."
+    },
+    {
+      "intl": "1.234,5",
+      "kind": "decimal",
+      "locale": "az-Arab",
+      "pyicu": "1,234.5"
+    },
+    {
+      "intl": "1.234,50 €",
+      "kind": "currency",
+      "locale": "az-Arab",
+      "pyicu": "€ 1,234.50"
+    },
+    {
+      "intl": "1.234,5 km",
+      "kind": "unit",
+      "locale": "az-Arab",
+      "pyicu": "1,234.5 km"
+    },
+    {
+      "intl": "A, B və C",
+      "kind": "list",
+      "locale": "az-Arab",
+      "pyicu": "A, B, C"
+    },
+    {
+      "intl": "3 gün öncə",
+      "kind": "relative_day",
+      "locale": "az-Arab",
+      "pyicu": "-3 d"
+    },
+    {
+      "intl": "29 mar 2026",
+      "kind": "date",
+      "locale": "az-Arab",
+      "pyicu": "AP 1405 Farvardin 9"
+    }
+  ],
+  "gates": {
+    "az_base_language_projection_matches_intl": true,
+    "babel_does_not_shape_declared_digits": true,
+    "babel_lacks_general_calendar_selection": true,
+    "babel_parser_subset_is_latin_digit_only": true,
+    "backend_defaults_can_differ_with_same_icu": true,
+    "exact_decimal_string_path_matches": true,
+    "intl_has_no_number_parser": true,
+    "plural_semantics_match": true,
+    "pyicu_and_intl_honor_buddhist_calendar": true,
+    "pyicu_and_intl_shape_declared_digits": true,
+    "pyicu_parses_declared_digit_systems": true,
+    "reference_pyicu_profiles_match_same_icu_intl_exactly": true,
+    "zoneinfo_classifies_declared_gaps_and_folds": true
+  },
+  "input_sha256": {
+    "browser_runner": "259e0b3e810fac94ccb20235fcfadfe8aca303c735674f864cc5eb1930a54ffb",
+    "harness": "ea7977369c9cfcf8144ff2a66494b1dce9edf987bcb29fe1c86a23740b311e58",
+    "python_candidate": "56dd356706697dc1119dca2df4a6cb047c66901b2c0c8c8c20983fc54f93ad45",
+    "requirements": "367ed9ba013566653c35aa40fe207631fc896c4f9872fc72e62934332a08bd57"
+  },
+  "python": {
+    "babel": {
+      "ar-EG": {
+        "currency": "‏1٬234٫50 €",
+        "date": "29‏/03‏/2026",
+        "decimal": "1٬234٫5",
+        "list": "A وB وC",
+        "percent": "56%",
+        "plurals": {
+          "0": "zero",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "many",
+          "2": "two",
+          "2.5": "other",
+          "21": "many",
+          "5": "few"
+        },
+        "relative_day": "قبل 3 أيام",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "ar-EG",
+          "numbering_system": "default"
+        },
+        "unit": "1,234.5 كم"
+      },
+      "az-Arab": {
+        "currency": "€ 1,234.50",
+        "date": "2026 M03 29",
+        "decimal": "1,234.5",
+        "list": "A, B, C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "-3 d",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "az-Arab",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "az-Latn": {
+        "currency": "1.234,50 €",
+        "date": "29 mar 2026",
+        "decimal": "1.234,5",
+        "list": "A, B və C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 gün öncə",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "az-Latn",
+          "numbering_system": "latn"
+        },
+        "unit": "1.234,5 km"
+      },
+      "cs-CZ": {
+        "currency": "1 234,50 €",
+        "date": "29. 3. 2026",
+        "decimal": "1 234,5",
+        "list": "A, B a C",
+        "percent": "56 %",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "many",
+          "101": "other",
+          "11": "other",
+          "2": "few",
+          "2.5": "many",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "před 3 dny",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "cs-CZ",
+          "numbering_system": "latn"
+        },
+        "unit": "1 234,5 km"
+      },
+      "en-US": {
+        "currency": "€1,234.50",
+        "date": "Mar 29, 2026",
+        "decimal": "1,234.5",
+        "list": "A, B, and C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 days ago",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "en-US",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "hi-IN-u-nu-deva": {
+        "currency": "€1,234.50",
+        "date": "29 मार्च 2026",
+        "decimal": "1,234.5",
+        "list": "A, B, और C",
+        "percent": "56%",
+        "plurals": {
+          "0": "one",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 दिन पहले",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "hi-IN",
+          "numbering_system": "deva"
+        },
+        "unit": "1,234.5 कि॰मी॰"
+      },
+      "ja-JP": {
+        "currency": "€1,234.50",
+        "date": "2026/03/29",
+        "decimal": "1,234.5",
+        "list": "A、B、C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "other",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 日前",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "ja-JP",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "pl-PL": {
+        "currency": "1 234,50 €",
+        "date": "29 mar 2026",
+        "decimal": "1 234,5",
+        "list": "A, B i C",
+        "percent": "56%",
+        "plurals": {
+          "0": "many",
+          "1": "one",
+          "1.5": "other",
+          "101": "many",
+          "11": "many",
+          "2": "few",
+          "2.5": "other",
+          "21": "many",
+          "5": "many"
+        },
+        "relative_day": "3 dni temu",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "pl-PL",
+          "numbering_system": "latn"
+        },
+        "unit": "1 234,5 km"
+      },
+      "ru-RU": {
+        "currency": "1 234,50 €",
+        "date": "29 мар. 2026 г.",
+        "decimal": "1 234,5",
+        "list": "A, B и C",
+        "percent": "56 %",
+        "plurals": {
+          "0": "many",
+          "1": "one",
+          "1.5": "other",
+          "101": "one",
+          "11": "many",
+          "2": "few",
+          "2.5": "other",
+          "21": "one",
+          "5": "many"
+        },
+        "relative_day": "3 дня назад",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "ru-RU",
+          "numbering_system": "latn"
+        },
+        "unit": "1 234,5 км"
+      },
+      "th-TH-u-ca-buddhist": {
+        "currency": "€1,234.50",
+        "date": "29 มี.ค. 2026",
+        "decimal": "1,234.5",
+        "list": "A B และC",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "other",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 วันที่ผ่านมา",
+        "resolved": {
+          "calendar": "gregory",
+          "locale": "th-TH",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 กม."
+      }
+    },
+    "exact_decimal": {
+      "babel": {
+        "-0": "-0",
+        "1.2300": "1.23",
+        "9007199254740993": "9,007,199,254,740,993"
+      },
+      "pyicu": {
+        "-0": "-0",
+        "1.2300": "1.23",
+        "9007199254740993": "9,007,199,254,740,993"
+      }
+    },
+    "installed_tree_bytes": {
+      "babel": 30810955,
+      "pyicu_wrapper": 1670445,
+      "tzdata": 513882
+    },
+    "locale_data_fallback_probe": {
+      "az-Arab_raw": {
+        "currency": "€ 1,234.50",
+        "date": "AP 1405 Farvardin 9",
+        "decimal": "1,234.5",
+        "list": "A, B, C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "-3 d",
+        "resolved": {
+          "calendar": "persian",
+          "locale": "az-Arab",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "az_base_language": {
+        "currency": "1.234,50 €",
+        "date": "29 mar 2026",
+        "decimal": "1.234,5",
+        "list": "A, B və C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 gün öncə",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "az",
+          "numbering_system": "latn"
+        },
+        "unit": "1.234,5 km"
+      }
+    },
+    "locale_extensions": {
+      "babel_accepts_unicode_extension": false,
+      "pyicu_devanagari_numbering": "deva",
+      "pyicu_thai_calendar": "buddhist"
+    },
+    "parsing": {
+      "ar-EG": {
+        "babel": {
+          "accepted": false,
+          "error": "NumberFormatError"
+        },
+        "pyicu": {
+          "accepted": true,
+          "consumed": 7,
+          "value": "1234.5"
+        }
+      },
+      "cs-CZ": {
+        "babel": {
+          "accepted": true,
+          "value": "1234.5"
+        },
+        "pyicu": {
+          "accepted": true,
+          "consumed": 7,
+          "value": "1234.5"
+        }
+      },
+      "en-US": {
+        "babel": {
+          "accepted": true,
+          "value": "1234.5"
+        },
+        "pyicu": {
+          "accepted": true,
+          "consumed": 7,
+          "value": "1234.5"
+        }
+      },
+      "hi-IN-u-nu-deva": {
+        "babel": {
+          "accepted": false,
+          "error": "NumberFormatError"
+        },
+        "pyicu": {
+          "accepted": true,
+          "consumed": 7,
+          "value": "1234.5"
+        }
+      }
+    },
+    "pyicu": {
+      "ar-EG": {
+        "currency": "‏١٬٢٣٤٫٥٠ €",
+        "date": "٢٩‏/٠٣‏/٢٠٢٦",
+        "decimal": "١٬٢٣٤٫٥",
+        "list": "A وB وC",
+        "percent": "٥٦٪؜",
+        "plurals": {
+          "0": "zero",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "many",
+          "2": "two",
+          "2.5": "other",
+          "21": "many",
+          "5": "few"
+        },
+        "relative_day": "قبل ٣ أيام",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "ar-EG",
+          "numbering_system": "arab"
+        },
+        "unit": "١٬٢٣٤٫٥ كم"
+      },
+      "az-Arab": {
+        "currency": "€ 1,234.50",
+        "date": "AP 1405 Farvardin 9",
+        "decimal": "1,234.5",
+        "list": "A, B, C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "-3 d",
+        "resolved": {
+          "calendar": "persian",
+          "locale": "az-Arab",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "az-Latn": {
+        "currency": "1.234,50 €",
+        "date": "29 mar 2026",
+        "decimal": "1.234,5",
+        "list": "A, B və C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 gün öncə",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "az-Latn",
+          "numbering_system": "latn"
+        },
+        "unit": "1.234,5 km"
+      },
+      "cs-CZ": {
+        "currency": "1 234,50 €",
+        "date": "29. 3. 2026",
+        "decimal": "1 234,5",
+        "list": "A, B a C",
+        "percent": "56 %",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "many",
+          "101": "other",
+          "11": "other",
+          "2": "few",
+          "2.5": "many",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "před 3 dny",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "cs-CZ",
+          "numbering_system": "latn"
+        },
+        "unit": "1 234,5 km"
+      },
+      "en-US": {
+        "currency": "€1,234.50",
+        "date": "Mar 29, 2026",
+        "decimal": "1,234.5",
+        "list": "A, B, and C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 days ago",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "en-US",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "hi-IN-u-nu-deva": {
+        "currency": "€१,२३४.५०",
+        "date": "२९ मार्च २०२६",
+        "decimal": "१,२३४.५",
+        "list": "A, B, और C",
+        "percent": "५६%",
+        "plurals": {
+          "0": "one",
+          "1": "one",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "३ दिन पहले",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "hi-IN-u-nu-deva",
+          "numbering_system": "deva"
+        },
+        "unit": "१,२३४.५ कि॰मी॰"
+      },
+      "ja-JP": {
+        "currency": "€1,234.50",
+        "date": "2026/03/29",
+        "decimal": "1,234.5",
+        "list": "A、B、C",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "other",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 日前",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "ja-JP",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 km"
+      },
+      "pl-PL": {
+        "currency": "1234,50 €",
+        "date": "29 mar 2026",
+        "decimal": "1234,5",
+        "list": "A, B i C",
+        "percent": "56%",
+        "plurals": {
+          "0": "many",
+          "1": "one",
+          "1.5": "other",
+          "101": "many",
+          "11": "many",
+          "2": "few",
+          "2.5": "other",
+          "21": "many",
+          "5": "many"
+        },
+        "relative_day": "3 dni temu",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "pl-PL",
+          "numbering_system": "latn"
+        },
+        "unit": "1234,5 km"
+      },
+      "ru-RU": {
+        "currency": "1 234,50 €",
+        "date": "29 мар. 2026 г.",
+        "decimal": "1 234,5",
+        "list": "A, B и C",
+        "percent": "56 %",
+        "plurals": {
+          "0": "many",
+          "1": "one",
+          "1.5": "other",
+          "101": "one",
+          "11": "many",
+          "2": "few",
+          "2.5": "other",
+          "21": "one",
+          "5": "many"
+        },
+        "relative_day": "3 дня назад",
+        "resolved": {
+          "calendar": "gregorian",
+          "locale": "ru-RU",
+          "numbering_system": "latn"
+        },
+        "unit": "1 234,5 км"
+      },
+      "th-TH-u-ca-buddhist": {
+        "currency": "€1,234.50",
+        "date": "29 มี.ค. 2569",
+        "decimal": "1,234.5",
+        "list": "A B และC",
+        "percent": "56%",
+        "plurals": {
+          "0": "other",
+          "1": "other",
+          "1.5": "other",
+          "101": "other",
+          "11": "other",
+          "2": "other",
+          "2.5": "other",
+          "21": "other",
+          "5": "other"
+        },
+        "relative_day": "3 วันที่ผ่านมา",
+        "resolved": {
+          "calendar": "buddhist",
+          "locale": "th-TH-u-ca-buddhist",
+          "numbering_system": "latn"
+        },
+        "unit": "1,234.5 กม."
+      }
+    },
+    "pyicu_runtime_artifact_bytes": {
+      "_icu_.cpython-313-darwin.so": 1668856,
+      "libicudata.78.dylib": 33195120,
+      "libicui18n.78.dylib": 3168272,
+      "libicuuc.78.dylib": 1866592
+    },
+    "runtime": {
+      "babel": "2.18.0",
+      "babel_cldr": "47",
+      "icu": "78.3",
+      "pyicu": "2.16.2",
+      "python": "3.13.12",
+      "tzdata": "2026.3",
+      "unicode": "17.0",
+      "zoneinfo_tzpath": []
+    },
+    "wall_times": {
+      "new_york_fold": {
+        "candidates": [
+          {
+            "fold": 0,
+            "instant": "2026-11-01T05:30:00+00:00",
+            "offset": "-1 day, 20:00:00"
+          },
+          {
+            "fold": 1,
+            "instant": "2026-11-01T06:30:00+00:00",
+            "offset": "-1 day, 19:00:00"
+          }
+        ],
+        "kind": "fold"
+      },
+      "new_york_gap": {
+        "candidates": [],
+        "kind": "gap"
+      },
+      "prague_fold": {
+        "candidates": [
+          {
+            "fold": 0,
+            "instant": "2026-10-25T00:30:00+00:00",
+            "offset": "2:00:00"
+          },
+          {
+            "fold": 1,
+            "instant": "2026-10-25T01:30:00+00:00",
+            "offset": "1:00:00"
+          }
+        ],
+        "kind": "fold"
+      },
+      "prague_gap": {
+        "candidates": [],
+        "kind": "gap"
+      }
+    }
+  },
+  "result": "PASS_BOUNDED"
+}

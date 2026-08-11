@@ -344,6 +344,27 @@ def resolve_nav_sources(
     return tree
 
 
+def replace_group_source(tree: NavTree, source: str, groups: list[NavGroup]) -> None:
+    """Replace one generated group placeholder with ordered generated groups."""
+    found = False
+    for area in tree.areas:
+        expanded: list[NavGroup] = []
+        for group in area.groups:
+            if group.source != source:
+                expanded.append(group)
+                continue
+            if found:
+                raise ValueError(f"Navigation source {source!r} has more than one owner")
+            found = True
+            for generated in groups:
+                generated.scope = group.scope
+                generated.items = _with_scope(generated.items, group.scope)
+                expanded.append(generated)
+        area.groups = expanded
+    if not found:
+        raise ValueError(f"Navigation source {source!r} has no declared group owner")
+
+
 def _resolve_source(
     source: str,
     sources: Mapping[str, list[NavItem] | None],

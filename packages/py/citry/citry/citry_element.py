@@ -41,12 +41,11 @@ Example:
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from citry.citry_render import CitryRender
     from citry.component import Component
     from citry.ownership import ComponentInvocationId, ComponentTagClientBindingRecord, OwnershipGraph
@@ -127,32 +126,50 @@ class CitryElement:
         self.element_morph_metadata = element_morph_metadata
         self.forward_ownership_invocation = forward_ownership_invocation
 
-    def render(self, *, template_globals: Mapping[str, Any] | None = None) -> CitryRender:
+    def render(
+        self,
+        *,
+        template_globals: Mapping[str, Any] | None = None,
+        provides: Mapping[str, Any] | None = None,
+    ) -> CitryRender:
         """
         Render this component into a ``CitryRender``.
 
         Each call mints fresh per-instance state (render_id, etc.), so the same
         CitryElement can be rendered multiple times with distinct identities.
 
-        ``template_globals`` adds or overrides template variables for this one
-        render, layered on top of the instance's ``citry.template_globals`` and
-        under each component's own ``template_data``. They reach every component
-        in the render, including nested children, embedded elements, and slot
-        content, which suits per-request values (the current user, a request id)
-        that should not be stored on the shared instance.
+        Args:
+            template_globals: Template variables added for this render. They
+                reach the whole tree, sit above the Citry instance's globals,
+                and sit below each component's own ``template_data``.
+            provides: Values the root component and its rendered descendants
+                may read with ``inject()``. A nested direct ``render()`` call
+                starts a new root and must pass its required values again.
 
-        Returns a ``CitryRender`` (the render-phase output), not a string. Call
-        ``.serialize()`` on it (or ``str()``) to get the HTML. ``str()`` on the
-        element itself runs the full chain with sensible defaults (and no
-        ``template_globals``).
+        Returns:
+            A ``CitryRender`` with the complete rendered tree. Call
+            ``serialize()`` or ``str()`` on it to produce HTML.
+
         """
         # Imported lazily to break the import cycle: component_render imports the
         # node classes, the nodes import CitryElement (for auto-rendering a
         # composed element found in an expression), so CitryElement must not pull
         # in component_render at module load.
         from citry.component_render import render_impl  # noqa: PLC0415
+        from citry.provide import validate_provide_key  # noqa: PLC0415
 
-        return render_impl(self, render_globals=dict(template_globals) if template_globals is not None else None)
+        if provides is not None and not isinstance(provides, Mapping):
+            raise TypeError("CitryElement.render() provides must be a mapping from provide keys to values.")
+        # Copy the public mapping so a caller cannot change which values this
+        # render sees after the root starts.
+        root_provides = (
+            {validate_provide_key(key): value for key, value in provides.items()} if provides is not None else None
+        )
+        return render_impl(
+            self,
+            provides=root_provides,
+            render_globals=dict(template_globals) if template_globals is not None else None,
+        )
 
     def __str__(self) -> str:
         # Convenience: str(element) runs the full pipeline

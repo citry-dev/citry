@@ -45,6 +45,7 @@ _PROJECTION_BLOCK_RE = re.compile(
     r"<!-- docs-ui-preview:(?P=payload):end -->",
     re.DOTALL,
 )
+_RAW_REGION_TAG_RE = re.compile(r"</?c-raw(?:\s[^<>]*?)?\s*/?>", re.IGNORECASE)
 _loaded_previews: dict[Path, _LoadedUiPreview] = {}
 _loaded_previews_lock = threading.Lock()
 
@@ -150,6 +151,28 @@ class _UiDemoParser(HTMLParser):
         self.directives.append(values)
 
 
+def _strip_raw_regions(source: str) -> str:
+    """Remove protected Markdown code before HTML raw-text parsing can consume it."""
+    output: list[str] = []
+    cursor = 0
+    depth = 0
+    for match in _RAW_REGION_TAG_RE.finditer(source):
+        tag = match.group(0)
+        closing = tag.startswith("</")
+        if depth == 0 and not closing:
+            output.append(source[cursor : match.start()])
+        if closing:
+            if depth:
+                depth -= 1
+                if depth == 0:
+                    cursor = match.end()
+        elif not tag.rstrip().endswith("/>"):
+            depth += 1
+    if depth == 0:
+        output.append(source[cursor:])
+    return "".join(output)
+
+
 def discover_ui_previews(
     catalog: UiLibraryCatalog,
     *,
@@ -162,7 +185,8 @@ def discover_ui_previews(
         try:
             api_source = ui_library_source_path(projection, repo_root=repo_root)
             parser = _UiDemoParser()
-            parser.feed(protect_fences(parse_page(api_source.read_text(encoding="utf-8")).body))
+            protected = protect_fences(parse_page(api_source.read_text(encoding="utf-8")).body)
+            parser.feed(_strip_raw_regions(protected))
             parser.close()
             for attrs in parser.directives:
                 preview = _preview_from_attrs(

@@ -341,8 +341,8 @@ with provider identity/version unknown. It must not claim default-formatter
 parity. A future formatter-specific adapter may provide stronger selection and
 identity guarantees without changing the core plan/result boundary.
 
-M2 uses vendored Ruff 0.14.10 at git pin `45bbb4cbff`, reported as
-`ruff@0.14.10+45bbb4cbff`. It targets Python 3.10, preserves quote style, uses
+M2 uses vendored Ruff 0.16.2 at git pin `5b48a04097`, reported as
+`ruff@0.16.2+5b48a04097`. It targets Python 3.10, preserves quote style, uses
 two-space embedded continuation indentation, and accounts for the region's
 remaining absolute 100-column budget. Original and result expressions must
 have equivalent Ruff AST projections and normalized comments anchored to the

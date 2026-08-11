@@ -2,6 +2,7 @@
 members = [
     "crates/citry_core_py",
     "crates/citry_html_transform",
+    "crates/citry_i18n",
     "crates/citry_template_formatter",
     "crates/citry_template_parser",
     "crates/python_safe_eval",
@@ -10,7 +11,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.95"
 authors = ["Juro Oravec <juraj.oravec.josefson@gmail.com>"]
 license = "MIT"
 homepage = "https://citry.dev"
@@ -25,6 +26,22 @@ pest_derive = "2.8.3"
 thiserror = "2.0.17"
 regex = "1.12.2"
 lazy_static = "1.5.0"
+icu_locale = { version = "2.2.0", features = ["compiled_data"] }
+icu = { version = "2.2.0", features = ["compiled_data", "sync", "unstable"] }
+icu_provider = "2.2.0"
+fixed_decimal = "0.7.2"
+tinystr = "0.8.3"
+writeable = "0.6.3"
+fluent-bundle = "=0.16.0"
+fluent-syntax = { version = "=0.12.0", features = ["serde"] }
+unic-langid = "=0.9.6"
+oxc_allocator = "0.143.0"
+oxc_ast = "0.143.0"
+oxc_ast_visit = "0.143.0"
+oxc_parser = "0.143.0"
+oxc_semantic = "0.143.0"
+oxc_span = "0.143.0"
+oxc_syntax = "0.143.0"
 
 # Ruff dependencies
 ruff_annotate_snippets = { path = "third_party/rust/ruff/crates/ruff_annotate_snippets" }
@@ -48,83 +65,87 @@ ty_static = { path = "third_party/rust/ruff/crates/ty_static" }
 # Used by ruff_python_formatter and its workspace-inherited dependencies
 arc-swap = { version = "1.7.1" }
 camino = { version = "1.1.7" }
+char_str = { version = "0.0.2" }
 clap = { version = "4.5.3", features = ["derive"] }
 countme = { version = "3.0.1" }
 dashmap = { version = "6.0.1" }
 drop_bomb = { version = "0.1.5" }
 dunce = { version = "1.0.5" }
 etcetera = { version = "0.11.0" }
-ignore = { version = "0.4.24" }
+ignore = { version = "0.4.30" }
 matchit = { version = "0.9.0" }
-ordermap = { version = "1.0.0" }
 path-slash = { version = "0.2.1" }
 pathdiff = { version = "0.2.1" }
-quick-junit = { version = "0.5.0" }
-rand = { version = "0.9.0" }
-serde_with = { version = "3.6.0", default-features = false, features = ["macros"] }
-similar = { version = "2.4.0", features = ["inline"] }
+quick-junit = { version = "0.6.0" }
+rand = { version = "0.10.0", default-features = false, features = ["std_rng"] }
+same-file = { version = "1.0.6" }
+similar = { version = "3.0.0", features = ["inline"] }
 smallvec = { version = "1.13.2", features = ["union", "const_generics", "const_new"] }
 supports-hyperlinks = { version = "3.1.0" }
 tempfile = { version = "3.9.0" }
 tracing = { version = "0.1.40" }
 tracing-subscriber = { version = "0.3.18", default-features = false, features = ["env-filter", "fmt", "ansi", "smallvec"] }
 uuid = { version = "1.6.1", features = ["v4", "fast-rng", "macro-diagnostics"] }
-zip = { version = "0.6.6", default-features = false }
+which = { version = "8.0.0" }
+zip = { version = "8.0", default-features = false }
 
 # Used by ruff_annotate_snippets
-anstream = { version = "0.6.18" }
+anstream = { version = "1.0.0" }
 anstyle = { version = "1.0.10" }
 unicode-width = { version = "0.2.0" }
-snapbox = { version = "0.6.0", features = [
+snapbox = { version = "1.0.0", features = [
     "diff",
     "term-svg",
     "cmd",
     "examples",
 ] }
-toml = { version = "0.9.0" }
-tryfn = { version = "0.2.1" }
 
 # Used by ruff_python_ast
 aho-corasick = { version = "1.1.3" }
+arrayvec = { version = "0.7.6" }
 bitflags = { version = "2.5.0" }
-compact_str = { version = "0.9.0" }
-get-size2 = { version = "0.7.0", features = [
+compact_str = "0.10.0"
+get-size2 = { version = "0.10.3", features = [
     "derive",
     "smallvec",
     "hashbrown",
     "compact-str",
+    "ordermap",
+    "thin-vec",
 ] }
 is-macro = { version = "0.3.5" }
-itertools = { version = "0.14.0" }
+itertools = { version = "0.15.0" }
 memchr = { version = "2.7.1" }
 rustc-hash = { version = "2.0.0" }
-salsa = { git = "https://github.com/salsa-rs/salsa.git", rev = "29ab321b45d00daa4315fa2a06f7207759a8c87e", default-features = false, features = [
+salsa = { version = "0.28.2", default-features = false, features = [
     "compact_str",
     "macros",
     "salsa_unstable",
     "inventory",
 ] }
-schemars = { version = "0.8.16" }
+schemars = { version = "1.0.4" }
 serde = { version = "1.0.197", features = ["derive"] }
 sha2 = "0.10.9"
+thin-vec = { version = "0.2.14" }
 
 # Used by ruff_cache
 filetime = { version = "0.2.23" }
 glob = { version = "0.3.1" }
 globset = { version = "0.4.14" }
+getrandom = "0.3.4"
 seahash = { version = "4.1.0" }
 
 # Used by ruff_macros
 heck = "0.5.0"
 proc-macro2 = { version = "1.0.79" }
 quote = { version = "1.0.23" }
-syn = { version = "2.0.55" }
+syn = { version = "3.0.0" }
 
 # Used by ruff_python_codegen
 test-case = { version = "3.3.1" }
 
 # Used by ruff_python_literal
-unic-ucd-category = { version = "0.9" }
+icu_properties = { version = "2.1.2" }
 
 # Used by ruff_python_parser
 anyhow = { version = "1.0.80" }

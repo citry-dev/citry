@@ -1,0 +1,352 @@
+{
+  "architectural_gates": {
+    "application_override_selected": true,
+    "application_source_fallback": true,
+    "attribute_resolved_independently": true,
+    "cold_cache": true,
+    "deterministic_discovery": true,
+    "formatter_calls_generated": true,
+    "operation_source_maps": true,
+    "owner_preserved": true,
+    "owner_source_graph_fallback": true,
+    "selective_invalidation": true,
+    "selectors_generated": true,
+    "slot_is_internal_only": true,
+    "transitive_contract": true,
+    "warm_cache": true
+  },
+  "artifact": {
+    "artifact_sha256": "6e29c536002b32f0147163d8314196c45b30e7237e3d496ea4a04c71d94ee080",
+    "manifest_sha256": "bbae42ebf9652172be3837c449b5442add13b7706dcd7471f47adbb4005ba2f7",
+    "revision": "a951f9d8af73b38ee4e908fcefcce3ac9b9cb2066ca1c8a12206c9a973b6fd03",
+    "source_map_count": 44
+  },
+  "benchmark_gates": {
+    "cold_under_100_ms": true,
+    "localized_added_median_within_budget": true,
+    "localized_added_p95_within_budget": true,
+    "one_catalog_change_under_100_ms": true,
+    "warm_mean_under_100_ms": true
+  },
+  "bounded_limits": [
+    "plural rules and formatter text are deterministic Phase 0 stand-ins, not the final CLDR backend",
+    "the tagged wire covers str, int, Decimal, datetime, and Slot, not the complete planned value set",
+    "browser switching and Slot DOM ownership are not exercised",
+    "fresh concurrent Slot marker generation is not exercised",
+    "fallback-language metadata and whole-message direction are not exercised",
+    "messages/messages_file reuse private core helpers and are not yet a core asset pair"
+  ],
+  "build": {
+    "cargo_lock_sha256": "a44300b23c5848b34241c887ad845bfe539037a2ccf15596a8e0db724469cd13",
+    "cargo_manifest_sha256": "c68e6097cdf651bcc9264116849a113bcce02634e63e55d792d8751fde72fa35",
+    "extension_binary_sha256": "a6ee2a9ca8770a5276e584549feae129e2fd506a78894638fae426492557dcb3",
+    "python_package_initializer_sha256": "16566c3de681cb4df32f66ee40bc1d31b6cce1147d4c3d20245eb7a2da8161c4",
+    "rust_source_sha256": "f38388eac01f62b32a928921c289f6f4ad50845ae295885abc806fc3e0ec7907"
+  },
+  "cache_stats": {
+    "changed": {
+      "evicted_catalogs": 0,
+      "invalidated_catalogs": 1,
+      "linked_outputs": 26,
+      "parsed_catalogs": 1,
+      "reused_catalogs": 3
+    },
+    "cold": {
+      "evicted_catalogs": 0,
+      "invalidated_catalogs": 0,
+      "linked_outputs": 26,
+      "parsed_catalogs": 4,
+      "reused_catalogs": 0
+    },
+    "warm": {
+      "evicted_catalogs": 0,
+      "invalidated_catalogs": 0,
+      "linked_outputs": 26,
+      "parsed_catalogs": 0,
+      "reused_catalogs": 4
+    }
+  },
+  "citry_integration": {
+    "assets": {
+      "file_index_registered": true,
+      "file_loaded": true,
+      "file_resolved": true,
+      "inline_dedented": true,
+      "inline_has_no_path": true,
+      "pair_not_core_validated": true
+    },
+    "render": {
+      "application_anchor_preserved_twice": true,
+      "component_config_scoped": true,
+      "english_switch": true,
+      "ordinary_trans_component": true,
+      "private_term_scoped": true,
+      "python_self_i18n": true,
+      "runtime_revision": true,
+      "scalar_escaped": true,
+      "template_tr_injected": true
+    },
+    "samples": {
+      "card": "\n<span>Akce účtu pro &lt;Ada&gt;</span>\n<span>Akce účtu pro &lt;Ada&gt;</span>\n",
+      "rich": "\nAPPLICATION-CS: &lt;Ada&gt; přijal(a) <a href=\"/terms\">Terms &amp; conditions</a>; podrobnosti: <a href=\"/terms\">Terms &amp; conditions</a>.\n"
+    }
+  },
+  "diagnostics": {
+    "authored_slot_function": {
+      "code": "I18N_SLOT_FUNCTION",
+      "column": 19,
+      "end": 45,
+      "line": 2,
+      "message": "Slot values cannot be passed to authored Fluent functions",
+      "message_id": "app-slot",
+      "path": "fixtures/negative/authored-slot.ftl",
+      "related": [],
+      "start": 40
+    },
+    "escaped_u4_bidi_control": {
+      "code": "I18N_BIDI_CONTROL_CATALOG",
+      "column": 28,
+      "end": 297,
+      "line": 8,
+      "message": "decoded Fluent string contains a prohibited bidi-control character",
+      "message_id": "citry-ui-fallback-only",
+      "path": "fixtures/citry_ui/en-US.ftl",
+      "related": [],
+      "start": 289
+    },
+    "escaped_u6_bidi_control": {
+      "code": "I18N_BIDI_CONTROL_CATALOG",
+      "column": 28,
+      "end": 299,
+      "line": 8,
+      "message": "decoded Fluent string contains a prohibited bidi-control character",
+      "message_id": "citry-ui-fallback-only",
+      "path": "fixtures/citry_ui/en-US.ftl",
+      "related": [],
+      "start": 289
+    },
+    "invalid_selector_type": {
+      "code": "I18N_SELECTOR_TYPE",
+      "column": 16,
+      "end": 41,
+      "line": 2,
+      "message": "selector $mode must have type int or Decimal",
+      "message_id": "app-select",
+      "path": "fixtures/negative/select.ftl",
+      "related": [],
+      "start": 36
+    },
+    "literal_bidi_control": {
+      "code": "I18N_BIDI_CONTROL_CATALOG",
+      "column": 26,
+      "end": 290,
+      "line": 8,
+      "message": "authored catalog contains a prohibited bidi-control character",
+      "message_id": null,
+      "path": "fixtures/citry_ui/en-US.ftl",
+      "related": [],
+      "start": 287
+    },
+    "malformed_fluent": {
+      "code": "I18N_FTL_SYNTAX",
+      "column": 1,
+      "end": 835,
+      "line": 23,
+      "message": "Expected an inline expression",
+      "message_id": null,
+      "path": "fixtures/citry_ui/cs-CZ.ftl",
+      "related": [],
+      "start": 834
+    },
+    "missing_format_profile": {
+      "code": "I18N_FORMAT_PROFILE",
+      "column": 31,
+      "end": 1006,
+      "line": 28,
+      "message": "NUMBER requires one literal profile and no other options",
+      "message_id": "citry-ui-balance",
+      "path": "fixtures/citry_ui/en-US.ftl",
+      "related": [],
+      "start": 991
+    },
+    "stale_schema": {
+      "code": "I18N_SCHEMA_VERSION",
+      "column": null,
+      "end": null,
+      "line": null,
+      "message": "expected schema_version 2, got 1",
+      "message_id": null,
+      "path": null,
+      "related": [],
+      "start": null
+    },
+    "strict_unknown_field": {
+      "code": "I18N_REQUEST_JSON",
+      "column": null,
+      "end": null,
+      "line": null,
+      "message": "invalid compile request: unknown field `unexpected`, expected one of `schema_version`, `active_locales`, `packages`, `catalogs` at line 1 column 4110",
+      "message_id": null,
+      "path": null,
+      "related": [],
+      "start": null
+    },
+    "transitive_type_conflict": {
+      "code": "I18N_TRANSITIVE_TYPE_CONFLICT",
+      "column": 1,
+      "end": 102,
+      "line": 5,
+      "message": "$shared is inherited as both str and Slot",
+      "message_id": "app-wrapper",
+      "path": "fixtures/negative/type-conflict.ftl",
+      "related": [],
+      "start": 91
+    },
+    "translation_added_variable": {
+      "code": "I18N_TRANSLATION_VARIABLE_ADDED",
+      "column": 1,
+      "end": 39,
+      "line": 3,
+      "message": "translation of \"my-app-target\" introduces undeclared variable $extra",
+      "message_id": "my-app-target",
+      "path": "fixtures/application/en-US.ftl",
+      "related": [],
+      "start": 26
+    },
+    "translation_branch_missing_slot": {
+      "code": "I18N_REQUIRED_SLOT_MISSING",
+      "column": 1,
+      "end": 173,
+      "line": 6,
+      "message": "translation of \"my-app-rich-choice\" omits required Slot $terms_link on a reachable path",
+      "message_id": "my-app-rich-choice",
+      "path": "fixtures/application/en-US.ftl",
+      "related": [],
+      "start": 155
+    },
+    "translation_missing_slot": {
+      "code": "I18N_REQUIRED_SLOT_MISSING",
+      "column": 1,
+      "end": 78,
+      "line": 4,
+      "message": "translation of \"citry-ui-account\" omits required Slot $terms_link on a reachable path",
+      "message_id": "citry-ui-account",
+      "path": "fixtures/application/en-US.ftl",
+      "related": [],
+      "start": 62
+    }
+  },
+  "environment": {
+    "cargo": "cargo 1.98.0-nightly (fbb61be30 2026-05-26)",
+    "maturin": "maturin 1.14.1",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12",
+    "python_optimize": 0,
+    "rustc": "rustc 1.98.0-nightly (14210df0e 2026-05-31)"
+  },
+  "inputs": {
+    "fixtures": {
+      "fixtures/application/cs-CZ.ftl": "6c26c5c65c780a59500ca03f34ad6c429205e2626d9beca762d90dac0d179568",
+      "fixtures/application/en-US.ftl": "b3b3bddc33353d99c005edcd1ee2608a6f50c249aa6333d812518057818ca489",
+      "fixtures/citry_ui/cs-CZ.ftl": "0cb2f43b1381f6d4db086a0e1c4a8b175d666495a2b777c9033e9ecf46e9074e",
+      "fixtures/citry_ui/en-US.ftl": "858d2aed4d1662b7c8c8b360c1daff260bfbdcdd2616f0f9fc1137663360b372",
+      "fixtures/component_messages.ftl": "2acfd82970cbcbd95e37b146510ec8eec3f2b4dc3073b40a5d7389197c9b2abe"
+    },
+    "harness_sha256": "d2a68bc9472c7ac35d0e1e7409375ff9f08a651883f11ca254480a1dc69c0c0c",
+    "production_inputs": {
+      "loaded:citry_core._rust": "666294e85ee745b92c53b91c17bf57c1f1d1401c3c37040ff6ed9aea36d559c2",
+      "packages/py/citry/citry/assets.py": "8444ce443358d8ad578ad46c9e101b123698343c46686a8f95bc00276442534c",
+      "packages/py/citry/citry/component.py": "1a3d5ff55b4005c6a39919f7d15982e510d916b687499aaf063c64700c3ababb",
+      "packages/py/citry/citry/component_render.py": "d7e4f19a16df2e604c91bf4a0fe207367a594074526fefeae5a6289707ccd933",
+      "packages/py/citry/citry/constness.py": "a916426ec823be466f2b186ae032661fb3b39229fa00a453cb3ff6abdb597936",
+      "packages/py/citry/citry/extension.py": "4ab37fd3614aa3bfee80d36a757b27179bff642b2a9ed8e3497021d3e9151bfd",
+      "packages/py/citry/citry/slots.py": "b7e10aba2ad8120370437aeb8475b9329cc8cd60a88b33f28c5b04baac7807c4",
+      "packages/py/citry_core/citry_core/template_parser/__init__.py": "a585715aa2ef0f872c015ffa41e515ff91764b6985cb73e1141639b43fafcedb",
+      "packages/py/citry_core/citry_core/template_parser/parse.py": "1f21d1c0539131f0b95f425ff008187d22d14e102780d2e12fe118faf8a89525",
+      "uv.lock": "63f3934cbad55ed0f8d4f9e57beea45f995f4dd62f195ff98481365945941ede"
+    }
+  },
+  "result": "PASS_BOUNDED",
+  "runtime": {
+    "gates": {
+      "czech_fractional_many": true,
+      "datetime_preserved": true,
+      "english_exact_zero": true,
+      "english_ordinal": true,
+      "english_signed_zero": true,
+      "large_decimal_preserved": true,
+      "large_integer_preserved": true,
+      "slot_repeated": true
+    },
+    "rejections": {
+      "bidi_control": "$name contains a prohibited bidi-control character",
+      "datetime_without_zone": "$when has an invalid datetime wire value",
+      "invalid_slot_marker": "$terms_link has an invalid Slot wire value",
+      "noncanonical_decimal": "$amount has an invalid Decimal wire value",
+      "nonfinite_decimal": "$amount has an invalid Decimal wire value",
+      "paragraph_boundary": "$name contains a paragraph boundary",
+      "stale_artifact_schema": "expected compiled schema 2, got 1",
+      "wrong_tag": "$name expects wire type \"str\", got \"int\""
+    },
+    "samples": {
+      "czech_fractional_many": "NUM[value=2.5,profile=decimal] položky",
+      "english_exact_zero": "No items",
+      "english_ordinal": "NUM[value=21,profile=integer]st",
+      "english_signed_zero": "No items",
+      "exact_large_decimal": "Balance: NUM[value=9007199254740993.25,profile=decimal]",
+      "exact_large_integer": "NUM[value=9007199254740993,profile=integer]rd",
+      "repeated_slot": "Ada: __CITRY_SLOT_PHASE0_RUNTIME_TERMS__ a znovu __CITRY_SLOT_PHASE0_RUNTIME_TERMS__",
+      "tagged_datetime": "Due: DATE[value=2026-08-10T12:34:56Z,profile=medium]"
+    }
+  },
+  "schema_version": 2,
+  "source_maps": {
+    "all_operation_kinds_present": true,
+    "all_ranges_replay": true,
+    "authored_ranges_are_distinct": true,
+    "repeated_slot_occurrences_mapped": true
+  },
+  "template_metadata": {
+    "composed_call": {
+      "direct_calls": [],
+      "unsupported": [
+        {
+          "code": "I18N_TEMPLATE_CALL_NOT_DIRECT",
+          "column": 4,
+          "line": 1
+        }
+      ]
+    },
+    "direct_call": {
+      "direct_calls": [
+        {
+          "column": 4,
+          "end": 37,
+          "keywords": [
+            "name"
+          ],
+          "line": 1,
+          "message_id": "citry-ui-account",
+          "start": 3
+        }
+      ],
+      "unsupported": []
+    },
+    "dynamic_id": {
+      "direct_calls": [],
+      "unsupported": [
+        {
+          "code": "I18N_TEMPLATE_ID_NOT_LITERAL",
+          "column": 4,
+          "line": 1
+        }
+      ]
+    },
+    "rich_component": {
+      "contains_fills": true,
+      "ordinary_component": true,
+      "ordinary_fill": true,
+      "spans": true
+    }
+  }
+}

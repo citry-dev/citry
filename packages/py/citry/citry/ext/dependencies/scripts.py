@@ -678,7 +678,9 @@ def _js_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCapture
     _canonical_variables_json(source_json)
     variables_hash = sha256(source_json.encode()).hexdigest()[:32]
     encoded = base64.b64encode(source_json.encode()).decode()
-    content = f'Citry.manager.registerComponentData("{class_id}", "{variables_hash}", JSON.parse(atob("{encoded}")));'
+    # Keep the content-addressed transport deduplicated, but hand the manager
+    # canonical JSON text so it can parse a fresh graph for every instance.
+    content = f'Citry.manager.registerComponentData("{class_id}", "{variables_hash}", atob("{encoded}"));'
     script = Script(kind="variables", content=content, origin_class_id=class_id)
     return _VariablesScriptCapture(
         source_json=source_json,
@@ -711,9 +713,7 @@ def _css_vars_capture(class_id: str, source_json: str) -> _VariablesScriptCaptur
 def _cache_component_js_vars_capture(
     comp_cls: type[Component],
     js_data: Mapping[str, object],
-) -> _VariablesScriptCapture | None:
-    if not uses_component(comp_cls):
-        return None
+) -> _VariablesScriptCapture:
     source_json, _variables_hash = _hash_vars(js_data)
     capture = _js_vars_capture(comp_cls.class_id, source_json)
     cache = comp_cls.citry.cache
@@ -752,19 +752,19 @@ def _cache_component_css_vars_capture(
     return capture
 
 
-def cache_component_js_vars(comp_cls: type[Component], js_data: Mapping[str, object]) -> str | None:
+def cache_component_js_vars(comp_cls: type[Component], js_data: Mapping[str, object]) -> str:
     """
     Cache the script delivering one distinct ``js_data()`` result, returning its hash.
 
     The script registers the data with the client-side manager
     (``Citry.manager.registerComponentData``); the manager hands it to the
-    component's ``$component`` callback for each instance rendered with
-    this data. The JSON rides as base64, so data values cannot break out of
-    the ``<script>`` tag. Returns ``None`` when the class has no JS (there is
-    no callback the data could reach).
+    component's ``$component`` callback and/or automatic Alpine scope for each
+    instance rendered with this data. The JSON rides as base64, so data values
+    cannot break out of the ``<script>`` tag. The generated script remains
+    content-addressed even though the browser parses a fresh graph per call.
     """
     capture = _cache_component_js_vars_capture(comp_cls, js_data)
-    return None if capture is None else capture.variables_hash
+    return capture.variables_hash
 
 
 def cache_component_css_vars(comp_cls: type[Component], css_data: Mapping[str, object]) -> str | None:

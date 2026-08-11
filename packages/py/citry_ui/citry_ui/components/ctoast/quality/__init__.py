@@ -1,0 +1,1 @@
+"""CToastRegion quality fixtures."""

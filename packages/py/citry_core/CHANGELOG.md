@@ -1,6 +1,25 @@
 # Release notes
 
-## Unreleased
+## v1.6.0
+
+_Unreleased_
+
+### Added
+
+- Expose Citry's language-neutral Fluent compiler and runtime through PyO3,
+  including typed message interfaces, deterministic artifacts, locale fallback,
+  structured rich-message segments, source diagnostics, ICU4X plural rules,
+  and the checked number, currency, date, relative-time, and list profiles.
+  Parameter metadata includes descriptions and exact declaration spans, and
+  currency formatting applies CLDR fraction digits and half-expand rounding.
+- Expose OXC-backed JavaScript expression analysis and conservative
+  `$component` initializer facts for Citry's batch and editor tooling,
+  including exact context bindings, free references, and synchronous scope
+  writes.
+
+## v1.5.0
+
+_7 Aug 2026_
 
 ### Changed
 
@@ -11,13 +30,16 @@
 
 ### Added
 
+- Expose immutable parser-owned directive and context-qualified structural
+  attribute inventories for language tools that need exhaustive Citry syntax
+  coverage.
 - Added `citry_core.template_formatter.format_template()` and the structured
   `TemplateFormatError` for parser-backed structural formatting of authored
   Citry template text without application discovery or global state. The
   structural formatter preserves sensitive, verbatim, and suppressed bytes while
   formatting proven block structure and nested template attributes.
 - Add built-in Python expression formatting backed by the vendored Ruff
-  0.14.10 pin. Ordinary expressions and `c-for` clauses are accepted only
+  0.16.2 pin. Ordinary expressions and `c-for` clauses are accepted only
   after AST and anchored-comment equivalence checks; direct `c-fill data`
   patterns use Citry's own formatter. The new
   `python_expression_provider()` function reports the authoritative provider

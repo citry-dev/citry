@@ -45,10 +45,11 @@ from importlib import import_module
 from pathlib import Path
 from types import ModuleType  # noqa: TC003 - required by register_library's public runtime annotation
 from typing import TYPE_CHECKING, Any, Literal
-from weakref import WeakValueDictionary, ref
+from weakref import WeakKeyDictionary, WeakValueDictionary, ref
 
 from citry._class_introspection import _static_class_dict
 from citry._component_introspection import _build_component_catalog, _build_component_info
+from citry._linting import _application_lint_info, _component_lint_info
 from citry.analysis import TemplateAnalysis
 from citry.autodiscovery import import_component_modules
 from citry.cache import CitryCache, InMemoryCache
@@ -63,7 +64,7 @@ from citry.component_registry import (
 from citry.constness import ConstBodyCache
 from citry.extension import ExtensionManager
 from citry.introspection import _new_engine_id
-from citry.settings import CitrySettings
+from citry.settings import CitrySettings, LintSettings
 from citry.tag_rules import build_tag_rules
 
 if TYPE_CHECKING:
@@ -145,6 +146,7 @@ class Citry:
         autodiscover: bool = True,
         mode: Literal["production", "development"] = "production",
         template_globals: Mapping[str, Any] | None = None,
+        lint: LintSettings | None = None,
         id_generator: Callable[[], str] | str | None = None,
         secret: str | list[str] | None = None,
         event_result_resolvers: Sequence[Any] = (),
@@ -169,6 +171,7 @@ class Citry:
             mode=mode,
             id_generator=id_generator,
             template_globals=template_globals if template_globals is not None else {},
+            lint=lint if lint is not None else LintSettings(),
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,
@@ -220,6 +223,18 @@ class Citry:
         # Const values; old entries are dropped when the cache is full.
         # See citry/constness.py.
         self._const_body_cache = ConstBodyCache()
+
+        # Final, extension-processed message source keyed by the class that
+        # authored the messages/messages_file pair. Inherited components share
+        # one source-unit result per Citry engine, so hook output cannot depend
+        # on which subclass happens to load it first.
+        self._messages_source_cache: WeakKeyDictionary[type, tuple[str | None, str | None]] = WeakKeyDictionary()
+        # reset_files() moves the current source here until its replacement
+        # has loaded successfully. A broken edit raises for that reload while
+        # later requests can still use the last valid source and catalog.
+        self._messages_reload_fallbacks: WeakKeyDictionary[type, tuple[str | None, str | None]] = WeakKeyDictionary()
+        self._messages_source_lock = threading.RLock()
+        self._messages_sources_loading: set[type] = set()
 
         # Parse-time validation rules derived from the registered components'
         # Kwargs/Slots declarations (see citry/tag_rules.py). Built on first
@@ -960,6 +975,11 @@ class Citry:
         """Whether this exact Citry-bound component class has any registered name."""
         return self._registry._has_class(comp_cls)
 
+    def _registered_component_classes_snapshot(self) -> set[type[Component]]:
+        """Read the authoritative registered class set without starting discovery."""
+        with self._registry._lifecycle.read("read registered component classes for a built-in extension"):
+            return set(self._registry._name_to_cls.values())
+
     def get(self, name: str) -> type[Component]:
         """
         Look up a component by name.
@@ -1211,8 +1231,14 @@ class Citry:
         """
         with self._registry._lifecycle.operation("Citry.template_analysis()", reentrant=False):
             tag_rules = self._ensure_tag_rules()
-            component_names = frozenset(self._registry._all())
-        return TemplateAnalysis._create(component_names, tag_rules)
+            registry = self._registry._all()
+            component_names = frozenset(registry)
+            components = {component.definition_id: component for component in registry.values()}
+            lint = _application_lint_info(self)
+            component_lint = {
+                definition_id: _component_lint_info(self, component) for definition_id, component in components.items()
+            }
+        return TemplateAnalysis._create(component_names, tag_rules, lint, component_lint)
 
     def autodiscover(self, dirs: Sequence[str | Path] | None = None) -> list[str]:
         """
@@ -1581,6 +1607,7 @@ class Citry:
                 self._library_definition_identities.clear()
                 self._library_definitions_by_class.clear()
                 self._tag_rules_cache = None
+                self.extensions.on_citry_cleared()
                 # Re-arm autodiscovery: the next lookup re-runs the dirs scan and
                 # rebuilds the registry. Even though the modules are already
                 # imported, the scan re-registers their components.

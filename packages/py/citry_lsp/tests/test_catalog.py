@@ -15,6 +15,7 @@ def _schema(*, fields: list[object] | None = None) -> dict[str, object]:
         "kind": "fields" if fields else "absent",
         "declared_on": "tests.Card" if fields else None,
         "import_path": "tests.Card.Schema" if fields else None,
+        "namespace_policy": "closed" if fields else "unknown",
         "fields": fields or [],
     }
 
@@ -222,7 +223,13 @@ def test_field_and_string_validators_reject_malformed_catalog_values():
         _schema_fields(None, "card", "kwargs")
     with pytest.raises(ValueError, match="field is invalid"):
         _schema_fields(
-            {"kind": "fields", "declared_on": None, "import_path": None, "fields": [{"name": "title", "required": 1}]},
+            {
+                "kind": "fields",
+                "declared_on": None,
+                "import_path": None,
+                "namespace_policy": "closed",
+                "fields": [{"name": "title", "required": 1}],
+            },
             "card",
             "kwargs",
         )

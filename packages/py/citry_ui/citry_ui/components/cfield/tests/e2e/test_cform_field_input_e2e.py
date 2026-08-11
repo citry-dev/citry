@@ -318,6 +318,29 @@ def test_controlled_and_uncontrolled_values_follow_native_reset_semantics(page):
     page.wait_for_function("document.querySelector('#email-control').value === 'next@example.com'")
 
 
+@pytest.mark.parametrize("canceled_reset", [1, 2])
+def test_each_same_turn_reset_keeps_its_own_controlled_restoration(page, canceled_reset):
+    _load(page)
+
+    page.evaluate(
+        """canceledReset => {
+          const form = document.querySelector('#profile-form');
+          const input = document.querySelector('#email-control');
+          let resetCount = 0;
+          form.addEventListener('reset', event => {
+            resetCount += 1;
+            if (resetCount === canceledReset) event.preventDefault();
+          });
+          input.value = 'browser edit';
+          form.reset();
+          form.reset();
+        }""",
+        canceled_reset,
+    )
+
+    page.wait_for_function("document.querySelector('#email-control').value === 'owner@example.com'")
+
+
 def test_dynamic_controls_follow_native_validity_and_cleanup(page):
     _load(page)
     assert page.locator("#profile-form").evaluate("element => element.matches(':invalid')") is True

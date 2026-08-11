@@ -12,10 +12,10 @@ use crate::ast::{
 use crate::constants::{
     citry_component_tag_eq, has_citry_component_prefix, is_dynamic_target_expr_attr,
     is_dynamic_target_static_attr, is_html_void_element, is_reserved_citry_tag_identity,
-    CLIENT_PROPS_ATTR, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_COMPONENT_TAG, C_ELEMENT_TAG,
-    C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG,
-    DYNAMIC_CLIENT_PROPS_ATTR, FORBIDDEN_HTML_TAG_NAMES, META_ATTR_IGNORE, META_ATTR_KEY,
-    RESERVED_TAG_NAMES, TAG_ATTR_RULES, TAG_ORDERING_RULES,
+    CLIENT_PROPS_ATTR, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS, C_BIND_ATTR, C_COMPONENT_TAG,
+    C_ELEMENT_TAG, C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG, C_IF_TAG, C_RAW_TAG,
+    C_SLOT_TAG, DYNAMIC_CLIENT_PROPS_ATTR, FORBIDDEN_HTML_TAG_NAMES, META_ATTR_IGNORE,
+    META_ATTR_KEY, RESERVED_TAG_NAMES, TAG_ATTR_RULES, TAG_ORDERING_RULES,
 };
 use crate::error::{assert_rule, assert_rules, ParseError};
 use crate::grammar::{GrammarParser, Rule};
@@ -1645,12 +1645,12 @@ fn validate_attribute_values(node: &Node, context: &ParserContext) -> Result<(),
         }
 
         if attr.kind == HtmlAttrKind::Template {
-            let expression_only = attr_name == "c-bind"
+            let expression_only = attr_name == C_BIND_ATTR
                 || is_dynamic_target_expr_attr(tag_name, attr_name)
                 || (matches!(tag_name, C_SLOT_TAG | C_FILL_TAG) && attr_name == "c-name")
                 || (tag_name == C_SLOT_TAG && attr_name == "c-required");
             if expression_only {
-                let message = if attr_name == "c-bind" {
+                let message = if attr_name == C_BIND_ATTR {
                     "'c-bind' must be an expression that resolves to a mapping; template values are not allowed."
                         .to_string()
                 } else {
@@ -1686,7 +1686,7 @@ fn validate_attribute_values(node: &Node, context: &ParserContext) -> Result<(),
 
         // Control-flow attrs (c-if, c-elif, c-for) miss their condition or
         // iterable; suggesting a static attribute would mislead there.
-        let message = if attr_name == "c-bind" || CONTROL_FLOW_TAGS.contains(attr_name) {
+        let message = if attr_name == C_BIND_ATTR || CONTROL_FLOW_TAGS.contains(attr_name) {
             format!("'{}' attribute must have a non-empty value.", attr_name)
         } else {
             format!(
@@ -2407,7 +2407,7 @@ fn process_control_flow_metadata(
         tag_name,
         C_IF_TAG | C_ELIF_TAG | C_ELSE_TAG | C_FOR_TAG | C_EMPTY_TAG | C_RAW_TAG
     ) {
-        if let Some(attr) = attrs.iter().find(|attr| attr.key.content == "c-bind") {
+        if let Some(attr) = attrs.iter().find(|attr| attr.key.content == C_BIND_ATTR) {
             return Err(context.error_from_token(
                 &attr.token,
                 format!(
@@ -2427,7 +2427,7 @@ fn process_control_flow_metadata(
         let mut fallback: Option<(usize, Vec<Token>)> = None;
         for (index, attr) in attrs.iter_mut().enumerate() {
             match attr.key.content.as_str() {
-                "c-bind" => {
+                C_BIND_ATTR => {
                     data = None;
                     fallback = None;
                 }
@@ -2771,12 +2771,12 @@ fn validate_attributes_present(node: &Node, context: &ParserContext) -> Result<(
         .filter(|attr| attr.kind != HtmlAttrKind::Meta)
         .map(|attr| attr.key.content.as_str())
         .filter(|&name| {
-            name != "c-bind"
+            name != C_BIND_ATTR
                 && !is_client_props_attr(name)
                 && !(is_component_boundary && is_component_boundary_handler_attr(name))
         })
         .collect();
-    let has_c_bind = attrs.iter().any(|attr| attr.key.content == "c-bind");
+    let has_c_bind = attrs.iter().any(|attr| attr.key.content == C_BIND_ATTR);
 
     // Check if this tag has validation rules - first check built-in rules, then user-provided rules.
     // User rules are keyed by lowercase tag name: component tags match case-insensitively
@@ -2990,7 +2990,7 @@ fn validate_attribute_conflicts(node: &Node, context: &ParserContext) -> Result<
 
         // c-bind is a dynamic spread, so it is both repeatable and excluded
         // from explicit logical-key conflicts.
-        if attr_name == "c-bind" {
+        if attr_name == C_BIND_ATTR {
             continue;
         }
 
@@ -3626,7 +3626,7 @@ fn _extract_fill_identity(node: &Node) -> FillIdentity {
                     .map(|value| value.content.clone())
                     .unwrap_or_default(),
             )),
-            "c-name" | "c-bind" => Some(FillIdentity::Dynamic),
+            "c-name" | C_BIND_ATTR => Some(FillIdentity::Dynamic),
             _ => None,
         })
         .unwrap_or(FillIdentity::None)
@@ -3680,7 +3680,7 @@ fn _extract_effective_fill_data_pattern(node: &Node) -> Option<&FillDataPattern>
         .rev()
         .find_map(|attr| match attr.key.content.as_str() {
             "data" => Some(attr.fill_data_pattern.as_ref()),
-            "c-bind" => Some(None),
+            C_BIND_ATTR => Some(None),
             _ => None,
         })?
 }
@@ -3713,7 +3713,7 @@ fn extract_slot_from_node(node: &Node) -> Option<StaticNamedSlot> {
     let name_token = match attrs
         .iter()
         .rev()
-        .find(|attr| matches!(attr.key.content.as_str(), "name" | "c-name" | "c-bind"))
+        .find(|attr| matches!(attr.key.content.as_str(), "name" | "c-name" | C_BIND_ATTR))
     {
         Some(attr) if attr.key.content == "name" => attr.inner_value.clone()?,
         Some(_) => return None,
@@ -3734,7 +3734,7 @@ fn extract_slot_from_node(node: &Node) -> Option<StaticNamedSlot> {
     let required = match attrs.iter().rev().find(|attr| {
         matches!(
             attr.key.content.as_str(),
-            "required" | "c-required" | "c-bind"
+            "required" | "c-required" | C_BIND_ATTR
         )
     }) {
         Some(attr) if attr.key.content == "required" => Some(true),

@@ -22,25 +22,22 @@ class Welcome(Component):
         }
 
     template = """
-      <div class="card">
+      <div
+        class="card"
+        x-bind:title="count + ' new messages'"
+      >
         <h1>{{ title }}</h1>
         <p>You have {{ count }} new messages.</p>
       </div>
     """
 
-    # js_data values reach the script as `data.*`.
+    # Top-level js_data values are Alpine variables.
     def js_data(
         self,
         kwargs: Kwargs,
         slots: Slots,
     ) -> dict[str, Any]:
         return {"count": len(kwargs.messages)}
-
-    js = """
-      $component(({ els, data }) => {
-        els[0].title = `${data.count} new messages`;
-      });
-    """
 
     # css_data values reach the styles as `var(--*)`.
     def css_data(

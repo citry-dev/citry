@@ -473,6 +473,8 @@ class SchemaInfo:
         declared_on: Import path of the MRO class that supplied the binding.
         import_path: Import path of the effective schema class.
         fields: Recognized fields in runtime declaration order.
+        namespace_policy: Whether declared fields exhaust the normalized
+            runtime mapping, explicitly permit extras, or leave that unknown.
 
     """
 
@@ -480,10 +482,18 @@ class SchemaInfo:
     declared_on: str | None
     import_path: str | None
     fields: tuple[FieldInfo, ...]
+    namespace_policy: Literal["closed", "allow-extra", "unknown"] = "unknown"
 
     def __post_init__(self) -> None:
         if type(self.kind) is not str or self.kind not in {"absent", "fields", "opaque"}:
             msg = f"Unknown schema kind: {self.kind!r}."
+            raise ValueError(msg)
+        if type(self.namespace_policy) is not str or self.namespace_policy not in {
+            "closed",
+            "allow-extra",
+            "unknown",
+        }:
+            msg = f"Unknown schema namespace policy: {self.namespace_policy!r}."
             raise ValueError(msg)
         _require_tuple(self.fields, "SchemaInfo.fields")
         if any(type(field) is not FieldInfo for field in self.fields):
@@ -494,6 +504,9 @@ class SchemaInfo:
             msg = "SchemaInfo field names must be unique."
             raise ValueError(msg)
         if self.kind == "absent":
+            if self.namespace_policy != "unknown":
+                msg = "An absent schema has an unknown namespace policy."
+                raise ValueError(msg)
             if self.import_path is not None or self.fields:
                 msg = "An absent schema has no import path or fields."
                 raise ValueError(msg)
@@ -505,6 +518,9 @@ class SchemaInfo:
             _require_exact_str(self.import_path, "SchemaInfo.import_path")
             return
         if self.kind == "opaque":
+            if self.namespace_policy != "unknown":
+                msg = "An opaque schema has an unknown namespace policy."
+                raise ValueError(msg)
             _require_exact_str(self.declared_on, "SchemaInfo.declared_on")
             _require_exact_str(self.import_path, "SchemaInfo.import_path")
             if self.fields:
@@ -661,21 +677,23 @@ class AssetInfo:
 @dataclass(frozen=True, slots=True)
 class ComponentAssets:
     """
-    Group a component's primary template, JavaScript, and CSS declarations.
+    Group a component's primary template, messages, JavaScript, and CSS declarations.
 
     Attributes:
         template: The primary template declaration.
+        messages: The source-locale Fluent declaration.
         js: The primary JavaScript declaration.
         css: The primary CSS declaration.
 
     """
 
     template: AssetInfo
+    messages: AssetInfo
     js: AssetInfo
     css: AssetInfo
 
     def __post_init__(self) -> None:
-        for field_name in ("template", "js", "css"):
+        for field_name in ("template", "messages", "js", "css"):
             if type(getattr(self, field_name)) is not AssetInfo:
                 msg = f"ComponentAssets.{field_name} must be an AssetInfo value."
                 raise TypeError(msg)
@@ -968,6 +986,7 @@ def _schema_to_dict(schema: SchemaInfo) -> dict[str, object]:
         "kind": schema.kind,
         "declared_on": schema.declared_on,
         "import_path": schema.import_path,
+        "namespace_policy": schema.namespace_policy,
         "fields": [
             {
                 "name": field.name,
@@ -1025,6 +1044,7 @@ def _component_to_dict(component: ComponentInfo) -> dict[str, object]:
         },
         "assets": {
             "template": _asset_to_dict(component.assets.template),
+            "messages": _asset_to_dict(component.assets.messages),
             "js": _asset_to_dict(component.assets.js),
             "css": _asset_to_dict(component.assets.css),
         },

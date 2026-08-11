@@ -1,0 +1,139 @@
+{
+  "artifacts": {
+    "candidate": "51398f363d9c8c456553c94429687a02771d47718b84a5d745d3ae3fcbc7590d",
+    "client_runtime": "a722144962d6edd937fd58b97641be2ebee47566c42bba69139392e398992219",
+    "component_render_source": "d7e4f19a16df2e604c91bf4a0fe207367a594074526fefeae5a6289707ccd933",
+    "graph_spec": "b8bbc53bfd1c9ec748764065ea1b2ae0f14905543d18fbac738b453e8f5f883a",
+    "harness": "c050913f55946c644629fb5593864d4fc523bc60ab5b19b88a5ad3d498de7c89",
+    "ownership_source": "3feb876ecdaf65225ae824dc9286862ee08724fc1684eda52eabb6340e70aeda",
+    "probe": "97f374ce30c7614ed5b06e3fb97aac4593218048c14f71271b69e0575682260d",
+    "root_shapes_tests": "a45fd4b0edd9f07fa8a8a6e0bd93b573f379958b9cad05f4dc478df677fe15ec",
+    "slot_scope_tests": "6ca226a420d0bb3e9eaa95fe5b7d4b750799427d232cbaf33c69229e7e3caf69",
+    "uv_lock": "63f3934cbad55ed0f8d4f9e57beea45f995f4dd62f195ff98481365945941ede"
+  },
+  "bounded_limits": [
+    "the candidate is research JavaScript loaded after Citry rather than a shipped runtime API",
+    "the client switch keeps the same occurrence keys and counts",
+    "each tested Slot region has one physical placement",
+    "browser creation, provider inheritance, stale generations, and chunk loading remain separate"
+  ],
+  "browser_results_equal": true,
+  "browser_versions": {
+    "chromium": "151.0.7922.34",
+    "firefox": "153.0",
+    "webkit": "26.5"
+  },
+  "dependencies": {
+    "playwright": "1.62.0",
+    "pytest_playwright": "0.8.0"
+  },
+  "environment": {
+    "machine": "arm64",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12"
+  },
+  "existing_slot_region_is_sufficient_for_source_aware_occurrence": true,
+  "new_client_graph_record_required": false,
+  "result": "PASS_BOUNDED",
+  "semantic_result": {
+    "candidate_format": "citry-i18n-rich-relocation-research/2",
+    "failures": {
+      "consumed_plan": {
+        "atomic": true,
+        "code": "I18N_RICH_PLAN_CONSUMED"
+      },
+      "corrupt_range": {
+        "atomic": true,
+        "code": "I18N_RICH_RANGE_CORRUPT"
+      },
+      "duplicate": {
+        "atomic": true,
+        "code": "I18N_RICH_OCCURRENCE_DUPLICATE"
+      },
+      "foreign_region": {
+        "atomic": true,
+        "code": "I18N_RICH_OCCURRENCE_MISSING"
+      },
+      "invalid_boundary": {
+        "atomic": true,
+        "code": "I18N_RICH_BOUNDARY_INVALID"
+      },
+      "invalid_context": {
+        "atomic": true,
+        "code": "I18N_RICH_CONTEXT_INVALID"
+      },
+      "invalid_destination": {
+        "atomic": true,
+        "code": "I18N_RICH_DESTINATION_INVALID"
+      },
+      "missing": {
+        "atomic": true,
+        "code": "I18N_RICH_OCCURRENCE_MISSING"
+      },
+      "overlapping_ranges": {
+        "atomic": true,
+        "code": "I18N_RICH_RANGE_OVERLAP"
+      },
+      "stale_revision": {
+        "atomic": true,
+        "code": "I18N_RICH_REGISTRATION_STALE"
+      }
+    },
+    "initial_gates": {
+      "component_js_received_graph_route": true,
+      "direct_slot_regions_are_distinct": true,
+      "occurrence_map_came_from_js_data": true,
+      "original_fill_scope_is_live": true,
+      "slot_boundaries_are_structural_isolates": true,
+      "slot_owned_language_is_explicit": true
+    },
+    "move_gates": {
+      "caller_events_still_use_source_scope": true,
+      "caller_scope_survived": true,
+      "component_identity_survived": true,
+      "component_ranges_survived": true,
+      "context_and_content_committed": true,
+      "focus_and_selection_survived": true,
+      "hostile_slot_controls_remained_inside_isolates": true,
+      "input_dom_and_state_survived": true,
+      "no_cleanup_or_reinitialization": true,
+      "observer_saw_only_complete_state": true,
+      "one_graph_revision_remained": true,
+      "slot_language_was_not_relabelled": true,
+      "structural_boundaries_survived": true,
+      "teleport_dom_placement_and_state_survived": true,
+      "unsafe_catalog_text_stayed_text": true
+    },
+    "round_trip_gates": {
+      "caller_scope_remained_after_round_trip": true,
+      "context_returned": true,
+      "focus_and_state_remained": true,
+      "no_cleanup_ran": true,
+      "structural_boundaries_remained": true,
+      "teleport_remained": true,
+      "unsafe_catalog_text_is_literal": true
+    },
+    "server_occurrence_declarations": [
+      {
+        "key": "message:terms_link:0",
+        "regionId": 1,
+        "slot": "terms_link"
+      },
+      {
+        "key": "message:terms_link:1",
+        "regionId": 2,
+        "slot": "terms_link"
+      },
+      {
+        "key": "message:help_link:0",
+        "regionId": 3,
+        "slot": "help_link"
+      }
+    ]
+  },
+  "tested_browsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ]
+}

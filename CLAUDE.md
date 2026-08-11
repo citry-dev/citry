@@ -58,8 +58,7 @@ is defined once in a crate and surfaced to every language.
 The active frontier is the **V3 template parser** in
 [`crates/citry_template_parser/`](crates/citry_template_parser/). V3 is the
 HTML-like `<c-*>` tag syntax described in [`README.md`](README.md). See the
-agent INDEX for the V1/V2/V3 version model and the current status
-snapshot in [`TODO/project_status_june_2026.md`](TODO/project_status_june_2026.md).
+agent INDEX for the V1/V2/V3 version model.
 
 This is a monorepo. Per-language packages live under [`packages/`](packages/);
 dev/build/release conventions are documented in
@@ -235,8 +234,8 @@ these are source-controlled and visible in `git status`, which is the point.
 | Per-user, repo-specific preference | `/.claude/settings.local.json` or `/CLAUDE.local.md` (both gitignored) |
 
 **Pick one location, not two.** If a fact already lives in
-[`docs/codebase.md`](docs/codebase.md) or the status report, the
-agent entry is a one-line pointer, not a copy.
+[`docs/codebase.md`](docs/codebase.md) or another source-controlled design
+document, the agent entry is a one-line pointer, not a copy.
 
 **Do not** write durable project knowledge into the machine-local, gitignored
 agent memory store (`~/.claude/projects/<project>/memory/`). That store is for
@@ -369,24 +368,22 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   versions only after the owning package reaches `1.0.0`, unless the user
   explicitly directs otherwise. Generic tests for version-mismatch machinery
   may still use several arbitrary values; this rule governs product contracts.
-- **Run checks repo-wide before declaring done.** Scoping a linter or test run
-  to the files you touched is fine for iteration, but a final pass must run the
-  whole gate, the same way CI does: `python scripts/check.py`. That one command
-  runs every phase (cargo fmt, cargo clippy, cargo test, ruff check, ruff format,
-  mypy, pytest, and the custom validators), runs them all even after one fails,
-  and reports everything at once. Pass `--reporter agent` for a single JSON
-  object you can parse. A scoped pass hides failures in files you changed
-  indirectly. The phases scope cargo with one `-p` per first-party crate (and
-  clippy with `--no-deps`) because the vendored ruff submodule's crates are
-  workspace path-dependencies; a bare `cargo test`/`cargo clippy` would pull in
-  ruff's own code (see [`docs/codebase.md`](docs/codebase.md) "Running checks").
+- **Follow the shared-worktree testing practice.** The authoritative workflow
+  is [`docs/codebase.md`](docs/codebase.md#testing-practices-in-a-shared-worktree):
+  run focused checks while implementing, then the fast repository profile once
+  the touched surfaces settle. Only the primary integration owner runs the full
+  coverage profile, once the shared worktree is quiet and the integrated work is
+  ready for handoff, a pull request, or release. Subagents and reviewers report
+  their focused evidence and do not start duplicate repository-wide gates unless
+  they were explicitly assigned integration ownership.
 - **Read the gate's own report, not the shell's exit code.** Two things about
-  `scripts/check.py` cost a wasted run every time they are forgotten:
+    `scripts/check.py` cost a wasted run every time they are forgotten:
   - **A failing phase carries its output in its `details` field.** With
-    `--reporter agent` the JSON is `{"status", "phases"}`. A passing phase is
-    just `{"name", "command", "status"}`; a failing one adds `"exitCode"` and
-    `"details"`, and `details` holds the tail of that phase's real output: the
-    failing test names, the mypy errors, the coverage summary. Read it before
+    `--reporter agent` the JSON is
+    `{"status", "profile", "durationSeconds", "phases"}`. Every phase includes
+    `{"name", "command", "status", "durationSeconds"}`; a failing one also adds
+    `"exitCode"` and `"details"`, and `details` holds the tail of that phase's
+    real output: the failing test names, the mypy errors, the coverage summary. Read it before
     re-running anything by hand. There is no `output`, `stdout`, or `stderr`
     key, so looking for one and finding nothing means the key is wrong, not
     that the report is empty.
@@ -400,8 +397,10 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 
   The `pytest` phase also fails when total coverage drops below
   `fail_under` in [`pyproject.toml`](pyproject.toml), with every test passing.
-  The `details` field distinguishes the two cases; treat a coverage shortfall as
-  a call for tests, and lower the ratchet only as a deliberate, stated decision.
+  This applies to the `full` profile; the `fast` profile deliberately omits
+  coverage. The `details` field distinguishes the two cases; treat a coverage
+  shortfall as a call for tests, and lower the ratchet only as a deliberate,
+  stated decision.
 - **A green local gate does not promise a green CI gate.** CI runs on Linux
   from a lockfile, and a developer machine differs in two ways that each hide a
   real failure:
@@ -428,9 +427,11 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   locking it into the assertion. Do not hand-compute token offsets or codegen
   strings from memory. A throwaway exploration harness (deleted afterward) is
   the established way to capture the output.
-- **Component `template` / `js` / `css` are multiline strings.** Write these
+- **Component `template` / `js` / `css` / `messages` are multiline strings.** Write these
   class attributes as multiline triple-quoted strings (`"""` or `'''`) with the
-  HTML/JS/CSS on its own lines, never flattened onto one line, even when short.
+  HTML/JS/CSS/FTL on its own lines, never flattened onto one line, even when short.
+  Assign one literal directly. Do not build an asset with implicit adjacent-string
+  concatenation.
   This holds in real component files and in docs examples alike (it reads better
   and matches how components are actually authored). Inside template strings,
   when a tag carries more than two attributes (or any long attribute), break
@@ -438,8 +439,22 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   own line at the tag's indent.
 - **Order component members from inputs to output.** Put nested `Kwargs`,
   `Slots`, and `State` schemas first, event handlers next, data methods such as
-  `template_data()` next, and `template`, `js`, and `css` last. Keep helpers
-  beside the behavior they support without reversing that overall direction.
+  `template_data()` next, then `template`, `js`, and `css`. Put `messages` after
+  those assets unless a concrete source-format constraint requires another
+  order. Keep helpers beside the behavior they support without reversing that
+  overall direction.
+- **Extensions compose through public values, not pair-specific bridges.** An
+  extension must not add fields to another extension's component config, change
+  another extension's callback signature, import its private state, or add a
+  special branch for one named peer. Pass ordinary public values through the
+  receiving extension's existing contract instead. A core hook is appropriate
+  only when every extension can use the same rule. See
+  [`docs/best-practices/component-authoring.md`](docs/best-practices/component-authoring.md#compose-extensions-through-public-values).
+- **Pass root provided values through `render(provides=...)`.** A direct nested
+  `render()` call starts a new tree and does not inherit provided values from
+  the function that called it. Pass every required value again so the call's
+  output depends on its visible inputs, not its call site. See
+  [`docs/best-practices/component-authoring.md`](docs/best-practices/component-authoring.md#pass-provided-values-explicitly-at-render-roots).
 - **Follow the component authoring guide.** Component source layout, nested
   schemas, Python-to-browser naming, headless/styled separation, template
   attribute order, CSS formatting, and the specification gate live in
@@ -456,10 +471,17 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
 
 ## House style
 
-- **Write for a first-time visitor.** This is an open-source project and
-  being approachable is a goal, not a nicety. Comments, docstrings, and docs
-  must make sense to someone reading the codebase for the first or second
-  time. Concretely:
+- **Plain, direct language is the default everywhere.** Unless the requester
+  asks for a specific register, style, or exact format, use plain language in
+  every kind of text: replies, plans, reports, agent instructions, design docs,
+  specifications, issue and PR text, code comments, docstrings, error messages,
+  and user-facing documentation. The user-facing section below adds extra
+  presentation rules; it does not limit this default to user-facing text.
+  State who acts, what they do, what they act on, and why it matters. Prefer a
+  sentence that explains the action over an abstract noun phrase that merely
+  labels it. This is an open-source project, so write for a first-time visitor:
+  the text must make sense to someone reading the codebase for the first or
+  second time. Concretely:
   - Prefer plain words over compiler/CS jargon ("computed once and reused"
     over "memoized"; "pre-render the constant parts" over "fold"; "drops the
     least recently used entry" over "LRU eviction").
@@ -620,6 +642,5 @@ commit history already records it.
 - Monorepo dev / build / release -> [`docs/codebase.md`](docs/codebase.md)
 - Brand assets (the C3 logo, favicons, icons) ->
   [`docs/codebase.md`](docs/codebase.md) "Brand assets"
-- Current status snapshot -> [`TODO/project_status_june_2026.md`](TODO/project_status_june_2026.md)
 - Python `citry` changelog -> [`CHANGELOG.md`](CHANGELOG.md); auxiliary package
   changelogs live with their packages

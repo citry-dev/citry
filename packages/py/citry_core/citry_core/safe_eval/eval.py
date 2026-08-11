@@ -1,7 +1,7 @@
 import builtins
 from collections.abc import Callable, Mapping, MutableMapping
 from types import MappingProxyType
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from citry_core import _rust
 from citry_core.safe_eval.error import error_context, format_error_with_context
@@ -409,7 +409,7 @@ def interpolation(
     __token: tuple[int, int],
     value: Any,
     expression: str,
-    conversion: str | None,
+    conversion: Literal["a", "r", "s"] | None,
     format_spec: str,
 ) -> Any:
     """Process t-string interpolation."""

@@ -1,0 +1,148 @@
+schema_version: 1
+family: tag
+
+components: [CTagGroup, CTag]
+
+inputs:
+  - id: ctag-group-server-inputs
+    component: CTagGroup
+    channel: server
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the visible fallback label and accessible group name.}
+      - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Supplies the exact root and relationship prefix.}
+      - {id: value, name: value, type: {display: 'str | Sequence[str] | None', interfaces: [CTagValue]}, default: {kind: literal, value: null}, effect: Sets initial single or multiple selection.}
+      - {id: selection-mode, name: selection_mode, type: {display: '"none" | "single" | "multiple"', interfaces: [CTagSelectionMode]}, default: {kind: literal, value: none}, effect: Selects descriptive or selectable behavior.}
+      - {id: mandatory, name: mandatory, type: bool, default: {kind: literal, value: false}, effect: Prevents activation from clearing the final selection.}
+      - {id: actionable, name: actionable, type: bool, default: {kind: literal, value: false}, effect: Enables Tag action callbacks.}
+      - {id: removable, name: removable, type: bool, default: {kind: literal, value: false}, effect: Adds form-safe remove Buttons and deletion keys.}
+      - {id: remove-label, name: remove_label, type: str, default: {kind: literal, value: Remove}, effect: Supplies the translated remove action label.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables the owned collection; Form and fieldset disabledness remain dominant.}
+      - {id: variant, name: variant, type: {display: '"soft" | "solid" | "outline"', interfaces: [CTagVariant]}, default: {kind: literal, value: soft}, effect: Selects visual treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CTagSize]}, default: {kind: literal, value: md}, effect: Selects Tag geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted root attributes without replacing owned semantics.}
+  - id: ctag-group-client-inputs
+    component: CTagGroup
+    channel: client
+    entries:
+      - {id: value, name: value, type: 'string | null | string[] | undefined', omitted: Releases control and preserves the last effective selection., effect: Controls selection while supplied.}
+      - {id: disabled, name: disabled, type: 'boolean | undefined', omitted: Uses the server fallback., effect: Overrides local disabledness while valid.}
+      - {id: variant, name: variant, type: '"soft" | "solid" | "outline" | undefined', omitted: Uses the server fallback., effect: Overrides visual treatment while valid.}
+      - {id: size, name: size, type: '"sm" | "md" | "lg" | undefined', omitted: Uses the server fallback., effect: Overrides geometry while valid.}
+      - {id: on-value-change, name: onValueChange, type: '((value, detail) => void) | undefined', omitted: No selection notification., effect: Receives selection requests.}
+      - {id: on-action, name: onAction, type: '((value, detail) => void) | undefined', omitted: No action notification., effect: Receives enabled actionable Tag activation.}
+      - {id: on-remove, name: onRemove, type: '((values, detail) => void) | undefined', omitted: No removal notification., effect: Receives remove Button or deletion-key requests.}
+  - id: ctag-server-inputs
+    component: CTag
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Supplies unique canonical identity within the group.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables this Tag.}
+      - {id: text-value, name: text_value, type: 'str | None', default: {kind: literal, value: null}, effect: Supplies typeahead text instead of current label text.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds Tag-root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds Tag-root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted Tag-root attributes without replacing owned semantics.}
+  - id: ctag-client-inputs
+    component: CTag
+    channel: client
+    entries:
+      - {id: disabled, name: disabled, type: 'boolean | undefined', omitted: Uses the server fallback., effect: Overrides item-local disabledness while valid.}
+      - {id: text-value, name: textValue, type: 'string | null | undefined', omitted: Uses server text or current label text., effect: Overrides typeahead text while valid.}
+
+slots:
+  - id: ctag-group-slots
+    component: CTagGroup
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CTagGroupDefaultSlotData]}, fallback: None.}
+      - {id: label, name: label, required: false, data: {display: '{}', interfaces: [CTagGroupLabelSlotData]}, fallback: Escaped label input.}
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CTagGroupDescriptionSlotData]}, fallback: Wrapper omitted.}
+  - id: ctag-slots
+    component: CTag
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CTagDefaultSlotData]}, fallback: None.}
+      - {id: start, name: start, required: false, data: {display: '{}', interfaces: [CTagStartSlotData]}, fallback: Wrapper omitted.}
+
+events:
+  - id: ctag-events
+    component: CTagGroup
+    entries:
+      - {id: on-value-change, name: onValueChange, signature: {display: '(value, detail: CTagValueChangeDetail) => void', interfaces: [CTagValueChangeDetail]}, trigger: Enabled selectable Tag proposes a different value., detail: {display: '{value, previousValue, tagValue, source, controlled, nativeEvent}', interfaces: [CTagValueChangeDetail]}, behavior: Runs before onAction; supplied client value remains authoritative.}
+      - {id: on-action, name: onAction, signature: {display: '(value: str, detail: CTagActionDetail) => void', interfaces: [CTagActionDetail]}, trigger: Enabled actionable Tag activates., detail: {display: '{value, source, nativeEvent}', interfaces: [CTagActionDetail]}, behavior: Runs after a selection request.}
+      - {id: on-remove, name: onRemove, signature: {display: '(values: list[str], detail: CTagRemoveDetail) => void', interfaces: [CTagRemoveDetail]}, trigger: Remove Button or Delete and Backspace., detail: {display: '{values, tagValue, source, nativeEvent}', interfaces: [CTagRemoveDetail]}, behavior: Requests owner collection removal without changing structure.}
+
+methods: []
+
+css:
+  - id: ctag-css-variables
+    component: CTagGroup
+    entries:
+      - {id: gap, name: --cui-tag-gap, type: length, purpose: Inline gap between Tags., default: 0.5rem}
+      - {id: row-gap, name: --cui-tag-row-gap, type: length, purpose: Gap between wrapped rows., default: 0.5rem}
+      - {id: background, name: --cui-tag-background, type: color, purpose: Unselected fill., default: Variant and scheme derived.}
+      - {id: foreground, name: --cui-tag-foreground, type: color, purpose: Unselected text., default: Variant and scheme derived.}
+      - {id: border-color, name: --cui-tag-border-color, type: color, purpose: Tag border., default: Scheme-derived neutral.}
+      - {id: selected-background, name: --cui-tag-selected-background, type: color, purpose: Selected fill., default: Scheme-derived primary.}
+      - {id: selected-foreground, name: --cui-tag-selected-foreground, type: color, purpose: Selected text., default: White.}
+      - {id: selected-border-color, name: --cui-tag-selected-border-color, type: color, purpose: Selected border., default: Selected background.}
+      - {id: focus-color, name: --cui-tag-focus-color, type: color, purpose: Focus outline., default: Highlight}
+      - {id: radius, name: --cui-tag-radius, type: length, purpose: Tag corner radius., default: 999px}
+      - {id: min-height, name: --cui-tag-min-height, type: length, purpose: Minimum Tag block size., default: Size derived.}
+      - {id: padding-inline, name: --cui-tag-padding-inline, type: length, purpose: Tag inline padding., default: Size derived.}
+      - {id: internal-gap, name: --cui-tag-internal-gap, type: length, purpose: Gap between internal parts., default: Size derived.}
+      - {id: font-size, name: --cui-tag-font-size, type: length, purpose: Tag label size., default: Size derived.}
+      - {id: label-color, name: --cui-tag-label-color, type: color, purpose: Group-label foreground., default: CanvasText}
+      - {id: description-color, name: --cui-tag-description-color, type: color, purpose: Description foreground., default: Scheme-derived muted text.}
+
+attributes:
+  - id: ctag-group-attributes
+    component: CTagGroup
+    entries:
+      - {id: selection-mode, name: data-selection-mode, element: Group root, type: '"none" | "single" | "multiple"', meaning: Reflects collection behavior.}
+      - {id: actionable, name: data-actionable, element: Group root, type: present-or-absent, meaning: Present when action callbacks are enabled.}
+      - {id: removable, name: data-removable, element: Group root, type: present-or-absent, meaning: Present when removal is enabled.}
+      - {id: disabled, name: data-disabled, element: Group root, type: present-or-absent, meaning: Mirrors effective group disabledness.}
+      - {id: variant, name: data-variant, element: Group root and Tag, type: '"soft" | "solid" | "outline"', meaning: Reflects visual treatment.}
+      - {id: size, name: data-size, element: Group root and Tag, type: '"sm" | "md" | "lg"', meaning: Reflects geometry.}
+  - id: ctag-attributes
+    component: CTag
+    entries:
+      - {id: value, name: data-value, element: Tag root, type: string, meaning: Exposes canonical identity.}
+      - {id: selected, name: data-selected, element: Tag root, type: present-or-absent, meaning: Mirrors effective selection.}
+      - {id: disabled, name: data-disabled, element: Tag root, type: present-or-absent, meaning: Mirrors effective item disabledness.}
+      - {id: removable, name: data-removable, element: Tag root, type: present-or-absent, meaning: Present when the remove affordance exists.}
+      - {id: aria-selected, name: aria-selected, element: Selectable Tag row, type: boolean, meaning: Exposes selection to assistive technology.}
+      - {id: aria-disabled, name: aria-disabled, element: Interactive Tag row, type: boolean, meaning: Exposes effective disabledness.}
+
+selectors:
+  - id: ctag-selectors
+    component: CTagGroup
+    entries:
+      - {id: group, selector: '[data-citry-ui-part="tag-group"]', element: Group root, purpose: Stable group and attrs destination.}
+      - {id: group-label, selector: '[data-citry-ui-part="group-label"]', element: Visible group label, purpose: Names the collection.}
+      - {id: list, selector: '[data-citry-ui-part="list"]', element: List or grid, purpose: Stable direct collection surface.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Optional description, purpose: Describes the collection.}
+      - {id: tag, selector: '[data-citry-ui-part="tag"]', element: Tag root, purpose: Stable Tag and attrs destination.}
+      - {id: indicator, selector: '[data-citry-ui-part="indicator"]', element: Selection indicator, purpose: Exposes selected state visually.}
+      - {id: start, selector: '[data-citry-ui-part="start"]', element: Decorative start wrapper, purpose: Positions composed decoration.}
+      - {id: tag-label, selector: '[data-citry-ui-part="tag-label"]', element: Tag label, purpose: Supplies the accessible Tag name.}
+      - {id: remove, selector: '[data-citry-ui-part="remove"]', element: Native Button, purpose: Requests removal.}
+
+interfaces:
+  - id: tag-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: selection-mode, name: CTagSelectionMode, definition: 'Literal["none", "single", "multiple"]'}
+      - {id: variant, name: CTagVariant, definition: 'Literal["soft", "solid", "outline"]'}
+      - {id: size, name: CTagSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: value, name: CTagValue, definition: 'str | None | Sequence[str]'}
+  - {id: value-change-detail, kind: record, name: CTagValueChangeDetail, entries: [{id: value, name: value, type: 'str | list[str] | None', meaning: Requested selection.}, {id: previous-value, name: previousValue, type: 'str | list[str] | None', meaning: Selection before activation.}, {id: tag-value, name: tagValue, type: str, meaning: Activated Tag identity.}, {id: source, name: source, type: '"activation"', meaning: Change origin.}, {id: controlled, name: controlled, type: bool, meaning: Whether client value controls selection.}, {id: native-event, name: nativeEvent, type: Event, meaning: Triggering native event.}]}
+  - {id: action-detail, kind: record, name: CTagActionDetail, entries: [{id: value, name: value, type: str, meaning: Activated Tag identity.}, {id: source, name: source, type: '"activation"', meaning: Action origin.}, {id: native-event, name: nativeEvent, type: Event, meaning: Triggering native event.}]}
+  - {id: remove-detail, kind: record, name: CTagRemoveDetail, entries: [{id: values, name: values, type: 'list[str]', meaning: Requested removal identities.}, {id: tag-value, name: tagValue, type: str, meaning: Tag that received the removal action.}, {id: source, name: source, type: '"remove-button" | "delete-key"', meaning: Removal origin.}, {id: native-event, name: nativeEvent, type: Event, meaning: Triggering native event.}]}
+  - {id: group-default-slot, kind: record, name: CTagGroupDefaultSlotData, entries: []}
+  - {id: group-label-slot, kind: record, name: CTagGroupLabelSlotData, entries: []}
+  - {id: group-description-slot, kind: record, name: CTagGroupDescriptionSlotData, entries: []}
+  - {id: tag-default-slot, kind: record, name: CTagDefaultSlotData, entries: []}
+  - {id: tag-start-slot, kind: record, name: CTagStartSlotData, entries: []}

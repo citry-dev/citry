@@ -638,6 +638,7 @@ class TestOnRenderGeneratorForm:
         assert len(seen) == 1
         assert ">final</b>" in seen[0]
 
+    @pytest.mark.qualification
     def test_deep_generator_chain_does_not_recurse(self):
         # A generator at every level of a deep tree; the drive loop keeps
         # depth flat, so this stays well past Python's recursion limit.

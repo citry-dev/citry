@@ -123,21 +123,6 @@ class CForm(LibraryComponent):
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
         }
 
-    @dataclass(slots=True)
-    class TemplateData:
-        form_id: str
-        action: str | None
-        method: CFormMethod | None
-        enctype: CFormEnctype | None
-        target: str | None
-        autocomplete: CFormAutocomplete | None
-        disabled: bool
-        readonly: bool
-        submitting: bool
-        novalidate: bool
-        aria_busy: Literal["true"] | None
-        attrs: dict[str, object]
-
     def js_data(
         self,
         kwargs: Kwargs,
@@ -147,6 +132,7 @@ class CForm(LibraryComponent):
             "disabled": kwargs.disabled,
             "readonly": kwargs.readonly,
             "submitting": kwargs.submitting,
+            "colors": ["red", "green", "blue"],
         }
 
     template = """
@@ -184,7 +170,7 @@ class CForm(LibraryComponent):
           readonly: {},
           submitting: {},
         },
-        init: ({ els, data, props, effect, reactive, provide }) => {
+        init: ({ els, data, scope, props, effect, reactive, provide }) => {
           const form = els[0];
           const fieldset = form.querySelector('[data-citry-ui-part="fieldset"]');
           const invalidEpisodes = new Set();

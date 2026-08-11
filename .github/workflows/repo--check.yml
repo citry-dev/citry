@@ -32,7 +32,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       # Rust is needed for the cargo fmt/clippy/test phases and to build the
       # citry_core extension during `uv sync`.
@@ -73,7 +73,7 @@ jobs:
       # mypy, pyright, package-local Node checks, pytest, and the custom
       # validators. Runs every phase then reports.
       - name: Run the check suite
-        run: python scripts/check.py
+        run: python scripts/check.py --profile full
 
       # Run the package's CLI directly as well as through pytest. `-S` hides
       # installed site packages, exercising its standard-library schema checker.

@@ -1,0 +1,78 @@
+schema_version: 1
+family: divider
+
+components:
+  - CDivider
+
+inputs:
+  - id: cdivider-server-inputs
+    component: CDivider
+    channel: server
+    column_widths: [fit, 15rem, 7rem, auto]
+    entries:
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CDividerOrientation]}, default: {kind: literal, value: horizontal}, effect: Selects native horizontal or ARIA vertical separator semantics.}
+      - {id: variant, name: variant, type: {display: '"solid" | "dashed" | "dotted"', interfaces: [CDividerVariant]}, default: {kind: literal, value: solid}, effect: Selects the line style.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CDividerSize]}, default: {kind: literal, value: sm}, effect: 'Selects 1px, 2px, or 4px fallback thickness.'}
+      - {id: inset, name: inset, type: {display: '"none" | "start" | "end" | "both"', interfaces: [CDividerInset]}, default: {kind: literal, value: none}, effect: Adds logical spacing along the line axis.}
+      - {id: label-pos, name: label_pos, type: {display: '"start" | "center" | "end"', interfaces: [CDividerLabelPos]}, default: {kind: literal, value: center}, effect: Positions a supplied visible label; non-default values require the default slot.}
+      - {id: decorative, name: decorative, type: bool, default: {kind: literal, value: false}, effect: Removes an unlabelled Divider from the accessibility tree. Labelled line segments are always decorative.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with `attrs`.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with `attrs`.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted native, data, targeted Alpine, and event attributes without replacing Divider semantics, anatomy, or Citry runtime fields.'}
+
+slots:
+  - id: cdivider-slots
+    component: CDivider
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{}', interfaces: [CDividerDefaultSlotData]}, fallback: Renders one unlabelled line.}
+
+events: []
+methods: []
+
+css:
+  - id: cdivider-css-variables
+    component: CDivider
+    entries:
+      - {id: cui-divider-color, name: --cui-divider-color, type: color, purpose: Line color., default: Nested-scheme border color.}
+      - {id: cui-divider-thickness, name: --cui-divider-thickness, type: length, purpose: Line thickness., default: 'Size-derived 1px, 2px, or 4px.'}
+      - {id: cui-divider-inset, name: --cui-divider-inset, type: length, purpose: Logical start/end inset amount., default: 1.5rem}
+      - {id: cui-divider-label-gap, name: --cui-divider-label-gap, type: length, purpose: Gap from a visible label to each line., default: 0.75rem}
+      - {id: cui-divider-label-color, name: --cui-divider-label-color, type: color, purpose: Visible label foreground., default: CanvasText}
+      - {id: cui-divider-label-font-size, name: --cui-divider-label-font-size, type: length, purpose: Visible label text size., default: 0.875rem}
+      - {id: cui-divider-label-font-weight, name: --cui-divider-label-font-weight, type: font-weight, purpose: Visible label emphasis., default: '600'}
+      - {id: cui-divider-min-length, name: --cui-divider-min-length, type: length, purpose: Useful vertical minimum length., default: 1em}
+
+attributes:
+  - id: cdivider-attributes
+    component: CDivider
+    entries:
+      - {id: data-orientation, name: data-orientation, element: Root, type: '"horizontal" | "vertical"', meaning: Reflects the line axis and semantic form.}
+      - {id: data-variant, name: data-variant, element: Root, type: '"solid" | "dashed" | "dotted"', meaning: Reflects the line style.}
+      - {id: data-size, name: data-size, element: Root, type: '"sm" | "md" | "lg"', meaning: Reflects the thickness preset.}
+      - {id: data-inset, name: data-inset, element: Root, type: '"none" | "start" | "end" | "both"', meaning: Reflects logical inset geometry.}
+      - {id: data-labeled, name: data-labeled, element: Root, type: present-or-absent, meaning: Present when the default label slot renders.}
+      - {id: data-label-pos, name: data-label-pos, element: Labelled root, type: '"start" | "center" | "end"', meaning: Reflects labelled line balance.}
+      - {id: data-decorative, name: data-decorative, element: Root, type: present-or-absent, meaning: Present when the line exposes no separator semantics.}
+      - {id: aria-orientation, name: aria-orientation, element: Vertical semantic root, type: '"vertical"', meaning: Communicates the nondefault separator orientation.}
+      - {id: aria-hidden, name: aria-hidden, element: Decorative root or labelled line, type: boolean-presence, meaning: Removes the decorative line from the accessibility tree.}
+
+selectors:
+  - id: cdivider-selectors
+    component: CDivider
+    entries:
+      - {id: data-citry-ui-part-divider, selector: '[data-citry-ui-part="divider"]', element: Root, purpose: Stable Divider root and `attrs` destination.}
+      - {id: data-citry-ui-part-line, selector: '[data-citry-ui-part="line"]', element: Labelled decorative line segment, purpose: Styles either of the two direct line children.}
+      - {id: data-citry-ui-part-label, selector: '[data-citry-ui-part="label"]', element: Labelled visible-content wrapper, purpose: Styles the authored section label.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-cdivider-orientation, name: CDividerOrientation, definition: 'Literal["horizontal", "vertical"]'}
+      - {id: input-type-aliases-cdivider-variant, name: CDividerVariant, definition: 'Literal["solid", "dashed", "dotted"]'}
+      - {id: input-type-aliases-cdivider-size, name: CDividerSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: input-type-aliases-cdivider-inset, name: CDividerInset, definition: 'Literal["none", "start", "end", "both"]'}
+      - {id: input-type-aliases-cdivider-label-pos, name: CDividerLabelPos, definition: 'Literal["start", "center", "end"]'}
+  - {id: cdivider-default-slot-data, kind: record, name: CDividerDefaultSlotData, entries: []}

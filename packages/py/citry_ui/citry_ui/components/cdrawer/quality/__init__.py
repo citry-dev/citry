@@ -1,0 +1,1 @@
+"""CDrawer quality fixtures."""

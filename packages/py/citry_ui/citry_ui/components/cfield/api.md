@@ -88,7 +88,9 @@ and retain the last valid value or documented fallback.
 Field owns `required`, `disabled`, `readonly`, and `invalid` for a control
 inside it. Set those inputs on Field, not on the nested Input. This keeps the
 label marker, native properties, ARIA relationships, and visible error in one
-state. A disabled `CForm` always wins because it uses a native disabled
+state. Required and read-only each require a control that supports that state.
+An unsupported server value raises; an unsupported browser value resolves to
+`false` and reports once. A disabled `CForm` always wins because it uses a native disabled
 fieldset.
 
 Standalone Input accepts those state inputs directly. Its client inputs use the

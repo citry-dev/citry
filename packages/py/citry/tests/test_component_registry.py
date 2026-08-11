@@ -473,7 +473,17 @@ class TestBuiltinLifecycle:
         assert dict(c._classes_by_id) == {}
         assert c._tag_rules_cache is None
         assert c._registry._builtins_registered is False
-        assert set(c.components) == {"provide", "cache", "component", "element", "error-fallback", "js", "css"}
+        assert set(c.components) == {
+            "provide",
+            "cache",
+            "component",
+            "element",
+            "error-fallback",
+            "js",
+            "css",
+            "i18n",
+            "trans",
+        }
 
     def test_other_thread_cannot_observe_builtin_that_rolls_back(self):
         started = threading.Event()
@@ -557,7 +567,17 @@ class TestBuiltinLifecycle:
             _ = c.components
         assert c._registry._name_to_cls == {}
         assert c._registry._builtins_registered is False
-        assert set(c.components) == {"provide", "cache", "component", "element", "error-fallback", "js", "css"}
+        assert set(c.components) == {
+            "provide",
+            "cache",
+            "component",
+            "element",
+            "error-fallback",
+            "js",
+            "css",
+            "i18n",
+            "trans",
+        }
 
     def test_builtin_token_from_another_registry_is_rejected(self):
         c = Citry()
@@ -595,7 +615,17 @@ class TestBuiltinLifecycle:
 
         c = Citry(extensions=[TryReservedName])
 
-        assert set(c.components) == {"provide", "cache", "component", "element", "error-fallback", "js", "css"}
+        assert set(c.components) == {
+            "provide",
+            "cache",
+            "component",
+            "element",
+            "error-fallback",
+            "js",
+            "css",
+            "i18n",
+            "trans",
+        }
         assert len(errors) == 1
         assert "reserved for the built-in <c-css>" in errors[0]
 
@@ -664,7 +694,17 @@ class TestBuiltinLifecycle:
 
         with pytest.raises(KeyError, match=retained.class_id):
             c.get_component_by_class_id(retained.class_id)
-        assert set(c.components) == {"provide", "cache", "component", "element", "error-fallback", "js", "css"}
+        assert set(c.components) == {
+            "provide",
+            "cache",
+            "component",
+            "element",
+            "error-fallback",
+            "js",
+            "css",
+            "i18n",
+            "trans",
+        }
 
 
 class TestManualRegister:

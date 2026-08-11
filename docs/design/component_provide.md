@@ -1,8 +1,8 @@
 # Design: provide / inject and the `<c-provide>` component
 
 **Status (2026-07-24): server and client contracts implemented.** The
-`CitryContext.provides` plumbing, the hand-over at component and slot
-boundaries, `Component.provide()`/`inject()`, the `<c-provide>` built-in with
+`CitryContext.provides` plumbing, explicit root `render(provides=...)`, the
+hand-over at component and slot boundaries, `Component.provide()`/`inject()`, the `<c-provide>` built-in with
 the `transparent` flag, `Component.unprovide()` compound-scope boundaries,
 lazy per-instance built-in registration, and the reserved-name guard. Tests in
 [`tests/test_provide.py`](../../packages/py/citry/tests/test_provide.py).
@@ -72,12 +72,14 @@ What already exists, verified on 2026-06-10:
 
 ## 2. The model in one paragraph
 
-A component makes data available with `self.provide("user_data", user=user)`
+A render caller can start the root with
+`Page().render(provides={"request_scope": request_scope})`. A component makes
+another value available below itself with `self.provide("user_data", user=user)`
 (or a template wraps content in `<c-provide key="user_data" c-user="user">`),
 and anything rendered inside that point can read it with
 `self.inject("user_data")`. Content written elsewhere (`CitryElement`) that ends up
 rendering inside the provider (as `CitryRender`) can inject too (section 3). The data travels on
-`CitryContext.provides`, a small mapping that each render hands to the next:
+`CitryContext.provides`, a small key-to-value mapping that each render hands to the next:
 a component hands it to its children, and a `<c-slot>` hands it into the slot
 content it renders. The data never enters the template variables; components
 opt in with `inject`. When two providers use the same key, the closer one
@@ -138,8 +140,10 @@ Provider above would never be on the button's parent chain.
 ### 4.1 `CitryContext.provides`
 
 `CitryContext` gets a `provides` field next to `variables`/`extra`: a mapping
-from key to frozen payload, plus private blocked markers that `inject()` treats
-as absent. It is treated as read-only. A component that provides or blocks
+from key to value, plus private blocked markers that `inject()` treats as
+absent. The keyword-field form of `provide()` stores a frozen payload; the
+direct-value form and root render mapping store the exact value the caller
+passed. The mapping is treated as read-only. A component that provides or blocks
 builds a **new** mapping with its changes instead of changing the one it
 received, so everyone already holding the old mapping is unaffected, and
 handing the mapping around is just sharing a reference (no copies).
@@ -156,8 +160,9 @@ stores the current `context.provides` on the `DeferredComponent` (a shared
 reference, nothing is copied). When the queue renders the child, the child
 instance keeps that mapping (this is what `inject` reads), and the child's
 own context starts from it plus whatever the child itself provides in
-`template_data`. A root render (`CitryElement.render()`) starts with nothing
-provided.
+`template_data`. A root render starts with the copied mapping passed to
+`CitryElement.render(provides=...)`, or an empty mapping when the caller omits
+it. Keys are validated before rendering begins.
 
 ### 4.3 From a `<c-slot>` into the slot content
 
@@ -178,25 +183,28 @@ provides active at that point: `_render_value` passes them to `render_impl`.
 This covers `{{ element }}` expressions (via `ExprNode`) and Python-supplied
 slot content (a `Slot` wrapping an element, or a slot function returning
 one), so `Provide(key="x", ..., slots={"default": Injectee()})` works. Only a
-plain user call to `.render()` starts with nothing provided.
+plain user call to `.render()` starts with only the values passed to that call.
+In particular, a direct `.render()` call inside `template_data()` starts a new
+root and does not inherit the outer component's provides. The caller passes any
+required values again.
 
 ## 5. The Python API
 
-### 5.1 `Component.provide(key, /, **data)`
+### 5.1 `Component.provide(key, value=MISSING, /, **data)`
 
-Makes `data` available to this component's descendants. Call it from
+Makes one value available to this component's descendants. Call it from
 `template_data` (or any hook that runs before the render context is built in
 `_render_one`). `key` must be a non-empty string identifier (error
-otherwise, matching DJC). `key` is positional-only, so a data field literally
-named `key` can be provided. The data is frozen right away into a
-`NamedTuple` named `Provided`: it cannot be changed afterwards, its fields
-are read as attributes (`inject("user_data").user`), and every provided
-field is always present. This is DJC's `DepInject` contract under a citry
-name.
+otherwise, matching DJC). Pass one positional `value` to store that object
+directly. Or pass keyword fields, which Citry freezes into a `NamedTuple` named
+`Provided`; its fields are read as attributes (`inject("user_data").user`). A
+call that passes both forms raises `TypeError`. `key` and the direct value are
+positional-only, so fields named `key` or `value` remain available in the
+keyword form.
 
 ### 5.2 `Component.inject(key, default=MISSING)`
 
-Returns the payload from the nearest provider above this component in the
+Returns the value from the nearest provider above this component in the
 rendered page, the given `default` when the key was never provided, or
 raises `KeyError` (with the DJC-style explanation plus a difflib "did you
 mean" hint over the available keys). Uses a `MISSING` sentinel rather than
@@ -223,7 +231,19 @@ is deliberately injectable. The runtime therefore stores a private `BLOCKED`
 marker in the outgoing provides mapping. `inject()` treats that marker exactly
 like an absent key, including default handling and close-name suggestions.
 
-### 5.4 Scoping rules (the DJC contract plus explicit boundaries)
+### 5.4 `CitryElement.render(provides=...)`
+
+Starts the root with explicit values that the root component and its rendered
+descendants may inject. The argument must be a mapping from valid provide keys
+to values. Citry copies the mapping before rendering, validates every key, and
+keeps each value unchanged.
+
+This is the request-entry API for a locale context, tenant, feature set, or
+other data that belongs to the whole tree but should not become a template
+variable. Each direct render call is independent. A nested direct render must
+pass its own mapping even when its caller is currently rendering another tree.
+
+### 5.5 Scoping rules (the DJC contract plus explicit boundaries)
 
 - Provided data is **not** added to template variables; components opt in
   via `inject`. (`test_provide_does_not_expose_kwargs_to_context`)
@@ -247,13 +267,16 @@ essentially:
 ```python
 class Provide(Component):
     transparent = True
-    template = "<c-slot />"
 
     def template_data(self, kwargs, slots):
         data = dict(kwargs)
         key = data.pop("key", None)   # missing/invalid key raises
         self.provide(key, **data)
         return {}
+
+    template = """
+      <c-slot />
+    """
 ```
 
 Everything else comes from existing machinery: static `key="theme"`, dynamic

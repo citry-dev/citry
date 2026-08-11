@@ -149,6 +149,124 @@ def test_nested_scopes_multi_root_shared_root_and_init_dag(page: Any, serve_live
     assert result["order"].index("shared-outer") < result["order"].index("shared-inner")
 
 
+def test_js_data_seeds_alpine_without_callback_and_clones_each_instance(page: Any, serve_live: Any) -> None:
+    c = Citry()
+    c.set_mounted_prefix("/citry")
+
+    class SeedOnly(Component):
+        citry = c
+        template = """
+          <article class="seed-only" x-init="nested.count += 1" x-text="label + ':' + nested.count"></article>
+        """
+
+        def js_data(self, kwargs: Any, slots: Any) -> dict[str, object]:
+            return {"label": "seed", "nested": {"count": 0}}
+
+    class WithInit(Component):
+        citry = c
+        js = """
+          $component(({ data, scope }) => {
+            window.__seededInit.push({
+              before: scope.label,
+              sameNestedValue: scope.nested.count === data.nested.count,
+              ownsProto: Object.prototype.hasOwnProperty.call(scope, "__proto__"),
+              unpolluted: ({}).polluted === undefined,
+            });
+            data.nested.count += 10;
+            scope.label = "callback";
+          });
+        """
+        template = """<output class="with-init" x-text="label + ':' + nested.count"></output>"""
+
+        def js_data(self, kwargs: Any, slots: Any) -> dict[str, object]:
+            return {
+                "label": "server",
+                "nested": {"count": 0},
+                "__proto__": {"polluted": True},
+            }
+
+    class Page(Component):
+        citry = c
+        template = """
+          <html><body>
+            <script>window.__seededInit = [];</script>
+            <c-seed-only /><c-seed-only />
+            <c-with-init /><c-with-init />
+          </body></html>
+        """
+
+    base = serve_live(c, str(Page()), "")
+    page.goto(base + "/")
+    page.wait_for_function(
+        "window.__seededInit?.length === 2 && "
+        "[...document.querySelectorAll('.seed-only')].every((el) => el.textContent === 'seed:1')"
+    )
+
+    result = page.evaluate(
+        """
+        () => {
+          const seedRoots = [...document.querySelectorAll('.seed-only')];
+          return {
+            seedText: seedRoots.map((el) => el.textContent),
+            seedGraphsAreDistinct: Alpine.evaluate(seedRoots[0], 'nested') !== Alpine.evaluate(seedRoots[1], 'nested'),
+            initText: [...document.querySelectorAll('.with-init')].map((el) => el.textContent),
+            init: window.__seededInit,
+            objectPrototypeSafe: ({}).polluted === undefined,
+          };
+        }
+        """
+    )
+    assert result == {
+        "seedText": ["seed:1", "seed:1"],
+        "seedGraphsAreDistinct": True,
+        "initText": ["callback:10", "callback:10"],
+        "init": [
+            {"before": "server", "sameNestedValue": True, "ownsProto": True, "unpolluted": True},
+            {"before": "server", "sameNestedValue": True, "ownsProto": True, "unpolluted": True},
+        ],
+        "objectPrototypeSafe": True,
+    }
+
+
+def test_malformed_registered_js_data_cancels_without_partial_scope_seed(page: Any, serve_live: Any) -> None:
+    c = Citry()
+    c.set_mounted_prefix("/citry")
+
+    class SeedOnly(Component):
+        citry = c
+        template = '<article class="malformed-seed" x-data="{}"></article>'
+
+        def js_data(self, kwargs: Any, slots: Any) -> dict[str, int]:
+            return {"first": 1, "second": 2}
+
+    html = str(SeedOnly())
+    invalid = base64.b64encode(b'{"first":1,').decode()
+    pattern = re.compile(
+        rf'(Citry\.manager\.registerComponentData\("{re.escape(SeedOnly.class_id)}", "[^"]+", atob\(")[^"]+'
+    )
+    html, replacements = pattern.subn(rf"\g<1>{invalid}", html)
+    assert replacements == 1
+
+    messages: list[str] = []
+    page.on("console", lambda message: messages.append(message.text))
+    base = serve_live(c, html, "")
+    page.goto(base + "/")
+    page.wait_for_function("window.Alpine && document.querySelector('.malformed-seed')?._x_dataStack")
+
+    assert (
+        page.evaluate(
+            """
+        () => {
+          const el = document.querySelector('.malformed-seed');
+          return Alpine.evaluate(el, "typeof first + ':' + typeof second");
+        }
+        """
+        )
+        == "undefined:undefined"
+    )
+    assert any("component data" in message and "call was cancelled" in message for message in messages)
+
+
 def test_pre_boundary_phase_reads_parent_before_child_isolation(page: Any, serve_live: Any) -> None:
     c = Citry()
     c.set_mounted_prefix("/citry")
@@ -187,13 +305,16 @@ def test_pre_boundary_phase_reads_parent_before_child_isolation(page: Any, serve
     page.wait_for_function("document.querySelector('.pre-boundary-child output')?.textContent === 'child'")
     assert page.evaluate(
         """() => ({
-          value: window.__a4PreBoundaryValue,
-          calls: window.__a4PreBoundaryCalls,
-          stacks: window.__a4PreBoundaryStacks,
-        })"""
+            value: window.__a4PreBoundaryValue,
+            calls: window.__a4PreBoundaryCalls,
+            stacks: window.__a4PreBoundaryStacks,
+          })"""
     ) == {
         "value": "parent-source",
-        "calls": 1,
+        # Page owns x-data and remains a lifecycle boundary, but its inherited
+        # always-empty js_data hook needs no synthetic scope layer. Child still
+        # reads the parent's x-data before its own boundary is installed.
+        "calls": 2,
         "stacks": {"child": None, "parent": [["sourceValue"]]},
     }
     assert page.locator(".pre-boundary-child output").inner_text() == "child"
@@ -396,15 +517,25 @@ def test_same_class_replacement_keeps_scope_and_els_but_refires_fresh_render(pag
         citry = c
         js = """
           $component(({ id, data, scope, els }) => {
+            const before = {
+              label: scope.label,
+              goneType: typeof scope.gone,
+              added: scope.added ?? null,
+              hadLocal: Boolean(scope.local),
+            };
             scope.identity = scope.identity || Symbol("stable-scope");
-            window.__a4ReplacementInits.push({ id, data, scope, els });
+            scope.local = scope.local || Symbol("callback-only");
+            scope.label = "callback-" + data.label;
+            window.__a4ReplacementInits.push({ id, data, scope, els, before });
             return () => window.__a4ReplacementCleanups.push(id);
           });
         """
         template = '<article class="card">card</article>'
 
         def js_data(self, kwargs: Any, slots: Any) -> dict[str, str]:
-            return {"label": kwargs["label"]}
+            if kwargs["label"] == "old":
+                return {"label": "old", "gone": "remove"}
+            return {"label": "fresh", "added": "new"}
 
     fragments = "".join(
         [
@@ -463,6 +594,11 @@ def test_same_class_replacement_keeps_scope_and_els_but_refires_fresh_render(pag
             stableScope: freshInit.scope === oldInit.scope,
             stableEls: freshInit.els === oldInit.els,
             pointsAtFreshRoot: freshInit.els[0] === document.querySelectorAll('.card')[1],
+            resetServerFieldBeforeCallback: freshInit.before.label,
+            removedOldSeed: freshInit.before.goneType,
+            addedNewSeed: freshInit.before.added,
+            preservedCallbackOnly: freshInit.before.hadLocal,
+            callbackOverride: freshInit.scope.label,
             cleanupIds: window.__a4ReplacementCleanups.slice().sort(),
             oldId: oldInit.id,
             provisionalId: provisionalInit.id,
@@ -476,6 +612,11 @@ def test_same_class_replacement_keeps_scope_and_els_but_refires_fresh_render(pag
     assert result["stableScope"] is True
     assert result["stableEls"] is True
     assert result["pointsAtFreshRoot"] is True
+    assert result["resetServerFieldBeforeCallback"] == "fresh"
+    assert result["removedOldSeed"] == "undefined"
+    assert result["addedNewSeed"] == "new"
+    assert result["preservedCallbackOnly"] is True
+    assert result["callbackOverride"] == "callback-fresh"
     assert result["cleanupIds"] == sorted([result["oldId"], result["provisionalId"]])
     assert result["runtime"]["componentDataReferences"] == 1
     assert result["runtime"]["instanceDataOwners"] == 0

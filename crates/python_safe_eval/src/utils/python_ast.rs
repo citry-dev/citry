@@ -74,7 +74,8 @@ pub fn call(func: Expr, args: Vec<Expr>, keywords: Vec<Keyword>, range: TextRang
             range,
             node_index: Default::default(),
             args: args.into_boxed_slice(),
-            keywords: keywords.into_boxed_slice(),
+            // Ruff stores keywords in a compact vector as of 0.16.2.
+            keywords: keywords.into(),
         },
     })
 }

@@ -216,7 +216,7 @@ class TestStaticMode:
 
         assert _run_main(["check", "--static"]) == 1
         error = capsys.readouterr().err
-        assert "unsupported non-None template_lang" in error
+        assert "Citry cannot check template_lang with a str value" in error
         assert "Parse error" not in error
 
     def test_source_errors_are_findings_and_scan_continues(self, tmp_path, monkeypatch, capsys):
@@ -258,6 +258,40 @@ class TestRegistryMode:
         assert report.notes == (TRANSFORM_NOTE,)
         assert len(report.findings) == 1
         assert "Broken.template" in report.findings[0].origin
+
+    def test_static_component_props_report_unknown_and_missing_keys(self, tmp_path):
+        engine = Citry(autodiscover=False)
+
+        class Child(Component):
+            citry = engine
+            js = """
+              $component({
+                props: {
+                  title: { type: String, required: true },
+                  count: { type: Number, required: true },
+                  enabled: { type: Boolean, required: true },
+                },
+                init() {},
+              });
+            """
+            template = """
+              <span></span>
+            """
+
+        class Parent(Component):
+            citry = engine
+            template = """
+              <c-child $c-props="{ title: title, count: 'many', extra: true }" />
+              <c-child $c-props="{ title, ...{} }" />
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings if finding.code.startswith("citry.browser.")] == [
+            "citry.browser.incompatible-component-prop",
+            "citry.browser.unknown-component-prop",
+            "citry.browser.missing-component-prop",
+        ]
 
     def test_complete_tag_rules_validate_registered_aliases(self, tmp_path):
         engine = Citry(autodiscover=False)
@@ -320,7 +354,291 @@ class TestRegistryMode:
         report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
 
         assert report.exit_code == 1
-        assert report.findings[0].message == "1:8: unknown registered component <c-Ghost>"
+        assert report.findings[0].message == "Component <c-Ghost> is not registered."
+        assert report.findings[0].code == "citry.template.unknown-component"
+
+    def test_literal_tr_uses_complete_cross_component_i18n_index(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Messages(Component):
+            citry = engine
+            messages = "known-message = Known"
+
+        class Host(Component):
+            citry = engine
+            template = '{{ tr("known-message") }} {{ tr("missing-message") }}'
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == ["citry.i18n.unknown-message"]
+        assert "missing-message" in report.findings[0].message
+
+    def test_literal_trans_message_uses_complete_i18n_index(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "known-message = Known"
+            template = '<c-trans message="missing-message" c-values="{}" />'
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == ["citry.i18n.unknown-message"]
+
+    def test_literal_trans_checks_attribute_values_and_fills(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+                # @param {str} $name
+                # @param {Slot} $link
+                rich = Hello { $name }, { $link }
+                    .aria-label = Hello { $name }
+            """
+            template = """
+                <c-trans message="rich" attr="missing" c-values="{'name': 'Ada'}" />
+                <c-trans message="rich" c-values="{'extra': 'Ada'}">
+                    <c-fill name="wrong">Wrong</c-fill>
+                </c-trans>
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == [
+            "citry.i18n.unknown-message",
+            "citry.i18n.argument-invalid",
+        ]
+        assert "rich.missing" in report.findings[0].message
+        assert "unknown values: extra" in report.findings[1].message
+        assert "missing values: name" in report.findings[1].message
+        assert "unknown fills: wrong" in report.findings[1].message
+        assert "missing fills: link" in report.findings[1].message
+
+    def test_missing_i18n_param_type_is_a_configurable_warning(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Broken(Component):
+            citry = engine
+            messages = "broken = Hello, { $name }."
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert report.findings[0].code == "citry.i18n.missing-param-type"
+        assert report.findings[0].severity == "warning"
+        assert "without an @param" in report.findings[0].message
+        assert report.exit_code == 0
+
+    def test_literal_tr_checks_attributes_arguments_and_literal_types(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+                # @param {str} $name - User name.
+                greeting = Hello, { $name }.
+                    .aria-label = Greeting for { $name }
+            """
+            template = """
+                {{ tr("greeting", attr="missing", name="Ada") }}
+                {{ tr("greeting", extra="Ada") }}
+                {{ tr("greeting", name=3) }}
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == [
+            "citry.i18n.unknown-message",
+            "citry.i18n.argument-invalid",
+            "citry.i18n.argument-invalid",
+        ]
+        assert "greeting.missing" in report.findings[0].message
+        assert "unknown argument(s): extra" in report.findings[1].message
+        assert "missing argument(s): name" in report.findings[1].message
+        assert "must be str" in report.findings[2].message
+
+    def test_template_variable_types_are_checked_against_message_parameters(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "# @param {str} $name\ngreeting = Hello, { $name }."
+            template = '{{ tr("greeting", name=count) }}'
+
+            class TemplateData:
+                count: int
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == ["citry.i18n.argument-invalid"]
+        assert "must be str, not int" in report.findings[0].message
+
+    def test_dynamic_trans_values_spread_defers_argument_checks_to_runtime(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "# @param {str} $name\ngreeting = Hello, { $name }."
+            template = '<c-trans message="greeting" c-values="{**values}" />'
+
+            class TemplateData:
+                values: dict[str, object]
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert report.findings == ()
+
+    def test_python_self_i18n_tr_literal_ids_are_checked(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "known = Known"
+
+            def translated_label(self) -> str:
+                return self.i18n.tr("missing")
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == ["citry.i18n.unknown-message"]
+        assert "missing" in report.findings[0].message
+
+    @pytest.mark.parametrize("attr", ["which", "None"])
+    def test_literal_missing_id_is_checked_when_attr_is_not_a_string(self, tmp_path, attr):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "known = Known"
+            template = f'{{{{ tr("missing", attr={attr}) }}}}'
+
+            class TemplateData:
+                which: str
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == ["citry.i18n.unknown-message"]
+
+    def test_python_i18n_scan_stops_at_nested_helper_classes(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "known = Known"
+
+            class Helper:
+                def translated_label(self) -> str:
+                    return self.i18n.tr("missing")
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert report.findings == ()
+
+    def test_client_message_ids_and_cross_language_plain_fallback_are_checked(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US", "cs-CZ"),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "known-message = Known"
+            template = '{{ tr("known-message") }}'
+
+            class I18n:
+                client_messages = ("missing-client-message",)
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == [
+            "citry.i18n.client-message-invalid",
+            "citry.i18n.cross-language-fallback",
+        ]
 
     def test_expression_strings_that_look_like_templates_do_not_create_unknowns(self, tmp_path):
         engine = Citry(autodiscover=False)
@@ -431,7 +749,7 @@ class TestRegistryMode:
 
         assert report.exit_code == 1
         assert len(report.findings) == 2
-        assert "cannot read" in report.findings[0].message
+        assert "could not read this template file" in report.findings[0].message
         assert report.findings[1].origin.endswith("b.html")
 
     def test_never_calls_template_load_or_transform_hooks(self, tmp_path, monkeypatch):
@@ -466,6 +784,117 @@ class TestAppFallback:
         assert main(args) == 0
         assert capsys.readouterr().err.count("extension-transformed") == 1
 
+    def test_unknown_template_roots_use_app_policy_and_runtime_globals(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = _write_app(
+            tmp_path,
+            "from citry import Citry, Component\n"
+            "engine = Citry(autodiscover=False, template_globals={'site_name': 'Citry'})\n"
+            "class Card(Component):\n"
+            " citry = engine\n"
+            " class TemplateData:\n"
+            "  title: str\n"
+            " template = '''\n<p>{{ title }} {{ site_name }} {{ typo }}</p>\n'''\n",
+        )
+
+        assert _run_main(["--app", spec, "check", "--format", "json"]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert [item["code"] for item in payload["findings"]] == ["citry.template.unknown-variable"]
+        assert payload["findings"][0]["severity"] == "error"
+        assert "typo" in payload["findings"][0]["message"]
+
+    def test_warning_policy_reports_without_failing_check(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = _write_app(
+            tmp_path,
+            "from citry import Citry, Component, LintSettings\n"
+            "engine = Citry(autodiscover=False, lint=LintSettings("
+            "rule_unknown_template_variable='warning'))\n"
+            "class Card(Component):\n"
+            " citry = engine\n"
+            " class TemplateData:\n"
+            "  title: str\n"
+            " template = '''\n<p>{{ typo }}</p>\n'''\n",
+        )
+
+        assert main(["--app", spec, "check", "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["exit_code"] == 0
+        assert payload["findings"][0]["severity"] == "warning"
+
+    def test_extra_allowing_schema_caps_default_error_at_warning(self, tmp_path, monkeypatch, capsys):
+        pytest.importorskip("pydantic")
+        monkeypatch.chdir(tmp_path)
+        spec = _write_app(
+            tmp_path,
+            "from pydantic import BaseModel, ConfigDict\n"
+            "from citry import Citry, Component\n"
+            "engine = Citry(autodiscover=False)\n"
+            "class Card(Component):\n"
+            " citry = engine\n"
+            " class TemplateData(BaseModel):\n"
+            "  model_config = ConfigDict(extra='allow')\n"
+            "  title: str\n"
+            " template = '''\n<p>{{ undeclared }}</p>\n'''\n",
+        )
+
+        assert main(["--app", spec, "check", "--format", "json"]) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["exit_code"] == 0
+        assert payload["findings"][0]["severity"] == "warning"
+        assert payload["findings"][0]["message"] == (
+            "Template variable 'undeclared' is not declared. It may be supplied dynamically."
+        )
+
+    def test_absent_schema_stays_strict_by_default(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        spec = _write_app(
+            tmp_path,
+            "from citry import Citry, Component\n"
+            "engine = Citry(autodiscover=False)\n"
+            "class Card(Component):\n"
+            " citry = engine\n"
+            " template = '{{ undeclared }}'\n",
+        )
+
+        assert _run_main(["--app", spec, "check", "--format", "json"]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["findings"][0]["severity"] == "error"
+        assert payload["findings"][0]["message"] == (
+            "Template variable 'undeclared' is not declared. "
+            "Citry could not determine whether it is supplied dynamically."
+        )
+
+    def test_shared_template_uses_the_strictest_consumer_policy(self, tmp_path, monkeypatch, capsys):
+        pytest.importorskip("pydantic")
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "shared.html").write_text("{{ undeclared }}", encoding="utf-8")
+        spec = _write_app(
+            tmp_path,
+            "from pathlib import Path\n"
+            "from pydantic import BaseModel, ConfigDict\n"
+            "from citry import Citry, Component\n"
+            "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+            "class Open(Component):\n"
+            " citry = engine\n"
+            " template_file = 'shared.html'\n"
+            " class TemplateData(BaseModel):\n"
+            "  model_config = ConfigDict(extra='allow')\n"
+            "  title: str\n"
+            "class Closed(Component):\n"
+            " citry = engine\n"
+            " template_file = 'shared.html'\n"
+            " class TemplateData:\n"
+            "  title: str\n",
+        )
+
+        assert _run_main(["--app", spec, "check", "--format", "json"]) == 1
+        payload = json.loads(capsys.readouterr().out)
+        root_findings = [item for item in payload["findings"] if item["code"] == "citry.template.unknown-variable"]
+        assert [(item["severity"], item["message"]) for item in root_findings] == [
+            ("error", "Template variable 'undeclared' is not available in this template.")
+        ]
+
     @pytest.mark.parametrize(
         "spec",
         [
@@ -485,12 +914,18 @@ class TestAppFallback:
         error = capsys.readouterr().err
         assert error.count("citry check: app unavailable:") == 1
         assert "component.py" in error
-        assert "unknown registered component" not in error
+        assert "is not registered" not in error
 
     @pytest.mark.parametrize(
         "body",
         [
             "engine = object()\n",
+            (
+                "from citry import ComponentLibrary, LibraryComponent\n"
+                "class CCard(LibraryComponent):\n"
+                " template = '''\n<article></article>\n'''\n"
+                "engine = ComponentLibrary('test-ui', (CCard,))\n"
+            ),
             "raise RuntimeError('boom')\n",
             "raise SystemExit(7)\n",
         ],
@@ -523,7 +958,7 @@ class TestAppFallback:
         error = capsys.readouterr().err
         assert error.count("citry check: app unavailable:") == 1
         assert "discovery boom" in error
-        assert "unknown registered component" not in error
+        assert "is not registered" not in error
 
     @pytest.mark.parametrize(
         ("statement", "error_type"),
@@ -557,7 +992,7 @@ class TestAppFallback:
 
         assert report.exit_code == 2
         assert report.app_failure == "RuntimeError: tag rule boom"
-        assert all("unknown registered component" not in finding.message for finding in report.findings)
+        assert all("is not registered" not in finding.message for finding in report.findings)
 
     def test_other_commands_keep_project_import_failures_fail_fast(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
@@ -615,3 +1050,163 @@ def test_environment_and_project_metadata_do_not_select_an_app(tmp_path, monkeyp
 
     assert main(["check", "--static"]) == 0
     assert capsys.readouterr().err == ""
+
+
+def test_registry_check_reports_js_data_wire_and_literal_server_event_problems(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = (
+            "<button @c-click=\"missing\" @click=\"sendEvent('missing'); $loading('missing'); $error()\"></button>"
+        )
+        js = 'sendEvent("missing"); loading("missing"); error(); sendEvent(dynamicName); onEvent("anything", () => {})'
+
+        class JsData:
+            title: str
+            invalid: set[str]
+
+        class Events:
+            def save(self):
+                pass
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    assert [finding.code for finding in report.findings].count("citry.js-data.unsupported-type") == 1
+    assert [finding.code for finding in report.findings].count("citry.browser.unknown-server-event") == 5
+    assert {finding.severity for finding in report.findings if "unsupported-type" in finding.code} == {"warning"}
+
+
+def test_registry_check_joins_inferred_js_data_values_to_kwargs_types(tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    spec = _write_app(
+        tmp_path,
+        "from citry import Citry, Component\n"
+        "engine = Citry(autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template = '<div></div>'\n"
+        "    class Kwargs:\n"
+        "        invalid: set[str]\n"
+        "        submitting: bool = False\n"
+        "    def js_data(self, options: Kwargs, slots):\n"
+        "        return {'submitting': options.submitting, 'invalid': options.invalid}\n",
+    )
+
+    assert _run_main(["--app", spec, "check", "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    findings = [item for item in payload["findings"] if item["code"] == "citry.js-data.unsupported-type"]
+
+    assert len(findings) == 1
+    assert "'invalid'" in findings[0]["message"]
+
+
+def test_registry_check_accepts_known_send_event_and_keeps_dynamic_and_on_event_open(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = (
+            '<button @c-click="save" '
+            "@click=\"sendEvent('save'); $loading('save'); $error(); "
+            "sendEvent(name); onEvent('open', fn)\"></button>"
+        )
+        js = 'sendEvent("save"); loading("save"); error(); $sendEvent(name); $onEvent("anything", fn)'
+
+        class Events:
+            def save(self):
+                pass
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    assert not [finding for finding in report.findings if finding.code == "citry.browser.unknown-server-event"]
+
+
+def test_registry_check_reports_unknown_alpine_roots_and_respects_component_policy(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = (
+            '<main :class="disabled1">'
+            '<template x-for="color in colors"><span x-text="color + customGlobal"></span></template>'
+            "</main>"
+        )
+
+        class JsData:
+            disabled: bool
+            colors: list[str]
+
+        class Lint:
+            rule_unknown_alpine_variable = "warning"
+            alpine_variables = {"customGlobal": str}
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [item for item in report.findings if item.code == "citry.alpine.unknown-variable"]
+
+    assert [(item.message, item.severity) for item in findings] == [
+        ("Alpine variable 'disabled1' is not available in this component.", "warning")
+    ]
+
+
+def test_registry_check_defaults_unknown_alpine_roots_to_error(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        template = '<button :disabled="disabled1"></button>'
+
+        class JsData:
+            disabled: bool
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [item for item in report.findings if item.code == "citry.alpine.unknown-variable"]
+
+    assert len(findings) == 1
+    assert findings[0].severity == "error"
+
+
+def test_registry_check_reports_unknown_component_js_variables_and_missing_context_binding(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        js = """
+        const outside = notCheckedHere;
+        $component(({ data }) => {
+          console.log(data.ready, configuredClient);
+          scope.ready = data.ready;
+        });
+        """
+
+        class Lint:
+            component_js_globals = {"configuredClient": object}
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [item for item in report.findings if item.code == "citry.component-js.unknown-variable"]
+
+    assert [(item.message, item.severity) for item in findings] == [
+        ("Component JavaScript variable 'scope' is not defined.", "error")
+    ]
+
+
+def test_registry_check_respects_component_js_rule_severity(tmp_path):
+    engine = Citry(autodiscover=False)
+
+    class Card(Component):
+        citry = engine
+        js = """
+        $component(() => {
+          missingClient();
+        });
+        """
+
+        class Lint:
+            rule_unknown_component_js_variable = "warning"
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [item for item in report.findings if item.code == "citry.component-js.unknown-variable"]
+
+    assert [(item.message, item.severity) for item in findings] == [
+        ("Component JavaScript variable 'missingClient' is not defined.", "warning")
+    ]

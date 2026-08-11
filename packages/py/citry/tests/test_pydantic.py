@@ -24,10 +24,45 @@ from citry.util.misc import to_dict
 pydantic = pytest.importorskip("pydantic")
 BaseModel = pydantic.BaseModel
 ConfigDict = pydantic.ConfigDict
-BaseModelV1 = pytest.importorskip("pydantic.v1").BaseModel
+pydantic_v1 = pytest.importorskip("pydantic.v1")
+BaseModelV1 = pydantic_v1.BaseModel
+ExtraV1 = pydantic_v1.Extra
 
 
 class TestPydanticKwargs:
+    def test_schema_introspection_preserves_extra_policy(self):
+        c = Citry(autodiscover=False)
+
+        class Closed(Component):
+            citry = c
+
+            class TemplateData(BaseModel):
+                known: str
+
+        class Open(Component):
+            citry = c
+
+            class TemplateData(BaseModel):
+                model_config = ConfigDict(extra="allow")
+                known: str
+
+        assert c.inspect_component(Closed).schemas.template_data.namespace_policy == "closed"
+        assert c.inspect_component(Open).schemas.template_data.namespace_policy == "allow-extra"
+
+    def test_pydantic_v1_extra_allow_is_preserved(self):
+        c = Citry(autodiscover=False)
+
+        class OpenV1(Component):
+            citry = c
+
+            class TemplateData(BaseModelV1):
+                known: str
+
+                class Config:
+                    extra = ExtraV1.allow
+
+        assert c.inspect_component(OpenV1).schemas.template_data.namespace_policy == "allow-extra"
+
     @pytest.mark.parametrize("model_base", [BaseModel, BaseModelV1])
     def test_same_generation_models_merge_across_c3_branches(self, model_base):
         c = Citry()

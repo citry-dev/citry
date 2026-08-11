@@ -1,0 +1,1 @@
+"""Icon quality scenario package."""

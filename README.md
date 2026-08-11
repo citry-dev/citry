@@ -33,21 +33,18 @@ class Welcome(Component):
         }
 
     template = """
-      <div class="card">
+      <div
+        class="card"
+        x-bind:title="count + ' new messages'"
+      >
         <h1>{{ title }}</h1>
         <p>You have {{ count }} new messages.</p>
       </div>
     """
 
-    # JS
+    # Browser data. Top-level keys are Alpine variables.
     def js_data(self, kwargs, slots):
         return {"count": len(kwargs.messages)}
-
-    js = """
-      $component(({ els, data }) => {
-        els[0].title = `${data.count} new messages`;
-      });
-    """
 
     # CSS
     def css_data(self, kwargs, slots):
@@ -332,22 +329,18 @@ class Page(Component):
     """
 ```
 
-### Pass Python data to JS/CSS as variables
+### Pass Python data to browser behavior and CSS
 
-`js_data()` and `css_data()` pass values from the server straight to that component's JS
-and CSS (as custom properties) in the browser, per rendered
-instance. A server-rendered component can drive its own client behaviour and
-styling from Python, with no manual data wiring:
+`js_data()` seeds values from Python directly into that component's Alpine
+scope. `css_data()` exposes values to its CSS as custom properties. Both are
+scoped to one rendered instance, with no manual data wiring:
 
 ```python
 class Chart(Component):
     template = """
-      <div class="chart"></div>
-    """
-    js = """
-      $component(({ els, data }) => {
-        draw(els[0], data.points);
-      });
+      <div class="chart">
+        <span x-text="'Points: ' + points.length"></span>
+      </div>
     """
     css = """
       .chart {
@@ -356,11 +349,20 @@ class Chart(Component):
     """
 
     def js_data(self, kwargs, slots):
-        return {"points": kwargs["points"]}   # reaches the JS as `data.points`
+        # Available directly in Alpine expressions as `points`.
+        return {"points": kwargs["points"]}
 
     def css_data(self, kwargs, slots):
-        return {"h": "240px"}                  # reaches the CSS as `var(--h)`
+        # Available to CSS as `var(--h)`.
+        return {"h": "240px"}
 ```
+
+Use `$component` when you need advanced setup such as calling an imperative
+JavaScript library, declaring reactive client props, installing effects, or
+registering cleanup. When a callback exists, Citry seeds the scope first and
+passes the same instance-local snapshot as `data`. Identical JSON is
+transported once, but sibling components receive separate nested arrays and
+objects.
 
 ### Provide data to a whole subtree
 
@@ -579,10 +581,13 @@ citry --app myproject.app:engine ext list    # extensions installed on it
 ```
 
 The explicit engine lets `check` validate registered component names, inputs,
-and slots. If the engine cannot import or finish discovery, the command reports
-that failure, continues with syntax-only checking, and returns a nonzero status.
-Checking always requires one of these explicit modes; bare `citry check` is a
-usage error.
+slots, and free template variables. Unknown roots are errors by default;
+configure the shared checker/editor policy with `LintSettings` on the engine.
+Runtime `template_globals` are recognized automatically. Warnings are reported
+without failing the command. If the engine cannot import or finish discovery,
+the command reports that failure, continues with syntax-only checking, and
+returns a nonzero status. Checking always requires one of these explicit modes;
+bare `citry check` is a usage error.
 
 Extensions can ship their own commands; run one with `citry --app ... ext run
 <extension> <command> [args]`. Run `citry --help` to see everything, and `citry

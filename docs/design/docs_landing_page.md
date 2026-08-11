@@ -1258,40 +1258,55 @@ Repeat one action, not a new sales pitch:
 Include the install command and a secondary link to a complete example. Let the
 field open and become still around the CTA.
 
-## Open landing-page work (2026-07-29)
+## Landing-page implementation record (updated 2026-08-10)
 
-These are decided in direction but blocked on things that do not exist yet.
-Nothing here should ship as a mock-up of a capability Citry does not have; the
-page's whole argument is that what it shows is real.
+The landing page must still demonstrate only capabilities that exist in the
+repository. Interactive surfaces keep a server-rendered fallback, publish a
+useful output, and fail honestly when an optional runtime is unavailable.
 
-### The UI library section needs a UI library
+### UI library showcase: implemented bounded first release
 
-The intended section replaces the old capability list: a browser mock-up whose
-left panel scrolls through available components, where a reader drags one onto
-the page area and sees it land. It is a strong idea because it demonstrates
-composition by doing it rather than listing primitives.
+This section presents Citry UI as a ready-made component collection. The small
+sample board provides supporting evidence that the components fit together:
 
-To build it honestly, the following must exist first:
+1. Fifteen recipes cover layout, forms, actions, navigation, feedback, and data
+   display. They follow the functional groups in `ui_library.yml`, and every
+   component, public input, and slot is checked against the real `citry_ui`
+   package during the docs build.
+2. The collection is the visually dominant surface. Each row is one direct
+   component action with one drag affordance. The rendered side sits on a
+   saturated presentation-stage matte around a raised native-color-scheme
+   artboard, so it reads as output rather than another block of landing-page
+   prose.
+3. Every recipe is server-rendered through the real Citry UI classes with its
+   shared component CSS. Recipes are curated miniature interfaces rather than
+   empty defaults: actions use comfortable sizing and hierarchy, Grid cards
+   carry status context, List rows include descriptions and metadata, pill
+   Tabs contain useful panel content, and Progress arrives in a compact status
+   card. The sample page therefore presents the kind of finished interface a
+   user would see.
+4. A rendered recipe exposes at most two meaningful component-owned drop areas.
+   Every insertion also keeps a sequence gap before and after the new recipe,
+   so even an atomic Button or Badge can be followed by more components. These
+   sequence gaps collapse at rest and only the gap nearest the held pointer
+   grows into a large animated target; horizontal regions use logical start/end
+   gaps. The page begins with one generous target and Reset returns to that
+   state.
+5. Dragging visibly lifts the chosen component, adds a pointer-following card,
+   changes the canvas treatment, and lights every compatible destination.
+   Holding near the sample board's top or bottom scrolls the composition, with
+   speed increasing toward the edge. Ordinary wheel scrolling returns to the
+   landing page after reaching either end instead of trapping the reader inside
+   the sample. Keyboard users choose a destination and activate the same
+   component row.
 
-1. A real component library package with a stable import path, so the panel
-   lists components that a reader can actually install and use. Roughly 12 to 20
-   components is the minimum for the panel to look like a library rather than a
-   sample: layout (stack, grid, card), form controls (input, select, checkbox,
-   button), feedback (alert, badge, spinner, toast), navigation (tabs, menu,
-   breadcrumb), and data display (table, list, avatar).
-2. A per-component preview that renders standalone at a small size, plus the
-   snippet that produces it, so the drop area can show both the result and the
-   code that made it.
-3. A machine-readable index of the library (name, category, preview, snippet)
-   that the landing build reads. Without it the section becomes a hand-kept
-   list that goes stale, which is the failure this page keeps designing out.
-4. A decision on what the drop actually produces: the accumulated snippet is the
-   valuable output, because it turns a toy into something a reader can paste.
+No arbitrary HTML or Python is accepted by the interaction. Components and
+inputs come from the validated catalog, and every checked-in recipe is rendered
+through the real Citry UI classes in focused tests.
 
-Until those exist the section stays out. A drag-and-drop demo of components
-nobody can install would be the most damaging thing the page could contain.
+Deferred extensions include broader coverage of the full component catalog.
 
-Sharing is a one-line claim, not a section: anyone can publish a component
+Sharing remains a one-line claim, not a section: anyone can publish a component
 package others install. It needs a real published example before it earns space.
 
 ### The example gallery needs examples

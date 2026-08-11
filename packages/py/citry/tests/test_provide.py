@@ -676,6 +676,94 @@ class TestProvideAcrossSlots:
 
 
 class TestPythonChannel:
+    def test_root_render_provides_one_direct_value(self):
+        c = _make_citry()
+        marker = object()
+        seen = {}
+
+        class Reader(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                seen["marker"] = self.inject("request_scope")
+                return {}
+
+            template = """
+                ready
+            """
+
+        class Page(Component):
+            citry = c
+            template = """
+                <c-reader />
+            """
+
+        rendered = Page().render(provides={"request_scope": marker})
+
+        assert "ready" in str(rendered)
+        assert seen["marker"] is marker
+
+    def test_component_can_provide_one_direct_value(self):
+        c = _make_citry()
+        marker = object()
+        seen = {}
+
+        class Reader(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                seen["marker"] = self.inject("request_scope")
+                return {}
+
+            template = """
+                ready
+            """
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                self.provide("request_scope", marker)
+                return {}
+
+            template = """
+                <c-reader />
+            """
+
+        Page().render()
+
+        assert seen["marker"] is marker
+
+    def test_component_rejects_direct_value_and_keyword_fields_together(self):
+        c = _make_citry()
+
+        class Page(Component):
+            citry = c
+
+            def template_data(self, kwargs, slots):
+                self.provide("request_scope", object(), user="Ada")
+                return {}
+
+            template = """
+                ready
+            """
+
+        with pytest.raises(TypeError, match="either one direct value or keyword fields"):
+            Page().render()
+
+    @pytest.mark.parametrize("provides", [{"not-valid": object()}, []])
+    def test_root_render_rejects_invalid_provides(self, provides):
+        c = _make_citry()
+
+        class Page(Component):
+            citry = c
+            template = """
+                ready
+            """
+
+        with pytest.raises((TypeError, ValueError)):
+            Page().render(provides=provides)
+
     def test_element_in_slots_kwarg_inherits_provides(self):
         c = _make_citry()
         injectee_cls = _make_injectee(c)

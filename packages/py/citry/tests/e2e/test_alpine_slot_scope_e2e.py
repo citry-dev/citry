@@ -15,6 +15,38 @@ pytestmark = pytest.mark.e2e
 READY = "window.Citry && Citry.events && Citry.events._internal.alpineStarted === true"
 
 
+def test_supplied_fill_reads_automatic_js_data_from_its_caller(page: Any, serve_live: Any) -> None:
+    c = Citry()
+    c.set_mounted_prefix("/citry")
+
+    class Card(Component):
+        citry = c
+        template = '<section class="data-card"><c-slot name="body" /></section>'
+
+    class Page(Component):
+        citry = c
+
+        def js_data(self, kwargs, slots):
+            return {"server": {"label": "caller-data"}}
+
+        template = """
+          <html><body><main>
+            <c-card>
+              <c-fill name="body">
+                <output class="fill-js-data" x-text="server.label"></output>
+              </c-fill>
+            </c-card>
+          </main></body></html>
+        """
+
+    base = serve_live(c, Page().render().serialize(), "")
+    page.goto(base + "/")
+    page.wait_for_function(READY)
+    page.wait_for_function("document.querySelector('.fill-js-data')?.textContent === 'caller-data'")
+
+    assert page.locator(".fill-js-data").inner_text() == "caller-data"
+
+
 def test_supplied_fill_uses_caller_scope_before_fill_local_data(page: Any, serve_live: Any) -> None:
     c = Citry()
     c.set_mounted_prefix("/citry")

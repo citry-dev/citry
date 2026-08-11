@@ -32,7 +32,6 @@ from citry.ext.dependencies.scripts import (
     evict_component_scripts,
     gen_cache_key,
     has_component_asset,
-    uses_component,
 )
 from citry.ext.dependencies.types import Dependency, DependencyRecord
 from citry.extension import (
@@ -197,13 +196,15 @@ class DependenciesExtension(Extension):
 
     def on_component_data(self, ctx: OnComponentDataContext) -> None:
         comp_cls = type(ctx.component)
-        # Record only components that actually carry assets; <c-provide> and
-        # plain markup-only components add nothing to emit. The accessors are
-        # cached per class, so this costs a few attribute reads per render.
+        # Record only components that carry an asset or nonempty JsData;
+        # <c-provide> and plain markup-only components add nothing to emit.
+        # The accessors are cached per class, so this costs a few attribute
+        # reads per render.
         if (
             not has_component_asset("js", comp_cls)
             and not has_component_asset("css", comp_cls)
             and not comp_cls.get_dependencies()
+            and not ctx.js_data
         ):
             return
         # Keep the class's processed scripts cached, in case they were evicted
@@ -299,8 +300,6 @@ class DependenciesExtension(Extension):
                 raise CacheArtifactError(f"{path}.class_id has no current registered component.") from err
             js_capture = _capture_from_wire(item["js"], path=f"{path}.js", class_id=class_id, kind="js")
             css_capture = _capture_from_wire(item["css"], path=f"{path}.css", class_id=class_id, kind="css")
-            if js_capture is not None and not uses_component(component_class):
-                raise CacheArtifactError(f"{path}.js is incompatible with the current component JS.")
             if css_capture is not None and not has_component_asset("css", component_class):
                 raise CacheArtifactError(f"{path}.css is incompatible with the current component CSS.")
             if js_capture is not None:

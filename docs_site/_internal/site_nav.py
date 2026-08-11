@@ -4,11 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from docs_site._internal.nav import SCOPE_SITE, NavItem, NavTree, load_nav, resolve_nav_sources
+from docs_site._internal.nav import (
+    SCOPE_SITE,
+    NavItem,
+    NavTree,
+    load_nav,
+    replace_group_source,
+    resolve_nav_sources,
+)
 from docs_site._internal.project import DocsProject, load_docs_project
 from docs_site._internal.reference_pages import reference_nav_items
 from docs_site._internal.release_notes import parse_changelog, releases_nav_items
-from docs_site._internal.ui_library_projection import ui_library_nav_items
+from docs_site._internal.ui_library_projection import ui_library_nav_groups
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -81,14 +88,15 @@ def load_site_nav_from_paths(
         if includes("reference")
         else tree.fallback_items_for_source("reference")
     )
-    ui_items = (
-        ui_library_nav_items(
-            project.ui_library,
-            repo_root=repo_root,
+    if tree.has_source("ui_library") and includes("ui_library"):
+        replace_group_source(
+            tree,
+            "ui_library",
+            ui_library_nav_groups(project.ui_library, repo_root=repo_root),
         )
-        if tree.has_source("ui_library") and includes("ui_library")
-        else tree.fallback_items_for_source("ui_library")
-    )
+        ui_items = None
+    else:
+        ui_items = tree.fallback_items_for_source("ui_library")
 
     return resolve_nav_sources(
         tree,

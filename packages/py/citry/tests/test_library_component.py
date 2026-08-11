@@ -101,6 +101,31 @@ def test_manifest_installation_supports_python_and_template_composition():
     assert str(Page()) == '<main data-cid-c2=""><button data-cid-c3="">Open</button></main>'
 
 
+def test_library_invocation_forwards_explicit_root_provides():
+    app = Citry(autodiscover=False)
+    marker = object()
+    seen = {}
+
+    class CReader(LibraryComponent):
+        def template_data(self, kwargs, slots):
+            seen["marker"] = self.inject("request_scope")
+            return {}
+
+        template = """
+            ready
+        """
+
+    app.register_library(ComponentLibrary(name="readers", components=(CReader,)))
+
+    rendered = CReader().render(
+        citry=app,
+        provides={"request_scope": marker},
+    )
+
+    assert str(rendered).strip() == "ready"
+    assert seen["marker"] is marker
+
+
 def test_module_manifest_and_repeat_registration_return_exact_installation():
     app = Citry(autodiscover=False)
 

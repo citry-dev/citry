@@ -21,10 +21,11 @@ to send.
 | `pygments-citry` | Highlights Citry source in Pygments-based tools | Published separately |
 | `citry-lsp` | Provides diagnostics, completion, hover, navigation, and symbols | Implemented; public release is part of the open beta |
 | VS Code extension | Highlights inline and standalone templates and starts `citry-lsp` | Implemented; public release is part of the open beta |
-| PyCharm integration | Connects PyCharm to Citry-aware highlighting and language features | Planned; no official plugin is available yet |
+| PyCharm + LSP4IJ | Connects PyCharm to Citry's standard language-server features | Tested setup available; no Citry-specific coloring or official plugin yet |
 
 Start with [VS Code](/ide/vscode/) for the complete editor integration. See
-[PyCharm](/ide/pycharm/) for what works today and what remains planned.
+[PyCharm](/ide/pycharm/) for the tested LSP4IJ setup and its current coloring
+and embedded-language limits.
 
 ## Check templates without an editor extension
 
@@ -46,3 +47,6 @@ If the app import fails, Citry reports the failure, continues with syntax-only
 checks, and exits with status 2. CI cannot mistake that degraded result for a
 complete registry check.
 
+Registry-backed checks also report unknown free template roots. Configure the
+shared batch/editor rule, runtime globals, and analysis-only variables on the
+application as described in [Template linting](/ide/template-linting/).

@@ -8,6 +8,7 @@ from dataclasses import MISSING, Field, dataclass
 from types import new_class
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import (
     _safe_class_text,
     _static_class_attribute,
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 
 _RAW_NESTED_DECLARATIONS_ATTR = "_citry_raw_nested_declarations"
 _SYNTHESIZED_DECLARATION_ATTR = "_citry_synthesized_declaration"
+_SYNTHESIZED_FIELD_OWNERS_ATTR = "_citry_synthesized_field_owners"
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,11 +144,16 @@ def _convert_to_slotted_dataclass(
 ) -> type:
     """Create one slotted dataclass over a composed raw declaration class."""
     annotations: dict[str, Any] = {}
+    field_owners: dict[str, type] = {}
     for klass in reversed(_static_class_mro(user_cls)):
         source_namespace = _static_class_dict(klass)
         if "__dataclass_fields__" in source_namespace:
             continue
-        annotations.update(inspect.get_annotations(klass))
+        own_annotations = _own_annotations(klass)
+        annotations.update(own_annotations)
+        # The generated dataclass owns the merged annotation mapping, so keep
+        # the authored owner beside it for catalog and editor navigation.
+        field_owners.update((field_name, klass) for field_name in own_annotations)
 
     provenance_class = user_cls if owner is None else owner
     module = _static_class_attribute(provenance_class, "__module__")
@@ -160,6 +167,7 @@ def _convert_to_slotted_dataclass(
         # Tooling must attribute effective fields to their authored bases, not
         # to this implementation-only class that copies the merged annotations.
         _SYNTHESIZED_DECLARATION_ATTR: True,
+        _SYNTHESIZED_FIELD_OWNERS_ATTR: tuple(field_owners.items()),
     }
     for field_name in annotations:
         default = inspect.getattr_static(user_cls, field_name, MISSING)

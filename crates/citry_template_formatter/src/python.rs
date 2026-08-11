@@ -19,7 +19,7 @@ use ruff_python_ast::{
 };
 use ruff_python_formatter::{PyFormatOptions, QuoteStyle, format_module_ast};
 use ruff_python_parser::{Mode, ParseOptions, parse, parse_expression};
-use ruff_python_trivia::{CommentRanges, SuppressionKind};
+use ruff_python_trivia::{CommentRanges, SuppressionKind, TriviaRanges};
 
 use crate::error::FormatError;
 use crate::newline::normalize_to_lf;
@@ -32,7 +32,7 @@ const EXPRESSION_WRAPPER: &str = "x";
 const CLAUSE_PREFIX: &str = "None for ";
 
 /// Stable identity for the Python formatter pinned by this workspace.
-pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.14.10+45bbb4cbff";
+pub const PYTHON_PROVIDER_IDENTITY: &str = "ruff@0.16.2+5b48a04097";
 
 pub(crate) fn format_expression(
     source: &str,
@@ -75,10 +75,11 @@ pub(crate) fn format_expression(
             "Python expression wrapper failed to parse: {error}"
         ))
     })?;
-    let wrapper_comments = CommentRanges::from(parsed_wrapper.tokens());
-    let formatted_document =
-        format_module_ast(&parsed_wrapper, &wrapper_comments, &wrapped, options)
-            .map_err(|error| FormatError::invariant(format!("Python provider failed: {error}")))?;
+    // Ruff 0.16.2 gives the formatter comments and other protected trivia in
+    // one index, so every non-code range participates in attachment decisions.
+    let wrapper_trivia = TriviaRanges::from(parsed_wrapper.tokens());
+    let formatted_document = format_module_ast(&parsed_wrapper, &wrapper_trivia, &wrapped, options)
+        .map_err(|error| FormatError::invariant(format!("Python provider failed: {error}")))?;
     let printed = formatted_document
         .print()
         .map_err(|error| FormatError::invariant(format!("Python provider failed: {error}")))?;
@@ -296,8 +297,8 @@ mod tests {
     #[test]
     fn provider_identity_matches_the_vendored_ruff_release() {
         let manifest = include_str!("../../../third_party/rust/ruff/crates/ruff/Cargo.toml");
-        assert!(manifest.contains("version = \"0.14.10\""));
-        assert_eq!(PYTHON_PROVIDER_IDENTITY, "ruff@0.14.10+45bbb4cbff");
+        assert!(manifest.contains("version = \"0.16.2\""));
+        assert_eq!(PYTHON_PROVIDER_IDENTITY, "ruff@0.16.2+5b48a04097");
     }
 
     #[test]

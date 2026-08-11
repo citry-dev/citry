@@ -11,7 +11,9 @@ lang parameter.
 import pytest
 
 from citry_core.template_parser import (
+    CITRY_DIRECTIVE_NAMES,
     RESERVED_TAG_NAMES,
+    STRUCTURAL_TAG_ATTRIBUTE_NAMES,
     FillDataField,
     FillDataPattern,
     HtmlAttr,
@@ -20,6 +22,9 @@ from citry_core.template_parser import (
     TagRules,
     Template,
     Token,
+    analyze_browser_source,
+    analyze_component_scope_writes,
+    analyze_component_source,
     compile_template,
     parse_diagnostic,
     parse_template,
@@ -30,6 +35,74 @@ def test_reserved_tag_names_are_exposed_from_the_parser() -> None:
     assert "c-if" in RESERVED_TAG_NAMES
     assert "c-slot" in RESERVED_TAG_NAMES
     assert all(name.startswith("c-") for name in RESERVED_TAG_NAMES)
+
+
+def test_parser_owned_attribute_names_are_exposed_with_structural_context() -> None:
+    assert {
+        "c-if",
+        "c-elif",
+        "c-else",
+        "c-for",
+        "c-empty",
+        "c-bind",
+        "#c-key",
+        "#c-ignore",
+        "$c-props",
+        "c-$c-props",
+    } == CITRY_DIRECTIVE_NAMES
+    assert set(STRUCTURAL_TAG_ATTRIBUTE_NAMES) == RESERVED_TAG_NAMES
+    assert STRUCTURAL_TAG_ATTRIBUTE_NAMES["c-for"] == {"each"}
+    assert STRUCTURAL_TAG_ATTRIBUTE_NAMES["c-fill"] == {"name", "c-name", "data", "fallback", "c-bind"}
+    assert STRUCTURAL_TAG_ATTRIBUTE_NAMES["c-slot"] == {
+        "name",
+        "c-name",
+        "required",
+        "c-required",
+        "c-bind",
+        "c-if",
+        "c-elif",
+        "c-else",
+        "c-for",
+        "c-empty",
+    }
+    with pytest.raises(TypeError):
+        STRUCTURAL_TAG_ATTRIBUTE_NAMES["c-slot"] = frozenset()  # type: ignore[index]
+
+
+def test_browser_analysis_exposes_oxc_free_references_and_scope_writes() -> None:
+    valid, references = analyze_browser_source("known + local.value", "expression")
+    source = "$component(({ scope, data }) => { scope.title = data.title; });"
+    writes = analyze_component_scope_writes(source)
+
+    assert valid
+    assert [name for name, _start, _end in references] == ["known", "local"]
+    assert len(writes) == 1
+    name, name_start, name_end, value_start, value_end = writes[0]
+    encoded = source.encode()
+    assert name == "title"
+    assert encoded[name_start:name_end] == b"title"
+    assert encoded[value_start:value_end] == b"data.title"
+
+
+def test_component_source_analysis_exposes_only_runtime_initializer_facts() -> None:
+    source = """
+const outside = missingOutside;
+$component(({ scope: alpineScope, data }) => {
+  alpineScope.ready = data.ready;
+  console.log(missingInside);
+});
+"""
+
+    valid, references, bindings, writes = analyze_component_source(source)
+
+    assert valid
+    assert [name for name, _start, _end in references] == ["console", "missingInside"]
+    assert [(name, local) for name, local, _start, _end, _references in bindings] == [
+        ("scope", "alpineScope"),
+        ("data", "data"),
+    ]
+    assert all(references for _name, _local, _start, _end, references in bindings)
+    assert [name for name, *_rest in writes] == ["ready"]
 
 
 # =========================================================================

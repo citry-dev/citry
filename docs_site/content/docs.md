@@ -102,8 +102,8 @@ not your editor has a dedicated Citry integration.
 - [Slots](/concepts/slots/) shows how a component can accept whole pieces of
   HTML as content.
 - [Client interactivity](/concepts/client-interactivity/) covers component
-  browser data, `$component`, `$c-props`, and browser communication between
-  parents and children.
+  browser data as Alpine variables, advanced setup with `$component`,
+  `$c-props`, and browser communication between parents and children.
 - [Server events](/events/) covers Python handlers, State, forms, loading and
   error feedback, browser events, and page updates.
 - [Web frameworks](/web-frameworks/) shows how to mount Citry in FastAPI,

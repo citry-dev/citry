@@ -36,9 +36,13 @@ RUFF_ROOT = REPO_ROOT / "third_party" / "rust" / "ruff"
 CARGO_TOML = REPO_ROOT / "Cargo.toml"
 LATEST_RELEASE_URL = "https://api.github.com/repos/astral-sh/ruff/releases/latest"
 COMPARE_API_URL = "https://api.github.com/repos/astral-sh/ruff/compare"
-COMPARE_URL = "https://github.com/astral-sh/ruff/compare"
+RUFF_URL = "https://github.com/astral-sh/ruff"
+COMPARE_URL = f"{RUFF_URL}/compare"
+COMMIT_URL = f"{RUFF_URL}/commit"
+RELEASE_URL = f"{RUFF_URL}/releases/tag"
 
 _RUFF_PATH_RE = re.compile(r'path\s*=\s*"third_party/rust/ruff/(?P<path>crates/[^"]+)"')
+_STABLE_TAG_RE = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 
 
 class CheckError(RuntimeError):
@@ -136,37 +140,70 @@ def _git(*args: str) -> str:
     return result.stdout.strip()
 
 
+def current_stable_tag(current_sha: str) -> str | None:
+    """Return the newest stable Ruff tag that points at the current commit."""
+    output = _git("tag", "--points-at", current_sha, "--sort=-version:refname")
+    # A commit can carry nightly or prerelease tags too, so report a stable tag
+    # only when Git proves the checkout is exactly one of Ruff's releases.
+    return next(
+        (tag for tag in output.splitlines() if _STABLE_TAG_RE.fullmatch(tag)),
+        None,
+    )
+
+
 def changed_files(
     tag: str,
     paths: tuple[str, ...],
-) -> tuple[str, str, PinRelation, list[str]]:
-    """Return the pin, release, their relation, and monitored changes."""
+) -> tuple[str, str | None, str, PinRelation, list[str]]:
+    """Return the pin and release revisions, their relation, and changes."""
     if not RUFF_ROOT.is_dir():
         raise CheckError(f"Ruff submodule is missing: {RUFF_ROOT}")
 
     current_sha = _git("rev-parse", "HEAD^{commit}")
+    current_tag = current_stable_tag(current_sha)
     relation = fetch_pin_relation(current_sha, tag)
     if relation == "equal":
-        return current_sha, current_sha, relation, []
+        return current_sha, current_tag, current_sha, relation, []
     if relation == "ahead":
-        return current_sha, "", relation, []
+        return current_sha, current_tag, "", relation, []
 
     _git("fetch", "--quiet", "--depth=1", "origin", f"refs/tags/{tag}")
     release_sha = _git("rev-parse", "FETCH_HEAD^{commit}")
     output = _git("diff", "--name-only", current_sha, release_sha, "--", *paths)
     files = [line for line in output.splitlines() if line]
-    return current_sha, release_sha, relation, files
+    return current_sha, current_tag, release_sha, relation, files
 
 
-def format_report(tag: str, current_sha: str, release_sha: str, files: list[str]) -> str:
+def _release_link(tag: str) -> str:
+    """Link one exact stable tag to its Ruff release page."""
+    return f"[`{tag}`]({RELEASE_URL}/{quote(tag, safe='')})"
+
+
+def _commit_link(sha: str) -> str:
+    """Link a compact commit label to the exact Ruff commit."""
+    return f"[`{sha[:12]}`]({COMMIT_URL}/{quote(sha, safe='')})"
+
+
+def format_report(
+    tag: str,
+    current_tag: str | None,
+    current_sha: str,
+    release_sha: str,
+    files: list[str],
+) -> str:
     """Build the tracking issue body for a relevant Ruff release."""
     shown = files[:100]
+    current_release = _release_link(current_tag) if current_tag is not None else "Not on an exact stable release tag"
+    compare_url = f"{COMPARE_URL}/{quote(current_sha, safe='')}...{quote(release_sha, safe='')}"
     lines = [
         "Ruff's latest stable release changes internal crates used by Citry.",
         "",
-        f"- Current submodule commit: `{current_sha}`",
-        f"- Latest stable release: `{tag}` (`{release_sha}`)",
-        f"- Compare: {COMPARE_URL}/{current_sha}...{tag}",
+        "| Revision | Stable release | Commit |",
+        "| --- | --- | --- |",
+        f"| Citry checkout | {current_release} | {_commit_link(current_sha)} |",
+        f"| Latest Ruff release | {_release_link(tag)} | {_commit_link(release_sha)} |",
+        "",
+        f"[Compare the exact commits]({compare_url})",
         "",
         "Changed files in monitored crates:",
         "",
@@ -185,7 +222,7 @@ def format_report(tag: str, current_sha: str, release_sha: str, files: list[str]
 def cmd_check() -> int:
     try:
         tag = fetch_latest_tag()
-        current_sha, release_sha, relation, files = changed_files(
+        current_sha, current_tag, release_sha, relation, files = changed_files(
             tag,
             monitored_paths(),
         )
@@ -206,7 +243,7 @@ def cmd_check() -> int:
         print(f"In sync: {tag} has no changes in Citry's monitored Ruff crates.")
         return 0
 
-    print(format_report(tag, current_sha, release_sha, files))
+    print(format_report(tag, current_tag, current_sha, release_sha, files))
     return 10
 
 

@@ -47,11 +47,13 @@ from docs_site._internal.blog import (
 from docs_site._internal.components import (  # noqa: F401
     blog,
     builtin,
+    diagnostic_catalog,
     docstring,
     example_card,
     image,
     include_file,
     landing,
+    landing_composer,
     live_code,
     people,
     search_modal,

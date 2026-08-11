@@ -13,6 +13,11 @@ use std::ops::Range;
 use citry_template_parser::{ParseDiagnostic, ParseError};
 use thiserror::Error;
 
+use crate::diagnostic_catalog::{
+    FORMAT_INVARIANT, FORMAT_PROVIDER_INVALID, FORMAT_SUPPRESSION, FORMAT_SYNTAX,
+    FORMAT_UNSUPPORTED,
+};
+
 /// Broad category for a template-formatting failure.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -47,11 +52,11 @@ impl FormatError {
     /// they outlive any renaming of the variants above.
     pub const fn code(&self) -> &'static str {
         match self.kind {
-            FormatErrorKind::Syntax => "citry.format.syntax",
-            FormatErrorKind::Suppression => "citry.format.suppression",
-            FormatErrorKind::InvalidSpan | FormatErrorKind::Invariant => "citry.format.invariant",
-            FormatErrorKind::Unsupported => "citry.format.unsupported",
-            FormatErrorKind::Provider => "citry.format.provider-invalid",
+            FormatErrorKind::Syntax => FORMAT_SYNTAX,
+            FormatErrorKind::Suppression => FORMAT_SUPPRESSION,
+            FormatErrorKind::InvalidSpan | FormatErrorKind::Invariant => FORMAT_INVARIANT,
+            FormatErrorKind::Unsupported => FORMAT_UNSUPPORTED,
+            FormatErrorKind::Provider => FORMAT_PROVIDER_INVALID,
         }
     }
 

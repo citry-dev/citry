@@ -1,0 +1,120 @@
+schema_version: 1
+family: native-select
+
+components:
+  - CNativeSelect
+
+inputs:
+  - id: cnative-select-server-inputs
+    component: CNativeSelect
+    channel: server
+    column_widths: [fit, 15rem, 11rem, auto]
+    entries:
+      - {id: options, name: options, type: {display: 'Sequence[CNativeSelectItem]', interfaces: [CNativeSelectItem]}, default: {kind: required}, effect: 'Sets the finite ordered options and one-level groups; canonical option values must be unique.'}
+      - {id: name, name: name, type: 'non-empty str | None', default: {kind: literal, value: null}, effect: 'Sets the native submitted name; an unnamed Select contributes no `FormData` entry.'}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Uses the Field control ID when composed, otherwise sets or generates native identity.'}
+      - {id: value, name: value, type: 'str | None', default: {kind: literal, value: null}, effect: 'Sets initial and reset selection; `None` or `""` selects an existing placeholder, while `None` without one uses native first-option selection.'}
+      - {id: placeholder, name: placeholder, type: 'non-empty str | None', default: {kind: literal, value: null}, effect: 'Inserts the enabled first empty-value option and enables native required support.'}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: 'Sets native required state when standalone and requires `placeholder`; omit it inside `CField`, which owns the state.'}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: 'Sets local disabled state when standalone; disabled `CForm` always wins.'}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: 'Sets application invalid state when standalone; omit it inside `CField`.'}
+      - {id: autocomplete, name: autocomplete, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native autofill hint.}
+      - id: variant
+        name: variant
+        type: {display: '"outline" | "filled" | "plain"', interfaces: [CNativeSelectVariant]}
+        default: {kind: literal, value: outline}
+        effect: Selects presentation.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CNativeSelectSize]}
+        default: {kind: literal, value: md}
+        effect: Selects visual padding and text size; this is not native Select `size`.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds native-root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds native-root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds native Form ownership, ARIA, data, and trusted Alpine attributes not owned by explicit inputs.'}
+
+  - id: cnative-select-client-inputs
+    component: CNativeSelect
+    channel: client
+    column_widths: [fit, 13rem, 15rem, auto]
+    entries:
+      - {id: value, name: value, type: 'string | null', omitted: Releases control and preserves the semantic native selection., effect: 'Controls current selection; `null` selects the placeholder or no selection, and `""` selects an existing placeholder.'}
+      - {id: required, name: required, type: boolean, omitted: Uses the server or Field value., effect: 'Controls required state when standalone; true requires a placeholder and `CField` owns the input when composed.'}
+      - {id: disabled, name: disabled, type: boolean, omitted: 'Uses the server, Field, or Form value.', effect: 'Controls local disabled state when standalone; disabled `CForm` always wins.'}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses the server or Field value., effect: 'Controls application invalid state; native invalidity still combines with it.'}
+      - id: variant
+        name: variant
+        type: {display: '"outline" | "filled" | "plain"', interfaces: [CNativeSelectVariant]}
+        omitted: Uses the server input.
+        effect: Controls presentation.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CNativeSelectSize]}
+        omitted: Uses the server input.
+        effect: Controls visual padding and text size.
+
+slots: []
+events: []
+methods: []
+
+css:
+  - id: cnative-select-css-variables
+    component: CNativeSelect
+    entries:
+      - {id: cui-native-select-background, name: --cui-native-select-background, type: color, purpose: Native closed-control background., default: 'Canvas, variant adjusted'}
+      - {id: cui-native-select-foreground, name: --cui-native-select-foreground, type: color, purpose: Selected text and indicator., default: CanvasText}
+      - {id: cui-native-select-border-color, name: --cui-native-select-border-color, type: color, purpose: Resting border., default: 'Subtle CanvasText mix, variant adjusted'}
+      - {id: cui-native-select-hover-border-color, name: --cui-native-select-hover-border-color, type: color, purpose: Hover border., default: Stronger CanvasText mix.}
+      - {id: cui-native-select-focus-color, name: --cui-native-select-focus-color, type: color, purpose: Focus outline and border., default: Highlight}
+      - {id: cui-native-select-invalid-border-color, name: --cui-native-select-invalid-border-color, type: color, purpose: Invalid border., default: Scheme-aware negative color.}
+      - {id: cui-native-select-disabled-background, name: --cui-native-select-disabled-background, type: color, purpose: Disabled background., default: Subtle CanvasText/Canvas mix.}
+      - {id: cui-native-select-placeholder-color, name: --cui-native-select-placeholder-color, type: color, purpose: Empty placeholder text and indicator., default: Muted CanvasText mix.}
+      - {id: cui-native-select-radius, name: --cui-native-select-radius, type: length, purpose: Corner radius., default: '0.5rem; 0 for plain'}
+      - {id: cui-native-select-inline-padding, name: --cui-native-select-inline-padding, type: length, purpose: Logical inline padding., default: Size-derived length.}
+      - {id: cui-native-select-block-padding, name: --cui-native-select-block-padding, type: length, purpose: Logical block padding., default: Size-derived length.}
+      - {id: cui-native-select-font-size, name: --cui-native-select-font-size, type: length, purpose: Closed-control text size., default: Size-derived length.}
+      - {id: cui-native-select-indicator-size, name: --cui-native-select-indicator-size, type: length, purpose: Each indicator triangle and its reserved inline space., default: 0.4rem}
+      - {id: cui-native-select-indicator-gap, name: --cui-native-select-indicator-gap, type: length, purpose: Logical gap between the indicator and root edge., default: 0.75rem}
+
+attributes:
+  - id: cnative-select-attributes
+    component: CNativeSelect
+    entries:
+      - {id: data-required, name: data-required, element: Native Select, type: 'present | absent', meaning: Mirrors effective required state.}
+      - {id: data-disabled, name: data-disabled, element: Native Select, type: 'present | absent', meaning: Mirrors effective disabled state.}
+      - {id: data-invalid, name: data-invalid, element: Native Select, type: 'present | absent', meaning: Mirrors combined application and native invalid state.}
+      - {id: data-empty, name: data-empty, element: Native Select, type: 'present | absent', meaning: Marks a selected placeholder or semantic no-selection.}
+      - {id: data-variant, name: data-variant, element: Native Select, type: '"outline" | "filled" | "plain"', meaning: Mirrors effective presentation variant.}
+      - {id: data-size, name: data-size, element: Native Select, type: '"sm" | "md" | "lg"', meaning: Mirrors effective visual size.}
+
+selectors:
+  - id: cnative-select-selectors
+    component: CNativeSelect
+    entries:
+      - {id: native-select, selector: '[data-citry-ui-part="native-select"]', element: Native Select, purpose: 'Stable root, styling hook, and `attrs` destination.'}
+
+interfaces:
+  - id: native-select-type-aliases
+    kind: aliases
+    entries:
+      - {id: native-select-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: native-select-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: native-select-variant, name: CNativeSelectVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: native-select-size, name: CNativeSelectSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: native-select-item, name: CNativeSelectItem, definition: 'CNativeSelectOption | CNativeSelectGroup'}
+  - id: cnative-select-option
+    kind: record
+    name: CNativeSelectOption
+    entries:
+      - {id: value, name: value, type: str, meaning: 'Unique nonempty canonical submitted value; CR and CRLF normalize to LF, and U+0000 is invalid.'}
+      - {id: label, name: label, type: str, meaning: Nonempty plain-text option label.}
+      - {id: disabled, name: disabled, type: bool, meaning: Disables native selection., default: 'False'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', meaning: Adds trusted unowned native option attributes., default: 'None'}
+  - id: cnative-select-group
+    kind: record
+    name: CNativeSelectGroup
+    entries:
+      - {id: label, name: label, type: str, meaning: Nonempty plain-text group label.}
+      - {id: options, name: options, type: 'Sequence[CNativeSelectOption]', meaning: Ordered direct options; groups cannot nest.}
+      - {id: disabled, name: disabled, type: bool, meaning: Disables every option in the native group., default: 'False'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', meaning: Adds trusted unowned native optgroup attributes., default: 'None'}

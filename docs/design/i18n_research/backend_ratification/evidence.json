@@ -1,0 +1,85 @@
+{
+  "artifacts": {
+    "baseline_source": "0a2deea2c167f81857de92dc8439d4bffa273706959a3fb3f3a48d91a538364b",
+    "browser_source": "f2446882a9e9558dd8316a176c691efc6c611490c34d22a11f55f129927b736e",
+    "cargo_lock": "a47b87a80acdaeae0dd75d3d8771b30f638c6e48048bb8ad50ebdae9b701149f",
+    "cargo_manifest": "0f683427e42ab688fe22ae15829a000b7a1f717e7a56fdce63608a3b4ff7f6cb",
+    "formatter_evidence": "a02f37413abacf4d2995c835fb46a8722897af0e1757bf8c4009375d5a4c76ed",
+    "harness": "ef4de5fa6f4c4e737dde3547dd69495cfffa682ade31f1ccac06d4e3b4901d28",
+    "production_slice_evidence": "0fc5465ac406e57fbccb28c4f154ef4d8067de9b00407734e3bd8a9a675427a4",
+    "runtime_evidence": "07f3c8b0f79136717b8e194100f2d3eb49e5b3255b58f09be89e01f956c79664",
+    "rust_source": "224e5a12e932d95f1468186366553f4f88cf0b7a60430a844b7ea9bcb97b672e"
+  },
+  "candidate": {
+    "capabilities": {
+      "alternate_calendar": true,
+      "concurrent_formatting": true,
+      "currency": true,
+      "exact_decimal": true,
+      "list": true,
+      "non_latin_digits": true,
+      "percent_formatting": true,
+      "plural_fraction": true,
+      "relative_time": true,
+      "strict_decimal_bad_grouping_rejected": true,
+      "strict_decimal_mixed_digits_rejected": true,
+      "strict_decimal_round_trip": true,
+      "unit": true
+    },
+    "concurrency_enabled": true,
+    "first_constructor_under_5ms": true,
+    "known_direct_api_gaps": {
+      "arabic_unit_grammar_differs_from_intl": true,
+      "direct_percent_symbol_differs_from_browser_intl": true,
+      "direct_percent_uses_percentage_points_instead_of_fraction": true
+    },
+    "repeated_decimal_format_under_10us": true,
+    "strict_decimal_parser_uses_resolved_icu4x_symbols": true
+  },
+  "comparison": {
+    "exact_output_matches": {
+      "arabic_currency": true,
+      "arabic_exact_decimal": true,
+      "buddhist_date": true,
+      "czech_relative_day": true,
+      "devanagari_exact_decimal": true,
+      "spanish_list": true
+    },
+    "fractional_plural_matches": true,
+    "node_icu": "78.3"
+  },
+  "decision": {
+    "cldr_service": "ICU4X is the selected Rust foundation, not a ratified full formatter adapter",
+    "full_formatter_ready": false,
+    "message_runtime": "fluent-bundle 0.16.0 through the existing Rust/PyO3 boundary",
+    "pyicu_role": "comparison oracle only; PyPI 2.16.2 has no binary wheels"
+  },
+  "environment": {
+    "cargo": "cargo 1.98.0-nightly (fbb61be30 2026-05-26)",
+    "machine": "arm64",
+    "node": "v26.5.0",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12",
+    "rust_packages": {
+      "fixed_decimal": "0.7.2",
+      "icu": "2.2.0",
+      "icu_calendar": "2.2.1",
+      "icu_datetime": "2.2.0",
+      "icu_decimal": "2.2.0",
+      "icu_experimental": "0.5.0",
+      "icu_list": "2.2.0",
+      "icu_locale": "2.2.0",
+      "icu_plurals": "2.2.0",
+      "icu_provider": "2.2.0",
+      "icu_time": "2.2.0"
+    },
+    "rustc": "rustc 1.98.0-nightly (14210df0e 2026-05-31)"
+  },
+  "research_binary": {
+    "baseline_bytes": 431152,
+    "candidate_bytes": 4089008,
+    "candidate_gzip_bytes": 1158913,
+    "incremental_bytes": 3657856
+  },
+  "result": "PASS_BOUNDED_WITH_UNRATIFIED_FULL_FORMATTER"
+}

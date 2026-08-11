@@ -17,9 +17,7 @@ backlog that the maintainer can accept, test in a live project, and sign off in
 manageable batches before any release commit is made.
 
 For repository operating rules, see [`/CLAUDE.md`](../../CLAUDE.md). For the
-monorepo and release model, see [`/docs/codebase.md`](../codebase.md). The dated
-status snapshot is
-[`/TODO/project_status_june_2026.md`](../../TODO/project_status_june_2026.md).
+monorepo and release model, see [`/docs/codebase.md`](../codebase.md).
 
 ---
 
@@ -117,10 +115,6 @@ The deeper audit must resolve, rather than repeat, conflicts such as these:
 - [`docs/codebase.md`](../codebase.md) labels most of itself unverified, describes
   both one and several Python packages, and contains both lockstep and
   independent versioning narratives.
-- [`CLAUDE.md`](../../CLAUDE.md) and the parser's `AGENTS.md` call the parser the
-  active frontier, while the June status snapshot says active work moved to the
-  Python runtime. The parser's deep agent index still contains a runtime-node
-  status that the current source contradicts.
 - Design docs describe Events v1, Alpine integration, output caching,
   introspection, debug tools, hot reload, and much of the runtime as implemented.
   Several associated GitHub issues are still open, including the introspection

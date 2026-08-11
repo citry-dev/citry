@@ -27,16 +27,16 @@ def merge_html_headings_into_toc(content_html: str, toc_tokens: list) -> list:
     Return a toc token tree that also covers raw-HTML headings in the content.
 
     Keeps the page-structural headings: the ones markdown already tracked, plus
-    reference symbol headings (class ``doc-heading``). Headings that live inside a
-    docstring body are left out. Returns ``toc_tokens`` unchanged when there is
-    nothing raw to add.
+    raw headings that opt in with ``toc-heading`` and reference symbol headings.
+    Headings that live inside a docstring body are left out. Returns
+    ``toc_tokens`` unchanged when there is nothing raw to add.
     """
     existing_ids = _collect_ids(toc_tokens)
     dom_headings = _extract_headings(content_html)
     kept = [
         (lvl, hid, name, kind)
         for (lvl, hid, name, cls, kind) in dom_headings
-        if hid in existing_ids or "doc-heading" in cls or "doc-member-heading" in cls
+        if hid in existing_ids or "toc-heading" in cls or "doc-heading" in cls or "doc-member-heading" in cls
     ]
 
     # Nothing raw to add (every kept heading is already in the markdown toc).

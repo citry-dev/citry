@@ -1,0 +1,73 @@
+schema_version: 1
+family: icon
+
+components:
+  - CIcon
+
+inputs:
+  - id: cicon-server-inputs
+    component: CIcon
+    channel: server
+    column_widths: [fit, 15rem, 7rem, auto]
+    entries:
+      - id: name
+        name: name
+        type:
+          display: CIconName
+          interfaces: [CIconName]
+        default: {kind: required}
+        effect: Selects one bundled visual glyph or semantic alias.
+      - id: label
+        name: label
+        type: str | None
+        default: {kind: literal, value: null}
+        effect: Gives a standalone Icon `img` semantics and this escaped accessible name. Omit it when visible text already explains the Icon. Trusted HTML values are rejected.
+      - id: size
+        name: size
+        type:
+          display: '"sm" | "md" | "lg"'
+          interfaces: [CIconSize]
+        default: {kind: literal, value: md}
+        effect: Sets the Icon to 0.875em, 1em, or 1.25em before CSS-variable overrides.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds root SVG classes from a string, conditional mapping, or nested sequence and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds root SVG inline styles from CSS text, a property mapping, or nested sequence and merges them with `attrs`.'}
+      - id: attrs
+        name: attrs
+        type: Mapping[str, object] | None
+        default: {kind: literal, value: null}
+        effect: Adds inert root SVG metadata such as `id`, `lang`, `dir`, `hidden`, `aria-describedby`, `aria-details`, and consumer `data-*` attributes. Geometry, naming, focus, executable directives, event bindings, reserved Citry runtime attributes, and trusted HTML values at any supported nesting depth are rejected.
+
+slots: []
+events: []
+methods: []
+
+css:
+  - id: cicon-css-variables
+    component: CIcon
+    entries:
+      - {id: cui-icon-size, name: --cui-icon-size, type: length, purpose: Overrides the rendered inline and block size., default: Size-derived em length.}
+      - {id: cui-icon-stroke-width, name: --cui-icon-stroke-width, type: number, purpose: Overrides the Lucide line weight., default: '2'}
+
+attributes:
+  - id: cicon-attributes
+    component: CIcon
+    entries:
+      - {id: data-name, name: data-name, element: Root SVG, type: CIconName, meaning: Reflects the requested public glyph or alias name.}
+      - {id: data-size, name: data-size, element: Root SVG, type: '"sm" | "md" | "lg"', meaning: Reflects the size preset before CSS-variable overrides.}
+
+selectors:
+  - id: cicon-selectors
+    component: CIcon
+    entries:
+      - {id: data-citry-ui-part-icon, selector: '[data-citry-ui-part="icon"]', element: Root SVG, purpose: Stable Icon root and `attrs` destination.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-cicon-size, name: CIconSize, definition: 'Literal["sm", "md", "lg"]'}
+      - id: input-type-aliases-cicon-name
+        name: CIconName
+        definition: 'Literal["arrow-down", "arrow-left", "arrow-right", "arrow-up", "calendar", "check", "chevron-down", "chevron-left", "chevron-right", "chevron-up", "circle-check", "circle-help", "circle-info", "circle-x", "clock", "copy", "download", "edit", "external-link", "eye", "eye-off", "file", "folder", "heart", "home", "leaf", "link", "lock", "mail", "menu", "minus", "more-horizontal", "more-vertical", "plus", "refresh-cw", "search", "settings", "star", "trash", "triangle-alert", "unlock", "upload", "user", "x", "back", "forward", "prev", "next", "close", "clear", "success", "info", "warn", "danger", "expand", "collapse", "dropdown"]'

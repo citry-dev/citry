@@ -14,6 +14,12 @@ from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from citry._diagnostic_catalog import (
+    FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
+    FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
+    FORMAT_PROVIDER_INVALID,
+    FORMAT_PROVIDER_UNAVAILABLE,
+)
 from citry._embedded_provider import (
     BiomeEmbeddedProvider,
     EmbeddedProviderInvalidError,
@@ -475,14 +481,14 @@ def _format_target(
             target.path,
             display,
             "errored",
-            f"citry.format.provider-invalid: {error}",
+            f"{FORMAT_PROVIDER_INVALID}: {error}",
         )
     except EmbeddedProviderUnavailableError as error:
         return FormatFileResult(
             target.path,
             display,
             "errored",
-            f"citry.format.provider-unavailable: {error}",
+            f"{FORMAT_PROVIDER_UNAVAILABLE}: {error}",
         )
     except (OSError, SyntaxError, UnicodeError, ValueError) as error:
         return FormatFileResult(target.path, display, "errored", str(error))
@@ -570,9 +576,9 @@ def _format_template_with_embedded(
         for notice in outcome.notices
         if notice.code
         in {
-            "citry.format.provider-unavailable",
-            "citry.format.embedded-interpolation-unsupported",
-            "citry.format.embedded-language-unsupported",
+            FORMAT_PROVIDER_UNAVAILABLE,
+            FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
+            FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
         }
     )
     if embedded == "required" and required_notices:
@@ -590,9 +596,9 @@ def _format_standalone_embedded(
     provider: BiomeEmbeddedProvider | None,
 ) -> tuple[str, tuple[str, ...]]:
     if embedded == "off":
-        return source, (f"citry.format.provider-unavailable: {language} formatting is disabled",)
+        return source, (f"{FORMAT_PROVIDER_UNAVAILABLE}: {language} formatting is disabled",)
     if provider is None:
-        notice = f"citry.format.provider-unavailable: no explicitly configured {language} provider"
+        notice = f"{FORMAT_PROVIDER_UNAVAILABLE}: no explicitly configured {language} provider"
         if embedded == "required":
             raise EmbeddedProviderUnavailableError(notice)
         return source, (notice,)

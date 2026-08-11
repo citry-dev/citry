@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       # The script is pure standard library, so it needs no install step.
       - name: Check supported Python versions
         id: check

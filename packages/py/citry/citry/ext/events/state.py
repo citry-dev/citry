@@ -17,7 +17,12 @@ from dataclasses import MISSING, dataclass, fields
 from datetime import timedelta
 from typing import Any
 
-from citry._nested_declarations import _convert_to_slotted_dataclass
+from citry._annotation_introspection import _own_annotations
+from citry._nested_declarations import (
+    _SYNTHESIZED_DECLARATION_ATTR,
+    _SYNTHESIZED_FIELD_OWNERS_ATTR,
+    _convert_to_slotted_dataclass,
+)
 
 # The full State meta surface. Every other underscore attribute on a State
 # class is a class-definition error, which is what makes typos loud
@@ -31,6 +36,7 @@ _DEFAULT_MAX_BYTES = 8192
 # underscore name: State may carry private helpers just like it carries the
 # recommended ``render()`` method. Plain values are what must be meta names.
 _DEF_LIKE = (staticmethod, classmethod, property)
+_SYNTHESIZED_STATE_NAMES = frozenset({_SYNTHESIZED_DECLARATION_ATTR, _SYNTHESIZED_FIELD_OWNERS_ATTR})
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,7 +82,7 @@ def _merged_annotations(user_cls: type) -> dict[str, Any]:
     merged: dict[str, Any] = {}
     for klass in reversed(user_cls.__mro__):
         if "__dataclass_fields__" not in klass.__dict__:
-            merged.update(inspect.get_annotations(klass))
+            merged.update(_own_annotations(klass))
     return merged
 
 
@@ -106,7 +112,9 @@ def validate_state_class(comp_name: str, user_cls: type) -> None:
         for name, value in vars(klass).items():
             if _is_dunder(name) or not name.startswith("_"):
                 continue
-            if name == "_citry_synthesized_declaration":
+            # Citry's generated schema carries private construction metadata;
+            # only author-written underscore values belong to the State meta.
+            if name in _SYNTHESIZED_STATE_NAMES:
                 continue
             if inspect.isfunction(value) or isinstance(value, _DEF_LIKE):
                 continue  # a private helper method; State may carry methods

@@ -166,6 +166,30 @@ def test_plain_server_only_template_fill_does_not_load_the_client_runtime():
     assert "Citry events client runtime. GENERATED FILE" not in html
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        '<code>example x-data="{ value: 1 }"</code>',
+        '<!-- <span x-text="value"></span> -->',
+        '<script>const example = `<span x-text="value"></span>`;</script>',
+        "<style>.example::after { content: '<span x-text=\"value\">'; }</style>",
+        '<textarea><span x-text="value"></span></textarea>',
+        '<title><span x-text="value"></span></title>',
+    ],
+)
+def test_alpine_shaped_text_outside_an_attribute_does_not_activate_the_client(body: str):
+    c = Citry()
+
+    class Page(Component):
+        citry = c
+        template = body
+
+    html = Page().render().serialize()
+
+    assert "data-citry-graph" not in html
+    assert "Citry events client runtime. GENERATED FILE" not in html
+
+
 def test_client_context_magic_alone_emits_the_graph_and_alpine_runtime():
     c = Citry()
 

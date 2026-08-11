@@ -7,6 +7,7 @@ from pathlib import Path, PurePosixPath
 import pytest
 
 from docs_site._internal.components.ui_demo import UiDemo
+from docs_site._internal.project import load_docs_project
 from docs_site._internal.ui_library_projection import UiLibraryCatalog, UiLibraryProjection
 from docs_site._internal.ui_previews import (
     UiPreviewError,
@@ -65,6 +66,613 @@ def test_discovery_ignores_documented_directives_and_derives_private_route(
     assert preview.title == "Primary action"
     assert preview.source_open is True
     assert preview.public_path == "/ui-library/components/button/_previews/primary-action/"
+
+
+def test_discovery_ignores_inline_raw_text_tags_before_a_preview(tmp_path: Path) -> None:
+    _write_sources(tmp_path, snippet="preview = 1\npreview\n")
+    api = tmp_path / "packages/py/citry_ui/citry_ui/components/cbutton/api.md"
+    api.write_text(
+        api.read_text(encoding="utf-8").replace(
+            "```citry-html",
+            "A native `<textarea>` keeps browser behavior.\n\n```citry-html",
+            1,
+        ),
+        encoding="utf-8",
+    )
+
+    [preview] = discover_ui_previews(_catalog(), repo_root=tmp_path)
+
+    assert preview.name == "primary-action"
+
+
+def test_textarea_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "textarea"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "compose-textarea",
+        "rows-and-resize",
+        "variants",
+        "sizes",
+        "field-states",
+        "validation-and-forms",
+        "controlled-values",
+        "native-text",
+        "direction-and-content",
+        "theme-customization",
+    ]
+
+
+def test_native_select_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "native-select"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "compose-select",
+        "options-and-groups",
+        "placeholder-and-required",
+        "variants",
+        "sizes",
+        "field-states",
+        "controlled-selection",
+        "native-picker",
+        "theme-customization",
+    ]
+
+
+def test_checkbox_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "checkbox"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "compose-checkbox",
+        "configuration",
+        "forms-and-validation",
+        "controlled-states",
+        "indeterminate",
+        "field-states",
+        "label-and-description",
+        "variants-and-sizes",
+        "theme-customization",
+    ]
+
+
+def test_alert_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "alert"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic-alert",
+        "intents",
+        "variants",
+        "sizes",
+        "icons",
+        "actions",
+        "configure",
+        "announcements",
+        "customization",
+    ]
+
+
+def test_accordion_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "accordion"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic-accordion",
+        "controlled-value",
+        "expansion-modes",
+        "actions",
+        "disabled-items",
+        "nested-accordion",
+        "variants",
+        "customization",
+    ]
+
+
+def test_disclosure_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "disclosure"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic-disclosure",
+        "controlled-open",
+        "actions-and-disabled",
+        "variants-and-sizes",
+        "nested-disclosures",
+        "overlays-and-dialogs",
+        "forms-and-focus",
+        "customization",
+    ]
+
+
+def test_flow_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "flow-layout"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "stack-spacing",
+        "group-alignment",
+        "wrapping",
+        "semantic-roots",
+        "nested-layouts",
+        "customization",
+        "direction",
+    ]
+
+
+def test_grid_container_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "grid-container"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "responsive-columns",
+        "asymmetric-layout",
+        "intrinsic-grid",
+        "container-sizes",
+        "spacing",
+        "semantics-and-nesting",
+        "customization",
+    ]
+
+
+def test_badge_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "badge"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic-badges",
+        "intents",
+        "variants",
+        "sizes-and-shapes",
+        "icons",
+        "counts-and-context",
+        "positioning",
+        "customization",
+    ]
+
+
+def test_divider_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "divider"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic-dividers",
+        "semantic-and-decorative",
+        "orientations",
+        "labels",
+        "variants-and-sizes",
+        "insets",
+        "customization",
+    ]
+
+
+def test_avatar_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "avatar"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "images-and-fallbacks",
+        "accessible-names",
+        "variants-and-sizes",
+        "shapes",
+        "reactive-sources",
+        "composition",
+        "customization",
+    ]
+
+
+def test_skeleton_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "skeleton"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "primitives",
+        "text-lines",
+        "field-note-card",
+        "specimen-list",
+        "motion",
+        "customization",
+    ]
+
+
+def test_toolbar_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "toolbar"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "commands",
+        "composition",
+        "orientation",
+        "variants",
+        "disabled",
+        "customization",
+    ]
+
+
+def test_file_input_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "file-input"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "field",
+        "drop-target",
+        "multiple",
+        "capture",
+        "disabled",
+        "customization",
+    ]
+
+
+def test_stepper_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "stepper"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "interactive",
+        "nonlinear",
+        "states",
+        "controlled",
+        "presentation",
+        "customization",
+    ]
+
+
+def test_splitter_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "splitter"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "multiple",
+        "vertical-nested",
+        "constraints-keyboard",
+        "controlled",
+        "disabled",
+        "customization",
+    ]
+
+
+def test_tree_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "tree"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "controlled-expansion",
+        "single-selection",
+        "multiple-selection",
+        "keyboard",
+        "disabled",
+        "customization",
+    ]
+
+
+def test_popover_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "popover"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "moon-inspector",
+        "interactive-form",
+        "controlled-open",
+        "dismissal",
+        "placements",
+        "nested-popovers",
+        "customization",
+        "responsive-content",
+    ]
+
+
+def test_menu_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "menu"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "commands-and-links",
+        "item-content",
+        "controlled-open",
+        "choices",
+        "groups-and-separators",
+        "submenus",
+        "keyboard-and-typeahead",
+        "disabled-and-forms",
+        "placement-and-rtl",
+        "sizes",
+        "customization",
+        "lifecycle",
+    ]
+
+
+def test_drawer_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "drawer"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "edit-field-note",
+        "bottom-sheet",
+        "configuration",
+        "controlled-drawer",
+        "long-content",
+        "drawer-form",
+        "nested-layers",
+        "explicit-completion",
+        "customization",
+    ]
+
+
+def test_toast_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "toast"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "reactive-queue",
+        "replacement",
+        "timeout-pause",
+        "persistent-action",
+        "visible-limit",
+        "focus-access",
+        "modal-pause",
+        "placement-rtl",
+        "customization",
+    ]
+
+
+def test_progress_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "progress"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "determinate",
+        "indeterminate",
+        "custom-range",
+        "intents",
+        "sizes-and-shapes",
+        "controlled",
+        "busy-region",
+        "customization",
+    ]
+
+
+def test_tooltip_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "tooltip"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "moon-labels",
+        "formatted-description",
+        "live-text",
+        "timing",
+        "controlled-open",
+        "placements",
+        "dismissal",
+        "customization",
+        "responsive-text",
+    ]
+
+
+def test_spinner_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "spinner"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic",
+        "intents",
+        "sizes",
+        "inline",
+        "controlled",
+        "busy-region",
+        "delayed",
+        "customization",
+    ]
+
+
+def test_radio_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "radio"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic",
+        "descriptions",
+        "controlled",
+        "forms",
+        "orientation",
+        "presentation",
+        "field",
+        "customization",
+    ]
+
+
+def test_switch_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "switch"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic",
+        "descriptions",
+        "controlled",
+        "forms",
+        "presentation",
+        "field",
+        "semantics",
+        "customization",
+    ]
+
+
+def test_breadcrumbs_catalog_discovers_every_component_owned_preview() -> None:
+    project = load_docs_project()
+
+    names = [
+        preview.name
+        for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+        if preview.family == "breadcrumbs"
+    ]
+
+    assert names == [
+        "at-a-glance",
+        "basic",
+        "current-link",
+        "separators",
+        "sizes",
+        "overflow",
+        "item-slot",
+        "route-records",
+        "customization",
+    ]
 
 
 def test_preview_module_requires_an_explicit_final_preview_expression(

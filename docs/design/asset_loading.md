@@ -1,13 +1,12 @@
-# Design: asset loading (template, JS, and CSS files)
+# Design: asset loading (template, messages, JS, and CSS files)
 
-**Status (2026-08-05): design agreed and built.** This
-document specifies how a component's assets, the HTML template and the
-component-colocated JS and CSS, are declared on the Component class, resolved to
-files on disk, loaded, cached, and invalidated. It covers the three inline/file
-field pairs (`template`/`template_file`, `js`/`js_file`, `css`/`css_file`), the
+**Status (updated 2026-08-10): design agreed and built.** This document
+specifies how a component's HTML template, Fluent messages, colocated JS, and
+colocated CSS are declared, found, loaded, cached, and invalidated. It covers
+the four inline/file pairs (`template`/`template_file`,
+`messages`/`messages_file`, `js`/`js_file`, and `css`/`css_file`), the
 `CitryTemplate` struct, the path lookup chain, the secondary-asset
-`Dependencies` class (owned by a built-in extension), the loading hooks, and the
-hot-reload boundary.
+`Dependencies` class, the loading hooks, and hot reload.
 
 For the broader migration context see
 [`migration_djc.md`](migration_djc.md). For the render model that consumes
@@ -81,7 +80,7 @@ Decisions made with the maintainer:
 1. **`CitryTemplate` struct.** The loaded template is a struct, not a bare
    string: source + origin + filepath, plus the compiled form filled in lazily
    on first render, all one object (section 4).
-2. **Scope: primary assets AND the secondary-asset class.** All three field
+2. **Scope: primary assets AND the secondary-asset class.** All four field
    pairs plus the secondary-asset class land now (sections 3 and 7).
 3. **Path lookup: py-file dir, then Citry dirs** (section 5). No staticfiles
    tier, no comp-dir-relative path rewriting; resolve to an absolute path and
@@ -115,13 +114,14 @@ extensions, mirroring `components/` for built-in components).
 
 ---
 
-## 3. The declaration model: three pairs, fields stay raw
+## 3. The declaration model: four pairs, fields stay raw
 
 The Component class gains the full DJC-style asset surface:
 
 ```python
 class Card(Component):
     template_file = "card.html"   # or: template = "<div>...</div>"
+    messages_file = "card.ftl"    # or: messages = "card-title = Card"
     js_file = "card.js"           # or: js = "console.log('hi')"
     css_file = "card.css"         # or: css = ".card { ... }"
 
@@ -140,6 +140,7 @@ are needed:
 
 ```python
 Card.get_template()       # -> CitryTemplate | None    (section 4)
+Card.get_messages()       # -> str | None              (source-locale Fluent)
 Card.get_js()             # -> str | None              (loaded primary JS content)
 Card.get_css()            # -> str | None              (loaded primary CSS content)
 Card.get_dependencies()   # -> CitryDependencies       (merged secondary assets, section 7)
@@ -172,7 +173,8 @@ inspectable.
 
 ### 3.2 Pair rules
 
-For each pair (`template`/`template_file`, `js`/`js_file`, `css`/`css_file`):
+For each pair (`template`/`template_file`, `messages`/`messages_file`,
+`js`/`js_file`, and `css`/`css_file`):
 
 - **Mutual exclusivity, checked at class definition.** Setting both members
   non-`None` on the same class raises `ValueError` immediately (DJC checks the
@@ -196,7 +198,7 @@ For each pair (`template`/`template_file`, `js`/`js_file`, `css`/`css_file`):
   the MRO walk terminates there with "no asset", which is the correct empty
   case.
 
-### 3.3 Resolution is lazy, cached per class
+### 3.3 Resolution is lazy and cached
 
 Each primary accessor resolves on first call and caches the result in the
 asking class's own `__dict__`: `_citry_template` (the `CitryTemplate`, which
@@ -208,6 +210,12 @@ cycle lets garbage collection reclaim the complete generation after registry
 removal or `Citry.clear()`. No filesystem I/O happens at import time, and a
 class is never resolved twice.
 
+Messages use a different ownership rule. A `messages` / `messages_file`
+declaration is one source unit. The `Citry` engine caches its final,
+extension-processed source under the class that declared that pair. A parent
+and every child that inherits its messages therefore share one result, and the
+message hook runs once for that declaration rather than once per child.
+
 One consequence to know about: a subclass that inherits its parent's
 declaration caches its *own* copy of the resolved content. Both classes
 register against the same file in the reverse index (section 8), so file-driven
@@ -216,9 +224,9 @@ clear children. Acceptable for the skeleton; revisit if it bites.
 
 ### 3.4 Inline source normalization
 
-`template`, `js`, and `css` string declarations pass through Python-compatible
-common-indentation removal before their loading hooks run. The transform has
-the same behavior as `textwrap.dedent`:
+`template`, `messages`, `js`, and `css` string declarations pass through
+Python-compatible common-indentation removal before their loading hooks run.
+The transform has the same behavior as `textwrap.dedent`:
 
 ```python
 class Card(Component):
@@ -371,10 +379,13 @@ extension hooks:
   `result="map"` like `on_template_loaded`. These were
   the "deferred pending CSS/JS subsystem" rows in
   [`extensions.md`](extensions.md) section 10; this subsystem lands them.
+- **`on_messages_loaded`** - fires once per `messages` declaration after the
+  source is loaded and indentation is removed. User extensions may replace the
+  text. The built-in i18n extension runs last and compiles that final text.
 
-Because resolution is cached per class, each hook fires once per class, and the
-post-hook content is what gets cached. A reset (section 8) re-fires on the next
-access, which is the desired hot-reload behavior.
+Template, JS, and CSS hooks fire once per requesting class. The message hook
+fires once per source declaration. A reset (section 8) causes the relevant hook
+to run again on the next access.
 
 `get_js_data` / `get_css_data` (per-render variables for the assets) remain a
 TODO tracked in [`extensions.md`](extensions.md) section 7.5; they are consumers
@@ -540,7 +551,8 @@ Per DJC #1413 (all state on the `Citry` instance), the index lives on `Citry`,
 not at module level:
 
 - `Citry._register_component_file(path, comp_cls)` - called by the loaders for
-  every file a class resolves (template, js, css, Dependencies entries).
+  every file a class resolves (template, messages, JS, CSS, and Dependencies
+  entries).
   Stores weakrefs.
 - `Citry.get_components_for_file(path)` - returns the live classes using that
   file, pruning dead refs. This is the API a future watcher (or test helper)
@@ -558,8 +570,11 @@ accessors in 3.1):
   (`Citry._evict_component_cache(comp_cls)`, since that cache previously only
   supported global `clear()`). The next render re-resolves, re-reads, re-fires
   `on_template_loaded`, and re-compiles.
-- `Card.reset_files()` - drops the cached primary JS/CSS content, then fires
-  the `on_files_reset` hook so extensions evict their own per-class state. The `dependencies` built-in implements it to drop its merged
+- `Card.reset_files()` - drops the cached messages, primary JS, and primary CSS
+  content, then fires the `on_files_reset` hook so extensions evict their own
+  state. A message reload keeps the last valid source and compiled catalog
+  until the replacement has loaded and compiled successfully. The
+  `dependencies` built-in implements the hook to drop its merged
   `CitryDependencies` cache and its mutable script compatibility keys the same
   way (DJC's `reset_files` evicts the script cache directly, but in
   citry the core must not reach into a specific extension). This is the first

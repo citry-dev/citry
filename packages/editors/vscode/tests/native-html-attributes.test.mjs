@@ -2,9 +2,55 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+	htmlProjectionCandidateAt,
+	htmlProjectionCandidateRangeAt,
 	nativeDynamicAttributeHoverProjection,
 	projectNativeHtmlAttributes,
 } from "../out/tests/nativeHtmlAttributes.mjs";
+
+test("activates parser-backed HTML projection only in nested values and c-element start tags", () => {
+	const source = [
+		'<div class="ordinary"></div>',
+		"<c-card c-body=\"<>😀<input type='email' /></>\" />",
+		'<c-element is="form" c-action="submit"></c-element>',
+		'<c-Element is="button" c-disabled="busy"></c-Element>',
+		'<script>const sample = "<c-element class=hidden>";</script>',
+	].join("\n");
+
+	assert.equal(htmlProjectionCandidateAt(source, source.indexOf("ordinary") + 2), false);
+	assert.equal(htmlProjectionCandidateAt(source, source.indexOf("email") + 2), true);
+	assert.equal(htmlProjectionCandidateAt(source, source.indexOf("c-action") + 2), true);
+	assert.equal(htmlProjectionCandidateAt(source, source.indexOf("c-disabled") + 2), true);
+	assert.equal(htmlProjectionCandidateAt(source, source.indexOf("hidden") + 2), false);
+});
+
+test("recognizes single-quoted nested hosts with double-quoted inner HTML", () => {
+	const source = "<c-card c-body='<><input type=\"email\" /></>' />";
+
+	assert.equal(htmlProjectionCandidateAt(source, source.indexOf("email") + 2), true);
+});
+
+test("returns the deepest containing parser-backed HTML host", () => {
+	const source = '<c-element is="form" c-body="<><input c-disabled=\'busy\' /></>" c-action="save">';
+	const nested = htmlProjectionCandidateRangeAt(source, source.indexOf("busy") + 2);
+	const element = htmlProjectionCandidateRangeAt(source, source.indexOf("c-action") + 2);
+
+	assert.ok(nested);
+	assert.equal(source.slice(nested.start, nested.end), "<><input c-disabled='busy' /></>");
+	assert.ok(element);
+	assert.equal(source.slice(element.start, element.end).endsWith(">"), true);
+});
+
+test("gives nested template levels independent projection cache ranges", () => {
+	const source = "<c-card c-body=\"<><c-inner c-content='<><input disabled /></>' /></>\" />";
+	const outer = htmlProjectionCandidateRangeAt(source, source.indexOf("c-inner") + 2);
+	const inner = htmlProjectionCandidateRangeAt(source, source.indexOf("input") + 2);
+
+	assert.ok(outer);
+	assert.equal(source.slice(outer.start, outer.end), "<><c-inner c-content='<><input disabled /></>' /></>");
+	assert.ok(inner);
+	assert.equal(source.slice(inner.start, inner.end), "<><input disabled /></>");
+});
 
 test("projects a dynamic native attribute without moving source coordinates", () => {
 	const source = '<form c-class="classes"></form>';

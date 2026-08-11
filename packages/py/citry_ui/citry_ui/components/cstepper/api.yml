@@ -1,0 +1,145 @@
+schema_version: 1
+family: stepper
+
+components:
+  - CStepper
+  - CStep
+
+inputs:
+  - id: cstepper-server-inputs
+    component: CStepper
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the accessible navigation landmark name.}
+      - {id: active, name: active, type: int, default: {kind: literal, value: 0}, effect: Sets the zero-based initial active Step.}
+      - {id: interactive, name: interactive, type: bool, default: {kind: literal, value: false}, effect: Structurally renders eligible Step triggers as native Buttons.}
+      - {id: linear, name: linear, type: bool, default: {kind: literal, value: true}, effect: Makes upcoming interactive Steps unavailable.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables every interactive Step.}
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CStepperOrientation]}, default: {kind: literal, value: horizontal}, effect: Selects logical Step layout.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CStepperVariant]}, default: {kind: literal, value: plain}, effect: Selects surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CStepperSize]}, default: {kind: literal, value: md}, effect: Selects indicator and spacing geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted root attributes without replacing owned semantics state visibility children or runtime.}
+  - id: cstepper-client-inputs
+    component: CStepper
+    channel: client
+    column_widths: [fit, 13rem, 12rem, auto]
+    entries:
+      - {id: active, name: active, type: 'int | null', omitted: Uses uncontrolled committed state., effect: Controls the zero-based active Step; null releases control.}
+      - {id: linear, name: linear, type: bool, omitted: Uses the server value., effect: Reactively limits navigation to current and completed Steps.}
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server value., effect: Reactively disables interactive Steps.}
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CStepperOrientation]}, omitted: Uses the server value., effect: Reactively changes logical layout.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CStepperVariant]}, omitted: Uses the server value., effect: Reactively changes surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CStepperSize]}, omitted: Uses the server value., effect: Reactively changes geometry.}
+      - {id: on-active-change, name: onActiveChange, type: '((active: number, detail: CStepperActiveChangeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives eligible different Step navigation requests.}
+  - id: cstep-server-inputs
+    component: CStep
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Makes this Step unavailable when interactive.}
+      - {id: optional, name: optional, type: bool, default: {kind: literal, value: false}, effect: Reflects optional workflow metadata.}
+      - {id: error, name: error, type: bool, default: {kind: literal, value: false}, effect: Reflects an application-owned error state.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the concrete Step list item.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds inline styles to the concrete Step list item.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted list-item attributes without replacing owned identity state or trigger behavior.}
+
+slots:
+  - id: cstepper-slots
+    component: CStepper
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CStepperDefaultSlotData]}, fallback: None. Requires at least two direct CStep declarations.}
+  - id: cstep-slots
+    component: CStep
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{index, state, is_current, is_disabled}', interfaces: [CStepDefaultSlotData]}, fallback: None. Supplies the Step label.}
+      - {id: description, name: description, required: false, data: {display: '{index, state, is_current, is_disabled}', interfaces: [CStepDescriptionSlotData]}, fallback: Omitted.}
+      - {id: indicator, name: indicator, required: false, data: {display: '{index, state, is_current, is_disabled}', interfaces: [CStepIndicatorSlotData]}, fallback: One-based ASCII Step number.}
+
+events:
+  - id: cstepper-events
+    component: CStepper
+    entries:
+      - {id: on-active-change, name: onActiveChange, signature: {display: '(active: number, detail: CStepperActiveChangeDetail) => void', interfaces: [CStepperActiveChangeDetail]}, trigger: Eligible different Step activation., detail: {display: '{active, previousActive, controlled, step, sourceEvent}', interfaces: [CStepperActiveChangeDetail]}, behavior: Requests navigation before an uncontrolled commit or controlled reconciliation.}
+
+methods: []
+
+css:
+  - id: cstepper-css-variables
+    component: CStepper
+    entries:
+      - {id: cui-stepper-gap, name: --cui-stepper-gap, type: length, purpose: Gap between Steps., default: 'sm: 0.5rem; md: 0.75rem; lg: 1rem'}
+      - {id: cui-stepper-indicator-size, name: --cui-stepper-indicator-size, type: length, purpose: Indicator inline and block size., default: 'sm: 1.625rem; md: 2rem; lg: 2.5rem'}
+      - {id: cui-stepper-trigger-gap, name: --cui-stepper-trigger-gap, type: length, purpose: Gap between indicator and copy., default: 0.625rem}
+      - {id: cui-stepper-radius, name: --cui-stepper-radius, type: length, purpose: Root and trigger corner radius input., default: 0.75rem}
+      - {id: cui-stepper-active-color, name: --cui-stepper-active-color, type: color, purpose: Current indicator color., default: 'light #175cd3; dark #93c5fd'}
+      - {id: cui-stepper-complete-color, name: --cui-stepper-complete-color, type: color, purpose: Completed indicator color., default: 'light #067647; dark #6ce9a6'}
+      - {id: cui-stepper-muted-color, name: --cui-stepper-muted-color, type: color, purpose: Upcoming indicator and description color., default: 'light #667085; dark #a4a7ae'}
+      - {id: cui-stepper-background, name: --cui-stepper-background, type: color, purpose: Root background., default: 'plain and outline transparent; soft subtle CanvasText mix'}
+      - {id: cui-stepper-border-color, name: --cui-stepper-border-color, type: color, purpose: Outline indicator and separator color., default: 'light #d0d5dd; dark #535862'}
+      - {id: cui-stepper-focus-color, name: --cui-stepper-focus-color, type: color, purpose: Interactive trigger focus outline., default: Highlight}
+
+attributes:
+  - id: cstepper-attributes
+    component: CStepper
+    entries:
+      - {id: aria-label, name: aria-label, element: Root nav, type: string, meaning: Names the workflow navigation landmark.}
+      - {id: data-active, name: data-active, element: Root nav, type: nonnegative-integer-string, meaning: Mirrors effective active index.}
+      - {id: data-orientation, name: data-orientation, element: Root nav, type: 'horizontal | vertical', meaning: Mirrors effective layout.}
+      - {id: data-interactive, name: data-interactive, element: Root nav, type: present-or-absent, meaning: Present when Steps render native Button triggers.}
+      - {id: data-linear, name: data-linear, element: Root nav, type: present-or-absent, meaning: Present when upcoming Steps are unavailable.}
+      - {id: data-variant, name: data-variant, element: Root nav, type: 'plain | soft | outline', meaning: Mirrors effective surface treatment.}
+      - {id: data-size, name: data-size, element: Root nav, type: 'sm | md | lg', meaning: Mirrors effective geometry.}
+      - {id: data-index, name: data-index, element: Step li, type: nonnegative-integer-string, meaning: Exposes zero-based settled order.}
+      - {id: data-state, name: data-state, element: Step li, type: 'complete | current | upcoming', meaning: Mirrors derived status.}
+      - {id: aria-current, name: aria-current, element: Current trigger, type: step, meaning: Identifies the current workflow Step.}
+      - {id: data-disabled, name: data-disabled, element: Root or Step, type: present-or-absent, meaning: Reflects effective component or Step unavailability.}
+      - {id: data-optional, name: data-optional, element: Step li, type: present-or-absent, meaning: Reflects optional metadata.}
+      - {id: data-error, name: data-error, element: Step li, type: present-or-absent, meaning: Reflects error metadata.}
+
+selectors:
+  - id: cstepper-selectors
+    component: CStepper
+    entries:
+      - {id: part-stepper, selector: '[data-citry-ui-part="stepper"]', element: Root nav, purpose: Stable root and attrs destination.}
+      - {id: part-list, selector: '[data-citry-ui-part="list"]', element: Ordered list, purpose: Stable Step collection.}
+      - {id: part-step, selector: '[data-citry-ui-part="step"]', element: Step list item, purpose: Stable declaration attrs destination and state surface.}
+      - {id: part-trigger, selector: '[data-citry-ui-part="trigger"]', element: Button or span, purpose: Stable interactive or static Step surface.}
+      - {id: part-indicator, selector: '[data-citry-ui-part="indicator"]', element: Decorative span, purpose: Stable Step marker.}
+      - {id: part-copy, selector: '[data-citry-ui-part="copy"]', element: Copy wrapper span, purpose: Stable label and description wrapper.}
+      - {id: part-label, selector: '[data-citry-ui-part="label"]', element: Label span, purpose: Stable accessible label content.}
+      - {id: part-description, selector: '[data-citry-ui-part="description"]', element: Optional description span, purpose: Stable described-by target.}
+      - {id: part-separator, selector: '[data-citry-ui-part="separator"]', element: Decorative span, purpose: Stable connector.}
+
+interfaces:
+  - id: cstepper-aliases
+    kind: aliases
+    entries:
+      - {id: cstepper-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: cstepper-style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: cstepper-orientation, name: CStepperOrientation, definition: 'Literal["horizontal", "vertical"]'}
+      - {id: cstepper-variant, name: CStepperVariant, definition: 'Literal["plain", "soft", "outline"]'}
+      - {id: cstepper-size, name: CStepperSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: cstep-state, name: CStepState, definition: 'Literal["complete", "current", "upcoming"]'}
+      - {id: cstep-description-slot-data, name: CStepDescriptionSlotData, definition: CStepDefaultSlotData}
+      - {id: cstep-indicator-slot-data, name: CStepIndicatorSlotData, definition: CStepDefaultSlotData}
+  - {id: cstepper-default-slot-data, kind: record, name: CStepperDefaultSlotData, entries: []}
+  - id: cstep-default-slot-data
+    kind: record
+    name: CStepDefaultSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Zero-based settled Step index.}
+      - {id: state, name: state, type: {display: '"complete" | "current" | "upcoming"', interfaces: [CStepState]}, meaning: Server-rendered status.}
+      - {id: is-current, name: is_current, type: bool, meaning: Whether this Step is initially current.}
+      - {id: is-disabled, name: is_disabled, type: bool, meaning: Whether this Step is initially unavailable.}
+  - id: cstepper-active-change-detail
+    kind: record
+    name: CStepperActiveChangeDetail
+    entries:
+      - {id: active, name: active, type: int, meaning: Requested zero-based index.}
+      - {id: previous-active, name: previousActive, type: int, meaning: Prior effective index.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether a client active value currently controls state.}
+      - {id: step, name: step, type: HTMLElement, meaning: Activated Step list item.}
+      - {id: source-event, name: sourceEvent, type: Event, meaning: Native click event.}

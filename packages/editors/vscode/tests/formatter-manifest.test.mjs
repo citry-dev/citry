@@ -66,6 +66,19 @@ test("one extension-owned formatter routes all VS Code workspaces", async () => 
 	);
 });
 
+test("CSS data intelligence activates and routes CSS files through the workspace client", async () => {
+	const manifest = JSON.parse(await readFile(manifestUrl, "utf8"));
+	const source = await readFile(extensionSourceUrl, "utf8");
+
+	assert.ok(manifest.activationEvents.includes("onLanguage:css"));
+	assert.match(
+		source,
+		/\{ language: "css", scheme: "file", pattern: \{ baseUri: folder\.uri\.toString\(\), pattern: "\*\*\/\*" \} \}/,
+	);
+	assert.match(source, /provideCompletionItem:[\s\S]*?ownsDocument\(document\)/);
+	assert.match(source, /provideReferences:[\s\S]*?ownsDocument\(document\)/);
+});
+
 test("parameterless custom requests include params for pygls", async () => {
 	const source = await readFile(extensionSourceUrl, "utf8");
 

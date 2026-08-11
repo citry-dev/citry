@@ -6,7 +6,7 @@ from typing import Any
 
 from citry import Component
 from docs_site._internal.project import current_docs_project
-from docs_site._internal.ui_library_projection import ui_library_overview_items
+from docs_site._internal.ui_library_projection import ui_library_overview_groups
 
 
 class UiLibraryList(Component):
@@ -23,16 +23,19 @@ class UiLibraryList(Component):
     def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
         project = current_docs_project()
         return {
-            "items": ui_library_overview_items(
+            "groups": ui_library_overview_groups(
                 project.ui_library,
                 repo_root=project.runtime.repo_root,
             )
         }
 
     template = """
-      <ul>
-        <li c-for="item in items">
-          <a c-href="item['path']">{{ item['title'] }}</a> - {{ item['description'] }}
-        </li>
-      </ul>
+      <section c-for="group in groups" c-aria-labelledby="'ui-library-' + group['id']">
+        <h2 c-id="'ui-library-' + group['id']">{{ group['label'] }}</h2>
+        <ul>
+          <li c-for="item in group['items']">
+            <a c-href="item['path']">{{ item['title'] }}</a> - {{ item['description'] }}
+          </li>
+        </ul>
+      </section>
     """

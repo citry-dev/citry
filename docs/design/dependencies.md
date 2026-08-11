@@ -322,8 +322,9 @@ class Table(Component):
 `render_impl` calls all three data methods together (as DJC's
 `_call_data_methods` does), validates `JsData`/`CssData` when declared, and
 `on_component_data`'s context gains `js_data` and `css_data`, closing the
-TODO in [`extensions.md`](extensions.md) section 7.5. A component with no
-`js`/`css` source skips the corresponding variables work entirely (DJC rule).
+TODO in [`extensions.md`](extensions.md) section 7.5. CSS data still needs a
+component CSS consumer. JS data is captured when `$component` or rendered
+Alpine expressions can consume it; data alone does not activate the client.
 
 ### 5.2 How variables reach the browser
 
@@ -343,15 +344,22 @@ The mechanism ports from DJC conceptually unchanged:
   strings, and comments. This is a structural containment check, not a full
   CSS grammar validator.
 - **JS variables** become a cached script that calls
-  `Citry.manager.registerComponentData("<class_id>", "<hash>", data)`, and
-  each instance that used `$component` produces a *component call*
-  (`class_id`, `component_id`, `js_vars_hash`) in the serialize-time
-  manifest. The client manager runs the component's registered callback for
-  the elements carrying `data-cid-<component_id>` once script and data are
-  loaded.
+  `Citry.manager.registerComponentData("<class_id>", "<hash>", json_source)`.
+  Each client-active instance produces an explicit component call
+  (`class_id`, `component_id`, `js_vars_hash`, `init | seed`) in the
+  serialize-time manifest. `init` seeds the instance's Alpine scope and then
+  runs `$component`; `seed` performs only the first operation. The content
+  stays deduplicated by hash, while the manager parses a fresh graph per call
+  so sibling instances never share nested mutable values.
 - **`$component` sugar**: a regex rewrite applied once when the class's JS is
   first cached: `$component(` becomes
   `Citry.manager.registerComponent("<class_id>", `.
+
+A component that declares `JsData` or overrides `js_data()` receives the
+seed-only call when its rendered output uses Alpine, even if that render
+returns an empty mapping. The empty call clears keys owned by an earlier
+correlated render. A component that inherits the framework's always-empty
+default does not receive a seed call.
 
 Citry already stamps `data-cid-<id>` on component root elements, which is
 exactly the element-association half DJC had to add by post-processing HTML
@@ -551,8 +559,9 @@ manager, renamed (`globalThis.Citry`, `data-citry`, `citry.min.js`):
 
 - `registerComponent(classId, definition)` (the `$component` target),
   `registerComponentData(classId, hash, data)`, `callComponent(classId,
-  componentId, varsHash)`; calls queue until their script and data arrive,
-  then run against the elements matching `[data-cid-<componentId>]`.
+  componentId, varsHash, revision, mode)`; calls queue until their script and
+  data arrive, then seed the graph-owned scope and optionally run against the
+  elements matching `[data-cid-<componentId>]`.
   A class accepts exactly one component registration. A second registration
   throws an error naming the class and explaining that only one `$component`
   registration is allowed. The definition is either the bare callback or a

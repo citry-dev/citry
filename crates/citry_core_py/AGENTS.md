@@ -13,6 +13,8 @@ see [`/docs/agent/INDEX.md`](../../docs/agent/INDEX.md).
   its functions / classes. This is the registration point for everything Python
   can import.
 - `src/html_transform.rs` - wraps `citry_html_transform`.
+- `src/i18n.rs` - exposes ICU4X locale canonicalization and direction lookup,
+  and wraps the language-neutral `citry_i18n` catalog runtime.
 - `src/safe_eval.rs` - wraps `python_safe_eval`.
 - `src/template_formatter.rs` - wraps `citry_template_formatter` and attaches
   stable formatter codes, ranges, and parser diagnostics to Python errors.

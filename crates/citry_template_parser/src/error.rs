@@ -2,6 +2,7 @@ use pest::error::{InputLocation, LineColLocation};
 use pyo3::prelude::*;
 use thiserror::Error;
 
+use crate::diagnostic_catalog::{PARSE_SYNTAX, PARSE_VALUE};
 use crate::grammar::Rule;
 
 /// Machine-readable details for one template parse failure.
@@ -104,7 +105,7 @@ impl ParseError {
                     LineColLocation::Span(start, end) => (start, end),
                 };
                 ParseDiagnostic {
-                    code: "citry.parse.syntax".to_string(),
+                    code: PARSE_SYNTAX.to_string(),
                     message: self.to_string(),
                     start_index: Some(start_index),
                     end_index: Some(end_index),
@@ -115,7 +116,7 @@ impl ParseError {
                 }
             }
             ParseError::Value(_) => ParseDiagnostic {
-                code: "citry.parse.value".to_string(),
+                code: PARSE_VALUE.to_string(),
                 message: self.to_string(),
                 start_index: None,
                 end_index: None,

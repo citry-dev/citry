@@ -50,6 +50,7 @@ from citry.introspection import (
     ExtensionVersion,
     _freeze_extension_publication,
 )
+from citry.settings import LintSettings
 from citry.util.misc import snake_to_pascal
 
 if TYPE_CHECKING:
@@ -107,6 +108,41 @@ class ComponentIntrospectionContext:
     """The temporary live component class from the copied registry snapshot."""
     info: ComponentInfo
     """The already-built core metadata record, with no extension entries."""
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateNamespaceContext:
+    """Give an extension one component whose template namespace it can describe."""
+
+    citry: Citry
+    """The owning Citry instance."""
+    component_class: type[Component]
+    """The temporary live component class from the registry snapshot."""
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateNamespaceContribution:
+    """
+    Publish analysis-only variables added by one installed extension.
+
+    Attributes:
+        template_variables: Variable names mapped to annotations, using the
+            same format as [`LintSettings.template_variables`][citry.LintSettings.template_variables].
+        allows_extra_variables: Whether this extension intentionally preserves
+            additional names that it cannot enumerate. Such unknown names are
+            linted as warnings, never silently accepted.
+
+    """
+
+    template_variables: Mapping[str, object]
+    allows_extra_variables: bool = False
+
+    def __post_init__(self) -> None:
+        validated = LintSettings(template_variables=self.template_variables)
+        object.__setattr__(self, "template_variables", validated.template_variables)
+        if type(self.allows_extra_variables) is not bool:
+            msg = "TemplateNamespaceContribution.allows_extra_variables must be a bool"
+            raise TypeError(msg)
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,6 +327,26 @@ class OnTemplateLoadedContext:
     """The Component class whose template was loaded."""
     content: str
     """The template string (before parsing)."""
+
+
+@dataclass(frozen=True, slots=True)
+class OnMessagesLoadedContext:
+    citry: Citry
+    """The ``Citry`` instance the component class belongs to."""
+    component_class: type[Component]
+    """The Component class whose source messages were loaded."""
+    declaration_owner: type
+    """The class that authored the inherited messages/messages_file pair."""
+    content: str
+    """The source-locale Fluent text before compilation."""
+    origin: str
+    """A file path or inline ``module::Class.messages`` label for diagnostics."""
+
+
+@dataclass(frozen=True, slots=True)
+class OnCitryClearedContext:
+    citry: Citry
+    """The ``Citry`` instance whose registry and engine caches were cleared."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -621,6 +677,27 @@ class Extension:
 
         """
 
+    def inspect_template_namespace(
+        self,
+        ctx: TemplateNamespaceContext,
+    ) -> TemplateNamespaceContribution | None:
+        """
+        Describe template variables supplied by this extension.
+
+        Citry calls this observational hook while it captures tooling analysis.
+        Return detached annotations only. Do not render, mutate the component,
+        or depend on request state. The contribution can add known names or
+        report that the extension preserves unenumerated extras, but it cannot
+        change lint severity.
+
+        Args:
+            ctx: The owning engine and temporary component class.
+
+        Returns:
+            Portable namespace metadata, or ``None`` for no contribution.
+
+        """
+
     # ----- Extension lifecycle -----
 
     def on_extension_created(self, ctx: OnExtensionCreatedContext) -> None:
@@ -636,6 +713,9 @@ class Extension:
 
     def on_component_unregistered(self, ctx: OnComponentUnregisteredContext) -> None:
         """Called after a Component class is unregistered."""
+
+    def on_citry_cleared(self, ctx: OnCitryClearedContext) -> None:
+        """Called during ``Citry.clear()`` after its registry is empty."""
 
     # ----- Component render -----
 
@@ -713,11 +793,16 @@ class Extension:
             "on_render_context_merge",
             "on_serialize",
             "on_template_loaded",
+            "on_messages_loaded",
             "on_template_compiled",
             "on_js_loaded",
             "on_css_loaded",
         )
         return any(getattr(type(self), name) is not getattr(Extension, name) for name in render_hooks)
+
+    def render_cache_bypass_reason(self) -> str | None:
+        """Return a stable reason when this extension requires live rendering."""
+        return None
 
     def on_serialize(self, ctx: OnSerializeContext) -> str | None:
         """
@@ -736,6 +821,18 @@ class Extension:
         """
         Called once per class with the template string before it is parsed.
         Return a new string to modify it.
+        """
+
+    def on_messages_loaded(self, ctx: OnMessagesLoadedContext) -> str | None:
+        """
+        Called once per source declaration with source-locale Fluent text
+        before compilation. A parent and children that inherit the same
+        messages share this one call.
+
+        Return a new string to replace the source. User extensions run in
+        installation order. The built-in i18n extension always runs after
+        those transformations, so it compiles the same final string the asset
+        loader caches.
         """
 
     def on_template_compiled(self, ctx: OnTemplateCompiledContext) -> list[BodyItem] | None:
@@ -801,7 +898,7 @@ def _builtin_extensions(mode: str) -> tuple[type[Extension], ...]:
     the duplicate-name validation). Built-ins cannot be disabled or replaced
     (docs/design/asset_loading.md section 7.2).
 
-    Cache, Dependencies, and Events are always present. The ``debug`` extension
+    Cache, Dependencies, Events, and i18n are always present. The ``debug`` extension
     draws visual component boundaries, which is developer-only output, so it is
     meant to be a built-in only when ``mode`` is ``"development"``
     (dev_prod_mode.md section 4). That auto-registration is temporarily gated
@@ -813,8 +910,14 @@ def _builtin_extensions(mode: str) -> tuple[type[Extension], ...]:
     from citry.ext.cache import CacheExtension  # noqa: PLC0415
     from citry.ext.dependencies import DependenciesExtension  # noqa: PLC0415
     from citry.ext.events import EventsExtension  # noqa: PLC0415
+    from citry.ext.i18n import I18nExtension  # noqa: PLC0415
 
-    builtins: tuple[type[Extension], ...] = (CacheExtension, DependenciesExtension, EventsExtension)
+    builtins: tuple[type[Extension], ...] = (
+        CacheExtension,
+        DependenciesExtension,
+        EventsExtension,
+        I18nExtension,
+    )
     if mode == "development" and _AUTO_DEBUG_IN_DEVELOPMENT:
         from citry.ext.debug import Debug  # noqa: PLC0415
 
@@ -935,7 +1038,7 @@ class ExtensionManager:
 
         seen: set[str] = set()
         class_name_owners: dict[str, str] = {}
-        reserved_class_names = {"Kwargs", "Slots", "TemplateData", "JsData", "CssData", "State"}
+        reserved_class_names = {"Kwargs", "Slots", "TemplateData", "JsData", "CssData", "Lint", "State"}
         for extension in self._extensions:
             # Built-in names are reserved: the built-ins come first in the
             # tuple, so a user extension reusing one fails here as a duplicate.
@@ -1022,6 +1125,33 @@ class ExtensionManager:
             msg = f"Extension {name!r} not found"
             raise ValueError(msg)
         return extension
+
+    def _template_namespace_contributions(
+        self,
+        component_class: type[Component],
+    ) -> tuple[tuple[str, TemplateNamespaceContribution], ...]:
+        """Collect validated extension facts without allowing a severity override."""
+        ctx = TemplateNamespaceContext(self.citry, component_class)
+        contributions: list[tuple[str, TemplateNamespaceContribution]] = []
+        for extension in self._extensions_with_hook("inspect_template_namespace"):
+            try:
+                contribution = extension.inspect_template_namespace(ctx)
+            except Exception as err:
+                msg = (
+                    f"Extension {extension.name!r} failed while inspecting the template namespace "
+                    f"for {component_class.__name__}."
+                )
+                raise RuntimeError(msg) from err
+            if contribution is None:
+                continue
+            if type(contribution) is not TemplateNamespaceContribution:
+                msg = (
+                    f"Extension {extension.name!r} must return TemplateNamespaceContribution or None "
+                    "from inspect_template_namespace()."
+                )
+                raise TypeError(msg)
+            contributions.append((extension.name, contribution))
+        return tuple(contributions)
 
     def _advance_render_cache_revision(self) -> int:
         """Advance the built-in Cache extension's local invalidation state."""
@@ -1481,6 +1611,9 @@ class ExtensionManager:
             OnComponentUnregisteredContext(citry=self.citry, name=name, component_class=component_class),
         )
 
+    def on_citry_cleared(self) -> None:
+        self.emit("on_citry_cleared", OnCitryClearedContext(citry=self.citry))
+
     # ----- Render hooks -----
 
     def on_component_input(self, component: Component) -> None:
@@ -1509,17 +1642,23 @@ class ExtensionManager:
     ) -> None:
         if not self.has_hook("on_component_data"):
             return
-        self.emit(
-            "on_component_data",
-            OnComponentDataContext(
-                citry=self.citry,
-                component=component,
-                context=context,
-                template_data=template_data,
-                js_data=js_data,
-                css_data=css_data,
-            ),
+        ctx = OnComponentDataContext(
+            citry=self.citry,
+            component=component,
+            context=context,
+            template_data=template_data,
+            js_data=js_data,
+            css_data=css_data,
         )
+        extensions = self._extensions_with_hook("on_component_data")
+        i18n = self._extensions_by_name["i18n"]
+        # Configured i18n owns the reserved tr/fmt names. Run it after every
+        # user extension so a later hook cannot replace the checked facades.
+        ordered = [extension for extension in extensions if extension is not i18n]
+        if i18n in extensions:
+            ordered.append(i18n)
+        for extension in ordered:
+            extension.on_component_data(ctx)
 
     def on_render_context_merge(self, parent_context: CitryContext, child_context: CitryContext) -> None:
         self.emit(
@@ -1648,6 +1787,35 @@ class ExtensionManager:
             result="map",
             field="content",
         )
+
+    def on_messages_loaded(
+        self,
+        component_class: type[Component],
+        declaration_owner: type,
+        content: str,
+        origin: str,
+    ) -> str:
+        ctx = OnMessagesLoadedContext(
+            citry=self.citry,
+            component_class=component_class,
+            declaration_owner=declaration_owner,
+            content=content,
+            origin=origin,
+        )
+        extensions = self._extensions_with_hook("on_messages_loaded")
+        i18n = self._extensions_by_name["i18n"]
+        # User extensions may normalize or replace authored source. The
+        # built-in runtime must compile the final value, and it must not retain
+        # a catalog when an earlier transformer raises. Keep i18n last for this
+        # one mapping hook regardless of extension installation order.
+        ordered = [extension for extension in extensions if extension is not i18n]
+        if i18n in extensions:
+            ordered.append(i18n)
+        for extension in ordered:
+            result = extension.on_messages_loaded(ctx)
+            if result is not None:
+                ctx = replace(ctx, content=result)
+        return ctx.content
 
     def on_template_compiled(self, component_class: type[Component], nodes: list[BodyItem]) -> list[BodyItem]:
         return self.emit(

@@ -72,7 +72,7 @@ def _schemas(*, kwargs: SchemaInfo = ABSENT_SCHEMA) -> ComponentSchemas:
 
 
 def _assets(*, template: AssetInfo = NONE_ASSET) -> ComponentAssets:
-    return ComponentAssets(template=template, js=NONE_ASSET, css=NONE_ASSET)
+    return ComponentAssets(template=template, messages=NONE_ASSET, js=NONE_ASSET, css=NONE_ASSET)
 
 
 def _component_info(
@@ -323,7 +323,7 @@ class TestFrozenValueModel:
                 css_data=ABSENT_SCHEMA,
             )
         with pytest.raises(TypeError, match="template"):
-            ComponentAssets(template="bad", js=NONE_ASSET, css=NONE_ASSET)
+            ComponentAssets(template="bad", messages=NONE_ASSET, js=NONE_ASSET, css=NONE_ASSET)
 
     def test_literal_state_fields_reject_string_subclasses(self):
         class StringSubclass(str):
@@ -1345,6 +1345,7 @@ class TestFrozenValueModel:
                             "kind": "fields",
                             "declared_on": "shop.card.Card",
                             "import_path": "shop.card.Card.Kwargs",
+                            "namespace_policy": "unknown",
                             "fields": [
                                 {
                                     "name": "title",
@@ -1361,15 +1362,34 @@ class TestFrozenValueModel:
                                 },
                             ],
                         },
-                        "slots": {"kind": "absent", "declared_on": None, "import_path": None, "fields": []},
+                        "slots": {
+                            "kind": "absent",
+                            "declared_on": None,
+                            "import_path": None,
+                            "namespace_policy": "unknown",
+                            "fields": [],
+                        },
                         "template_data": {
                             "kind": "absent",
                             "declared_on": None,
                             "import_path": None,
+                            "namespace_policy": "unknown",
                             "fields": [],
                         },
-                        "js_data": {"kind": "absent", "declared_on": None, "import_path": None, "fields": []},
-                        "css_data": {"kind": "absent", "declared_on": None, "import_path": None, "fields": []},
+                        "js_data": {
+                            "kind": "absent",
+                            "declared_on": None,
+                            "import_path": None,
+                            "namespace_policy": "unknown",
+                            "fields": [],
+                        },
+                        "css_data": {
+                            "kind": "absent",
+                            "declared_on": None,
+                            "import_path": None,
+                            "namespace_policy": "unknown",
+                            "fields": [],
+                        },
                     },
                     "assets": {
                         "template": {
@@ -1380,6 +1400,17 @@ class TestFrozenValueModel:
                             "owner_qualname": "Card",
                             "declared_path": "card.html",
                             "resolution": "not-requested",
+                            "resolved_path": None,
+                            "searched_paths": [],
+                        },
+                        "messages": {
+                            "kind": "none",
+                            "declared_on": None,
+                            "owner_file": None,
+                            "owner_module": None,
+                            "owner_qualname": None,
+                            "declared_path": None,
+                            "resolution": "not-applicable",
                             "resolved_path": None,
                             "searched_paths": [],
                         },
@@ -1562,6 +1593,73 @@ class TestSchemaAdapter:
         assert schema.fields[1].source_qualname.endswith(".<locals>.Left.Kwargs")
         assert all(item.source_module == __name__ for item in schema.fields)
         assert all(item.source_file == Path(__file__).resolve() for item in schema.fields)
+
+    def test_synthesized_schema_keeps_authored_field_owners_after_source_metadata_changes(self):
+        app = Citry(autodiscover=False)
+
+        class LeftKwargs:
+            left: str
+
+        class RightKwargs:
+            right: int
+
+        class Left(Component):
+            citry = app
+            Kwargs = LeftKwargs
+
+        class Right(Component):
+            citry = app
+            Kwargs = RightKwargs
+
+        class Combined(Left, Right):
+            pass
+
+        # The effective schema captured these owners when the component was
+        # built; later reflection must not reconstruct them from storage that
+        # differs between Python annotation models.
+        LeftKwargs.__annotations__ = {}
+        RightKwargs.__annotations__ = {}
+
+        fields = _inspect_component_schemas(Combined).kwargs.fields
+
+        assert [item.type_display for item in fields] == ["int", "str"]
+        assert fields[0].source_qualname is not None
+        assert fields[0].source_qualname.endswith(".<locals>.RightKwargs")
+        assert fields[1].source_qualname is not None
+        assert fields[1].source_qualname.endswith(".<locals>.LeftKwargs")
+
+    def test_component_construction_reads_each_annotation_expression_once(self):
+        app = Citry(autodiscover=False)
+        calls = 0
+
+        def annotation_value() -> type[str]:
+            nonlocal calls
+            calls += 1
+            return str
+
+        namespace = {"Component": Component, "app": app, "annotation_value": annotation_value}
+        source = "class Card(Component):\n    citry = app\n    class Kwargs:\n        title: annotation_value()\n"
+        exec(compile(source, "<annotation-snapshot>", "exec", dont_inherit=True), namespace)  # noqa: S102
+
+        card = namespace["Card"]
+        assert isinstance(card, type)
+        assert calls == 1
+        assert app.inspect_component(card).schemas.kwargs.fields[0].type_display == "str"
+        assert app.inspect_component(card).schemas.kwargs.fields[0].source_qualname == "Card.Kwargs"
+        assert calls == 1
+
+    @pytest.mark.skipif(sys.version_info < (3, 14), reason="PEP 649 is active on Python 3.14+")
+    def test_python_314_keeps_an_unresolved_deferred_field_as_a_forward_reference(self):
+        app = Citry(autodiscover=False)
+        namespace = {"Component": Component, "app": app}
+        source = "class Card(Component):\n    citry = app\n    class TemplateData:\n        user: MissingUser\n"
+        exec(compile(source, "<deferred-forward-ref>", "exec", dont_inherit=True), namespace)  # noqa: S102
+
+        card = namespace["Card"]
+        assert isinstance(card, type)
+        field_info = app.inspect_component(card).schemas.template_data.fields[0]
+        assert field_info.type_display == "MissingUser"
+        assert field_info.source_qualname == "Card.TemplateData"
 
     def test_composed_field_with_unsafe_authored_owner_drops_provenance_atomically(self):
         app = Citry(autodiscover=False)
@@ -2241,7 +2339,7 @@ class TestCatalogQueries:
         assert app._registry._builtins_ready()
         assert app._discovered
         assert core_catalog.components == ()
-        assert len(full_catalog.components) == 7
+        assert len(full_catalog.components) == 9
         assert all(component.builtin for component in full_catalog.components)
 
     def test_builtin_alias_stays_filtered_and_builtin_subclass_is_a_user_component(self):

@@ -4,12 +4,13 @@ import json
 import subprocess
 import sys
 import textwrap
+from importlib import import_module
 from pathlib import Path
 
 import pytest
 
 from citry import Citry as _Citry
-from citry import CommandArg, Component, Extension, ExtensionCommand
+from citry import CommandArg, Component, ComponentLibrary, Extension, ExtensionCommand, LibraryComponent
 from citry.__main__ import main
 from citry.command import format_as_ascii_table, run
 from citry.commands import build_cli
@@ -245,8 +246,10 @@ class TestListComponents:
             {"name": "css", "class": "Css", "path": "source.py"},
             {"name": "element", "class": "DynamicElement", "path": "source.py"},
             {"name": "error-fallback", "class": "ErrorFallback", "path": "source.py"},
+            {"name": "i18n", "class": "I18nProvider", "path": "source.py"},
             {"name": "js", "class": "Js", "path": "source.py"},
             {"name": "provide", "class": "Provide", "path": "source.py"},
+            {"name": "trans", "class": "Trans", "path": "source.py"},
             {"name": "zebracard, zebra-card, extra", "class": "ZebraCard", "path": "source.py"},
         ]
         assert out == f"{format_as_ascii_table(expected_rows, ('name', 'class', 'path'))}\n"
@@ -441,6 +444,20 @@ class TestAppHardening:
         # The Citry *class*, not an instance.
         with pytest.raises(SystemExit):
             main(["--app", "citry.citry:Citry", "ext", "list"])
+        assert "not a Citry instance" in capsys.readouterr().err
+
+    def test_component_library_target_remains_editor_only(self, capsys, monkeypatch):
+        class CCard(LibraryComponent):
+            template = """
+            <article></article>
+            """
+
+        module = import_module("citry.citry")
+        monkeypatch.setattr(module, "test_library", ComponentLibrary("test-ui", (CCard,)), raising=False)
+
+        with pytest.raises(SystemExit):
+            main(["--app", "citry.citry:test_library", "ext", "list"])
+
         assert "not a Citry instance" in capsys.readouterr().err
 
     def test_app_after_subcommand_is_not_hijacked(self):

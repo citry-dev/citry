@@ -11,8 +11,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 citry_html_transform = { path = "../citry_html_transform" }
+citry_i18n = { path = "../citry_i18n" }
 citry_template_formatter = { path = "../citry_template_formatter" }
 python_safe_eval = { path = "../python_safe_eval" }
 citry_template_parser = { path = "../citry_template_parser" }
+icu_locale = { workspace = true }
 pyo3 = { workspace = true }
 quick-xml = { workspace = true }

@@ -29,12 +29,70 @@ from citry import (
     LibraryNotInstalled,
 )
 from citry_ui import (
+    CAccordion,
+    CAccordionItem,
+    CAlert,
+    CAlertDialog,
+    CBadge,
+    CBreadcrumbs,
     CButton,
+    CCard,
+    CCarousel,
+    CCarouselSlide,
+    CCheckbox,
     CCombobox,
+    CContainer,
     CDialog,
+    CDisclosure,
+    CDrawer,
+    CDropTarget,
+    CEditable,
     CField,
+    CFileInput,
+    CGrid,
+    CGridItem,
+    CGroup,
+    CHoverCard,
+    CIcon,
     CInput,
+    CListbox,
+    CListboxGroup,
+    CListboxOption,
+    CMenu,
+    CMenuCheckboxItem,
+    CMenuGroup,
+    CMenuItem,
+    CMenuRadioGroup,
+    CMenuRadioItem,
+    CMenuSeparator,
+    CMenuSubmenu,
+    CMultiSelect,
+    CMultiSelectOption,
+    CNativeSelect,
+    CNativeSelectGroup,
+    CNativeSelectOption,
+    CNavigationMenu,
+    CNavigationMenuItem,
+    CNavigationMenuLink,
+    CPopover,
+    CProgress,
+    CRadio,
+    CRadioGroup,
+    CSelect,
+    CSpinner,
+    CSplitter,
+    CSplitterPanel,
+    CStack,
+    CStep,
+    CStepper,
+    CSwitch,
     CTable,
+    CTextarea,
+    CToastRegion,
+    CToolbar,
+    CTooltip,
+    CTree,
+    CTreeItem,
 )
 from citry_ui.components import COMPONENTS
 
@@ -59,24 +117,105 @@ def test_package_exposes_one_explicit_ordered_component_library():
 
     assert manifest.name == "citry-ui"
     assert manifest.components == COMPONENTS
-    assert len(COMPONENTS) == 14
+    assert manifest.required_extensions == ()
+    assert len(COMPONENTS) == 94
     assert all(issubclass(definition, LibraryComponent) for definition in COMPONENTS)
     assert all(not issubclass(definition, Component) for definition in COMPONENTS)
     assert tuple(definition.__name__ for definition in COMPONENTS) == (
+        "CAccordion",
+        "CAccordionItem",
+        "CInternalAccordionItems",
+        "CInternalAccordionPanelContent",
+        "CDisclosure",
+        "CInternalDisclosureTitleContent",
+        "CInternalDisclosureActionsContent",
+        "CInternalDisclosurePanelContent",
+        "CAlert",
+        "CAlertDialog",
+        "CAvatar",
+        "CBreadcrumbs",
+        "CBadge",
         "CButton",
+        "CButtonGroup",
+        "CCarousel",
+        "CCarouselSlide",
         "CCombobox",
         "CDialog",
+        "CDrawer",
+        "CDivider",
+        "CEditable",
+        "CHoverCard",
         "CField",
         "CInput",
+        "CFileInput",
+        "CDropTarget",
+        "CTextarea",
+        "CNativeSelect",
+        "CCheckbox",
         "CForm",
+        "CStack",
+        "CGroup",
+        "CContainer",
+        "CGrid",
+        "CGridItem",
+        "CIcon",
+        "CList",
+        "CListItem",
+        "CListbox",
+        "CListboxOption",
+        "CListboxGroup",
+        "CNavigationMenu",
+        "CNavigationMenuLink",
+        "CNavigationMenuItem",
+        "CSelect",
+        "CMenu",
+        "CMenuItem",
+        "CMenuCheckboxItem",
+        "CMenuRadioGroup",
+        "CMenuRadioItem",
+        "CMenuGroup",
+        "CMenuSeparator",
+        "CMenuSubmenu",
+        "CInternalMenuCollection",
+        "CInternalMenuContent",
+        "CMultiSelect",
+        "CProgress",
+        "CPagination",
+        "CPopover",
+        "CTooltip",
+        "CToastRegion",
+        "CRadioGroup",
+        "CRadio",
+        "CSpinner",
+        "CSplitter",
+        "CSplitterPanel",
+        "CStepper",
+        "CStep",
+        "CSkeleton",
+        "CSwitch",
+        "CCard",
         "CTable",
         "CTabs",
         "CTab",
         "CTabPanel",
+        "CTagGroup",
+        "CTag",
+        "CToggleGroup",
+        "CToggle",
+        "CToolbar",
+        "CTree",
+        "CTreeItem",
         "CInternalTabsDeclarations",
         "CInternalTabs",
         "CInternalTab",
         "CInternalTabPanel",
+        "CInternalStepperDeclarations",
+        "CInternalStepper",
+        "CInternalStep",
+        "CInternalSplitterDeclarations",
+        "CInternalSplitter",
+        "CInternalSplitterPanel",
+        "CInternalSplitterHandle",
     )
 
 
@@ -147,13 +286,55 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
     installed = app.register_library(citry_ui)
 
     assert {component.__module__ for component in installed.classes} == {
+        "citry_ui.components.caccordion.caccordion",
+        "citry_ui.components.cdisclosure.cdisclosure",
+        "citry_ui.components.calert.calert",
+        "citry_ui.components.calert_dialog.calert_dialog",
+        "citry_ui.components.cavatar.cavatar",
+        "citry_ui.components.cbadge.cbadge",
+        "citry_ui.components.cbreadcrumbs.cbreadcrumbs",
         "citry_ui.components.cbutton.cbutton",
+        "citry_ui.components.cbutton_group.cbutton_group",
+        "citry_ui.components.ccarousel.ccarousel",
         "citry_ui.components.ccombobox.ccombobox",
         "citry_ui.components.cdialog.cdialog",
+        "citry_ui.components.cdrawer.cdrawer",
+        "citry_ui.components.cdivider.cdivider",
+        "citry_ui.components.ceditable.ceditable",
         "citry_ui.components.cfield.cfield",
+        "citry_ui.components.cfile_input.cfile_input",
+        "citry_ui.components.cflow.cflow",
+        "citry_ui.components.cgrid.cgrid",
+        "citry_ui.components.chover_card.chover_card",
         "citry_ui.components.cform.cform",
+        "citry_ui.components.cicon.cicon",
+        "citry_ui.components.clist.clist",
+        "citry_ui.components.clistbox.clistbox",
+        "citry_ui.components.cselect.cselect",
+        "citry_ui.components.cmulti_select.cmulti_select",
+        "citry_ui.components.cnavigation_menu.cnavigation_menu",
+        "citry_ui.components.cmenu.cmenu",
+        "citry_ui.components.ccard.ccard",
         "citry_ui.components.ctable.ctable",
         "citry_ui.components.ctabs.ctabs",
+        "citry_ui.components.ctag.ctag",
+        "citry_ui.components.ctextarea.ctextarea",
+        "citry_ui.components.cnative_select.cnative_select",
+        "citry_ui.components.cprogress.cprogress",
+        "citry_ui.components.cpagination.cpagination",
+        "citry_ui.components.cpopover.cpopover",
+        "citry_ui.components.ctooltip.ctooltip",
+        "citry_ui.components.ctoast.ctoast",
+        "citry_ui.components.cradio.cradio",
+        "citry_ui.components.cspinner.cspinner",
+        "citry_ui.components.csplitter.csplitter",
+        "citry_ui.components.cstepper.cstepper",
+        "citry_ui.components.cskeleton.cskeleton",
+        "citry_ui.components.cswitch.cswitch",
+        "citry_ui.components.ctoggle.ctoggle",
+        "citry_ui.components.ctoolbar.ctoolbar",
+        "citry_ui.components.ctree.ctree",
+        "citry_ui.components.ccheckbox.ccheckbox",
     }
     assert [field.name for field in fields(CButton.Kwargs)] == [
         "type",
@@ -408,17 +589,52 @@ def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():
 
     assert requirements is not None
     citry_requirement = next(requirement for requirement in requirements if requirement.startswith("citry"))
-    assert ">=0.3.1" in citry_requirement
+    assert ">=0.3.2" in citry_requirement
     assert "<0.4.0" in citry_requirement
     assert all(not requirement.startswith("typing-extensions") for requirement in requirements)
     assert resources.joinpath("py.typed").is_file()
+    assert resources.joinpath("components/caccordion/caccordion.py").is_file()
+    assert resources.joinpath("components/cdisclosure/cdisclosure.py").is_file()
     assert resources.joinpath("components/cbutton/cbutton.py").is_file()
+    assert resources.joinpath("components/cbreadcrumbs/cbreadcrumbs.py").is_file()
+    assert resources.joinpath("components/ccarousel/ccarousel.py").is_file()
     assert resources.joinpath("components/ccombobox/ccombobox.py").is_file()
     assert resources.joinpath("components/cdialog/cdialog.py").is_file()
+    assert resources.joinpath("components/calert_dialog/calert_dialog.py").is_file()
+    assert resources.joinpath("components/cdrawer/cdrawer.py").is_file()
+    assert resources.joinpath("components/ceditable/ceditable.py").is_file()
     assert resources.joinpath("components/cfield/cfield.py").is_file()
+    assert resources.joinpath("components/cfile_input/cfile_input.py").is_file()
+    assert resources.joinpath("components/cflow/cflow.py").is_file()
+    assert resources.joinpath("components/cgrid/cgrid.py").is_file()
+    assert resources.joinpath("components/chover_card/chover_card.py").is_file()
     assert resources.joinpath("components/cform/cform.py").is_file()
+    assert resources.joinpath("components/cicon/cicon.py").is_file()
+    assert resources.joinpath("components/clistbox/clistbox.py").is_file()
+    assert resources.joinpath("components/cselect/cselect.py").is_file()
+    assert resources.joinpath("components/cmulti_select/cmulti_select.py").is_file()
+    assert resources.joinpath("components/cnavigation_menu/cnavigation_menu.py").is_file()
+    assert resources.joinpath("components/_anchored_layer.py").is_file()
+    assert resources.joinpath("components/cmenu/cmenu.py").is_file()
+    assert resources.joinpath("components/ccard/ccard.py").is_file()
     assert resources.joinpath("components/ctable/ctable.py").is_file()
     assert resources.joinpath("components/ctabs/ctabs.py").is_file()
+    assert resources.joinpath("components/ctextarea/ctextarea.py").is_file()
+    assert resources.joinpath("components/cnative_select/cnative_select.py").is_file()
+    assert resources.joinpath("components/cprogress/cprogress.py").is_file()
+    assert resources.joinpath("components/cradio/cradio.py").is_file()
+    assert resources.joinpath("components/cspinner/cspinner.py").is_file()
+    assert resources.joinpath("components/csplitter/csplitter.py").is_file()
+    assert resources.joinpath("components/cstepper/cstepper.py").is_file()
+    assert resources.joinpath("components/cswitch/cswitch.py").is_file()
+    assert resources.joinpath("components/ccheckbox/ccheckbox.py").is_file()
+    assert resources.joinpath("components/calert/calert.py").is_file()
+    assert resources.joinpath("components/cpopover/cpopover.py").is_file()
+    assert resources.joinpath("components/ctooltip/ctooltip.py").is_file()
+    assert resources.joinpath("components/ctoast/ctoast.py").is_file()
+    assert resources.joinpath("components/cbadge/cbadge.py").is_file()
+    assert resources.joinpath("components/ctoolbar/ctoolbar.py").is_file()
+    assert resources.joinpath("components/ctree/ctree.py").is_file()
     assert resources.joinpath("_definitions.py").is_file() is False
     assert resources.joinpath("_installation.py").is_file() is False
     assert resources.joinpath("_invocation.py").is_file() is False
@@ -433,8 +649,66 @@ def test_component_files_have_no_constructor_or_explicit_same_name_plumbing():
 
 
 def test_representative_component_definitions_remain_directly_importable():
+    assert CAccordion.__module__ == "citry_ui.components.caccordion.caccordion"
+    assert CAccordionItem.__module__ == "citry_ui.components.caccordion.caccordion"
+    assert CDisclosure.__module__ == "citry_ui.components.cdisclosure.cdisclosure"
+    assert CAlert.__module__ == "citry_ui.components.calert.calert"
+    assert CAlertDialog.__module__ == "citry_ui.components.calert_dialog.calert_dialog"
+    assert CBadge.__module__ == "citry_ui.components.cbadge.cbadge"
+    assert CCarousel.__module__ == "citry_ui.components.ccarousel.ccarousel"
+    assert CCarouselSlide.__module__ == "citry_ui.components.ccarousel.ccarousel"
+    assert CBreadcrumbs.__module__ == "citry_ui.components.cbreadcrumbs.cbreadcrumbs"
     assert CField.__module__ == "citry_ui.components.cfield.cfield"
+    assert CStack.__module__ == "citry_ui.components.cflow.cflow"
+    assert CGroup.__module__ == "citry_ui.components.cflow.cflow"
+    assert CContainer.__module__ == "citry_ui.components.cgrid.cgrid"
+    assert CGrid.__module__ == "citry_ui.components.cgrid.cgrid"
+    assert CGridItem.__module__ == "citry_ui.components.cgrid.cgrid"
+    assert CHoverCard.__module__ == "citry_ui.components.chover_card.chover_card"
     assert CCombobox.__module__ == "citry_ui.components.ccombobox.ccombobox"
     assert CDialog.__module__ == "citry_ui.components.cdialog.cdialog"
+    assert CDrawer.__module__ == "citry_ui.components.cdrawer.cdrawer"
+    assert CEditable.__module__ == "citry_ui.components.ceditable.ceditable"
     assert CInput.__module__ == "citry_ui.components.cfield.cfield"
+    assert CFileInput.__module__ == "citry_ui.components.cfile_input.cfile_input"
+    assert CDropTarget.__module__ == "citry_ui.components.cfile_input.cfile_input"
+    assert CIcon.__module__ == "citry_ui.components.cicon.cicon"
+    assert CListbox.__module__ == "citry_ui.components.clistbox.clistbox"
+    assert CListboxOption.__module__ == "citry_ui.components.clistbox.clistbox"
+    assert CListboxGroup.__module__ == "citry_ui.components.clistbox.clistbox"
+    assert CSelect.__module__ == "citry_ui.components.cselect.cselect"
+    assert CMultiSelect.__module__ == "citry_ui.components.cmulti_select.cmulti_select"
+    assert CMultiSelectOption.__module__ == "citry_ui.components.cmulti_select.cmulti_select"
+    assert CNavigationMenu.__module__ == "citry_ui.components.cnavigation_menu.cnavigation_menu"
+    assert CNavigationMenuLink.__module__ == "citry_ui.components.cnavigation_menu.cnavigation_menu"
+    assert CNavigationMenuItem.__module__ == "citry_ui.components.cnavigation_menu.cnavigation_menu"
+    assert CMenu.__module__ == "citry_ui.components.cmenu.cmenu"
+    assert CMenuItem.__module__ == "citry_ui.components.cmenu.cmenu"
+    assert CMenuCheckboxItem.__module__ == "citry_ui.components.cmenu.cmenu"
+    assert CMenuRadioGroup.__module__ == "citry_ui.components.cmenu.cmenu"
+    assert CMenuRadioItem.__module__ == "citry_ui.components.cmenu.cmenu"
+    assert CMenuGroup.__module__ == "citry_ui.components.cmenu.cmenu"
+    assert CMenuSeparator.__module__ == "citry_ui.components.cmenu.cmenu"
+    assert CMenuSubmenu.__module__ == "citry_ui.components.cmenu.cmenu"
+    assert CCard.__module__ == "citry_ui.components.ccard.ccard"
     assert CTable.__module__ == "citry_ui.components.ctable.ctable"
+    assert CTextarea.__module__ == "citry_ui.components.ctextarea.ctextarea"
+    assert CNativeSelect.__module__ == "citry_ui.components.cnative_select.cnative_select"
+    assert CNativeSelectOption.__module__ == "citry_ui.components.cnative_select.cnative_select"
+    assert CNativeSelectGroup.__module__ == "citry_ui.components.cnative_select.cnative_select"
+    assert CProgress.__module__ == "citry_ui.components.cprogress.cprogress"
+    assert CPopover.__module__ == "citry_ui.components.cpopover.cpopover"
+    assert CTooltip.__module__ == "citry_ui.components.ctooltip.ctooltip"
+    assert CToastRegion.__module__ == "citry_ui.components.ctoast.ctoast"
+    assert CToolbar.__module__ == "citry_ui.components.ctoolbar.ctoolbar"
+    assert CTree.__module__ == "citry_ui.components.ctree.ctree"
+    assert CTreeItem.__module__ == "citry_ui.components.ctree.ctree"
+    assert CRadioGroup.__module__ == "citry_ui.components.cradio.cradio"
+    assert CRadio.__module__ == "citry_ui.components.cradio.cradio"
+    assert CSpinner.__module__ == "citry_ui.components.cspinner.cspinner"
+    assert CSplitter.__module__ == "citry_ui.components.csplitter.csplitter"
+    assert CSplitterPanel.__module__ == "citry_ui.components.csplitter.csplitter"
+    assert CStepper.__module__ == "citry_ui.components.cstepper.cstepper"
+    assert CStep.__module__ == "citry_ui.components.cstepper.cstepper"
+    assert CSwitch.__module__ == "citry_ui.components.cswitch.cswitch"
+    assert CCheckbox.__module__ == "citry_ui.components.ccheckbox.ccheckbox"

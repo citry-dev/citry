@@ -1455,6 +1455,160 @@ def test_keyed_component_ranges_reorder_across_wrappers_and_receive_fresh_html(p
     assert not [message for message in messages if message.startswith("error:")]
 
 
+def test_nested_portable_ranges_survive_successive_mixed_reorder_and_removal(
+    page: Any,
+    serve_live: Any,
+) -> None:
+    """Detached portable parents keep nested operational cap pairs usable."""
+    c = Citry(secret=SIGNING_KEY)
+    c.set_mounted_prefix("/citry")
+
+    class Leaf(Component):
+        citry = c
+        template = """
+          <button class="mixed-range-leaf" c-data-ident="ident">
+            <input class="mixed-range-draft" />
+            <span>{{ label }}</span>
+          </button>
+        """
+
+        def template_data(self, kwargs, slots):
+            return {"ident": kwargs["ident"], "label": kwargs["label"]}
+
+    class Relay(Component):
+        citry = c
+        transparent = True
+        template = "<c-slot />"
+
+    class Collection(Component):
+        citry = c
+        template = '<section class="mixed-range-collection"><c-relay><c-slot /></c-relay></section>'
+
+    class Parent(Component):
+        citry = c
+
+        class Events:
+            def refresh(self):
+                return None
+
+        template = """
+          <main class="mixed-range-parent">
+            <c-collection #c-key="'collection'">
+              <c-for each="item in primary">
+                <c-leaf
+                  #c-key="item['ident']"
+                  c-ident="item['ident']"
+                  c-label="item['label']"
+                />
+              </c-for>
+              <c-relay>
+                <c-for each="item in secondary">
+                  <c-leaf
+                    #c-key="item['ident']"
+                    c-ident="item['ident']"
+                    c-label="item['label']"
+                  />
+                </c-for>
+              </c-relay>
+              <c-if cond="show_nested">
+                <c-collection #c-key="'nested'">
+                  <c-for each="item in nested">
+                    <c-leaf
+                      #c-key="item['ident']"
+                      c-ident="item['ident']"
+                      c-label="item['label']"
+                    />
+                  </c-for>
+                </c-collection>
+              </c-if>
+            </c-collection>
+          </main>
+        """
+
+        def template_data(self, kwargs, slots):
+            step = kwargs["step"]
+            primary_order = ("a", "b", "c") if step == 0 else ("c", "a", "b") if step == 1 else ("c", "a")
+            return {
+                "primary": tuple({"ident": ident, "label": f"{ident}-{step}"} for ident in primary_order),
+                "secondary": tuple(
+                    {"ident": ident, "label": f"{ident}-{step}"} for ident in (("x", "y") if step < 2 else ("x",))
+                ),
+                "show_nested": step < 2,
+                "nested": tuple(
+                    {"ident": ident, "label": f"{ident}-{step}"}
+                    for ident in (("n1", "n2") if step == 0 else ("n2", "n1"))
+                ),
+            }
+
+    class Page(Component):
+        citry = c
+        template = """
+          <html><head><title>nested portable ranges</title></head><body><c-parent c-step="0" /></body></html>
+        """
+
+    messages = _goto(page, serve_live, c, str(Page()))
+    fragments = [_fragment(Parent(step=1)), _fragment(Parent(step=2))]
+    result = page.evaluate(
+        """
+        async ([fragments]) => {
+          const internal = Citry.events._internal;
+          const parent = document.querySelector('.mixed-range-parent');
+          const parentId = parent.getAttribute('data-cid').trim().split(' ').at(-1);
+          const anchor = internal.getAnchor(parentId);
+          const retained = Object.fromEntries(['a', 'c', 'x'].map((ident) => [
+            ident,
+            document.querySelector(`[data-ident="${ident}"]`),
+          ]));
+          document.querySelector('[data-ident="a"] .mixed-range-draft').value = 'retained-draft';
+          const snapshots = [];
+          for (let index = 0; index < fragments.length; index += 1) {
+            const currentId = anchor.componentId;
+            anchor.epoch = index + 1;
+            await internal.applyResult(
+              {
+                ok: true,
+                sendSequence: index + 1,
+                actions: [{
+                  action: 'render',
+                  target: `render:${currentId}`,
+                  swap: 'morph',
+                  html: fragments[index],
+                }],
+              },
+              { anchor, instance: currentId, event: 'refresh' },
+            );
+            snapshots.push(Array.from(document.querySelectorAll('.mixed-range-leaf')).map(
+              (element) => element.dataset.ident,
+            ));
+          }
+          return {
+            snapshots,
+            retained: Object.fromEntries(Object.entries(retained).map(([ident, element]) => [
+              ident,
+              document.querySelector(`[data-ident="${ident}"]`) === element,
+            ])),
+            draft: document.querySelector('[data-ident="a"] .mixed-range-draft').value,
+            temporaryAdapters: document.querySelectorAll(
+              'template[data-citry-range-holder],template[data-citry-range-sentinel]',
+            ).length,
+          };
+        }
+        """,
+        [fragments],
+    )
+
+    assert result == {
+        "snapshots": [
+            ["c", "a", "b", "x", "y", "n2", "n1"],
+            ["c", "a", "x"],
+        ],
+        "retained": {"a": True, "c": True, "x": True},
+        "draft": "retained-draft",
+        "temporaryAdapters": 0,
+    }
+    assert not [message for message in messages if message.startswith("error:")]
+
+
 def test_component_range_keys_and_root_element_keys_are_independent(page: Any, serve_live: Any) -> None:
     c = Citry(secret=SIGNING_KEY)
     c.set_mounted_prefix("/citry")

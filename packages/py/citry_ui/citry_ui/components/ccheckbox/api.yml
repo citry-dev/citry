@@ -1,0 +1,137 @@
+schema_version: 1
+family: checkbox
+
+components:
+  - CCheckbox
+
+inputs:
+  - id: ccheckbox-server-inputs
+    component: CCheckbox
+    channel: server
+    column_widths: [fit, 15rem, 9rem, auto]
+    entries:
+      - {id: name, name: name, type: 'non-empty str | None', default: {kind: literal, value: null}, effect: 'Sets the native submitted name; an unnamed Checkbox contributes no `FormData` entry.'}
+      - {id: value, name: value, type: str, default: {kind: literal, value: 'on'}, effect: 'Sets the token submitted while checked; newline spelling is canonicalized and U+0000 is rejected.'}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Uses the Field control ID when composed, otherwise sets or generates native identity and label association.'}
+      - {id: checked, name: checked, type: bool, default: {kind: literal, value: false}, effect: 'Sets native default and initial checkedness plus the reset destination.'}
+      - {id: indeterminate, name: indeterminate, type: bool, default: {kind: literal, value: false}, effect: 'Seeds runtime-enhanced native mixed state; server-only HTML remains a two-state Checkbox.'}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: 'Sets native required state when standalone; omit it inside `CField`, which owns the state.'}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: 'Sets local disabled state when standalone; disabled `CForm` always wins.'}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: 'Sets application invalid presentation when standalone; omit it inside `CField`.'}
+      - id: variant
+        name: variant
+        type: {display: '"solid" | "outline"', interfaces: [CCheckboxVariant]}
+        default: {kind: literal, value: solid}
+        effect: Selects filled or outlined checked and mixed presentation.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CCheckboxSize]}
+        default: {kind: literal, value: md}
+        effect: Selects control geometry and associated text scale.
+      - id: label-pos
+        name: label_pos
+        type: {display: '"start" | "end"', interfaces: [CCheckboxLabelPos]}
+        default: {kind: literal, value: end}
+        effect: Places authored label and description at the logical start or end of the control.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: 'Adds neutral-root classes and merges them with `attrs`.'}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: 'Adds neutral-root inline styles and merges them with `attrs`.'}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned attributes to the neutral root. Structural ownership directives, `for`, `role`, `tabindex`, `contenteditable`, and `aria-hidden` are rejected.'}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted unowned attributes to the native input, including static Form ownership and merged ARIA IDREFs. Label-free standalone usage requires one static ARIA name.'}
+
+  - id: ccheckbox-client-inputs
+    component: CCheckbox
+    channel: client
+    column_widths: [fit, 13rem, 14rem, auto]
+    entries:
+      - {id: checked, name: checked, type: boolean, omitted: 'Releases control and preserves current native checkedness.', effect: 'Controls current checkedness after native input and change handlers settle.'}
+      - {id: indeterminate, name: indeterminate, type: boolean, omitted: 'Releases control and preserves current native indeterminateness.', effect: 'Controls the native mixed property and its runtime root reflection.'}
+      - {id: value, name: value, type: string, omitted: 'Uses the private server fallback.', effect: 'Controls the native submitted token; omission or invalid supply reapplies the server value.'}
+      - {id: required, name: required, type: boolean, omitted: 'Uses the server or Field value.', effect: 'Controls native required state when standalone; `CField` owns it when composed.'}
+      - {id: disabled, name: disabled, type: boolean, omitted: 'Uses the local server or Field value.', effect: 'Controls local disabled state when standalone; disabled `CForm` always wins.'}
+      - {id: invalid, name: invalid, type: boolean, omitted: 'Uses the server or Field value.', effect: 'Controls application invalid presentation; native invalidity still combines with it.'}
+      - id: variant
+        name: variant
+        type: {display: '"solid" | "outline"', interfaces: [CCheckboxVariant]}
+        omitted: Uses the server input.
+        effect: Controls presentation.
+      - id: size
+        name: size
+        type: {display: '"sm" | "md" | "lg"', interfaces: [CCheckboxSize]}
+        omitted: Uses the server input.
+        effect: Controls geometry and associated text size.
+      - id: label-pos
+        name: label_pos
+        type: {display: '"start" | "end"', interfaces: [CCheckboxLabelPos]}
+        omitted: Uses the server input.
+        effect: Controls logical label placement.
+
+slots:
+  - id: ccheckbox-slots
+    component: CCheckbox
+    entries:
+      - id: default
+        name: default
+        required: false
+        data: {display: '{}', interfaces: [CCheckboxDefaultSlotData]}
+        fallback: 'Required unless a static ARIA name or `CField` label owns naming.'
+      - id: description
+        name: description
+        required: false
+        data: {display: '{}', interfaces: [CCheckboxDescriptionSlotData]}
+        fallback: No description element.
+
+events: []
+methods: []
+
+css:
+  - id: ccheckbox-css-variables
+    component: CCheckbox
+    entries:
+      - {id: cui-checkbox-background, name: --cui-checkbox-background, type: color, purpose: Unchecked control surface., default: Canvas}
+      - {id: cui-checkbox-foreground, name: --cui-checkbox-foreground, type: color, purpose: Label foreground., default: CanvasText}
+      - {id: cui-checkbox-border-color, name: --cui-checkbox-border-color, type: color, purpose: Resting unchecked border., default: Subtle CanvasText mix.}
+      - {id: cui-checkbox-hover-border-color, name: --cui-checkbox-hover-border-color, type: color, purpose: Enabled hover border., default: Stronger CanvasText mix.}
+      - {id: cui-checkbox-active-color, name: --cui-checkbox-active-color, type: color, purpose: Checked and mixed fill or outline., default: Scheme-aware blue.}
+      - {id: cui-checkbox-indicator-color, name: --cui-checkbox-indicator-color, type: color, purpose: Check and mixed indicator., default: Scheme-aware high-contrast color; active color in outline variant.}
+      - {id: cui-checkbox-focus-color, name: --cui-checkbox-focus-color, type: color, purpose: Focus-visible outline., default: Highlight}
+      - {id: cui-checkbox-invalid-color, name: --cui-checkbox-invalid-color, type: color, purpose: Invalid border accent., default: Scheme-aware danger color.}
+      - {id: cui-checkbox-disabled-opacity, name: --cui-checkbox-disabled-opacity, type: number, purpose: Disabled root opacity., default: '0.55'}
+      - {id: cui-checkbox-control-size, name: --cui-checkbox-control-size, type: length, purpose: Native control inline and block size., default: Size-derived length.}
+      - {id: cui-checkbox-radius, name: --cui-checkbox-radius, type: length, purpose: Control corner radius., default: 0.3rem}
+      - {id: cui-checkbox-gap, name: --cui-checkbox-gap, type: length, purpose: Control-to-text gap., default: Size-derived length.}
+      - {id: cui-checkbox-description-color, name: --cui-checkbox-description-color, type: color, purpose: Description foreground., default: Muted CanvasText mix.}
+      - {id: cui-checkbox-description-gap, name: --cui-checkbox-description-gap, type: length, purpose: Label-to-description gap., default: 0.2rem}
+
+attributes:
+  - id: ccheckbox-attributes
+    component: CCheckbox
+    entries:
+      - {id: data-checked, name: data-checked, element: Neutral root, type: 'present | absent', meaning: Runtime mirror of current native checkedness; static HTML does not emit it.}
+      - {id: data-indeterminate, name: data-indeterminate, element: Neutral root, type: 'present | absent', meaning: Runtime mirror of current native indeterminateness; static HTML does not emit it.}
+      - {id: data-required, name: data-required, element: Neutral root, type: 'present | absent', meaning: Mirrors effective required state.}
+      - {id: data-disabled, name: data-disabled, element: Neutral root, type: 'present | absent', meaning: Mirrors effective disabled state.}
+      - {id: data-invalid, name: data-invalid, element: Neutral root, type: 'present | absent', meaning: Mirrors combined application and native invalid state.}
+      - {id: data-variant, name: data-variant, element: Neutral root, type: '"solid" | "outline"', meaning: Mirrors effective presentation variant.}
+      - {id: data-size, name: data-size, element: Neutral root, type: '"sm" | "md" | "lg"', meaning: Mirrors effective size.}
+      - {id: data-label-pos, name: data-label-pos, element: Neutral root, type: '"start" | "end"', meaning: Mirrors logical label placement.}
+
+selectors:
+  - id: ccheckbox-selectors
+    component: CCheckbox
+    entries:
+      - {id: checkbox, selector: '[data-citry-ui-part="checkbox"]', element: Neutral root, purpose: 'Stable root, layout hook, and `attrs` destination.'}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Native checkbox input, purpose: 'Native state, focus, indicator, and `input_attrs` destination.'}
+      - {id: label, selector: '[data-citry-ui-part="label"]', element: Internal label, purpose: Visible default-slot label and activation target.}
+      - {id: description, selector: '[data-citry-ui-part="description"]', element: Description span, purpose: Optional described-by content outside the accessible name.}
+
+interfaces:
+  - id: checkbox-type-aliases
+    kind: aliases
+    entries:
+      - {id: checkbox-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: checkbox-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: checkbox-variant, name: CCheckboxVariant, definition: 'Literal["solid", "outline"]'}
+      - {id: checkbox-size, name: CCheckboxSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: checkbox-label-pos, name: CCheckboxLabelPos, definition: 'Literal["start", "end"]'}
+  - {id: checkbox-default-slot-data, kind: record, name: CCheckboxDefaultSlotData, entries: []}
+  - {id: checkbox-description-slot-data, kind: record, name: CCheckboxDescriptionSlotData, entries: []}

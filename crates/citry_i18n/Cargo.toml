@@ -1,0 +1,30 @@
+[package]
+name = "citry_i18n"
+description = "Fluent catalog compiler and runtime for Citry"
+version = "0.1.0"
+edition = { workspace = true }
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
+
+[dependencies]
+fluent-bundle = { workspace = true }
+fluent-syntax = { workspace = true }
+getrandom = { workspace = true }
+icu = { workspace = true }
+icu_locale = { workspace = true }
+icu_provider = { workspace = true }
+fixed_decimal = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tinystr = { workspace = true }
+unic-langid = { workspace = true }
+writeable = { workspace = true }
+
+[lints]
+workspace = true

@@ -61,6 +61,7 @@ from re import sub
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from citry._class_introspection import _safe_class_text, _static_class_dict, _static_class_mro
+from citry._linting import _validate_component_lint
 from citry._nested_declarations import (
     NestedClassDeclaration,
     _active_nested_class_declarations,
@@ -71,7 +72,7 @@ from citry._nested_declarations import (
     _is_dataclass_family,
     _nested_declaration_bases,
 )
-from citry.assets import load_css, load_js, load_template, validate_asset_pairs
+from citry.assets import load_css, load_js, load_messages, load_template, validate_asset_pairs
 from citry.assets import reset_files as _reset_files_impl
 from citry.assets import reset_template as _reset_template_impl
 from citry.citry import Citry, citry
@@ -425,9 +426,13 @@ class ComponentMeta(LibraryComponentMeta):
             raise ValueError(msg)
 
         extensions = citry_instance.extensions
-        nested_names = {*_DATA_SCHEMA_NAMES, "State", *(ext.class_name for ext in extensions._extensions)}
+        nested_names = {*_DATA_SCHEMA_NAMES, "Lint", "State", *(ext.class_name for ext in extensions._extensions)}
         _capture_nested_declarations(cls, authored_namespace, nested_names)
         type.__setattr__(cls, "_citry_nested_declaration_names", frozenset(nested_names))
+
+        # Lint is configuration rather than render data, so validate its C3
+        # declarations without converting it into a runtime dataclass.
+        _validate_component_lint(cls)
 
         # Core schemas use the same declaration chain as extension configs.
         # Plain field classes become one slotted dataclass after composition;
@@ -590,6 +595,16 @@ class Component(metaclass=ComponentMeta):
     declare the path while the component still supplies the owning engine.
     """
 
+    messages: ClassVar[str | None] = None
+    """Inline source-locale Fluent messages for this component.
+
+    Mutually exclusive with ``messages_file``. Read the loaded source with
+    ``get_messages()``.
+    """
+
+    messages_file: ClassVar[str | None] = None
+    """Path to source-locale Fluent messages, resolved like ``template_file``."""
+
     js: ClassVar[str | None] = None
     """Inline primary JS for this component. Mutually exclusive with
     ``js_file``. Read the loaded content with ``get_js()``."""
@@ -694,6 +709,15 @@ class Component(metaclass=ComponentMeta):
 
     TemplateData: ClassVar[type | None] = None
     """Optional typed template data output, inherited like [`Kwargs`][citry.Component.Kwargs]."""
+
+    Lint: ClassVar[type | None] = None
+    """Optional per-component template-lint settings.
+
+    Define a nested ``Lint`` class with
+    ``rule_unknown_template_variable`` and/or ``template_variables``. Nested
+    declarations compose through the component C3 order. Assign ``None`` to
+    return to the Citry instance's application lint policy.
+    """
 
     JsData: ClassVar[type | None] = None
     """Optional typed schema for the ``js_data()`` output. Like
@@ -916,11 +940,12 @@ class Component(metaclass=ComponentMeta):
         """
         Return the JS variables for this render.
 
-        Override this to expose per-render data to the component's JS
-        (``Component.js``). The dict is serialized to JSON and delivered to
-        the component's ``$component`` callback in the browser; identical
-        data is sent to the browser only once, however many instances share
-        it. Consumed by the built-in ``dependencies`` extension.
+        Override this to expose per-render data to the component's browser
+        behavior. The dict is serialized to strict JSON, seeded into the
+        component's Alpine scope, and delivered to its ``$component`` callback
+        as ``data`` when one exists. Identical JSON is transported only once,
+        while every rendered instance receives a fresh mutable value graph.
+        Consumed by the built-in ``dependencies`` extension.
 
         Args:
             kwargs: The keyword arguments passed to the component.
@@ -1070,18 +1095,18 @@ class Component(metaclass=ComponentMeta):
         """
         return None
 
-    def provide(self, key: str, /, **data: Any) -> None:
+    def provide(self, key: str, value: Any = MISSING, /, **data: Any) -> None:
         """
-        Make ``data`` available to this component's descendants.
+        Make one value available to this component's descendants.
 
         Any component rendered below this one (including components inside
         slot content rendered below it) can read the data with
         ``self.inject(key)``. The data does NOT enter the template variables;
         descendants opt in explicitly.
 
-        Call this from ``template_data``. The data is frozen into an
-        immutable payload at this point, so what descendants inject always
-        has exactly the fields given here, as attributes::
+        Pass a direct positional value when the caller already owns the value
+        object. Or pass keyword fields and Citry will freeze them into an
+        immutable payload whose fields are read as attributes::
 
             class Page(Component):
                 template = '<c-user-card />'
@@ -1096,19 +1121,28 @@ class Component(metaclass=ComponentMeta):
                 def template_data(self, kwargs, slots):
                     return {"name": self.inject("user_data").user}
 
+            class LocaleRoot(Component):
+                def template_data(self, kwargs, slots):
+                    self.provide("citry_i18n", kwargs.locale_context)
+                    return {}
+
         In templates, the same thing is written with the ``<c-provide>``
         built-in component: ``<c-provide key="user_data" c-user="user">``.
 
         Args:
             key: Name the data is provided under (a non-empty identifier).
                 Positional-only, so a data field named ``key`` is allowed.
-            **data: The provided fields.
+            value: One direct value. It is passed through unchanged.
+            **data: Fields Citry freezes into one immutable payload. A call
+                cannot pass both a direct value and keyword fields.
 
         """
         validate_provide_key(key)
+        if value is not MISSING and data:
+            raise TypeError("Component.provide() accepts either one direct value or keyword fields, not both.")
         if self._provides_own is None:
             self._provides_own = {}
-        self._provides_own[key] = make_provided(data)
+        self._provides_own[key] = make_provided(data) if value is MISSING else value
 
     def inject(self, key: str, default: Any = MISSING) -> Any:
         """
@@ -1120,10 +1154,11 @@ class Component(metaclass=ComponentMeta):
         twice. A component's own ``provide`` calls are visible to its
         descendants only, never to its own ``inject``.
 
-        The returned payload is immutable, with the provided fields as
-        attributes: ``self.inject("user_data").user``. Works during
-        ``template_data`` and keeps working after the render for as long as
-        the component instance is kept.
+        A direct value is returned unchanged. Keyword fields passed to
+        ``provide()`` return an immutable payload with those fields as
+        attributes: ``self.inject("user_data").user``. Injection works during
+        ``template_data`` and keeps working after the render for as long as the
+        component instance is kept.
 
         Args:
             key: The name the data was provided under.
@@ -1202,6 +1237,11 @@ class Component(metaclass=ComponentMeta):
         return load_js(cls)
 
     @classmethod
+    def get_messages(cls) -> str | None:
+        """Return the loaded ``messages`` / ``messages_file`` source, or ``None``."""
+        return load_messages(cls)
+
+    @classmethod
     def get_css(cls) -> str | None:
         """
         The loaded primary CSS content, or ``None``. Resolved from ``css`` /
@@ -1232,7 +1272,7 @@ class Component(metaclass=ComponentMeta):
     @classmethod
     def reset_files(cls) -> None:
         """
-        Clear this class's loaded JS/CSS (and, via the ``on_files_reset``
+        Clear this class's loaded messages/JS/CSS (and, via the ``on_files_reset``
         hook, extension state such as the merged ``Dependencies``), so the
         next access re-reads them.
         """

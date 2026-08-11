@@ -39,7 +39,7 @@ dependencies = [
     # Pinned to one exact version, not a range. The runtime node classes in
     # `citry.nodes` read the source citry-core's compiler emits, so the two
     # move together: raise this in the same change that releases citry-core.
-    "citry-core==1.4.0",
+    "citry-core==1.6.0",
     # Deliberately wide. Citry uses only `ObjectProxy` and `__wrapped__`, and
     # wrapt keeps `ObjectProxy` working across its 2.0 rewrite, so both major
     # lines serve. Raising the floor would force wrapt 2 on every installation
@@ -54,6 +54,10 @@ dependencies = [
     # imports. The other symbols used here (`TypeAliasType`, `Unpack`,
     # `override`, and `TypeVar` with a PEP 696 default) all land earlier.
     "typing-extensions>=4.10",
+    # Citry opens this package directly instead of consulting the host's
+    # system zoneinfo search path. LocaleContext records the installed data
+    # version, so time-zone conversion and cache identity stay explicit.
+    "tzdata>=2026.3",
 ]
 
 # Optional runtime extras, namespaced `<category>-<name>` (see docs/codebase.md).
@@ -65,6 +69,7 @@ dependencies = [
 # have. citry.reload imports only `watchfiles.watch`, and watchdog's
 # `FileSystemEventHandler` and `Observer`, which every release in range provides.
 [project.optional-dependencies]
+analysis-ty = ["ty==0.0.69"]       # Python expression types for analysis tooling
 watcher-watchfiles = ["watchfiles>=1.0"]   # recommended native backend
 watcher-watchdog = ["watchdog>=4.0"]       # alternate native backend
 
@@ -79,6 +84,9 @@ citry = "citry.__main__:main"
 dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",  # coverage gate in scripts/check.py
+    # Both repository-check profiles distribute non-browser tests by file;
+    # the e2e group below reuses the same runner for its browser suites.
+    "pytest-xdist>=3.8.0",
     # test-only: the django contrib adapter tests (test_contrib_django.py) need a
     # real django. A range, not the benchmark group's exact pin: benchmarks need a
     # stable baseline, these tests just need any supported django. py>=3.12 only,

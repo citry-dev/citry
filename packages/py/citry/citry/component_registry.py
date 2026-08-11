@@ -25,10 +25,14 @@ if TYPE_CHECKING:
     from citry.citry import Citry
     from citry.component import Component
 
-BUILTIN_COMPONENT_NAMES: Final = frozenset({"provide", "cache", "component", "element", "error-fallback", "js", "css"})
-"""Component names reserved for the built-in tags (``js`` and ``css`` ahead
-of their implementations, so user code never comes to depend on them). The
-built-in classes themselves live in ``citry/components/``."""
+BUILTIN_COMPONENT_NAMES: Final = frozenset(
+    {"provide", "cache", "component", "element", "error-fallback", "js", "css", "i18n", "trans"}
+)
+"""Component names reserved for built-in tags.
+
+Core component classes live in ``citry/components/``. Extension-owned classes,
+such as ``cache``, ``i18n``, and ``trans``, live with their extensions.
+"""
 
 STRUCTURAL_TAG_NAMES: Final = frozenset(name.removeprefix("c-") for name in RESERVED_TAG_NAMES)
 """Names the template parser interprets directly instead of resolving through

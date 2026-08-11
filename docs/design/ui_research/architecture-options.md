@@ -1,7 +1,7 @@
 # Phase 6 architecture hypotheses and packaging spike
 
 **Snapshot:** 2026-07-23. **Status:** Phase 6 historical evidence, with a
-2026-07-29 framework and publishing follow-up. The architecture comparison was frozen before
+2026-08-08 framework and publishing follow-up. The architecture comparison was frozen before
 the original packaging spike was evaluated. Examples of package-owned
 registration, invocation facades, and installation references below describe
 that experiment, not the current authoring API. Current publishing behavior is
@@ -52,11 +52,9 @@ The Python distribution is `citry-ui`, its import namespace is `citry_ui`, and
 it depends on a tested compatible `citry` range. There is no `citry[ui-*]`
 installation alias.
 
-The package now uses the released `citry>=0.3.1,<0.4.0` line. Citry 0.3.1 and
-Citry Core 1.4.0 contain the publishing, slot-data, Events, ownership, and
-ambient-context APIs used by the spike, including the corrected generated
-Events browser asset. Citry UI still needs real multi-release installation
-fixtures before publication.
+The package now targets the `citry>=0.3.2,<0.4.0` source line and Citry Core
+1.5.0. Their release artifacts are pending. Citry UI still needs clean
+released-artifact and multi-release installation fixtures before publication.
 
 ## 2. Fixed boundaries
 
@@ -603,7 +601,7 @@ The Phase 6 package skeleton uses:
 | Import package | `citry_ui` |
 | Initial spike version | `0.0.1` |
 | Python range | Same floor and ceiling as the compatible Citry line |
-| Citry dependency | `citry>=0.3.1,<0.4.0`, widened only after its full matrix passes |
+| Citry dependency | `citry>=0.3.2,<0.4.0`, widened only after its full matrix passes |
 | Type marker | `citry_ui/py.typed` included in wheel |
 | Assets | Inline or module-relative templates and prebuilt plain CSS/JavaScript; the static Button probe uses inline template/CSS and no JavaScript |
 | Consumer tools | Python installer only; no Node, compiler, CDN, or runtime fetch |
@@ -953,7 +951,7 @@ supporting and representative pages make its performance costs measurable.
 The following work remains before a public `citry-ui` release:
 
 1. Real installation, multi-release upgrade, downgrade, retained-page, and
-   deprecation fixtures for the released `citry>=0.3.1,<0.4.0` line.
+   deprecation fixtures for the `citry>=0.3.2,<0.4.0` line after its release.
 2. Atomic live uninstall and hot replacement only if the product requires
    them; additive publication, preflight, collision handling, repeated
    registration, concurrent visibility, and rollback are implemented.

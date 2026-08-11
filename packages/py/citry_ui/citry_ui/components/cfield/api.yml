@@ -12,9 +12,9 @@ inputs:
     column_widths: [fit, 12rem, 8rem, auto]
     entries:
       - {id: control-id, name: control_id, type: 'str | None', default: {kind: generated}, effect: 'Sets the control ID and related label, description, and error IDs.'}
-      - {id: required, name: required, type: bool, default: {kind: literal, value: false}, effect: Supplies required state to the control.}
+      - {id: required, name: required, type: bool, default: {kind: literal, value: false}, effect: Supplies required state to a supporting control; an unsupported true value raises after server control registration.}
       - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Sets local disabled state; an enclosing disabled `CForm` always wins.}
-      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: derived, display: Inherits `CForm`.}, effect: Supplies read-only state.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: derived, display: Inherits `CForm`.}, effect: Supplies read-only state to a supporting control; an unsupported true value raises after server control registration.}
       - {id: invalid, name: invalid, type: bool, default: {kind: literal, value: false}, effect: Supplies application-owned invalid state.}
       - id: orientation
         name: orientation
@@ -35,9 +35,9 @@ inputs:
     channel: client
     column_widths: [fit, 12rem, 12rem, auto]
     entries:
-      - {id: required, name: required, type: boolean, omitted: Uses the server input., effect: Controls required state.}
+      - {id: required, name: required, type: boolean, omitted: Uses the server input., effect: Controls required state for supporting controls; an unsupported true value resolves to false and reports once.}
       - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls local disabled state; an enclosing disabled `CForm` always wins.}
-      - {id: readonly, name: readonly, type: boolean, omitted: Uses the server input or reactive Form value., effect: Controls read-only state.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses the server input or reactive Form value., effect: Controls read-only state for supporting controls; an unsupported true value resolves to false and reports once.}
       - {id: invalid, name: invalid, type: boolean, omitted: Uses the server input., effect: Controls application invalid state; native invalid state still combines with it.}
       - id: orientation
         name: orientation

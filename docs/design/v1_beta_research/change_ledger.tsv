@@ -188,7 +188,7 @@ status	path	tracked_state	size_bytes	provisional_path_class	ownership_state	base
 ??	.github/workflows/repo--docs-release.yml	untracked	6507	workflow_or_repository_config	unassigned	B0-20260723T132129Z-53aec721
 ??	TODO/TODO.md	untracked	2840	documentation	unassigned	B0-20260723T132129Z-53aec721
 ??	TODO/old_djccore_ddos.png	untracked	390243	binary_or_reference	unassigned	B0-20260723T132129Z-53aec721
-??	TODO/project_status_june_2026.md	untracked	34331	documentation	unassigned	B0-20260723T132129Z-53aec721
+??	[redacted]	untracked	34331	documentation	unassigned	B0-20260723T132129Z-53aec721
 ??	TODO/resume_notes_djc_citry.md	untracked	8589	documentation	unassigned	B0-20260723T132129Z-53aec721
 ??	TODO/v2_jsx.md	untracked	19772	documentation	unassigned	B0-20260723T132129Z-53aec721
 ??	benchmarks/client.py	untracked	17044	source_or_config	unassigned	B0-20260723T132129Z-53aec721

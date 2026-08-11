@@ -13,7 +13,10 @@ child button will change the parent's choice **in the browser**, and the new lab
 down to the child.
 
 Start with [Add browser behavior](/getting-started/browser-interactivity/) if
-you have not used Alpine or [`$component`][$component] in Citry yet.
+you have not used `js_data()` with Alpine in Citry yet. This chapter introduces
+[`$component`][$component] because the child needs to declare reactive client
+props and run setup logic. Components that only expose `js_data()` values to
+their own Alpine expressions do not need it.
 
 ## Build the parent and child
 

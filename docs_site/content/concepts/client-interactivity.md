@@ -21,13 +21,11 @@ This page explains the component boundary. For Alpine directives and magics,
 see [Alpine in components](/syntax/alpine/). For runtime loading, plugins, CSP,
 and deployment, see [Alpine runtime](/advanced/alpine-runtime/).
 
-## Initialize a component once per live render
+## Seed the component scope from Python
 
 Return initial browser data from
-[`Component.js_data()`][citry.Component.js_data], then receive it in the
-[`$component` hook][$component]. `$component(...)` registers browser setup for
-the component class. Citry calls that setup once for each live rendered
-instance:
+[`Component.js_data()`][citry.Component.js_data]. Citry makes every top-level
+key available directly to Alpine expressions in that component:
 
 ```citry
 from citry import Citry, Component
@@ -46,7 +44,7 @@ class Counter(Component):
         kwargs: Kwargs,
         slots,
     ) -> dict[str, int]:
-        return {"start": kwargs.start}
+        return {"count": kwargs.start}
 
     template = """
       <button
@@ -56,26 +54,38 @@ class Counter(Component):
       ></button>
     """
 
-    js = """
-      $component(({ data, scope }) => {
-        scope.count = data.start;
-        scope.increment = () => {
-          scope.count += 1;
-        };
-      });
-    """
 ```
 
 The value returned by `js_data()` must be JSON-serializable. Use strings,
 numbers, booleans, `null`-equivalent `None`, lists, and dictionaries with
 serializable contents. Convert dates, model instances, and other Python
-objects before returning them. Browser `data` is an initial inert value; put
-changing values on `scope` or in a reactive object.
+objects before returning them. Identical JSON stays deduplicated in transport,
+but each component instance gets a fresh nested graph.
+
+## Initialize component JavaScript
+
+Add [`$component`][$component] when the component needs setup code. Citry
+seeds `scope` first, then calls the initializer once per live render:
+
+```js
+$component(({ data, scope }) => {
+  console.log(data.count, scope.count);
+  scope.increment = () => {
+    scope.count += 1;
+  };
+});
+```
+
+The callback can replace seeded values or add client-only fields. On a
+compatible rerender, Citry refreshes the keys owned by the new server payload,
+removes formerly seeded keys that are now absent, and preserves other fields
+the callback added. Treat `data` as the current snapshot and make ongoing
+reactive changes through `scope`.
 
 The setup callback receives:
 
-- `data`: the value returned by `js_data()`, or `null`;
-- `scope`: the stable component-local Alpine scope;
+- `data`: the fresh instance-local value returned by `js_data()`, or `null`;
+- `scope`: the stable component-local Alpine scope, already seeded from `data`;
 - `props`: reactive read-only values accepted from the parent;
 - `els`: the component's current root elements;
 - `state`: the Events State facade, or `null`;
@@ -152,6 +162,13 @@ operation onto `scope` when the child's own template needs to call it.
 Citry reports missing required props, type mismatches, thrown expressions,
 Promises, arrays, and other non-plain results in the browser. A later valid
 value can recover normally.
+
+With the Citry language server, a direct `$c-props="{...}"` object on a
+statically named child is checked while you type. Unknown keys, omitted
+required props, and incompatible proven value types point back to the child's
+static `props` declaration. A spread can supply any required key, so it
+suppresses only the omitted-key check. The Python-dynamic form below remains a
+runtime contract because its JavaScript source is not known until rendering.
 
 The Python-dynamic form is also valid:
 

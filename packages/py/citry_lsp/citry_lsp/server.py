@@ -8,15 +8,30 @@ import uuid
 from contextlib import suppress
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
-from urllib.parse import unquote, urlparse
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from lsprotocol import types
 from pygls.exceptions import JsonRpcException, JsonRpcInvalidParams
 from pygls.lsp.server import LanguageServer
 
+from citry._diagnostic_catalog import FORMAT_PROVIDER_INVALID, FORMAT_STALE_DOCUMENT
 from citry_core.template_formatter import EmbeddedFormatResult
-from citry_lsp.engine import DocumentState, completion_result, definition, document_symbols, hover
+from citry_lsp.engine import (
+    DocumentState,
+    ParsedRegion,
+    browser_diagnostics,
+    browser_projection,
+    completion_result,
+    declaration,
+    definition,
+    document_symbols,
+    hover,
+    html_projection,
+    references,
+    semantic_dependencies,
+    template_lint_diagnostics,
+    template_variable_hover,
+)
 from citry_lsp.formatting import (
     EmbeddedProviderRequest,
     FormatScope,
@@ -25,25 +40,42 @@ from citry_lsp.formatting import (
     format_templates,
     prepare_component_assets,
 )
-from citry_lsp.project import ProjectState, load_project
+from citry_lsp.project import ProjectState, load_project_async
 from citry_lsp.protocol import (
+    BROWSER_PROJECTION_METHOD,
     EMBEDDED_FORMATTING_VERSION,
     FORMAT_COMPONENT_ASSETS_METHOD,
     FORMAT_EMBEDDED_METHOD,
     FORMAT_TEMPLATES_METHOD,
+    HTML_PROJECTION_METHOD,
     PROTOCOL_VERSION,
     SERVER_VERSION,
     EmbeddedFormattingCapability,
     ProjectStatus,
 )
+from citry_lsp.semantic import (
+    semantic_completions,
+    semantic_definition,
+    semantic_diagnostics,
+    semantic_hover,
+    semantic_signature_help,
+    semantic_type_definition,
+    semantic_variable_hover,
+)
+from citry_lsp.type_analysis import TyAnalyzer
+from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Awaitable, Callable, Coroutine, Sequence
+
+_InteractiveResult = TypeVar("_InteractiveResult")
 
 STATUS_METHOD = "citry/status"
 RELOAD_METHOD = "citry/reload"
 _MISSING = object()
 _EMBEDDED_REQUEST_TIMEOUT_SECONDS = 30.0
+_RELOAD_DEBOUNCE_SECONDS = 0.15
+_SEMANTIC_DIAGNOSTIC_DEBOUNCE_SECONDS = 0.15
 logger = logging.getLogger(__name__)
 
 
@@ -68,9 +100,24 @@ class CitryLanguageServer(LanguageServer):
             )
         )
         self.documents: dict[str, DocumentState] = {}
+        self.analysis_generation = 0
+        self.type_analyzer = TyAnalyzer(self.workspace_path)
+        self.type_analysis_warning_sent = False
+        self._reload_requested_generation = 0
+        self._reload_applied_generation = 0
+        self._reload_delay = _RELOAD_DEBOUNCE_SECONDS
+        self._reload_event = asyncio.Event()
+        self._reload_task: asyncio.Task[None] | None = None
+        self._reload_load_task: asyncio.Task[ProjectState] | None = None
+        self._reload_waiters: list[tuple[int, asyncio.Future[dict[str, object]]]] = []
+        self._semantic_task: asyncio.Task[None] | None = None
+        self._interactive_requests = 0
+        self._semantic_refresh_deferred = False
+        self._close_task: asyncio.Task[None] | None = None
+        self._closing = False
 
     def configure(self, params: types.InitializeParams) -> None:
-        """Validate the client protocol and load the selected project generation."""
+        """Validate initialization options before asynchronous project loading."""
         options = params.initialization_options
         if options is None:
             options = {}
@@ -104,10 +151,27 @@ class CitryLanguageServer(LanguageServer):
         self.embedded_formatting = _embedded_formatting_capability(options)
         self.workspace_uri = _workspace_uri(params)
         self.workspace_path = _workspace_path(params)
+        # The child starts lazily, so configuration can replace this owner
+        # without importing or starting project code in the stdio process.
+        self.type_analyzer = TyAnalyzer(self.workspace_path)
+        self.type_analysis_warning_sent = False
         self.project = _project_with_embedded_capability(
-            load_project(self.workspace_path, self.app),
+            ProjectState(
+                ProjectStatus(
+                    interpreter="",
+                    workspace=str(self.workspace_path),
+                    app=self.app,
+                    mode="unavailable",
+                    message="The configured Citry project is still loading.",
+                )
+            ),
             self.embedded_formatting,
         )
+
+    async def load_initial_project(self) -> None:
+        """Load registry facts without blocking initialization's event loop."""
+        project = await load_project_async(self.workspace_path, self.app)
+        self.project = _project_with_embedded_capability(project, self.embedded_formatting)
 
     def publish(self, document: DocumentState) -> None:
         """Publish the current diagnostics for one document."""
@@ -121,6 +185,7 @@ class CitryLanguageServer(LanguageServer):
 
     def update_document(self, uri: str, language_id: str, source: str, version: int | None) -> None:
         """Analyze and publish one open document generation."""
+        self.analysis_generation += 1
         document = self.documents.get(uri)
         if document is None:
             document = DocumentState(uri, language_id, source, version)
@@ -129,26 +194,325 @@ class CitryLanguageServer(LanguageServer):
         document.update(source, version, self.project)
         self.publish(document)
 
-    def reload_project(self) -> dict[str, object]:
-        """Replace project state through a fresh worker and reanalyze documents."""
-        self.project = _project_with_embedded_capability(
-            load_project(self.workspace_path, self.app),
-            self.embedded_formatting,
+    async def publish_semantic_diagnostics(self, uri: str, version: int | None) -> None:
+        """Publish mapped type findings only for the generation that requested them."""
+        document = self.documents.get(uri)
+        if document is None:
+            return
+        generation = self.analysis_generation
+        findings = await semantic_diagnostics(
+            self.type_analyzer,
+            document,
+            self.project,
+            self.documents,
         )
-        for document in self.documents.values():
-            document.update(document.source, document.version, self.project)
-            self.publish(document)
+        lint_findings = template_lint_diagnostics(document, self.project, self.documents)
+        browser_findings = browser_diagnostics(document, self.project, self.documents)
+        current = self.documents.get(uri)
+        if current is not document or current.version != version or self.analysis_generation != generation:
+            return
+        _report_type_analysis_failure(self)
+        self.text_document_publish_diagnostics(
+            types.PublishDiagnosticsParams(
+                uri,
+                (*document.diagnostics, *lint_findings, *browser_findings, *findings),
+                version=version,
+            )
+        )
+
+    async def publish_semantic_dependents(self, changed: DocumentState) -> None:
+        """Refresh the changed document and templates that depend on Python source."""
+        await self.publish_semantic_diagnostics(changed.uri, changed.version)
+        if changed.language_id != "python":
+            return
+        try:
+            changed_path = file_uri_path(changed.uri)
+            changed_uri = changed_path.resolve().as_uri() if changed_path is not None else changed.uri
+        except (TypeError, ValueError):
+            changed_uri = changed.uri
+        direct: list[DocumentState] = []
+        fallback: list[DocumentState] = []
+        for document in tuple(self.documents.values()):
+            if document is changed:
+                continue
+            dependencies = semantic_dependencies(document, self.project, self.documents)
+            if changed_uri in dependencies.source_uris:
+                direct.append(document)
+            elif not dependencies.complete:
+                fallback.append(document)
+        for document in (*direct, *fallback):
+            await self.publish_semantic_diagnostics(document.uri, document.version)
+
+    def schedule_semantic_dependents(self, changed: DocumentState) -> None:
+        """Debounce semantic diagnostics so interactive requests get priority."""
+        if self._interactive_requests:
+            self._semantic_refresh_deferred = True
+            return
+        self._replace_semantic_task(self._delayed_semantic_dependents(changed))
+
+    def schedule_all_semantic_diagnostics(self) -> None:
+        """Refresh every open document after one applied project generation."""
+        if self._interactive_requests:
+            self._semantic_refresh_deferred = True
+            return
+        self._replace_semantic_task(self._delayed_all_semantic_diagnostics())
+
+    async def run_interactive(
+        self,
+        operation: Callable[[], Awaitable[_InteractiveResult]],
+    ) -> _InteractiveResult:
+        """Preempt background diagnostics while one interactive Ty query runs."""
+        self._interactive_requests += 1
+        try:
+            semantic = self._semantic_task
+            if semantic is not None and semantic is not asyncio.current_task() and not semantic.done():
+                self._semantic_refresh_deferred = True
+                semantic.cancel()
+                await asyncio.gather(semantic, return_exceptions=True)
+            return await operation()
+        finally:
+            self._interactive_requests -= 1
+            if (
+                self._interactive_requests == 0
+                and self._semantic_refresh_deferred
+                and self.documents
+                and not self._closing
+            ):
+                self._semantic_refresh_deferred = False
+                self.schedule_all_semantic_diagnostics()
+
+    def _replace_semantic_task(self, refresh: Coroutine[object, object, None]) -> None:
+        previous = self._semantic_task
+        if previous is not None and not previous.done():
+            previous.cancel()
+        task = asyncio.create_task(refresh)
+        self._semantic_task = task
+        task.add_done_callback(_consume_background_task)
+
+    async def _delayed_semantic_dependents(self, changed: DocumentState) -> None:
+        await asyncio.sleep(_SEMANTIC_DIAGNOSTIC_DEBOUNCE_SECONDS)
+        current = self.documents.get(changed.uri)
+        if current is not changed:
+            return
+        await self.publish_semantic_dependents(changed)
+
+    async def _delayed_all_semantic_diagnostics(self) -> None:
+        await asyncio.sleep(_SEMANTIC_DIAGNOSTIC_DEBOUNCE_SECONDS)
+        for document in tuple(self.documents.values()):
+            await self.publish_semantic_diagnostics(document.uri, document.version)
+
+    async def wait_for_semantic_refresh(self) -> None:
+        """Await the currently scheduled refresh, primarily for focused tests."""
+        task = self._semantic_task
+        if task is not None:
+            await asyncio.shield(task)
+
+    async def reload_project(self, *, debounce: float = 0.0) -> dict[str, object]:
+        """Request one coalesced, latest-wins project reload generation."""
+        if self._closing:
+            return self.project.status.to_dict()
+        self._reload_requested_generation += 1
+        requested = self._reload_requested_generation
+        self._reload_delay = min(self._reload_delay, max(debounce, 0.0))
+        waiter: asyncio.Future[dict[str, object]] = asyncio.get_running_loop().create_future()
+        self._reload_waiters.append((requested, waiter))
+        self._reload_event.set()
+        active_load = self._reload_load_task
+        if active_load is not None and not active_load.done():
+            active_load.cancel()
+        if self._reload_task is None or self._reload_task.done():
+            self._reload_task = asyncio.create_task(self._reload_worker())
+            self._reload_task.add_done_callback(_consume_background_task)
+        try:
+            return await asyncio.shield(waiter)
+        except asyncio.CancelledError:
+            waiter.cancel()
+            raise
+
+    async def _reload_worker(self) -> None:
+        """Serialize app discovery and discard every superseded result."""
+        try:
+            while not self._closing:
+                self._reload_event.clear()
+                delay = self._reload_delay
+                self._reload_delay = _RELOAD_DEBOUNCE_SECONDS
+                if delay:
+                    try:
+                        await asyncio.wait_for(self._reload_event.wait(), delay)
+                    except asyncio.TimeoutError:
+                        pass
+                    else:
+                        continue
+                target = self._reload_requested_generation
+                loading = asyncio.create_task(load_project_async(self.workspace_path, self.app))
+                self._reload_load_task = loading
+                try:
+                    project = await loading
+                except asyncio.CancelledError:
+                    if not self._closing and target != self._reload_requested_generation:
+                        continue
+                    raise
+                finally:
+                    if self._reload_load_task is loading:
+                        self._reload_load_task = None
+                if target != self._reload_requested_generation:
+                    continue
+                prepared = await self._prepare_project_documents(project)
+                if target != self._reload_requested_generation:
+                    continue
+                self._apply_project(project, target, prepared)
+                self._finish_reload_waiters(target)
+                if not self._reload_event.is_set() and target == self._reload_requested_generation:
+                    return
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception("Citry project reload failed")
+            self._fail_reload_waiters(exc)
+        finally:
+            if self._closing:
+                self._fail_reload_waiters(asyncio.CancelledError())
+
+    async def _prepare_project_documents(
+        self,
+        project: ProjectState,
+    ) -> dict[str, tuple[DocumentState, int, DocumentState]]:
+        """Parse stable document snapshots away from the LSP event loop."""
+        snapshots = tuple(
+            (
+                document,
+                document.uri,
+                document.language_id,
+                document.source,
+                document.version,
+                document._analysis_revision,
+                dict(document.last_good),
+            )
+            for document in self.documents.values()
+        )
+        return await asyncio.to_thread(_reanalyze_document_snapshots, snapshots, project)
+
+    def _apply_project(
+        self,
+        project: ProjectState,
+        generation: int,
+        prepared: dict[str, tuple[DocumentState, int, DocumentState]],
+    ) -> None:
+        """Publish one completed project generation atomically on the event loop."""
+        self.analysis_generation += 1
+        semantic = self._semantic_task
+        if semantic is not None and not semantic.done():
+            semantic.cancel()
+        self.project = _project_with_embedded_capability(project, self.embedded_formatting)
+        self._reload_applied_generation = generation
+        for uri, document in tuple(self.documents.items()):
+            snapshot = prepared.get(uri)
+            if snapshot is not None and snapshot[0] is document and snapshot[1] == document._analysis_revision:
+                analyzed = snapshot[2]
+                self.documents[uri] = analyzed
+            else:
+                # A document opened or changed while snapshots were parsing.
+                # Reanalyze only that race on the event loop before publishing.
+                document.update(document.source, document.version, self.project)
+                analyzed = document
+            self.publish(analyzed)
         self.protocol.notify(STATUS_METHOD, self.project.status.to_dict())
-        return self.project.status.to_dict()
+        if self.documents:
+            self.schedule_all_semantic_diagnostics()
+
+    def _finish_reload_waiters(self, generation: int) -> None:
+        status = self.project.status.to_dict()
+        remaining: list[tuple[int, asyncio.Future[dict[str, object]]]] = []
+        for target, waiter in self._reload_waiters:
+            if target <= generation:
+                if not waiter.done():
+                    waiter.set_result(status)
+            else:
+                remaining.append((target, waiter))
+        self._reload_waiters = remaining
+
+    def _fail_reload_waiters(self, error: BaseException) -> None:
+        for _target, waiter in self._reload_waiters:
+            if not waiter.done():
+                if isinstance(error, asyncio.CancelledError):
+                    waiter.cancel()
+                else:
+                    waiter.set_exception(error)
+        self._reload_waiters.clear()
+
+    async def close(self) -> None:
+        """Cancel background generations and reap the one owned analyzer."""
+        if self._close_task is None:
+            self._close_task = asyncio.create_task(self._close_owned_resources())
+        await _await_cancellation_safe(self._close_task)
+
+    async def _close_owned_resources(self) -> None:
+        """Perform terminal cleanup exactly once for all shutdown callers."""
+        self._closing = True
+        tasks = [task for task in (self._semantic_task, self._reload_task) if task is not None and not task.done()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+        self._fail_reload_waiters(asyncio.CancelledError())
+        await self.type_analyzer.close()
 
 
 server = CitryLanguageServer()
 
 
+def _consume_background_task(task: asyncio.Task[object]) -> None:
+    """Observe a background result without reporting normal cancellation."""
+    with suppress(asyncio.CancelledError):
+        error = task.exception()
+        if error is not None:
+            logger.error(
+                "Citry background task failed",
+                exc_info=(type(error), error, error.__traceback__),
+            )
+
+
+def _reanalyze_document_snapshots(
+    snapshots: tuple[
+        tuple[DocumentState, str, str, str, int | None, int, dict[str, ParsedRegion]],
+        ...,
+    ],
+    project: ProjectState,
+) -> dict[str, tuple[DocumentState, int, DocumentState]]:
+    """Build replacement document generations in one worker thread."""
+    prepared: dict[str, tuple[DocumentState, int, DocumentState]] = {}
+    for original, uri, language_id, source, version, revision, last_good in snapshots:
+        replacement = DocumentState(uri, language_id, source, version)
+        replacement.last_good = last_good
+        replacement.update(source, version, project)
+        prepared[uri] = (original, revision, replacement)
+    return prepared
+
+
+async def _await_cancellation_safe(task: asyncio.Task[None]) -> None:
+    """Finish terminal ownership cleanup before propagating cancellation."""
+    cancellation: asyncio.CancelledError | None = None
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError as exc:
+            cancellation = exc
+    await task
+    if cancellation is not None:
+        raise cancellation
+
+
+@server.feature(types.SHUTDOWN)
+async def shutdown_feature(ls: CitryLanguageServer, *_args: object) -> None:
+    """Stop the analyzer child while the client still awaits a response."""
+    await ls.close()
+
+
 @server.feature(types.INITIALIZE)
-def initialize(ls: CitryLanguageServer, params: types.InitializeParams) -> None:
+async def initialize(ls: CitryLanguageServer, params: types.InitializeParams) -> None:
     """Capture initialization options before pygls builds capabilities."""
     ls.configure(params)
+    await ls.load_initial_project()
 
 
 @server.feature(types.INITIALIZED)
@@ -165,11 +529,13 @@ async def initialized(ls: CitryLanguageServer, _params: types.InitializedParams)
 
 
 def _formatting_registration_params(workspace_uri: str) -> types.RegistrationParams:
-    selector = types.TextDocumentFilterLanguage(
-        language="citry-html",
-        scheme="file",
-        pattern=types.RelativePattern(workspace_uri, "**/*"),
-    )
+    # The registration itself belongs to this initialized workspace client.
+    # Keep the selector language-only: PyCharm's native client rejects the LSP
+    # 3.17 RelativePattern wire shape, while LSP4IJ 0.20.1 incorrectly ORs the
+    # language, scheme, and pattern fields of one document filter. Adding a
+    # file scheme would therefore expose Citry formatting on ordinary Python.
+    _ = workspace_uri
+    selector = types.TextDocumentFilterLanguage(language="citry-html")
     options = types.DocumentFormattingRegistrationOptions(document_selector=[selector])
     registration = types.Registration(
         "citry-html-formatting",
@@ -225,14 +591,15 @@ def _project_with_embedded_capability(
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_OPEN)
-def did_open(ls: CitryLanguageServer, params: types.DidOpenTextDocumentParams) -> None:
+async def did_open(ls: CitryLanguageServer, params: types.DidOpenTextDocumentParams) -> None:
     """Analyze a newly opened Citry or Python document."""
     document = params.text_document
     ls.update_document(document.uri, document.language_id, document.text, document.version)
+    ls.schedule_semantic_dependents(ls.documents[document.uri])
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_CHANGE)
-def did_change(ls: CitryLanguageServer, params: types.DidChangeTextDocumentParams) -> None:
+async def did_change(ls: CitryLanguageServer, params: types.DidChangeTextDocumentParams) -> None:
     """Analyze the full synchronized document content."""
     if not params.content_changes:
         return
@@ -241,25 +608,46 @@ def did_change(ls: CitryLanguageServer, params: types.DidChangeTextDocumentParam
     previous = ls.documents.get(params.text_document.uri)
     language_id = previous.language_id if previous is not None else "python"
     ls.update_document(params.text_document.uri, language_id, source, params.text_document.version)
+    ls.schedule_semantic_dependents(ls.documents[params.text_document.uri])
 
 
 @server.feature(types.TEXT_DOCUMENT_DID_CLOSE)
-def did_close(ls: CitryLanguageServer, params: types.DidCloseTextDocumentParams) -> None:
+async def did_close(ls: CitryLanguageServer, params: types.DidCloseTextDocumentParams) -> None:
     """Drop document state and clear its diagnostics."""
-    ls.documents.pop(params.text_document.uri, None)
+    ls.analysis_generation += 1
+    closed = ls.documents.pop(params.text_document.uri, None)
+    await ls.type_analyzer.close_document(params.text_document.uri)
     ls.text_document_publish_diagnostics(types.PublishDiagnosticsParams(params.text_document.uri, ()))
+    if closed is not None and closed.language_id == "python":
+        ls.schedule_all_semantic_diagnostics()
 
 
 @server.feature(
     types.TEXT_DOCUMENT_COMPLETION,
     types.CompletionOptions(trigger_characters=["<", "-", ".", " ", '"', "'", "{", ",", "#", "$"]),
 )
-def completion(ls: CitryLanguageServer, params: types.CompletionParams) -> types.CompletionList:
+async def completion(ls: CitryLanguageServer, params: types.CompletionParams) -> types.CompletionList:
     """Complete Citry syntax, lexical bindings, and registry contracts."""
     document = ls.documents.get(params.text_document.uri)
     if document is None:
         return types.CompletionList(is_incomplete=False, items=())
-    result = completion_result(document, params.position, ls.project)
+    result = completion_result(document, params.position, ls.project, ls.documents)
+    if not result.items:
+        generation = ls.analysis_generation
+        semantic = await ls.run_interactive(
+            lambda: semantic_completions(
+                ls.type_analyzer,
+                document,
+                params.position,
+                ls.project,
+                ls.documents,
+            )
+        )
+        if generation != ls.analysis_generation:
+            return types.CompletionList(is_incomplete=False, items=())
+        if semantic:
+            result = replace(result, items=semantic, is_incomplete=True)
+        _report_type_analysis_failure(ls)
     for item in result.items:
         if not ls.completion_snippets and item.insert_text_format == types.InsertTextFormat.Snippet:
             if item.insert_text is not None:
@@ -324,17 +712,169 @@ def _snippet_plain_text(value: str) -> str:
 
 
 @server.feature(types.TEXT_DOCUMENT_HOVER)
-def hover_feature(ls: CitryLanguageServer, params: types.HoverParams) -> types.Hover | None:
-    """Show lexical bindings or catalog-backed component and input documentation."""
+async def hover_feature(ls: CitryLanguageServer, params: types.HoverParams) -> types.Hover | None:
+    """Show Python-style variables, Citry syntax, or catalog documentation."""
     document = ls.documents.get(params.text_document.uri)
-    return hover(document, params.position, ls.project) if document is not None else None
+    if document is None:
+        return None
+    variable = template_variable_hover(document, params.position, ls.project, ls.documents)
+    if variable is not None:
+        # The parser owns identity and provenance; ty contributes only the current Python type.
+        generation = ls.analysis_generation
+        variable_result = await ls.run_interactive(
+            lambda: semantic_variable_hover(
+                ls.type_analyzer,
+                document,
+                params.position,
+                ls.project,
+                ls.documents,
+                variable,
+            )
+        )
+        if generation != ls.analysis_generation:
+            return None
+        _report_type_analysis_failure(ls)
+        return variable_result
+    result = hover(document, params.position, ls.project, ls.documents)
+    if result is None:
+        generation = ls.analysis_generation
+        result = await ls.run_interactive(
+            lambda: semantic_hover(
+                ls.type_analyzer,
+                document,
+                params.position,
+                ls.project,
+                ls.documents,
+            )
+        )
+        if generation != ls.analysis_generation:
+            return None
+        _report_type_analysis_failure(ls)
+    return result
 
 
 @server.feature(types.TEXT_DOCUMENT_DEFINITION)
-def definition_feature(ls: CitryLanguageServer, params: types.DefinitionParams) -> types.Location | None:
+async def definition_feature(
+    ls: CitryLanguageServer,
+    params: types.DefinitionParams,
+) -> types.Location | list[types.Location] | None:
     """Navigate to exact lexical, component, and component-input declarations."""
     document = ls.documents.get(params.text_document.uri)
-    return definition(document, params.position, ls.project, ls.documents) if document is not None else None
+    if document is None:
+        return None
+    result = definition(document, params.position, ls.project, ls.documents)
+    if result is not None:
+        return result
+    generation = ls.analysis_generation
+    semantic = await ls.run_interactive(
+        lambda: semantic_definition(
+            ls.type_analyzer,
+            document,
+            params.position,
+            ls.project,
+            ls.documents,
+        )
+    )
+    if generation != ls.analysis_generation:
+        return None
+    _report_type_analysis_failure(ls)
+    if len(semantic) == 1:
+        return semantic[0]
+    return list(semantic) if semantic else None
+
+
+@server.feature(types.TEXT_DOCUMENT_REFERENCES)
+async def references_feature(
+    ls: CitryLanguageServer,
+    params: types.ReferenceParams,
+) -> list[types.Location] | None:
+    """List exact uses of one Citry-owned template variable."""
+    document = ls.documents.get(params.text_document.uri)
+    if document is None:
+        return None
+    return references(
+        document,
+        params.position,
+        ls.project,
+        ls.documents,
+        include_declaration=params.context.include_declaration,
+    )
+
+
+@server.feature(types.TEXT_DOCUMENT_DECLARATION)
+async def declaration_feature(
+    ls: CitryLanguageServer,
+    params: types.DeclarationParams,
+) -> types.Location | list[types.Location] | None:
+    """Navigate from one template variable to its authored declaration."""
+    document = ls.documents.get(params.text_document.uri)
+    if document is None:
+        return None
+    return declaration(document, params.position, ls.project, ls.documents)
+
+
+@server.feature(types.TEXT_DOCUMENT_TYPE_DEFINITION)
+async def type_definition_feature(
+    ls: CitryLanguageServer,
+    params: types.TypeDefinitionParams,
+) -> types.Location | list[types.Location] | None:
+    """Navigate to Python types proven for one template variable."""
+    document = ls.documents.get(params.text_document.uri)
+    if document is None:
+        return None
+    generation = ls.analysis_generation
+    locations = await ls.run_interactive(
+        lambda: semantic_type_definition(
+            ls.type_analyzer,
+            document,
+            params.position,
+            ls.project,
+            ls.documents,
+        )
+    )
+    if generation != ls.analysis_generation:
+        return None
+    _report_type_analysis_failure(ls)
+    if len(locations) == 1:
+        return locations[0]
+    return list(locations) if locations else None
+
+
+@server.feature(
+    types.TEXT_DOCUMENT_SIGNATURE_HELP,
+    types.SignatureHelpOptions(trigger_characters=["(", ","], retrigger_characters=[","]),
+)
+async def signature_help_feature(
+    ls: CitryLanguageServer,
+    params: types.SignatureHelpParams,
+) -> types.SignatureHelp | None:
+    """Show Python call signatures for a proven template expression."""
+    document = ls.documents.get(params.text_document.uri)
+    if document is None:
+        return None
+    generation = ls.analysis_generation
+    result = await ls.run_interactive(
+        lambda: semantic_signature_help(
+            ls.type_analyzer,
+            document,
+            params.position,
+            ls.project,
+            ls.documents,
+        )
+    )
+    if generation != ls.analysis_generation:
+        return None
+    _report_type_analysis_failure(ls)
+    return result
+
+
+def _report_type_analysis_failure(ls: CitryLanguageServer) -> None:
+    """Show one degradation notice while parser-backed features stay active."""
+    message = ls.type_analyzer.failure
+    if message is None or ls.type_analysis_warning_sent:
+        return
+    ls.type_analysis_warning_sent = True
+    ls.window_show_message(types.ShowMessageParams(types.MessageType.Warning, message))
 
 
 @server.feature(types.TEXT_DOCUMENT_DOCUMENT_SYMBOL)
@@ -380,22 +920,53 @@ async def format_document(
 
 
 @server.feature(types.WORKSPACE_DID_CHANGE_WATCHED_FILES)
-def watched_files(ls: CitryLanguageServer, params: types.DidChangeWatchedFilesParams) -> None:
+async def watched_files(ls: CitryLanguageServer, params: types.DidChangeWatchedFilesParams) -> None:
     """Reload registry facts when project Python files change."""
+    # The copied catalog proves component origins, but it is not a complete
+    # transitive import graph for registrations and app configuration. Keep
+    # the conservative workspace-wide Python watch and make it cheap through
+    # burst coalescing rather than guessing that an unlisted module is inert.
     if ls.app is not None and any(change.uri.lower().endswith(".py") for change in params.changes):
-        ls.reload_project()
+        await ls.reload_project(debounce=_RELOAD_DEBOUNCE_SECONDS)
+
+
+@server.feature(BROWSER_PROJECTION_METHOD)
+def browser_projection_request(ls: CitryLanguageServer, params: object) -> dict[str, object] | None:
+    """Return one version-bound JavaScript-provider projection."""
+    uri, version, position = _projection_request_params(params, label="browser projection")
+    document = ls.documents.get(uri)
+    if document is None or document.version != version:
+        return None
+    projection = browser_projection(
+        document,
+        position,
+        ls.project,
+        ls.documents,
+    )
+    return projection.to_dict() if projection is not None else None
+
+
+@server.feature(HTML_PROJECTION_METHOD)
+def html_projection_request(ls: CitryLanguageServer, params: object) -> dict[str, object] | None:
+    """Return one version-bound parser-proven HTML-provider projection."""
+    uri, version, position = _projection_request_params(params, label="HTML projection")
+    document = ls.documents.get(uri)
+    if document is None or document.version != version:
+        return None
+    projection = html_projection(document, position, ls.project)
+    return projection.to_dict() if projection is not None else None
 
 
 @server.feature(STATUS_METHOD)
 def status_request(ls: CitryLanguageServer, _params: object | None = None) -> dict[str, object]:
-    """Return the current interpreter, app, protocol, and confidence mode."""
+    """Return the current interpreter, registry target, protocol, and confidence mode."""
     return ls.project.status.to_dict()
 
 
 @server.feature(RELOAD_METHOD)
-def reload_request(ls: CitryLanguageServer, _params: object | None = None) -> dict[str, object]:
-    """Reload the configured app through a fresh worker."""
-    return ls.reload_project()
+async def reload_request(ls: CitryLanguageServer, _params: object | None = None) -> dict[str, object]:
+    """Reload the configured registry target through a fresh worker."""
+    return await ls.reload_project()
 
 
 @server.feature(FORMAT_TEMPLATES_METHOD)
@@ -406,7 +977,7 @@ def format_templates_request(ls: CitryLanguageServer, params: object) -> dict[st
     if document is None:
         return {
             "kind": "refused",
-            "code": "citry.format.stale-document",
+            "code": FORMAT_STALE_DOCUMENT,
             "message": "document is not open in the Citry language server",
             "range": None,
         }
@@ -437,7 +1008,7 @@ async def _format_component_assets(
         return _with_embedded_capability(
             {
                 "kind": "refused",
-                "code": "citry.format.stale-document",
+                "code": FORMAT_STALE_DOCUMENT,
                 "message": "document is not open in the Citry language server",
                 "range": None,
             },
@@ -525,7 +1096,7 @@ async def _embedded_results(
     except ValueError as error:
         return {
             "kind": "refused",
-            "code": "citry.format.provider-invalid",
+            "code": FORMAT_PROVIDER_INVALID,
             "message": str(error),
             "range": None,
         }
@@ -682,7 +1253,7 @@ def _prepared_document_is_current(
 def _stale_embedded_response() -> dict[str, object]:
     return {
         "kind": "refused",
-        "code": "citry.format.stale-document",
+        "code": FORMAT_STALE_DOCUMENT,
         "message": "document changed while embedded formatting was in progress",
         "range": None,
     }
@@ -690,16 +1261,16 @@ def _stale_embedded_response() -> dict[str, object]:
 
 def _embedded_request_failure(error: Exception) -> dict[str, object]:
     detail = f"{type(error).__name__}: {error}"
-    if "citry.format.stale-document" in str(error):
+    if FORMAT_STALE_DOCUMENT in str(error):
         return {
             "kind": "refused",
-            "code": "citry.format.stale-document",
+            "code": FORMAT_STALE_DOCUMENT,
             "message": detail,
             "range": None,
         }
     return {
         "kind": "refused",
-        "code": "citry.format.provider-invalid",
+        "code": FORMAT_PROVIDER_INVALID,
         "message": f"embedded formatting client request failed: {detail}",
         "range": None,
     }
@@ -770,9 +1341,46 @@ def _format_scope_params(
     return uri, version, "position", types.Position(line, character)
 
 
+def _projection_request_params(
+    params: object,
+    *,
+    label: str,
+) -> tuple[str, int, types.Position]:
+    """Validate one projection request after Pygls decodes its JSON objects."""
+    if not _wire_object_has_exact_fields(params, frozenset({"textDocument", "position"})):
+        raise JsonRpcInvalidParams(f"{label} parameters are invalid")
+    text_document = _wire_field(params, "textDocument")
+    position = _wire_field(params, "position")
+    if not _wire_object_has_exact_fields(text_document, frozenset({"uri", "version"})):
+        raise JsonRpcInvalidParams(f"{label} textDocument is invalid")
+    uri = _wire_field(text_document, "uri")
+    version = _wire_field(text_document, "version")
+    if type(uri) is not str or type(version) is not int:
+        raise JsonRpcInvalidParams(f"{label} identity is invalid")
+    if not _wire_object_has_exact_fields(position, frozenset({"line", "character"})):
+        raise JsonRpcInvalidParams(f"{label} position is invalid")
+    line = _wire_field(position, "line")
+    character = _wire_field(position, "character")
+    if type(line) is not int or type(character) is not int or line < 0 or character < 0:
+        raise JsonRpcInvalidParams(f"{label} position is invalid")
+    return uri, version, types.Position(line, character)
+
+
 def _is_wire_object(value: object) -> bool:
     value_type = type(value)
-    return value_type is dict or (value_type.__module__ == "pygls.protocol" and value_type.__name__ == "Object")
+    return value_type is dict or (
+        isinstance(value, tuple) and value_type.__module__ == "pygls.protocol" and value_type.__name__ == "Object"
+    )
+
+
+def _wire_object_has_exact_fields(value: object, expected: frozenset[str]) -> bool:
+    """Keep custom request validation strict for raw and Pygls-decoded JSON."""
+    if type(value) is dict:
+        return frozenset(value) == expected
+    if not _is_wire_object(value):
+        return False
+    fields = getattr(value, "_fields", ())
+    return type(fields) is tuple and frozenset(fields) == expected
 
 
 def _wire_field(value: object, name: str, *, default: object | None = None) -> object | None:
@@ -796,14 +1404,11 @@ def _workspace_uri(params: types.InitializeParams) -> str:
 
 
 def _path_from_uri(uri: str) -> Path:
-    parsed = urlparse(uri)
-    if parsed.scheme != "file":
+    path = file_uri_path(uri)
+    if path is None:
         msg = f"Citry requires a file workspace URI, got {uri!r}"
         raise JsonRpcInvalidParams(msg)
-    path = unquote(parsed.path)
-    if parsed.netloc:
-        path = f"//{parsed.netloc}{path}"
-    return Path(path).resolve()
+    return path.resolve()
 
 
 __all__ = [

@@ -13,9 +13,11 @@ boundaries, and a way to capture the exact HTML a component produced.
 ## Debug the editor integration
 
 The VS Code status bar shows the active Citry analysis level for each workspace
-folder. `registry` means the server imported the configured Citry app and can
-check component names, inputs, and slots. `syntax only` means parser diagnostics
-still run, but registry-backed checks and component intelligence are disabled.
+folder. `registry` means the server loaded the configured Citry instance or
+component library and can check component names, inputs, and slots. A selected
+component library has its library-only scope named in status. `syntax only`
+means parser diagnostics still run, but registry-backed checks and component
+intelligence are disabled.
 
 If the status is `syntax only` unexpectedly:
 
@@ -26,13 +28,16 @@ If the status is `syntax only` unexpectedly:
    ```
 
 2. Set `citry.app` to the same `module:attribute` Citry instance the application
-   starts, for example `myproject.app:engine`.
+   starts, for example `myproject.app:engine`. A component-library author can
+   select its manifest, such as `acme_ui:__citry_library__`; status then reports
+   that host-app components, configuration, and host-provided extensions are
+   outside that registry.
 3. Run **Citry: Show Language Server Status**. Check the reported interpreter,
    app spec, Citry version, protocol version, and discovery message.
 4. If the interpreter is wrong, select the intended Python environment or set
    `citry.python` to its executable. Then run **Citry: Restart Language Server**.
 
-App discovery has a five-second startup limit and runs in a child process. An
+Registry discovery has a five-second startup limit and runs in a child process. An
 import exception, `SystemExit`, process crash, startup timeout, unsupported
 Citry version, or catalog mismatch therefore degrades that workspace to syntax
 only without breaking the editor's language-server connection. Fix the first

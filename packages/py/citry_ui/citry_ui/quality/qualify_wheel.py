@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 import sys
@@ -15,26 +16,83 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/__init__.py",
     "citry_ui/py.typed",
     "citry_ui/components/__init__.py",
+    "citry_ui/components/_anchored_layer.py",
     "citry_ui/components/_aria.py",
     "citry_ui/components/_attrs.py",
     "citry_ui/components/_context.py",
     "citry_ui/components/_validation.py",
+    "citry_ui/components/caccordion/__init__.py",
+    "citry_ui/components/caccordion/caccordion.py",
+    "citry_ui/components/calert/__init__.py",
+    "citry_ui/components/calert/calert.py",
+    "citry_ui/components/cavatar/__init__.py",
+    "citry_ui/components/cavatar/cavatar.py",
+    "citry_ui/components/cbadge/__init__.py",
+    "citry_ui/components/cbadge/cbadge.py",
+    "citry_ui/components/cbreadcrumbs/__init__.py",
+    "citry_ui/components/cbreadcrumbs/cbreadcrumbs.py",
     "citry_ui/components/cbutton/__init__.py",
     "citry_ui/components/cbutton/cbutton.py",
+    "citry_ui/components/cbutton_group/__init__.py",
+    "citry_ui/components/cbutton_group/cbutton_group.py",
+    "citry_ui/components/ccard/__init__.py",
+    "citry_ui/components/ccard/ccard.py",
+    "citry_ui/components/ccheckbox/__init__.py",
+    "citry_ui/components/ccheckbox/ccheckbox.py",
     "citry_ui/components/ccombobox/__init__.py",
     "citry_ui/components/ccombobox/ccombobox.py",
     "citry_ui/components/cdialog/__init__.py",
     "citry_ui/components/cdialog/cdialog.py",
+    "citry_ui/components/cdrawer/__init__.py",
+    "citry_ui/components/cdrawer/cdrawer.py",
+    "citry_ui/components/cdivider/__init__.py",
+    "citry_ui/components/cdivider/cdivider.py",
     "citry_ui/components/cfield/__init__.py",
     "citry_ui/components/cfield/cfield.py",
+    "citry_ui/components/cflow/__init__.py",
+    "citry_ui/components/cflow/cflow.py",
+    "citry_ui/components/cgrid/__init__.py",
+    "citry_ui/components/cgrid/cgrid.py",
     "citry_ui/components/cform/__init__.py",
     "citry_ui/components/cform/cform.py",
+    "citry_ui/components/cicon/__init__.py",
+    "citry_ui/components/cicon/_catalog.py",
+    "citry_ui/components/cicon/cicon.py",
+    "citry_ui/components/clist/__init__.py",
+    "citry_ui/components/clist/clist.py",
+    "citry_ui/components/cmenu/__init__.py",
+    "citry_ui/components/cmenu/cmenu.py",
+    "citry_ui/components/cnative_select/__init__.py",
+    "citry_ui/components/cnative_select/cnative_select.py",
+    "citry_ui/components/cpagination/__init__.py",
+    "citry_ui/components/cpagination/cpagination.py",
+    "citry_ui/components/cpopover/__init__.py",
+    "citry_ui/components/cpopover/cpopover.py",
+    "citry_ui/components/ctooltip/__init__.py",
+    "citry_ui/components/ctooltip/ctooltip.py",
+    "citry_ui/components/cprogress/__init__.py",
+    "citry_ui/components/cprogress/cprogress.py",
+    "citry_ui/components/cradio/__init__.py",
+    "citry_ui/components/cradio/cradio.py",
+    "citry_ui/components/cspinner/__init__.py",
+    "citry_ui/components/cspinner/cspinner.py",
+    "citry_ui/components/cskeleton/__init__.py",
+    "citry_ui/components/cskeleton/cskeleton.py",
+    "citry_ui/components/cswitch/__init__.py",
+    "citry_ui/components/cswitch/cswitch.py",
     "citry_ui/components/ctable/__init__.py",
     "citry_ui/components/ctable/ctable.py",
     "citry_ui/components/ctabs/__init__.py",
     "citry_ui/components/ctabs/ctabs.py",
+    "citry_ui/components/ctextarea/__init__.py",
+    "citry_ui/components/ctextarea/ctextarea.py",
+    "citry_ui/components/ctoggle/__init__.py",
+    "citry_ui/components/ctoggle/ctoggle.py",
+    "citry_ui/components/ctoast/__init__.py",
+    "citry_ui/components/ctoast/ctoast.py",
 }
 _FORBIDDEN_SUFFIXES = {".html", ".json", ".md", ".png", ".svg"}
+_THIRD_PARTY_NOTICE_SHA256 = "0f1b152923fc9ff1181a9e6c87aa5877e258efe6d7dbc4c3198ab25e9dd3e8ad"
 
 
 class WheelQualificationError(ValueError):
@@ -102,12 +160,27 @@ def qualify_wheel(path: Path) -> WheelReport:
     wheel_name = f"{dist_info}/WHEEL"
     record_name = f"{dist_info}/RECORD"
     license_name = f"{dist_info}/licenses/LICENSE"
+    third_party_license_name = f"{dist_info}/licenses/THIRD_PARTY_LICENSES.md"
     missing_metadata = [
-        name for name in (metadata_name, wheel_name, record_name, license_name) if name not in name_set
+        name
+        for name in (
+            metadata_name,
+            wheel_name,
+            record_name,
+            license_name,
+            third_party_license_name,
+        )
+        if name not in name_set
     ]
     if missing_metadata:
         msg = f"Wheel is missing distribution metadata: {', '.join(missing_metadata)}."
         raise WheelQualificationError(msg)
+
+    third_party_notice_digest = hashlib.sha256(contents[third_party_license_name]).hexdigest()
+    if third_party_notice_digest != _THIRD_PARTY_NOTICE_SHA256:
+        raise WheelQualificationError(
+            "Wheel third-party notice differs from the reviewed Lucide and Feather license notice."
+        )
 
     metadata = contents[metadata_name].decode("utf-8")
     if "Name: citry-ui\n" not in metadata:

@@ -1,0 +1,44 @@
+{
+  "active_locales": ["en-US", "cs-CZ"],
+  "packages": {
+    "citry_ui": {
+      "source_locale": "en-US",
+      "exports": [
+        "citry-ui-account",
+        "citry-ui-count",
+        "citry-ui-fallback-only",
+        "citry-ui-ref-target",
+        "citry-ui-ref-wrapper"
+      ]
+    },
+    "my_app": {
+      "source_locale": "cs-CZ",
+      "exports": [
+        "my-app-fallback-only",
+        "my-app-ordinal",
+        "my-app-target",
+        "my-app-wrapper"
+      ]
+    }
+  },
+  "layers": [
+    {
+      "name": "citry_ui",
+      "package": "citry_ui",
+      "precedence": 0,
+      "catalogs": {
+        "en-US": "citry_ui/en-US.ftl",
+        "cs-CZ": "citry_ui/cs-CZ.ftl"
+      }
+    },
+    {
+      "name": "application",
+      "package": "my_app",
+      "precedence": 1,
+      "catalogs": {
+        "en-US": "application/en-US.ftl",
+        "cs-CZ": "application/cs-CZ.ftl"
+      }
+    }
+  ]
+}

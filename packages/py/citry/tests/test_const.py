@@ -14,15 +14,13 @@ from weakref import ref
 
 import pytest
 
-from citry import Citry, Component, Const
+from citry import Citry, Component, Const, const_value, is_const
 from citry.constness import (
     _MAX_UNROLL_ITERATIONS,
     _UNFREEZABLE,
     ConstBodyCache,
-    const_value,
     extract_const_vars,
     freeze_const,
-    is_const,
     precompute_const_parts,
 )
 from citry.nodes import ComponentNode, ExprHtmlAttr, ExprNode, FillNode, ForNode, IfNode, SlotNode, StaticHtmlAttr

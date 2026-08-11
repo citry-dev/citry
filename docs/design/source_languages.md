@@ -28,6 +28,13 @@ fields because this design is not implemented yet. Implementing this design
 must update the catalog's asset records with resolved language and declaration
 provenance in the same round.
 
+For the cross-package implementation sequence—region discovery, parser
+authority, source maps, portable facts, LSP capabilities, editor projections,
+performance, and tests—follow
+[`embedded_language_ide.md`](embedded_language_ide.md). That playbook also
+covers primary code blocks such as `Component.messages` whose language is not
+selected through the `*_lang` compiler model described here.
+
 ---
 
 ## 1. The problem, and the three concerns not to conflate

@@ -9,6 +9,11 @@ use std::rc::Rc;
 use pyo3::exceptions::{PySyntaxError, PyValueError};
 use pyo3::prelude::*;
 
+use citry_template_parser::browser::{
+    BrowserAnalysisMode, analyze_browser_source as analyze_browser_source_rust,
+    analyze_component_scope_writes as analyze_component_scope_writes_rust,
+    analyze_component_source as analyze_component_source_rust,
+};
 use citry_template_parser::compiler::compile_template as compile_template_rust;
 use citry_template_parser::error::CompileError;
 use citry_template_parser::lang::lang::Lang;
@@ -106,4 +111,88 @@ pub fn parse_template(
 pub fn compile_template(template: Template, lang: Option<&str>) -> PyResult<String> {
     let lang_enum = lang_from_str(lang)?;
     compile_template_rust(template, lang_enum).map_err(compile_error_to_py)
+}
+
+/// Parse one Alpine expression/statement and return exact free identifier ranges.
+#[pyfunction]
+pub fn analyze_browser_source(
+    input: &str,
+    mode: &str,
+) -> PyResult<(bool, Vec<(String, usize, usize)>)> {
+    let mode = mode
+        .parse::<BrowserAnalysisMode>()
+        .map_err(PyValueError::new_err)?;
+    let analysis = analyze_browser_source_rust(input, mode);
+    Ok((
+        analysis.valid,
+        analysis
+            .references
+            .into_iter()
+            .map(|reference| (reference.name, reference.start, reference.end))
+            .collect(),
+    ))
+}
+
+/// Return direct synchronous `$component` scope writes and their source ranges.
+#[pyfunction]
+pub fn analyze_component_scope_writes(input: &str) -> Vec<(String, usize, usize, usize, usize)> {
+    analyze_component_scope_writes_rust(input)
+        .into_iter()
+        .map(|write| {
+            (
+                write.name,
+                write.name_start,
+                write.name_end,
+                write.value_start,
+                write.value_end,
+            )
+        })
+        .collect()
+}
+
+type ComponentSourceAnalysis = (
+    bool,
+    Vec<(String, usize, usize)>,
+    Vec<(String, String, usize, usize, Vec<(usize, usize)>)>,
+    Vec<(String, usize, usize, usize, usize)>,
+);
+
+/// Return detached source facts for runtime `$component` initializers.
+#[pyfunction]
+pub fn analyze_component_source(input: &str) -> ComponentSourceAnalysis {
+    let analysis = analyze_component_source_rust(input);
+    (
+        analysis.valid,
+        analysis
+            .references
+            .into_iter()
+            .map(|reference| (reference.name, reference.start, reference.end))
+            .collect(),
+        analysis
+            .bindings
+            .into_iter()
+            .map(|binding| {
+                (
+                    binding.name,
+                    binding.local_name,
+                    binding.start,
+                    binding.end,
+                    binding.references,
+                )
+            })
+            .collect(),
+        analysis
+            .scope_writes
+            .into_iter()
+            .map(|write| {
+                (
+                    write.name,
+                    write.name_start,
+                    write.name_end,
+                    write.value_start,
+                    write.value_end,
+                )
+            })
+            .collect(),
+    )
 }

@@ -3,7 +3,7 @@
 # ruff: noqa: ANN
 
 from dataclasses import dataclass, field, fields
-from typing import NamedTuple
+from typing import Annotated, NamedTuple
 
 import pytest
 
@@ -28,6 +28,91 @@ class TestComponentFields:
             template_file = "my_comp.html"
 
         assert MyComp.template_file == "my_comp.html"
+
+    def test_lint_declarations_compose_and_reset_through_component_c3(self):
+        c = Citry(autodiscover=False)
+
+        class Base(Component):
+            citry = c
+
+            class Lint:
+                rule_unknown_template_variable = "warning"
+                template_variables = {"base_value": int}
+                rule_unknown_alpine_variable = "warning"
+                alpine_variables = {"$baseMagic": int}
+                rule_unknown_component_js_variable = "warning"
+                component_js_globals = {"baseClient": int}
+
+        class Child(Base):
+            class Lint:
+                template_variables = {
+                    "child_value": Annotated[str, "Child-only value."],
+                }
+                alpine_variables = {
+                    "childValue": Annotated[str, "Child-only browser value."],
+                }
+                component_js_globals = {
+                    "childClient": Annotated[str, "Child-only component JS value."],
+                }
+
+        class Reset(Child):
+            Lint = None
+
+        analysis = c.template_analysis()
+        child_lint = analysis.component_lint[Child.definition_id]
+        reset_lint = analysis.component_lint[Reset.definition_id]
+
+        assert child_lint.rule_unknown_template_variable == "warning"
+        assert {item.name for item in child_lint.template_variables} == {"base_value", "child_value"}
+        child_value = next(item for item in child_lint.template_variables if item.name == "child_value")
+        assert (child_value.type_display, child_value.description) == ("str", "Child-only value.")
+        assert child_lint.rule_unknown_alpine_variable == "warning"
+        assert {item.name for item in child_lint.alpine_variables} == {"$baseMagic", "childValue"}
+        child_browser_value = next(item for item in child_lint.alpine_variables if item.name == "childValue")
+        assert (child_browser_value.type_display, child_browser_value.description) == (
+            "str",
+            "Child-only browser value.",
+        )
+        assert child_lint.rule_unknown_component_js_variable == "warning"
+        assert {item.name for item in child_lint.component_js_globals} == {"baseClient", "childClient"}
+        child_client_value = next(item for item in child_lint.component_js_globals if item.name == "childClient")
+        assert (child_client_value.type_display, child_client_value.description) == (
+            "str",
+            "Child-only component JS value.",
+        )
+        assert reset_lint.rule_unknown_template_variable == "error"
+        assert reset_lint.template_variables == ()
+        assert reset_lint.rule_unknown_alpine_variable == "error"
+        assert reset_lint.alpine_variables == ()
+        assert reset_lint.rule_unknown_component_js_variable == "error"
+        assert reset_lint.component_js_globals == ()
+
+    def test_lint_declaration_rejects_unknown_fields_and_invalid_values(self):
+        c = Citry(autodiscover=False)
+
+        with pytest.raises(ValueError, match="unknown setting"):
+
+            class Unknown(Component):
+                citry = c
+
+                class Lint:
+                    typo = "warning"
+
+        with pytest.raises(ValueError, match="must be 'ignore', 'warning', or 'error'"):
+
+            class InvalidRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_unknown_template_variable = "warn"
+
+        with pytest.raises(ValueError, match="rule_unknown_alpine_variable"):
+
+            class InvalidAlpineRule(Component):
+                citry = c
+
+                class Lint:
+                    rule_unknown_alpine_variable = "warn"
 
     def test_kwargs_auto_dataclass(self):
         c = Citry()

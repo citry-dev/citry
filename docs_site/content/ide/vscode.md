@@ -30,16 +30,32 @@ know the application's component names, inputs, or slots.
 Install **Citry** from the Visual Studio Marketplace. Cursor, Windsurf,
 VSCodium, and other compatible forks will use the matching Open VSX release.
 
-## Select the application
+## Select the registry target
 
-Set `citry.app` to the `module:attribute` path of the project's
-[`Citry`][citry.Citry] instance:
+Set `citry.app` to the `module:attribute` path of either the project's
+[`Citry`][citry.Citry] instance or a reusable
+[`ComponentLibrary`][citry.ComponentLibrary]:
 
 ```json
 {
   "citry.app": "myproject.app:citry_app"
 }
 ```
+
+For example, select the Citry UI library directly while working without a host
+application:
+
+```json
+{
+  "citry.app": "citry_ui:__citry_library__"
+}
+```
+
+The library form creates an isolated registry with Citry's built-ins and that
+library. It does not include host-application components, configuration, or
+host-provided extensions. If the library requires one of those extensions,
+expose a configured `Citry` instance that installs it and select that instance
+instead.
 
 The extension normally follows the interpreter selected by Microsoft's Python
 extension. Set `citry.python` to an explicit executable when that integration
@@ -54,6 +70,102 @@ is unavailable:
 With no app configured, the status bar reports **syntax only**. Definite
 inline templates and files explicitly using the Citry Template language are
 still checked, but unknown components and their contracts are not inferred.
+
+## Complete Alpine and component JavaScript
+
+In a registry-owned component template, Citry connects Alpine expressions to
+the component's browser data:
+
+```citry
+class Search(Component):
+    class JsData:
+        query: str
+        result_count: int
+
+    class State:
+        page: int
+
+    template = """
+      <p x-text="query.toUpperCase()"></p>
+      <button @click="$state.page += 1">Next</button>
+    """
+```
+
+Top-level `JsData` names complete in `x-*`, `@*`, and `:*` values. Hover shows
+their JSON-derived JavaScript type, and **Go to Definition**, **Go to
+Declaration**, and **Find All References** connect them to the exact Python
+field or a conservatively inferred `js_data()` dict key. Public Events
+`State` fields receive the same navigation through `$state`.
+
+The component's direct `js` or resolved `js_file` receives matching types for
+the complete `$component` callback context. Direct synchronous writes to
+`scope` become typed Alpine names, and `x-for` bindings receive
+iterable-derived types and exact navigation. A static
+`$component({ props, init })` declaration also types its read-only `props`.
+VS Code's installed JavaScript service supplies ordinary JavaScript member
+completion, hover, and definitions; Citry keeps the Python-backed origins
+authoritative. Unknown Alpine roots are errors by default through the shared
+Citry lint policy. Free names inside a `$component` initializer are also
+errors by default, which catches a context value such as `scope` when it was
+used but not destructured. Configure the severity or real host-provided
+globals through `LintSettings`; see [Template linting](/ide/template-linting/).
+
+Hovering `$component`, a destructured callback value, or a Citry Alpine magic
+such as `$sendEvent`, `$loading`, or `$error` shows its Citry contract and a
+link to the matching browser API reference. Handler-name completion opens
+inside the literal arguments to `sendEvent`, `$sendEvent`, `$loading`, and
+`$error`, including from an empty string.
+
+A literal `sendEvent()` or `$sendEvent()` name, a declarative `@c-*` handler,
+and a handler passed to `$loading()` or `$error()` must match an effective
+Python event handler and navigate to that method. Dynamic names are left open,
+as are all `onEvent()` and `$onEvent()` names.
+
+Direct `$c-props` objects on statically resolved child components validate
+unknown keys, required props, and proven value types against the child's
+static `$component({props})` declaration. A prop key hovers and navigates to
+that declaration. A spread keeps explicit keys checkable but suppresses a
+missing-required conclusion; dynamic targets and `c-$c-props` remain
+unproven. When a `JsData` annotation or known literal value cannot cross
+Citry's strict JSON wire, Citry reports `citry.js-data.unsupported-type` as a
+warning and lets JavaScript tooling treat that value as `unknown`.
+
+## Navigate from CSS variables to Python data
+
+When the selected registry owns a component's CSS, Citry connects a
+`var(--name)` use to the Python data that produces it:
+
+```citry
+from citry import Component
+
+
+class Chart(Component):
+    class CssData:
+        chart_height: str
+
+    css = """
+    .chart {
+        height: var(--chart_height);
+    }
+    """
+```
+
+Inside `var(--...)`, completion offers exact `CssData` names. Hover shows the
+Python producer, **Go to Definition** and **Go to Declaration** open its field,
+and **Find All References** lists uses in that physical stylesheet. The same
+features work for direct string keys inferred conservatively from
+`css_data()`, so `{"row-color": value}` is available as `--row-color`.
+
+Both direct `css` literals and resolved `css_file` files are supported. A CSS
+file shared by several components exposes only names supplied by every proven
+owner. Saving or synchronizing a Python edit rechecks the schema and asset
+owner before Citry returns navigation.
+
+Citry leaves other custom properties alone. A value may come from an ancestor,
+the host page, a theme, JavaScript, an extension, or another stylesheet, so an
+unmatched `var(--host-token)` is not an error. VS Code's CSS service continues
+to provide ordinary CSS completion, validation, and local custom-property
+navigation alongside Citry's producer information.
 
 ## Associate standalone templates
 
@@ -144,11 +256,99 @@ extension. Embedded JavaScript/CSS output also matches when the provider,
 version, and options match. For deterministic automation, configure the CLI's
 explicit Biome adapter instead of relying on editor provider ordering.
 
+## Look up Citry syntax
+
+Hover a Citry structural tag, fixed directive, or structural attribute to see
+a concise explanation and a link to its full Citry guide. This works in
+syntax-only mode, so `<c-slot>`, `required`, `c-bind`, `#c-key`, and related
+syntax do not require an application registry or an installed HTML provider.
+Dynamic HTML attributes such as `c-class` keep using the HTML provider's
+documentation for their underlying native attribute.
+
+HTML assistance also enters parser-proven nested-template values. Use the
+opposite quote for attributes inside the nested value, so a double-quoted host
+contains ordinary single-quoted HTML attributes:
+
+```html
+<c-card c-body="<><input type='email' autocomplete='email' /></>" />
+```
+
+Completion, hover, and go to definition are mapped back from that isolated
+fragment. For `<c-element>`, a literal target such as `is="form"` receives
+form-specific attribute intelligence. A dynamic `c-is` or `c-bind` keeps only
+global HTML attributes because its eventual tag is not proven. Citry returns
+no forwarded result when the current parse, source map, provider response, or
+document version is uncertain.
+
+## Complete template roots
+
+Inside a registry-owned component template, Citry completes and documents
+declared `TemplateData` fields, runtime `template_globals`, and lint-only
+variables in interpolations and Python-valued attributes. Global runtime values
+receive conservative inferred types; explicit annotations and descriptions use
+the application's [template lint settings](/ide/template-linting/).
+When no `TemplateData` schema is declared, it also infers conservative roots
+from direct dict keys and modelled mapping operations in `template_data()`.
+The inherited implementation exposes effective `Kwargs` fields automatically.
+Go to definition targets the annotated field or exact returned dict key.
+Go to references lists uses of the same proven root or exact loop/fill binding
+inside that physical template. Go to declaration targets the authored field,
+dict key, or lexical introduction. Go to type definition targets the actual
+Python class or standard-library type when every component consumer and return
+path produces a safe mapped answer. Unused fill bindings target their current
+neutral `Any` contract. Unsaved Python edits that change component inheritance
+or template ownership are revalidated before these registry-backed results are
+shown.
+The live ownership proof covers direct string and `pathlib.Path(...)`
+declarations. Imported constants, factories, decorators, metaclasses, and
+other dynamic template selection use the loaded registry, but variable
+navigation is withheld while Python source is synchronized because those
+dependencies cannot be bounded safely. Save and restart the language server to
+refresh that registry state.
+
+Once a root is proven, Citry also supplies ordinary Python member and call
+completion, type hover, user-member navigation, signature help, and mapped
+diagnostics. This works in interpolations, Python-valued attributes, loop
+clauses, and nested templates. Template conditions narrow optional and union
+types, while shared templates keep only suggestions that apply to every
+proven component consumer and return path.
+
+The language server installs its supported Python analyzer automatically in
+the same environment. If that analyzer cannot start or stops responding,
+Citry reports the degradation once and keeps parser checks plus root-level
+completion, hover, and navigation available. Unknown root names use the policy
+configured on the `Citry` application, not a separate VS Code preference.
+
+Open Python files use synchronized editor text, so adding or renaming a direct
+key updates completion, hover, and navigation without saving or reloading the
+app. Invalid source, ambiguous ownership, unsupported mapping escapes, and
+roots not shared by every physical-template consumer are withheld rather than
+guessed. The semantic analyzer is likewise limited to those mapped template
+expressions and does not replace the Python extension for ordinary `.py` code.
+
+## Keep template strings from becoming f-strings
+
+Pylance can add an `f` prefix when you type `{` in a Python string. Its
+`python.analysis.autoFormatStrings` setting is off by default. If your profile
+or workspace enables it, add this workspace setting:
+
+```json
+{
+  "python.analysis.autoFormatStrings": false
+}
+```
+
+The setting applies to every Python file in the VS Code window. Pylance does
+not provide a per-literal exception. Citry does not reverse editor changes, so
+deliberate f-strings remain untouched. Editors without Pylance do not need this
+setting.
+
 ## Current limits
 
 - Highlighting of deeply nested or unfinished expressions is best effort.
 - Parsing stops after the first syntax error.
-- Python analysis remains the responsibility of Pylance or Pyright.
+- General Python-file analysis remains the responsibility of the configured
+  Python extension; Citry analyzes only mapped template expressions.
 - Embedded CSS and JavaScript receive highlighting, completion, hover, and
   formatting through VS Code providers, but Citry cannot request their
   diagnostics through VS Code's public API.

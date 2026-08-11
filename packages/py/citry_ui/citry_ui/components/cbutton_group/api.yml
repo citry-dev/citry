@@ -1,0 +1,60 @@
+schema_version: 1
+family: button-group
+
+components:
+  - CButtonGroup
+
+inputs:
+  - id: cbutton-group-server-inputs
+    component: CButtonGroup
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the accessible name for the related action group.}
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CButtonGroupOrientation]}, default: {kind: literal, value: horizontal}, effect: Selects the action layout axis.}
+      - {id: attached, name: attached, type: bool, default: {kind: literal, value: true}, effect: Joins direct CButton children with shared edge geometry.}
+      - {id: grow, name: grow, type: bool, default: {kind: literal, value: false}, effect: Distributes direct CButton children evenly across the available inline size.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied trusted attributes without replacing group semantics, naming, layout reflections, children, focus ownership, or Citry runtime fields.'}
+
+slots:
+  - id: cbutton-group-slots
+    component: CButtonGroup
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CButtonGroupDefaultSlotData]}, fallback: None.}
+
+events: []
+methods: []
+
+css:
+  - id: cbutton-group-css-variables
+    component: CButtonGroup
+    entries:
+      - {id: cui-button-group-gap, name: --cui-button-group-gap, type: length, purpose: Gap between nonattached actions., default: 0.5rem}
+      - {id: cui-button-group-radius, name: --cui-button-group-radius, type: length, purpose: Outer corner radius of attached direct Buttons., default: 0.55rem}
+      - {id: cui-button-group-border-width, name: --cui-button-group-border-width, type: length, purpose: Adjacent border overlap for attached Buttons., default: 1px}
+
+attributes:
+  - id: cbutton-group-attributes
+    component: CButtonGroup
+    entries:
+      - {id: data-orientation, name: data-orientation, element: Root, type: '"horizontal" | "vertical"', meaning: Reflects the layout axis.}
+      - {id: data-attached, name: data-attached, element: Root, type: present-or-absent, meaning: Present when direct Buttons use joined geometry.}
+      - {id: data-grow, name: data-grow, element: Root, type: present-or-absent, meaning: Present when direct Buttons share the available width.}
+
+selectors:
+  - id: cbutton-group-selectors
+    component: CButtonGroup
+    entries:
+      - {id: data-citry-ui-part-button-group, selector: '[data-citry-ui-part="button-group"]', element: Root, purpose: Stable group and attrs destination.}
+      - {id: data-citry-ui-part-button, selector: '[data-citry-ui-part="button"]', element: Direct CButton root, purpose: Applies joined geometry to direct Button children through the CButton public selector.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-cbutton-group-orientation, name: CButtonGroupOrientation, definition: 'Literal["horizontal", "vertical"]'}
+  - {id: cbutton-group-default-slot-data, kind: record, name: CButtonGroupDefaultSlotData, entries: []}

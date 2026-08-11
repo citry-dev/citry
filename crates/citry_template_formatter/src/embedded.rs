@@ -19,6 +19,10 @@ use std::ops::Range;
 use citry_template_parser::parse_template;
 use sha2::{Digest, Sha256};
 
+use crate::diagnostic_catalog::{
+    FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED, FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
+    FORMAT_EMBEDDED_SUPPRESSED, FORMAT_PROVIDER_UNAVAILABLE,
+};
 use crate::error::FormatError;
 use crate::formatter;
 use crate::newline::{detect_newline, normalize_to_lf};
@@ -303,7 +307,7 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
         let region_id = format!("{}-{index}", body.kind.as_str());
         if body_is_protected(body, &model) {
             notices.push(notice(
-                "citry.format.embedded-suppressed",
+                FORMAT_EMBEDDED_SUPPRESSED,
                 "embedded body is protected by a formatter directive",
                 &region_id,
                 body.language,
@@ -312,7 +316,7 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
         }
         let Some(language) = body.language else {
             notices.push(notice(
-                "citry.format.embedded-language-unsupported",
+                FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
                 "embedded body has an alternate or dynamic language",
                 &region_id,
                 None,
@@ -333,7 +337,7 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
         // since the sequence can appear in places the parse did not mark.
         if body.has_interpolation || exact.contains("{{") || exact.contains("{#") {
             notices.push(notice(
-                "citry.format.embedded-interpolation-unsupported",
+                FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
                 "embedded body contains Citry interpolation or comment syntax without a context-safe placeholder adapter",
                 &region_id,
                 Some(language),
@@ -345,7 +349,7 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
         }
         if contains_multiline_literal(exact, language) {
             notices.push(notice(
-                "citry.format.embedded-language-unsupported",
+                FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
                 "embedded body contains a multiline whitespace-sensitive token that cannot be reindented safely",
                 &region_id,
                 Some(language),
@@ -355,7 +359,7 @@ pub fn prepare_embedded_format(source: &str) -> Result<EmbeddedFormatPlan, Forma
         let standalone = standalone_source(exact);
         if starts_with_lexical_sentinel(&standalone, language) {
             notices.push(notice(
-                "citry.format.embedded-language-unsupported",
+                FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
                 "embedded body starts with a position-sensitive language sentinel that cannot be reframed safely",
                 &region_id,
                 Some(language),
@@ -483,7 +487,7 @@ pub fn finish_embedded_format(
             }
             EmbeddedFormatResult::Unchanged { .. } => {}
             EmbeddedFormatResult::Unavailable { message, .. } => notices.push(notice(
-                "citry.format.provider-unavailable",
+                FORMAT_PROVIDER_UNAVAILABLE,
                 message,
                 &request.id,
                 Some(request.language),

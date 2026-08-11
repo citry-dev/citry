@@ -4,6 +4,72 @@
 
 ### Added
 
+- Added the production server foundation for Citry i18n. Components can define
+  inline or file-backed Fluent messages, use typed `tr()` and `fmt` helpers,
+  inherit locale context through `<c-i18n>`, and place application-owned fills
+  through `<c-trans>`. The built-in extension now links component and
+  standalone-package catalogs with locale-major fallback, exposes checked
+  ICU4X number, currency, date, relative-time, and list profiles, and provides
+  extract, check, compile, and inspect commands. Localized caches vary through
+  ordinary `Cache.vary()` values. Browser-side locale switching remains a
+  separate stage and `client=True` fails clearly until it ships. Locale contexts
+  enter a component tree explicitly through root `render(provides=...)` data or
+  a subtree `<c-i18n>` provider.
+  Compiled interfaces retain parameter descriptions and source spans, and
+  `citry check` validates literal attributes, typed arguments, rich values and
+  fills, client-message outputs, and cross-language plain-text fallback.
+- Added explicit root provide values through `CitryElement.render(provides=...)`
+  and `LibraryComponentInvocation.render(provides=...)`. Components may pass an
+  existing value unchanged with `provide(key, value)`, while the keyword-field
+  form keeps producing an immutable attribute payload.
+- Added portable browser-expression and strict JSON-wire analysis for editor
+  integrations. `citry check` now warns about source-proven `JsData` fields
+  that cannot cross the JSON wire, reports unknown Alpine variables, validates
+  direct `$c-props` keys and required child props, and checks literal server
+  handlers used by `sendEvent()`, `$sendEvent()`, `$loading()`, `$error()`, or
+  declarative `@c-*` bindings. Dynamic handler names and `onEvent()` remain
+  open. Inferred `js_data()` dictionary values read directly from its kwargs
+  parameter now use the matching effective `Kwargs` field type.
+- Added strict component-JavaScript initializer linting. Free names inside a
+  proven `$component` callback or configuration `init` function are errors by
+  default, including context values used without destructuring. Applications
+  and inheritable `Component.Lint` declarations can select warning or ignore
+  severity and declare typed host-provided globals.
+- Added automatic instance-local `js_data()` seeding for component Alpine
+  scopes. Top-level JSON keys are available directly to Alpine expressions,
+  including for components without `$component`; callback components receive
+  the seed before init. Identical payloads stay content-deduplicated on the
+  wire but are parsed into fresh nested graphs per instance. Correlated
+  rerenders refresh and remove server-owned keys while preserving callback-only
+  scope state, and dependency manifests now distinguish `init` from seed-only
+  calls explicitly.
+- Added portable CSS-data analysis under `citry.analysis`. Tooling can infer
+  exact literal custom-property keys from conservative `css_data()` source,
+  locate source-mapped CSS `var(--name)` references and completion positions,
+  and fingerprint direct template, JavaScript, or CSS asset ownership without
+  treating authored asset-body edits as ownership changes.
+- Added `LintSettings` on `Citry` and inheritable `Component.Lint` overrides
+  for the shared `citry.template.unknown-variable` rule. Unknown free template
+  roots are errors by default in registry-backed `citry check` and editor
+  diagnostics; explicit extra-preserving schemas cap them at warning, while
+  warning-only checks still exit successfully. Runtime `template_globals` are
+  known and conservatively typed automatically, and analysis-only variables
+  accept annotations plus optional `Annotated` descriptions. Extensions can
+  publish detached namespace contributions without changing rule severity.
+- Added condition-specific `citry check` codes and concise, user-facing
+  unknown-variable and unknown-component messages while retaining stable
+  machine-readable identifiers.
+- Added analyzer-ready template-expression records and shadow Python builders
+  under `citry.analysis`. Tooling can enumerate every Python-valued template
+  host, retain lexical control-flow context, bind declared or inferred roots,
+  and map generated analysis ranges back to authored template and Python
+  source. Portable class fingerprints let editor integrations revalidate each
+  component's effective template asset after synchronized inheritance or asset
+  declaration edits. Direct literal and `pathlib.Path(...)` declarations have
+  a static runtime-match proof; unbounded dynamic or imported selection is
+  declined. Live schema, template, JavaScript, and CSS body changes do not
+  invalidate ownership. The optional `analysis-ty` extra pins the supported
+  external Python analyzer without adding it to ordinary runtime installations.
 - Added direct `class_` and `style` root inputs to every public Citry UI
   component. Structured values merge with class and style contributions in
   `attrs`.
@@ -170,6 +236,12 @@
 
 ### Fixed
 
+- `citry format` now releases its secured JavaScript and CSS provider
+  executables before removing their private directories, so Windows runs do
+  not leave locked `.citry-biome-*` cache directories behind.
+- Typed `TemplateData` and `Kwargs` fields now retain their authored source and
+  type-aware editor behavior on Python 3.14, including C3-composed schemas and
+  unresolved forward annotations.
 - Direct JavaScript and CSS component literals now accept formatter-added
   final newlines, quotes, escapes, CRLF, and lone-CR output while preserving
   their existing Python quote kind. Provider output is streamed into its

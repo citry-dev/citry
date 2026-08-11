@@ -6,7 +6,13 @@ from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from typing import Protocol
 
-from citry import LspPosition, LspRange, discover_python_templates
+from citry import (
+    LspPosition,
+    LspRange,
+    PythonComponentAssetKind,
+    discover_python_component_assets,
+    discover_python_templates,
+)
 
 
 class TemplateSourceMap(Protocol):
@@ -15,6 +21,8 @@ class TemplateSourceMap(Protocol):
     template_source: str
 
     def map_range(self, start_index: int, end_index: int) -> LspRange: ...
+
+    def range_is_unambiguous(self, start_index: int, end_index: int) -> bool: ...
 
     def parser_index_at(self, position: LspPosition) -> int | None: ...
 
@@ -35,6 +43,26 @@ class RegionDiscovery:
 
     regions: tuple[TemplateRegion, ...]
     valid_python: bool
+
+
+@dataclass(frozen=True, slots=True)
+class CssRegion:
+    """One registry-associated authored CSS source region."""
+
+    key: str
+    component_name: str | None
+    source_map: TemplateSourceMap
+    ast_proven: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class JsRegion:
+    """One registry-associated authored JavaScript source region."""
+
+    key: str
+    component_name: str | None
+    source_map: TemplateSourceMap
+    ast_proven: bool = True
 
 
 class StandaloneTemplateSourceMap:
@@ -61,6 +89,11 @@ class StandaloneTemplateSourceMap:
             _offset_to_lsp(self.template_source, self._line_starts, end),
         )
 
+    def range_is_unambiguous(self, start_index: int, end_index: int) -> bool:
+        """Validate a range and report that a standalone document is contiguous."""
+        self.map_range(start_index, end_index)
+        return True
+
     def parser_index_at(self, position: LspPosition) -> int | None:
         offset = _lsp_to_offset(self.template_source, self._line_starts, position)
         return self._byte_boundaries[offset]
@@ -86,6 +119,72 @@ def discover_python_regions(source: str) -> RegionDiscovery:
         ),
         valid_python=discovery.valid_python,
     )
+
+
+def discover_python_css_regions(source: str) -> tuple[CssRegion, ...]:
+    """Return direct component ``css`` literals from valid Python source."""
+    try:
+        discovery = discover_python_component_assets(source)
+    except (SyntaxError, TypeError, ValueError):
+        return ()
+    return tuple(
+        CssRegion(
+            f"css:{region.component_name}",
+            region.component_name,
+            region.source_map,
+        )
+        for region in discovery.regions
+        if region.kind is PythonComponentAssetKind.CSS
+    )
+
+
+def discover_python_js_regions(source: str) -> tuple[JsRegion, ...]:
+    """Return direct component ``js`` literals from valid Python source."""
+    try:
+        discovery = discover_python_component_assets(source)
+    except (SyntaxError, TypeError, ValueError):
+        return ()
+    return tuple(
+        JsRegion(
+            f"js:{region.component_name}",
+            region.component_name,
+            region.source_map,
+        )
+        for region in discovery.regions
+        if region.kind is PythonComponentAssetKind.JS
+    )
+
+
+def standalone_css_region(source: str) -> CssRegion:
+    """Treat one registry-owned CSS file as its own authored region."""
+    return CssRegion("css:standalone", None, StandaloneTemplateSourceMap(source))
+
+
+def standalone_js_region(source: str) -> JsRegion:
+    """Treat one registry-owned JavaScript file as its authored region."""
+    return JsRegion("js:standalone", None, StandaloneTemplateSourceMap(source))
+
+
+def css_region_at_position(regions: tuple[CssRegion, ...], position: LspPosition) -> CssRegion | None:
+    """Return the authored CSS region containing an LSP position."""
+    for region in regions:
+        try:
+            if region.source_map.parser_index_at(position) is not None:
+                return region
+        except ValueError:
+            continue
+    return None
+
+
+def js_region_at_position(regions: tuple[JsRegion, ...], position: LspPosition) -> JsRegion | None:
+    """Return the authored JavaScript region containing an LSP position."""
+    for region in regions:
+        try:
+            if region.source_map.parser_index_at(position) is not None:
+                return region
+        except ValueError:
+            continue
+    return None
 
 
 def region_at_position(regions: tuple[TemplateRegion, ...], position: LspPosition) -> TemplateRegion | None:
@@ -172,14 +271,22 @@ def _lsp_to_offset(source: str, line_starts: tuple[int, ...], position: LspPosit
 
 
 __all__ = [
+    "CssRegion",
+    "JsRegion",
     "RegionDiscovery",
     "StandaloneTemplateSourceMap",
     "TemplateRegion",
     "TemplateSourceMap",
+    "css_region_at_position",
+    "discover_python_css_regions",
+    "discover_python_js_regions",
     "discover_python_regions",
     "document_offset_at",
     "document_range_for_offsets",
+    "js_region_at_position",
     "parser_char_index",
     "region_at_position",
+    "standalone_css_region",
+    "standalone_js_region",
     "standalone_region",
 ]

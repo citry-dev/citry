@@ -1,0 +1,112 @@
+schema_version: 1
+family: list
+components: [CList, CListItem]
+
+inputs:
+  - id: clist-server-inputs
+    component: CList
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: ordered, name: ordered, type: bool, default: {kind: literal, value: false}, effect: Renders ol instead of ul.}
+      - {id: start, name: start, type: 'int | None', default: {kind: literal, value: null}, effect: Sets native ordered-list numbering start.}
+      - {id: reversed, name: reversed, type: bool, default: {kind: literal, value: false}, effect: Reverses native ordered-list numbering.}
+      - {id: marker, name: marker, type: {display: '"none" | "disc" | "decimal"', interfaces: [CListMarker]}, default: {kind: literal, value: none}, effect: Selects no marker or a semantic unordered/ordered marker.}
+      - {id: density, name: density, type: {display: '"comfortable" | "compact"', interfaces: [CListDensity]}, default: {kind: literal, value: comfortable}, effect: Selects item spacing.}
+      - {id: variant, name: variant, type: {display: '"plain" | "surface"', interfaces: [CListVariant]}, default: {kind: literal, value: plain}, effect: Selects transparent or quiet item surfaces.}
+      - {id: divided, name: divided, type: bool, default: {kind: literal, value: false}, effect: Draws dividers between direct Items.}
+      - {id: label, name: label, type: 'str | None', default: {kind: literal, value: null}, effect: Optionally names the list.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds trusted copied list attributes without replacing semantics, children, or runtime fields.'}
+  - id: clist-item-server-inputs
+    component: CListItem
+    channel: server
+    entries:
+      - {id: href, name: href, type: 'str | None', default: {kind: literal, value: null}, effect: Makes the whole Item a native link; disabled Items render static content.}
+      - {id: action, name: action, type: bool, default: {kind: literal, value: false}, effect: Makes the whole Item a native type=button action; cannot combine with href.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Removes link/action interaction and reflects disabled styling.}
+      - {id: current, name: current, type: bool, default: {kind: literal, value: false}, effect: Emits aria-current=page on an enabled link.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds li classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds li inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied li attributes without replacing Item semantics.}
+      - {id: surface-attrs, name: surface_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied static/link/Button surface attributes without replacing its identity or behavior.}
+
+slots:
+  - id: clist-slots
+    component: CList
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CListDefaultSlotData]}, fallback: None.}
+  - id: clist-item-slots
+    component: CListItem
+    entries:
+      - {id: start, name: start, required: false, data: {display: '{}', interfaces: [CListItemStartSlotData]}, fallback: No leading media.}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CListItemDefaultSlotData]}, fallback: None.}
+      - {id: description, name: description, required: false, data: {display: '{}', interfaces: [CListItemDescriptionSlotData]}, fallback: No supplemental text.}
+      - {id: end, name: end, required: false, data: {display: '{}', interfaces: [CListItemEndSlotData]}, fallback: No trailing metadata or secondary action.}
+
+events: []
+methods: []
+
+css:
+  - id: clist-css-variables
+    component: CList
+    entries:
+      - {id: cui-list-gap, name: --cui-list-gap, type: length, purpose: Gap between direct Items., default: 0.25rem}
+      - {id: cui-list-padding, name: --cui-list-padding, type: length, purpose: Root padding., default: 0.35rem}
+      - {id: cui-list-item-padding, name: --cui-list-item-padding, type: length, purpose: Item surface padding., default: Density-derived.}
+      - {id: cui-list-radius, name: --cui-list-radius, type: length, purpose: Item surface radius., default: 0.65rem}
+      - {id: cui-list-foreground, name: --cui-list-foreground, type: color, purpose: Primary foreground., default: CanvasText}
+      - {id: cui-list-muted, name: --cui-list-muted, type: color, purpose: Description foreground., default: Nested-scheme muted foreground.}
+      - {id: cui-list-background, name: --cui-list-background, type: color, purpose: Root background., default: transparent}
+      - {id: cui-list-hover-background, name: --cui-list-hover-background, type: color, purpose: Interactive hover and surface variant background., default: Nested-scheme quiet surface.}
+      - {id: cui-list-current-background, name: --cui-list-current-background, type: color, purpose: Current-link background., default: Nested-scheme blue surface.}
+      - {id: cui-list-divider-color, name: --cui-list-divider-color, type: color, purpose: Divider color., default: Nested-scheme border color.}
+      - {id: cui-list-marker-color, name: --cui-list-marker-color, type: color, purpose: Marker color., default: currentColor}
+      - {id: cui-list-focus-ring, name: --cui-list-focus-ring, type: color, purpose: Interactive focus outline., default: Highlight}
+
+attributes:
+  - id: clist-attributes
+    component: CList
+    entries:
+      - {id: data-marker, name: data-marker, element: List root, type: '"none" | "disc" | "decimal"', meaning: Marker contract.}
+      - {id: data-density, name: data-density, element: List root, type: '"comfortable" | "compact"', meaning: Spacing density.}
+      - {id: data-variant, name: data-variant, element: List root, type: '"plain" | "surface"', meaning: Surface treatment.}
+      - {id: data-divided, name: data-divided, element: List root, type: present-or-absent, meaning: Present when direct Items have dividers.}
+  - id: clist-item-attributes
+    component: CListItem
+    entries:
+      - {id: data-current, name: data-current, element: li, type: present-or-absent, meaning: Present for the current link.}
+      - {id: data-disabled, name: data-disabled, element: li, type: present-or-absent, meaning: Present when a link becomes static or an action Button is natively disabled.}
+      - {id: data-interactive, name: data-interactive, element: li, type: present-or-absent, meaning: Present when the surface is an enabled link or Button.}
+      - {id: aria-current, name: aria-current, element: Current link, type: '"page"', meaning: Exposes current navigation location.}
+
+selectors:
+  - id: clist-selectors
+    component: CList
+    entries:
+      - {id: data-citry-ui-part-list, selector: '[data-citry-ui-part="list"]', element: ul or ol root, purpose: Stable list and attrs destination.}
+  - id: clist-item-selectors
+    component: CListItem
+    entries:
+      - {id: data-citry-ui-part-list-item, selector: '[data-citry-ui-part="list-item"]', element: li, purpose: Stable Item and attrs destination.}
+      - {id: data-citry-ui-part-surface, selector: '[data-citry-ui-part="surface"]', element: 'div, a, or button', purpose: Stable content/action surface and surface_attrs destination.}
+      - {id: data-citry-ui-part-start, selector: '[data-citry-ui-part="start"]', element: Leading wrapper, purpose: Leading media surface.}
+      - {id: data-citry-ui-part-body, selector: '[data-citry-ui-part="body"]', element: Primary content wrapper, purpose: Primary and description layout surface.}
+      - {id: data-citry-ui-part-description, selector: '[data-citry-ui-part="description"]', element: Supplemental text wrapper, purpose: Muted description surface.}
+      - {id: data-citry-ui-part-end, selector: '[data-citry-ui-part="end"]', element: Trailing wrapper, purpose: Metadata or secondary action surface.}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-list-marker, name: CListMarker, definition: 'Literal["none", "disc", "decimal"]'}
+      - {id: input-type-aliases-list-density, name: CListDensity, definition: 'Literal["comfortable", "compact"]'}
+      - {id: input-type-aliases-list-variant, name: CListVariant, definition: 'Literal["plain", "surface"]'}
+  - {id: clist-default-slot-data, kind: record, name: CListDefaultSlotData, entries: []}
+  - {id: clist-item-default-slot-data, kind: record, name: CListItemDefaultSlotData, entries: []}
+  - {id: clist-item-start-slot-data, kind: record, name: CListItemStartSlotData, entries: []}
+  - {id: clist-item-description-slot-data, kind: record, name: CListItemDescriptionSlotData, entries: []}
+  - {id: clist-item-end-slot-data, kind: record, name: CListItemEndSlotData, entries: []}

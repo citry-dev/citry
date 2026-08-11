@@ -16,6 +16,7 @@ const entries = [
   // import without code splitting would pull the heavy runtime into every page.
   { source: "live_code.js", output: "live_code.js", bundle: false },
   { source: "live_code_runtime.js", output: "live_code_runtime.js", bundle: true },
+  { source: "landing_composer.js", output: "landing_composer.js", bundle: true },
 ];
 
 async function generate(entry) {

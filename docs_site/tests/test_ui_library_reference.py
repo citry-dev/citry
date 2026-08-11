@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from docs_site._internal.config_loading import DocsConfigError
+from docs_site._internal.project import load_docs_project
 from docs_site._internal.ui_library_reference import (
     compose_ui_library_source,
     load_ui_api_reference,
@@ -111,6 +112,16 @@ def _write_reference(tmp_path: Path, source: str | None = None) -> Path:
     path = tmp_path / "api.yml"
     path.write_text(source or _valid_reference(), encoding="utf-8")
     return path
+
+
+def test_every_catalogued_ui_family_has_a_valid_composable_reference() -> None:
+    project = load_docs_project()
+
+    for projection in project.ui_library.projections:
+        source = project.runtime.repo_root / projection.source
+        composed = compose_ui_library_source(source, family=projection.family)
+
+        assert "## API reference" in composed
 
 
 def test_structured_reference_renders_the_fixed_api_shape(tmp_path: Path) -> None:

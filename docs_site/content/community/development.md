@@ -290,8 +290,10 @@ Putting it together, a documented method reads like this:
 
 ```python
 def render(
-    self, *,
-    template_globals: Mapping[str, Any] | None = None
+    self,
+    *,
+    template_globals: Mapping[str, Any] | None = None,
+    provides: Mapping[str, Any] | None = None,
 ) -> CitryRender:
     """
     Render this element to a [`CitryRender`][citry.CitryRender].
@@ -299,6 +301,8 @@ def render(
     Args:
         template_globals: Extra global names to expose to the template
             while it renders.
+        provides: Values the root and its rendered descendants may read
+            with ``inject()``.
 
     Returns:
         The rendered output, ready to serialize to HTML.

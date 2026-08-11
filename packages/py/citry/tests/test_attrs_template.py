@@ -31,7 +31,10 @@ def _html(template, **data):
             return dict(data)
 
     Comp.template = template
-    return _CID_RE.sub("", Comp().render().serialize())
+    # These tests inspect server-side attribute rendering. Some resulting
+    # attributes are real Alpine directives, so explicitly omit the client
+    # ownership/runtime layer rather than making every assertion strip it.
+    return _CID_RE.sub("", Comp().render().serialize(deps_strategy="simple"))
 
 
 class TestBuildingValuesWithExpressions:

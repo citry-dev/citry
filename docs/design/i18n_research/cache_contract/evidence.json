@@ -1,0 +1,53 @@
+{
+  "artifacts": {
+    "cache_design": "1450f3213e59c0818345538b776419b4d0b238f67814804b4a755bbc9bcb5ee3",
+    "cache_extension": "5227cca0c393ed2397b23d7b57cdd738c31e3b6b64cbd887d9eda634be7f0b3f",
+    "cache_keys": "909c72e7e2c11ceab6f26f42e41abec78569b48a5b92fecb8808e35f2ee30dd5",
+    "harness": "fa62c37aadbc2fde2eb566091b9aec1f19891cf996ab4d5a629e85a550214cf4",
+    "i18n_design": "c8f23dbe9f81d945d3f95c38e673beda0bf55bc09655ebddce44c0e8e682c656",
+    "uv_lock": "63f3934cbad55ed0f8d4f9e57beea45f995f4dd62f195ff98481365945941ede"
+  },
+  "environment": {
+    "machine": "arm64",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12"
+  },
+  "render_checks": {
+    "component_cache": {
+      "distinct_locales_did_not_replay": true,
+      "same_semantic_context_replayed": true
+    },
+    "dormant_extension": {
+      "cache_replayed": true,
+      "render_cache_mode": "stateless",
+      "render_cache_version": 1
+    },
+    "explicit_independence_shared": true,
+    "fragment_cache": {
+      "distinct_locales_did_not_replay": true,
+      "same_locale_replayed": true,
+      "unbound_backend_reads": 0
+    },
+    "prelookup_failures": {
+      "missing_token_backend_reads": 0,
+      "missing_token_publications": 0,
+      "stale_token_backend_reads": 0,
+      "stale_token_rejected": true,
+      "unbound_backend_reads": 0
+    },
+    "recording_backend": {
+      "gets": 11,
+      "sets": 6,
+      "unique_get_keys": 6,
+      "unique_set_keys": 6
+    }
+  },
+  "result": "PASS_BOUNDED",
+  "token_checks": {
+    "cross_engine_rejected": true,
+    "forged_token_rejected": true,
+    "output_affecting_fields_produced_distinct_encodings": true,
+    "schema_version": 1,
+    "variant_count": 7
+  }
+}

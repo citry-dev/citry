@@ -79,21 +79,21 @@ contains a Python expression:
 
 Python decides the `class` while rendering the component. Later, Alpine owns
 `open` in the browser and changes it without rendering the component again.
-Python names are not automatically available to Alpine, and Alpine names are
-not automatically available to Python.
+Python template names are not automatically available to Alpine, and Alpine
+names are not automatically available to Python. `js_data()` is the explicit
+way to expose Python-produced browser data.
 
 Do not put `{{ ... }}` inside an Alpine expression. A static attribute keeps
 those braces as literal text. When Alpine needs a starting value from Python,
 pass it deliberately.
 
-## Start Alpine with a Python value
+## Seed Alpine from Python
 
-One option is to prepare a JSON object in Python, then use a dynamic
-`c-x-data` attribute to produce Alpine's ordinary `x-data` attribute:
+Return per-instance browser data from [`js_data()`][citry.Component.js_data].
+Citry seeds every top-level key into this component's Alpine scope before any
+Alpine expression runs:
 
 ```citry
-import json
-
 from citry import Component
 
 
@@ -101,17 +101,18 @@ class Counter(Component):
     class Kwargs:
         start: int = 0
 
-    def template_data(
+    class JsData:
+        count: int
+
+    def js_data(
         self,
         kwargs: Kwargs,
         slots,
-    ) -> dict[str, object]:
-        return {
-            "initial_data": json.dumps({"count": kwargs.start}),
-        }
+    ) -> JsData:
+        return {"count": kwargs.start}
 
     template = """
-      <div c-x-data="initial_data">
+      <div>
         <button type="button" @click="count += 1">
           Add one
         </button>
@@ -120,16 +121,15 @@ class Counter(Component):
     """
 ```
 
-Citry evaluates `initial_data` as Python and renders an `x-data` attribute.
-Alpine then reads the resulting JSON in the browser. Its values must be
-JSON-serializable: strings, numbers, booleans, `None`, lists, and string-keyed
+The returned data must be JSON-serializable: strings, numbers, booleans,
+`None`, lists, and string-keyed
 dictionaries made from those values. Use JavaScript naming in that object,
 such as `itemCount`, even when its Python source is named `item_count`.
 
-For richer per-instance data and component-owned JavaScript, use
-[`js_data()`][citry.Component.js_data] with [`$component`][$component]. The
-[Add browser behavior](/getting-started/browser-interactivity/) tutorial builds
-that path one step at a time.
+Add [`$component`][$component] only when the component also needs JavaScript
+setup, managed effects, client props, or additional callback-owned scope data.
+The [Add browser behavior](/getting-started/browser-interactivity/) tutorial
+builds that path one step at a time.
 
 ## Keep Alpine data inside its component
 
@@ -197,6 +197,13 @@ The [Browser APIs reference](/reference/browser-apis/#alpine-magics) gives the
 exact contract for each name. Continue to
 [Client interactivity](/concepts/client-interactivity/) for component-owned
 JavaScript, reactive client props, handlers, and lifecycle.
+
+When the Citry language server knows the owning component, it treats unknown
+free Alpine variables as errors by default. Names from `JsData`, `x-data`, an
+enclosing `x-for`, synchronous `$component` scope writes, Alpine/Citry magics,
+browser globals, and configured lint-only variables are included
+automatically. The application or component lint policy can reduce unknown
+names to warnings or ignore them for a deliberately open integration.
 
 ## TODO - Alpine attrs on Component
 Not only event handlers, and our `$c-props`.

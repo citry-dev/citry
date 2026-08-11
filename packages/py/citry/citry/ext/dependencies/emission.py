@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, replace
 from functools import cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypeAlias
+from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 from citry.assets import HasHtml
 from citry.ext.dependencies.routes import runtime_url, script_url
@@ -49,9 +49,11 @@ if TYPE_CHECKING:
     from citry.ext.dependencies.types import DependencyRecord
     from citry.extension import OnSerializeContext
 
-# One "run this instance's $component callback" entry for the client-side
-# manager: (class_id, component_id, js_vars_hash or None).
-_ComponentCall: TypeAlias = tuple[str, str, "str | None"]
+# One per-instance client call: initialize `$component` after seeding, or only
+# seed the instance's Alpine scope. The explicit mode keeps script arrival
+# order from changing semantics.
+_CallMode: TypeAlias = Literal["init", "seed"]
+_ComponentCall: TypeAlias = tuple[str, str, "str | None", _CallMode]
 
 # The key under which the extension keeps its records in CitryContext.extra.
 EXTRA_KEY = "dependencies"
@@ -141,7 +143,14 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
     # CSS variables are pure CSS (a stylesheet plus a root-element marker)
     # and work under both.
     with_client_js = ctx.deps_strategy == "document"
-    resolved = _resolve_records(citry, records, with_client_js=with_client_js)
+    ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
+    scope_seed_instances = ownership.scope_seed_instances if isinstance(ownership, OwnershipManifestArtifact) else ()
+    resolved = _resolve_records(
+        citry,
+        records,
+        with_client_js=with_client_js,
+        scope_seed_instances=scope_seed_instances,
+    )
     scripts, styles, calls = resolved.scripts, resolved.styles, resolved.calls
 
     # The extension-owned custom hook: other extensions adjust the lists in
@@ -159,7 +168,6 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
     )
     citry.extensions.emit("on_dependencies", hook_ctx)
     scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
-    ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
     graph_revision: str | None = None
     if isinstance(ownership, OwnershipManifestArtifact):
         graph_revision = ownership.revision
@@ -234,10 +242,10 @@ class _Resolved:
     mark_js_urls: list[str]
     mark_css_urls: list[str]
     # (class_id, component_id) of instances whose class has Component.css but
-    # no $component callback. Nothing else registers such an instance with
-    # the client-side manager, so the manifest declares it present and the
-    # manager can count the class's live instances for the Component.css
-    # cleanup (docs/design/dependencies.md 8.4).
+    # no component call. Nothing else registers such an instance with the
+    # client-side manager, so the manifest declares it present and the manager
+    # can count the class's live instances for Component.css cleanup
+    # (docs/design/dependencies.md 8.4).
     css_instances: list[tuple[str, str]]
     # Fragment fetch descriptors are deduplicated across component instances,
     # but adoption still needs to know which incoming branches requested one.
@@ -253,6 +261,7 @@ def _resolve_records(
     *,
     with_client_js: bool,
     as_urls: bool = False,
+    scope_seed_instances: tuple[tuple[str, str], ...] = (),
 ) -> _Resolved:
     """
     Turn the collected records into the ``scripts`` / ``styles`` lists plus
@@ -292,6 +301,8 @@ def _resolve_records(
     component_js: list[Dependency] = []
     component_css: list[Dependency] = []
     calls: list[_ComponentCall] = []
+    called_ids: set[str] = set()
+    scope_seed_by_id = {render_id: class_id for class_id, render_id in scope_seed_instances}
     mark_js_urls: list[str] = []
     mark_css_urls: list[str] = []
     css_instances: list[tuple[str, str]] = []
@@ -314,6 +325,10 @@ def _resolve_records(
         # rendered this record; the fallback keeps manually constructed and
         # older records compatible.
         comp_cls = record.component_class or citry.get_component_by_class_id(record.class_id)
+        expected_seed_class = scope_seed_by_id.get(record.component_id)
+        if expected_seed_class is not None and expected_seed_class != record.class_id:
+            msg = f"Scope-seed instance {record.component_id!r} changed component class during serialization."
+            raise RuntimeError(msg)
 
         cached = class_deps.get(comp_cls)
         if cached is None:
@@ -378,6 +393,11 @@ def _resolve_records(
             class_deps[comp_cls] = cached
 
         cls_scripts, cls_styles, cls_mark_js, cls_mark_css, cls_uses_oncomp, cls_css_presence = cached
+        call_mode: _CallMode | None = None
+        if cls_uses_oncomp:
+            call_mode = "init"
+        elif with_client_js and record.component_id in scope_seed_by_id:
+            call_mode = "seed"
         # Copy the class lists so the per-instance scripts below (and any
         # on_dependencies edit) never mutate the cached entry.
         instance_scripts: list[Dependency] = list(cls_scripts)
@@ -391,7 +411,7 @@ def _resolve_records(
         # Unlike class scripts these cannot be rebuilt on a cache miss (the
         # data existed only during the render), so a missing entry is
         # skipped; a shared cache backend prevents this across processes.
-        if with_client_js and record.js_vars_hash is not None:
+        if call_mode is not None and record.js_vars_hash is not None:
             if as_urls:
                 instance_scripts.append(
                     Script(
@@ -422,9 +442,10 @@ def _resolve_records(
                     if mounted:
                         mark_css_urls.append(script_url(comp_cls, "css", record.css_vars_hash))
 
-        if cls_uses_oncomp:
-            calls.append((record.class_id, record.component_id, record.js_vars_hash))
-        if cls_css_presence:
+        if call_mode is not None:
+            calls.append((record.class_id, record.component_id, record.js_vars_hash, call_mode))
+            called_ids.add(record.component_id)
+        if cls_css_presence and call_mode is None:
             css_instances.append((record.class_id, record.component_id))
 
         # Per-component hook: adjust this instance's lists before they join
@@ -439,6 +460,17 @@ def _resolve_records(
         for style in instance_styles:
             _bucket(style, core_css, extra_css, component_css)
             style_owner_groups.setdefault(style, set()).add(record.component_id)
+
+    # A component with direct Alpine expressions needs a lifecycle and an
+    # empty seed call even when it declares no assets and returns no JsData.
+    # Such an instance has no dependency record, so add it from the settled
+    # ownership artifact after record-backed calls have claimed their hashes.
+    if with_client_js:
+        for class_id, component_id in scope_seed_instances:
+            if component_id in called_ids:
+                continue
+            calls.append((class_id, component_id, None, "seed"))
+            called_ids.add(component_id)
 
     deduped_scripts = list(dict.fromkeys([*core_js, *extra_js, *component_js]))
     deduped_styles = list(dict.fromkeys([*core_css, *extra_css, *component_css]))
@@ -561,8 +593,8 @@ def _build_manifest(
             "css": encode_fetch(fetch_css, fetch_css_owners),
         },
         "calls": [
-            [_b64(class_id), _b64(component_id), None if vars_hash is None else _b64(vars_hash)]
-            for class_id, component_id, vars_hash in calls
+            [_b64(class_id), _b64(component_id), None if vars_hash is None else _b64(vars_hash), mode]
+            for class_id, component_id, vars_hash, mode in calls
         ],
         "cssInstances": [[_b64(class_id), _b64(component_id)] for class_id, component_id in css_instances],
         "graph": graph_revision,
@@ -597,10 +629,18 @@ def _emit_fragment(
         " citry.contrib.fastapi.mount(app, citry_instance)), or use"
         " set_mounted_prefix() in processes that only render."
     )
-    if records:
+    ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
+    scope_seed_instances = ownership.scope_seed_instances if isinstance(ownership, OwnershipManifestArtifact) else ()
+    if records or scope_seed_instances:
         if citry.mounted_prefix is None:
             raise RuntimeError(fragment_needs_mount_msg)
-        resolved = _resolve_records(citry, records, with_client_js=True, as_urls=True)
+        resolved = _resolve_records(
+            citry,
+            records,
+            with_client_js=True,
+            as_urls=True,
+            scope_seed_instances=scope_seed_instances,
+        )
     else:
         resolved = _Resolved(
             scripts=[],
@@ -624,7 +664,6 @@ def _emit_fragment(
     )
     citry.extensions.emit("on_dependencies", hook_ctx)
     scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
-    ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
     graph_revision: str | None = None
     ownership_tag: Dependency | None = None
     if isinstance(ownership, OwnershipManifestArtifact):

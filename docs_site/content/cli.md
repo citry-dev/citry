@@ -82,7 +82,10 @@ This checks the authored inline and file templates of every registered
 application component. It applies the component declarations from `Kwargs` and
 `Slots`, including required inputs and typed slot data, and reports component
 tags the complete registry does not know. Built-in component names and
-registered aliases are included in that lookup.
+registered aliases are included in that lookup. It also applies the
+application's [template lint policy](/ide/template-linting/) to free root
+variables. Runtime `template_globals` and declared analysis-only variables are
+known automatically.
 
 When importing project code is intentionally unavailable, select the limited
 static mode explicitly:
@@ -119,8 +122,8 @@ diagnostic work described in the IDE integration design.
 
 The exit status is:
 
-- `0` when every checked template passes
-- `1` when a template or source asset has a diagnostic
+- `0` when no error is present, including a warning-only report
+- `1` when a template or source asset has an error
 - `2` for a missing or conflicting mode, or when explicit app selection or
   discovery fails after syntax-only fallback finishes
 

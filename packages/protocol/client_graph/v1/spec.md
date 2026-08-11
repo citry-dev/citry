@@ -118,8 +118,9 @@ practical terms, the component's template or JavaScript uses a Citry feature
 that needs extra server-to-browser relationship data. Examples include setup
 registered with `$component`, Events or State, bindings passed through a nested
 `<c-*>` tag, Citry expressions that refer to the current component, and Alpine
-directives inside a template-authored slot fill. Ordinary Alpine markup can
-work without Citry component identity, so an `x-*` attribute alone does not
+directives that consume the component's `js_data()` or appear inside a
+template-authored slot fill. Ordinary Alpine markup can work without Citry
+component identity, so an `x-*` attribute alone does not
 always make a component client-active.
 
 Citry may also mark related components as client-active. For example, a client

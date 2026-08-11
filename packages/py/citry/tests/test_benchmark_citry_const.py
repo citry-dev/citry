@@ -2523,7 +2523,13 @@ class TabItem(Component):
         result, error = yield
         if error is not None:
             return None
-        content = Markup(str(result).strip()) if result is not None else Markup("")
+        # This benchmark's synthetic Tabs API intentionally flattens child
+        # ownership into stored markup. Explicitly omit dependencies while
+        # doing so; client-active render ownership cannot survive string
+        # capture and is exercised by the dedicated browser suites instead.
+        content = (
+            Markup(result.serialize(deps_strategy="ignore").strip()) if result is not None else Markup("")
+        )
         self._parent_tabs.append(TabEntry(header=self._header, content=content, disabled=self._disabled))
         return None
 

@@ -1,0 +1,1356 @@
+{
+  "bounded_conclusion": {
+    "backend_ratified": false,
+    "fluent_compiler_linker": "viable"
+  },
+  "cases": [
+    {
+      "active_locale": "cs-CZ",
+      "args": {
+        "name": "Ada",
+        "terms_link": "__CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__"
+      },
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-41340385ada7",
+      "name": "account_cs",
+      "output": "citry-ui-account"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {
+        "name": "Ada",
+        "terms_link": "__CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__"
+      },
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-173dd4ba05b0",
+      "name": "account_en",
+      "output": "citry-ui-account"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {
+        "name": "Ada"
+      },
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-6023dc6a86a3",
+      "name": "account_aria_cs",
+      "output": "citry-ui-account.aria-label"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {
+        "name": "Ada",
+        "terms_link": "__CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__"
+      },
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-6a4a748b5ce1",
+      "name": "wrapper_cs",
+      "output": "my-app-wrapper"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {
+        "name": "Ada",
+        "terms_link": "__CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__"
+      },
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-7b61beb3baaa",
+      "name": "wrapper_en",
+      "output": "my-app-wrapper"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {},
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-ff3f81058539",
+      "name": "reference_candidate_fallback",
+      "output": "citry-ui-ref-wrapper"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {},
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-f731d86dcc89",
+      "name": "library_source_fallback",
+      "output": "citry-ui-fallback-only"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {},
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-42a604292384",
+      "name": "application_source_fallback",
+      "output": "my-app-fallback-only"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {
+        "count": 0
+      },
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-62197de7798c",
+      "name": "count_cs_0",
+      "output": "citry-ui-count"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {
+        "count": 1
+      },
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-62197de7798c",
+      "name": "count_cs_1",
+      "output": "citry-ui-count"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {
+        "count": 2
+      },
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-62197de7798c",
+      "name": "count_cs_2",
+      "output": "citry-ui-count"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {
+        "count": 2.5
+      },
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-62197de7798c",
+      "name": "count_cs_2_5",
+      "output": "citry-ui-count"
+    },
+    {
+      "active_locale": "cs-CZ",
+      "args": {
+        "count": 5
+      },
+      "bundle_locale": "cs-CZ",
+      "internal_id": "cmsg-62197de7798c",
+      "name": "count_cs_5",
+      "output": "citry-ui-count"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {
+        "position": 1
+      },
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-31003afe87a1",
+      "name": "ordinal_en_1",
+      "output": "my-app-ordinal"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {
+        "position": 2
+      },
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-31003afe87a1",
+      "name": "ordinal_en_2",
+      "output": "my-app-ordinal"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {
+        "position": 3
+      },
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-31003afe87a1",
+      "name": "ordinal_en_3",
+      "output": "my-app-ordinal"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {
+        "position": 4
+      },
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-31003afe87a1",
+      "name": "ordinal_en_4",
+      "output": "my-app-ordinal"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {
+        "position": 11
+      },
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-31003afe87a1",
+      "name": "ordinal_en_11",
+      "output": "my-app-ordinal"
+    },
+    {
+      "active_locale": "en-US",
+      "args": {
+        "position": 21
+      },
+      "bundle_locale": "en-US",
+      "internal_id": "cmsg-31003afe87a1",
+      "name": "ordinal_en_21",
+      "output": "my-app-ordinal"
+    }
+  ],
+  "compiled": {
+    "artifacts": {
+      "cs-CZ": "-cterm-aab36c9d4e20 = APPLICATION-CS\ncmsg-1a326155f34e = { CITRY_TEXT($name) } přijal(a) { SLOT($terms_link) }; podrobnosti: { SLOT($terms_link) }.\ncmsg-41340385ada7 = { -cterm-aab36c9d4e20 }: { cmsg-1a326155f34e }\ncmsg-42a604292384 = APP CS SOURCE FALLBACK\ncmsg-6023dc6a86a3 = Akce účtu pro { CITRY_TEXT($name) }\ncmsg-62197de7798c =\n    { CITRY_PLURAL($count, exact: \"0\") ->\n        [exact-0] Žádné položky\n        [one] Jedna položka\n        [few] { NUMBER($count, profile: \"integer\") } položky\n        [many] { NUMBER($count, profile: \"decimal\") } položky\n       *[other] { NUMBER($count, profile: \"integer\") } položek\n    }\ncmsg-6a4a748b5ce1 = Aplikace: { cmsg-1a326155f34e }\ncmsg-c7bad6e49292 =\n    { CITRY_PLURAL($position, mode: \"ordinal\") ->\n       *[other] Pozice { NUMBER($position, profile: \"integer\") }\n    }\n",
+      "en-US": "-cterm-6342018ff502 = APPLICATION-EN\ncmsg-173dd4ba05b0 = { -cterm-6342018ff502 }: { cmsg-e1f328df89b3 }\ncmsg-31003afe87a1 =\n    { CITRY_PLURAL($position, mode: \"ordinal\") ->\n        [one] { NUMBER($position, profile: \"integer\") }st\n        [two] { NUMBER($position, profile: \"integer\") }nd\n        [few] { NUMBER($position, profile: \"integer\") }rd\n       *[other] { NUMBER($position, profile: \"integer\") }th\n    }\ncmsg-4b1c718c918d = Account actions for { CITRY_TEXT($name) }\ncmsg-7b61beb3baaa = Application: { cmsg-e1f328df89b3 }\ncmsg-9ed044fe8ebf =\n    { CITRY_PLURAL($count, exact: \"0\") ->\n        [exact-0] No items\n        [one] One item\n       *[other] { NUMBER($count, profile: \"integer\") } items\n    }\ncmsg-dcfc44154258 = library target\ncmsg-e1f328df89b3 = { CITRY_TEXT($name) } accepted { SLOT($terms_link) }; details: { SLOT($terms_link) }.\ncmsg-f731d86dcc89 = LIBRARY SOURCE FALLBACK\ncmsg-ff3f81058539 = English wrapper: { cmsg-dcfc44154258 }\n"
+    },
+    "manifest": {
+      "cs-CZ": {
+        "citry-ui-account": {
+          "bundle_locale": "cs-CZ",
+          "contract": {
+            "name": "str",
+            "terms_link": "Slot"
+          },
+          "internal_id": "cmsg-41340385ada7",
+          "owner": "citry_ui",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 672,
+            "file": "fixtures/application/cs-CZ.ftl",
+            "line": 16,
+            "start": 469
+          }
+        },
+        "citry-ui-account.aria-label": {
+          "bundle_locale": "cs-CZ",
+          "contract": {
+            "name": "str"
+          },
+          "internal_id": "cmsg-6023dc6a86a3",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 130,
+            "file": "fixtures/citry_ui/cs-CZ.ftl",
+            "line": 3,
+            "start": 22
+          }
+        },
+        "citry-ui-count": {
+          "bundle_locale": "cs-CZ",
+          "contract": {
+            "count": "int"
+          },
+          "internal_id": "cmsg-62197de7798c",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 382,
+            "file": "fixtures/citry_ui/cs-CZ.ftl",
+            "line": 6,
+            "start": 132
+          }
+        },
+        "citry-ui-fallback-only": {
+          "bundle_locale": "en-US",
+          "contract": {},
+          "internal_id": "cmsg-f731d86dcc89",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 456,
+            "file": "fixtures/citry_ui/en-US.ftl",
+            "line": 15,
+            "start": 408
+          }
+        },
+        "citry-ui-ref-target": {
+          "bundle_locale": "en-US",
+          "contract": {},
+          "internal_id": "cmsg-dcfc44154258",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 493,
+            "file": "fixtures/citry_ui/en-US.ftl",
+            "line": 16,
+            "start": 457
+          }
+        },
+        "citry-ui-ref-wrapper": {
+          "bundle_locale": "en-US",
+          "contract": {},
+          "internal_id": "cmsg-ff3f81058539",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 557,
+            "file": "fixtures/citry_ui/en-US.ftl",
+            "line": 17,
+            "start": 494
+          }
+        },
+        "my-app-fallback-only": {
+          "bundle_locale": "cs-CZ",
+          "contract": {},
+          "internal_id": "cmsg-42a604292384",
+          "owner": "my_app",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 467,
+            "file": "fixtures/application/cs-CZ.ftl",
+            "line": 14,
+            "start": 422
+          }
+        },
+        "my-app-ordinal": {
+          "bundle_locale": "cs-CZ",
+          "contract": {
+            "position": "int"
+          },
+          "internal_id": "cmsg-c7bad6e49292",
+          "owner": "my_app",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 420,
+            "file": "fixtures/application/cs-CZ.ftl",
+            "line": 9,
+            "start": 254
+          }
+        },
+        "my-app-target": {
+          "bundle_locale": "cs-CZ",
+          "contract": {
+            "name": "str",
+            "terms_link": "Slot"
+          },
+          "internal_id": "cmsg-1a326155f34e",
+          "owner": "my_app",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 206,
+            "file": "fixtures/application/cs-CZ.ftl",
+            "line": 3,
+            "start": 26
+          }
+        },
+        "my-app-wrapper": {
+          "bundle_locale": "cs-CZ",
+          "contract": {
+            "name": "str",
+            "terms_link": "Slot"
+          },
+          "internal_id": "cmsg-6a4a748b5ce1",
+          "owner": "my_app",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 252,
+            "file": "fixtures/application/cs-CZ.ftl",
+            "line": 7,
+            "start": 208
+          }
+        }
+      },
+      "en-US": {
+        "citry-ui-account": {
+          "bundle_locale": "en-US",
+          "contract": {
+            "name": "str",
+            "terms_link": "Slot"
+          },
+          "internal_id": "cmsg-173dd4ba05b0",
+          "owner": "citry_ui",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 479,
+            "file": "fixtures/application/en-US.ftl",
+            "line": 12,
+            "start": 430
+          }
+        },
+        "citry-ui-account.aria-label": {
+          "bundle_locale": "en-US",
+          "contract": {
+            "name": "str"
+          },
+          "internal_id": "cmsg-4b1c718c918d",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 234,
+            "file": "fixtures/citry_ui/en-US.ftl",
+            "line": 3,
+            "start": 22
+          }
+        },
+        "citry-ui-count": {
+          "bundle_locale": "en-US",
+          "contract": {
+            "count": "int"
+          },
+          "internal_id": "cmsg-9ed044fe8ebf",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 406,
+            "file": "fixtures/citry_ui/en-US.ftl",
+            "line": 8,
+            "start": 236
+          }
+        },
+        "citry-ui-fallback-only": {
+          "bundle_locale": "en-US",
+          "contract": {},
+          "internal_id": "cmsg-f731d86dcc89",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 456,
+            "file": "fixtures/citry_ui/en-US.ftl",
+            "line": 15,
+            "start": 408
+          }
+        },
+        "citry-ui-ref-target": {
+          "bundle_locale": "en-US",
+          "contract": {},
+          "internal_id": "cmsg-dcfc44154258",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 493,
+            "file": "fixtures/citry_ui/en-US.ftl",
+            "line": 16,
+            "start": 457
+          }
+        },
+        "citry-ui-ref-wrapper": {
+          "bundle_locale": "en-US",
+          "contract": {},
+          "internal_id": "cmsg-ff3f81058539",
+          "owner": "citry_ui",
+          "selected_layer": "citry_ui",
+          "selected_source": {
+            "column": 1,
+            "end": 557,
+            "file": "fixtures/citry_ui/en-US.ftl",
+            "line": 17,
+            "start": 494
+          }
+        },
+        "my-app-fallback-only": {
+          "bundle_locale": "cs-CZ",
+          "contract": {},
+          "internal_id": "cmsg-42a604292384",
+          "owner": "my_app",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 467,
+            "file": "fixtures/application/cs-CZ.ftl",
+            "line": 14,
+            "start": 422
+          }
+        },
+        "my-app-ordinal": {
+          "bundle_locale": "en-US",
+          "contract": {
+            "position": "int"
+          },
+          "internal_id": "cmsg-31003afe87a1",
+          "owner": "my_app",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 428,
+            "file": "fixtures/application/en-US.ftl",
+            "line": 5,
+            "start": 152
+          }
+        },
+        "my-app-target": {
+          "bundle_locale": "en-US",
+          "contract": {
+            "name": "str",
+            "terms_link": "Slot"
+          },
+          "internal_id": "cmsg-e1f328df89b3",
+          "owner": "my_app",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 103,
+            "file": "fixtures/application/en-US.ftl",
+            "line": 3,
+            "start": 26
+          }
+        },
+        "my-app-wrapper": {
+          "bundle_locale": "en-US",
+          "contract": {
+            "name": "str",
+            "terms_link": "Slot"
+          },
+          "internal_id": "cmsg-7b61beb3baaa",
+          "owner": "my_app",
+          "selected_layer": "application",
+          "selected_source": {
+            "column": 1,
+            "end": 151,
+            "file": "fixtures/application/en-US.ftl",
+            "line": 4,
+            "start": 104
+          }
+        }
+      }
+    },
+    "source_maps": [
+      {
+        "authored": {
+          "column": 19,
+          "end": 147,
+          "file": "fixtures/application/cs-CZ.ftl",
+          "line": 5,
+          "start": 142
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "name",
+        "generated": {
+          "column": 23,
+          "end": 76,
+          "line": 2,
+          "start": 59
+        },
+        "internal_id": "cmsg-1a326155f34e",
+        "kind": "scalar"
+      },
+      {
+        "authored": {
+          "column": 39,
+          "end": 173,
+          "file": "fixtures/application/cs-CZ.ftl",
+          "line": 5,
+          "start": 162
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "terms_link",
+        "generated": {
+          "column": 55,
+          "end": 108,
+          "line": 2,
+          "start": 91
+        },
+        "internal_id": "cmsg-1a326155f34e",
+        "kind": "slot"
+      },
+      {
+        "authored": {
+          "column": 69,
+          "end": 203,
+          "file": "fixtures/application/cs-CZ.ftl",
+          "line": 5,
+          "start": 192
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "terms_link",
+        "generated": {
+          "column": 91,
+          "end": 144,
+          "line": 2,
+          "start": 127
+        },
+        "internal_id": "cmsg-1a326155f34e",
+        "kind": "slot"
+      },
+      {
+        "authored": {
+          "column": 22,
+          "end": 651,
+          "file": "fixtures/application/cs-CZ.ftl",
+          "line": 18,
+          "start": 644
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "-shared",
+        "generated": {
+          "column": 23,
+          "end": 189,
+          "line": 3,
+          "start": 170
+        },
+        "internal_id": "cmsg-41340385ada7",
+        "kind": "private-term"
+      },
+      {
+        "authored": {
+          "column": 35,
+          "end": 670,
+          "file": "fixtures/application/cs-CZ.ftl",
+          "line": 18,
+          "start": 657
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "my-app-target",
+        "generated": {
+          "column": 48,
+          "end": 212,
+          "line": 3,
+          "start": 195
+        },
+        "internal_id": "cmsg-41340385ada7",
+        "kind": "public-reference"
+      },
+      {
+        "authored": {
+          "column": 35,
+          "end": 128,
+          "file": "fixtures/citry_ui/cs-CZ.ftl",
+          "line": 4,
+          "start": 123
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "name",
+        "generated": {
+          "column": 37,
+          "end": 311,
+          "line": 5,
+          "start": 294
+        },
+        "internal_id": "cmsg-6023dc6a86a3",
+        "kind": "scalar"
+      },
+      {
+        "authored": {
+          "column": 20,
+          "end": 157,
+          "file": "fixtures/citry_ui/cs-CZ.ftl",
+          "line": 6,
+          "start": 151
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "0",
+        "generated": {
+          "column": 7,
+          "end": 372,
+          "line": 7,
+          "start": 340
+        },
+        "internal_id": "cmsg-62197de7798c",
+        "kind": "plural-selector"
+      },
+      {
+        "authored": {
+          "column": 13,
+          "end": 253,
+          "file": "fixtures/citry_ui/cs-CZ.ftl",
+          "line": 9,
+          "start": 219
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "integer",
+        "generated": {
+          "column": 17,
+          "end": 486,
+          "line": 10,
+          "start": 452
+        },
+        "internal_id": "cmsg-62197de7798c",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 14,
+          "end": 311,
+          "file": "fixtures/citry_ui/cs-CZ.ftl",
+          "line": 10,
+          "start": 277
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "decimal",
+        "generated": {
+          "column": 18,
+          "end": 548,
+          "line": 11,
+          "start": 514
+        },
+        "internal_id": "cmsg-62197de7798c",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 15,
+          "end": 370,
+          "file": "fixtures/citry_ui/cs-CZ.ftl",
+          "line": 11,
+          "start": 336
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "integer",
+        "generated": {
+          "column": 19,
+          "end": 611,
+          "line": 12,
+          "start": 577
+        },
+        "internal_id": "cmsg-62197de7798c",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 30,
+          "end": 250,
+          "file": "fixtures/application/cs-CZ.ftl",
+          "line": 7,
+          "start": 237
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "my-app-target",
+        "generated": {
+          "column": 33,
+          "end": 677,
+          "line": 14,
+          "start": 660
+        },
+        "internal_id": "cmsg-6a4a748b5ce1",
+        "kind": "public-reference"
+      },
+      {
+        "authored": {
+          "column": 20,
+          "end": 354,
+          "file": "fixtures/application/cs-CZ.ftl",
+          "line": 10,
+          "start": 320
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": null,
+        "generated": {
+          "column": 7,
+          "end": 746,
+          "line": 16,
+          "start": 706
+        },
+        "internal_id": "cmsg-c7bad6e49292",
+        "kind": "ordinal-selector"
+      },
+      {
+        "authored": {
+          "column": 22,
+          "end": 416,
+          "file": "fixtures/application/cs-CZ.ftl",
+          "line": 11,
+          "start": 379
+        },
+        "bundle_locale": "cs-CZ",
+        "detail": "integer",
+        "generated": {
+          "column": 26,
+          "end": 812,
+          "line": 17,
+          "start": 775
+        },
+        "internal_id": "cmsg-c7bad6e49292",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 22,
+          "end": 458,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 12,
+          "start": 451
+        },
+        "bundle_locale": "en-US",
+        "detail": "-shared",
+        "generated": {
+          "column": 23,
+          "end": 78,
+          "line": 2,
+          "start": 59
+        },
+        "internal_id": "cmsg-173dd4ba05b0",
+        "kind": "private-term"
+      },
+      {
+        "authored": {
+          "column": 35,
+          "end": 477,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 12,
+          "start": 464
+        },
+        "bundle_locale": "en-US",
+        "detail": "my-app-target",
+        "generated": {
+          "column": 48,
+          "end": 101,
+          "line": 2,
+          "start": 84
+        },
+        "internal_id": "cmsg-173dd4ba05b0",
+        "kind": "public-reference"
+      },
+      {
+        "authored": {
+          "column": 20,
+          "end": 205,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 5,
+          "start": 171
+        },
+        "bundle_locale": "en-US",
+        "detail": null,
+        "generated": {
+          "column": 7,
+          "end": 170,
+          "line": 4,
+          "start": 130
+        },
+        "internal_id": "cmsg-31003afe87a1",
+        "kind": "ordinal-selector"
+      },
+      {
+        "authored": {
+          "column": 13,
+          "end": 258,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 6,
+          "start": 221
+        },
+        "bundle_locale": "en-US",
+        "detail": "integer",
+        "generated": {
+          "column": 17,
+          "end": 227,
+          "line": 5,
+          "start": 190
+        },
+        "internal_id": "cmsg-31003afe87a1",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 13,
+          "end": 312,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 7,
+          "start": 275
+        },
+        "bundle_locale": "en-US",
+        "detail": "integer",
+        "generated": {
+          "column": 17,
+          "end": 285,
+          "line": 6,
+          "start": 248
+        },
+        "internal_id": "cmsg-31003afe87a1",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 13,
+          "end": 366,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 8,
+          "start": 329
+        },
+        "bundle_locale": "en-US",
+        "detail": "integer",
+        "generated": {
+          "column": 17,
+          "end": 343,
+          "line": 7,
+          "start": 306
+        },
+        "internal_id": "cmsg-31003afe87a1",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 15,
+          "end": 422,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 9,
+          "start": 385
+        },
+        "bundle_locale": "en-US",
+        "detail": "integer",
+        "generated": {
+          "column": 19,
+          "end": 403,
+          "line": 8,
+          "start": 366
+        },
+        "internal_id": "cmsg-31003afe87a1",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 41,
+          "end": 232,
+          "file": "fixtures/citry_ui/en-US.ftl",
+          "line": 6,
+          "start": 227
+        },
+        "bundle_locale": "en-US",
+        "detail": "name",
+        "generated": {
+          "column": 43,
+          "end": 473,
+          "line": 10,
+          "start": 456
+        },
+        "internal_id": "cmsg-4b1c718c918d",
+        "kind": "scalar"
+      },
+      {
+        "authored": {
+          "column": 33,
+          "end": 149,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 4,
+          "start": 136
+        },
+        "bundle_locale": "en-US",
+        "detail": "my-app-target",
+        "generated": {
+          "column": 36,
+          "end": 528,
+          "line": 11,
+          "start": 511
+        },
+        "internal_id": "cmsg-7b61beb3baaa",
+        "kind": "public-reference"
+      },
+      {
+        "authored": {
+          "column": 20,
+          "end": 308,
+          "file": "fixtures/citry_ui/en-US.ftl",
+          "line": 9,
+          "start": 302
+        },
+        "bundle_locale": "en-US",
+        "detail": "0",
+        "generated": {
+          "column": 7,
+          "end": 589,
+          "line": 13,
+          "start": 557
+        },
+        "internal_id": "cmsg-9ed044fe8ebf",
+        "kind": "plural-selector"
+      },
+      {
+        "authored": {
+          "column": 15,
+          "end": 396,
+          "file": "fixtures/citry_ui/en-US.ftl",
+          "line": 12,
+          "start": 362
+        },
+        "bundle_locale": "en-US",
+        "detail": "integer",
+        "generated": {
+          "column": 19,
+          "end": 695,
+          "line": 16,
+          "start": 661
+        },
+        "internal_id": "cmsg-9ed044fe8ebf",
+        "kind": "number"
+      },
+      {
+        "authored": {
+          "column": 19,
+          "end": 49,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 3,
+          "start": 44
+        },
+        "bundle_locale": "en-US",
+        "detail": "name",
+        "generated": {
+          "column": 23,
+          "end": 784,
+          "line": 19,
+          "start": 767
+        },
+        "internal_id": "cmsg-e1f328df89b3",
+        "kind": "scalar"
+      },
+      {
+        "authored": {
+          "column": 38,
+          "end": 74,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 3,
+          "start": 63
+        },
+        "bundle_locale": "en-US",
+        "detail": "terms_link",
+        "generated": {
+          "column": 54,
+          "end": 815,
+          "line": 19,
+          "start": 798
+        },
+        "internal_id": "cmsg-e1f328df89b3",
+        "kind": "slot"
+      },
+      {
+        "authored": {
+          "column": 64,
+          "end": 100,
+          "file": "fixtures/application/en-US.ftl",
+          "line": 3,
+          "start": 89
+        },
+        "bundle_locale": "en-US",
+        "detail": "terms_link",
+        "generated": {
+          "column": 86,
+          "end": 847,
+          "line": 19,
+          "start": 830
+        },
+        "internal_id": "cmsg-e1f328df89b3",
+        "kind": "slot"
+      },
+      {
+        "authored": {
+          "column": 43,
+          "end": 555,
+          "file": "fixtures/citry_ui/en-US.ftl",
+          "line": 17,
+          "start": 536
+        },
+        "bundle_locale": "en-US",
+        "detail": "citry-ui-ref-target",
+        "generated": {
+          "column": 40,
+          "end": 951,
+          "line": 21,
+          "start": 934
+        },
+        "internal_id": "cmsg-ff3f81058539",
+        "kind": "public-reference"
+      }
+    ]
+  },
+  "environment": {
+    "cargo": "cargo 1.98.0-nightly (fbb61be30 2026-05-26)",
+    "node": "v26.5.0",
+    "packages": {
+      "Babel": "2.18.0",
+      "attrs": "26.1.0",
+      "fluent.runtime": "0.4.0",
+      "fluent.syntax": "0.19.0",
+      "pytz": "2026.3.post1",
+      "typing-extensions": "4.15.0"
+    },
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "pnpm": "10.32.1",
+    "python": "3.13.12",
+    "rustc": "rustc 1.98.0-nightly (14210df0e 2026-05-31)",
+    "uv": "uv 0.12.0 (Homebrew 2026-07-28 aarch64-apple-darwin)"
+  },
+  "evidence_integrity": {
+    "browser_runtime_versions": {
+      "@fluent/bundle": "0.19.1"
+    },
+    "python_assert_statements": 0
+  },
+  "gates": {
+    "application_override_preserves_owner": true,
+    "authored_internal_functions_absent": true,
+    "authored_plural_and_ordinal_lowered": true,
+    "catalog_order_deterministic": true,
+    "displayed_scalars_lowered": true,
+    "partial_attribute_fallback": true,
+    "per_owner_source_fallback": true,
+    "private_terms_remain_layer_local": true,
+    "production_linker_ratified": false,
+    "python_browser_rust_outputs_equal": true,
+    "real_pyo3_binding_proved": false,
+    "repeated_slot_markers_preserved": true,
+    "required_slot_omission_rejected": true,
+    "same_locale_reference_candidate_fallback": true,
+    "source_maps_cover_lowered_operations": true,
+    "transitive_type_conflict_rejected": true,
+    "transitive_typed_interface": true
+  },
+  "inputs": {
+    "compiler_linker/browser/runner.mjs": "1bca31a1fea4de60a9c17e31120d5aa2f15856317e409bffadef8850a046fc99",
+    "compiler_linker/fixtures/application/cs-CZ.ftl": "e75d4672eb65bb6ed2a5b4c61ad96846b2b8f37567e6c5d12dd980c7a238841d",
+    "compiler_linker/fixtures/application/en-US.ftl": "91039a88d16c811e758d16cf0a7879dcf965f9b2c2141c2f5b6cfe098424e566",
+    "compiler_linker/fixtures/citry_ui/cs-CZ.ftl": "c7ac9c18179b66851ad06562baed1fd3e9a26add04dae3777cd3521e81a64c68",
+    "compiler_linker/fixtures/citry_ui/en-US.ftl": "7b4f303c38c664a4d379aee25bbbe3aab7209e29bb838a087224d949530e699e",
+    "compiler_linker/fixtures/negative/missing-slot.ftl": "6cac024c71b0338887923a48c96363f5790d2e282c29b88a59906bd04961b555",
+    "compiler_linker/fixtures/negative/reference-cycle.ftl": "0486c3f41fd8bb651ecdc29496e8e73bab78fbb52b692c4fa0eca5574083b327",
+    "compiler_linker/fixtures/negative/type-conflict.ftl": "2087a460a00ff7d4105a60bf45b1b0aaae99f1bd345927b58352a591dbd7bbc9",
+    "compiler_linker/fixtures/negative/unknown-variable.ftl": "5f3234082cf7decf6b8639d289bac425d6f6915a88eb75bd03b97ce99e555e70",
+    "compiler_linker/fixtures/topology.json": "52e547c65c31546d774e9cffff184665ce207700ec45e6201de936e61d7f2f40",
+    "compiler_linker/python-requirements.txt": "2db9e7866e155b40e5cb9a81faec354e5988083a196c14704721c5f91235c5d5",
+    "compiler_linker/run_compiler_linker_spike.py": "ba322ef83eb65e6b746d5a42eb8eb7e8226a64b2f608456053a8d9003760b75c",
+    "compiler_linker/rust/Cargo.lock": "83231a2cc3443e550d13a3bee80374247f84c19c250b8de0a8a5ac9e3b0551ee",
+    "compiler_linker/rust/Cargo.toml": "c222d4b58aad5fb84ec46f6e48bc62f05fcfd77156a4b49f57688de781004ec9",
+    "compiler_linker/rust/src/main.rs": "c72303250f7116cedd83986fad7de48e6c5ec767ab9ea9960ee115fa22855fe1",
+    "runtime_backend/browser/package.json": "ad18a66f0e30586accee964caf954d525d72b1456458d6d8f8ed97e488378c84",
+    "runtime_backend/browser/pnpm-lock.yaml": "680bf1fe2f0bb85b1384f34325c33bbb0355690631308631ed241827080966ad"
+  },
+  "negative": {
+    "reference_cycle": "source-reference-cycle",
+    "required_slot_omitted": "required-slot-omitted",
+    "transitive_type_conflict": "transitive-type-conflict",
+    "translation_added_variable": "translation-added-variable"
+  },
+  "result": "PASS_BOUNDED",
+  "runtime_results": {
+    "browser": {
+      "account_aria_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "Akce účtu pro ⁨Ada⁩"
+      },
+      "account_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "APPLICATION-CS: ⁨Ada⁩ přijal(a) __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; podrobnosti: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "account_en": {
+        "bundle_locale": "en-US",
+        "value": "APPLICATION-EN: ⁨Ada⁩ accepted __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; details: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "application_source_fallback": {
+        "bundle_locale": "cs-CZ",
+        "value": "APP CS SOURCE FALLBACK"
+      },
+      "count_cs_0": {
+        "bundle_locale": "cs-CZ",
+        "value": "Žádné položky"
+      },
+      "count_cs_1": {
+        "bundle_locale": "cs-CZ",
+        "value": "Jedna položka"
+      },
+      "count_cs_2": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=2,profile=integer]⁩ položky"
+      },
+      "count_cs_2_5": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=2.5,profile=decimal]⁩ položky"
+      },
+      "count_cs_5": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=5,profile=integer]⁩ položek"
+      },
+      "library_source_fallback": {
+        "bundle_locale": "en-US",
+        "value": "LIBRARY SOURCE FALLBACK"
+      },
+      "ordinal_en_1": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=1,profile=integer]⁩st"
+      },
+      "ordinal_en_11": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=11,profile=integer]⁩th"
+      },
+      "ordinal_en_2": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=2,profile=integer]⁩nd"
+      },
+      "ordinal_en_21": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=21,profile=integer]⁩st"
+      },
+      "ordinal_en_3": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=3,profile=integer]⁩rd"
+      },
+      "ordinal_en_4": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=4,profile=integer]⁩th"
+      },
+      "reference_candidate_fallback": {
+        "bundle_locale": "en-US",
+        "value": "English wrapper: library target"
+      },
+      "wrapper_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "Aplikace: ⁨Ada⁩ přijal(a) __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; podrobnosti: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "wrapper_en": {
+        "bundle_locale": "en-US",
+        "value": "Application: ⁨Ada⁩ accepted __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; details: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      }
+    },
+    "python": {
+      "account_aria_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "Akce účtu pro ⁨Ada⁩"
+      },
+      "account_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "APPLICATION-CS: ⁨Ada⁩ přijal(a) __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; podrobnosti: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "account_en": {
+        "bundle_locale": "en-US",
+        "value": "APPLICATION-EN: ⁨Ada⁩ accepted __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; details: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "application_source_fallback": {
+        "bundle_locale": "cs-CZ",
+        "value": "APP CS SOURCE FALLBACK"
+      },
+      "count_cs_0": {
+        "bundle_locale": "cs-CZ",
+        "value": "Žádné položky"
+      },
+      "count_cs_1": {
+        "bundle_locale": "cs-CZ",
+        "value": "Jedna položka"
+      },
+      "count_cs_2": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=2,profile=integer]⁩ položky"
+      },
+      "count_cs_2_5": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=2.5,profile=decimal]⁩ položky"
+      },
+      "count_cs_5": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=5,profile=integer]⁩ položek"
+      },
+      "library_source_fallback": {
+        "bundle_locale": "en-US",
+        "value": "LIBRARY SOURCE FALLBACK"
+      },
+      "ordinal_en_1": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=1,profile=integer]⁩st"
+      },
+      "ordinal_en_11": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=11,profile=integer]⁩th"
+      },
+      "ordinal_en_2": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=2,profile=integer]⁩nd"
+      },
+      "ordinal_en_21": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=21,profile=integer]⁩st"
+      },
+      "ordinal_en_3": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=3,profile=integer]⁩rd"
+      },
+      "ordinal_en_4": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=4,profile=integer]⁩th"
+      },
+      "reference_candidate_fallback": {
+        "bundle_locale": "en-US",
+        "value": "English wrapper: library target"
+      },
+      "wrapper_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "Aplikace: ⁨Ada⁩ přijal(a) __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; podrobnosti: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "wrapper_en": {
+        "bundle_locale": "en-US",
+        "value": "Application: ⁨Ada⁩ accepted __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; details: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      }
+    },
+    "rust": {
+      "account_aria_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "Akce účtu pro ⁨Ada⁩"
+      },
+      "account_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "APPLICATION-CS: ⁨Ada⁩ přijal(a) __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; podrobnosti: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "account_en": {
+        "bundle_locale": "en-US",
+        "value": "APPLICATION-EN: ⁨Ada⁩ accepted __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; details: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "application_source_fallback": {
+        "bundle_locale": "cs-CZ",
+        "value": "APP CS SOURCE FALLBACK"
+      },
+      "count_cs_0": {
+        "bundle_locale": "cs-CZ",
+        "value": "Žádné položky"
+      },
+      "count_cs_1": {
+        "bundle_locale": "cs-CZ",
+        "value": "Jedna položka"
+      },
+      "count_cs_2": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=2,profile=integer]⁩ položky"
+      },
+      "count_cs_2_5": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=2.5,profile=decimal]⁩ položky"
+      },
+      "count_cs_5": {
+        "bundle_locale": "cs-CZ",
+        "value": "⁨NUM[value=5,profile=integer]⁩ položek"
+      },
+      "library_source_fallback": {
+        "bundle_locale": "en-US",
+        "value": "LIBRARY SOURCE FALLBACK"
+      },
+      "ordinal_en_1": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=1,profile=integer]⁩st"
+      },
+      "ordinal_en_11": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=11,profile=integer]⁩th"
+      },
+      "ordinal_en_2": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=2,profile=integer]⁩nd"
+      },
+      "ordinal_en_21": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=21,profile=integer]⁩st"
+      },
+      "ordinal_en_3": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=3,profile=integer]⁩rd"
+      },
+      "ordinal_en_4": {
+        "bundle_locale": "en-US",
+        "value": "⁨NUM[value=4,profile=integer]⁩th"
+      },
+      "reference_candidate_fallback": {
+        "bundle_locale": "en-US",
+        "value": "English wrapper: library target"
+      },
+      "wrapper_cs": {
+        "bundle_locale": "cs-CZ",
+        "value": "Aplikace: ⁨Ada⁩ přijal(a) __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; podrobnosti: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      },
+      "wrapper_en": {
+        "bundle_locale": "en-US",
+        "value": "Application: ⁨Ada⁩ accepted __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__; details: __CITRY_SLOT_COMPILER_LINKER_TERMS_LINK__."
+      }
+    }
+  }
+}

@@ -148,6 +148,22 @@ Use `required` when the requirement depends on whether the outlet is reached:
 If `show_details` is false, that slot does not render and cannot raise. If it
 is true and no fill exists, Citry raises `RuntimeError`.
 
+### Require a slot conditionally
+
+Use `c-required` when the requirement itself comes from a Python expression:
+
+```citry-html
+<c-slot
+  name="details"
+  c-required="account.must_supply_details"
+/>
+```
+
+Citry evaluates the expression when the outlet renders. A truthy result has
+the same behavior as the bare `required` marker; a falsy result leaves the
+slot optional. As with `required`, an outlet in a branch that does not render
+cannot raise a missing-fill error.
+
 ## Know which scope a fill uses
 
 A template-authored fill belongs to the template that uses the component. Its
@@ -295,6 +311,46 @@ A computed name must still appear in the component's declared `Slots` schema.
 If two dynamic fills resolve to the same name, Citry raises `RuntimeError`.
 Prefer literal names when the interface is fixed; they are easier to discover
 and check.
+
+## Spread slot and fill settings
+
+`<c-slot>` and `<c-fill>` are the two structural tags that accept `c-bind`.
+The expression must produce a mapping, and Citry applies its keys in source
+order with the directly authored attributes.
+
+On `<c-slot>`, the mapping may provide `name` and `required`. Every other key
+becomes data exposed by that slot:
+
+```citry-html
+<c-slot
+  c-bind="{
+    'name': active_slot,
+    'required': require_active_slot,
+    'item': current_item,
+  }"
+/>
+```
+
+On `<c-fill>`, the accepted keys are `name`, `data`, and `fallback`:
+
+```citry-html
+<c-fill
+  c-bind="{
+    'name': active_slot,
+    'data': 'slot_data',
+  }"
+>
+  {{ slot_data }}
+</c-fill>
+```
+
+A later source wins for the same setting. A spread that evaluates to `None`
+leaves the current settings unchanged. Inside a mapping, `None` is still a
+value: it makes `required` false, remains available as slot data, omits a
+fill's `data` or `fallback` binding, and is invalid for `name`. Non-string or
+unsupported keys raise an error. See
+[`c-bind`](/syntax/dynamic-attributes/#c-bind-spread) for mapping evaluation
+and ordering on ordinary HTML elements and component inputs.
 
 ## Wrapping the fallback
 

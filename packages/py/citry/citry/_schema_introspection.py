@@ -15,8 +15,13 @@ from dataclasses import MISSING, Field, is_dataclass
 from pathlib import Path
 from typing import Any, ForwardRef, Literal, NamedTuple, TypeVar, cast, get_args, get_origin
 
+from citry._annotation_introspection import _own_annotations
 from citry._class_introspection import _safe_class_import_path, _safe_class_text, _static_class_dict, _static_class_mro
-from citry._nested_declarations import _get_nested_class_declarations
+from citry._nested_declarations import (
+    _SYNTHESIZED_DECLARATION_ATTR,
+    _SYNTHESIZED_FIELD_OWNERS_ATTR,
+    _get_nested_class_declarations,
+)
 from citry.introspection import (
     ComponentSchemas,
     FieldInfo,
@@ -105,7 +110,13 @@ def _inspect_schema_role(
                 break
 
     if owner is None:
-        return SchemaInfo(kind="absent", declared_on=None, import_path=None, fields=())
+        return SchemaInfo(
+            kind="absent",
+            declared_on=None,
+            import_path=None,
+            fields=(),
+            namespace_policy="unknown",
+        )
 
     # Component's own None-valued role attributes are framework defaults, not
     # user declarations. A None on every other MRO class is an explicit shadow.
@@ -115,7 +126,13 @@ def _inspect_schema_role(
         if not framework_default and declared_on is None:
             msg = f"Could not determine a safe import path for the owner of the {attribute} schema binding."
             raise TypeError(msg)
-        return SchemaInfo(kind="absent", declared_on=declared_on, import_path=None, fields=())
+        return SchemaInfo(
+            kind="absent",
+            declared_on=declared_on,
+            import_path=None,
+            fields=(),
+            namespace_policy="unknown",
+        )
     if not isinstance(schema, type):
         component_name = (
             _safe_class_import_path(component_class) or _safe_class_text(component_class, "__name__") or "Component"
@@ -129,8 +146,53 @@ def _inspect_schema_role(
         raise TypeError(msg)
     inspected_fields = _inspect_schema_class(schema, include_default_values=include_default_values)
     if inspected_fields is None:
-        return SchemaInfo(kind="opaque", declared_on=declared_on, import_path=import_path, fields=())
-    return SchemaInfo(kind="fields", declared_on=declared_on, import_path=import_path, fields=inspected_fields)
+        return SchemaInfo(
+            kind="opaque",
+            declared_on=declared_on,
+            import_path=import_path,
+            fields=(),
+            namespace_policy="unknown",
+        )
+    return SchemaInfo(
+        kind="fields",
+        declared_on=declared_on,
+        import_path=import_path,
+        fields=inspected_fields,
+        namespace_policy=_schema_namespace_policy(schema),
+    )
+
+
+def _schema_namespace_policy(schema_class: type) -> Literal["closed", "allow-extra", "unknown"]:
+    """Describe whether a recognized schema preserves undeclared fields."""
+    if is_dataclass(schema_class):
+        return "closed"
+
+    # Pydantic v2 materializes the effective config as a mapping on the model
+    # class, including inherited values.
+    model_fields = getattr(schema_class, "model_fields", None)
+    if isinstance(model_fields, dict):
+        model_config = getattr(schema_class, "model_config", None)
+        if isinstance(model_config, AbcMapping):
+            return "allow-extra" if _pydantic_extra_is_allow(model_config.get("extra")) else "closed"
+        return "closed"
+
+    # Pydantic v1 exposes the effective Config class after model creation.
+    v1_fields = getattr(schema_class, "__fields__", None)
+    if isinstance(v1_fields, dict):
+        config = getattr(schema_class, "__config__", None)
+        return "allow-extra" if _pydantic_extra_is_allow(getattr(config, "extra", None)) else "closed"
+
+    if issubclass(schema_class, tuple) and hasattr(schema_class, "_fields"):
+        return "closed"
+    return "unknown"
+
+
+def _pydantic_extra_is_allow(value: object) -> bool:
+    """Recognize Pydantic v1's enum and v2's literal config value safely."""
+    if type(value) is str:
+        return value == "allow"
+    enum_value = getattr(value, "value", None)
+    return type(enum_value) is str and enum_value == "allow"
 
 
 def _inspect_schema_class(
@@ -152,27 +214,38 @@ def _read_schema_fields(schema_class: object) -> tuple[_RawField, ...] | None:
     if is_dataclass(schema_class):
         classvar_marker = dataclasses._FIELD_CLASSVAR  # type: ignore[attr-defined]
         declared_fields = cast("dict[str, Field[Any]]", schema_class.__dataclass_fields__)
-        return tuple(
-            _dataclass_field(schema_class, field)
+        included_fields = tuple(
+            field
             for field in declared_fields.values()
             if field.init and field._field_type is not classvar_marker  # type: ignore[attr-defined]
+        )
+        field_owners = _field_declaring_classes(schema_class, (field.name for field in included_fields))
+        return tuple(
+            _dataclass_field(field, declaring_class=field_owners.get(field.name)) for field in included_fields
         )
 
     # Pydantic v2 is checked first because v2 also exposes a deprecated v1 alias.
     model_fields = getattr(schema_class, "model_fields", None)
     if isinstance(model_fields, dict):
-        return tuple(_pydantic_v2_field(schema_class, name, info) for name, info in model_fields.items())
+        field_owners = _field_declaring_classes(schema_class, model_fields)
+        return tuple(
+            _pydantic_v2_field(name, info, declaring_class=field_owners.get(name))
+            for name, info in model_fields.items()
+        )
 
     v1_fields = getattr(schema_class, "__fields__", None)
     if isinstance(v1_fields, dict):
-        return tuple(_pydantic_v1_field(schema_class, name, info) for name, info in v1_fields.items())
+        field_owners = _field_declaring_classes(schema_class, v1_fields)
+        return tuple(
+            _pydantic_v1_field(name, info, declaring_class=field_owners.get(name)) for name, info in v1_fields.items()
+        )
 
     if issubclass(schema_class, tuple) and hasattr(schema_class, "_fields"):
         return _named_tuple_fields(schema_class)
     return None
 
 
-def _dataclass_field(schema_class: type, field: Field[Any]) -> _RawField:
+def _dataclass_field(field: Field[Any], *, declaring_class: type | None) -> _RawField:
     if field.default is MISSING and field.default_factory is MISSING:
         default_kind: Literal["missing", "value", "factory"] = "missing"
         default_value = _UNAVAILABLE
@@ -191,11 +264,11 @@ def _dataclass_field(schema_class: type, field: Field[Any]) -> _RawField:
         default_kind=default_kind,
         default_value=default_value,
         description=description,
-        declaring_class=_field_declaring_class(schema_class, field.name),
+        declaring_class=declaring_class,
     )
 
 
-def _pydantic_v2_field(schema_class: type, name: str, info: object) -> _RawField:
+def _pydantic_v2_field(name: str, info: object, *, declaring_class: type | None) -> _RawField:
     required = bool(cast("Any", info).is_required())
     default_factory = getattr(info, "default_factory", None)
     if required:
@@ -216,11 +289,11 @@ def _pydantic_v2_field(schema_class: type, name: str, info: object) -> _RawField
         default_kind=default_kind,
         default_value=default_value,
         description=description,
-        declaring_class=_field_declaring_class(schema_class, name),
+        declaring_class=declaring_class,
     )
 
 
-def _pydantic_v1_field(schema_class: type, name: str, info: object) -> _RawField:
+def _pydantic_v1_field(name: str, info: object, *, declaring_class: type | None) -> _RawField:
     required = bool(getattr(info, "required", False))
     default_factory = getattr(info, "default_factory", None)
     if required:
@@ -242,13 +315,14 @@ def _pydantic_v1_field(schema_class: type, name: str, info: object) -> _RawField
         default_kind=default_kind,
         default_value=default_value,
         description=description,
-        declaring_class=_field_declaring_class(schema_class, name),
+        declaring_class=declaring_class,
     )
 
 
 def _named_tuple_fields(schema_class: type) -> tuple[_RawField, ...]:
     field_names = cast("tuple[str, ...]", cast("Any", schema_class)._fields)
     defaults = cast("dict[str, object]", getattr(schema_class, "_field_defaults", {}))
+    field_owners = _field_declaring_classes(schema_class, field_names)
     annotations: dict[str, object] = {}
     for candidate in reversed(schema_class.__mro__):
         own_annotations = candidate.__dict__.get("__annotations__")
@@ -281,7 +355,7 @@ def _named_tuple_fields(schema_class: type) -> tuple[_RawField, ...]:
             default_kind="missing" if name not in defaults else "value",
             default_value=defaults.get(name, _UNAVAILABLE),
             description=None,
-            declaring_class=_field_declaring_class(schema_class, name),
+            declaring_class=field_owners.get(name),
         )
         for name in field_names
     )
@@ -330,19 +404,48 @@ def _field_source(owner: type | None) -> tuple[str | None, str | None, Path | No
     return module, qualname, _loaded_python_file(owner)
 
 
-def _field_declaring_class(schema_class: type, name: str) -> type | None:
-    """Find the nearest authored class whose own declaration defines ``name``."""
+def _field_declaring_classes(schema_class: type, field_names: typing.Iterable[str]) -> dict[str, type]:
+    """Map effective fields to the nearest authored class that declares them."""
+    remaining = set(field_names)
+    owners: dict[str, type] = {}
     for candidate in _static_class_mro(schema_class):
         namespace = _static_class_dict(candidate)
-        if namespace.get("_citry_synthesized_declaration", False) is True:
-            continue
-        annotations = namespace.get("__annotations__")
-        if isinstance(annotations, dict) and name in annotations:
-            return candidate
+        synthesized = namespace.get(_SYNTHESIZED_DECLARATION_ATTR, False) is True
+        stored_owners = namespace.get(_SYNTHESIZED_FIELD_OWNERS_ATTR) if synthesized else None
+        if type(stored_owners) is tuple:
+            for entry in stored_owners:
+                if (
+                    type(entry) is tuple
+                    and len(entry) == 2
+                    and type(entry[0]) is str
+                    and isinstance(entry[1], type)
+                    and entry[0] in remaining
+                ):
+                    owners[entry[0]] = entry[1]
+                    remaining.remove(entry[0])
+        if not remaining:
+            break
+
+        # NamedTuple keeps an exact static field inventory even when Python
+        # defers the authored annotations themselves.
         own_fields = namespace.get("_fields")
-        if type(own_fields) is tuple and name in own_fields:
-            return candidate
-    return None
+        if type(own_fields) is tuple:
+            for name in own_fields:
+                if type(name) is str and name in remaining:
+                    owners[name] = candidate
+                    remaining.remove(name)
+        if not remaining:
+            break
+
+        if synthesized:
+            continue
+        for name in _own_annotations(candidate):
+            if name in remaining:
+                owners[name] = candidate
+                remaining.remove(name)
+        if not remaining:
+            break
+    return owners
 
 
 def _loaded_python_file(cls: type) -> Path | None:

@@ -679,7 +679,7 @@ class TestLifetime:
             assert completed.wait(timeout=1)
             worker.join()
 
-        assert_waits_for_index_lock(extension._render_cache_bypass)
+        assert_waits_for_index_lock(extension.render_cache_bypass_reason)
         assert_waits_for_index_lock(lambda: app.unregister(Card))
 
     def test_debug_does_not_retain_unregistered_rendered_component_class(self):

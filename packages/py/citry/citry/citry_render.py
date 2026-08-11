@@ -193,9 +193,9 @@ class CitryRender:
             deps_strategy: How to handle the collected JS/CSS.
 
                 - ``"document"`` (default): emit the tags, plus the
-                  client-side dependency manager and the page manifest when
-                  any component registered a per-instance callback
-                  (``$component``), so ``js_data()`` reaches the browser.
+                client-side dependency manager and the page manifest when
+                a component needs per-instance browser behavior, including
+                ``js_data()`` scope seeding and ``$component`` callbacks.
                 - ``"simple"``: the tags only, no JavaScript runtime. For
                   static pages and emails; per-instance JS does not run
                   (CSS variables still work, they are pure CSS).

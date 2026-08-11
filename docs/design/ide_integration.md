@@ -21,6 +21,10 @@ records every contested decision and why it was resolved the way it was.
 Related docs: the standing editor-experience decisions this design builds on
 are in [`source_languages.md`](source_languages.md) (no highlight-only
 stopgap, the `*_lang` attributes, the staged extension-grammar-server path).
+The reusable implementation contract for adding another embedded component
+language is [`embedded_language_ide.md`](embedded_language_ide.md); feature
+work follows that vertical checklist instead of reconstructing the Template,
+JavaScript, and CSS implementation history from this document.
 The versioned runtime catalog is specified in
 [`component_introspection.md`](component_introspection.md); it represents
 classes successfully loaded into a `Citry` instance. Static analysis produces
@@ -332,9 +336,10 @@ edit mappings are equally exact. The implemented VS Code path scans direct
 ordinary start-tag attributes, projects one `c-` prefix without changing UTF-16
 coordinates, and accepts only provider hovers whose range exactly identifies
 the projected lowercase suffix. Citry directives and every `c-*` tag boundary
-are excluded. Comments, expressions, raw-text bodies, end tags, and quoted
-nested templates cannot produce candidates. Provider absence remains a silent
-no-result.
+    are excluded. Comments, expressions, raw-text bodies, end tags, and quoted
+    nested templates cannot produce candidates in this direct-tag path. Step 22
+    adds a separate parser-backed projection for nested templates and
+    `<c-element>`. Provider absence remains a silent no-result.
 
 Citry currently has 15 built-in tags from two authoritative sources. The Rust
 parser owns eight structural names (`if`, `elif`, `else`, `for`, `empty`,
@@ -361,10 +366,14 @@ the server:
   option, derive `TagRules` from each registered component's `Kwargs`, `Slots`,
   and slot-data fields, and pass them to `parse_template`, so unknown or
   missing attributes and slot violations on registered components are
-  diagnosed by the parser itself. A first editor setting or initialization
-  option carries the app spec; an invalid spec, import failure, wrong object
-  type, or discovery failure is reported in tooling status and degrades to
-  syntax-only analysis. No new parser machinery is needed for the rule checks.
+  diagnosed by the parser itself. The editor setting additionally accepts a
+  `ComponentLibrary`; its isolated worker installs that library into
+  `Citry(autodiscover=False)` and reports that the registry excludes host-app
+  state. An invalid spec, import failure, wrong object type, missing required
+  host extension, or discovery failure is reported in tooling status and
+  degrades to syntax-only analysis. The batch checker's `--app` remains a
+  `Citry` instance because its other CLI commands need a runnable engine. No
+  new parser machinery is needed for the rule checks.
   The parser lets a tag with no rules pass unvalidated, so
   unknown-component detection is one extra tool-side check, shared with
   the server: compare the parsed component tag names against the registry
@@ -434,11 +443,14 @@ commitment:
   and inputs, and document symbols. Exact component-input fields use additive
   runtime provenance plus a conservative Python AST join; other schema roles
   consume that same join only when their feature is implemented.
-  It never analyzes Python, never embeds a CSS or JS analyzer, never
-  mirrors the user's project. Pyright / Pylance own the `.py` file; the
-  citry server is a second, coexisting server registered for `python`
-  documents plus the `citry-html` file type (the proven Ruff / Tailwind
-  pattern).
+  Its Python work is limited to conservative source-AST joins and mapped
+  shadow documents for Citry-owned declarations, regions, and expressions. A
+  pinned Python analyzer child answers only those mapped expression requests;
+  Citry never attempts general Python semantic analysis or embeds a CSS or JS
+  analyzer.
+  Pyright / Pylance own the `.py` file; the citry server is a second,
+  coexisting server registered for `python` documents plus the `citry-html`
+  file type (the proven Ruff / Tailwind pattern).
 - **Region discovery is conservative and recoverable.** On valid Python, the
   server combines the standard `ast` and source tokens to find literal class
   attributes and their authored string bodies. AST alone is insufficient:
@@ -454,11 +466,12 @@ commitment:
   `citry check`, sharing that code. Interpreter discovery (which Python
   owns this workspace) is answered in VS Code by the
   `@vscode/python-extension` environments API and elsewhere by an explicit
-  setting; the current `module:attribute` app spec resolves the app instance.
+  setting; the current `module:attribute` registry target resolves either the
+  app instance or an isolated `ComponentLibrary` registry.
   The environments API is treated as an adapter, with an explicit executable
   setting retained because the extension API can change. This is
   the classic failure mode of Python-resident servers and gets first-class
-  status reporting ("which Python, which app instance, registry or static
+  status reporting ("which Python, which registry target, registry or static
   mode") plus a troubleshooting docs page from day one, instead of silent
   degradation. Multi-root workspaces (several projects, several venvs, one
   window) mean one server instance per workspace folder; the extension
@@ -495,16 +508,18 @@ Two hard behavior rules, adopted as grafts and stated up front:
   surfaces upgrade guidance when the server reports an older version at
   initialize).
 
-Implemented 2026-07-30 and extended within formatter protocol v1 on 2026-08-04.
+Implemented 2026-07-30 and extended within formatter protocol v1 on 2026-08-04
+and library registry targets on 2026-08-08.
 The server supports the Citry 0.3.x and component-catalog v1 contracts and
 rejects an incompatible client protocol during initialize. A one-shot worker
-subprocess imports the configured app, captures Python and file-descriptor
+subprocess imports the configured target, captures Python and file-descriptor
 output, and returns only portable `TemplateAnalysis` and `ComponentCatalog`
-data. Startup is bounded at
-five seconds; `SystemExit`, invalid specs, hangs, crashes, and malformed worker
-responses all produce one reported syntax-only degradation. File changes and
-the explicit reload request replace the complete copied project generation.
-No project module enters the LSP stdio process.
+data. A `ComponentLibrary` target is installed into a fresh
+`Citry(autodiscover=False)` whose status names the library-only scope. Startup
+is bounded at five seconds; `SystemExit`, invalid specs, hangs, crashes, and
+malformed worker responses all produce one reported syntax-only degradation.
+File changes and the explicit reload request replace the complete copied
+project generation. No project module enters the LSP stdio process.
 
 #### 3.4.1 Capability and degradation contract
 
@@ -513,11 +528,11 @@ complete. These are the minimum guarantees for `citry check` and the server:
 
 | Source and project state | Available behavior | Deliberately suppressed or reported limitation |
 |---|---|---|
-| Definite template region; configured app imports and discovery completes | Base parser diagnostics, registered component and input checks, schema-free Citry structural/directive completion, lexical loop/fill completion and hover, registry component/attribute/slot completion, catalog hover, exact component/input definitions when source is provable, and unknown-component diagnostics | Extension-transformed diagnostics unless that extension supplies an authored-source mapping |
+| Definite template region; configured app or library target imports and discovery completes | Base parser diagnostics, registered component and input checks, schema-free Citry structural/directive completion, lexical loop/fill completion and hover, registry component/attribute/slot completion, catalog hover, declared or conservatively source-inferred template-root completion/hover/navigation, type-aware member and call features for proven roots, exact component/input definitions when source is provable, unknown-component diagnostics, and application-configured unknown-root linting | Extension-transformed diagnostics unless that extension supplies an authored-source mapping; a library target explicitly excludes host-app components, configuration, and host-provided extensions |
 | Definite template region; no app configured | `citry check --static` and the server provide base parser diagnostics in their explicit syntax-only modes; the server still offers Citry structural/directive completion and parser-proven lexical loop/fill completion, hover, and navigation; the VS Code client independently forwards HTML, CSS, and JavaScript completion, hover, and definitions | Registry component completion and hover, interface checks, unknown-component diagnostics, and delegated web-language diagnostics |
-| Configured app spec is invalid, imports the wrong object, or import/discovery fails | The same syntax-only analysis as an explicit `citry check --static` run | Registry-derived features; one actionable project-status error carries the underlying failure |
+| Configured registry target is invalid, imports the wrong object, requires unavailable host extensions, or import/discovery fails | The same syntax-only analysis as an explicit `citry check --static` run | Registry-derived features; one actionable project-status error carries the underlying failure |
 | Python file parses and contains a definite literal component asset | AST-decoded source, base syntax analysis, and exact authored host ranges through the shipped byte-to-UTF-16 source map | Computed, inherited, file-backed, concatenated, or otherwise nonliteral inline asset values unless registry-backed source discovery identifies a separate file |
-| Python file is incomplete | `citry check` reports that the source cannot be analyzed; the server uses lexically proven current regions plus last-good semantic data and recovers active bindings only from complete current-text start tags | A last-good diagnostic whose range cannot be proven against current text; ambiguous regions are skipped |
+| Python file is incomplete | `citry check` reports that the source cannot be analyzed; the server uses lexically proven current regions, recovers active bindings only from complete current-text start tags, and narrowly repairs a trailing member access or unfinished call only for the active completion/signature request | Stale semantic answers and diagnostics from an earlier source generation; ambiguous regions are skipped |
 | Static scan sees a possible component but no complete runtime registry exists | Syntax-only facts with explicit partial confidence | Any conclusion that the component set is complete, especially unknown-component errors |
 | Template uses extension rewrites | Authored base-syntax analysis | Transformed-source diagnostics unless the extension supplies a mapping; status names the unsupported capability |
 | Template declares an unsupported non-`None` `template_lang` value | The source is skipped with an explicit finding | Base-language guessing and alternate dialect semantics |
@@ -572,32 +587,35 @@ editor to VS Code's 48% in the 2024 Python Developers Survey, verified live
 by design C and re-verified by judge 2), and the honest story is the least
 flattering part of this design:
 
-- **Planned pre-publication semantics route: an LSP4IJ user-defined server
+- **The first PyCharm semantics route is an LSP4IJ user-defined server
   template.** LSP4IJ
   supports declaring a language server with no plugin code (command plus
   file mappings), and definitions can be exported and imported as
-  templates. Step 14 tests this route and, if the attach spike succeeds,
-  publishes an importable JSON template with the editor documentation. The
+  templates. The attach spike succeeded on 2026-08-11, and the repository
+  publishes an importable template under `packages/editors/jetbrains/lsp4ij/`
+  with the editor documentation. The
   JetBrains
   **native** LSP API is not a documented route here: it is a plugin API (an
-  `LspServerDescriptor` lives in plugin code), so "config docs" cannot
+  `LspClientDescriptor` lives in plugin code), so "config docs" cannot
   reach it; design A's contrary claim was judged factually wrong and is
   corrected in this synthesis. A thin official plugin (descriptor plus
   bundled server plus TextMate bundle) on the JetBrains Marketplace is a
   named later rung, once the server is stable.
-- **The attach question is open and gets the language-server rung's first
-  spike.**
-  Whether any second LSP client (LSP4IJ or the native API) surfaces
-  features on `.py` documents PyCharm's Python plugin already owns is
-  unverified across the entire corpus, and both judges flagged it. The
-  spike (days, testing both routes on `.py` documents) remains step 21 before
-  PyCharm support is promised anywhere user-facing. It does not block the
-  already implemented editor-independent or VS Code rungs.
+- **The attach question is closed.** PyCharm 2026.2.0.1 with LSP4IJ 0.20.1
+  attached one Citry server to both an inline `.py` component and a standalone
+  `.citry-html` template while PyCharm's Python support remained active.
+  Completion, hover, Definition, References, Declaration, Type Definition,
+  push diagnostics, an unsaved diagnostic edit/clear, and standalone
+  formatting all reached the IDE through LSP4IJ's feature adapters. A
+  disposable native-API plugin also attached one project-wide Citry client to
+  both files, so attachment alone is not a reason to maintain an official
+  plugin. The exact environment, timings, falsifiers, and limitations are in
+  `ide_research/pycharm_attach_spike.md`.
 - **No inline coloring in PyCharm under this plan, and the docs say so.**
   JetBrains' TextMate bundle mechanism only applies to file types no native
   plugin owns; `.py` belongs to PyCharm's Python plugin, so no bundle can
-  color inside Python strings. LSP diagnostics and completion are provisional
-  pending the spike, and inline templates have no Citry coloring
+  color inside Python strings. LSP diagnostics and completion work through
+  the tested template, but inline templates have no Citry coloring
   until an official plugin adds native injection support, which is a named,
   triggered future rung (section 10), not an implicit never. PyCharm users
   can meanwhile use the IDE's own `# language=HTML` injection by hand;
@@ -606,18 +624,63 @@ flattering part of this design:
   framing is carried into user-facing docs verbatim (grafted from design
   C's "Note A", at both judges' direction).
 
+#### Deferred first-party JetBrains plugin
+
+The completed attach spike removes attachment as a reason to build a plugin,
+but it does not make the LSP4IJ route equivalent to the VS Code client. The
+remaining work is parked in
+[GitHub issue #78](https://github.com/citry-dev/citry/issues/78) and has two
+deliberately separate rungs.
+
+The first rung tests the smallest editor-neutral coloring path. `citry-lsp`
+would publish standard `textDocument/semanticTokens`, deriving token identity
+and coordinates from the existing parser, Python/nested-template source maps,
+and shared syntax fixtures. LSP4IJ 0.20.1 contains semantic-token support, but
+Citry must still prove in a real PyCharm session that those tokens paint inline
+regions cleanly over Python's ordinary string highlighting. The existing
+TextMate grammar can separately supply baseline coloring for standalone
+`*.citry-html`; a TextMate bundle cannot color a region inside the Python file
+type PyCharm already owns.
+
+The second rung is a first-party Kotlin plugin using JetBrains'
+`LspIntegrationProvider` and one project-wide Citry client. It owns one-click
+project-interpreter and `module:attribute` app selection, status/degradation
+UI, restart/troubleshooting, and Marketplace packaging. Native language
+injections are preferred for Citry/HTML in `template` strings, JavaScript in
+`js` strings and Alpine expressions, and CSS in `css` strings. Injection
+prefixes/suffixes seed `$component`, magics, `JsData`, props, event names,
+Alpine scope, and `CssData` without copying those analyzers into Kotlin.
+
+Ordinary injection is not sufficient for every surface. `<c-element is="...">`
+must adopt the selected native element's contract; nested templates require
+recursive source mapping; and Alpine/child-component behavior depends on
+registry-backed projections. For those positions the plugin consumes Citry's
+existing private HTML/browser projections, presents mapped virtual documents
+to the installed JetBrains HTML/JavaScript/CSS services, and maps completion,
+hover, edits, and navigation back to authored source. Generated locations must
+never escape into the UI. Missing optional host-language services, indexing,
+stale generations, cancellation, restart, and multiple workspaces all degrade
+conservatively. Local PyCharm is proven first; JetBrains Remote Development
+gets its own placement/interpreter matrix before documentation claims it.
+
+Recommended order: semantic-token spike; standalone TextMate packaging; thin
+native client/status plugin; native injections; then the specialized
+`<c-element>`, nested-template, Alpine, props, events, and CSS projection
+adapters. Semantic tokens may eliminate the coloring-only reason for a plugin,
+but they cannot replace the editor-side provider bridge.
+
 ---
 
 ## 4. Editor coverage matrix
 
 What this design delivers per editor at the end of v1 (section 5). "Inline"
 means templates in `.py` strings; "file" means `template_file` templates.
-The JetBrains semantics cells are provisional on the pre-server attach spike.
+The JetBrains semantics cells reflect the completed 2026-08-11 attach spike.
 
 | Editor | Highlighting (inline) | Highlighting (file) | Diagnostics + completion + hover + go-to | Citry ships | Channel |
 |---|---|---|---|---|---|
 | VS Code + forks (Cursor, Windsurf, VSCodium) | Yes (injection grammar) | Yes (grammar) | Yes (bundled LSP client) | Extension | Marketplace + Open VSX |
-| PyCharm / JetBrains | No (named future rung; section 3.6) | Partial (TextMate bundle for the `citry-html` file type) | Provisional: via the LSP4IJ template pointed at the venv's `citry-lsp`; native-API plugin later | LSP4IJ template JSON + docs; thin plugin later | Docs site; JetBrains Marketplace later |
+| PyCharm / JetBrains | No (named future rung; section 3.6) | No in the current LSP4IJ route (`*.citry-html` remains plain text) | Yes for Citry's standard LSP features through the tested LSP4IJ template; VS Code-private HTML/JS/CSS delegation is absent | LSP4IJ template JSON + docs; thin plugin later | Docs site; JetBrains Marketplace later |
 | Neovim | No (no tree-sitter grammar in committed scope) | No | Yes (config snippet; server installs with the project) | Config docs | Docs |
 | Zed | No | No | Yes (config snippet; extension later if demand) | Config docs | Docs |
 | Helix | No | No | Yes, diagnostics-first (Helix has no semantic tokens; nothing here relies on them) | `languages.toml` snippet | Docs |
@@ -676,7 +739,7 @@ needs maintainer calibration (open question 1).
 | Milestone | Deliverable | Effort | What it buys |
 |---|---|---|---|
 | v1.0 | Engine pass and shared coordinate adapter; `citry-lsp` diagnostics for inline, explicit `citry-html`, and catalog-resolved file templates; VS Code client; `citry check --format json` | Implemented 2026-07-30 | Red squiggles from the real parser as you type, component-aware when the registry imports; first-in-family for a Python component framework |
-| v1.1 | Component/input/slot/slot-data completion, catalog hover, schema-free structural/directive completion, lexical loop/fill completion and navigation, exact component-class and component-input navigation where provable, document symbols, conservative incomplete-region recovery, complete catalog retention, and VS Code web-language request forwarding | Implemented through 2026-08-05 | "My editor knows my components" even before app setup for parser-owned syntax, then adds registry contracts, exact authored fields, slot-data shapes, and ordinary HTML, CSS, and JavaScript assistance inside asset strings |
+| v1.1 | Component/input/slot/slot-data completion, catalog hover, schema-free structural/directive completion, lexical loop/fill completion and navigation, declared and conservative source-inferred template roots, exact component-class/input/root navigation where provable, document symbols, conservative incomplete-region recovery, complete catalog retention, and VS Code web-language request forwarding | Implemented through 2026-08-08 | "My editor knows my components" even before app setup for parser-owned syntax, then adds registry contracts, exact authored fields and returned keys, slot-data shapes, and ordinary HTML, CSS, and JavaScript assistance inside asset strings |
 | v1.2 | Editor long tail by documentation: Neovim / Zed / Helix / Sublime config snippets; the **LSP4IJ importable template JSON** on the docs site; interpreter-troubleshooting page | 1-2 weeks (reads design A's "~1 week of docs and testing per editor" as an overestimate for docs-only config snippets; the LSP4IJ template JSON is the only new artifact) | LSP features in every LSP-capable editor without new codebases |
 
 **Cumulative, stated honestly:** v0 plus v1 is roughly **10 to 15 focused
@@ -748,7 +811,7 @@ This table records the implemented and proposed locations.
 | VS Code extension + grammars | `packages/editors/vscode/` | JSON + TypeScript | v0.1.0 client and universal VSIX implemented; not yet published |
 | Structured diagnostics and `kind` getter | `crates/citry_template_parser/` + `crates/citry_core_py/` + `_rust.pyi` + Python wrapper | Rust + stubs | implemented 2026-07-30 through the required prior-art, plan, and cross-binding audit |
 | Syntax corpus and authoritative-set validator | Highlighting tests plus `scripts/validators/` if cross-package validation needs it | Fixtures + Python | implemented with v0.1 highlighting |
-| Editor setup docs, LSP4IJ template JSON, troubleshooting page | docs site (`docs_site/`) | Markdown/JSON | VS Code setup and troubleshooting implemented; long-tail editor snippets and LSP4IJ template remain v1.2 |
+| Editor setup docs, LSP4IJ template JSON, troubleshooting page | docs site (`docs_site/`) + `packages/editors/jetbrains/lsp4ij/` | Markdown/JSON | VS Code setup/troubleshooting and the tested PyCharm LSP4IJ template are implemented; remaining long-tail editor snippets stay in v1.2 |
 
 The engine changes touch two high-risk surfaces named in CLAUDE.md (the
 `#[pyclass]` contract and the PyO3 glue), so each goes through the
@@ -839,19 +902,15 @@ matrix), no proxied host server, no source maps. What remains:
 
 Each entry names the cost avoided and the trigger that would reopen it.
 
-- **Full Python semantic checking beyond direct schema joins** (shadow Python
-  for Pyright/mypy, svelte2tsx-style) was originally deferred, then reopened by
-  direct user testing on 2026-08-06. The smaller `TemplateData` schema join in
-  step 10 proved the value of declared root completion, hover, and definitions,
-  while also exposing the boundary: the catalog's display-only type strings do
-  not prove members, and components without a duplicated `TemplateData` class
-  still receive no roots from their `template_data()` return. The accepted
-  order now separates a conservative source-level returned-dict shape pass from
-  the larger batch-first transform. Name resolution across arbitrary Python,
-  call signatures, inferred member types, unions, narrowing, and semantic
-  diagnostics still require that dedicated design and source-map maintenance
-  line; they must not be approximated by parsing display strings or executing
-  `template_data()` during discovery.
+- **General Python checking outside mapped template expressions.** Step 16 now
+  uses shadow Python and a pinned `ty` child for member and call completion,
+  hover, navigation, signatures, and diagnostics on proven template roots. It
+  deliberately does not analyze arbitrary `.py` code or replace the user's
+  Python extension. Citry owns only the template namespace, lexical controls,
+  source mapping, and conservative result filtering. The analyzer owns Python
+  names, types, calls, unions, and narrowing. Reopen this boundary only if a
+  template feature requires an analyzer fact that cannot be requested through
+  the supported child protocol.
 - **A Rust language server now.** Avoided because: most new code of any
   option, a per-platform binary pipeline the pure-Python server does not
   need, and its unique strength (performance headroom) solves no measured
@@ -883,14 +942,14 @@ Each entry names the cost avoided and the trigger that would reopen it.
   cascade-prone surface), and last-good-tree plus one accurate squiggle is
   a defensible v1. Reopen when: falsifier 4 fires; prefer the tree-sitter
   layer over grammar surgery.
-- **A JetBrains-native plugin.** Two distinct rungs, both named: the
-  **thin LSP plugin** (descriptor + bundled server + TextMate bundle, a
-  small codebase) reopens when the LSP4IJ route proves too fiddly for
-  ordinary PyCharm users or when the pivot produces a bundlable binary; the
-  **native injection (PSI) plugin** that colors inside `.py` strings is a
-  second full codebase against a large API and reopens only on evidence
-  that PyCharm users are blocked on the inline-highlighting gap
-  specifically.
+- **A JetBrains-native plugin.** Parked in
+  [#78](https://github.com/citry-dev/citry/issues/78), with the implementation
+  and acceptance contract in section 3.6. Test standard semantic tokens and
+  standalone TextMate coloring first. The **thin native LSP/status plugin**
+  reopens when the LSP4IJ route proves too fiddly or first-party setup/status
+  is itself valuable; the **native injection and projection bridge** reopens
+  on demand for inline coloring or VS Code-parity HTML/JavaScript/CSS
+  intelligence. Neither is needed merely to attach Citry alongside Python.
 - **web-types emission for JetBrains. Dead, with the verification
   recorded as the standing reason:** design C verified against live
   JetBrains sources that web-types discovery is keyed off `package.json`
@@ -1032,10 +1091,11 @@ then:
    debouncing tuned; if a debounced ~300ms experience still lags on real
    projects, the Python-resident premise is wrong and the Rust pivot
    (section 10) is pulled forward.
-2. **The PyCharm attach spike fails on both routes.** Then PyCharm users
-   get value only for `template_file` projects, the published coverage
-   matrix is corrected before v0.1 ships, and the native-plugin question
-   reopens much earlier than planned.
+2. **PyCharm attachment regresses on both tested routes.** The 2026-08-11
+   spike did not fire this falsifier: both LSP4IJ and the native API attached
+   Citry alongside Python support. If a future supported PyCharm/LSP4IJ
+   combination breaks both routes, correct the published coverage matrix and
+   reopen the native-plugin question before claiming that version.
 3. **Interpreter discovery dominates.** If, despite the environments API,
    the explicit app spec and first-class status reporting,
    environment resolution is still the top issue category after v1.0, the
@@ -1191,7 +1251,12 @@ degradation contract in section 3.4.1.
    generated, unreadable, invalid, and ambiguous declarations produce no field
    target. Open files use synchronized editor text and closed files use the
    current disk AST; v1 does not claim generation freshness without a source
-   fingerprint. The unreleased catalog and client protocols remain version 1.
+   fingerprint. Effective schema construction snapshots each field's authored
+   owner across both eager annotations on Python 3.10 through 3.13 and deferred
+   annotations on Python 3.14. C3-composed `TemplateData` and `Kwargs` therefore
+   retain every distinct source owner without asking the LSP process to evaluate
+   project annotations. The unreleased catalog and client protocols remain
+   version 1.
 10. **Join `TemplateData` to template expressions.** Implemented 2026-08-06.
     For an AST-proven inline declaration or a registry-owned template file,
     intersect the `TemplateData` fields of every effective consumer of that
@@ -1215,12 +1280,11 @@ degradation contract in section 3.4.1.
     tests. The runtime now materializes declared data-schema defaults and
     coercions by using the validated `TemplateData`/`JsData`/`CssData` instance
     as the normalized result, while retaining extras that the schema explicitly
-    allows. In the current implementation, unresolved-root diagnostics remain
-    disabled; step 17 replaces that temporary state with a Citry-owned rule
-    whose default severity is warning:
-    instance and per-render template globals, extension mutation, and arbitrary
-    extra data keep the applicable root namespace open. No protocol or catalog
-    version bump is needed before the first release.
+    allows. Step 17 now owns unresolved-root diagnostics through a Citry rule
+    whose default severity is error. Runtime globals, lint-only declarations,
+    extension metadata, and explicit extra-preserving policies participate
+    without pretending that unknown or absent schemas are closed. No protocol
+    or catalog version bump is needed before the first release.
 11. **Preserve native HTML intelligence for dynamic attributes.** Implemented
     2026-08-06 for direct-attribute hover in VS Code. On native
     elements, project a recognized dynamic attribute such as `c-class` to its
@@ -1232,20 +1296,22 @@ degradation contract in section 3.4.1.
     The same-length client projection lowercases the native suffix for HTML
     identity and maps only an exact provider-owned suffix range back to the
     complete Citry spelling. It excludes every `c-*` tag boundary, raw-text
-    body, comment, expression, end tag, and quoted nested template. Completion,
-    nested-template forwarding, and `<c-element>` remain follow-ups rather than
-    looser variants of this hover contract.
-12. **Accept a `ComponentLibrary` as a registry target.** Allow the existing
+    body, comment, expression, end tag, and quoted nested template. Completion
+    remains outside this direct dynamic-attribute slice. Step 22 implements
+    nested-template and `<c-element>` forwarding through a distinct parser-backed
+    projection rather than loosening this hover contract.
+12. **Accept a `ComponentLibrary` as a registry target.** Implemented
+    2026-08-08. Allow the existing
     `module:attribute` setting to resolve either a `Citry` instance or a
     `ComponentLibrary`. For a library target, the isolated discovery worker
     creates `Citry(autodiscover=False)`, registers that manifest, and publishes
     the resulting built-in-plus-library analysis and catalog. Status and
     documentation must make the boundary explicit: this mode knows no host-app
-    components, configuration, or extensions. If the library cannot install
-    without host-provided extensions, discovery fails clearly and directs the
-    author to expose a configured `Citry` wrapper instead. In particular,
-    `"citry.app": "citry_ui:__citry_library__"` should work without a separate
-    adapter module.
+    components, configuration, or host-provided extensions. If the library
+    cannot install without host-provided extensions, discovery fails clearly
+    and directs the author to expose a configured `Citry` wrapper instead. In
+    particular, `"citry.app": "citry_ui:__citry_library__"` works as the direct
+    manifest target.
 13. **Repair expression delivery, completion edits, structural snippets, and
     component matching.** Treat completion as an end-to-end LSP/client contract,
     not merely a list of server labels. Empty and partial Python expressions in
@@ -1293,72 +1359,423 @@ degradation contract in section 3.4.1.
     retains `c-CForm`, `<c-cfo` ranks `c-CForm` first, and an exact `<c-cform`
     prefers that alias. Attribute-value completions such as fill slot names and
     exposed slot-data fields remain separate value-oriented completion paths.
-14. **Add first-party Citry syntax hover.** Provide concise, syntax-only hover
-    documentation and canonical `https://citry.dev/` links for every
-    parser-owned structural tag, directive, and structural attribute. The
-    acceptance corpus includes `c-bind`, `<c-slot>`, `<c-slot required>`, and
-    `<c-fill>`. Keep the metadata in one exhaustive table checked against the
-    authoritative parser-owned names; registry state and an installed HTML
-    provider are not prerequisites.
-15. **Infer conservative roots from `template_data()` source.** Without
-    executing component methods, inspect the exact owning Python AST and expose
-    statically proven string keys from returned dict shapes in the same
-    interpolation and expression-attribute contexts as declared
-    `TemplateData`. A key can complete and navigate to its literal definition
-    even when its value type is unknown; add a type only when Python analysis
-    proves one. Track conditional returns, unpacking, aliases, inheritance, and
-    shared templates with explicit confidence/completeness rather than treating
-    a partial shape as closed. Declared `TemplateData` remains authoritative
-    where present. This is the narrow path that makes keys such as `root_class`
-    and `root_attrs` useful without forcing authors to duplicate a large return
+    The no-whitespace activation slice was implemented on 2026-08-08. VS Code
+    retriggers once when the first Unicode identifier character is typed in a
+    lexically plausible Citry Python or structural-value host, including
+    directly after `{{`, an attribute quote, or an operator. It uses the same
+    deletion and history recovery as tag completion. Identifier characters
+    remain absent from the global LSP trigger list so ordinary Python typing
+    does not wake Citry; the server remains authoritative for exact parsed
+    regions, expression token context, and replacement ranges. Strings,
+    comments, mapping string keys, and raw-text bodies are declined, while
+    f-string replacements and static `c-fill` `name`/`data` values retain their
+    applicable completion paths. Automatic word retriggering is limited to
+    conventional direct Python `template` literals and documents explicitly in
+    `citry-html` mode. Registry-owned files left in ordinary `html` mode still
+    support manual completion and native punctuation/whitespace triggers, but
+    the client cannot prove their ownership before waking every HTML provider.
+14. **Add first-party Citry syntax hover.** Implemented 2026-08-08. Concise,
+    syntax-only hover documentation and canonical `https://citry.dev/` links
+    cover every parser-owned structural tag, fixed directive, and contextual
+    structural attribute. The acceptance corpus includes `c-bind`,
+    `<c-slot>`, `<c-slot required>`, and `<c-fill>`, along with closing tags,
+    nested templates, inline Python strings, and invalid structural placement.
+    One context-qualified table drives both completion and hover. Its tag,
+    directive, and per-structural-tag attribute keys are checked against
+    immutable inventories exported by the Rust parser through `citry_core`.
+    Exact AST token ranges handle valid templates; a parser-shaped scan keeps
+    tag and attribute help available when semantic placement fails, while
+    comments, raw bodies, values, dynamic `c-*` attributes, and split Python
+    literal tokens produce no false hover. Registry state and an installed HTML
+    provider are not prerequisites. Existing lexical and `TemplateData` hover
+    wins inside expression values, and catalog hover still owns registered
+    components and component inputs that are not fixed Citry syntax.
+15. **Infer conservative roots from `template_data()` source.** Implemented
+    2026-08-08. Use the
+    selected project interpreter's CPython `ast`, not Ruff's `ty` analyzer, for
+    this source-shape pass. The isolated app worker statically walks the loaded
+    component class MRO to copy the concrete-to-owner resolution chain, files,
+    and qualified names without invoking the method or arbitrary descriptors.
+    An engine-owned `ComponentLibrary` materialization wrapper is collapsed
+    only from its positive runtime marker, and the effective function's code
+    file and first line must match the exact direct AST method it claims as
+    provenance.
+    The private worker metadata is keyed by catalog `definition_id`; it does not
+    expand catalog v1 or the client protocol. A shared, pure source-analysis
+    function under `citry.analysis` then analyzes that exact method without
+    importing project code. The LSP supplies synchronized editor text for every
+    open Python file in the chain and disk source otherwise. The checker now
+    supplies disk source to the shared step-17 root policy; step 15 itself did
+    not add a new `citry check` finding or report field. Direct returned dicts
+    and only explicitly modelled local aliases, mutations, branches, and `**`
+    unpacks contribute literal string keys. A direct return of the method's
+    `kwargs` parameter, or a simple untouched alias of it, instead joins the
+    component's proven effective `Kwargs` fields. This includes the inherited
+    base implementation, whose runtime contract makes component inputs
+    available as template roots without an override. Typed `Kwargs` is a
+    structural carrier rather than an ordinary dict, so calls, subscript
+    operations, unpacking, and other mutations on it withhold those roots;
+    returning any other unknown parameter or name leaves the shape open.
+    Literal-dict roots carry their key range and an optional
+    value-expression range, while kwargs-derived roots reuse the effective
+    `Kwargs` field's existing declaration provenance. Every result also carries
+    whether the key is always or conditionally present and whether the complete
+    shape is closed or remains open with a reason. The source pass does not
+    infer value types; kwargs-derived roots reuse their existing structured
+    schema type when all consumers agree. Repeated literal keys follow Python's last-write order within
+    one mapping. When several reachable branches define the same key, retain
+    every definition and return every distinct standard LSP location; never
+    choose one arbitrarily. Unknown unpacking preserves proven key existence
+    while discarding any value definition it may overwrite. Passing a tracked
+    mapping to unsupported code or referencing it from unmodelled control flow
+    withholds that affected mapping's roots rather than guessing. Invalid or
+    unreadable source, an unsaved class or method
+    rename that no longer matches runtime provenance, or anything other than
+    one exact owning AST node contributes no inferred roots for that owner and
+    never reuses stale definition ranges. A key can complete and navigate to
+    its literal definition even when its value type is unknown. Literal keys
+    are accepted only when their exact runtime string is also the exact Python
+    identifier identity, so normalization-changing strings are not suggested.
+    This pass does
+    not grow its own general Python type system. Declared `TemplateData` remains
+    authoritative where present, and a physical template shared by several
+    components exposes only compatible proven roots shared by every consumer.
+    This is the narrow path that makes keys such as `root_class` and
+    `root_attrs` useful without forcing authors to duplicate a large return
     dict solely for editor support.
-16. **Design and implement type-aware Python template expressions.** Start from
-    an editor-independent batch/shadow-Python representation with authored
-    source mappings, then reuse it for completion, hover, navigation, and
-    diagnostics inside `{{ ... }}`, every Python-valued attribute, loop clauses,
-    and nested templates. Cover member and call completion, unions, Optional
-    values, narrowing, aliases, and safe-expression restrictions; for example,
-    `method.lower()` is offered only where the effective type permits that
-    member. Consume structured types or a real Python analyzer rather than
-    parsing catalog display strings into an ad hoc type system.
-17. **Configure template linting on `Citry`, with unknown roots warning by
-    default.** Add one extensible lint-settings surface to the `Citry` instance
-    and carry it through portable analysis so `citry check` and the LSP apply
-    the same policy; VS Code does not invent a parallel preference. The unknown
-    template-variable rule accepts `ignore`, `warning`, or `error` and defaults
-    to `warning`. Diagnose only free root names after accounting for lexical
-    bindings, declared or inferred component data, and every known global;
-    members remain the type checker's concern. Runtime `Citry.template_globals`
-    are known automatically, while lint settings independently declare
-    additional global names and optional types/descriptions for per-render,
-    framework, or extension-provided values without injecting runtime data.
-    Extensions may contribute the same portable metadata. Registry mode emits
-    the configured diagnostic even when some dynamic source remains open—the
-    default warning is deliberately advisory—and authors can declare the name,
-    downgrade/ignore the rule, or expose a more complete schema. Syntax-only
-    analysis, which cannot associate a component namespace, does not guess.
-    Define rule codes, inheritance/override behavior, serialization, and
-    component-level escape hatches before implementation.
-18. **Join `CssData` to component CSS.** Recognize Citry's generated CSS
-    variable spelling, provide field hover and exact definition links back to
-    `Component.CssData`, and stay conservative when a stylesheet has multiple
-    possible component owners. Global CSS custom-property visibility means
-    this is provenance and authoring assistance, not a claim of CSS isolation.
-19. **Specify and implement automatic `JsData` scope seeding.** Give each
-    component instance an independent client-side value graph, seed its Alpine
-    scope from serialized `js_data` immediately before `$component`, and keep
-    `$component` as the hook for additional or overridden scope values. Define
-    duplicate-name precedence, supported wire types, hydration timing, and
-    Alpine activation before changing runtime behavior.
-20. **Add Alpine/browser-expression intelligence from that contract.** Parse
+16. **Design and implement type-aware Python template expressions.**
+    Implemented 2026-08-08. The accepted analyzer and source-mapping contract
+    is specified in
+    [`python_template_expressions.md`](python_template_expressions.md). A
+    portable `citry.analysis` builder finds every Python-valued host and emits
+    virtual Python that binds declared or source-inferred roots, recreates
+    template conditions, lowers loop clauses to comprehensions, carries nested
+    template and fill scope, and maps exact expression and unchanged Python
+    source ranges. Inferred methods are copied so their concrete return value
+    types remain visible even through a broad public return annotation; the
+    inherited `return kwargs` path imports only static type information for the
+    effective `Kwargs` schema. The schema catalog supplies per-field authored
+    owners from its version-neutral annotation snapshot, including Python 3.14
+    deferred declarations; missing owner provenance withholds that typed binding
+    rather than falling back to the generated effective class.
+    `citry-lsp` runs the exactly pinned published `ty` language server from the
+    selected environment as one child per workspace. Standard structured LSP
+    records provide member and call completion, hover, definition, signature
+    help, and pull diagnostics without linking Ruff's unpublished internal
+    crates or importing project code in the stdio process. Results are retained
+    only inside mapped authored expressions, shared consumers and return paths
+    are joined conservatively, Citry owns unknown-root findings independently,
+    and private, `str.format`, and receiver-proven sandbox-internal members are
+    filtered. Missing, mismatched, failed, and timed-out analyzers produce
+    one degradation notice while parser and root features continue. The client
+    protocol remains version 1 because all editor operations use standard LSP
+    capabilities. Variable hover composes a Python-highlighted declaration
+    from the analyzer's current type with Citry's root or lexical provenance;
+    declared catalog text remains the fallback when semantic analysis cannot
+    prove one complete answer across every consumer and return path.
+17. **Configure template linting on `Citry`, with strict unknown roots by
+    default.** Implemented 2026-08-08. The contract is specified in
+    [`template_linting.md`](template_linting.md). Add one extensible
+    lint-settings surface to the `Citry` instance and carry it through portable
+    analysis so `citry check` and the LSP apply the same policy; VS Code does
+    not invent a parallel preference. `rule_unknown_template_variable` accepts
+    `ignore`, `warning`, or `error` and defaults to `error`. Diagnose only free
+    root names after accounting for lexical bindings, declared or inferred
+    component data, runtime globals, lint-only variables, and extension
+    contributions. Portable schema metadata records `closed`, explicit
+    `allow-extra`, or `unknown` namespace policy rather than treating a field
+    list as exhaustive. Explicitly extra-allowing schemas cap the diagnostic at
+    warning; unknown and absent schemas remain strict unless the author declares
+    the name or overrides the rule. Members remain the Python analyzer's
+    concern. Components configure inherited overrides through `Component.Lint`.
+    Syntax-only analysis, which cannot associate a component namespace, does
+    not guess. Runtime globals and lint-only declarations also participate in
+    root completion, Python-style hover, and conservative member intelligence;
+    qualified forward annotations resolve in the selected project environment.
+    Direct application and component `template_variables` mappings also carry
+    exact, synchronized source provenance for Definition and Declaration;
+    dynamic or ambiguous construction produces no guessed target.
+    Citry-owned diagnostic identifiers, message templates, trigger conditions,
+    examples, default severities, reporting surfaces, and help links come from
+    the versioned diagnostics-v1 catalog. The LSP retains `citry` as the
+    standard source label and attaches catalog documentation through
+    `Diagnostic.codeDescription`; provider-owned `citry.python.*` details
+    remain external.
+18. **Join CSS data sources to component CSS.** Implemented 2026-08-09. This
+    step covers both declared
+    `Component.CssData` fields and exact string keys inferred conservatively
+    from `css_data()` when no schema is declared. A Python field name maps to
+    its exact runtime custom-property spelling: `chart_height` becomes
+    `--chart_height`; Citry does not convert underscores to dashes or normalize
+    case. An inferred key such as `"row-color"` becomes `--row-color`.
+
+    The first supported authoring surfaces are direct `Component.css` string
+    literals and registry-owned `css_file` files, including inherited and
+    shared assets with source-proven owners. CSS selected dynamically,
+    dependency or extension CSS without an authored source map, compiled CSS
+    dialects, arbitrary stylesheets, inline `style` attributes, and template
+    `<style>` bodies remain outside this step. A template `<style>` element is
+    not itself the component CSS asset that causes `css_data()` to be emitted,
+    so it needs a separate delivery and ownership contract before Citry joins
+    data to it.
+
+    Citry recognizes a data reference only as the custom-property argument of
+    `var()`, including incomplete `var(--` and `var(--cha` authoring states.
+    Custom-property declarations, `@property`, strings, comments, selectors,
+    and lookalike text are not data references. The scanner handles CSS
+    comments, strings, nested functions, fallbacks, CRLF, Unicode, UTF-16
+    editor coordinates, and incomplete input. Completion emits the exact
+    unescaped runtime spelling; escaped identifier spellings conservatively
+    receive no Citry result in this step.
+
+    Completion, hover, Definition, Declaration, and References are additive to
+    the editor's ordinary CSS service. Hover leads with the CSS property and
+    then names every proven Python producer, its annotation, and description.
+    A Python annotation describes the value before CSS serialization, not the
+    CSS grammar accepted where `var()` is used, so Citry does not present it as
+    a CSS value type. Definition and Declaration point to exact `CssData`
+    fields or inferred dictionary keys. References list each exact use in the
+    same physical CSS asset once; `includeDeclaration` adds every exact Python
+    origin. Reverse Python-field-to-workspace-CSS references, Type Definition,
+    rename, and workspace-wide CSS indexing remain outside this slice.
+
+    A shared stylesheet gets Citry assistance only for a name available from
+    every currently proven consumer. Hover lists each producer separately when
+    annotations or descriptions disagree, and navigation returns every exact
+    origin. A name present on only some consumers produces no Citry result.
+    Syntax-only analysis has no component owners and therefore leaves the
+    stylesheet entirely to the ordinary CSS provider.
+
+    `css_data()` source inference reuses the portable, batch-capable mapping
+    analysis developed for `template_data()`, with a CSS string-key policy and
+    without the default `return kwargs` rule. It accepts direct dictionary
+    returns, simple aliases, modeled updates, exact string keys, and multiple
+    reachable return paths. Conditional keys remain available but are marked
+    conditional. Computed keys, escaped mappings, unsupported mutation,
+    ambiguous method ownership, and stale source open the shape or withhold it
+    rather than manufacturing provenance. A declared `CssData` schema remains
+    authoritative; open-schema extras are not guessed from source in this
+    first implementation.
+
+    Source freshness follows the template-variable contract. The worker copies
+    CSS asset and `css_data()` resolution chains from its isolated project
+    process. The long-lived LSP validates effective MRO, direct string or
+    `pathlib.Path(...)` asset ownership, schema fields, and inferred-key ranges
+    against synchronized source. Imported constants, factories, decorators,
+    metaclasses, other dynamic asset selection, conflicting source aliases,
+    or a changed request generation degrade to no Citry result. Shared
+    consumers are filtered independently, so one stale component does not
+    invalidate an unrelated proven owner.
+
+    This feature deliberately emits no unknown-property or unused-field
+    diagnostics. A custom property can come from an ancestor, the host page, a
+    theme, an external stylesheet, JavaScript, or an extension. Likewise, an
+    apparently unused `CssData` field can be consumed outside the component's
+    primary authored stylesheet. The join proves known producer provenance;
+    it never claims CSS namespace closure or selector isolation.
+19. **Specify and implement automatic `JsData` scope seeding.** Implemented
+    2026-08-09. The runtime
+    keeps content-addressed JSON delivery, but parses a fresh value graph for
+    every component invocation so siblings never share mutable arrays or
+    objects. It seeds every top-level `js_data()` entry into the component's
+    stable Alpine scope before `$component` runs. A callback may overwrite a
+    seeded name or add another name; on a correlated rerender Citry refreshes
+    current seeded names, removes seeded names absent from the new payload,
+    and preserves callback-owned names outside that set. Inner Alpine scopes
+    retain their ordinary lexical precedence, component boundaries stay
+    isolated, and fill content retains its recorded lexical source.
+
+    The wire contract remains strict JSON: null, booleans, finite numbers,
+    strings, arrays, and objects with exact string keys. Seeding does not
+    flatten nested objects or rename keys. Property writes must be safe even
+    for names such as `__proto__`; only JavaScript-identifier keys later
+    participate in bare-name editor completion. The callback receives the
+    same invocation-local snapshot as `data`, while `scope` remains the
+    mutable Alpine surface.
+
+    A component with `$component` always receives the seed before its
+    callback. A rendered component that declares `JsData` or overrides
+    `js_data()` and has Alpine expressions receives an explicit seed-only
+    lifecycle call even when it has no component JavaScript or its current
+    data is empty; the empty call also clears keys owned by an earlier render.
+    A component that inherits the framework's always-empty default needs no
+    seed call. The manifest states whether a call initializes or only seeds;
+    the client never guesses from a registration that may still be loading.
+    `js_data()` alone does not ship Alpine or a payload when the rendered
+    instance has neither `$component` nor browser expressions. For initial
+    documents and inserted fragments, scope attachment and seeding finish
+    before Alpine evaluates the instance or dependent children run. Missing
+    or malformed data cancels that call with a pointed client error rather
+    than exposing a partially seeded scope.
+20. **Add Alpine/browser-expression intelligence from that contract.**
+    Implemented 2026-08-09. Parse
     expression and statement contexts for `x-*`, `@*`, and `:*`; offer
-    `JsData`-derived names and types; and navigate those names to exact Python
-    fields. Alpine magics, Events/State metadata, incoming props, and names
-    added imperatively by `$component` remain separate proven sources rather
-    than being guessed from JavaScript text.
+    `JsData`-derived names and their JSON wire types; and navigate those names
+    to exact Python fields or conservatively inferred `js_data()` keys.
+    Declared `JsData` is authoritative. Without it, source inference follows
+    the same current-source and shared-consumer confidence rules as template
+    and CSS data. A direct value such as `kwargs.submitting` joins to the
+    effective `Kwargs.submitting` annotation through the method's actual
+    second parameter name. Python annotations map to a structured JSON type
+    model, not copied display strings. A field whose type cannot be converted
+    cleanly to the strict JSON wire contract produces a warning at its
+    declaration and degrades to `unknown` for editor typing; runtime
+    serialization remains the final check for actual values.
+
+    Component JavaScript receives a mapped virtual declaration for
+    `$component`. Its `data` and initial `scope` shapes come from `JsData`; its
+    read-only `props` shape comes from the authored `props` declaration,
+    including constructor unions, required/default presence, and the
+    runtime's null policy. Empty or dynamic prop definitions remain unknown
+    instead of borrowing types from similarly named JS data. Generated ranges
+    never escape into authored edits or navigation.
+
+    Events, State, props, Alpine magics, and names added imperatively by
+    `$component` remain separate proven sources. A string literal passed to
+    `sendEvent` or `$sendEvent` is checked against the owning component's
+    effective Events handler wire names and navigates to the exact Python
+    method. Dynamic names remain unchecked. `onEvent` and `$onEvent` listen
+    for open browser-event names produced by `actions.Dispatch` or other DOM
+    code, so they accept any string and do not use the server-handler
+    diagnostic.
+
+    The portable analysis locates expression, statement, and loop hosts in
+    supported Alpine attributes, including nested templates, without
+    importing project code. It also identifies root names, simple
+    `owner.member` uses, `$component` prop declarations, and literal server
+    event calls while declining strings, comments, computed members, and
+    dynamic event names. `citry check` and the LSP share the same structured
+    Python-to-JSON type mapping and diagnostics.
+
+    In VS Code, a version-bound virtual JavaScript document delegates ordinary
+    JavaScript completion, hover, and definition to the installed JavaScript
+    provider. Citry adds exact `JsData` roots, component `data` and `scope`
+    members, public Events `State` members through `$state` and callback
+    `state`, static client props, and server-event origins. Shared assets keep
+    only contracts proven for every owner, and synchronized Python source is
+    revalidated before a result is returned. Citry-owned names suppress a
+    duplicate delegated hover or definition. Citry owns linked hover help for
+    its Alpine magics and `$component` context, while ordinary JavaScript
+    remains provider-owned. Generated projection ranges, stale
+    document versions, invalid source, ambiguous ownership, unsupported data
+    shapes, and partial provenance degrade to no mapped result. This slice
+    does not claim a standalone JavaScript diagnostic service. Citry owns its
+    JSON-wire warning, Alpine and component-initializer namespace rules,
+    literal server-event contract, and static child-prop contract; ordinary
+    JavaScript diagnostics remain provider-owned.
+
+    **Accepted browser-intelligence expansion.** User testing after the first
+    Step 20 delivery established that browser expressions need the same strict
+    namespace policy as Python template expressions. Citry therefore owns a
+    portable Alpine-expression analyzer, backed by OXC and shared by
+    `citry check` and the LSP. It distinguishes declarations, local bindings,
+    property names, and free root references instead of promoting the earlier
+    lexical scanner into a linter. A free Alpine root absent from every proven
+    source is an error by default. `LintSettings.rule_unknown_alpine_variable`
+    and the matching `Component.Lint` field accept `"error"`, `"warning"`, or
+    `"ignore"`; `alpine_variables` declares additional analysis-only browser
+    globals or custom Alpine magics using the same annotation and
+    `Annotated[T, description]` convention as template lint variables.
+    `JsData`, inferred `js_data()`, Alpine/Citry magics, ordinary browser
+    globals, `x-data`, `x-for`, and proven synchronous `$component` scope writes
+    are joined automatically and are never repeated in that setting.
+
+    Component JavaScript has a separate strict namespace rule for proven
+    `$component` initializers. OXC resolves local declarations and the exact
+    callback or configuration-`init` context destructuring, then reports free
+    initializer references without scanning unrelated file-level JavaScript.
+    A missing name is an error by default, so `scope.value = ...` is rejected
+    when the callback destructured only `data`. The application and inheritable
+    `Component.Lint` declaration expose
+    `rule_unknown_component_js_variable = "error" | "warning" | "ignore"`
+    and `component_js_globals`, whose values use the same annotation and
+    `Annotated[T, description]` convention. ECMAScript and browser globals are
+    built in; callback context names must be destructured and are not implicit
+    globals. Invalid severities or JavaScript identifiers are rejected when
+    settings are constructed. Invalid or unsupported initializer source
+    produces no partial namespace diagnostic and leaves ordinary JavaScript
+    diagnostics to the installed provider.
+
+    `$component` exposes the complete runtime callback context, including
+    `id`, `els`, typed `data`, initial `scope`, read-only `props`, Events
+    `state`, `loading`, `error`, `effect`, `reactive`, `graph`,
+    `provide`/`inject`/`unprovide`, `sendEvent`, and `onEvent`. Callback and
+    configuration-object forms use separate contextual overloads, and the
+    callback result is `void | (() => void)` because a returned function is
+    cleanup while async initialization is unsupported. Direct synchronous
+    initialization writes such as `scope.name = value`, `scope["name"] =
+    value`, and a static `Object.assign(scope, {...})` add proven variables to
+    the component's Alpine subtree. Conditional writes are optional; computed
+    keys, escaped aliases, async/later writes, and arbitrary dynamic mutation
+    remain unproven. Rebinding the local `scope` parameter does not replace the
+    Alpine scope.
+
+    `x-for` separates its declaration pattern from its iterable expression.
+    The iterable is checked in the outer scope; declared value/key/index names
+    are typed, navigable, and visible on the `<template>` and its single-root
+    descendant subtree, with nested scopes and shadowing resolved by binding
+    identity. The provider projection models Alpine value iteration rather than
+    copying JavaScript `for...in` semantics.
+
+    Literal server-handler checks cover all equivalent spellings: `sendEvent`
+    and `$sendEvent` calls, declarative `@c-*` bindings, and the handler names
+    passed to `$loading(...)` and `$error(...)`. They share
+    `citry.browser.unknown-server-event`, completion, hover, and exact Python
+    handler navigation. `onEvent` and `$onEvent` remain open browser-event
+    listeners. Declarative handler argument expressions are analyzed in the
+    source component's Alpine scope.
+
+    Citry-owned browser APIs have first-party hover records with their
+    JavaScript signature, a concise explanation, and a canonical documentation
+    link. This covers `$component`, each proven destructured context binding,
+    and Citry Alpine magics such as `$sendEvent`, `$loading`, and `$error`.
+    Literal server-event completion works from an empty or partial string in
+    `sendEvent`, `$sendEvent`, `$loading`, and `$error`, using the same handler
+    contract as diagnostics and navigation.
+
+    The VS Code adapter keeps one virtual JavaScript document per authored
+    browser host and refreshes it as the source changes. Requests for the same
+    document version and cursor position share one LSP projection. When the
+    registry-backed projection exists, the generic embedded-JavaScript path
+    does not invoke a second provider. This keeps the installed JavaScript
+    service warm, avoids duplicate work, and prevents generated `document.js`
+    targets from escaping through fallback navigation. Cancellation, stale
+    source versions, failed providers, or a missing registry return no result.
+
+    For a statically resolved child component, `$c-props` is checked against
+    the child's effective static `$component({props})` contract. Citry reports
+    unknown keys, missing required keys, and incompatible proven value types,
+    and navigates an authored key to the child prop declaration. Explicit keys
+    remain checkable beside a spread, but a dynamic spread prevents a
+    missing-required conclusion; computed keys, dynamic component targets,
+    ambiguous shared targets, and unproven `c-$c-props` results degrade without
+    a speculative diagnostic.
+
+    The accepted expansion was implemented on 2026-08-10. The portable OXC
+    analysis, shared lint policy, event contract, `$component` declarations,
+    scope-write discovery, `x-for` bindings, and static `$c-props` checks are
+    consumed by batch and editor surfaces from the same source records.
+
 21. **Complete the PyCharm attach spike.** Verify inline Python-string and
     standalone-template behavior through LSP4IJ, publish an importable template,
     and document the tested capability matrix before release.
+
+    Implemented 2026-08-11. PyCharm 2026.2.0.1 and LSP4IJ 0.20.1 attached one
+    Citry server to both document shapes alongside native Python support. The
+    standard completion, hover, Definition, References, Declaration, Type
+    Definition, push-diagnostic, unsaved-edit, and standalone-formatting paths
+    passed through LSP4IJ. A disposable native `LspIntegrationProvider` reached
+    `Running` and attached to both files as well. The first public route is the
+    importable definition in `packages/editors/jetbrains/lsp4ij/citry/`; a
+    maintained native plugin remains triggered by setup/status/coloring or
+    private-provider needs, not by an attach blocker. The spike also narrowed
+    dynamic formatting registration to a language-only selector accepted by
+    both JetBrains clients without exposing Citry formatting on Python files.
+    See `ide_research/pycharm_attach_spike.md` for the evidence matrix and
+    limitations. The intentionally deferred coloring, native-client, and
+    HTML/JavaScript/CSS bridge work is tracked in
+    [#78](https://github.com/citry-dev/citry/issues/78) with its staged
+    acceptance contract.
 22. **Grow the remaining long tail only from evidence.** Richer whole-program
     indexing beyond the scheduled expression work, extension-aware
     authored-source mappings, alternate template dialects,
@@ -1366,17 +1783,99 @@ degradation contract in section 3.4.1.
     triggers in sections 10 and 12. Static and runtime records get explicit
     join keys, confidence, ambiguity, and
     version behavior before they are combined.
-    Two concrete HTML-provider follow-ups remain recorded here rather than
-    being silently implied by the direct-attribute slice in step 11:
-    - Revisit HTML hover, completion, and definition inside nested templates
-      stored in `c-*` attribute values. The ordinary HTML provider sees those
-      tags as quoted text, so support requires a parser/source-map-backed
-      virtual extraction rather than another lexical rewrite.
-    - Revisit native-attribute forwarding on `<c-element>`. It is an HTML
-      attribute boundary rather than a component-input boundary, but its
-      effective tag can be dynamic. Forward tag-specific intelligence only
-      when the target and the returned source mappings are proven; generic
-      global-attribute assistance may be separable from that later work.
+    The two concrete HTML-provider follow-ups were implemented on 2026-08-10.
+    Nested templates stored in `c-*` attribute values receive HTML completion,
+    hover, and definition through a parser-proven virtual fragment. The LSP
+    strips the `<>...</>` envelope, selects the deepest containing nested
+    template, and returns an exact version-bound source range. The VS Code
+    client asks the installed HTML provider against that fragment and maps
+    only ranges and edits contained by the returned source map. For example,
+    a double-quoted nested-template attribute uses single quotes for HTML
+    attributes inside it: `c-body="<><input type='email' /></>"`.
+
+    `<c-element>` start-tag intelligence uses the same parser-backed request.
+    A statically proven literal target such as `is="form"` is projected to a
+    same-length `<form>` start tag, so tag-specific attributes such as
+    `action` and `method` are available. A dynamic `c-is`, `c-bind`, an
+    unproven target, or a literal tag name too long for exact same-length
+    mapping is projected to a custom-element placeholder, which preserves
+    generic global HTML attributes without claiming a tag-specific contract.
+    Citry's `is`, `c-is`, and `c-bind` selection attributes are masked from the
+    HTML provider. Dynamic native attributes such as `c-action` still use the
+    exact suffix projection from step 11 and map hover back to the complete
+    authored name.
+
+    Both paths require the current parser tree, one contiguous literal range,
+    and a linear authored-source mapping. Host-only multiline indentation is
+    retained in the virtual fragment. Invalid/recovered syntax, Python escapes
+    or literal joins that need a richer map, stale versions, provider
+    failure, and out-of-range provider edits return no result. A cheap lexical
+    client filter only decides whether to ask for the parser-backed projection;
+    it never establishes eligibility. This additive private request keeps the
+    unreleased protocol at version 1.
+
+    **Performance follow-up, implemented 2026-08-10.** The VS Code adapter
+    rejects irrelevant browser-provider routes before contacting the LSP,
+    coalesces Python watcher bursts, keeps stable generic virtual-document
+    identities, caches HTML projections by document generation and containing
+    source range, and requests no eager completion-item resolution. Custom
+    projections and delegated providers have bounded waits and propagate
+    cancellation where the public provider API permits it. Opt-in
+    `citry.trace.performance` output records projection, virtual-document,
+    delegated-provider, and total elapsed time as structured JSON without
+    changing protocol v1.
+
+    Project discovery runs asynchronously. Reload requests are serialized,
+    debounced, and latest-wins; a catalog refresh preserves the one incremental
+    `ty` process. Child requests keep late protocol responses consumable after
+    cancellation, and shutdown retains ownership through bounded terminate and
+    kill escalation. Semantic diagnostics wait for a short idle period, cancel
+    obsolete generations, reuse one proven component/source join per template
+    generation, and batch compatible expression copies into one analyzer
+    document per consumer. Direct Python dependencies are refreshed first;
+    analysis with an incomplete transitive-import graph retains the broader
+    freshness fallback.
+
+    On the 2026-08-10 development machine, constructing shadows for 60 Python
+    expressions fell from 475.64 ms to 12.87 ms on the first generation and
+    below 0.01 ms for an unchanged generation. Thirty mapped `ty` diagnostics
+    used one request instead of 30 and measured 64.51 ms cold and 15.41 ms
+    warm. On a 17.4 KB template, the client-side browser route measured about
+    0.22 ms median / 0.24 ms p95, and deepest HTML-host selection measured
+    about 0.28 ms median / 0.37 ms p95. These are focused implementation
+    benchmarks, not end-to-end editor latency; the performance trace is the
+    supported way to separate provider stages in a real Extension Host.
+23. **Complete variable navigation with standard LSP meanings.** Implemented
+    2026-08-08. References operate only on a proven template root or exact
+    parser-owned `c-for` or `c-fill` binding. They list authored uses inside the
+    same physical template, including nested templates, without crossing sibling
+    bindings that reuse a name. `includeDeclaration` adds the lexical
+    introduction or every exact `TemplateData`, `Kwargs`, or inferred-dict-key
+    origin. Definition and Declaration share that Citry-owned origin resolver.
+    Type Definition is a separate `ty` request: it points to the actual Python
+    class or typeshed type, maps copied source back to the authored file, and
+    returns no result when any proven consumer or return path lacks a safe
+    target. Untyped `c-fill` bindings point to their current neutral `Any`
+    contract even when they have no authored use. Python-local lambda,
+    comprehension, and walrus variables, member references, and references in
+    other physical templates remain outside this first slice. Invalid parses,
+    ambiguous ownership, a stale synchronized schema or asset-resolution chain,
+    analyzer failure, or a generated-only target degrade to no result rather
+    than a partial answer.
+    Asset freshness is source-proven only for direct string literals and
+    direct `pathlib.Path(...)` declarations. Imported constants, factories,
+    decorators, metaclasses, and other dynamic asset selection keep their
+    loaded registry behavior, but any synchronized Python buffer makes this
+    navigation slice fail closed until discovery runs again.
+24. **Keep template literals from being changed into f-strings by Pylance.**
+    Implemented 2026-08-08. Pylance owns this edit through
+    `python.analysis.autoFormatStrings`; its default is `false`. Citry documents
+    a workspace override of `false` and uses it in this repository. The setting
+    is window-scoped, so one workspace value applies to every Python file in
+    that VS Code window, not one template literal or workspace folder. Citry
+    does not intercept typing or reverse document changes because those events
+    cannot prove whether an f-string edit came from Pylance or was authored
+    deliberately. Editors without Pylance need no setting.
 
 Step 5 selected the companion `citry_lsp` distribution. It exposes the
 `citry-lsp` console command, declares Citry 0.3.2 through 0.3.x, catalog v1,
@@ -1386,7 +1885,8 @@ portable analysis and coordinate contracts, so it must reach PyPI before
 `citry-lsp` 0.1.0 can be published.
 
 Claim each distribution identifier immediately before its artifact is ready to
-publish; speculative name claims do not block earlier local work. No local
-PyCharm installation was available on 2026-07-30, so the attach spike and any
-JetBrains semantic-support matrix remain pre-publication work. This does not
-change the implemented editor-agnostic server or VS Code client.
+publish; speculative name claims do not block earlier local work. The PyCharm
+attach spike completed on 2026-08-11. Its checked-in LSP4IJ definition and
+tested semantic-support matrix cover the editor-neutral server;
+Citry-specific JetBrains coloring and VS Code-private provider delegation
+remain separate future plugin work.

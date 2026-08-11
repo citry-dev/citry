@@ -6,6 +6,30 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Changed
 
+- Keep editor requests responsive during project discovery by loading through
+  an asynchronous, cancellation-safe worker. Python-file bursts now debounce
+  into serialized latest-wins registry reloads, catalog refreshes preserve the
+  incremental `ty` process, and stale semantic diagnostics are cancelled
+  before they can delay interactive completion or hover. Analyzer shutdown and
+  late cancelled responses retain bounded child ownership instead of leaving
+  language-server or `ty` processes behind.
+- Reuse immutable class-resolution fingerprints across the app worker's data
+  and asset channels, keeping large component-library registries within the
+  bounded startup window without weakening source-provenance checks.
+- Use concise catalog-backed template diagnostic messages, rename the
+  unreleased unknown-component code to `citry.template.unknown-component`, and
+  attach canonical help links while retaining `citry` as the diagnostic source.
+- Present declared, source-inferred, loop, and fill variables as
+  Python-highlighted declarations on hover, using the analyzer's narrowed type
+  while retaining Citry provenance and safe catalog fallbacks.
+- Keep member completion useful for direct optional roots by offering the
+  non-`None` member surface without weakening hover or diagnostics, and retain
+  completion and signature help while repairing incomplete `cond` and `each`
+  expressions in explicit or shorthand structural hosts.
+- Keep root completion independent of surrounding whitespace while declining
+  root-only suggestions inside Python strings, comments, numeric literals, and
+  mapping string keys. Complete f-string replacement expressions remain
+  eligible on every supported Python version.
 - Match the runtime casing contract: only an exact lowercase `c-` prefix is
   component syntax, suffix lookup stays case-insensitive, and component kwarg
   and slot names remain case-sensitive in completion and hover.
@@ -19,8 +43,85 @@ All notable changes to `citry-lsp` are documented here.
   envelope records in the server instead of projecting only kwargs, slots,
   and template paths.
 
+### Fixed
+
+- Register standalone formatting with the portable language-only selector that
+  PyCharm's native LSP client, LSP4IJ, and VS Code all accept, without exposing
+  the Citry formatter on ordinary Python files in LSP4IJ.
+- Convert editor file URIs through one platform-aware path resolver, so
+  Windows drive-letter and UNC workspaces retain registry-backed completion,
+  hover, navigation, synchronized Python sources, and formatting.
+
 ### Added
 
+- Add a parser-backed, version-bound HTML-provider projection for nested
+  templates and `<c-element>` attributes. Literal element targets preserve
+  tag-specific assistance, dynamic targets preserve only global attributes,
+  and uncertain or non-linear source mappings fail closed.
+- Add registry-backed Alpine and component-JavaScript intelligence. Declared
+  or conservatively inferred `JsData` roots now complete, hover, navigate, and
+  receive JSON-derived JavaScript types; `$component` data, scope, static
+  props, public Events State, Alpine `x-for` bindings, synchronous scope writes,
+  and literal server-event names use the same synchronized Python provenance.
+  Unknown Alpine roots are errors by default; declarative `@c-*`, `$loading()`,
+  and `$error()` handler names share event diagnostics and navigation. Static
+  `$c-props` objects validate child keys, required props, and proven value
+  types, with exact navigation to the child JavaScript declaration.
+  Unsupported JSON types warn and shared assets retain only facts proven for
+  every owner. Direct values read from an inferred `js_data()` method's kwargs
+  parameter use the effective `Kwargs` field annotation instead of degrading
+  to `unknown`. Free `$component` initializer names are errors by default and
+  can use typed application or component globals. Citry browser APIs show
+  linked first-party hover help, and server-handler string arguments complete
+  from empty or partial values.
+- Join registry-owned inline and file-backed component CSS to declared
+  `CssData` fields and conservative literal keys inferred from `css_data()`.
+  Exact `var(--name)` uses now receive completion, hover, Definition,
+  Declaration, and same-stylesheet References while shared assets and
+  synchronized Python edits retain conservative ownership checks. Arbitrary
+  custom properties remain open-world and do not produce Citry diagnostics.
+- Add registry-backed unknown-template-variable diagnostics through Citry's
+  shared lint policy. Runtime globals, application/component lint metadata,
+  extension contributions, declared schemas, inferred roots, and synchronized
+  source participate in the same namespace used by `citry check`. Explicit
+  extra-preserving schemas cap findings at warning, while syntax-only files do
+  not guess ownership. Known global and lint-only roots also complete, hover,
+  and use their conservative types for Python member intelligence.
+- Navigate application and component lint-only variables to exact direct
+  `template_variables` dictionary keys, while declining dynamic, stale, or
+  ambiguous settings construction.
+- Add same-template references and declaration navigation for proven roots and
+  exact loop/fill bindings. Type Definition now follows those variables to
+  their actual Python or standard-library types when every mapped consumer and
+  return path has a safe answer, including neutral `Any` targets for unused
+  fill bindings. Synchronized component inheritance and template ownership are
+  revalidated before registry-backed variable results are served. Direct
+  literal and `pathlib.Path(...)` declarations receive exact freshness checks;
+  dynamic or imported asset selection fails closed while Python source is
+  synchronized.
+- Add type-aware Python template expressions through a pinned `ty` child from
+  the selected project environment. Proven roots now receive member and call
+  completion, hover, user-member navigation, signature help, and source-mapped
+  diagnostics across interpolations, Python-valued attributes, loop clauses,
+  narrowing, nested templates, inferred return paths, and shared consumers.
+  Unknown-root policy remains deferred, analyzer failures degrade once to the
+  existing parser and root features, and sandboxed members are filtered.
+- Infer conservative template roots from statically resolvable
+  `template_data()` source when no `TemplateData` schema is declared. Direct
+  dict keys, modelled aliases, mutations, branches, and unpacks now provide
+  completion, hover, and exact key navigation from synchronized Python text;
+  the inherited `return kwargs` implementation reuses effective `Kwargs`
+  fields and their types without treating a typed `Kwargs` carrier as a dict.
+  Ambiguous, stale, or unsupported shapes withhold claims, and shared templates
+  retain only roots proven for every consumer.
+- Add syntax-only first-party hover documentation and canonical Citry guide
+  links for every parser-owned structural tag, fixed directive, and contextual
+  structural attribute. Exact source ranges cover standalone, nested, and
+  inline Python templates without requiring a registry or HTML provider.
+- Accept a `ComponentLibrary` as the configured registry target. The server
+  materializes it with Citry's built-ins in an isolated registry, reports the
+  library-only scope in project status, and directs libraries requiring
+  host-provided extensions to expose a configured `Citry` instance.
 - Add parser and registry-backed diagnostics for conservative inline Python
   template regions, explicit `citry-html` documents, and registry-resolved
   associated template files.

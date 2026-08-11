@@ -24,6 +24,115 @@
 # - Functions without `self` are treated as module-level functions.
 #   This matches how typeshed defines modules.
 
+from collections.abc import Mapping
+
+########################################################
+# Internationalization
+########################################################
+
+class i18n:
+    class I18nCompileError(ValueError):
+        code: str
+        diagnostic_json: str
+
+    class CompiledCatalog:
+        @property
+        def schema_version(self) -> int: ...
+        @property
+        def revision(self) -> str: ...
+        @property
+        def formats_revision(self) -> str: ...
+        def artifact_json(self) -> str: ...
+        def format(
+            self,
+            locale: str,
+            message_id: str,
+            args_json: str = "{}",
+            attribute: str | None = None,
+        ) -> str: ...
+        def resolve_json(
+            self,
+            locale: str,
+            message_id: str,
+            args_json: str = "{}",
+            attribute: str | None = None,
+        ) -> str: ...
+        def resolve_rich_json(
+            self,
+            locale: str,
+            message_id: str,
+            args_json: str,
+            slot_names_json: str,
+            attribute: str | None = None,
+        ) -> str: ...
+        def format_number(self, locale: str, profile: str, value: str) -> str: ...
+        def parse_number_json(self, locale: str, profile: str, input: str) -> str: ...
+        def format_currency(
+            self,
+            locale: str,
+            profile: str,
+            value: str,
+            currency: str,
+        ) -> str: ...
+        def format_date(
+            self,
+            locale: str,
+            profile: str,
+            year: int,
+            month: int,
+            day: int,
+        ) -> str: ...
+        def format_time(
+            self,
+            locale: str,
+            profile: str,
+            hour: int,
+            minute: int,
+            second: int,
+            nanosecond: int,
+        ) -> str: ...
+        def format_datetime(
+            self,
+            locale: str,
+            profile: str,
+            year: int,
+            month: int,
+            day: int,
+            hour: int,
+            minute: int,
+            second: int,
+            nanosecond: int,
+            time_zone: str,
+            offset_seconds: int,
+            epoch_seconds: int,
+        ) -> str: ...
+        def format_relative_time(
+            self,
+            locale: str,
+            profile: str,
+            value: str,
+            unit: str,
+        ) -> str: ...
+        def format_list(self, locale: str, profile: str, values: list[str]) -> str: ...
+
+    class CatalogCompiler:
+        def __init__(self) -> None: ...
+        def compile(self, request_json: str) -> i18n.CompiledCatalog: ...
+        def compile_link_unit(self, request_json: str) -> str: ...
+        def clear(self) -> None: ...
+
+    class TextCatalog:
+        def __init__(self, locale: str, source: str, origin: str) -> None: ...
+        @property
+        def origin(self) -> str: ...
+        def entries(self) -> list[tuple[str, bool, list[str]]]: ...
+        def format(self, message_id: str, attribute: str | None = None) -> str: ...
+
+    @staticmethod
+    def canonicalize_locale(value: str) -> str: ...
+    @staticmethod
+    def locale_direction(value: str) -> str | None: ...
+
 ########################################################
 # HTML transform
 ########################################################
@@ -268,6 +377,24 @@ class template_formatter:
 ########################################################
 
 class template_parser:
+    @staticmethod
+    def analyze_browser_source(
+        input: str,
+        mode: str,
+    ) -> tuple[bool, list[tuple[str, int, int]]]: ...
+    @staticmethod
+    def analyze_component_scope_writes(
+        input: str,
+    ) -> list[tuple[str, int, int, int, int]]: ...
+    @staticmethod
+    def analyze_component_source(
+        input: str,
+    ) -> tuple[
+        bool,
+        list[tuple[str, int, int]],
+        list[tuple[str, str, int, int, list[tuple[int, int]]]],
+        list[tuple[str, int, int, int, int]],
+    ]: ...
     # Functions
     @staticmethod
     def parse_template(
@@ -280,6 +407,11 @@ class template_parser:
         template: template_parser.Template,
         lang: str | None = None,
     ) -> str: ...
+    def format_number(self, locale: str, profile: str, value: str) -> str: ...
+    def format_currency(self, locale: str, profile: str, value: str, currency: str) -> str: ...
+    def format_date(self, locale: str, profile: str, year: int, month: int, day: int) -> str: ...
+    def format_relative_time(self, locale: str, profile: str, value: str, unit: str) -> str: ...
+    def format_list(self, locale: str, profile: str, values: list[str]) -> str: ...
 
     # AST types
 
@@ -500,3 +632,9 @@ class template_parser:
     RESERVED_TAG_NAMES: frozenset[str]
     """Structural ``<c-*>`` tags the parser handles itself (e.g. ``c-if``, ``c-slot``),
     so they never resolve to a user component."""
+
+    CITRY_DIRECTIVE_NAMES: frozenset[str]
+    """Fixed Citry attribute directives whose spelling is owned by the parser."""
+
+    STRUCTURAL_TAG_ATTRIBUTE_NAMES: Mapping[str, frozenset[str]]
+    """Fixed parser-owned attribute spellings keyed by structural tag name."""

@@ -228,10 +228,9 @@ class CacheExtension(Extension):
         if not config.enabled:
             return None
 
-        debug_extension = self.citry.extensions._extensions_by_name.get("debug")
-        debug_bypass = getattr(debug_extension, "_render_cache_bypass", None)
-        if debug_bypass is not None and debug_bypass():
-            self._diagnose_component("bypass", component, reason="debug-active")
+        bypass_reason = self._extension_bypass_reason()
+        if bypass_reason is not None:
+            self._diagnose_component("bypass", component, reason=bypass_reason)
             return None
 
         ttl = _normalize_ttl(config.ttl, source="component Cache ttl")
@@ -298,11 +297,9 @@ class CacheExtension(Extension):
             raise ValueError(msg)
         if not enabled:
             return None
-
-        debug_extension = self.citry.extensions._extensions_by_name.get("debug")
-        debug_bypass = getattr(debug_extension, "_render_cache_bypass", None)
-        if debug_bypass is not None and debug_bypass():
-            self._diagnose("bypass", kind="fragment", reason="debug-active")
+        bypass_reason = self._extension_bypass_reason()
+        if bypass_reason is not None:
+            self._diagnose("bypass", kind="fragment", reason=bypass_reason)
             return None
         if ttl == 0:
             self._diagnose("bypass", kind="fragment", reason="ttl-zero")
@@ -326,6 +323,19 @@ class CacheExtension(Extension):
             return decision
         self._diagnose_lookup(decision, component=None)
         return decision
+
+    def _extension_bypass_reason(self) -> str | None:
+        """Ask every extension through the same public cache-lookup hook."""
+        for extension in self.citry.extensions._extensions:
+            reason = extension.render_cache_bypass_reason()
+            if reason is not None:
+                if type(reason) is not str or not reason:
+                    raise TypeError(
+                        f"Extension {extension.name!r} render_cache_bypass_reason() must return "
+                        "None or an exact non-empty string."
+                    )
+                return reason
+        return None
 
     def _lookup_physical_key(
         self,

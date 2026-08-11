@@ -4,8 +4,7 @@ This document tracks the extraction of the framework-agnostic component
 engine from `django-components` into the `citry` Python package. It is the
 persistent reference for this multi-session effort.
 
-For operating rules see `/CLAUDE.md`. For current project state see
-`/TODO/project_status_june_2026.md`.
+For operating rules see `/CLAUDE.md`.
 
 ---
 

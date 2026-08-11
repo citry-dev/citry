@@ -23,7 +23,7 @@ The callback form accepts one initializer:
 
 ```js
 $component(({ els, data, scope }) => {
-  scope.name = data.name;
+  console.log(data.name, scope.name);
   els[0].dataset.ready = "true";
 });
 ```
@@ -45,8 +45,9 @@ $component({
 ```
 
 A component class may register exactly one `$component` initializer. Citry
-runs it synchronously after the component boundary, parent initialization,
-and client props are ready. Do not return a Promise.
+seeds the component scope from `js_data()` first, then runs the initializer
+synchronously after the component boundary, parent initialization, and client
+props are ready. Do not return a Promise.
 
 Return a function when the initializer creates something that must be cleaned
 up. Citry calls it before that instance initializes again and when the
@@ -65,10 +66,10 @@ The initializer receives these values:
 |---|---|
 | `id` | The current server render ID. A rerender may replace it. |
 | `els` | A stable array containing the instance's current element roots. It is empty for a rootless component. |
-| `data` | The JSON value returned by [`js_data()`][citry.Component.js_data], or `null`. |
+| `data` | A fresh instance-local graph parsed from the JSON returned by [`js_data()`][citry.Component.js_data], or `null`. |
 | `graph` | The current ownership route and source metadata when the instance belongs to a client graph. |
 | `props` | The stable, reactive, top-level read-only values declared by the configuration form. The callback form receives an empty object. |
-| `scope` | The stable reactive object available to Alpine expressions inside this component. |
+| `scope` | The stable reactive object available to Alpine expressions inside this component. Its top-level server-data keys are seeded before init. |
 | `state` | The component's reactive Events State, or `null` when the component declares no Events. |
 | `effect(fn)` | Run a managed reactive effect. It returns an early-stop function and stops automatically before cleanup. |
 | `reactive(value)` | Turn an object or array into an Alpine reactive proxy. |
@@ -79,6 +80,12 @@ The initializer receives these values:
 | `onEvent(name, callback)` | Listen for server-dispatched events targeting this instance and return an unsubscribe function. |
 | `loading(name?)` | Return whether any handler, or one named handler, is queued or running. |
 | `error(name?)` | Return the newest retained error, or the retained error for one named handler. |
+
+`$component` is optional when the template only needs server data in Alpine
+expressions. Returning `{"count": 0}` from `js_data()` makes `count` available
+to `x-text="count"` and `@click="count++"` directly. On a compatible rerender,
+Citry refreshes current seeded keys and removes old seeded keys that disappeared,
+while preserving unrelated fields added by the callback.
 
 A prop declaration accepts `type`, `required`, and `default`. `type` may be a
 constructor or an array of constructors. `required` defaults to `false`. Use a

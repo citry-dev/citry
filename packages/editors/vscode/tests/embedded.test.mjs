@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { embeddedLanguageAt, pythonEmbeddedRegions, virtualDocumentSource } from "../out/tests/embedded.mjs";
+import {
+	embeddedLanguageAt,
+	pythonEmbeddedRegions,
+	virtualDocumentSource,
+	virtualDocumentSourceAt,
+} from "../out/tests/embedded.mjs";
 
 test("discovers exact typed template, JavaScript, and CSS triple-string assignments", () => {
 	const source = [
@@ -75,4 +80,15 @@ test("selects a provider only while the cursor is inside an embedded body", () =
 	assert.equal(embeddedLanguageAt(source, "python", source.indexOf("template")), undefined);
 	assert.equal(embeddedLanguageAt("<div>", "citry-html", 2), "html");
 	assert.equal(embeddedLanguageAt("<div>", "plaintext", 2), undefined);
+});
+
+test("builds a cursor-proven virtual view from one region scan", () => {
+	const source = 'template = """<div></div>"""\njs = """const answer = 42"""';
+	const htmlOffset = source.indexOf("div");
+
+	assert.equal(
+		virtualDocumentSourceAt(source, "python", "html", htmlOffset),
+		virtualDocumentSource(source, "python", "html"),
+	);
+	assert.equal(virtualDocumentSourceAt(source, "python", "javascript", htmlOffset), undefined);
 });

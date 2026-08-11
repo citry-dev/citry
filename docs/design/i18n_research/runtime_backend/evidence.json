@@ -1,0 +1,317 @@
+{
+  "bidi_validation": {
+    "browser": {
+      "catalog_cases_rejected": 36,
+      "catalog_escape_forms": [
+        "literal",
+        "u4",
+        "U6"
+      ],
+      "paragraph_boundaries_rejected_per_scalar_sink": 7,
+      "whole_message_paragraph_cases_isolated": 8
+    },
+    "python": {
+      "catalog_cases_rejected": 36,
+      "catalog_escape_forms": [
+        "literal",
+        "u4",
+        "U6"
+      ],
+      "paragraph_boundaries_rejected_per_scalar_sink": 7,
+      "whole_message_paragraph_cases_isolated": 8
+    },
+    "rust": {
+      "catalog_cases_rejected": 36,
+      "catalog_escape_forms": [
+        "literal",
+        "u4",
+        "U6"
+      ],
+      "paragraph_boundaries_rejected_per_scalar_sink": 7,
+      "whole_message_paragraph_cases_isolated": 8
+    }
+  },
+  "bounded_claims": {
+    "browser_compiled_catalog_proved": false,
+    "formatting_backend_ratified": false,
+    "production_backend_ratified": false,
+    "production_pyo3_binding_proved": false,
+    "rich_message_api_ratified": false,
+    "rust_bundle_send_sync_compile_assertion": true
+  },
+  "browser_payload": {
+    "catalog_parser_included": true,
+    "full_budget_gate_passed": false,
+    "gzip_bytes": 4703,
+    "includes_citry_adapter": false,
+    "message_count": 100,
+    "metafile_inputs": [
+      "<generated-entry>",
+      "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/esm/builtins.js",
+      "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/esm/bundle.js",
+      "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/esm/index.js",
+      "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/esm/memoizer.js",
+      "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/esm/resolver.js",
+      "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/esm/resource.js",
+      "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/esm/scope.js",
+      "node_modules/.pnpm/@fluent+bundle@0.19.1/node_modules/@fluent/bundle/esm/types.js"
+    ],
+    "minified_bytes": 14407,
+    "source_bytes": 3179,
+    "source_gzip_bytes": 479,
+    "upstream_runtime_only": true
+  },
+  "cross_layer_lowering": {
+    "actual_layer_precedence_exercised": false,
+    "distinct_internal_private_term_ids_rendered": true,
+    "illustrative_lowered_artifact_public_reference_rendered": true,
+    "source_to_lowered_transform_proved": false
+  },
+  "environment": {
+    "cargo": "cargo 1.98.0-nightly (fbb61be30 2026-05-26)",
+    "locks": {
+      "browser_pnpm_sha256": "680bf1fe2f0bb85b1384f34325c33bbb0355690631308631ed241827080966ad",
+      "python_exact_pins_sha256": "2db9e7866e155b40e5cb9a81faec354e5988083a196c14704721c5f91235c5d5",
+      "rust_cargo_sha256": "816dd73c7018710f847da82dc07ba3b6b922b8691c730ab30d093257d95f4d38"
+    },
+    "node": "v26.5.0",
+    "packages": {
+      "@fluent/bundle": "0.19.1",
+      "Babel": "2.18.0",
+      "attrs": "26.1.0",
+      "esbuild": "0.28.1",
+      "fluent-bundle": "0.16.0",
+      "fluent.runtime": "0.4.0",
+      "fluent.syntax": "0.19.0",
+      "pytz": "2026.3.post1",
+      "typing-extensions": "4.15.0"
+    },
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "pnpm": "10.32.1",
+    "python": "3.13.12",
+    "rustc": "rustc 1.98.0-nightly (14210df0e 2026-05-31)",
+    "uv": "uv 0.12.0 (Homebrew 2026-07-28 aarch64-apple-darwin)"
+  },
+  "fixtures": {
+    "cs-CZ.ftl": "a9fd68f91df8850fe633b0143b3a32350d6f042f1a84791c8c7e975fab4b66e4",
+    "en-US.ftl": "bd1cfa7f3e54572a187e577971a93ecabd0241b4779c891ce7da34d0b6dd1cee",
+    "hostile-bidi-control.json": "c026b8be1a271a74f87fdc407bf6a4fa57b2ad21e1d23c588d8d45869e367075",
+    "invalid.ftl": "3dd47d43b41f1deab152c90afa5b4927344df0317409337445f4c730028bb316",
+    "layered-generated.ftl": "329c62c1de5708f015a350b7d63241f7466b86bba8591293ded16259f2830701",
+    "unsupported-variable-term-argument.ftl": "f941928e541c6cc273e0e7420fa506eba660fe542697ef1aadc2fd71846b24f2"
+  },
+  "formatter_delegation": {
+    "datetime_called": true,
+    "exact_and_plural_selection_delegated": true,
+    "exact_selector_called": true,
+    "number_called": true,
+    "ordinal_called": true,
+    "plural_called": true
+  },
+  "harness": {
+    "browser/package.json": "ad18a66f0e30586accee964caf954d525d72b1456458d6d8f8ed97e488378c84",
+    "browser/runner.mjs": "f1640a1bb7ded80ede87ff418b7b5ef58c89067d254eb13ef7e4347a9ae97aca",
+    "python-requirements.txt": "2db9e7866e155b40e5cb9a81faec354e5988083a196c14704721c5f91235c5d5",
+    "python_candidate.py": "574dc80d093eca93928f395a4f01121a12137ee39531e806b5f67949d0119633",
+    "run_runtime_backend_spike.py": "560481ca0ee6d1ebdc49cf447a4eb05ed7b61cdb03f87763896c9bfd1ff3a662",
+    "rust/Cargo.toml": "74eda45de312972a2cb62a2b3c41d7c083bc9ea6cb907238e5080fae5c257f02",
+    "rust/src/main.rs": "ea31f20c58d0d2e9c8d902f1f4f71e9f277706259e0aa542f94c49243614841f"
+  },
+  "python_optimization_safety": {
+    "assert_statements": 0,
+    "source_files_checked": 2
+  },
+  "result": "PASS_BOUNDED",
+  "rich_placeholder_adapter": {
+    "catalog_and_scalar_collision_rejected": true,
+    "citry_owned_scalar_isolation_exercised": true,
+    "embedded_bidi_controls_rejected": true,
+    "escaped_catalog_bidi_controls_rejected": true,
+    "fluent_owned_isolation_disabled": true,
+    "markers_distinct_per_locale": true,
+    "markers_distinct_per_resolution": true,
+    "markers_random_per_run": true,
+    "opaque_marker_rehydrated": true,
+    "repeated_slot_occurrences_rehydrated": true,
+    "required_slot_omission_rejected": true,
+    "runtime_result_was_flat_string": true,
+    "scalar_paragraph_boundaries_rejected": true,
+    "slot_marker_remained_unisolated": true,
+    "slot_object_entered_runtime": false,
+    "source_to_lowered_transform_proved": false,
+    "static_slot_usage_contract_required": true,
+    "unsafe_selector_behavior": "all runtimes accepted a Slot marker as an ordinary selector string",
+    "whole_message_paragraph_isolation_exercised": true
+  },
+  "rust_function_error_strategy": {
+    "final_text_sentinel_used": false,
+    "pre_resolution_value_contract_exercised": true,
+    "production_infallible_callback_binding_proved": false,
+    "source_function_option_validation_required": true
+  },
+  "semantic_parity": {
+    "candidate_count": 3,
+    "cases": {
+      "cs-CZ": {
+        "attribute": "Akce pro ⁨אבג <Ada&Co>⁩",
+        "balance": "Zůstatek: ⁨NUM[value=1234.5,profile=currency,currency=USD]⁩",
+        "due_date": "Termín: ⁨DATE[value=1782864000000,profile=short-date]⁩",
+        "layered_reference": "Library wrapper: application override via application private term / library private term",
+        "multiline_fallback_isolated": "⁦První odstavec náhradního textu⁩\n⁦Druhý odstavec náhradního textu⁩",
+        "ordinal_1": "⁨NUM[value=1,profile=integer]⁩. pořadí",
+        "ordinal_11": "⁨NUM[value=11,profile=integer]⁩. pořadí",
+        "ordinal_2": "⁨NUM[value=2,profile=integer]⁩. pořadí",
+        "ordinal_21": "⁨NUM[value=21,profile=integer]⁩. pořadí",
+        "ordinal_3": "⁨NUM[value=3,profile=integer]⁩. pořadí",
+        "ordinal_4": "⁨NUM[value=4,profile=integer]⁩. pořadí",
+        "plural_0": "Žádné položky",
+        "plural_1": "⁨NUM[value=1,profile=integer]⁩ položka",
+        "plural_1_5": "⁨NUM[value=1.5,profile=decimal]⁩ desetinné položky",
+        "plural_2": "⁨NUM[value=2,profile=integer]⁩ položky",
+        "plural_2_5": "⁨NUM[value=2.5,profile=decimal]⁩ desetinné položky",
+        "plural_5": "⁨NUM[value=5,profile=integer]⁩ položek",
+        "plural_negative_zero": "Žádné položky",
+        "rich": [
+          {
+            "kind": "text",
+            "value": "⁨אבג <Ada&Co>⁩ přijal(a) "
+          },
+          {
+            "kind": "slot",
+            "name": "terms_link",
+            "occurrence": 0
+          },
+          {
+            "kind": "text",
+            "value": " ⁨NUM[value=2,profile=integer]⁩krát; podrobnosti: "
+          },
+          {
+            "kind": "slot",
+            "name": "terms_link",
+            "occurrence": 1
+          },
+          {
+            "kind": "text",
+            "value": "."
+          }
+        ],
+        "summary": "Citry účet: ⁨אבג <Ada&Co>⁩"
+      },
+      "en-US": {
+        "attribute": "Actions for ⁨אבג <Ada&Co>⁩",
+        "balance": "Balance: ⁨NUM[value=1234.5,profile=currency,currency=USD]⁩",
+        "due_date": "Due: ⁨DATE[value=1782864000000,profile=short-date]⁩",
+        "layered_reference": "Library wrapper: application override via application private term / library private term",
+        "multiline_fallback_isolated": "⁦First fallback paragraph⁩\n⁦Second fallback paragraph⁩",
+        "ordinal_1": "⁨NUM[value=1,profile=integer]⁩st",
+        "ordinal_11": "⁨NUM[value=11,profile=integer]⁩th",
+        "ordinal_2": "⁨NUM[value=2,profile=integer]⁩nd",
+        "ordinal_21": "⁨NUM[value=21,profile=integer]⁩st",
+        "ordinal_3": "⁨NUM[value=3,profile=integer]⁩rd",
+        "ordinal_4": "⁨NUM[value=4,profile=integer]⁩th",
+        "plural_0": "No items",
+        "plural_1": "⁨NUM[value=1,profile=integer]⁩ item",
+        "plural_1_5": "⁨NUM[value=1.5,profile=integer]⁩ items",
+        "plural_2": "⁨NUM[value=2,profile=integer]⁩ items",
+        "plural_2_5": "⁨NUM[value=2.5,profile=integer]⁩ items",
+        "plural_5": "⁨NUM[value=5,profile=integer]⁩ items",
+        "plural_negative_zero": "No items",
+        "rich": [
+          {
+            "kind": "text",
+            "value": ""
+          },
+          {
+            "kind": "slot",
+            "name": "terms_link",
+            "occurrence": 0
+          },
+          {
+            "kind": "text",
+            "value": " accepted ⁨NUM[value=2,profile=integer]⁩ times; details: "
+          },
+          {
+            "kind": "slot",
+            "name": "terms_link",
+            "occurrence": 1
+          },
+          {
+            "kind": "text",
+            "value": ". Accepted by ⁨אבג <Ada&Co>⁩."
+          }
+        ],
+        "summary": "Citry account: ⁨אבג <Ada&Co>⁩"
+      }
+    },
+    "cases_equal": true
+  },
+  "strict_resolution": {
+    "browser": {
+      "bidi-control-catalog": "rejected all 36 literal and escaped bidi-control cases",
+      "bidi-control-plain": "account-summary contains a prohibited bidi-control scalar",
+      "bidi-control-rich": "acceptance contains a prohibited bidi-control scalar",
+      "invalid-plural-infinity": "invalid-plural-input $value must be a finite safe number before resolution",
+      "invalid-plural-input": "invalid-plural-input $value must be a finite safe number before resolution",
+      "invalid-plural-nan": "invalid-plural-input $value must be a finite safe number before resolution",
+      "paragraph-boundary-plain": "rejected all 7 Unicode bidi paragraph boundaries",
+      "paragraph-boundary-rich": "rejected all 7 Unicode bidi paragraph boundaries",
+      "slot-function-scalar": "slot-function-scalar $value must be a Slot before resolution",
+      "slot_catalog_collision": "slot marker collides with a catalog resource",
+      "slot_marker_omitted": "expected at least one slot marker, received 0",
+      "slot_marker_wrapped": "slot marker was unexpectedly wrapped as scalar text",
+      "slot_scalar_collision": "slot marker collides with a scalar input",
+      "unknown-function": "ReferenceError: Unknown function: NOT_REGISTERED()",
+      "unknown-variable": "ReferenceError: Unknown variable: $missing"
+    },
+    "python": {
+      "bidi-control-catalog": "rejected all 36 literal and escaped bidi-control cases",
+      "bidi-control-plain": "account-summary contains a prohibited bidi-control scalar",
+      "bidi-control-rich": "acceptance contains a prohibited bidi-control scalar",
+      "invalid-plural-infinity": "invalid-plural-input $value must be a finite number before resolution",
+      "invalid-plural-input": "invalid-plural-input $value must be a finite number before resolution",
+      "invalid-plural-nan": "invalid-plural-input $value must be a finite number before resolution",
+      "paragraph-boundary-plain": "rejected all 7 Unicode bidi paragraph boundaries",
+      "paragraph-boundary-rich": "rejected all 7 Unicode bidi paragraph boundaries",
+      "slot-function-scalar": "slot-function-scalar $value must be a Slot before resolution",
+      "slot_catalog_collision": "slot marker collides with a catalog resource",
+      "slot_marker_omitted": "expected at least one slot marker, received 0",
+      "slot_marker_wrapped": "slot marker was unexpectedly wrapped as scalar text",
+      "slot_scalar_collision": "slot marker collides with a scalar input",
+      "unknown-function": "Unknown function: NOT_REGISTERED",
+      "unknown-variable": "Unknown external: missing"
+    },
+    "rust": {
+      "bidi-control-catalog": "rejected all 36 literal and escaped bidi-control cases",
+      "bidi-control-plain": "account-summary contains a prohibited bidi-control scalar",
+      "bidi-control-rich": "acceptance contains a prohibited bidi-control scalar",
+      "invalid-plural-infinity": "invalid-plural-input $value must be a finite safe number before resolution",
+      "invalid-plural-input": "invalid-plural-input $value must be a finite safe number before resolution",
+      "invalid-plural-nan": "invalid-plural-input $value must be a finite safe number before resolution",
+      "paragraph-boundary-plain": "rejected all 7 Unicode bidi paragraph boundaries",
+      "paragraph-boundary-rich": "rejected all 7 Unicode bidi paragraph boundaries",
+      "slot-function-scalar": "slot-function-scalar $value must be a Slot before resolution",
+      "slot_catalog_collision": "slot marker collides with a catalog resource",
+      "slot_marker_omitted": "expected at least one slot marker, received 0",
+      "slot_marker_wrapped": "slot marker was unexpectedly wrapped as scalar text",
+      "slot_scalar_collision": "slot marker collides with a scalar input",
+      "unknown-function": "[ResolverError(Reference(Function { id: \"NOT_REGISTERED\" }))]",
+      "unknown-variable": "[ResolverError(Reference(Variable { id: \"missing\" }))]"
+    }
+  },
+  "term_variable_argument": {
+    "annotations": [
+      "Expected literal"
+    ],
+    "conclusion": "current Fluent named term arguments accept literals, not variables",
+    "junk_entries": 1
+  },
+  "unproved_design_contract": {
+    "authored_to_lowered_transform_proved": false,
+    "intended_rules": [
+      "implicit typed number/date display is rejected",
+      "ordinary numeric selectors compile to CITRY_PLURAL",
+      "ordinary displayed scalars compile to CITRY_TEXT"
+    ],
+    "source_checker_proved": false
+  }
+}

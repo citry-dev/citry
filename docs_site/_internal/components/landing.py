@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import functools
 import importlib
+import itertools
 import json
 import re
 from typing import TYPE_CHECKING, Any
@@ -26,6 +27,577 @@ if TYPE_CHECKING:
 # are the one fragile part, so `test_walkthrough_stops_point_at_the_right_lines`
 # checks that each range still contains the text it claims to explain.
 _TOUR_PATH = "docs_site/snippets/landing/product_card.py"
+
+# The editor demo reads ordinary source and layers its interactive symbols on
+# top. Keeping the annotations here means the file stays useful as real Citry
+# code, while a stale or ambiguous range fails the docs build.
+_EDITOR_PATH = "docs_site/snippets/landing/editor_invite_panel.py"
+
+_EDITOR_MARKS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "member-type-definition",
+        "needle": "class Member(TypedDict):",
+        "symbol": "Member",
+        "definition": "member-type",
+        "signature": "class Member(TypedDict)",
+        "language": "python",
+        "provenance": "Python type",
+        "description": "This JSON-safe shape follows members from Python into the browser.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "member-name-definition",
+        "needle": "class Member(TypedDict):\n    name: str",
+        "symbol": "name",
+        "definition": "member-name",
+        "signature": "(property) Member.name: str",
+        "language": "python",
+        "provenance": "Declared by Member",
+        "description": "The field remains typed after Python data reaches Alpine.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "member-online-definition",
+        "needle": "name: str\n    online: bool",
+        "symbol": "online",
+        "definition": "member-online",
+        "signature": "(property) Member.online: bool",
+        "language": "python",
+        "provenance": "Declared by Member",
+        "description": "Citry translates this bool to a JavaScript boolean.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "invite-type-definition",
+        "needle": "class InviteIn(TypedDict):",
+        "symbol": "InviteIn",
+        "definition": "invite-type",
+        "signature": "class InviteIn(TypedDict)",
+        "language": "python",
+        "provenance": "Python event payload",
+        "description": "The event handler and browser call share this payload shape.",
+        "docs": "/events/",
+    },
+    {
+        "id": "member-chip-definition",
+        "needle": "class MemberChip(Component):",
+        "symbol": "MemberChip",
+        "definition": "member-chip",
+        "signature": "class MemberChip(Component)",
+        "language": "python",
+        "provenance": "Registered Citry component",
+        "description": "Component tags navigate to the Python class that owns them.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "member-chip-name-definition",
+        "needle": "class Kwargs:\n        name: str",
+        "symbol": "name",
+        "definition": "member-chip-name",
+        "signature": "(property) MemberChip.Kwargs.name: str",
+        "language": "python",
+        "provenance": "Declared component input",
+        "description": "The component accepts this required Python input.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "member-chip-status-definition",
+        "needle": "name: str\n        status: CitryRender",
+        "symbol": "status",
+        "definition": "member-chip-status",
+        "signature": "(property) MemberChip.Kwargs.status: CitryRender",
+        "language": "python",
+        "provenance": "Declared component input",
+        "description": "The child accepts this rendered nested-template value.",
+        "docs": "/syntax/nested-templates/",
+    },
+    {
+        "id": "member-chip-online-definition",
+        "needle": "props: { online: { type: Boolean } }",
+        "symbol": "online",
+        "definition": "member-chip-online",
+        "signature": "(property) online: boolean",
+        "language": "typescript",
+        "provenance": "Declared by MemberChip.$component",
+        "description": "The child exposes this client-side prop to its Alpine scope.",
+        "docs": "/getting-started/client-props-and-handlers/",
+    },
+    {
+        "id": "member-type-use",
+        "needle": "members: list[Member]",
+        "symbol": "Member",
+        "target": "member-type",
+        "signature": "class Member(TypedDict)",
+        "language": "python",
+        "provenance": "Type of each InvitePanel member",
+        "description": "Go to Type Definition opens the TypedDict above.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "kwarg-title-definition",
+        "needle": "class Kwargs:\n        title: str\n        members: list[Member]",
+        "symbol": "title",
+        "definition": "kwarg-title",
+        "signature": "(property) InvitePanel.Kwargs.title: str",
+        "language": "python",
+        "provenance": "Declared component input",
+        "description": "Every InvitePanel caller must provide this title.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "kwarg-members-definition",
+        "needle": "title: str\n        members: list[Member]",
+        "symbol": "members",
+        "definition": "kwarg-members",
+        "signature": "(property) InvitePanel.Kwargs.members: list[Member]",
+        "language": "python",
+        "provenance": "Declared component input",
+        "description": "The server receives a typed list of members.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "event-definition",
+        "needle": "def invite(self, data: InviteIn) -> None:",
+        "symbol": "invite",
+        "definition": "event-invite",
+        "signature": "(method) InvitePanel.Events.invite(data: InviteIn) -> None",
+        "language": "python",
+        "provenance": "Python event handler",
+        "description": "This method is callable from the component in the browser.",
+        "docs": "/events/",
+    },
+    {
+        "id": "invite-type-use",
+        "needle": "data: InviteIn) -> None",
+        "symbol": "InviteIn",
+        "target": "invite-type",
+        "signature": "class InviteIn(TypedDict)",
+        "language": "python",
+        "provenance": "Payload accepted by invite",
+        "description": "Go to Type Definition opens the event payload declaration.",
+        "docs": "/events/",
+    },
+    {
+        "id": "template-title-definition",
+        "needle": 'return {"title": kwargs.title}',
+        "symbol": '"title"',
+        "definition": "template-title",
+        "signature": "(variable) title: str",
+        "language": "python",
+        "provenance": "Inferred from template_data()",
+        "description": "Citry infers this template root directly from the returned dictionary.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "kwargs-title-use",
+        "needle": "kwargs.title}",
+        "symbol": "title",
+        "target": "kwarg-title",
+        "signature": "(property) InvitePanel.Kwargs.title: str",
+        "language": "python",
+        "provenance": "Declared by InvitePanel.Kwargs",
+        "description": "Definition follows this access to the input declaration.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "js-members-definition",
+        "needle": '"members": kwargs.members,',
+        "symbol": '"members"',
+        "definition": "js-members",
+        "signature": "(variable) members: list[Member]",
+        "language": "python",
+        "provenance": "Inferred from js_data()",
+        "description": "Citry serializes this inferred value into component JavaScript.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "kwargs-members-use",
+        "needle": "kwargs.members,",
+        "symbol": "members",
+        "target": "kwarg-members",
+        "signature": "(property) InvitePanel.Kwargs.members: list[Member]",
+        "language": "python",
+        "provenance": "Declared by InvitePanel.Kwargs",
+        "description": "Definition follows this access to the input declaration.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "js-inviting-definition",
+        "needle": '"inviting": False',
+        "symbol": '"inviting"',
+        "definition": "js-inviting",
+        "signature": "(variable) inviting: bool",
+        "language": "python",
+        "provenance": "Inferred from js_data()",
+        "description": "The literal False becomes a typed Alpine boolean.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "title-use",
+        "needle": "<h2>{{ title }}</h2>",
+        "symbol": "title",
+        "target": "template-title",
+        "placement": "below",
+        "signature": "(variable) title: str",
+        "language": "python",
+        "provenance": "Inferred from template_data()",
+        "description": "Go to Definition opens the exact returned dictionary key.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "member-binding",
+        "needle": 'x-for="member in visibleMembers"',
+        "symbol": "member",
+        "signature": "(variable) member: Member",
+        "language": "typescript",
+        "provenance": "Introduced by x-for",
+        "description": "This name exists only inside the repeated template subtree.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "visible-members-use",
+        "needle": 'x-for="member in visibleMembers"',
+        "symbol": "visibleMembers",
+        "target": "visible-members",
+        "signature": "(variable) visibleMembers: Member[]",
+        "language": "typescript",
+        "provenance": "Assigned by InvitePanel.$component",
+        "description": "Go to Definition follows this name into component JavaScript.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "member-chip-use",
+        "needle": "<c-MemberChip",
+        "symbol": "MemberChip",
+        "target": "member-chip",
+        "signature": "class MemberChip(Component)",
+        "language": "python",
+        "provenance": "Registered Citry component",
+        "description": "Go to Definition opens the component's Python class.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "member-chip-name-use",
+        "needle": 'c-name="member.name"',
+        "symbol": "c-name",
+        "target": "member-chip-name",
+        "signature": "(property) MemberChip.Kwargs.name: str",
+        "language": "python",
+        "provenance": "Input accepted by MemberChip",
+        "description": "Go to Definition opens the child's Kwargs field.",
+        "docs": "/ide/vscode/",
+    },
+    {
+        "id": "member-name-use",
+        "needle": 'member.name"',
+        "symbol": "name",
+        "target": "member-name",
+        "signature": "(property) Member.name: string",
+        "language": "typescript",
+        "provenance": "Inferred from the x-for item",
+        "description": "Go to Definition opens the TypedDict field.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "member-chip-status-use",
+        "needle": 'c-status="<>',
+        "symbol": "c-status",
+        "target": "member-chip-status",
+        "signature": "(property) MemberChip.Kwargs.status: CitryRender",
+        "language": "python",
+        "provenance": "Nested-template component input",
+        "description": "Go to Definition opens the child input that receives this rendered fragment.",
+        "docs": "/syntax/nested-templates/",
+    },
+    {
+        "id": "nested-html-attribute",
+        "needle": "c-title='title'",
+        "symbol": "c-title",
+        "signature": "(attribute) HTMLElement.title: string",
+        "language": "typescript",
+        "provenance": "HTML provider inside a nested template",
+        "description": "Citry forwards native HTML completion, hover, and documentation into the fragment.",
+        "docs": "/ide/vscode/#look-up-citry-syntax",
+    },
+    {
+        "id": "nested-title-use",
+        "needle": "='title'>",
+        "symbol": "title",
+        "target": "template-title",
+        "signature": "(variable) title: str",
+        "language": "python",
+        "provenance": "Inferred from template_data()",
+        "description": "Python-expression navigation remains available inside the nested template.",
+        "docs": "/ide/vscode/#complete-template-roots",
+    },
+    {
+        "id": "client-props",
+        "needle": '$c-props="{',
+        "symbol": "$c-props",
+        "signature": "(attribute) $c-props: MemberChipProps",
+        "language": "typescript",
+        "provenance": "Checked against MemberChip",
+        "description": "Unknown, missing, and mistyped child props are reported here.",
+        "docs": "/getting-started/client-props-and-handlers/",
+    },
+    {
+        "id": "member-chip-online-use",
+        "needle": '$c-props="{ online:',
+        "symbol": "online",
+        "target": "member-chip-online",
+        "signature": "(property) online: boolean",
+        "language": "typescript",
+        "provenance": "Client prop declared by MemberChip",
+        "description": "Go to Definition opens the child's $component prop declaration.",
+        "docs": "/getting-started/client-props-and-handlers/",
+    },
+    {
+        "id": "member-online-use",
+        "needle": "member.online }",
+        "symbol": "online",
+        "target": "member-online",
+        "signature": "(property) Member.online: boolean",
+        "language": "typescript",
+        "provenance": "Inferred from the x-for item",
+        "description": "Go to Definition opens the Python Member field.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "unknown-template-variable",
+        "needle": "{{ missing_summary }}",
+        "symbol": "missing_summary",
+        "severity": "error",
+        "code": "citry.template.unknown-variable",
+        "signature": '"missing_summary" is not defined',
+        "language": "python",
+        "provenance": "Error · citry.template.unknown-variable",
+        "description": "Template variable 'missing_summary' is not available in this template.",
+        "docs": "/ide/diagnostics/#citry.template.unknown-variable",
+    },
+    {
+        "id": "send-event",
+        "needle": "@submit.prevent=\"$sendEvent('invite', { email })\"",
+        "symbol": "$sendEvent",
+        "signature": 'function $sendEvent(name: "invite", data: InviteIn): Promise<void>',
+        "language": "typescript",
+        "provenance": "Citry browser API",
+        "description": "Calls a typed Python handler without leaving Alpine.",
+        "docs": "/events/bindings/",
+    },
+    {
+        "id": "event-name",
+        "needle": "$sendEvent('invite', { email })",
+        "symbol": "invite",
+        "target": "event-invite",
+        "signature": "(event) invite(data: InviteIn): void",
+        "language": "typescript",
+        "provenance": "Matches InvitePanel.Events.invite",
+        "description": "Event names complete, validate, and navigate to Python.",
+        "docs": "/events/bindings/",
+    },
+    {
+        "id": "loading-magic",
+        "needle": ":aria-busy=\"$loading('invite')\"",
+        "symbol": "$loading",
+        "signature": 'function $loading(event: "invite"): boolean',
+        "language": "typescript",
+        "provenance": "Citry browser API",
+        "description": "Tracks the named Python event for this component instance.",
+        "docs": "/events/bindings/#read-call-state-from-alpine",
+    },
+    {
+        "id": "email-use",
+        "needle": 'x-model="email"',
+        "symbol": "email",
+        "target": "scope-email",
+        "signature": "(variable) email: string",
+        "language": "typescript",
+        "provenance": "Assigned by InvitePanel.$component",
+        "description": "Go to Definition opens the direct scope assignment.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "inviting-use",
+        "needle": ':disabled="inviting || queuedInvite"',
+        "symbol": "inviting",
+        "target": "js-inviting",
+        "signature": "(variable) inviting: boolean",
+        "language": "typescript",
+        "provenance": "Inferred from js_data()",
+        "description": "Go to Definition opens the exact returned dictionary key.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "unknown-alpine-variable",
+        "needle": "inviting || queuedInvite",
+        "symbol": "queuedInvite",
+        "severity": "error",
+        "code": "citry.alpine.unknown-variable",
+        "signature": '"queuedInvite" is not defined',
+        "language": "typescript",
+        "provenance": "Error · citry.alpine.unknown-variable",
+        "description": "Alpine variable 'queuedInvite' is not available in this component.",
+        "docs": "/ide/diagnostics/#citry.alpine.unknown-variable",
+    },
+    {
+        "id": "unknown-event",
+        "needle": "$error('invte')",
+        "symbol": "invte",
+        "severity": "error",
+        "code": "citry.browser.unknown-server-event",
+        "signature": 'Server event "invte" is not declared',
+        "language": "typescript",
+        "provenance": "Error · citry.browser.unknown-server-event",
+        "description": "Server event 'invte' is not declared by this component.",
+        "docs": "/ide/diagnostics/#citry.browser.unknown-server-event",
+    },
+    {
+        "id": "component-api",
+        "needle": "$component({\n        props: { compact:",
+        "symbol": "$component",
+        "signature": "function $component(definition: ComponentDefinition): void",
+        "language": "typescript",
+        "provenance": "Citry component JavaScript API",
+        "description": "Adds typed client props and setup to this component.",
+        "docs": "/getting-started/client-props-and-handlers/",
+    },
+    {
+        "id": "data-parameter",
+        "needle": "init: ({ data, scope, props, effect }) => {",
+        "symbol": "data",
+        "signature": "(parameter) data: Readonly<InvitePanelData>",
+        "language": "typescript",
+        "provenance": "Inferred from js_data()",
+        "description": "The callback sees the JSON-safe shape produced by Python.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "scope-parameter",
+        "needle": "init: ({ data, scope, props, effect }) => {",
+        "symbol": "scope",
+        "signature": "(parameter) scope: AlpineScope",
+        "language": "typescript",
+        "provenance": "Citry $component context",
+        "description": "Direct assignments become typed Alpine variables.",
+        "docs": "/concepts/client-interactivity/",
+    },
+    {
+        "id": "props-parameter",
+        "needle": "init: ({ data, scope, props, effect }) => {",
+        "symbol": "props",
+        "signature": "(parameter) props: Readonly<{ compact?: boolean }>",
+        "language": "typescript",
+        "provenance": "Declared by InvitePanel.$component",
+        "description": "The callback receives the component's validated client props.",
+        "docs": "/getting-started/client-props-and-handlers/",
+    },
+    {
+        "id": "effect-parameter",
+        "needle": "init: ({ data, scope, props, effect }) => {",
+        "symbol": "effect",
+        "signature": "function effect(callback: () => void): CitryCleanup",
+        "language": "typescript",
+        "provenance": "Citry $component context",
+        "description": "Runs a reactive effect and disposes it with the component.",
+        "docs": "/getting-started/client-props-and-handlers/",
+    },
+    {
+        "id": "email-definition",
+        "needle": 'scope.email = "";',
+        "symbol": "email",
+        "definition": "scope-email",
+        "signature": "(property) AlpineScope.email: string",
+        "language": "typescript",
+        "provenance": "Assigned during $component initialization",
+        "description": "The direct scope write creates a typed Alpine variable.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "visible-members-definition",
+        "needle": "scope.visibleMembers = props.compact",
+        "symbol": "visibleMembers",
+        "definition": "visible-members",
+        "signature": "(property) AlpineScope.visibleMembers: Member[]",
+        "language": "typescript",
+        "provenance": "Assigned during $component initialization",
+        "description": "The scope write is visible and typed in the template above.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "data-members-slice-use",
+        "needle": "data.members.slice",
+        "symbol": "members",
+        "target": "js-members",
+        "signature": "(property) InvitePanelData.members: Member[]",
+        "language": "typescript",
+        "provenance": "Inferred from js_data()",
+        "description": "Go to Definition opens the exact returned dictionary key.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+    {
+        "id": "data-members-fallback-use",
+        "needle": ": data.members;",
+        "symbol": "members",
+        "target": "js-members",
+        "signature": "(property) InvitePanelData.members: Member[]",
+        "language": "typescript",
+        "provenance": "Inferred from js_data()",
+        "description": "Every use shares the Python key's inferred Member[] type.",
+        "docs": "/ide/vscode/#complete-alpine-and-component-javascript",
+    },
+)
+
+_EDITOR_NOTES: tuple[dict[str, str], ...] = (
+    {
+        "id": "typed-data",
+        "label": "01 / Data is inferred",
+        "title": "Returned dictionaries become typed editor data.",
+        "text": "Citry follows template_data() and js_data() keys into template and Alpine expressions, without a duplicate schema.",
+        "mark": "title-use",
+    },
+    {
+        "id": "python-navigation",
+        "label": "02 / Python stays connected",
+        "title": "Types and fields navigate across the source.",
+        "text": "Type Definition and Go to Definition follow TypedDicts, Kwargs fields, returned keys, and event payloads.",
+        "mark": "member-type-use",
+    },
+    {
+        "id": "child-contract",
+        "label": "03 / Child contracts are joined",
+        "title": "One component call connects three declarations.",
+        "text": "The tag opens the Python class, c-name opens Kwargs, and $c-props opens the child's JavaScript prop.",
+        "mark": "member-chip-use",
+    },
+    {
+        "id": "nested-templates",
+        "label": "04 / HTML enters attributes",
+        "title": "Nested templates keep full editor intelligence.",
+        "text": "Inside c-status, native HTML attributes retain documentation while template roots stay typed and navigable.",
+        "mark": "nested-html-attribute",
+    },
+    {
+        "id": "event-navigation",
+        "label": "05 / Events cross languages",
+        "title": "Browser event names open Python handlers.",
+        "text": "$sendEvent is typed from the handler signature, while literal event names validate and navigate to Python.",
+        "mark": "event-name",
+    },
+    {
+        "id": "scope-seeding",
+        "label": "06 / Setup feeds Alpine",
+        "title": "Direct scope writes become typed variables.",
+        "text": "email and visibleMembers navigate from template expressions to the exact assignments inside $component.",
+        "mark": "email-use",
+    },
+    {
+        "id": "diagnostics",
+        "label": "07 / Mistakes explain themselves",
+        "title": "Unknown names and event typos fail in place.",
+        "text": "Red squiggles carry the same diagnostic code, message, and documentation link shown by the extension.",
+        "mark": "unknown-alpine-variable",
+    },
+)
 
 # A stop's ``text`` is markup, not plain prose: naming an attribute or a method
 # reads better as code than in quotes, and the note is rendered as HTML.
@@ -86,10 +658,10 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
         "label": "Data",
         "lines": (23, 33),
         "anchor": "def template_data",
-        "title": "Use Python variables in templates, JS, and CSS",
+        "title": "Use Python variables in templates, browser behavior, and CSS",
         "text": (
             "<code>template_data</code> prepares template variables, "
-            "<code>js_data</code> sends data to JS script as JSON, and "
+            "<code>js_data</code> seeds Alpine variables from JSON, and "
             "<code>css_data</code> creates CSS variables scoped to this "
             "one instance."
         ),
@@ -158,11 +730,11 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
         "label": "Script",
         "lines": (63, 68),
         "anchor": "$component",
-        "title": "A script scoped to this component",
+        "title": "Advanced setup scoped to this component",
         "text": (
-            "<code>$component</code> receives this instance's elements and whatever "
-            "<code>js_data</code> returned, so the script never has to find its own "
-            "component with a selector."
+            "Templates use <code>js_data</code> values directly. Add "
+            "<code>$component</code> when an imperative library or other setup "
+            "needs this instance's elements and data."
         ),
     },
     {
@@ -220,12 +792,10 @@ _HOST_CASES: tuple[dict[str, Any], ...] = (
             "from citry import citry\n"
             "from citry.contrib.fastapi import mount\n"
             "\n"
-            "\n"
             "@asynccontextmanager\n"
             "async def lifespan(_app: FastAPI):\n"
             "    citry.initialize()\n"
             "    yield\n"
-            "\n"
             "\n"
             "app = FastAPI(lifespan=lifespan)\n"
             "mount(app, citry)"
@@ -703,6 +1273,9 @@ class LandingTourMarkup(Component):
         }
 
     template = """
+      <p style="font-size: 0.85rem; margin-top: 3rem;">
+        Point at any marked line below to see what it does:
+      </p>
       <div class="landing-tour" data-landing-tour c-data-tour-source="source">
         <div class="landing-code landing-tour__code">
           <div class="landing-code__bar">
@@ -752,6 +1325,219 @@ class LandingTour(Component):
 
     template = """
       {{ tour }}
+    """
+
+
+def _editor_ranges(source: str, marks: tuple[dict[str, Any], ...]) -> list[tuple[int, int, dict[str, Any]]]:
+    """Resolve exact demo symbols, failing when an annotation no longer names one place."""
+    ranges: list[tuple[int, int, dict[str, Any]]] = []
+    for mark in marks:
+        needle = mark["needle"]
+        if source.count(needle) != 1:
+            message = f"Editor demo marker {mark['id']!r} needs one occurrence of {needle!r}."
+            raise RuntimeError(message)
+        if needle.count(mark["symbol"]) != 1:
+            message = f"Editor demo marker {mark['id']!r} does not identify one symbol inside its source range."
+            raise RuntimeError(message)
+        start = source.index(needle) + needle.index(mark["symbol"])
+        ranges.append((start, start + len(mark["symbol"]), mark))
+
+    ranges.sort(key=lambda item: item[0])
+    for previous, current in itertools.pairwise(ranges):
+        if previous[1] > current[0]:
+            message = f"Editor demo markers {previous[2]['id']!r} and {current[2]['id']!r} overlap."
+            raise RuntimeError(message)
+    return ranges
+
+
+def _editor_symbol_open(mark: dict[str, Any]) -> str:
+    """Open one exact symbol without changing the text Pygments highlighted."""
+    if definition := mark.get("definition"):
+        definition_id = escape(definition)
+        return (
+            '<span class="landing-editor__definition" '
+            f'data-editor-annotation="{escape(mark["id"])}" '
+            f'id="landing-editor-definition-{definition_id}" '
+            f'data-editor-definition="{definition_id}" tabindex="-1">'
+        )
+
+    mark_id = escape(mark["id"])
+    description = escape(f"{mark['symbol']}: {mark['signature']}")
+    severity = mark.get("severity")
+    classes = "landing-editor__symbol"
+    if severity:
+        classes += f" landing-editor__symbol--{severity}"
+    signature_html = highlight(
+        mark["signature"],
+        get_lexer_by_name(mark["language"]),
+        HtmlFormatter(nowrap=True),
+    ).strip()
+    attributes = [
+        'type="button"',
+        f'class="{classes}"',
+        f'data-editor-annotation="{mark_id}"',
+        f'data-editor-symbol="{mark_id}"',
+        f'data-editor-signature="{escape(mark["signature"])}"',
+        f'data-editor-signature-html="{escape(signature_html)}"',
+        f'data-editor-language="{escape(mark["language"])}"',
+        f'data-editor-provenance="{escape(mark["provenance"])}"',
+        f'data-editor-description="{escape(mark["description"])}"',
+        f'data-editor-docs="{escape(mark["docs"])}"',
+        'aria-controls="landing-editor-hover"',
+        'aria-expanded="false"',
+        f'aria-label="{description}"',
+    ]
+    if severity:
+        attributes.append(f'data-editor-severity="{escape(severity)}"')
+    if code := mark.get("code"):
+        attributes.append(f'data-editor-diagnostic="{escape(code)}"')
+    if placement := mark.get("placement"):
+        attributes.append(f'data-editor-placement="{escape(placement)}"')
+    if target := mark.get("target"):
+        attributes.append(f'data-editor-target="{escape(target)}"')
+    return f"<button {' '.join(attributes)}>"
+
+
+def _editor_symbol_close(mark: dict[str, Any]) -> str:
+    """Close an inert definition destination or an interactive source symbol."""
+    return "</span>" if mark.get("definition") else "</button>"
+
+
+def _editor_code(source: str, marks: tuple[dict[str, Any], ...]) -> str:
+    """Highlight source with the real Citry lexer and wrap only annotated symbols."""
+    ranges = _editor_ranges(source, marks)
+    boundaries = {position for start, end, _mark in ranges for position in (start, end)}
+    starts = {start: mark for start, _end, mark in ranges}
+    ends = {end: mark for _start, end, mark in ranges}
+    formatter = HtmlFormatter()
+    rendered: list[str] = ['<div class="highlight"><pre><span></span>']
+
+    # Split lexer tokens at annotation boundaries. The original token type is
+    # retained on every piece, so an interactive name has exactly the same
+    # colour it would have in an ordinary Citry code block.
+    lexer = get_lexer_by_name("citry")
+    for offset, token_type, value in lexer.get_tokens_unprocessed(source):
+        token_end = offset + len(value)
+        cuts = [offset, *(point for point in boundaries if offset < point < token_end), token_end]
+        cuts.sort()
+        css_classes = formatter._get_css_classes(token_type)
+        for start, end in itertools.pairwise(cuts):
+            if mark := starts.get(start):
+                rendered.append(_editor_symbol_open(mark))
+            text = str(escape(value[start - offset : end - offset]))
+            if css_classes and text:
+                rendered.append(f'<span class="{css_classes}">{text}</span>')
+            else:
+                rendered.append(text)
+            if mark := ends.get(end):
+                rendered.append(_editor_symbol_close(mark))
+
+    rendered.append("</pre></div>\n")
+    return "".join(rendered)
+
+
+class LandingEditorDemoMarkup(Component):
+    """A server-rendered editor surface with exact, focusable symbol hovers."""
+
+    transparent = True
+
+    class Kwargs:
+        pass
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
+        repo_root = current_docs_project().runtime.repo_root
+        if repo_root is None:
+            raise RuntimeError("The landing editor demo needs a repository root to load its source.")
+        source = (repo_root / _EDITOR_PATH).read_text(encoding="utf-8")
+        return {
+            "file_name": _EDITOR_PATH.rsplit("/", 1)[-1],
+            "code": Markup(_editor_code(source, _EDITOR_MARKS)),  # noqa: S704 - escaped Pygments output
+            "notes": list(_EDITOR_NOTES),
+        }
+
+    template = """
+      <p style="font-size: 0.85rem; margin-top: 3rem;">
+        Hover or focus any dotted symbol below. <b>Ctrl-click</b> / <b>⌘-click</b>
+        on a symbol to go to its definition.
+      </p>
+      <div class="landing-editor" data-editor-showcase>
+        <div class="landing-code landing-editor__code" data-editor-code>
+          <div class="landing-code__bar landing-editor__bar">
+            <span class="landing-code__dot"></span>
+            <span>{{ file_name }}</span>
+            <span class="landing-editor__mode">Citry</span>
+          </div>
+          <div class="landing-editor__hover-layer">
+            <div
+              id="landing-editor-hover"
+              class="landing-editor__hover"
+              role="dialog"
+              aria-label="Type information"
+              data-editor-hover
+              hidden
+            >
+              <div class="landing-editor__hover-signature">
+                <code data-editor-hover-signature></code>
+              </div>
+              <strong data-editor-hover-provenance></strong>
+              <p data-editor-hover-description></p>
+              <div class="landing-editor__hover-actions">
+                <a
+                  href="/ide/vscode/"
+                  target="_blank"
+                  rel="noopener"
+                  data-editor-hover-docs
+                >
+                  Open Citry docs
+                </a>
+                <a href="#" data-editor-jump hidden>
+                  Go to definition
+                </a>
+              </div>
+              <small data-editor-jump-hint hidden>
+                <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + click also jumps
+              </small>
+            </div>
+          </div>
+          {{ code }}
+          <p class="landing-editor__status" data-editor-status aria-live="polite"></p>
+        </div>
+
+        <div class="landing-editor__notes">
+          <button
+            c-for="note in notes"
+            class="landing-editor__note"
+            type="button"
+            c-data-editor-note="note['mark']"
+          >
+            <span>{{ note['label'] }}</span>
+            <strong>{{ note['title'] }}</strong>
+            <small>{{ note['text'] }}</small>
+          </button>
+        </div>
+      </div>
+    """
+
+
+class LandingEditorDemo(Component):
+    """Place the editor showcase into a markdown page without rewriting its code."""
+
+    transparent = True
+
+    class Kwargs:
+        pass
+
+    class Slots:
+        pass
+
+    def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, Any]:  # noqa: ARG002
+        return {"demo": _as_markdown_block(str(LandingEditorDemoMarkup()))}
+
+    template = """
+      {{ demo }}
     """
 
 
@@ -1623,7 +2409,7 @@ class LandingPage(Component):
         border-bottom: 1px solid var(--landing-line);
         color: var(--landing-faint);
         font-family: var(--font-mono);
-        font-size: 0.7rem;
+        font-size: 0.6rem;
       }
 
       .landing-code__dot {
@@ -1702,6 +2488,288 @@ class LandingPage(Component):
         font-size: 0.85rem;
       }
 
+      /* The editor leads so this section changes the page's visual rhythm;
+         the compact capability index stays visible beside the long source. */
+      .landing-editor {
+        display: grid;
+        grid-template-columns: minmax(0, 1.42fr) minmax(15rem, 0.58fr);
+        gap: clamp(1.5rem, 4vw, 3rem);
+        align-items: start;
+      }
+
+      .landing-editor__notes {
+        position: sticky;
+        top: 5.5rem;
+        display: grid;
+        gap: 0.7rem;
+        min-width: 0;
+      }
+
+      .landing-editor__hint {
+        margin: 0 0 0.25rem;
+        color: var(--landing-faint);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
+      .landing-editor__note {
+        display: grid;
+        gap: 0.4rem;
+        width: 100%;
+        padding: 0.9rem 1rem;
+        border: 1px solid transparent;
+        border-radius: 0.8rem;
+        background: transparent;
+        color: var(--landing-muted);
+        cursor: pointer;
+        font: inherit;
+        text-align: left;
+        transition: 140ms ease;
+        transition-property: border-color, background, color, transform;
+      }
+
+      .landing-editor__note:hover,
+      .landing-editor__note:focus-visible,
+      .landing-editor__note.is-active {
+        border-color: var(--landing-line);
+        background: var(--landing-panel);
+        color: var(--landing-ink);
+        transform: translateX(-0.2rem);
+      }
+
+      .landing-editor__note span {
+        color: var(--landing-blue);
+        font-family: var(--font-mono);
+        font-size: 0.68rem;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+      }
+
+      .landing-editor__note strong {
+        font-size: 0.92rem;
+        line-height: 1.35;
+      }
+
+      .landing-editor__note small {
+        color: var(--landing-muted);
+        font-size: 0.79rem;
+        line-height: 1.5;
+      }
+
+      .landing-editor__code {
+        position: relative;
+        overflow: visible;
+        min-width: 0;
+        isolation: isolate;
+      }
+
+      .landing-editor__code > .highlight {
+        overflow: hidden;
+        border-radius: 0 0 0.9rem 0.9rem;
+      }
+
+      .landing-editor__bar {
+        background: color-mix(in srgb, var(--landing-panel-solid), var(--landing-bg) 22%);
+      }
+
+      .landing-editor__mode {
+        margin-left: auto !important;
+        color: var(--landing-blue);
+        text-transform: uppercase;
+      }
+
+      .landing-editor__code > .highlight > pre {
+        max-height: 46rem;
+        padding: 1.2rem 1.35rem 2.5rem;
+        font-size: 0.76rem;
+        line-height: 1.62;
+      }
+
+      /* Buttons retain the lexer spans inside them, so resetting their chrome
+         keeps the exact syntax colours and adds only the discoverable underline. */
+      .landing-editor__symbol {
+        display: inline;
+        margin: 0;
+        padding: 0 0 0.04em;
+        border: 0;
+        border-bottom: 1px dotted color-mix(in srgb, var(--landing-blue), transparent 18%);
+        border-radius: 0;
+        background: transparent;
+        color: inherit;
+        cursor: help;
+        font: inherit;
+        letter-spacing: inherit;
+        line-height: inherit;
+        text-align: inherit;
+      }
+
+      .landing-editor__symbol:hover,
+      .landing-editor__symbol:focus-visible,
+      .landing-editor__symbol.is-active {
+        outline: 0;
+        background: color-mix(in srgb, var(--landing-blue), transparent 80%);
+        box-shadow: 0 0 0 0.13rem color-mix(in srgb, var(--landing-blue), transparent 80%);
+      }
+
+      .landing-editor__symbol--error {
+        border-bottom: 0;
+        text-decoration-line: underline;
+        text-decoration-style: wavy;
+        text-decoration-color: #f14c4c;
+        text-decoration-thickness: 1.5px;
+        text-underline-offset: 0.16em;
+      }
+
+      .landing-editor__symbol--error:hover,
+      .landing-editor__symbol--error:focus-visible,
+      .landing-editor__symbol--error.is-active {
+        background: rgb(241 76 76 / 12%);
+        box-shadow: 0 0 0 0.13rem rgb(241 76 76 / 12%);
+      }
+
+      .landing-editor__definition:focus {
+        outline: 0;
+      }
+
+      .landing-editor__definition.is-definition-flash {
+        animation: landing-editor-definition 1.15s ease-out;
+      }
+
+      @keyframes landing-editor-definition {
+        0%, 35% {
+          background: color-mix(in srgb, var(--landing-cyan), transparent 55%);
+          box-shadow: 0 0 0 0.28rem color-mix(in srgb, var(--landing-cyan), transparent 72%);
+        }
+        100% {
+          background: transparent;
+          box-shadow: none;
+        }
+      }
+
+      .landing-editor__hover-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 8;
+        overflow: visible;
+        pointer-events: none;
+      }
+
+      .landing-editor__hover {
+        position: absolute;
+        width: min(29rem, calc(100% - 1.5rem));
+        padding: 0.8rem 0.9rem;
+        border: 1px solid #555;
+        border-radius: 0.28rem;
+        background: #202020;
+        box-shadow: 0 0.8rem 2.2rem rgb(0 0 0 / 42%);
+        color: #d4d4d4;
+        font-family: var(--font-sans);
+        font-size: 0.78rem;
+        line-height: 1.45;
+        pointer-events: auto;
+      }
+
+      .landing-editor__hover.is-error {
+        border-color: #a1260d;
+      }
+
+      .landing-editor__hover.is-error .landing-editor__hover-signature {
+        border-bottom-color: #6e342c;
+        box-shadow: inset 0.2rem 0 #f14c4c;
+      }
+
+      .landing-editor__hover.is-error > strong {
+        color: #f48771;
+      }
+
+      .landing-editor__hover-signature {
+        margin: -0.8rem -0.9rem 0.75rem;
+        padding: 0.7rem 0.9rem;
+        border-bottom: 1px solid #3d3d3d;
+        background: #181818;
+        color: #d4d4d4;
+        font-size: 0.76rem;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+
+      .landing-editor__hover-signature code {
+        padding: 0;
+        background: transparent;
+        color: inherit;
+        font-family: var(--font-mono);
+        font-size: inherit;
+        line-height: inherit;
+        white-space: inherit;
+      }
+
+      /* These mirror the restrained VS Code dark-theme palette used by the
+         reference hover while preserving Pygments' language-aware tokens. */
+      .landing-editor__hover-signature :is(.n, .nx, .nv) { color: #9cdcfe; }
+      .landing-editor__hover-signature :is(.nb, .kt, .nc) { color: #4ec9b0; }
+      .landing-editor__hover-signature :is(.k, .kd, .kn, .ow) { color: #c586c0; }
+      .landing-editor__hover-signature :is(.nf, .fm) { color: #dcdcaa; }
+      .landing-editor__hover-signature :is(.s, .s1, .s2) { color: #ce9178; }
+      .landing-editor__hover-signature :is(.mi, .mf) { color: #b5cea8; }
+      .landing-editor__hover-signature :is(.p, .o) { color: #d4d4d4; }
+
+      .landing-editor__hover strong {
+        display: block;
+        color: #f2f2f2;
+        font-size: 0.78rem;
+      }
+
+      .landing-editor__hover p {
+        margin: 0.35rem 0 0;
+        color: #b8b8b8;
+      }
+
+      .landing-editor__hover-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.8rem;
+        margin-top: 0.65rem;
+      }
+
+      .landing-editor__hover a {
+        color: #75beff;
+        font-size: 0.74rem;
+        text-decoration: none;
+      }
+
+      .landing-editor__hover a:hover,
+      .landing-editor__hover a:focus-visible {
+        text-decoration: underline;
+      }
+
+      .landing-editor__hover > small {
+        display: block;
+        margin-top: 0.5rem;
+        color: #929292;
+        font-size: 0.68rem;
+      }
+
+      .landing-editor__hover kbd {
+        padding: 0.05rem 0.2rem;
+        border: 1px solid #555;
+        border-radius: 0.2rem;
+        background: #2d2d2d;
+        color: #ddd;
+        font-family: var(--font-mono);
+        font-size: 0.64rem;
+      }
+
+      .landing-editor__status {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
       /* The annotated walkthrough: source on the left, one explanation on the
          right. Marked lines carry a dot in the gutter so a reader can see where
          there is something to point at. */
@@ -1710,7 +2778,6 @@ class LandingPage(Component):
         grid-template-columns: minmax(0, 1.35fr) minmax(16rem, 0.65fr);
         gap: clamp(1.5rem, 4vw, 3rem);
         align-items: start;
-        margin-top: 3rem;
       }
 
       .landing-tour__code {
@@ -2037,6 +3104,495 @@ class LandingPage(Component):
         line-height: 1.55;
       }
 
+      .landing-composer {
+        --composer-line: color-mix(in srgb, var(--landing-line) 86%, transparent);
+        --composer-panel: color-mix(in srgb, var(--landing-panel) 94%, var(--landing-blue) 6%);
+        --composer-stage-start: color-mix(in srgb, var(--landing-blue) 22%, var(--landing-bg-deep));
+        --composer-stage-end: color-mix(in srgb, var(--landing-violet) 18%, var(--landing-bg-deep));
+        overflow: clip;
+        margin-top: 2.25rem;
+        border: 1px solid var(--composer-line);
+        border-radius: 1.15rem;
+        background: var(--landing-panel);
+        box-shadow: 0 1.5rem 4rem rgb(6 18 38 / 10%);
+        color: var(--landing-ink);
+      }
+
+      .landing-composer button {
+        font: inherit;
+      }
+
+      .landing-composer button {
+        touch-action: manipulation;
+      }
+
+      .landing-composer button:focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--landing-blue) 42%, transparent);
+        outline-offset: 2px;
+      }
+
+      .landing-composer__bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+      }
+
+      .landing-composer__bar {
+        padding: 0.85rem 1rem;
+        border-bottom: 1px solid var(--composer-line);
+        background: color-mix(in srgb, var(--landing-panel) 96%, var(--landing-blue) 4%);
+      }
+
+      .landing-composer__bar-copy {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 0.2rem 0.35rem;
+      }
+
+      .landing-composer__bar p {
+        margin: 0;
+        color: var(--landing-muted);
+        font-size: 0.82rem;
+      }
+
+      .landing-composer__bar h3 {
+        margin: 0;
+        color: var(--landing-ink);
+        font-size: 0.95rem;
+      }
+
+      .landing-composer__reset,
+      .landing-composer__palette button {
+        min-height: 2rem;
+        padding: 0.35rem 0.65rem;
+        border: 1px solid var(--composer-line);
+        border-radius: 0.5rem;
+        background: var(--landing-panel);
+        color: var(--landing-ink);
+        font-size: 0.75rem;
+        font-weight: 650;
+        line-height: 1.2;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .landing-composer button:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+
+      .landing-composer__layout {
+        display: grid;
+        grid-template-columns: minmax(18rem, 0.95fr) minmax(20rem, 1.65fr);
+        height: 38rem;
+        min-height: 31rem;
+      }
+
+      .landing-composer__palette {
+        overflow: auto;
+        min-width: 0;
+        padding: 0.75rem;
+        border-right: 1px solid var(--composer-line);
+        background: var(--composer-panel);
+      }
+
+      .landing-composer__palette-group {
+        margin-top: 0.65rem;
+      }
+
+      .landing-composer__palette-group:first-child {
+        margin-top: 0;
+      }
+
+      .landing-composer__palette-group h4 {
+        margin: 0 0 0.3rem;
+        color: var(--landing-muted);
+        font-family: var(--font-mono);
+        font-size: 0.7rem;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .landing-composer__palette-group ul {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.3rem;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .landing-composer__palette-group li {
+        min-width: 0;
+      }
+
+      .landing-composer__palette-item {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        align-items: center;
+        gap: 0.35rem;
+        width: 100%;
+        min-height: 2.15rem !important;
+        padding: 0.28rem 0.45rem !important;
+        text-align: left;
+        touch-action: pan-y !important;
+        transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+      }
+
+      .landing-composer__palette-item:hover {
+        border-color: color-mix(in srgb, var(--landing-blue) 45%, var(--composer-line));
+        box-shadow: 0 0.35rem 1rem rgb(6 18 38 / 8%);
+      }
+
+      .landing-composer__palette-group li.is-drag-pending .landing-composer__palette-item,
+      .landing-composer__palette-group li.is-drag-source .landing-composer__palette-item {
+        border-color: var(--landing-blue);
+        background: color-mix(in srgb, var(--landing-blue) 10%, var(--landing-panel));
+        box-shadow: 0 0.9rem 2rem rgb(6 18 38 / 20%);
+        transform: scale(1.035) rotate(-1deg);
+      }
+
+      .landing-composer__palette-group li.is-drag-source .landing-composer__palette-item {
+        opacity: 0.72;
+      }
+
+      .landing-composer__grip {
+        display: grid;
+        place-items: center;
+        width: 1rem;
+        min-height: 1.5rem;
+        color: var(--landing-faint);
+        cursor: grab;
+        user-select: none;
+      }
+
+      .landing-composer__palette-item strong {
+        overflow: hidden;
+        font-size: 0.8rem;
+        font-weight: bold;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .landing-composer__workspace {
+        display: flex;
+        overflow: hidden;
+        flex-direction: column;
+        min-width: 0;
+        background:
+          radial-gradient(circle at 14% 10%, color-mix(in srgb, var(--landing-cyan) 24%, transparent), transparent 36%),
+          radial-gradient(circle at 88% 92%, color-mix(in srgb, var(--landing-violet) 20%, transparent), transparent 40%),
+          radial-gradient(rgb(255 255 255 / 28%) 0.7px, transparent 0.7px),
+          linear-gradient(145deg, var(--composer-stage-start), var(--composer-stage-end));
+        background-size: auto, auto, 14px 14px, auto;
+        box-shadow: inset 0 0 0 1px rgb(255 255 255 / 20%);
+      }
+
+      .landing-composer__board {
+        zoom: 0.8;
+        position: relative;
+        overflow: auto;
+        flex: 1 1 auto;
+        min-height: 0;
+        padding: clamp(1.35rem, 3.8vw, 2.8rem);
+        overflow-anchor: none;
+        scrollbar-gutter: stable;
+      }
+
+      .landing-composer__canvas {
+        display: grid;
+        align-content: start;
+        min-height: 100%;
+        padding: clamp(0.75rem, 2vw, 1.25rem);
+        border: 1px solid color-mix(in srgb, white 48%, var(--composer-line));
+        border-radius: 0.9rem;
+        background: Canvas;
+        box-shadow:
+          0 2rem 4.5rem rgb(5 15 38 / 28%),
+          0 0.35rem 1rem rgb(5 15 38 / 18%),
+          inset 0 0 0 1px rgb(255 255 255 / 42%);
+        color: CanvasText;
+      }
+
+      .landing-composer__rendered-recipe {
+        display: contents;
+      }
+
+      .landing-composer__rendered-recipe.is-just-placed > * {
+        animation: landing-composer-arrive 220ms ease-out;
+      }
+
+      .landing-composer__canvas :where([data-citry-ui-part]) {
+        max-inline-size: 100%;
+      }
+
+      .landing-composer__canvas [data-composer-inert-control] {
+        cursor: default !important;
+      }
+
+      @keyframes landing-composer-arrive {
+        from {
+          opacity: 0;
+          transform: translateY(0.45rem) scale(0.985);
+        }
+
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      .landing-composer__drop {
+        display: grid;
+        place-items: center;
+        gap: 0.2rem;
+        width: 100%;
+        min-width: min(100%, 7rem);
+        min-height: 4.5rem;
+        margin-block: 0.55rem;
+        padding: 0.75rem;
+        border: 1px dashed color-mix(in srgb, var(--landing-blue) 38%, var(--composer-line)) !important;
+        border-radius: 0.65rem;
+        border-color: color-mix(in srgb, var(--landing-blue) 38%, var(--composer-line)) !important;
+        background: color-mix(in srgb, var(--landing-blue) 4%, var(--landing-panel)) !important;
+        color: var(--landing-muted) !important;
+        cursor: pointer !important;
+        transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+        font-size: 1rem;
+      }
+
+      .landing-composer__drop > strong {
+        color: var(--landing-ink);
+        font-size: 1.2rem;
+      }
+
+      .landing-composer__drop > small {
+        max-width: 26rem;
+        color: var(--landing-muted);
+        font-size: 1rem;
+        line-height: 1.45;
+      }
+
+      .landing-composer__drop--root {
+        min-height: clamp(15rem, 45vh, 22rem);
+        margin: 0;
+      }
+
+      .landing-composer__drop--flow {
+        overflow: hidden;
+        min-width: 0;
+        min-height: 0;
+        max-height: 0;
+        margin: 0;
+        padding: 0;
+        border-width: 0 !important;
+        opacity: 0;
+        pointer-events: none !important;
+        transition:
+          max-height 180ms ease,
+          min-height 180ms ease,
+          margin 180ms ease,
+          padding 180ms ease,
+          opacity 120ms ease,
+          flex-basis 180ms ease,
+          inline-size 180ms ease;
+      }
+
+      .landing-composer__drop--flow[data-composer-drop-axis="inline"] {
+        flex: 0 0 0;
+        inline-size: 0;
+        max-inline-size: 0;
+      }
+
+      .landing-composer[data-composer-dragging]
+        .landing-composer__drop--flow.is-drag-near,
+      .landing-composer__drop--flow:focus-visible {
+        min-height: 4rem;
+        max-height: 5rem;
+        margin-block: 0.4rem;
+        padding: 0.65rem;
+        border-width: 2px !important;
+        opacity: 1;
+        pointer-events: auto !important;
+      }
+
+      .landing-composer[data-composer-dragging]
+        .landing-composer__drop--flow[data-composer-drop-axis="inline"].is-drag-near,
+      .landing-composer__drop--flow[data-composer-drop-axis="inline"]:focus-visible {
+        flex-basis: clamp(4.5rem, 18%, 7rem);
+        min-width: 4.5rem;
+        min-height: 3rem;
+        max-width: 7rem;
+        max-height: 5rem;
+        margin: 0 0.3rem;
+      }
+
+      .landing-composer__drop.is-selected,
+      .landing-composer__drop[aria-pressed="true"] {
+        border-color: color-mix(in srgb, var(--landing-blue) 55%, var(--composer-line)) !important;
+        background: color-mix(in srgb, var(--landing-blue) 7%, var(--landing-panel)) !important;
+        color: var(--landing-ink) !important;
+      }
+
+      .landing-composer[data-composer-dragging] .landing-composer__board {
+        background: color-mix(in srgb, var(--landing-blue) 5%, transparent);
+        box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--landing-blue) 32%, transparent);
+      }
+
+      .landing-composer__drop.is-drag-available:not(.landing-composer__drop--flow),
+      .landing-composer__drop--flow.is-drag-near {
+        border-width: 2px !important;
+        border-color: var(--landing-blue) !important;
+        background: color-mix(in srgb, var(--landing-blue) 12%, var(--landing-panel)) !important;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--landing-blue) 12%, transparent);
+        color: var(--landing-ink) !important;
+      }
+
+      .landing-composer__drop.is-drag-target {
+        background: color-mix(in srgb, var(--landing-blue) 23%, var(--landing-panel)) !important;
+        box-shadow: 0 0 0 5px color-mix(in srgb, var(--landing-blue) 22%, transparent);
+        transform: scale(1.01);
+      }
+
+      .landing-composer__drop.is-drag-unavailable {
+        opacity: 0.32;
+      }
+
+      .landing-composer__drag-cue {
+        position: sticky;
+        z-index: 4;
+        top: 0;
+        width: fit-content;
+        max-height: 0;
+        margin: 0 auto;
+        padding: 0rem 0.8rem;
+        border-radius: 999px;
+        background: var(--landing-blue);
+        box-shadow: 0 0.7rem 1.6rem rgb(6 18 38 / 22%);
+        color: white;
+        font-size: 1rem;
+        font-weight: 750;
+        opacity: 0;
+        transform: translateY(-0.8rem);
+        transition: opacity 120ms ease, transform 120ms ease;
+        pointer-events: none;
+      }
+
+      .landing-composer[data-composer-dragging] .landing-composer__drag-cue {
+        max-height: 3rem;
+        opacity: 1;
+        transform: translateY(0);
+        padding: 0.5rem 0.8rem;
+      }
+
+      .landing-composer__drag-ghost {
+        position: fixed;
+        z-index: 1000;
+        top: 0;
+        left: 0;
+        display: grid;
+        grid-template-columns: auto minmax(7rem, 1fr);
+        column-gap: 0.55rem;
+        align-items: center;
+        min-width: 11rem;
+        max-width: 17rem;
+        padding: 0.7rem 0.85rem;
+        border: 2px solid var(--landing-blue);
+        border-radius: 0.7rem;
+        background: var(--landing-panel);
+        box-shadow: 0 1.1rem 2.7rem rgb(6 18 38 / 28%);
+        color: var(--landing-ink);
+        font-size: 0.72rem;
+        pointer-events: none;
+      }
+
+      .landing-composer__drag-ghost-grip {
+        grid-row: 1 / span 2;
+        color: var(--landing-blue);
+        font-size: 1rem;
+      }
+
+      .landing-composer__drag-ghost strong {
+        font-size: 0.78rem;
+      }
+
+      .landing-composer__drag-ghost small {
+        margin-top: 0.1rem;
+        color: var(--landing-muted);
+        font-size: 0.62rem;
+      }
+
+      @media (max-width: 64rem) {
+        .landing-composer__layout {
+          grid-template-columns: minmax(15rem, 0.8fr) minmax(20rem, 1.4fr);
+        }
+      }
+
+      @media (max-width: 44rem) {
+        .landing-composer__bar {
+          align-items: stretch;
+          flex-direction: column;
+        }
+
+        .landing-composer__layout {
+          display: block;
+          height: auto;
+        }
+
+        .landing-composer__palette {
+          overflow: visible;
+          border-right: 0;
+          border-bottom: 1px solid var(--composer-line);
+        }
+
+        .landing-composer__workspace {
+          min-height: 28rem;
+          max-height: 38rem;
+        }
+
+        .landing-composer__board {
+          min-height: 24rem;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .landing-composer__palette-item,
+        .landing-composer__drop,
+        .landing-composer__drag-cue {
+          transition: none;
+        }
+
+        .landing-composer__rendered-recipe.is-just-placed > * {
+          animation: none;
+        }
+      }
+
+      @media (forced-colors: active) {
+        .landing-composer,
+        .landing-composer__canvas,
+        .landing-composer__palette-item {
+          border-color: CanvasText;
+        }
+
+        .landing-composer__workspace,
+        .landing-composer__canvas {
+          background: Canvas;
+          box-shadow: none;
+        }
+
+        .landing-composer__drop[aria-pressed="true"],
+        .landing-composer__drop.is-drag-target,
+        .landing-composer__drop.is-drag-available:not(.landing-composer__drop--flow),
+        .landing-composer__drop--flow.is-drag-near,
+        .landing-composer__palette-group li.is-drag-source .landing-composer__palette-item {
+          outline: 2px solid Highlight;
+          outline-offset: 1px;
+        }
+      }
+
       .landing-human-note,
       .landing-trust-card {
         height: 100%;
@@ -2144,6 +3700,22 @@ class LandingPage(Component):
       }
 
       @media (max-width: 900px) {
+        .landing-editor {
+          grid-template-columns: 1fr;
+        }
+
+        /* The interaction itself leads on a small screen; the six summaries
+           then remain available below it without shrinking the source. */
+        .landing-editor__code {
+          grid-row: 1;
+        }
+
+        .landing-editor__notes {
+          position: static;
+          grid-row: 2;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
         .landing-tour {
           grid-template-columns: 1fr;
           position: relative;
@@ -2229,6 +3801,19 @@ class LandingPage(Component):
       }
 
       @media (max-width: 600px) {
+        .landing-editor__notes {
+          grid-template-columns: 1fr;
+        }
+
+        .landing-editor__code > .highlight > pre {
+          padding-inline: 1rem;
+          font-size: 0.7rem;
+        }
+
+        .landing-editor__hover {
+          width: calc(100% - 1rem);
+        }
+
         /* One column, and each panel sits under its own row, so a reader never
            has to look elsewhere on the page for the answer. */
         .landing-picker {
@@ -2490,6 +4075,179 @@ class LandingPage(Component):
               if (!tour.contains(event.target)) notesBox.classList.remove('is-floating');
             });
           }
+        }
+
+        // The editor sample keeps the original highlighted source in the DOM.
+        // Exact symbol buttons fill one hover card from server-rendered data,
+        // and modified clicks follow the same targets its definition link uses.
+        const editor = root.querySelector('[data-editor-showcase]')
+          || document.querySelector('[data-editor-showcase]');
+        if (editor) {
+          const code = editor.querySelector('[data-editor-code]');
+          const scroller = editor.querySelector('.highlight pre');
+          const symbols = Array.from(editor.querySelectorAll('[data-editor-symbol]'));
+          const card = editor.querySelector('[data-editor-hover]');
+          const signature = editor.querySelector('[data-editor-hover-signature]');
+          const provenance = editor.querySelector('[data-editor-hover-provenance]');
+          const description = editor.querySelector('[data-editor-hover-description]');
+          const docs = editor.querySelector('[data-editor-hover-docs]');
+          const jump = editor.querySelector('[data-editor-jump]');
+          const jumpHint = editor.querySelector('[data-editor-jump-hint]');
+          const notes = Array.from(editor.querySelectorAll('[data-editor-note]'));
+          const status = editor.querySelector('[data-editor-status]');
+          let activeSymbol = null;
+          let clickedSymbol = null;
+
+          function placeHover(symbol, card) {
+            if (!code || !symbol || !card) return;
+            const codeRect = code.getBoundingClientRect();
+            const symbolRect = symbol.getBoundingClientRect();
+            const inset = 8;
+            const width = card.offsetWidth;
+            const height = card.offsetHeight;
+            let left = symbolRect.left - codeRect.left;
+            const preferredTop = symbol.dataset.editorPlacement === 'below'
+              ? symbolRect.bottom - codeRect.top + inset
+              : symbolRect.top - codeRect.top - height - inset;
+            const bar = code.querySelector('.landing-editor__bar');
+            const minimumTop = (bar ? bar.offsetHeight : 0) + inset;
+            const maximumTop = Math.max(
+              minimumTop,
+              code.clientHeight - height - inset,
+            );
+            const top = Math.max(minimumTop, Math.min(preferredTop, maximumTop));
+            left = Math.max(inset, Math.min(left, code.clientWidth - width - inset));
+            card.style.left = `${left}px`;
+            card.style.top = `${top}px`;
+          }
+
+          function showEditorHover(symbol) {
+            if (!symbol || !card) return;
+            const id = symbol.dataset.editorSymbol;
+            if (activeSymbol !== symbol) clickedSymbol = null;
+            activeSymbol = symbol;
+            // Pygments produced and escaped this module-owned signature on the
+            // server; retaining its spans gives the hover editor-like colour.
+            if (signature) signature.innerHTML = symbol.dataset.editorSignatureHtml || '';
+            if (provenance) provenance.textContent = symbol.dataset.editorProvenance || '';
+            if (description) description.textContent = symbol.dataset.editorDescription || '';
+            if (docs) docs.href = symbol.dataset.editorDocs || '/ide/vscode/';
+            const target = symbol.dataset.editorTarget;
+            if (jump) {
+              jump.hidden = !target;
+              jump.dataset.editorJump = target || '';
+              jump.href = target ? `#landing-editor-definition-${target}` : '#';
+            }
+            if (jumpHint) jumpHint.hidden = !target;
+            const isError = symbol.dataset.editorSeverity === 'error';
+            card.classList.toggle('is-error', isError);
+            card.setAttribute(
+              'aria-label',
+              `${isError ? 'Diagnostic' : 'Type information'} for ${symbol.textContent}`,
+            );
+            card.hidden = false;
+            symbols.forEach((item) => {
+              const selected = item === symbol;
+              item.classList.toggle('is-active', selected);
+              item.setAttribute('aria-expanded', selected ? 'true' : 'false');
+            });
+            notes.forEach((note) => {
+              note.classList.toggle('is-active', note.dataset.editorNote === id);
+            });
+            requestAnimationFrame(() => placeHover(symbol, card));
+          }
+
+          function hideEditorHover() {
+            activeSymbol = null;
+            clickedSymbol = null;
+            if (card) card.hidden = true;
+            symbols.forEach((symbol) => {
+              symbol.classList.remove('is-active');
+              symbol.setAttribute('aria-expanded', 'false');
+            });
+            notes.forEach((note) => note.classList.remove('is-active'));
+          }
+
+          function jumpToDefinition(target) {
+            const definition = editor.querySelector(
+              `[data-editor-definition="${CSS.escape(target)}"]`,
+            );
+            if (!definition) return;
+            hideEditorHover();
+            definition.scrollIntoView({ block: 'center', inline: 'nearest' });
+            definition.focus({ preventScroll: true });
+            definition.classList.remove('is-definition-flash');
+            requestAnimationFrame(() => definition.classList.add('is-definition-flash'));
+            if (status) status.textContent = `Opened definition for ${definition.textContent}`;
+          }
+
+          symbols.forEach((symbol) => {
+            symbol.addEventListener('mouseenter', () => showEditorHover(symbol));
+            symbol.addEventListener('focus', () => showEditorHover(symbol));
+            symbol.addEventListener('click', (event) => {
+              const target = symbol.dataset.editorTarget;
+              // A keyboard-generated button click has detail 0. It follows the
+              // target directly, while an ordinary pointer click opens hover.
+              if (target && (event.ctrlKey || event.metaKey || event.detail === 0)) {
+                event.preventDefault();
+                jumpToDefinition(target);
+                return;
+              }
+              if (clickedSymbol === symbol && activeSymbol === symbol && !card.hidden) {
+                hideEditorHover();
+                return;
+              }
+              showEditorHover(symbol);
+              clickedSymbol = symbol;
+            });
+          });
+
+          notes.forEach((note) => {
+            note.addEventListener('click', () => {
+              const symbol = symbols.find(
+                (item) => item.dataset.editorSymbol === note.dataset.editorNote,
+              );
+              if (!symbol) return;
+              symbol.scrollIntoView({ block: 'center', inline: 'nearest' });
+              requestAnimationFrame(() => showEditorHover(symbol));
+            });
+          });
+
+          if (jump) {
+            jump.addEventListener('click', (event) => {
+              event.preventDefault();
+              jumpToDefinition(jump.dataset.editorJump);
+            });
+          }
+
+          document.addEventListener('click', (event) => {
+            const target = event.target;
+            const staysOpen = target && typeof target.closest === 'function'
+              ? target.closest('[data-editor-symbol], [data-editor-note], [data-editor-hover]')
+              : null;
+            if (!staysOpen) hideEditorHover();
+          });
+          document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && activeSymbol) hideEditorHover();
+          });
+
+          if (scroller) {
+            scroller.addEventListener('scroll', () => {
+              if (!activeSymbol) return;
+              placeHover(activeSymbol, card);
+            }, { passive: true });
+          }
+          window.addEventListener('resize', () => {
+            if (!activeSymbol) return;
+            placeHover(activeSymbol, card);
+          });
+
+          // Opening one representative hover makes the interaction visible
+          // without requiring the reader to guess which dotted name to try.
+          const first = symbols.find(
+            (symbol) => symbol.dataset.editorSymbol === 'member-chip-use',
+          );
+          if (first) showEditorHover(first);
         }
 
       });

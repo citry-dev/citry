@@ -1,0 +1,170 @@
+schema_version: 1
+family: navigation-menu
+
+components:
+  - CNavigationMenu
+  - CNavigationMenuLink
+  - CNavigationMenuItem
+
+inputs:
+  - id: navigation-menu-server-inputs
+    component: CNavigationMenu
+    channel: server
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Names the native navigation landmark.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets root identity and generated trigger/panel relationship prefixes.}
+      - {id: value, name: value, type: 'str | None', default: {kind: literal, value: null}, effect: Selects the server-open Item and uncontrolled fallback.}
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CNavigationMenuOrientation]}, default: {kind: literal, value: horizontal}, effect: Sets visual layout and optional arrow-key axis.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Prevents disclosure opening and forces an open panel closed.}
+      - {id: delay, name: delay, type: int, default: {kind: literal, value: 200}, effect: Sets fine-pointer open delay from 0 through 60000 milliseconds.}
+      - {id: close-delay, name: close_delay, type: int, default: {kind: literal, value: 300}, effect: Sets fine-pointer root-leave close delay from 0 through 60000 milliseconds.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: false}, effect: Allows optional top-level arrow navigation to wrap.}
+      - {id: variant, name: variant, type: {display: '"plain" | "surface"', interfaces: [CNavigationMenuVariant]}, default: {kind: literal, value: plain}, effect: Selects root visual treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CNavigationMenuSize]}, default: {kind: literal, value: md}, effect: Selects geometry for the complete tree.}
+      - {id: class, name: class_, type: {display: CClassValue, interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: CStyleValue, interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed native and data attributes to the nav root.}
+  - id: navigation-menu-client-inputs
+    component: CNavigationMenu
+    channel: client
+    entries:
+      - {id: value, name: value, type: 'string | null', omitted: Releases control and preserves committed state., effect: Controls the open Item while supplied.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Reactively disables disclosure behavior.}
+      - {id: delay, name: delay, type: integer, omitted: Uses the server input., effect: Controls future pointer-open delay.}
+      - {id: close-delay, name: closeDelay, type: integer, omitted: Uses the server input., effect: Controls future pointer-close delay.}
+      - {id: loop, name: loop, type: boolean, omitted: Uses the server input., effect: Controls arrow-key wrapping.}
+      - {id: orientation, name: orientation, type: CNavigationMenuOrientation, omitted: Uses the server input., effect: Changes layout and keyboard axis.}
+      - {id: variant, name: variant, type: CNavigationMenuVariant, omitted: Uses the server input., effect: Changes root treatment.}
+      - {id: size, name: size, type: CNavigationMenuSize, omitted: Uses the server input., effect: Changes tree geometry.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: Does not notify a component callback., effect: Receives open-value requests and forced safety closes.}
+  - id: navigation-menu-link-server-inputs
+    component: CNavigationMenuLink
+    channel: server
+    entries:
+      - {id: href, name: href, type: str, default: {kind: required}, effect: Sets the native link destination without URL rewriting.}
+      - {id: current, name: current, type: bool, default: {kind: literal, value: false}, effect: Emits aria-current page.}
+      - {id: target, name: target, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native target.}
+      - {id: rel, name: rel, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native rel.}
+      - {id: download, name: download, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native download.}
+      - {id: class, name: class_, type: {display: CClassValue, interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds list-item classes.}
+      - {id: style, name: style, type: {display: CStyleValue, interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds list-item styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed list-item attributes.}
+      - {id: link-attrs, name: link_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed native link attributes.}
+  - id: navigation-menu-item-server-inputs
+    component: CNavigationMenuItem
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Sets unique Item identity and callback value.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables the disclosure Button.}
+      - {id: class, name: class_, type: {display: CClassValue, interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds list-item classes.}
+      - {id: style, name: style, type: {display: CStyleValue, interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds list-item styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed list-item attributes.}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed native Button attributes.}
+      - {id: panel-attrs, name: panel_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed panel attributes.}
+
+slots:
+  - id: navigation-menu-slots
+    component: CNavigationMenu
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CNavigationMenuDefaultSlotData]}, fallback: none}
+  - id: navigation-menu-link-slots
+    component: CNavigationMenuLink
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CNavigationMenuLinkDefaultSlotData]}, fallback: none}
+  - id: navigation-menu-item-slots
+    component: CNavigationMenuItem
+    entries:
+      - {id: label, name: label, required: true, data: {display: '{}', interfaces: [CNavigationMenuItemLabelSlotData]}, fallback: none}
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CNavigationMenuItemDefaultSlotData]}, fallback: none}
+
+events:
+  - id: navigation-menu-events
+    component: CNavigationMenu
+    entries:
+      - id: on-value-change
+        name: onValueChange
+        signature: {display: '(value: string | null, detail: CNavigationMenuValueChangeDetail) => void', interfaces: [CNavigationMenuValueChangeDetail]}
+        trigger: Trigger, hover, Escape, outside interaction, link activation, disabledness, or structure requests a different open value.
+        detail: {display: '{value, previousValue, reason, controlled, forced, source}', interfaces: [CNavigationMenuValueChangeDetail]}
+        behavior: Uncontrolled requests commit before notification; controlled requests wait for acceptance; safety closes are forced.
+
+methods: []
+
+css:
+  - id: navigation-menu-css-variables
+    component: CNavigationMenu
+    entries:
+      - {id: background, name: --cui-navigation-menu-background, type: color, purpose: Root background., default: transparent}
+      - {id: foreground, name: --cui-navigation-menu-foreground, type: color, purpose: Tree foreground., default: CanvasText}
+      - {id: border-color, name: --cui-navigation-menu-border-color, type: color, purpose: Surface boundaries., default: Scheme-aware neutral.}
+      - {id: trigger-background, name: --cui-navigation-menu-trigger-background, type: color, purpose: Resting top-level control background., default: transparent}
+      - {id: trigger-hover-background, name: --cui-navigation-menu-trigger-hover-background, type: color, purpose: Hovered control background., default: Scheme-aware neutral.}
+      - {id: trigger-open-background, name: --cui-navigation-menu-trigger-open-background, type: color, purpose: Open control background., default: Scheme-aware neutral.}
+      - {id: focus-color, name: --cui-navigation-menu-focus-color, type: color, purpose: Focus ring., default: Highlight}
+      - {id: radius, name: --cui-navigation-menu-radius, type: length, purpose: Root and panel radius., default: 0.75rem}
+      - {id: gap, name: --cui-navigation-menu-gap, type: length, purpose: Top-level gap., default: 0.25rem}
+      - {id: padding, name: --cui-navigation-menu-padding, type: length, purpose: Root padding., default: Size-derived.}
+      - {id: panel-background, name: --cui-navigation-menu-panel-background, type: color, purpose: Panel surface., default: Canvas}
+      - {id: panel-inline-size, name: --cui-navigation-menu-panel-inline-size, type: length, purpose: Preferred panel width., default: 24rem}
+      - {id: panel-max-inline-size, name: --cui-navigation-menu-panel-max-inline-size, type: length, purpose: Viewport-safe maximum panel width., default: 'calc(100vw - 2rem)'}
+      - {id: panel-padding, name: --cui-navigation-menu-panel-padding, type: length, purpose: Panel padding., default: 1rem}
+      - {id: panel-shadow, name: --cui-navigation-menu-panel-shadow, type: shadow, purpose: Panel elevation., default: Scheme-aware shadow.}
+      - {id: offset, name: --cui-navigation-menu-offset, type: length, purpose: Panel offset., default: 0.45rem}
+      - {id: duration, name: --cui-navigation-menu-duration, type: time, purpose: Indicator transition duration., default: 150ms}
+      - {id: easing, name: --cui-navigation-menu-easing, type: easing, purpose: Indicator transition easing., default: ease-out}
+
+attributes:
+  - id: navigation-menu-attributes
+    component: CNavigationMenu
+    entries:
+      - {id: aria-label, name: aria-label, element: Root nav, type: string, meaning: Names the navigation landmark.}
+      - {id: data-orientation, name: data-orientation, element: Root nav, type: CNavigationMenuOrientation, meaning: Reflects layout and arrow-key axis.}
+      - {id: data-disabled, name: data-disabled, element: Root and disabled Item/trigger, type: present | absent, meaning: Reflects effective component disabledness.}
+      - {id: data-loop, name: data-loop, element: Root nav, type: present | absent, meaning: Reflects arrow wrapping.}
+      - {id: data-variant, name: data-variant, element: Root nav, type: CNavigationMenuVariant, meaning: Reflects treatment.}
+      - {id: data-size, name: data-size, element: Root nav, type: CNavigationMenuSize, meaning: Reflects geometry.}
+      - {id: data-value, name: data-value, element: Root Item trigger and panel, type: string, meaning: Reflects open or owned Item identity according to destination.}
+      - {id: data-open, name: data-open, element: Open Item trigger and panel, type: present | absent, meaning: Reflects open state.}
+      - {id: aria-current, name: aria-current, element: Current Link, type: '"page"', meaning: Identifies the current destination.}
+      - {id: aria-controls, name: aria-controls, element: Item trigger, type: IDREF, meaning: Points to the adjacent panel.}
+      - {id: aria-expanded, name: aria-expanded, element: Item trigger, type: '"true" | "false"', meaning: Reflects panel visibility.}
+      - {id: disabled, name: disabled, element: Item trigger, type: present | absent, meaning: Uses native Button disabledness.}
+      - {id: hidden, name: hidden, element: Closed panel, type: present | absent, meaning: Removes closed content from rendering and accessibility.}
+      - {id: inert, name: inert, element: Closed panel, type: present | absent, meaning: Prevents programmatic closed-panel interaction.}
+
+selectors:
+  - id: navigation-menu-selectors
+    component: CNavigationMenu
+    entries:
+      - {id: root, selector: '[data-citry-ui-part="navigation-menu"]', element: nav, purpose: Root style and attrs destination.}
+      - {id: list, selector: '[data-citry-ui-part="list"]', element: ul, purpose: Direct child collection.}
+      - {id: link-item, selector: '[data-citry-ui-part="link-item"]', element: Link li, purpose: Link list item.}
+      - {id: link, selector: '[data-citry-ui-part="link"]', element: Native a, purpose: Navigation destination.}
+      - {id: item, selector: '[data-citry-ui-part="item"]', element: Disclosure li, purpose: Item state boundary.}
+      - {id: trigger, selector: '[data-citry-ui-part="trigger"]', element: Native Button, purpose: Disclosure control.}
+      - {id: indicator, selector: '[data-citry-ui-part="indicator"]', element: Decorative span, purpose: Open-state chevron.}
+      - {id: panel, selector: '[data-citry-ui-part="panel"]', element: Neutral div, purpose: Rich navigation content.}
+
+interfaces:
+  - id: navigation-menu-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: orientation, name: CNavigationMenuOrientation, definition: 'Literal["horizontal", "vertical"]'}
+      - {id: variant, name: CNavigationMenuVariant, definition: 'Literal["plain", "surface"]'}
+      - {id: size, name: CNavigationMenuSize, definition: 'Literal["sm", "md", "lg"]'}
+  - {id: root-slot, kind: record, name: CNavigationMenuDefaultSlotData, entries: []}
+  - {id: link-slot, kind: record, name: CNavigationMenuLinkDefaultSlotData, entries: []}
+  - {id: item-label-slot, kind: record, name: CNavigationMenuItemLabelSlotData, entries: []}
+  - {id: item-default-slot, kind: record, name: CNavigationMenuItemDefaultSlotData, entries: []}
+  - id: value-change-detail
+    kind: record
+    name: CNavigationMenuValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'str | None', meaning: Requested open value.}
+      - {id: previous, name: previousValue, type: 'str | None', meaning: Previously effective value.}
+      - {id: reason, name: reason, type: string, meaning: Request source.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a supplied client value owns state.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether safety close overrides control.}
+      - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source.}

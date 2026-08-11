@@ -15,6 +15,11 @@ export interface NativeHtmlAttributeProjection {
 	attributes: ProjectedNativeAttribute[];
 }
 
+export interface HtmlProjectionCandidate {
+	start: number;
+	end: number;
+}
+
 export interface NativeDynamicAttributeHoverProjection extends ProjectedNativeAttribute {
 	source: string;
 	providerOffset: number;
@@ -29,6 +34,30 @@ export interface NativeDynamicAttributeHoverProjection extends ProjectedNativeAt
  * hover only when the provider returns that exact suffix range.
  */
 export function projectNativeHtmlAttributes(source: string): NativeHtmlAttributeProjection {
+	return scanHtml(source, []);
+}
+
+/**
+ * Cheaply identify positions that may need the parser-backed HTML projection.
+ * This is only an activation filter; the language server remains authoritative.
+ */
+export function htmlProjectionCandidateAt(source: string, offset: number): boolean {
+	return htmlProjectionCandidateRangeAt(source, offset) !== undefined;
+}
+
+/** Return the deepest lexical host so one parser result can serve that range. */
+export function htmlProjectionCandidateRangeAt(source: string, offset: number): HtmlProjectionCandidate | undefined {
+	if (offset < 0 || offset > source.length) {
+		return undefined;
+	}
+	const candidates: HtmlProjectionCandidate[] = [];
+	scanHtml(source, candidates);
+	return candidates
+		.filter(({ start, end }) => start <= offset && offset <= end)
+		.sort((left, right) => left.end - left.start - (right.end - right.start))[0];
+}
+
+function scanHtml(source: string, htmlCandidates: HtmlProjectionCandidate[]): NativeHtmlAttributeProjection {
 	const projected = source.split("");
 	const attributes: ProjectedNativeAttribute[] = [];
 	let index = 0;
@@ -71,7 +100,7 @@ export function projectNativeHtmlAttributes(source: string): NativeHtmlAttribute
 			continue;
 		}
 
-		const tag = scanStartTag(source, index, projected, attributes);
+		const tag = scanStartTag(source, index, projected, attributes, htmlCandidates);
 		if (tag === undefined) {
 			index += 1;
 			continue;
@@ -116,6 +145,7 @@ function scanStartTag(
 	start: number,
 	projected: string[],
 	attributes: ProjectedNativeAttribute[],
+	htmlCandidates: HtmlProjectionCandidate[],
 ): ScannedStartTag | undefined {
 	let index = start + 1;
 	if (!isAsciiLetter(source[index])) {
@@ -128,6 +158,8 @@ function scanStartTag(
 	const authoredTagName = source.slice(nameStart, index);
 	const name = asciiLowercase(authoredTagName);
 	const eligibleTag = !authoredTagName.startsWith("c-");
+	const cElementCandidateStart =
+		authoredTagName.startsWith("c-") && asciiLowercase(authoredTagName.slice(2)) === "element" ? index : undefined;
 
 	while (index < source.length) {
 		index = skipWhitespace(source, index);
@@ -140,9 +172,15 @@ function scanStartTag(
 			continue;
 		}
 		if (source.startsWith("/>", index)) {
+			if (cElementCandidateStart !== undefined) {
+				htmlCandidates.push({ start: cElementCandidateStart, end: index + 2 });
+			}
 			return { name, end: index + 2, selfClosing: true };
 		}
 		if (source[index] === ">") {
+			if (cElementCandidateStart !== undefined) {
+				htmlCandidates.push({ start: cElementCandidateStart, end: index + 1 });
+			}
 			return { name, end: index + 1, selfClosing: false };
 		}
 		if (source[index] === "<" || source.startsWith("{{", index)) {
@@ -193,6 +231,21 @@ function scanStartTag(
 			if (closingQuote < 0) {
 				return { name, end: source.length, selfClosing: false };
 			}
+			const valueStart = index + 1;
+			const value = source.slice(valueStart, closingQuote).trim();
+			if (authoredName.startsWith("c-") && nestedTemplateValue(value)) {
+				htmlCandidates.push({ start: valueStart, end: closingQuote });
+				// A deeper template needs its own cache identity because the server
+				// selects the deepest fragment that contains the current cursor.
+				const nestedCandidates: HtmlProjectionCandidate[] = [];
+				scanHtml(source.slice(valueStart, closingQuote), nestedCandidates);
+				for (const candidate of nestedCandidates) {
+					htmlCandidates.push({
+						start: valueStart + candidate.start,
+						end: valueStart + candidate.end,
+					});
+				}
+			}
 			index = closingQuote + 1;
 			continue;
 		}
@@ -207,6 +260,10 @@ function scanStartTag(
 	}
 
 	return { name, end: source.length, selfClosing: false };
+}
+
+function nestedTemplateValue(value: string): boolean {
+	return (value.startsWith("<>") && value.endsWith("</>")) || /^<[A-Za-z]/.test(value);
 }
 
 function skipPythonExpression(source: string, start: number): number | undefined {

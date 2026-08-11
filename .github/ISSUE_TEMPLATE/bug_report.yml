@@ -34,6 +34,6 @@ body:
     attributes:
       label: Environment
       description: Python version and operating system.
-      placeholder: "Python 3.13, macOS 15"
+      placeholder: "Python 3.14, macOS 15"
     validations:
       required: false

@@ -11,9 +11,12 @@ object, not a loose dict).
 
 from __future__ import annotations
 
+import ast
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, get_args
+
+from citry_core.template_parser import analyze_browser_source
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -25,6 +28,150 @@ if TYPE_CHECKING:
 # type annotation, so the allowed set can be derived from it for validation.
 Mode = Literal["production", "development"]
 _ALLOWED_MODES: tuple[str, ...] = get_args(Mode)
+LintSeverity = Literal["ignore", "warning", "error"]
+_ALLOWED_LINT_SEVERITIES: tuple[str, ...] = get_args(LintSeverity)
+
+
+def _is_template_variable_name(name: object) -> bool:
+    """Return whether a string has one exact Python identifier identity."""
+    if type(name) is not str or not name:
+        return False
+    try:
+        parsed = ast.parse(name, mode="eval").body
+    except (SyntaxError, UnicodeEncodeError, ValueError):
+        return False
+    # Python normalizes some Unicode spellings while parsing. Runtime mapping
+    # keys do not, so accept only a name whose parsed identity is unchanged.
+    return isinstance(parsed, ast.Name) and parsed.id == name
+
+
+def _is_alpine_variable_name(name: object) -> bool:
+    """Return whether OXC parses a string as one exact free JS identifier."""
+    if type(name) is not str or not name:
+        return False
+    try:
+        valid, references = analyze_browser_source(name, "expression")
+    except (TypeError, ValueError, UnicodeError):
+        return False
+    encoded_length = len(name.encode("utf-8"))
+    return valid and references == [(name, 0, encoded_length)]
+
+
+@dataclass(frozen=True, slots=True)
+class LintSettings:
+    """
+    Configure Citry's template and browser lint rules and analysis-only variables.
+
+    Attributes:
+        rule_unknown_template_variable: Severity for a free template root that
+            is absent from the proven component namespace. The default is
+            ``"error"``. A schema that explicitly allows extra fields caps
+            this rule at ``"warning"``.
+        template_variables: Extra variables known to template analysis but not
+            injected at runtime. Values are annotations. Use
+            ``Annotated[T, "description"]`` to attach concise documentation.
+        rule_unknown_alpine_variable: Severity for a free Alpine-expression
+            root absent from the component's proven browser scope. The default
+            is ``"error"``.
+        alpine_variables: Extra variables or custom Alpine magics known only to
+            browser analysis. Values use the same annotation convention as
+            ``template_variables``.
+        rule_unknown_component_js_variable: Severity for a free variable used
+            inside a ``$component`` initializer. The default is ``"error"``.
+        component_js_globals: Extra globals available to component JavaScript
+            analysis. Values use the same annotation convention as
+            ``template_variables``.
+
+    Raises:
+        TypeError: If a variable or global collection is not a mapping.
+        ValueError: If a severity or variable name is invalid.
+
+    """
+
+    rule_unknown_template_variable: LintSeverity = "error"
+    rule_i18n_missing_param_type: LintSeverity = "warning"
+    template_variables: Mapping[str, object] = field(default_factory=dict)
+    rule_unknown_alpine_variable: LintSeverity = "error"
+    alpine_variables: Mapping[str, object] = field(default_factory=dict)
+    rule_unknown_component_js_variable: LintSeverity = "error"
+    component_js_globals: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.rule_unknown_template_variable) is not str
+            or self.rule_unknown_template_variable not in _ALLOWED_LINT_SEVERITIES
+        ):
+            msg = (
+                "rule_unknown_template_variable must be one of "
+                f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_unknown_template_variable!r}"
+            )
+            raise ValueError(msg)
+        if (
+            type(self.rule_i18n_missing_param_type) is not str
+            or self.rule_i18n_missing_param_type not in _ALLOWED_LINT_SEVERITIES
+        ):
+            msg = (
+                "rule_i18n_missing_param_type must be one of "
+                f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_i18n_missing_param_type!r}"
+            )
+            raise ValueError(msg)
+        try:
+            variables = dict(self.template_variables)
+        except (TypeError, ValueError) as err:
+            msg = "LintSettings.template_variables must be a mapping"
+            raise TypeError(msg) from err
+        invalid_name = next((name for name in variables if not _is_template_variable_name(name)), None)
+        if invalid_name is not None:
+            msg = f"LintSettings.template_variables contains invalid template variable name {invalid_name!r}"
+            raise ValueError(msg)
+        object.__setattr__(self, "template_variables", variables)
+        if (
+            type(self.rule_unknown_alpine_variable) is not str
+            or self.rule_unknown_alpine_variable not in _ALLOWED_LINT_SEVERITIES
+        ):
+            msg = (
+                "rule_unknown_alpine_variable must be one of "
+                f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_unknown_alpine_variable!r}"
+            )
+            raise ValueError(msg)
+        try:
+            alpine_variables = dict(self.alpine_variables)
+        except (TypeError, ValueError) as err:
+            msg = "LintSettings.alpine_variables must be a mapping"
+            raise TypeError(msg) from err
+        invalid_alpine_name = next(
+            (name for name in alpine_variables if not _is_alpine_variable_name(name)),
+            None,
+        )
+        if invalid_alpine_name is not None:
+            msg = f"LintSettings.alpine_variables contains invalid Alpine variable name {invalid_alpine_name!r}"
+            raise ValueError(msg)
+        object.__setattr__(self, "alpine_variables", alpine_variables)
+        if (
+            type(self.rule_unknown_component_js_variable) is not str
+            or self.rule_unknown_component_js_variable not in _ALLOWED_LINT_SEVERITIES
+        ):
+            msg = (
+                "rule_unknown_component_js_variable must be one of "
+                f"{_ALLOWED_LINT_SEVERITIES}, got {self.rule_unknown_component_js_variable!r}"
+            )
+            raise ValueError(msg)
+        try:
+            component_js_globals = dict(self.component_js_globals)
+        except (TypeError, ValueError) as err:
+            msg = "LintSettings.component_js_globals must be a mapping"
+            raise TypeError(msg) from err
+        invalid_component_js_name = next(
+            (name for name in component_js_globals if not _is_alpine_variable_name(name)),
+            None,
+        )
+        if invalid_component_js_name is not None:
+            msg = (
+                "LintSettings.component_js_globals contains invalid JavaScript identifier "
+                f"{invalid_component_js_name!r}"
+            )
+            raise ValueError(msg)
+        object.__setattr__(self, "component_js_globals", component_js_globals)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +228,9 @@ class CitrySettings:
             which is how you add or change a global after the instance exists
             (including the default instance, created at import before your code
             runs).
+        lint: Template lint severities and analysis-only variables. Runtime
+            globals are discovered from ``Citry.template_globals`` and do not
+            need to be repeated here.
         id_generator: A function returning the per-render id stamped on each
             component instance (``component.id``, which drives the
             ``data-cid-<id>`` markers that scope a component's CSS and JS on the
@@ -129,6 +279,7 @@ class CitrySettings:
     autodiscover: bool = True
     mode: Mode = "production"
     template_globals: Mapping[str, Any] = field(default_factory=dict)
+    lint: LintSettings = field(default_factory=LintSettings)
     # Advanced/niche settings
     id_generator: Callable[[], str] | str | None = None
     secret: str | list[str] | None = None
@@ -167,6 +318,9 @@ class CitrySettings:
         # caller's mapping cannot change these frozen settings.
         object.__setattr__(self, "extensions_defaults", dict(self.extensions_defaults))
         object.__setattr__(self, "template_globals", dict(self.template_globals))
+        if type(self.lint) is not LintSettings:
+            msg = "CitrySettings.lint must be a LintSettings value"
+            raise TypeError(msg)
 
         # A bare-string secret is stored as a one-element list, so readers
         # always see the rotation form: first entry signs, every entry verifies.

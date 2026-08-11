@@ -361,9 +361,9 @@ returns structured data. Citry owns hashing and the physical key format.
 #### Ambient data remains explicit
 
 The default key cannot see future database reads, current time, randomness,
-`template_globals`, `Component.inject()`, locale, timezone, feature flags, or
-request state hidden behind an object. A cache-enabled component that depends on
-one of these must do at least one of the following:
+`template_globals`, `Component.inject()`, feature flags, or request state hidden
+behind an object. A cache-enabled component that depends on one of these must do
+at least one of the following:
 
 - pass the relevant stable value as a kwarg;
 - include it in `Cache.vary()`;
@@ -374,6 +374,28 @@ one of these must do at least one of the following:
 `inject()`, but passing the stable dimension as an explicit kwarg is easier to
 inspect, test, and reproduce. Ambient render globals are not passed as a second
 implicit mapping.
+
+Extensions follow the same rule. Cache does not add fields or callback arguments
+for i18n, authentication, feature flags, or any other named extension. A
+localized component can include the i18n context's plain immutable identity in
+its normal variation:
+
+```python
+class Cache:
+    enabled = True
+
+    def vary(self, kwargs, slots):
+        return {
+            "kwargs": kwargs,
+            "locale_context": self.component.i18n.context.identity,
+        }
+```
+
+The identity covers locale, fallback locales, direction, time zone, tzdb
+revision, catalog revision, and format revision. Cache treats it like any other
+tuple of canonical values. If the component deliberately returns no locale
+facts, ordinary Cache semantics apply and the entry may be shared across
+locales. The author remains responsible for making that choice safe.
 
 Caching never creates an authorization boundary. Omitting a user or tenant
 dimension can serve one caller's rendered data to another caller.
@@ -943,6 +965,13 @@ safety from whether a hook happens to exist.
 Changing an extension's payload or replay meaning requires incrementing
 `render_cache_version`. Changing application behavior still requires a new
 deployment `generation`.
+
+One ownership cleanup remains: generic replay contribution and replay-error
+types currently live under `citry.ext.cache`, so Events, Dependencies, and the
+extension manager import Cache-owned modules while implementing the generic
+contract above. Move those neutral types into a core render-cache protocol
+module. Events and Dependencies should then depend on that protocol, not on
+Cache's private implementation.
 
 ---
 

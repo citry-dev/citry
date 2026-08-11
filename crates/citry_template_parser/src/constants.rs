@@ -133,6 +133,7 @@ pub const FOR_NODE: &str = "ForNode";
 pub const SLOT_NODE: &str = "SlotNode";
 pub const FILL_NODE: &str = "FillNode";
 pub const FILL_DATA_BINDING: &str = "FillDataBinding";
+pub const C_BIND_ATTR: &str = "c-bind";
 // Keeps the whole attribute region of an HTML start tag structured when it has
 // a dynamic attribute or an extension-owned literal binding/output name. See
 // compile_html_node.
@@ -162,6 +163,57 @@ pub const RESERVED_TAG_NAMES: &[&str] = &[
     // because they are practically just custom components:
     // c-component, c-element, c-provide, c-js, c-css
     // (c-element allows only the default fill, per TAG_SLOT_RULES_DATA)
+];
+
+/// Fixed Citry attribute directives that tooling can document without an app.
+///
+/// Dynamic `c-*` attributes such as `c-class` are intentionally absent because
+/// their suffix is an HTML attribute or component input rather than a fixed
+/// parser-owned spelling.
+pub const CITRY_DIRECTIVE_NAMES: &[&str] = &[
+    C_IF_TAG,
+    C_ELIF_TAG,
+    C_ELSE_TAG,
+    C_FOR_TAG,
+    C_EMPTY_TAG,
+    C_BIND_ATTR,
+    META_ATTR_KEY,
+    META_ATTR_IGNORE,
+    CLIENT_PROPS_ATTR,
+    DYNAMIC_CLIENT_PROPS_ATTR,
+];
+
+/// Fixed attributes whose meaning is owned by one reserved structural tag.
+///
+/// `<c-slot>` may also expose arbitrary user-named data fields. Those open
+/// names are deliberately absent because tooling can document only the fixed
+/// parser contract without a component schema.
+pub const STRUCTURAL_TAG_ATTRIBUTE_NAMES: &[(&str, &[&str])] = &[
+    (C_IF_TAG, &["cond"]),
+    (C_ELIF_TAG, &["cond"]),
+    (C_ELSE_TAG, &[]),
+    (C_FOR_TAG, &["each"]),
+    (C_EMPTY_TAG, &[]),
+    (C_RAW_TAG, &[]),
+    (
+        C_FILL_TAG,
+        &["name", "c-name", "data", "fallback", C_BIND_ATTR],
+    ),
+    (
+        C_SLOT_TAG,
+        &[
+            "name",
+            "c-name",
+            "required",
+            "c-required",
+            C_BIND_ATTR,
+            C_IF_TAG,
+            C_ELIF_TAG,
+            C_ELSE_TAG,
+            C_FOR_TAG,
+            C_EMPTY_TAG,
+        ],
+    ),
 ];
 
 /// Whether an exact-prefix Citry tag has the identity of a reserved
@@ -254,6 +306,97 @@ lazy_static! {
     };
 }
 
+#[cfg(test)]
+mod tests {
+    use super::{
+        CITRY_DIRECTIVE_NAMES, CLIENT_PROPS_ATTR, CONTROL_FLOW_GROUPS, C_BIND_ATTR, C_FILL_TAG,
+        C_SLOT_TAG, DYNAMIC_CLIENT_PROPS_ATTR, META_ATTR_IGNORE, META_ATTR_KEY, RESERVED_TAG_NAMES,
+        STRUCTURAL_TAG_ATTRIBUTE_NAMES, TAG_ATTR_RULES_DATA,
+    };
+    use std::collections::{HashMap, HashSet};
+
+    #[test]
+    fn tooling_syntax_inventories_are_unique_and_cover_every_structural_tag() {
+        let directives: HashSet<_> = CITRY_DIRECTIVE_NAMES.iter().copied().collect();
+        assert_eq!(directives.len(), CITRY_DIRECTIVE_NAMES.len());
+
+        let structural_tags: HashSet<_> = STRUCTURAL_TAG_ATTRIBUTE_NAMES
+            .iter()
+            .map(|(tag, _attributes)| *tag)
+            .collect();
+        assert_eq!(structural_tags.len(), STRUCTURAL_TAG_ATTRIBUTE_NAMES.len());
+        assert_eq!(
+            structural_tags,
+            RESERVED_TAG_NAMES.iter().copied().collect()
+        );
+
+        for (_tag, attributes) in STRUCTURAL_TAG_ATTRIBUTE_NAMES {
+            let unique: HashSet<_> = attributes.iter().copied().collect();
+            assert_eq!(unique.len(), attributes.len());
+        }
+    }
+
+    #[test]
+    fn tooling_directives_match_the_parser_owned_groups_and_special_names() {
+        // The language-tool inventory must move with every parser-owned fixed
+        // directive, including the names handled outside control-flow lowering.
+        let expected: HashSet<_> = CONTROL_FLOW_GROUPS
+            .iter()
+            .flat_map(|group| group.iter().copied())
+            .chain([
+                C_BIND_ATTR,
+                META_ATTR_KEY,
+                META_ATTR_IGNORE,
+                CLIENT_PROPS_ATTR,
+                DYNAMIC_CLIENT_PROPS_ATTR,
+            ])
+            .collect();
+        assert_eq!(
+            CITRY_DIRECTIVE_NAMES
+                .iter()
+                .copied()
+                .collect::<HashSet<_>>(),
+            expected
+        );
+    }
+
+    #[test]
+    fn tooling_structural_attributes_match_parser_validation_rules() {
+        // Most structural tags have closed validation rules. c-bind bypasses
+        // those groups deliberately, so include it for c-fill before comparing.
+        let documented: HashMap<_, HashSet<_>> = STRUCTURAL_TAG_ATTRIBUTE_NAMES
+            .iter()
+            .map(|(tag, attributes)| (*tag, attributes.iter().copied().collect()))
+            .collect();
+        for (tag, (allowed_groups, _required_groups)) in TAG_ATTR_RULES_DATA {
+            if !RESERVED_TAG_NAMES.contains(tag) || *tag == C_SLOT_TAG {
+                continue;
+            }
+            let mut operational: HashSet<_> = allowed_groups
+                .expect("closed structural tags define allowed attributes")
+                .iter()
+                .flat_map(|group| group.iter().copied())
+                .collect();
+            if *tag == C_FILL_TAG {
+                operational.insert(C_BIND_ATTR);
+            }
+            assert_eq!(documented.get(tag), Some(&operational));
+        }
+
+        // c-slot accepts open data names, but these fixed settings and control
+        // directives are the parser-owned subset language tools can document.
+        let slot_fixed: HashSet<_> = ["name", "c-name", "required", "c-required", C_BIND_ATTR]
+            .into_iter()
+            .chain(
+                CONTROL_FLOW_GROUPS
+                    .iter()
+                    .flat_map(|group| group.iter().copied()),
+            )
+            .collect();
+        assert_eq!(documented.get(C_SLOT_TAG), Some(&slot_fixed));
+    }
+}
+
 /// Static definition of attribute validation rules for special tags
 /// Format: (tag_name, (allowed_attrs, required_attrs))
 /// - allowed_attrs: array of arrays of allowed attribute names. Each inner array is a "one of" group.
@@ -281,16 +424,16 @@ pub const TAG_ATTR_RULES_DATA: &[(&str, (Option<&[&[&str]]>, &[&[&str]]))] = &[
         C_FILL_TAG,
         (
             Some(&[&["name", "c-name"], &["data"], &["fallback"]]),
-            &[&["name", "c-name", "c-bind"]],
+            &[&["name", "c-name", C_BIND_ATTR]],
         ),
     ),
     // c-slot: any attributes allowed, nothing required. A slot with no "name",
     // "c-name", nor "c-bind" attribute is the default slot, named "default".
     (C_SLOT_TAG, (None, &[])),
     // c-component: any attributes allowed, but one of ["is", "c-is", "c-bind"] required
-    (C_COMPONENT_TAG, (None, &[&["is", "c-is", "c-bind"]])),
+    (C_COMPONENT_TAG, (None, &[&["is", "c-is", C_BIND_ATTR]])),
     // c-element: any attributes allowed, but one of ["is", "c-is", "c-bind"] required
-    (C_ELEMENT_TAG, (None, &[&["is", "c-is", "c-bind"]])),
+    (C_ELEMENT_TAG, (None, &[&["is", "c-is", C_BIND_ATTR]])),
     // NOTE: `<c-provide>`, `<c-js>`, and `<c-css>` are not included here
     // because they can be implemented as user-side components.
 ];

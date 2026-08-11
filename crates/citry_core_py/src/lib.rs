@@ -6,14 +6,17 @@
 #![allow(clippy::too_many_arguments)]
 
 pub mod html_transform;
+pub mod i18n;
 pub mod safe_eval;
 pub mod template_formatter;
 pub mod template_parser;
 
 use pyo3::prelude::*;
-use pyo3::types::PyFrozenSet;
+use pyo3::types::{PyDict, PyFrozenSet};
 
-use citry_template_parser::constants::{HTML_VOID_ELEMENTS, RESERVED_TAG_NAMES};
+use citry_template_parser::constants::{
+    CITRY_DIRECTIVE_NAMES, HTML_VOID_ELEMENTS, RESERVED_TAG_NAMES, STRUCTURAL_TAG_ATTRIBUTE_NAMES,
+};
 use citry_template_parser::{
     Comment, Expr, FillDataField, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlEndTag,
     HtmlStartTag, Node, ParseDiagnostic, StaticNamedSlot, TagRules, Template, TemplateElement,
@@ -21,11 +24,18 @@ use citry_template_parser::{
 };
 
 use crate::html_transform::{mark_html, transform_html};
+use crate::i18n::{
+    I18nCompileError, PyCatalogCompiler, PyCompiledCatalog, PyTextCatalog, canonicalize_locale,
+    locale_direction,
+};
 use crate::template_formatter::{
     PyEmbeddedFormatPlan, TemplateFormatError, finish_embedded_format, format_template,
     prepare_embedded_format, python_expression_provider,
 };
-use crate::template_parser::{compile_template, parse_template};
+use crate::template_parser::{
+    analyze_browser_source, analyze_component_scope_writes, analyze_component_source,
+    compile_template, parse_template,
+};
 
 /// Singular Python API that brings together all the other Rust crates.
 /// Each crate is exposed as a submodule.
@@ -39,6 +49,16 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_submodule(&html_transform_mod)?;
     html_transform_mod.add_function(wrap_pyfunction!(transform_html, &html_transform_mod)?)?;
     html_transform_mod.add_function(wrap_pyfunction!(mark_html, &html_transform_mod)?)?;
+
+    // Internationalization primitives
+    let i18n_mod = PyModule::new(m.py(), "i18n")?;
+    m.add_submodule(&i18n_mod)?;
+    i18n_mod.add_function(wrap_pyfunction!(canonicalize_locale, &i18n_mod)?)?;
+    i18n_mod.add_function(wrap_pyfunction!(locale_direction, &i18n_mod)?)?;
+    i18n_mod.add_class::<PyTextCatalog>()?;
+    i18n_mod.add_class::<PyCatalogCompiler>()?;
+    i18n_mod.add_class::<PyCompiledCatalog>()?;
+    i18n_mod.add("I18nCompileError", m.py().get_type::<I18nCompileError>())?;
 
     // Safe eval
     let safe_eval_mod = PyModule::new(m.py(), "safe_eval")?;
@@ -77,6 +97,18 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Functions
     template_parser_mod.add_function(wrap_pyfunction!(parse_template, &template_parser_mod)?)?;
     template_parser_mod.add_function(wrap_pyfunction!(compile_template, &template_parser_mod)?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(
+        analyze_browser_source,
+        &template_parser_mod
+    )?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(
+        analyze_component_scope_writes,
+        &template_parser_mod
+    )?)?;
+    template_parser_mod.add_function(wrap_pyfunction!(
+        analyze_component_source,
+        &template_parser_mod
+    )?)?;
     // AST classes
     template_parser_mod.add_class::<ParseDiagnostic>()?;
     template_parser_mod.add_class::<Token>()?;
@@ -108,6 +140,25 @@ fn _rust(m: &Bound<'_, PyModule>) -> PyResult<()> {
         "RESERVED_TAG_NAMES",
         PyFrozenSet::new(m.py(), RESERVED_TAG_NAMES)?,
     )?;
+    // Fixed directives and context-qualified structural attributes let editor
+    // integrations prove that their syntax help covers the parser contract.
+    template_parser_mod.add(
+        "CITRY_DIRECTIVE_NAMES",
+        PyFrozenSet::new(m.py(), CITRY_DIRECTIVE_NAMES)?,
+    )?;
+    let structural_attributes = PyDict::new(m.py());
+    for (tag_name, attribute_names) in STRUCTURAL_TAG_ATTRIBUTE_NAMES {
+        structural_attributes.set_item(
+            tag_name,
+            PyFrozenSet::new(m.py(), attribute_names.iter().copied())?,
+        )?;
+    }
+    let mapping_proxy = m
+        .py()
+        .import("types")?
+        .getattr("MappingProxyType")?
+        .call1((structural_attributes,))?;
+    template_parser_mod.add("STRUCTURAL_TAG_ATTRIBUTE_NAMES", mapping_proxy)?;
 
     Ok(())
 }

@@ -1,0 +1,168 @@
+schema_version: 1
+family: select
+
+components:
+  - CSelect
+
+inputs:
+  - id: cselect-server-inputs
+    component: CSelect
+    channel: server
+    column_widths: [fit, 14rem, 8rem, auto]
+    entries:
+      - {id: options, name: options, type: 'Sequence[CSelectOption]', default: {kind: required}, effect: Supplies the nonempty ordered stable collection.}
+      - {id: placeholder, name: placeholder, type: str, default: {kind: required}, effect: Supplies author-localized empty-value text.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native value proxy with a Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: literal, value: null}, effect: Sets native proxy identity and generated relationships.}
+      - {id: value, name: value, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the initial selected stable value.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial popup visibility when eligible.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native required validity outside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Disables selection and form contribution.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Preserves submission while preventing changes.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds owner-supplied invalid presentation.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: false}, effect: Wraps open Listbox arrow navigation.}
+      - {id: placement, name: placement, type: {display: '"bottom-start" | "bottom-end" | "top-start" | "top-end"', interfaces: [CSelectPlacement]}, default: {kind: literal, value: bottom-start}, effect: Sets preferred logical popup placement.}
+      - {id: match-width, name: match_width, type: bool, default: {kind: literal, value: true}, effect: Matches the popup inline size to the control within viewport limits.}
+      - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CSelectVariant]}, default: {kind: literal, value: outline}, effect: Selects control treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CSelectSize]}, default: {kind: literal, value: md}, effect: Selects control and Option geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted nonconflicting root attributes.}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted relationships events and accessible naming to the combobox Button.}
+      - {id: listbox-attrs, name: listbox_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted nonconflicting Listbox attributes.}
+  - id: cselect-client-inputs
+    component: CSelect
+    channel: client
+    column_widths: [fit, 14rem, 12rem, auto]
+    entries:
+      - {id: value, name: value, type: 'string | null', omitted: Releases control to committed selection., effect: Controls selected value while supplied.}
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control to committed visibility., effect: Controls popup visibility while supplied.}
+      - {id: required, name: required, type: bool, omitted: Uses the server or Field fallback., effect: Reactively changes required validity.}
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server or Field fallback., effect: Reactively disables selection.}
+      - {id: readonly, name: readonly, type: bool, omitted: Uses the server or Field fallback., effect: Reactively prevents changes while preserving submission.}
+      - {id: invalid, name: invalid, type: bool, omitted: Uses the server or Field fallback., effect: Reactively changes invalid presentation.}
+      - {id: loop, name: loop, type: bool, omitted: Uses the server value., effect: Reactively changes arrow wrapping.}
+      - {id: placement, name: placement, type: 'CSelectPlacement', omitted: Uses the server value., effect: Reactively changes preferred placement.}
+      - {id: match-width, name: matchWidth, type: bool, omitted: Uses the server value., effect: Reactively changes popup sizing.}
+      - {id: variant, name: variant, type: 'CSelectVariant', omitted: Uses the server value., effect: Reactively changes treatment.}
+      - {id: size, name: size, type: 'CSelectSize', omitted: Uses the server value., effect: Reactively changes geometry.}
+      - {id: on-value-change, name: onValueChange, type: '((value: string | null, detail: CSelectValueChangeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives selection reset and structural requests.}
+      - {id: on-open-change, name: onOpenChange, type: '((open: boolean, detail: CSelectOpenChangeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives visibility requests and forced-close notices.}
+
+slots: []
+
+events:
+  - id: cselect-events
+    component: CSelect
+    entries:
+      - {id: value-change, name: onValueChange, signature: {display: '(value: string | null, detail: CSelectValueChangeDetail) => void', interfaces: [CSelectValueChangeDetail]}, trigger: Enabled selection reset or structural recovery., detail: {display: '{value, previousValue, option, controlled, source, sourceEvent}', interfaces: [CSelectValueChangeDetail]}, behavior: Commits immediately when uncontrolled and waits for owner acceptance when controlled.}
+      - {id: open-change, name: onOpenChange, signature: {display: '(open: boolean, detail: CSelectOpenChangeDetail) => void', interfaces: [CSelectOpenChangeDetail]}, trigger: Visibility request or nonrejectable safety close., detail: {display: '{open, reason, controlled, forced, source}', interfaces: [CSelectOpenChangeDetail]}, behavior: Controlled requests notify without changing visibility; forced safety closes always hide.}
+
+methods: []
+
+css:
+  - id: cselect-css-variables
+    component: CSelect
+    entries:
+      - {id: background, name: --cui-select-background, type: color, purpose: Control and popup surface., default: Canvas}
+      - {id: foreground, name: --cui-select-foreground, type: color, purpose: Primary foreground., default: CanvasText}
+      - {id: placeholder-color, name: --cui-select-placeholder-color, type: color, purpose: Empty-value foreground., default: scheme-aware muted}
+      - {id: muted-color, name: --cui-select-muted-color, type: color, purpose: Description and disabled foreground., default: scheme-aware muted}
+      - {id: border-color, name: --cui-select-border-color, type: color, purpose: Outline border., default: scheme-aware subtle border}
+      - {id: hover-background, name: --cui-select-hover-background, type: color, purpose: Highlighted Option surface., default: CanvasText mix}
+      - {id: selected-background, name: --cui-select-selected-background, type: color, purpose: Selected Option surface., default: scheme-aware blue}
+      - {id: selected-foreground, name: --cui-select-selected-foreground, type: color, purpose: Selected Option foreground., default: scheme-aware blue text}
+      - {id: focus-color, name: --cui-select-focus-color, type: color, purpose: Focus outline., default: Highlight}
+      - {id: radius, name: --cui-select-radius, type: length, purpose: Control and popup corners., default: 0.625rem}
+      - {id: control-padding, name: --cui-select-control-padding, type: length, purpose: Control padding., default: size-derived}
+      - {id: option-padding, name: --cui-select-option-padding, type: length, purpose: Option padding., default: size-derived}
+      - {id: max-block-size, name: --cui-select-max-block-size, type: length, purpose: Popup scroll boundary., default: 18rem}
+      - {id: offset, name: --cui-select-offset, type: length, purpose: Anchor gap., default: 0.25rem}
+      - {id: shadow, name: --cui-select-shadow, type: shadow, purpose: Popup elevation., default: scheme-aware shadow}
+      - {id: duration, name: --cui-select-duration, type: time, purpose: Popup and indicator motion., default: 120ms}
+
+attributes:
+  - id: cselect-attributes
+    component: CSelect
+    entries:
+      - {id: role-combobox, name: role, element: Control Button, type: combobox, meaning: Declares the select-only popup control.}
+      - {id: role-listbox, name: role, element: Listbox div, type: listbox, meaning: Declares the popup collection.}
+      - {id: role-option, name: role, element: Option div, type: option, meaning: Declares each value.}
+      - {id: aria-expanded, name: aria-expanded, element: Control Button, type: 'true | false', meaning: Reflects popup visibility.}
+      - {id: aria-controls, name: aria-controls, element: Control Button, type: IDREF, meaning: Targets the Listbox.}
+      - {id: aria-activedescendant, name: aria-activedescendant, element: Control Button, type: IDREF or absent, meaning: Identifies the highlighted open Option.}
+      - {id: aria-required, name: aria-required, element: Control Button, type: 'true or absent', meaning: Mirrors effective required state.}
+      - {id: aria-disabled, name: aria-disabled, element: Control Button, type: 'true or absent', meaning: Mirrors effective unavailability.}
+      - {id: aria-readonly, name: aria-readonly, element: Control Button, type: 'true or absent', meaning: Mirrors read-only interaction.}
+      - {id: aria-invalid, name: aria-invalid, element: Control Button, type: 'true or absent', meaning: Mirrors effective invalid presentation.}
+      - {id: aria-selected, name: aria-selected, element: Option div, type: 'true | false', meaning: Reflects effective selection.}
+      - {id: data-open, name: data-open, element: Root div, type: present-or-absent, meaning: Mirrors effective visibility.}
+      - {id: data-empty, name: data-empty, element: Root div, type: present-or-absent, meaning: Mirrors no selected value.}
+      - {id: data-required, name: data-required, element: Root div, type: present-or-absent, meaning: Mirrors effective required state.}
+      - {id: data-readonly, name: data-readonly, element: Root div, type: present-or-absent, meaning: Mirrors read-only interaction.}
+      - {id: data-invalid, name: data-invalid, element: Root div, type: present-or-absent, meaning: Mirrors effective invalid presentation.}
+      - {id: data-match-width, name: data-match-width, element: Root div, type: present-or-absent, meaning: Mirrors popup width matching.}
+      - {id: data-variant, name: data-variant, element: Root div, type: 'outline | filled | plain', meaning: Mirrors effective treatment.}
+      - {id: data-size, name: data-size, element: Root div, type: 'sm | md | lg', meaning: Mirrors effective geometry.}
+      - {id: data-value, name: data-value, element: Option div, type: string, meaning: Exposes stable identity.}
+      - {id: data-selected, name: data-selected, element: Option div, type: present-or-absent, meaning: Mirrors selection.}
+      - {id: data-highlighted, name: data-highlighted, element: Option div, type: present-or-absent, meaning: Mirrors active descendant.}
+      - {id: data-disabled, name: data-disabled, element: Root or Option div, type: present-or-absent, meaning: Mirrors effective unavailability.}
+      - {id: data-placement, name: data-placement, element: Popup div, type: CSelectPlacement, meaning: Reflects preferred logical placement.}
+
+selectors:
+  - id: cselect-selectors
+    component: CSelect
+    entries:
+      - {id: root, selector: '[data-citry-ui-part="root"]', element: Root div, purpose: Stable root attrs and state surface.}
+      - {id: control, selector: '[data-citry-ui-part="control"]', element: Combobox Button, purpose: Visible control and focus owner.}
+      - {id: value, selector: '[data-citry-ui-part="value"]', element: Value span, purpose: Selected label or placeholder.}
+      - {id: indicator, selector: '[data-citry-ui-part="indicator"]', element: Indicator span, purpose: Decorative popup-state mark.}
+      - {id: popup, selector: '[data-citry-ui-part="popup"]', element: Manual popover div, purpose: Top-layer scrolling surface.}
+      - {id: listbox, selector: '[data-citry-ui-part="listbox"]', element: Listbox div, purpose: Semantic collection.}
+      - {id: group, selector: '[data-citry-ui-part="group"]', element: Group div, purpose: Related Options.}
+      - {id: group-label, selector: '[data-citry-ui-part="group-label"]', element: Group label span, purpose: Visible group name.}
+      - {id: option, selector: '[data-citry-ui-part="option"]', element: Option div, purpose: Value semantics and state.}
+      - {id: option-label, selector: '[data-citry-ui-part="option-label"]', element: Option label span, purpose: Accessible Option name.}
+      - {id: option-description, selector: '[data-citry-ui-part="option-description"]', element: Option description span, purpose: Supporting description.}
+
+interfaces:
+  - id: cselect-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: placement, name: CSelectPlacement, definition: 'Literal["bottom-start", "bottom-end", "top-start", "top-end"]'}
+      - {id: variant, name: CSelectVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: size, name: CSelectSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: source, name: CSelectChangeSource, definition: 'Literal["pointer", "keyboard", "reset", "structure"]'}
+      - {id: reason, name: CSelectOpenReason, definition: 'Literal["trigger", "keyboard", "selection", "escape", "tab", "outside", "focus-outside", "reset", "native", "ancestor"]'}
+  - id: cselect-option
+    kind: record
+    name: CSelectOption
+    entries:
+      - {id: value, name: value, type: str, meaning: Stable unique form value.}
+      - {id: label, name: label, type: str, meaning: Visible accessible Option name.}
+      - {id: description, name: description, type: 'str | None', meaning: Optional separately described supporting text.}
+      - {id: disabled, name: disabled, type: bool, meaning: Prevents user selection.}
+      - {id: group, name: group, type: 'str | None', meaning: Optional contiguous visible group label.}
+  - id: cselect-value-change-detail
+    kind: record
+    name: CSelectValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'str | None', meaning: Requested value.}
+      - {id: previous-value, name: previousValue, type: 'str | None', meaning: Previous effective value.}
+      - {id: option, name: option, type: 'HTMLElement | None', meaning: Activated Option or None for reset and structure.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client value owns selection.}
+      - {id: source, name: source, type: CSelectChangeSource, meaning: Request source.}
+      - {id: source-event, name: sourceEvent, type: 'Event | None', meaning: Native source event when present.}
+  - id: cselect-open-change-detail
+    kind: record
+    name: CSelectOpenChangeDetail
+    entries:
+      - {id: open, name: open, type: bool, meaning: Requested or forced visibility.}
+      - {id: reason, name: reason, type: CSelectOpenReason, meaning: Visibility reason.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client open owns visibility.}
+      - {id: forced, name: forced, type: bool, meaning: Whether safety made the close nonrejectable.}
+      - {id: source, name: source, type: 'EventTarget | None', meaning: Native source or safety owner.}

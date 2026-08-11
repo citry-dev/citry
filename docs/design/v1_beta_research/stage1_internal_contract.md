@@ -81,9 +81,8 @@ workflow results, built-artifact inspection, or live validation.
    section and a much larger Unreleased section (`CHANGELOG.md:3`,
    `CHANGELOG.md:530`). The proposed beta must explicitly absorb, precede, or
    follow that intended release.
-3. The dated project status and contributing guide still describe two Python
-   packages, while the workspace now contains four
-   (`TODO/project_status_june_2026.md:168-187`, `CONTRIBUTING.md:26`,
+3. At the Stage 1 baseline, the contributing guide still described two Python
+   packages, while the workspace contained four (`CONTRIBUTING.md:26`,
    `pyproject.toml:53`, `pyproject.toml:245`).
 4. `citry.__init__` says only root `__all__` names are stable and all submodules
    are internal, while `citry.contrib` and public docs explicitly expose

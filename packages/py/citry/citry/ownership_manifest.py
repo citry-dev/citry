@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any, cast
 
+from citry._class_introspection import _static_class_dict, _static_class_mro
 from citry._protocol.client_graph import (
     COMMENT_PREFIX,
     PROTOCOL,
@@ -51,7 +53,7 @@ if TYPE_CHECKING:
 
 
 EXTRA_KEY = "citry:ownership-manifest"
-_ALPINE_ATTRIBUTE_RE = re.compile(
+_ALPINE_ATTRIBUTE_CANDIDATE_RE = re.compile(
     r"(?:^|[\s<])(?:x-[^\s=/>]+|@[^\s=/>]+|:[^\s=/>]+)(?=\s|=|/?>)",
     re.IGNORECASE,
 )
@@ -61,6 +63,32 @@ _AMBIENT_CONTEXT_MAGIC_RE = re.compile(
     r"\$(?:provide|inject|unprovide)\b",
     re.IGNORECASE | re.DOTALL,
 )
+
+
+class _AlpineAttributeParser(HTMLParser):
+    """Find actual Alpine attributes without treating comments or text as markup."""
+
+    _RAW_TEXT_TAGS = frozenset({"script", "style", "textarea", "title"})
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=False)
+        self.found = False
+        self._raw_text_tag: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._raw_text_tag is not None:
+            return
+        self.found = self.found or any(name.startswith(("x-", "@", ":")) for name, _value in attrs)
+        if tag in self._RAW_TEXT_TAGS:
+            self._raw_text_tag = tag
+
+    def handle_startendtag(self, _tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._raw_text_tag is None:
+            self.found = self.found or any(name.startswith(("x-", "@", ":")) for name, _value in attrs)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == self._raw_text_tag:
+            self._raw_text_tag = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +111,8 @@ class OwnershipManifestArtifact:
     transparent_instance_ids: frozenset[tuple[int, str]]
     region_ids: frozenset[tuple[int, int]]
     client_active_instances: frozenset[tuple[int, str]]
+    scope_seed_instances: tuple[tuple[str, str], ...] = ()
+    """Source-ordered ``(class_id, render_id)`` instances whose own Alpine expressions need JsData."""
     audit_manifest: bool = True
 
     def assert_unchanged(self) -> None:
@@ -136,6 +166,24 @@ class OwnershipManifestArtifact:
 def has_range_directive(invocation: ComponentInvocationRecord) -> bool:
     """Whether an invocation needs browser-visible ComponentRange metadata."""
     return invocation.morph_key is not None or invocation.morph_mode is not None
+
+
+def _component_can_produce_js_data(component_class: type[Component]) -> bool:
+    """Whether a class declares a schema or overrides the opt-in data hook."""
+    # The synthesized effective schema is stored on the concrete component.
+    # A non-None value therefore covers direct and inherited JsData fields.
+    if _static_class_dict(component_class).get("JsData") is not None:
+        return True
+
+    # Stop at the first method owner. The framework root supplies the
+    # documented None-returning default; any nearer owner opted into JsData,
+    # even when this particular render returns an empty mapping.
+    for candidate in _static_class_mro(component_class):
+        namespace = _static_class_dict(candidate)
+        if "js_data" not in namespace:
+            continue
+        return namespace.get("_citry_component_root") is not True
+    return False
 
 
 def _client_binding_payload(
@@ -203,8 +251,10 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
     reached_region_ids: dict[int, set[int]] = {}
     reached_region_parts: dict[int, dict[int, object]] = {}
     component_occurrences: set[str] = set()
+    component_classes_by_occurrence: dict[tuple[int, str], type[Component]] = {}
     wrapper_occurrences: set[int] = set()
     client_active_seeds: set[tuple[int, str]] = set()
+    scope_seed_seeds: set[tuple[int, str]] = set()
 
     # Imported lazily so ownership serialization keeps its existing import
     # boundary with the dependency extension.
@@ -252,18 +302,24 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
                 graph_order.append(graph)
             if component_class is not None and frame.is_component_root and frame.render_id is not None:
                 reachable_render_ids.setdefault(graph_id, set()).add(frame.render_id)
+                component_classes_by_occurrence[(graph_id, frame.render_id)] = component_class
                 events = cast("EventsExtension", component_class.citry.extensions.get_extension("events"))
                 info = events.resolve(component_class)
+                direct_alpine = _render_part_uses_alpine(current, owner_render_id=frame.render_id)
+                if direct_alpine:
+                    scope_seed_seeds.add((graph_id, frame.render_id))
                 if (
                     (component is not None and component._component_tag_client_bindings)
                     or uses_component(component_class)
                     or info.events_cls is not None
                     or info.state_cls is not None
+                    or direct_alpine
                     or _render_part_uses_ambient_context(current, owner_render_id=frame.render_id)
                 ):
                     client_active_seeds.add((graph_id, frame.render_id))
             elif component_class is not None and frame.render_id is not None and component_class.transparent:
                 transparent_frame_ids.setdefault(graph_id, set()).add(frame.render_id)
+                component_classes_by_occurrence[(graph_id, frame.render_id)] = component_class
         pending.extend(reversed(current.parts))
 
     captures = tuple(GraphCapture(graph=graph, snapshot=graph.snapshot()) for graph in graph_order)
@@ -358,6 +414,7 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
         for invocation in active_invocations:
             if invocation.client_bindings:
                 client_active_instances.add((graph_id, invocation.source_render_id))
+                scope_seed_seeds.add((graph_id, invocation.source_render_id))
                 if invocation.target_render_id is not None:
                     client_active_instances.add((graph_id, invocation.target_render_id))
 
@@ -462,6 +519,13 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
         for fill in active_fills:
             if fill.id not in template_fill_ids:
                 continue
+            if fill.lexical_owner_render_id is not None:
+                # Alpine in supplied content evaluates in the caller's
+                # lexical scope; fallback content reports the receiver as its
+                # lexical owner. Seed that exact source lifecycle so JsData is
+                # available even when the owner has no Alpine attribute on its
+                # own physical roots.
+                scope_seed_seeds.add((graph_id, fill.lexical_owner_render_id))
             for fill_render_id in (fill.lexical_owner_render_id, fill.receiver_render_id):
                 if fill_render_id is not None:
                     client_active_instances.add((graph_id, fill_render_id))
@@ -692,6 +756,18 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
         ),
         region_ids=frozenset(region_ids),
         client_active_instances=frozenset(client_active_instances),
+        scope_seed_instances=tuple(
+            (record.class_id, record.render_id)
+            for capture in captures
+            for record in capture.snapshot.logical_instances
+            if (id(capture.graph), record.render_id) in scope_seed_seeds
+            and (id(capture.graph), record.render_id) in instance_ids
+            and (
+                (component_class := component_classes_by_occurrence.get((id(capture.graph), record.render_id)))
+                is not None
+            )
+            and _component_can_produce_js_data(component_class)
+        ),
         audit_manifest=include_provenance,
     )
     return artifact
@@ -699,12 +775,12 @@ def prepare_ownership_manifest(root: CitryRender) -> OwnershipManifestArtifact:
 
 def _render_part_uses_alpine(part: object, *, owner_render_id: str | None = None) -> bool:
     """Whether settled region output directly contains an Alpine attribute."""
+    chunks: list[str] = []
     pending = [part]
     while pending:
         current = pending.pop()
         if isinstance(current, str):
-            if _ALPINE_ATTRIBUTE_RE.search(current):
-                return True
+            chunks.append(current)
             continue
         if isinstance(current, (PhysicalRegionPart, PhysicalRegionRender)):
             pending.append(current.part)
@@ -717,8 +793,14 @@ def _render_part_uses_alpine(part: object, *, owner_render_id: str | None = None
                 and render_id != owner_render_id
             ):
                 continue
-            pending.extend(current.parts)
-    return False
+            pending.extend(reversed(current.parts))
+    html = "".join(chunks)
+    if _ALPINE_ATTRIBUTE_CANDIDATE_RE.search(html) is None:
+        return False
+    parser = _AlpineAttributeParser()
+    parser.feed(html)
+    parser.close()
+    return parser.found
 
 
 def _render_part_uses_ambient_context(part: object, *, owner_render_id: str | None = None) -> bool:
@@ -785,9 +867,15 @@ def ownership_manifest_required(root: CitryRender) -> bool:
                 reached_render_ids_by_graph[id(graph)] = reached_renders
             reached_renders[1].add(render_id)
         if component_class is not None:
+            direct_alpine = (
+                current.frame.is_component_root
+                and current.frame.render_id is not None
+                and _render_part_uses_alpine(current, owner_render_id=current.frame.render_id)
+            )
             if (
                 (component is not None and component._component_tag_client_bindings)
                 or uses_component(component_class)
+                or direct_alpine
                 or _render_part_uses_ambient_context(current, owner_render_id=current.frame.render_id)
             ):
                 return True

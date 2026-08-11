@@ -2,26 +2,43 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
 from lsprotocol import types
 
-from citry import Citry, Component, ComponentLibrary, LibraryComponent, SlotInput
-from citry_core.template_parser import RESERVED_TAG_NAMES
+import citry_lsp.engine as engine_module
+from citry import Citry, Component, ComponentLibrary, LibraryComponent, SlotInput, TemplateAnalysis
+from citry_core.template_parser import CITRY_DIRECTIVE_NAMES, RESERVED_TAG_NAMES, STRUCTURAL_TAG_ATTRIBUTE_NAMES
 from citry_lsp.catalog import CatalogIndex, FieldRecord
 from citry_lsp.engine import (
+    _CITRY_SYNTAX,
+    _STRUCTURAL_ATTRIBUTES,
+    _STRUCTURAL_TAG_SPECS,
     DocumentState,
+    HtmlProjection,
+    TemplateVariableHover,
     _field_definition_location,
     _open_document_source,
     _template_data_fields,
+    all_expression_shadows,
+    browser_diagnostics,
+    browser_projection,
     completion_items,
     completion_result,
+    declaration,
     definition,
     document_symbols,
+    expression_shadows,
     hover,
+    html_projection,
+    references,
+    render_template_variable_hover,
+    semantic_dependencies,
+    template_lint_diagnostics,
 )
-from citry_lsp.project import ProjectState
+from citry_lsp.project import ProjectState, load_project
 from citry_lsp.protocol import ProjectStatus
 
 _DEFINITION_ENGINE = Citry(autodiscover=False)
@@ -114,7 +131,9 @@ class _CardBodySlotData:
     index: int
 
 
+@lru_cache(maxsize=1)
 def _registry_state() -> ProjectState:
+    """Build the immutable registry fixture once for this test process."""
     engine = Citry(autodiscover=False)
 
     class Card(Component):
@@ -126,6 +145,7 @@ def _registry_state() -> ProjectState:
         class Kwargs:
             title: str
             count: int = 0
+            required: bool = False
 
         class Slots:
             body: SlotInput[_CardBodySlotData]
@@ -146,7 +166,9 @@ def _registry_state() -> ProjectState:
     )
 
 
+@lru_cache(maxsize=1)
 def _component_matching_state() -> ProjectState:
+    """Reuse the small component-name catalog across matching cases."""
     engine = Citry(autodiscover=False)
 
     class CForm(Component):
@@ -173,6 +195,18 @@ def _syntax_state() -> ProjectState:
     return ProjectState(ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="syntax-only"))
 
 
+@lru_cache(maxsize=1)
+def _definition_catalog() -> CatalogIndex:
+    """Inspect the module-owned definition registry once for all navigation cases."""
+    return CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+
+
+@lru_cache(maxsize=1)
+def _definition_analysis() -> TemplateAnalysis:
+    """Build parser rules once because ProjectState treats the analysis as immutable."""
+    return _DEFINITION_ENGINE.template_analysis()
+
+
 def _document(source: str, project: ProjectState, *, language_id: str = "citry-html") -> DocumentState:
     document = DocumentState("file:///template.html", language_id, source, 1)
     document.update(source, 1, project)
@@ -185,6 +219,1052 @@ def _position(source: str, marker: str, offset: int = 0) -> types.Position:
     return types.Position(before.count("\n"), len(before.rsplit("\n", 1)[-1].encode("utf-16-le")) // 2)
 
 
+def test_html_projection_extracts_parser_proven_nested_templates_with_exact_ranges():
+    project = _syntax_state()
+    source = "<c-card c-body=\"<>😀<label for='email'>Email</label></>\" />"
+    document = _document(source, project)
+
+    projection = html_projection(document, _position(source, "email", 2), project)
+
+    assert isinstance(projection, HtmlProjection)
+    assert projection.source == "😀<label for='email'>Email</label>"
+    assert projection.position == _position(projection.source, "email", 2)
+    assert projection.source_range == types.Range(
+        _position(source, "😀"),
+        _position(source, "</>"),
+    )
+    assert projection.virtual_range == types.Range(
+        types.Position(0, 0),
+        _position(projection.source, projection.source, len(projection.source)),
+    )
+
+
+def test_html_projection_extracts_a_rooted_nested_template_without_a_fragment_envelope():
+    project = _syntax_state()
+    source = "<c-card c-body=\"<section><input type='email' /></section>\" />"
+
+    projection = html_projection(_document(source, project), _position(source, "email", 2), project)
+
+    assert projection is not None
+    assert projection.source == "<section><input type='email' /></section>"
+    assert projection.source_range == types.Range(
+        _position(source, "<section>"),
+        _position(source, "</section>", len("</section>")),
+    )
+
+
+def test_html_projection_maps_nested_templates_inside_indented_python_literals():
+    project = _syntax_state()
+    source = (
+        "from citry import Component\n"
+        "class Card(Component):\n"
+        '    template = """\n'
+        '      <c-card c-body="<>\n'
+        "        <input type='email' />\n"
+        '      </>" />\n'
+        '    """\n'
+    )
+    document = _document(source, project, language_id="python")
+
+    projection = html_projection(document, _position(source, "email", 2), project)
+
+    assert projection is not None
+    assert projection.source == "\n        <input type='email' />\n"
+    assert projection.source_range == types.Range(
+        _position(source, '<c-card c-body="<>', len('<c-card c-body="<>')),
+        _position(source, "      </>"),
+    )
+
+
+def test_html_projection_preserves_crlf_and_utf16_inside_nested_templates():
+    project = _syntax_state()
+    source = "<c-card\r\n  c-body=\"<>\r\n    😀<input type='email' />\r\n  </>\"\r\n/>"
+    document = _document(source, project)
+
+    projection = html_projection(document, _position(source, "email", 2), project)
+
+    assert projection is not None
+    assert projection.source == "\r\n    😀<input type='email' />\r\n  "
+    assert projection.position == _position(projection.source, "email", 2)
+    assert projection.source_range == types.Range(
+        _position(source, "<>\r\n", 2),
+        _position(source, "</>"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "marker", "expected_tag", "expected_attribute"),
+    [
+        (
+            '<c-element is="form" c-action="submit" class="card"></c-element>',
+            "c-action",
+            "form",
+            'c-action="submit" class="card"',
+        ),
+        (
+            '<c-Element IS="FORM" c-action="submit" class="card"></c-Element>',
+            "c-action",
+            "form",
+            'c-action="submit" class="card"',
+        ),
+        (
+            '<c-element c-is="tag" c-class="card"></c-element>',
+            "c-class",
+            "x-element",
+            'c-class="card"',
+        ),
+        (
+            '<c-element c-IS="tag" c-class="card"></c-element>',
+            "c-class",
+            "x-element",
+            'c-class="card"',
+        ),
+        (
+            '<c-element is="form" c-bind="attrs" class="card"></c-element>',
+            "class",
+            "x-element",
+            'class="card"',
+        ),
+        (
+            '<c-element is="blockquote" class="quote"></c-element>',
+            "class",
+            "x-element",
+            'class="quote"',
+        ),
+    ],
+)
+def test_html_projection_uses_static_c_element_targets_only_when_same_length_mapping_is_proven(
+    source: str,
+    marker: str,
+    expected_tag: str,
+    expected_attribute: str,
+):
+    project = _syntax_state()
+    projection = html_projection(_document(source, project), _position(source, marker, 2), project)
+
+    assert projection is not None
+    assert projection.source.startswith(f"<{expected_tag}")
+    assert projection.source.rstrip().endswith(f"{expected_attribute}>")
+    assert 'is="' not in projection.source
+    assert "c-is=" not in projection.source
+    assert "c-bind=" not in projection.source
+    assert len(projection.source) == len(source[: source.index(">") + 1])
+
+
+def test_html_projection_leaves_c_element_selection_attributes_to_citry():
+    project = _syntax_state()
+    source = '<c-element is="form" c-action="submit"></c-element>'
+    document = _document(source, project)
+
+    assert html_projection(document, _position(source, 'is="form"', 1), project) is None
+    assert html_projection(document, _position(source, "c-element", 2), project) is None
+
+
+def test_html_projection_prefers_a_nested_c_element_start_tag():
+    project = _syntax_state()
+    source = "<c-card c-body=\"<>😀<c-element is='button' c-disabled='busy'>Go</c-element></>\" />"
+    document = _document(source, project)
+
+    projection = html_projection(document, _position(source, "c-disabled", 3), project)
+
+    assert projection is not None
+    assert projection.source.startswith("<button")
+    assert projection.source.rstrip().endswith("c-disabled='busy'>")
+    assert " is=" not in projection.source
+    assert projection.source_range == types.Range(
+        _position(source, "<c-element"),
+        _position(source, ">Go", 1),
+    )
+
+
+def test_html_projection_prefers_nested_html_over_its_c_element_host():
+    project = _syntax_state()
+    source = '<c-element is="div" c-body="<><input type=\'email\' /></>"></c-element>'
+
+    projection = html_projection(_document(source, project), _position(source, "email", 2), project)
+
+    assert projection is not None
+    assert projection.source == "<input type='email' />"
+
+
+def test_html_projection_refuses_a_non_linear_python_escape_map():
+    project = _syntax_state()
+    source = (
+        "from citry import Component\n"
+        "class Card(Component):\n"
+        '    template = """<c-card c-body=\'<>'
+        '<input title=\\"example\\" />'
+        '</>\' />"""\n'
+    )
+    document = _document(source, project, language_id="python")
+
+    assert html_projection(document, _position(source, "example", 2), project) is None
+
+
+def test_html_projection_requires_the_current_parser_tree():
+    project = _syntax_state()
+    valid = "<c-card c-body=\"<><input type='email' /></>\" />"
+    document = _document(valid, project)
+    invalid = "<c-card c-body=\"<><input type='email' /></>\""
+    document.update(invalid, 2, project)
+
+    assert html_projection(document, _position(invalid, "email", 2), project) is None
+
+
+def test_js_data_alpine_and_component_js_intelligence_share_exact_python_origins(tmp_path):
+    template_source = (
+        '<button @c-click="save" @c-blur="missing" '
+        'x-text="title.toUpperCase() + notice.toUpperCase() + ready.valueOf() + disabled1 + '
+        '$state.progress.toFixed()" '
+        "@click=\"sendEvent('save'); $sendEvent('save'); sendEvent('missing'); "
+        "$loading('missing'); $error()\"></button>"
+        '<template x-for="color in colors"><span x-text="color.toUpperCase()"></span></template>'
+    )
+    js_source = (
+        "$component({\n"
+        "  props: { label: { type: String, required: true }, page: { type: Number, default: null } },\n"
+        "  init({ data, scope, props, state, sendEvent, loading, error }) {\n"
+        "    scope.notice = data.title; Object.assign(scope, { ready: true });\n"
+        "    data.title.toUpperCase(); scope.count.toFixed(); scope.notice.toUpperCase();\n"
+        "    props.label.toUpperCase(); state.progress.toFixed();\n"
+        "    sendEvent('save'); sendEvent('missing'); loading('missing'); error();\n"
+        "  },\n"
+        "});\n"
+    )
+    template_file = tmp_path / "card.html"
+    js_file = tmp_path / "card.js"
+    app_file = tmp_path / "app.py"
+    template_file.write_text(template_source, encoding="utf-8")
+    js_file.write_text(js_source, encoding="utf-8")
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    js_file = 'card.js'\n"
+        "    class JsData:\n"
+        "        title: str\n"
+        "        count: int\n"
+        "        invalid: set[str]\n"
+        "        colors: list[str]\n"
+        "    class State:\n"
+        "        progress: int\n"
+        "        secret: str\n"
+        "        _public = ('progress',)\n"
+        "    class Events:\n"
+        "        def save(self):\n"
+        "            pass\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    template = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    javascript = DocumentState(js_file.as_uri(), "javascript", js_source, 1)
+    python = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    for document in (template, javascript, python):
+        document.update(document.source, document.version, project)
+    documents = {document.uri: document for document in (template, javascript, python)}
+
+    root_items = completion_items(template, _position(template_source, "title", 2), project, documents)
+    assert [item.label for item in root_items] == ["title"]
+    root_hover = hover(template, _position(template_source, "title", 2), project, documents)
+    assert root_hover is not None
+    assert "(variable) title: string" in root_hover.contents.value
+    title_target = definition(template, _position(template_source, "title", 2), project, documents)
+    assert isinstance(title_target, types.Location)
+    assert title_target.uri == app_file.as_uri()
+    assert title_target.range.start.line == 8
+
+    state_hover = hover(
+        template,
+        _position(template_source, "$state.progress", len("$state.pro")),
+        project,
+        documents,
+    )
+    assert state_hover is not None
+    assert "(property) progress: number" in state_hover.contents.value
+    state_target = definition(
+        template,
+        _position(template_source, "$state.progress", len("$state.pro")),
+        project,
+        documents,
+    )
+    assert isinstance(state_target, types.Location)
+    assert state_target.uri == app_file.as_uri()
+    assert state_target.range.start.line == 13
+
+    loop_declaration = _position(template_source, 'x-for="color', len('x-for="co'))
+    loop_use = _position(template_source, "color.to", len("color"))
+    loop_hover = hover(template, loop_use, project, documents)
+    assert loop_hover is not None
+    assert "(variable) color: string" in loop_hover.contents.value
+    declaration_hover = hover(template, loop_declaration, project, documents)
+    assert declaration_hover is not None
+    assert "(variable) color: string" in declaration_hover.contents.value
+    loop_target = definition(template, loop_use, project, documents)
+    assert isinstance(loop_target, types.Location)
+    assert loop_target.uri == template_file.as_uri()
+    assert loop_target.range == declaration_hover.range
+    loop_references = references(
+        template,
+        loop_use,
+        project,
+        documents,
+        include_declaration=True,
+    )
+    assert loop_references is not None
+    assert len(loop_references) == 2
+
+    js_title_target = definition(javascript, _position(js_source, "data.title", len("data.ti")), project, documents)
+    assert js_title_target == title_target
+    scope_target = definition(
+        template,
+        _position(template_source, "notice.to", len("notice")),
+        project,
+        documents,
+    )
+    assert isinstance(scope_target, types.Location)
+    assert scope_target.uri == js_file.as_uri()
+    assert scope_target.range.start.line == 3
+    scope_hover = hover(
+        template,
+        _position(template_source, "notice.to", len("notice")),
+        project,
+        documents,
+    )
+    assert scope_hover is not None
+    assert "notice: string" in scope_hover.contents.value
+    js_references = references(
+        javascript,
+        _position(js_source, "data.title", len("data.ti")),
+        project,
+        documents,
+        include_declaration=True,
+    )
+    assert js_references is not None
+    assert {location.uri for location in js_references} == {js_file.as_uri(), app_file.as_uri()}
+
+    template_projection = browser_projection(
+        template,
+        _position(template_source, "title.to", len("title.to")),
+        project,
+        documents,
+    )
+    assert template_projection is not None
+    assert "var title;" in template_projection.source
+    assert "function $provide(key, value)" in template_projection.source
+    assert template_projection.owned_root_names == (
+        "title",
+        "count",
+        "invalid",
+        "colors",
+        "notice",
+        "ready",
+    )
+    loop_projection = browser_projection(template, loop_use, project, documents)
+    assert loop_projection is not None
+    assert "/** @type {string} */\nvar color;" in loop_projection.source
+    js_projection = browser_projection(
+        javascript,
+        _position(js_source, "data.title", len("data.title")),
+        project,
+        documents,
+    )
+    assert js_projection is not None
+    assert "var title;" not in js_projection.source
+    assert "label: string" in js_projection.source
+    assert "page: number | null" in js_projection.source
+    assert "notice?: string" in js_projection.source
+    assert "ready?: boolean" in js_projection.source
+    assert "@typedef {{progress: number}} CitryEventsState" in js_projection.source
+    assert "function((" not in js_projection.source
+    assert "/** @typedef {Object} CitryEventError" in js_projection.source
+    assert "function $component(definition)" in js_projection.source
+    assert "function $provide(key, value)" not in js_projection.source
+    assert "secret" not in js_projection.source
+    assert js_projection.citry_owns_position
+
+    template_state_projection = browser_projection(
+        template,
+        _position(template_source, "$state.progress", len("$state.pro")),
+        project,
+        documents,
+    )
+    assert template_state_projection is not None
+    assert template_state_projection.citry_owns_position
+    callback_state_target = definition(
+        javascript,
+        _position(
+            js_source,
+            "props.label.toUpperCase(); state.progress",
+            len("props.label.toUpperCase(); state.pro"),
+        ),
+        project,
+        documents,
+    )
+    assert callback_state_target == state_target
+
+    magic_hover = hover(
+        template,
+        _position(template_source, "$loading", len("$load")),
+        project,
+        documents,
+    )
+    assert magic_hover is not None
+    assert "(function) $loading" in magic_hover.contents.value
+    assert "https://citry.dev/reference/browser-apis/#loading" in magic_hover.contents.value
+    send_event_magic_hover = hover(
+        template,
+        _position(template_source, "$sendEvent", len("$send")),
+        project,
+        documents,
+    )
+    assert send_event_magic_hover is not None
+    assert "(function) $sendEvent" in send_event_magic_hover.contents.value
+    assert "https://citry.dev/reference/browser-apis/#send-event" in send_event_magic_hover.contents.value
+    component_hover = hover(
+        javascript,
+        _position(js_source, "$component", len("$comp")),
+        project,
+        documents,
+    )
+    assert component_hover is not None
+    assert "(function) $component" in component_hover.contents.value
+    assert "https://citry.dev/reference/browser-apis/#component" in component_hover.contents.value
+    context_hover = hover(
+        javascript,
+        _position(js_source, "props.label", len("pro")),
+        project,
+        documents,
+    )
+    assert context_hover is not None
+    assert "(parameter) props: Readonly<CitryClientProps>" in context_hover.contents.value
+    assert "https://citry.dev/reference/browser-apis/#component" in context_hover.contents.value
+    send_event_context_hover = hover(
+        javascript,
+        _position(js_source, "sendEvent('save", len("send")),
+        project,
+        documents,
+    )
+    assert send_event_context_hover is not None
+    assert "(function) sendEvent" in send_event_context_hover.contents.value
+    assert "https://citry.dev/reference/browser-apis/#component" in send_event_context_hover.contents.value
+    props_projection = browser_projection(
+        javascript,
+        _position(js_source, "props.label", len("pro")),
+        project,
+        documents,
+    )
+    assert props_projection is not None
+    assert props_projection.citry_owns_position
+
+    loading_items = completion_items(
+        template,
+        _position(template_source, "$loading('missing", len("$loading('")),
+        project,
+        documents,
+    )
+    assert [item.label for item in loading_items] == ["save"]
+    assert loading_items[0].text_edit is not None
+    assert loading_items[0].text_edit.new_text == "save"
+    callback_loading_items = completion_items(
+        javascript,
+        _position(js_source, "loading('missing", len("loading('")),
+        project,
+        documents,
+    )
+    assert [item.label for item in callback_loading_items] == ["save"]
+
+    dynamic_props_source = js_source.replace(
+        "{ label: { type: String, required: true }, page: { type: Number, default: null } }",
+        "makeProps()",
+    )
+    dynamic_javascript = DocumentState(js_file.as_uri(), "javascript", dynamic_props_source, 2)
+    dynamic_javascript.update(dynamic_props_source, 2, project)
+    dynamic_documents = {**documents, dynamic_javascript.uri: dynamic_javascript}
+    dynamic_projection = browser_projection(
+        dynamic_javascript,
+        _position(dynamic_props_source, "makeProps", 2),
+        project,
+        dynamic_documents,
+    )
+    assert dynamic_projection is not None
+    assert "@typedef {Record<string, unknown>} CitryClientProps" in dynamic_projection.source
+
+    template_codes = [finding.code for finding in browser_diagnostics(template, project, documents)]
+    js_codes = [finding.code for finding in browser_diagnostics(javascript, project, documents)]
+    python_codes = [finding.code for finding in browser_diagnostics(python, project, documents)]
+    assert template_codes == [
+        "citry.alpine.unknown-variable",
+        "citry.browser.unknown-server-event",
+        "citry.browser.unknown-server-event",
+        "citry.browser.unknown-server-event",
+    ]
+    assert js_codes == [
+        "citry.browser.unknown-server-event",
+        "citry.browser.unknown-server-event",
+    ]
+    assert python_codes == ["citry.js-data.unsupported-type"]
+    event_target = definition(
+        javascript,
+        _position(js_source, "'save'", 2),
+        project,
+        documents,
+    )
+    assert isinstance(event_target, types.Location)
+    assert event_target.uri == app_file.as_uri()
+    assert event_target.range.start.line == 17
+    declarative_target = definition(
+        template,
+        _position(template_source, '@c-click="save', len('@c-click="sa')),
+        project,
+        documents,
+    )
+    assert declarative_target == event_target
+    declarative_items = completion_items(
+        template,
+        _position(template_source, '@c-click="save', len('@c-click="sa')),
+        project,
+        documents,
+    )
+    assert [item.label for item in declarative_items] == ["save"]
+    assert declarative_items[0].text_edit is not None
+    assert declarative_items[0].text_edit.new_text == "save"
+    declarative_hover = hover(
+        template,
+        _position(template_source, '@c-click="save', len('@c-click="sa')),
+        project,
+        documents,
+    )
+    assert declarative_hover is not None
+    assert "(server event) save" in declarative_hover.contents.value
+
+
+def test_static_component_props_report_contract_errors_and_navigate_to_child_js(tmp_path):
+    template_source = (
+        '<c-child $c-props="{ title: title, count: \'many\', extra: true }" /><c-child $c-props="{ title, ...{} }" />'
+    )
+    child_js = (
+        "$component({\n"
+        "  props: {\n"
+        "    title: { type: String, required: true },\n"
+        "    count: { type: Number, required: true },\n"
+        "    enabled: { type: Boolean, required: true },\n"
+        "  },\n"
+        "  init() {},\n"
+        "});\n"
+    )
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Child(Component):\n"
+        "    citry = engine\n"
+        "    js_file = 'child.js'\n"
+        "    template = '<span></span>'\n"
+        "class Parent(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'parent.html'\n"
+        "    class JsData:\n"
+        "        title: str\n"
+    )
+    template_file = tmp_path / "parent.html"
+    child_js_file = tmp_path / "child.js"
+    app_file = tmp_path / "app.py"
+    template_file.write_text(template_source, encoding="utf-8")
+    child_js_file.write_text(child_js, encoding="utf-8")
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    template = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    javascript = DocumentState(child_js_file.as_uri(), "javascript", child_js, 1)
+    python = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    for document in (template, javascript, python):
+        document.update(document.source, document.version, project)
+    documents = {document.uri: document for document in (template, javascript, python)}
+
+    prop_findings = [
+        finding
+        for finding in browser_diagnostics(template, project, documents)
+        if str(finding.code).startswith("citry.browser.")
+    ]
+    assert [finding.code for finding in prop_findings] == [
+        "citry.browser.incompatible-component-prop",
+        "citry.browser.unknown-component-prop",
+        "citry.browser.missing-component-prop",
+    ]
+    assert "expects number" in prop_findings[0].message
+    assert "extra" in prop_findings[1].message
+    assert "enabled" in prop_findings[2].message
+
+    key_position = _position(template_source, "title: title", 2)
+    target = definition(template, key_position, project, documents)
+    assert isinstance(target, types.Location)
+    assert target.uri == child_js_file.as_uri()
+    assert target.range.start.line == 2
+    prop_hover = hover(template, key_position, project, documents)
+    assert prop_hover is not None
+    assert "(property) title: string" in prop_hover.contents.value
+
+
+def test_component_js_unknown_variables_use_lint_globals_and_default_to_error(tmp_path):
+    js_source = """
+$component(({ data }) => {
+  console.log(data.ready, configuredClient);
+  scope.ready = data.ready;
+});
+"""
+    js_file = tmp_path / "card.js"
+    app_file = tmp_path / "app.py"
+    js_file.write_text(js_source, encoding="utf-8")
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component, LintSettings\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, "
+        "lint=LintSettings(component_js_globals={'configuredClient': str}))\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    js_file = 'card.js'\n"
+        "    class JsData:\n"
+        "        ready: bool\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    javascript = DocumentState(js_file.as_uri(), "javascript", js_source, 1)
+    python = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    for document in (javascript, python):
+        document.update(document.source, document.version, project)
+    documents = {document.uri: document for document in (javascript, python)}
+
+    findings = browser_diagnostics(javascript, project, documents)
+    projection = browser_projection(
+        javascript,
+        _position(js_source, "configuredClient", len("configured")),
+        project,
+        documents,
+    )
+
+    assert [(finding.code, finding.message, finding.severity) for finding in findings] == [
+        (
+            "citry.component-js.unknown-variable",
+            "Component JavaScript variable 'scope' is not defined.",
+            types.DiagnosticSeverity.Error,
+        )
+    ]
+    assert findings[0].range == types.Range(
+        start=_position(js_source, "scope.ready"),
+        end=_position(js_source, "scope.ready", len("scope")),
+    )
+    assert projection is not None
+    assert "/** @type {string} */\nvar configuredClient;" in projection.source
+
+
+def test_inferred_js_data_tracks_kwargs_types_synchronized_source_and_invalid_literals(tmp_path):
+    template_source = "<p x-text=\"submitting.valueOf() ? title.toUpperCase() : ''\"></p>"
+    template_file = tmp_path / "card.html"
+    app_file = tmp_path / "app.py"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class Kwargs:\n"
+        "        submitting: bool = False\n"
+        "    def js_data(self, kwargs: Kwargs, slots):\n"
+        "        return {'title': 'Card', 'submitting': kwargs.submitting, 'invalid': {1, 2}}\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    template = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    python = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    for document in (template, python):
+        document.update(document.source, document.version, project)
+    documents = {template.uri: template, python.uri: python}
+
+    items = completion_items(template, _position(template_source, "title", 2), project, documents)
+    assert [item.label for item in items] == ["title"]
+    submitting_hover = hover(template, _position(template_source, "submitting", 2), project, documents)
+    assert submitting_hover is not None
+    assert "(variable) submitting: boolean" in submitting_hover.contents.value
+    projection = browser_projection(
+        template,
+        _position(template_source, "submitting.valueOf", len("submitting.value")),
+        project,
+        documents,
+    )
+    assert projection is not None
+    assert "/** @type {boolean} */\nvar submitting;" in projection.source
+    target = definition(template, _position(template_source, "title", 2), project, documents)
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+    assert target.range.start.line == 9
+    diagnostics = browser_diagnostics(python, project, documents)
+    assert [diagnostic.code for diagnostic in diagnostics] == ["citry.js-data.unsupported-type"]
+
+    edited_source = app_source.replace("'title': 'Card'", "'renamed': 'Card'")
+    edited_python = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    edited_python.update(edited_source, 2, project)
+    edited_documents = {template.uri: template, edited_python.uri: edited_python}
+
+    assert completion_items(template, _position(template_source, "title", 2), project, edited_documents) == []
+    assert definition(template, _position(template_source, "title", 2), project, edited_documents) is None
+
+
+def test_css_file_completes_hovers_and_navigates_declared_css_data(tmp_path):
+    css_source = ".card { height: var(--chart_height); width: var(--chart_height); }"
+    css_file = tmp_path / "card.css"
+    css_file.write_text(css_source, encoding="utf-8")
+    app_source = (
+        "from pathlib import Path\n"
+        "from typing import Annotated\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    class CssData:\n"
+        "        chart_height: Annotated[str, 'Rendered chart height.']\n"
+        "    template = '<div class=\"card\"></div>'\n"
+        "    css_file = 'card.css'\n"
+    )
+    app_file = tmp_path / "app.py"
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(css_file.as_uri(), "css", css_source, 1)
+    document.update(css_source, 1, project)
+    documents = {document.uri: document}
+
+    partial = css_source.replace("--chart_height", "--cha", 1)
+    partial_document = DocumentState(css_file.as_uri(), "css", partial, 2)
+    partial_document.update(partial, 2, project)
+    completions = completion_items(partial_document, _position(partial, "--cha", len("--cha")), project)
+    assert [item.label for item in completions] == ["--chart_height"]
+    assert completions[0].detail == "Citry CSS data · Python producer type: str"
+    assert completions[0].text_edit == types.TextEdit(
+        types.Range(_position(partial, "--cha"), _position(partial, "--cha", len("--cha"))),
+        "--chart_height",
+    )
+
+    position = _position(css_source, "chart_height", 2)
+    found_hover = hover(document, position, project, documents)
+    assert found_hover is not None
+    assert "--chart_height" in found_hover.contents.value
+    assert "`Card.CssData.chart_height`: `str`" in found_hover.contents.value
+
+    target = definition(document, position, project, documents)
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+    assert target.range.start.line == 7
+    assert declaration(document, position, project, documents) == target
+    found_references = references(document, position, project, documents, include_declaration=True)
+    assert found_references is not None
+    assert len(found_references) == 3
+
+
+def test_inline_css_uses_inferred_hyphenated_css_data_key(tmp_path):
+    source = (
+        "from citry import Citry, Component\n"
+        "engine = Citry(autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    def css_data(self, kwargs, slots):\n"
+        "        return {'row-color': 'red'}\n"
+        "    template = '<div class=\"card\"></div>'\n"
+        '    css = """\n'
+        "    .card { color: var(--row-color); }\n"
+        '    """\n'
+    )
+    app_file = tmp_path / "app.py"
+    app_file.write_text(source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    documents = {document.uri: document}
+    position = _position(source, "--row-color", 3)
+
+    found_hover = hover(document, position, project, documents)
+    target = definition(document, position, project, documents)
+
+    assert found_hover is not None
+    assert "Card.css_data()" in found_hover.contents.value
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+    assert target.range.start.line == 5
+
+
+def test_shared_css_intersects_producers_and_unknown_custom_properties_remain_open(tmp_path):
+    css_source = ".shared { color: var(--common); background: var(--only_a); border: var(--theme); }"
+    css_file = tmp_path / "shared.css"
+    css_file.write_text(css_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class A(Component):\n"
+        "    citry = engine\n"
+        "    class CssData:\n"
+        "        common: str\n"
+        "        only_a: str\n"
+        "    template = '<div></div>'\n"
+        "    css_file = 'shared.css'\n"
+        "class B(Component):\n"
+        "    citry = engine\n"
+        "    class CssData:\n"
+        "        common: int\n"
+        "    template = '<div></div>'\n"
+        "    css_file = 'shared.css'\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(css_file.as_uri(), "css", css_source, 1)
+    document.update(css_source, 1, project)
+
+    common = hover(document, _position(css_source, "common", 2), project)
+
+    assert common is not None
+    assert "`A.CssData.common`: `str`" in common.contents.value
+    assert "`B.CssData.common`: `int`" in common.contents.value
+    assert hover(document, _position(css_source, "only_a", 2), project) is None
+    assert hover(document, _position(css_source, "theme", 2), project) is None
+
+
+def test_css_data_uses_synchronized_schema_and_asset_ownership(tmp_path):
+    css_source = ".card { color: var(--accent); background: var(--fresh); }"
+    css_file = tmp_path / "card.css"
+    css_file.write_text(css_source, encoding="utf-8")
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    class CssData:\n"
+        "        accent: str\n"
+        "    template = '<div></div>'\n"
+        "    css_file = 'card.css'\n"
+    )
+    app_file = tmp_path / "app.py"
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    css_document = DocumentState(css_file.as_uri(), "css", css_source, 1)
+    css_document.update(css_source, 1, project)
+    edited = app_source.replace("accent: str", "fresh: int")
+    python_document = DocumentState(app_file.as_uri(), "python", edited, 2)
+    python_document.update(edited, 2, project)
+    documents = {css_document.uri: css_document, python_document.uri: python_document}
+
+    assert hover(css_document, _position(css_source, "accent", 2), project, documents) is None
+    fresh = hover(css_document, _position(css_source, "fresh", 2), project, documents)
+    assert fresh is not None
+    assert "`Card.CssData.fresh`: `int`" in fresh.contents.value
+    target = definition(css_document, _position(css_source, "fresh", 2), project, documents)
+    assert isinstance(target, types.Location)
+    assert target.range.start.line == 6
+
+    moved = edited.replace("css_file = 'card.css'", "css_file = 'other.css'")
+    moved_document = DocumentState(app_file.as_uri(), "python", moved, 3)
+    moved_document.update(moved, 3, project)
+    moved_documents = {css_document.uri: css_document, moved_document.uri: moved_document}
+    assert hover(css_document, _position(css_source, "fresh", 2), project, moved_documents) is None
+
+
+def test_template_lint_diagnostics_join_declared_roots_globals_and_component_metadata(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = '<div c-title="title + framework_value">{{ site_name }} {{ typo }}</div>'
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, "
+        "template_globals={'site_name': 'Citry'})\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        title: str\n"
+        "    class Lint:\n"
+        "        template_variables = {'framework_value': str}\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    assert [(item.code, item.severity) for item in diagnostics] == [
+        ("citry.template.unknown-variable", types.DiagnosticSeverity.Error)
+    ]
+    assert diagnostics[0].range == types.Range(
+        _position(template_source, "typo"),
+        _position(template_source, "typo", len("typo")),
+    )
+
+
+def test_runtime_globals_and_lint_metadata_complete_and_hover(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ site_name }} {{ request }} {{ component_value }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_source = (
+        "from pathlib import Path\n"
+        "from typing import Annotated\n"
+        "from citry import Citry, Component, LintSettings\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, "
+        "template_globals={'site_name': 'Citry'}, "
+        "lint=LintSettings(template_variables={'request': Annotated[str, 'Current request.']}))\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class Lint:\n"
+        "        template_variables = {'component_value': int}\n"
+    )
+    app_file = tmp_path / "app.py"
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    documents = {document.uri: document}
+
+    items = completion_items(
+        document,
+        _position(template_source, "site_name", len("site")),
+        project,
+        documents,
+    )
+    request_hint = hover(document, _position(template_source, "request", 2), project, documents)
+    request_definition = definition(document, _position(template_source, "request", 2), project, documents)
+    component_definition = definition(
+        document,
+        _position(template_source, "component_value", 2),
+        project,
+        documents,
+    )
+
+    assert {"site_name", "request", "component_value"} <= {item.label for item in items}
+    assert request_hint is not None
+    assert isinstance(request_hint.contents, types.MarkupContent)
+    assert request_hint.contents.value == (
+        "```python\n(variable) request: str\n```\n\nApplication lint metadata.\n\nCurrent request."
+    )
+    assert request_definition == types.Location(
+        app_file.as_uri(),
+        types.Range(
+            _position(app_source, "'request'"),
+            _position(app_source, "'request'", len("'request'")),
+        ),
+    )
+    assert component_definition == types.Location(
+        app_file.as_uri(),
+        types.Range(
+            _position(app_source, "'component_value'"),
+            _position(app_source, "'component_value'", len("'component_value'")),
+        ),
+    )
+
+    edited_app = app_source.replace("'component_value': int", "'other_value': int")
+    open_app = DocumentState(app_file.as_uri(), "python", edited_app, 2)
+    open_app.update(edited_app, 2, project)
+    synchronized = {**documents, open_app.uri: open_app}
+    assert (
+        definition(
+            document,
+            _position(template_source, "component_value", 2),
+            project,
+            synchronized,
+        )
+        is None
+    )
+
+
+def test_template_lint_diagnostics_use_inferred_roots_and_warning_policy(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ inferred }} {{ missing }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component, LintSettings\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, "
+        "lint=LintSettings(rule_unknown_template_variable='warning'))\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {'inferred': 'yes'}\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    diagnostics = template_lint_diagnostics(document, project, {document.uri: document})
+
+    assert [(item.message, item.severity) for item in diagnostics] == [
+        (
+            "Template variable 'missing' is not available in this template.",
+            types.DiagnosticSeverity.Warning,
+        )
+    ]
+    assert diagnostics[0].code_description == types.CodeDescription(
+        "https://citry.dev/ide/diagnostics/#citry.template.unknown-variable"
+    )
+
+
+def test_template_lint_diagnostics_do_not_run_without_registry_ownership():
+    source = "{{ unknown }}"
+    project = _syntax_state()
+    document = _document(source, project)
+
+    assert template_lint_diagnostics(document, project, {document.uri: document}) == ()
+
+
+@pytest.mark.parametrize(
+    "edited_source",
+    [
+        (
+            "from pathlib import Path\n"
+            "from citry import Citry, Component\n"
+            "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+            "class Card(Component):\n"
+            "    citry = engine\n"
+            "    template_file = 'card.html'\n"
+            "    class TemplateData:\n"
+            "        title: str\n"
+            "        added: str\n"
+        ),
+        "def invalid(\n",
+    ],
+)
+def test_template_lint_diagnostics_decline_or_refresh_synchronized_schema_source(tmp_path, edited_source):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ added }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        title: str\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    template_document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    template_document.update(template_source, 1, project)
+    python_document = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    python_document.update(edited_source, 2, project)
+    documents = {
+        template_document.uri: template_document,
+        python_document.uri: python_document,
+    }
+
+    assert template_lint_diagnostics(template_document, project, documents) == ()
+
+
 def test_syntax_diagnostic_uses_parser_code_and_exact_range():
     source = "😀<div>"
     document = _document(source, _syntax_state())
@@ -192,6 +1272,9 @@ def test_syntax_diagnostic_uses_parser_code_and_exact_range():
     assert len(document.diagnostics) == 1
     diagnostic = document.diagnostics[0]
     assert diagnostic.code == "citry.parse.syntax"
+    assert diagnostic.code_description == types.CodeDescription(
+        "https://citry.dev/ide/diagnostics/#citry.parse.syntax"
+    )
     assert diagnostic.range.start.character >= 2
 
 
@@ -215,7 +1298,11 @@ def test_unknown_component_only_fires_in_registry_mode():
     registry = _document(source, _registry_state())
     static = _document(source, _syntax_state())
 
-    assert [item.code for item in registry.diagnostics] == ["citry.component.unknown"]
+    assert [item.code for item in registry.diagnostics] == ["citry.template.unknown-component"]
+    assert registry.diagnostics[0].message == "Component <c-ghost> is not registered."
+    assert registry.diagnostics[0].code_description == types.CodeDescription(
+        "https://citry.dev/ide/diagnostics/#citry.template.unknown-component"
+    )
     assert static.diagnostics == ()
 
 
@@ -858,6 +1945,218 @@ def test_uppercase_citry_prefix_is_not_treated_as_component_syntax():
     assert "prefixes are lowercase" in invalid.diagnostics[0].message
 
 
+def test_syntax_hover_covers_every_parser_owned_structural_tag_without_a_registry():
+    project = _syntax_state()
+    sources = {
+        "c-if": '<c-if cond="ready"></c-if>',
+        "c-elif": '<c-if cond="first"></c-if><c-elif cond="second"></c-elif>',
+        "c-else": '<c-if cond="ready"></c-if><c-else></c-else>',
+        "c-for": '<c-for each="item in items"></c-for>',
+        "c-empty": '<c-for each="item in items"></c-for><c-empty></c-empty>',
+        "c-raw": "<c-raw>{{ untouched }}</c-raw>",
+        "c-fill": '<c-card><c-fill name="body"></c-fill></c-card>',
+        "c-slot": '<c-slot name="body"></c-slot>',
+    }
+
+    # The exported parser set makes this corpus fail when Citry adds syntax
+    # without adding the corresponding editor documentation.
+    assert frozenset(sources) == RESERVED_TAG_NAMES
+    for tag_name, source in sources.items():
+        result = hover(_document(source, project), _position(source, tag_name, 2), project)
+
+        assert result is not None, tag_name
+        assert isinstance(result.contents, types.MarkupContent)
+        assert result.range == types.Range(
+            _position(source, tag_name),
+            _position(source, tag_name, len(tag_name)),
+        )
+        assert f"`<{tag_name}>`" in result.contents.value
+        assert f"https://citry.dev/reference/builtins/#{tag_name}" in result.contents.value
+
+
+def test_syntax_hover_metadata_is_exhaustive_unique_and_parser_owned():
+    keys = [(spec.kind, spec.context, spec.label) for spec in _CITRY_SYNTAX]
+    documented_directives = {
+        spec.label for spec in _CITRY_SYNTAX if spec.kind == "attribute" and spec.context in {"general", "component"}
+    }
+    documented_structural_attributes = {
+        tag_name: frozenset(spec.label for spec in specs) for tag_name, specs in _STRUCTURAL_ATTRIBUTES.items()
+    }
+
+    assert len(keys) == len(set(keys))
+    assert frozenset(_STRUCTURAL_TAG_SPECS) == RESERVED_TAG_NAMES
+    assert documented_directives == CITRY_DIRECTIVE_NAMES
+    assert documented_structural_attributes == STRUCTURAL_TAG_ATTRIBUTE_NAMES
+    assert all(spec.documentation_url.startswith("https://citry.dev/") for spec in _CITRY_SYNTAX)
+
+
+@pytest.mark.parametrize(
+    ("source", "attribute", "documentation_path"),
+    [
+        ('<div c-if="ready"></div>', "c-if", "/syntax/control-flow/"),
+        (
+            '<div c-if="first"></div><div c-elif="second"></div>',
+            "c-elif",
+            "/syntax/control-flow/",
+        ),
+        ('<div c-if="ready"></div><div c-else></div>', "c-else", "/syntax/control-flow/"),
+        ('<div c-for="item in items"></div>', "c-for", "/syntax/control-flow/"),
+        (
+            '<div c-for="item in items"></div><div c-empty></div>',
+            "c-empty",
+            "/syntax/control-flow/",
+        ),
+        ('<div c-bind="attrs"></div>', "c-bind", "/syntax/dynamic-attributes/#c-bind-spread"),
+        ('<div #c-key="row.id"></div>', "#c-key", "/syntax/dynamic-attributes/#c-key"),
+        ("<div #c-ignore></div>", "#c-ignore", "/syntax/dynamic-attributes/#c-ignore"),
+        ('<c-card $c-props="{ open }" />', "$c-props", "/concepts/client-interactivity/#pass-client-props-down"),
+        (
+            '<c-card c-$c-props="props"></c-card>',
+            "c-$c-props",
+            "/concepts/client-interactivity/#pass-client-props-down",
+        ),
+        ('<c-if cond="ready"></c-if>', "cond", "/syntax/control-flow/"),
+        ('<c-for each="item in items"></c-for>', "each", "/syntax/control-flow/"),
+        ('<c-slot name="body"></c-slot>', "name", "/concepts/slots/"),
+        ('<c-slot c-name="slot_name"></c-slot>', "c-name", "/concepts/slots/#dynamic-slot-names"),
+        (
+            '<c-card><c-fill name="body" data="{ item }"></c-fill></c-card>',
+            "data",
+            "/concepts/slots/#scoped-slots-passing-data-to-the-fill",
+        ),
+        (
+            '<c-card><c-fill name="body" fallback="has_fallback"></c-fill></c-card>',
+            "fallback",
+            "/concepts/slots/#wrapping-the-fallback",
+        ),
+        ('<c-slot name="body" required></c-slot>', "required", "/concepts/slots/#supply-fallback-content"),
+        (
+            '<c-slot name="body" c-required="required"></c-slot>',
+            "c-required",
+            "/concepts/slots/#require-a-slot-conditionally",
+        ),
+        (
+            '<c-card><c-fill c-bind="fill_attrs"></c-fill></c-card>',
+            "c-bind",
+            "/concepts/slots/#spread-slot-and-fill-settings",
+        ),
+        (
+            '<c-slot c-bind="slot_attrs"></c-slot>',
+            "c-bind",
+            "/concepts/slots/#spread-slot-and-fill-settings",
+        ),
+        ('<c-component is="card"></c-component>', "is", "/advanced/dynamic-components/"),
+        ('<c-element c-is="tag"></c-element>', "c-is", "/advanced/dynamic-components/"),
+    ],
+)
+def test_syntax_hover_documents_directives_and_structural_attributes_without_a_registry(
+    source,
+    attribute,
+    documentation_path,
+):
+    project = _syntax_state()
+
+    result = hover(_document(source, project), _position(source, attribute, 1), project)
+
+    assert result is not None
+    assert isinstance(result.contents, types.MarkupContent)
+    assert result.range == types.Range(
+        _position(source, attribute),
+        _position(source, attribute, len(attribute)),
+    )
+    assert f"`{attribute}`" in result.contents.value
+    assert f"https://citry.dev{documentation_path}" in result.contents.value
+
+
+@pytest.mark.parametrize(
+    ("source", "marker"),
+    [
+        ('<div c-class="classes"></div>', "c-class"),
+        ('<div title="c-bind"></div>', "c-bind"),
+        ('<c-if c-bind="attrs"></c-if>', "c-bind"),
+        ('<c-fill #c-key="row.id"></c-fill>', "#c-key"),
+        ("<c-slot #c-ignore></c-slot>", "#c-ignore"),
+        ('<c-raw c-if="ready"></c-raw>', "c-if"),
+        ("<div>{# <c-slot required> #}</div>", "c-slot"),
+        ("<div><!-- <c-slot required> --></div>", "c-slot"),
+        ("<c-raw><c-slot required></c-raw>", "c-slot"),
+        ('<script>const sample = "<c-slot required>";</script>', "c-slot"),
+        ('<div name="body" required></div>', "required"),
+    ],
+)
+def test_syntax_hover_ignores_dynamic_attributes_values_and_comments(source, marker):
+    project = _syntax_state()
+
+    assert hover(_document(source, project), _position(source, marker, 1), project) is None
+
+
+def test_syntax_hover_covers_closing_tags_and_invalid_structural_placement():
+    project = _syntax_state()
+    closing_source = '<c-if cond="ready"></c-if>'
+    invalid_source = "<c-fill></c-fill>"
+    closing_start = closing_source.rindex("c-if")
+
+    closing = hover(
+        _document(closing_source, project),
+        types.Position(0, closing_start + 2),
+        project,
+    )
+    invalid = hover(_document(invalid_source, project), _position(invalid_source, "c-fill", 2), project)
+
+    assert closing is not None
+    assert closing.range == types.Range(
+        types.Position(0, closing_start),
+        types.Position(0, closing_start + len("c-if")),
+    )
+    assert invalid is not None
+    assert isinstance(invalid.contents, types.MarkupContent)
+    assert "`<c-fill>`" in invalid.contents.value
+
+
+def test_syntax_hover_maps_nested_and_inline_python_ranges_with_astral_text():
+    project = _syntax_state()
+    nested_source = '<c-card c-body="<>😀<c-slot required /></>" />'
+    python_source = (
+        "from citry import Component\n"
+        "class Card(Component):\n"
+        '    template = """\n'
+        "      😀<c-slot required />\n"
+        '    """\n'
+    )
+
+    nested = hover(_document(nested_source, project), _position(nested_source, "required", 2), project)
+    inline = hover(
+        _document(python_source, project, language_id="python"),
+        _position(python_source, "required", 2),
+        project,
+    )
+
+    assert nested is not None
+    assert nested.range == types.Range(
+        _position(nested_source, "required"),
+        _position(nested_source, "required", len("required")),
+    )
+    assert inline is not None
+    assert inline.range == types.Range(
+        _position(python_source, "required"),
+        _position(python_source, "required", len("required")),
+    )
+
+
+def test_syntax_hover_declines_implicit_python_literal_concatenation():
+    project = _syntax_state()
+    source = 'from citry import Component\nclass Card(Component):\n    template = ("<c-slot requ" "ired />")\n'
+
+    assert (
+        hover(
+            _document(source, project, language_id="python"),
+            _position(source, "ired", 2),
+            project,
+        )
+        is None
+    )
+
+
 def test_hover_and_component_definition_use_catalog_precision():
     project = _registry_state()
     source = '<c-card title="Hi" />'
@@ -878,8 +2177,33 @@ def test_hover_and_component_definition_use_catalog_precision():
     assert target.range.start == types.Position(0, 0)
 
 
+def test_syntax_hover_yields_to_catalog_inputs_and_static_slot_values():
+    project = _registry_state()
+    input_source = "<c-card required />"
+    fill_source = '<c-card><c-fill name="body"></c-fill></c-card>'
+
+    component_input = hover(
+        _document(input_source, project),
+        _position(input_source, "required", 2),
+        project,
+    )
+    fill_key = hover(_document(fill_source, project), _position(fill_source, "name", 2), project)
+    fill_value = hover(_document(fill_source, project), _position(fill_source, "body", 2), project)
+
+    assert component_input is not None
+    assert isinstance(component_input.contents, types.MarkupContent)
+    assert "optional" in component_input.contents.value
+    assert "citry.dev" not in component_input.contents.value
+    assert fill_key is not None
+    assert isinstance(fill_key.contents, types.MarkupContent)
+    assert "Select this slot by its literal name" in fill_key.contents.value
+    assert fill_value is not None
+    assert isinstance(fill_value.contents, types.MarkupContent)
+    assert "Slot `body`" in fill_value.contents.value
+
+
 def test_component_definition_uses_exact_top_level_class_name_range():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(
             interpreter="python",
@@ -888,7 +2212,7 @@ def test_component_definition_uses_exact_top_level_class_name_range():
             mode="registry",
             registry_ready=True,
         ),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source = "<c-definition-card />"
@@ -906,7 +2230,7 @@ def test_component_definition_uses_exact_top_level_class_name_range():
 
 
 def test_component_input_definition_uses_exact_nested_field_range():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(
             interpreter="python",
@@ -915,7 +2239,7 @@ def test_component_input_definition_uses_exact_nested_field_range():
             mode="registry",
             registry_ready=True,
         ),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source = '<c-definition-card title="title" />'
@@ -957,7 +2281,7 @@ def test_component_input_definition_uses_exact_nested_field_range():
 
 
 def test_inline_template_data_roots_complete_hover_and_define_exact_fields():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(
             interpreter="python",
@@ -966,7 +2290,7 @@ def test_inline_template_data_roots_complete_hover_and_define_exact_fields():
             mode="registry",
             registry_ready=True,
         ),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -986,8 +2310,7 @@ def test_inline_template_data_roots_complete_hover_and_define_exact_fields():
     assert by_label["template_user"].detail == "TemplateData · str (required)"
     assert hint is not None
     assert isinstance(hint.contents, types.MarkupContent)
-    assert "TemplateData field" in hint.contents.value
-    assert "str (required)" in hint.contents.value
+    assert hint.contents.value == ("```python\n(variable) template_user: str\n```\n\nTemplateData field · required")
     assert target is not None
     field_line = next(index for index, line in enumerate(source.splitlines()) if line.strip() == "template_user: str")
     assert target.uri == source_file.as_uri()
@@ -997,11 +2320,36 @@ def test_inline_template_data_roots_complete_hover_and_define_exact_fields():
     )
 
 
+def test_variable_hover_uses_catalog_type_for_unusable_analyzer_text() -> None:
+    variable = TemplateVariableHover(
+        "callback",
+        types.Range(types.Position(0, 3), types.Position(0, 11)),
+        "TemplateData field · required",
+        fallback_types=("Callable[[str], int]",),
+    )
+
+    hint = render_template_variable_hover(variable, ("def callback(value: str) -> int",))
+    nested_declaration_hint = render_template_variable_hover(variable, ("(variable) callback: int",))
+    async_declaration_hint = render_template_variable_hover(variable, ("async def callback() -> int",))
+    unknown_hint = render_template_variable_hover(variable, ("Unknown",))
+    literal_unknown_hint = render_template_variable_hover(variable, ('Literal["Unknown"]',))
+
+    assert hint.contents.value == (
+        "```python\n(variable) callback: Callable[[str], int]\n```\n\nTemplateData field · required"
+    )
+    assert nested_declaration_hint == hint
+    assert async_declaration_hint == hint
+    assert unknown_hint == hint
+    assert literal_unknown_hint.contents.value == (
+        '```python\n(variable) callback: Literal["Unknown"]\n```\n\nTemplateData field · required'
+    )
+
+
 def test_inline_template_data_uses_asset_owner_provenance_for_an_unregistered_library_base():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1019,10 +2367,10 @@ def test_inline_template_data_uses_asset_owner_provenance_for_an_unregistered_li
 
 
 def test_template_data_completion_unions_lexical_names_and_schema_roots():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1045,10 +2393,10 @@ def test_template_data_completion_unions_lexical_names_and_schema_roots():
 
 
 def test_lexical_roots_do_not_complete_or_resolve_at_member_boundaries():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1075,10 +2423,10 @@ def test_lexical_roots_do_not_complete_or_resolve_at_member_boundaries():
     ],
 )
 def test_template_data_completion_covers_expression_valued_attributes(marker, offset):
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1092,10 +2440,10 @@ def test_template_data_completion_covers_expression_valued_attributes(marker, of
 
 
 def test_template_data_hover_joins_only_the_exact_free_root_token():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1120,10 +2468,10 @@ def test_template_data_hover_joins_only_the_exact_free_root_token():
 
 
 def test_template_data_root_join_uses_python_nfkc_identity():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1142,10 +2490,10 @@ def test_template_data_root_join_uses_python_nfkc_identity():
 
 
 def test_template_data_completion_survives_an_incomplete_template_expression():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1164,10 +2512,10 @@ def test_template_data_completion_survives_an_incomplete_template_expression():
 
 @pytest.mark.parametrize("prefix", ["", "a", "aut"])
 def test_template_data_completion_covers_empty_and_partial_attribute_values(prefix):
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1205,11 +2553,122 @@ def test_template_data_completion_covers_empty_and_partial_attribute_values(pref
         assert item.text_edit.insert.start.character == cursor.character - len(prefix)
 
 
-def test_template_data_completion_replaces_the_complete_identifier_around_cursor():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+@pytest.mark.parametrize(
+    ("authored", "replacement", "cursor_offset"),
+    [
+        ('c-action="action"', 'c-autocomplete="a"', len('c-autocomplete="a')),
+        (
+            'c-action="action"',
+            'c-autocomplete="autocomplete+a"',
+            len('c-autocomplete="autocomplete+a'),
+        ),
+        (
+            'c-action="action"',
+            'c-autocomplete="autocomplete +a"',
+            len('c-autocomplete="autocomplete +a'),
+        ),
+        ("{{ action }}", "{{a }}", len("{{a")),
+        ("{{ action }}", "{{ f'{a}' }}", len("{{ f'{a")),
+        ('c-action="action"', "c-action=\"f'{a}'\"", len("c-action=\"f'{a")),
+        (
+            'c-action="action"',
+            "c-for=\"item in [f'{a}']\"",
+            len("c-for=\"item in [f'{a"),
+        ),
+    ],
+)
+def test_template_data_completion_does_not_require_whitespace_before_a_root(
+    authored,
+    replacement,
+    cursor_offset,
+):
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
+        catalog,
+    )
+    source_file = Path(__file__).resolve()
+    original = source_file.read_text(encoding="utf-8")
+    source = original.replace(authored, replacement, 1)
+    cursor = _position(source, replacement, cursor_offset)
+    document = DocumentState(source_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    items = completion_items(document, cursor, project)
+
+    autocomplete = next(item for item in items if item.label == "autocomplete")
+    assert isinstance(autocomplete.text_edit, types.InsertReplaceEdit)
+    assert autocomplete.text_edit.insert == types.Range(
+        types.Position(cursor.line, cursor.character - 1),
+        cursor,
+    )
+    assert autocomplete.text_edit.replace == autocomplete.text_edit.insert
+
+
+@pytest.mark.parametrize(
+    ("authored", "replacement", "cursor_offset"),
+    [
+        ("{{ action }}", "{{ 'a' }}", len("{{ 'a")),
+        ("{{ action }}", "{{ 'a }}", len("{{ 'a")),
+        ("{{ action }}", "{{ action # a }}", len("{{ action # a")),
+        ("{{ action }}", "{{ {'a }}", len("{{ {'a")),
+        ("{{ action }}", "{{ f'prefix a suffix' }}", len("{{ f'prefix a")),
+        ('c-action="action"', "c-action=\"'a'\"", len("c-action=\"'a")),
+        ('c-action="action"', "c-action=\"{'a': action}\"", len("c-action=\"{'a")),
+    ],
+)
+def test_template_data_roots_do_not_complete_in_python_strings_comments_or_keys(
+    authored,
+    replacement,
+    cursor_offset,
+):
+    catalog = _definition_catalog()
+    project = ProjectState(
+        ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
+        _definition_analysis(),
+        catalog,
+    )
+    source_file = Path(__file__).resolve()
+    original = source_file.read_text(encoding="utf-8")
+    source = original.replace(authored, replacement, 1)
+    cursor = _position(source, replacement, cursor_offset)
+    document = DocumentState(source_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    assert completion_items(document, cursor, project) == []
+
+
+def test_fill_data_completion_does_not_mix_in_template_roots():
+    catalog = _definition_catalog()
+    project = ProjectState(
+        ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
+        _definition_analysis(),
+        catalog,
+    )
+    source_file = Path(__file__).resolve()
+    original = source_file.read_text(encoding="utf-8")
+    replacement = '<c-definition-card><c-fill name="body" data="{ a"></c-fill></c-definition-card>'
+    source = original.replace(
+        '<form data-label="😀" c-action="action">\n      {{ action }}\n    </form>',
+        replacement,
+        1,
+    )
+    cursor = _position(source, replacement, len('<c-definition-card><c-fill name="body" data="{ a'))
+    document = DocumentState(source_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    labels = {item.label for item in completion_items(document, cursor, project)}
+
+    assert "autocomplete" not in labels
+    assert "action" not in labels
+
+
+def test_template_data_completion_replaces_the_complete_identifier_around_cursor():
+    catalog = _definition_catalog()
+    project = ProjectState(
+        ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1234,10 +2693,10 @@ def test_template_data_completion_replaces_the_complete_identifier_around_cursor
 
 
 def test_template_data_completion_covers_an_empty_interpolation():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1277,10 +2736,10 @@ def test_broken_buffer_completion_ignores_static_attribute_interpolation_text():
 
 
 def test_empty_dynamic_attribute_completion_ignores_quotes_in_tag_comments():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1301,10 +2760,10 @@ def test_empty_dynamic_attribute_completion_ignores_quotes_in_tag_comments():
 
 
 def test_template_data_is_withheld_for_regex_recovered_python_regions():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(interpreter="python", workspace=str(Path.cwd()), mode="registry", registry_ready=True),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source_file = Path(__file__).resolve()
@@ -1434,6 +2893,720 @@ def test_template_data_is_withheld_when_a_shared_file_has_an_untyped_consumer(tm
     assert hover(document, _position(template_source, "common", 3), project) is None
 
 
+def test_inferred_template_data_tracks_synchronized_source_for_completion_hover_and_definition(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ title }} {{ count }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    disk_source = (
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[__import__('pathlib').Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'title': 'Hello', 'count': 1}\n"
+    )
+    app_file.write_text(disk_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    assert project.status.registry_ready is True
+    assert project.source_analysis is not None
+    template_document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    template_document.update(template_source, 1, project)
+
+    items = completion_items(
+        template_document,
+        _position(template_source, "title", 3),
+        project,
+        {template_document.uri: template_document},
+    )
+    hint = hover(
+        template_document,
+        _position(template_source, "title", 3),
+        project,
+        {template_document.uri: template_document},
+    )
+    target = definition(
+        template_document,
+        _position(template_source, "title", 3),
+        project,
+        {template_document.uri: template_document},
+    )
+
+    assert {item.label for item in items} == {"title", "count"}
+    assert {item.detail for item in items} == {"Inferred from template_data()"}
+    assert hint is not None
+    assert isinstance(hint.contents, types.MarkupContent)
+    assert hint.contents.value == ("```python\n(variable) title\n```\n\nInferred from template_data()")
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+    assert target.range.start.line == 6
+
+    edited_source = disk_source.replace("'title': 'Hello'", "'heading': 'Hello'")
+    python_document = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    python_document.update(edited_source, 2, project)
+    edited_template = "{{ heading }}"
+    template_document.update(edited_template, 2, project)
+    open_documents = {
+        template_document.uri: template_document,
+        python_document.uri: python_document,
+    }
+
+    edited_items = completion_items(
+        template_document,
+        _position(edited_template, "heading", 3),
+        project,
+        open_documents,
+    )
+    edited_target = definition(
+        template_document,
+        _position(edited_template, "heading", 3),
+        project,
+        open_documents,
+    )
+
+    assert {item.label for item in edited_items} == {"heading", "count"}
+    assert isinstance(edited_target, types.Location)
+    assert edited_target.range.start.line == 6
+    assert edited_source.splitlines()[6][edited_target.range.start.character :].startswith("'heading'")
+
+    python_document.update(edited_source + "\n(", 3, project)
+    assert (
+        completion_items(
+            template_document,
+            _position(edited_template, "heading", 3),
+            project,
+            open_documents,
+        )
+        == []
+    )
+    assert (
+        definition(
+            template_document,
+            _position(edited_template, "heading", 3),
+            project,
+            open_documents,
+        )
+        is None
+    )
+
+
+def test_expression_shadows_use_declared_schema_source_and_exact_cursor(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ method.lower() }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        method: str | None\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    shadows = expression_shadows(
+        document,
+        _position(template_source, "lower", 2),
+        project,
+        {document.uri: document},
+    )
+
+    assert len(shadows) == 1
+    shadow = shadows[0]
+    assert shadow.cursor_offset == template_source.index("lower") + 2 - template_source.index("method")
+    assert len(shadow.document.copies) == 1
+    copy = shadow.document.copies[0]
+    assert shadow.document.source[copy.shadow_start : copy.shadow_end] == "method.lower() "
+    assert "method = __citry_cast(Card.TemplateData, __citry_data).method" in shadow.document.source
+
+
+def test_all_expression_shadows_reuses_one_consumer_join_per_generation(tmp_path, monkeypatch):
+    template_file = tmp_path / "card.html"
+    template_source = "\n".join(f"{{{{ title.lower() }}}} {{{{ items[{index}] }}}}" for index in range(12))
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        title: str\n"
+        "        items: list[str]\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    python_document = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    python_document.update(app_source, 1, project)
+    documents = {document.uri: document, python_document.uri: python_document}
+
+    original = engine_module._component_template_context
+    calls = 0
+
+    def counted_context(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(engine_module, "_component_template_context", counted_context)
+    first = all_expression_shadows(document, project, documents)
+    second = all_expression_shadows(document, project, documents)
+
+    assert len(first) == 24
+    assert second is first
+    assert calls == 1
+
+    # Exact synchronized text, not the editor version alone, defines a new generation.
+    python_document.update(f"{app_source}\n", 2, project)
+    refreshed = all_expression_shadows(document, project, documents)
+    assert refreshed is not first
+    assert len(refreshed) == 24
+    assert calls == 2
+
+
+def test_semantic_dependencies_expose_direct_sources_and_stay_conservative(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ title.lower() }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        title: str\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    dependencies = semantic_dependencies(document, project, {document.uri: document})
+
+    assert app_file.resolve().as_uri() in dependencies.source_uris
+    # Python annotations may import types from files absent from portable provenance.
+    assert dependencies.complete is False
+
+
+def test_expression_shadows_decline_a_query_split_across_python_literals(tmp_path):
+    app_file = tmp_path / "app.py"
+    source = (
+        "from citry import Citry, Component\n"
+        "engine = Citry(autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        '    template = "{{ title.lo" "wer() }}"\n'
+        "    class TemplateData:\n"
+        "        title: str\n"
+    )
+    app_file.write_text(source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    shadows = expression_shadows(
+        document,
+        _position(source, "wer", 2),
+        project,
+        {document.uri: document},
+    )
+
+    assert shadows == ()
+
+
+def test_expression_shadows_copy_each_inferred_return_and_synchronized_source(tmp_path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ method.lower() }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    disk_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    def template_data(self, kwargs):\n"
+        "        if kwargs:\n"
+        "            return {'method': 'get'}\n"
+        "        return {'method': None}\n"
+    )
+    app_file.write_text(disk_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    edited_source = disk_source.replace("'get'", "'post'")
+    python_document = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    python_document.update(edited_source, 2, project)
+
+    shadows = expression_shadows(
+        document,
+        _position(template_source, "lower", 2),
+        project,
+        {document.uri: document, python_document.uri: python_document},
+    )
+
+    assert len(shadows) == 1
+    shadow = shadows[0]
+    assert "'post'" in shadow.document.source
+    assert len(shadow.document.copies) == 2
+
+
+def test_inferred_template_data_survives_component_library_materialization(tmp_path):
+    template_file = tmp_path / "library-card.html"
+    template_source = "{{ title }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_file.write_text(
+        "from citry import ComponentLibrary, LibraryComponent\n"
+        "class CCard(LibraryComponent):\n"
+        "    template_file = 'library-card.html'\n"
+        "    class Kwargs:\n"
+        "        title: str\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {'title': kwargs.title}\n"
+        "library = ComponentLibrary('test-ui', (CCard,))\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:library")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    items = completion_items(document, _position(template_source, "title", 3), project)
+    target = definition(document, _position(template_source, "title", 3), project)
+
+    assert [(item.label, item.detail) for item in items] == [("title", "Inferred from template_data()")]
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+    assert target.range.start.line == 6
+
+
+def test_library_source_inference_rejects_generated_classes_with_forged_provenance(tmp_path):
+    template_file = tmp_path / "generated-card.html"
+    template_source = "{{ authored_root }} {{ generated_root }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from functools import wraps\n"
+        "from citry import ComponentLibrary, LibraryComponent\n"
+        "class CCard(LibraryComponent):\n"
+        "    template_file = 'generated-card.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {'authored_root': 1}\n"
+        "class GeneratedCCard(CCard):\n"
+        "    @wraps(CCard.template_data)\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {'generated_root': 1}\n"
+        "GeneratedCCard.__name__ = CCard.__name__\n"
+        "GeneratedCCard.__module__ = CCard.__module__\n"
+        "GeneratedCCard.__qualname__ = CCard.__qualname__\n"
+        "library = ComponentLibrary('test-ui', (GeneratedCCard,))\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:library")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    assert completion_items(document, _position(template_source, "authored_root", 3), project) == []
+    assert hover(document, _position(template_source, "generated_root", 3), project) is None
+
+
+def test_library_source_inference_rejects_same_line_code_from_another_module(tmp_path):
+    template_file = tmp_path / "cross-module-card.html"
+    template_source = "{{ authored_root }} {{ generated_root }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "factory.py").write_text(
+        "from functools import wraps\n"
+        "\n"
+        "def generated(base):\n"
+        "    class Generated(base):\n"
+        "        @wraps(base.template_data)\n"
+        "        def template_data(self, kwargs, slots):\n"
+        "            return {'generated_root': 1}\n"
+        "    Generated.__name__ = base.__name__\n"
+        "    Generated.__module__ = base.__module__\n"
+        "    Generated.__qualname__ = base.__qualname__\n"
+        "    return Generated\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "app.py").write_text(
+        "from citry import ComponentLibrary, LibraryComponent\n"
+        "from factory import generated\n"
+        "class CCard(LibraryComponent):\n"
+        "    template_file = 'cross-module-card.html'\n"
+        "    def template_data(self, kwargs, slots):\n"
+        "        return {'authored_root': 1}\n"
+        "GeneratedCCard = generated(CCard)\n"
+        "library = ComponentLibrary('test-ui', (GeneratedCCard,))\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:library")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    assert completion_items(document, _position(template_source, "authored_root", 3), project) == []
+    assert hover(document, _position(template_source, "generated_root", 3), project) is None
+
+
+def test_inherited_default_template_data_exposes_effective_kwargs_fields(tmp_path):
+    template_file = tmp_path / "form.html"
+    template_source = "{{ method }} {{ action }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Form(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'form.html'\n"
+        "    class Kwargs:\n"
+        "        method: str\n"
+        "        action: str | None = None\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    items = completion_items(document, _position(template_source, "method", 3), project)
+    hint = hover(document, _position(template_source, "method", 3), project)
+    target = definition(document, _position(template_source, "method", 3), project)
+
+    by_name = {item.label: item for item in items}
+    assert set(by_name) == {"method", "action"}
+    assert by_name["method"].detail == "Inferred from template_data() · str (required)"
+    assert hint is not None
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+    assert target.range.start.line == 7
+
+    # An unsaved override invalidates the copied inherited-owner chain until
+    # project reload establishes a new exact component generation.
+    edited_source = app_source.replace(
+        "    class Kwargs:\n",
+        "    def template_data(self, kwargs):\n        return {'other': 1}\n    class Kwargs:\n",
+    )
+    python_document = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    python_document.update(edited_source, 2, project)
+
+    assert (
+        completion_items(
+            document,
+            _position(template_source, "method", 3),
+            project,
+            {document.uri: document, python_document.uri: python_document},
+        )
+        == []
+    )
+
+
+def test_inherited_template_data_is_withheld_after_unsaved_base_binding_change(tmp_path):
+    template_file = tmp_path / "selected.html"
+    template_source = "{{ old_root }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Base(Component):\n"
+        "    citry = engine\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'old_root': 1}\n"
+        "class Other(Component):\n"
+        "    citry = engine\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'new_root': 1}\n"
+        "Selected = Base\n"
+        "class Card(Selected):\n"
+        "    citry = engine\n"
+        "    template_file = 'selected.html'\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    assert {item.label for item in completion_items(document, _position(template_source, "old_root", 3), project)} == {
+        "old_root"
+    }
+
+    edited_source = app_source.replace("Selected = Base", "Selected = Other")
+    python_document = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    python_document.update(edited_source, 2, project)
+    assert (
+        completion_items(
+            document,
+            _position(template_source, "old_root", 3),
+            project,
+            {document.uri: document, python_document.uri: python_document},
+        )
+        == []
+    )
+
+
+def test_inherited_template_data_is_withheld_after_unsaved_import_alias_change(tmp_path):
+    template_file = tmp_path / "imported.html"
+    template_source = "{{ old_root }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "bases.py").write_text(
+        "class Base:\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'old_root': 1}\n"
+        "class Other:\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'new_root': 1}\n",
+        encoding="utf-8",
+    )
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from bases import Base\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Base, Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'imported.html'\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    items = completion_items(document, _position(template_source, "old_root", 3), project)
+    assert {item.label for item in items} == {"old_root"}
+
+    edited_source = app_source.replace("from bases import Base", "from bases import Other as Base")
+    python_document = DocumentState(app_file.as_uri(), "python", edited_source, 2)
+    python_document.update(edited_source, 2, project)
+    assert (
+        completion_items(
+            document,
+            _position(template_source, "old_root", 3),
+            project,
+            {document.uri: document, python_document.uri: python_document},
+        )
+        == []
+    )
+
+
+def test_typed_kwargs_methods_are_not_modelled_as_dict_mutations(tmp_path):
+    template_file = tmp_path / "authored-method.html"
+    template_source = "{{ title }} {{ extra }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'authored-method.html'\n"
+        "    class Kwargs:\n"
+        "        title: str\n"
+        "        def update(self, **values):\n"
+        "            return None\n"
+        "    def template_data(self, kwargs):\n"
+        "        kwargs.update(extra=1)\n"
+        "        return kwargs\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    assert completion_items(document, _position(template_source, "title", 3), project) == []
+    assert hover(document, _position(template_source, "extra", 3), project) is None
+
+
+def test_inferred_template_data_joins_an_inline_template_in_its_open_python_document(tmp_path):
+    app_file = tmp_path / "app.py"
+    source = (
+        "from citry import Citry, Component\n"
+        "engine = Citry(autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template = '{{ root_class }}'\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'root_class': 'card'}\n"
+    )
+    app_file.write_text(source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    cursor = _position(source, "{{ root_class", len("{{ root_"))
+
+    items = completion_items(document, cursor, project, {document.uri: document})
+    hint = hover(document, cursor, project, {document.uri: document})
+    target = definition(document, cursor, project, {document.uri: document})
+
+    assert {item.label for item in items} == {"root_class"}
+    assert hint is not None
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+    assert target.range.start.line == 6
+
+
+def test_inferred_template_data_returns_every_reachable_key_definition(tmp_path):
+    template_file = tmp_path / "branch.html"
+    template_source = "{{ value }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Branch(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'branch.html'\n"
+        "    def template_data(self, kwargs):\n"
+        "        if condition:\n"
+        "            return {'value': first}\n"
+        "        return {'value': second}\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    target = definition(document, _position(template_source, "value", 3), project)
+
+    assert isinstance(target, list)
+    assert [location.range.start.line for location in target] == [8, 9]
+
+
+def test_declared_template_data_remains_authoritative_over_source_inference(tmp_path):
+    template_file = tmp_path / "declared.html"
+    template_source = "{{ declared }} {{ extra }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Declared(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'declared.html'\n"
+        "    class TemplateData:\n"
+        "        declared: str\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'declared': 'yes', 'extra': 'not-authoritative'}\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    items = completion_items(document, _position(template_source, "declared", 3), project)
+
+    assert {item.label for item in items} == {"declared"}
+    assert hover(document, _position(template_source, "extra", 3), project) is None
+
+
+def test_shared_template_intersects_inferred_roots_and_keeps_each_definition(tmp_path):
+    template_file = tmp_path / "shared-inferred.html"
+    template_source = "{{ common }} {{ first_only }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class First(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'shared-inferred.html'\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'common': 1, 'first_only': 1}\n"
+        "class Second(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'shared-inferred.html'\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'common': 2, 'second_only': 2}\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    items = completion_items(document, _position(template_source, "common", 3), project)
+    common_target = definition(document, _position(template_source, "common", 3), project)
+
+    assert {item.label for item in items} == {"common"}
+    assert isinstance(common_target, list)
+    assert [location.range.start.line for location in common_target] == [7, 12]
+    assert hover(document, _position(template_source, "first_only", 3), project) is None
+
+
+def test_mixed_kwargs_and_literal_returns_keep_root_but_drop_schema_type(tmp_path):
+    template_file = tmp_path / "mixed-origin.html"
+    template_source = "{{ title }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Mixed(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'mixed-origin.html'\n"
+        "    class Kwargs:\n"
+        "        title: str\n"
+        "    def template_data(self, kwargs):\n"
+        "        if flag:\n"
+        "            return kwargs\n"
+        "        return {'title': 42}\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    items = completion_items(document, _position(template_source, "title", 3), project)
+    target = definition(document, _position(template_source, "title", 3), project)
+
+    assert [(item.label, item.detail) for item in items] == [("title", "Inferred from template_data()")]
+    assert isinstance(target, list)
+    assert [location.range.start.line for location in target] == [11, 7]
+
+
+def test_shared_declared_and_inferred_root_keeps_both_definition_locations(tmp_path):
+    template_file = tmp_path / "shared-declared-inferred.html"
+    template_source = "{{ common }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Declared(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'shared-declared-inferred.html'\n"
+        "    class TemplateData:\n"
+        "        common: str\n"
+        "class Inferred(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'shared-declared-inferred.html'\n"
+        "    def template_data(self, kwargs):\n"
+        "        return {'common': 1}\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    target = definition(document, _position(template_source, "common", 3), project)
+
+    assert isinstance(target, list)
+    assert [location.range.start.line for location in target] == [12, 7]
+
+
 def test_field_definition_join_handles_utf8_columns_and_declines_ambiguity(tmp_path):
     source_file = tmp_path / "schema.py"
     source_file.write_text("class Schema:\n    café = None; title: str\n", encoding="utf-8")
@@ -1477,7 +3650,7 @@ def test_open_field_source_join_matches_symlinked_editor_uri(tmp_path):
 
 
 def test_fill_slot_definition_uses_exact_nested_field_range():
-    catalog = CatalogIndex(_DEFINITION_ENGINE.inspect_components(include_builtins=True).to_dict())
+    catalog = _definition_catalog()
     project = ProjectState(
         ProjectStatus(
             interpreter="python",
@@ -1486,7 +3659,7 @@ def test_fill_slot_definition_uses_exact_nested_field_range():
             mode="registry",
             registry_ready=True,
         ),
-        _DEFINITION_ENGINE.template_analysis(),
+        _definition_analysis(),
         catalog,
     )
     source = '<c-definition-card><c-fill name="body">Body</c-fill></c-definition-card>'
@@ -1587,6 +3760,287 @@ def test_loop_use_navigates_to_lexical_introduction_and_symbols_nest():
     assert symbols[0].children[0].name == "<li>"
 
 
+def test_lexical_references_follow_one_binding_through_nested_templates():
+    project = _syntax_state()
+    source = (
+        '<c-for each="item in outer">{{ item }}'
+        '<c-card c-body="<>{{ item }}</>" />'
+        "</c-for>"
+        '<c-for each="item in other">{{ item }}</c-for>'
+    )
+    document = _document(source, project)
+    position = _position(source, "{{ item", len("{{ it"))
+
+    uses = references(document, position, project)
+    with_declaration = references(document, position, project, include_declaration=True)
+    declared = declaration(document, position, project)
+    declaration_position = _position(source, "item in outer")
+    declared_from_origin = declaration(document, declaration_position, project)
+
+    assert uses is not None
+    assert [location.range.start for location in uses] == [
+        _position(source, "{{ item", len("{{ ")),
+        _position(source, 'c-body="<>{{ item', len('c-body="<>{{ ')),
+    ]
+    assert with_declaration is not None
+    assert [location.range.start for location in with_declaration] == [
+        declaration_position,
+        *[location.range.start for location in uses],
+    ]
+    assert declared is not None
+    assert declared.range.start == declaration_position
+    assert declared_from_origin == declared
+
+
+def test_root_references_include_every_free_use_and_optional_python_origins():
+    catalog = _definition_catalog()
+    project = ProjectState(
+        ProjectStatus(
+            interpreter="python",
+            workspace=str(Path.cwd()),
+            app="tests.test_engine:_DEFINITION_ENGINE",
+            mode="registry",
+            registry_ready=True,
+        ),
+        _definition_analysis(),
+        catalog,
+    )
+    source_file = Path(__file__).resolve()
+    source = source_file.read_text(encoding="utf-8")
+    document = DocumentState(source_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    marker = "{{ template_user }}\n      <div"
+    position = _position(source, marker, len("{{ template_"))
+
+    uses = references(document, position, project, {document.uri: document})
+    with_declaration = references(
+        document,
+        position,
+        project,
+        {document.uri: document},
+        include_declaration=True,
+    )
+    declared = declaration(document, position, project, {document.uri: document})
+
+    assert uses is not None
+    assert len(uses) == 4
+    assert all(location.uri == document.uri for location in uses)
+    assert with_declaration is not None
+    assert len(with_declaration) == 5
+    field_line = next(index for index, line in enumerate(source.splitlines()) if line.strip() == "template_user: str")
+    field_location = types.Location(
+        source_file.as_uri(),
+        types.Range(
+            types.Position(field_line, len("        ")),
+            types.Position(field_line, len("        template_user")),
+        ),
+    )
+    assert field_location in with_declaration
+    assert declared == field_location
+
+
+@pytest.mark.parametrize("edit", ["delete-field", "invalid-source"])
+def test_root_references_decline_stale_synchronized_schema_source(tmp_path: Path, edit: str):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ user }} {{ user }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        user: str\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    synchronized_source = (
+        app_source.replace("        user: str\n", "        pass\n")
+        if edit == "delete-field"
+        else app_source + "broken = (\n"
+    )
+    python_document = DocumentState(app_file.as_uri(), "python", synchronized_source, 2)
+    python_document.update(synchronized_source, 2, project)
+    documents = {document.uri: document, python_document.uri: python_document}
+    position = _position(template_source, "user", 2)
+
+    assert references(document, position, project, documents) is None
+    assert references(document, position, project, documents, include_declaration=True) is None
+    assert declaration(document, position, project, documents) is None
+
+
+@pytest.mark.parametrize("edit", ["change-file", "delete-file", "invalid-source"])
+def test_variable_features_decline_stale_synchronized_template_owner(tmp_path: Path, edit: str):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ user }} {{ user }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class TemplateData:\n"
+        "        user: str\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    synchronized_source = {
+        "change-file": app_source.replace("'card.html'", "'other.html'"),
+        "delete-file": app_source.replace("template_file = 'card.html'", "template_file = None"),
+        "invalid-source": app_source + "broken = (\n",
+    }[edit]
+    python_document = DocumentState(app_file.as_uri(), "python", synchronized_source, 2)
+    python_document.update(synchronized_source, 2, project)
+    documents = {document.uri: document, python_document.uri: python_document}
+    position = _position(template_source, "user", 2)
+
+    assert hover(document, position, project, documents) is None
+    assert references(document, position, project, documents) is None
+    assert declaration(document, position, project, documents) is None
+
+
+def test_shared_template_filters_a_consumer_with_a_stale_inherited_owner(tmp_path: Path):
+    template_file = tmp_path / "shared.html"
+    template_source = "{{ shared }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Base(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'shared.html'\n"
+        "    class TemplateData:\n"
+        "        shared: str\n"
+        "class Child(Base):\n"
+        "    class TemplateData:\n"
+        "        shared: int\n"
+        "class Current(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'shared.html'\n"
+        "    class TemplateData:\n"
+        "        shared: str\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    synchronized_source = app_source.replace("class Child(Base):", "class Child(Component):")
+    python_document = DocumentState(app_file.as_uri(), "python", synchronized_source, 2)
+    python_document.update(synchronized_source, 2, project)
+    documents = {document.uri: document, python_document.uri: python_document}
+
+    targets = declaration(document, _position(template_source, "shared", 2), project, documents)
+
+    assert isinstance(targets, list)
+    assert {target.uri for target in targets} == {app_file.as_uri()}
+    assert {target.range.start.line for target in targets} == {7, 15}
+
+
+def test_open_unchanged_path_template_declaration_keeps_ownership(tmp_path: Path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ user }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = Path('card.html')\n"
+        "    class TemplateData:\n"
+        "        user: str\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    python_document = DocumentState(app_file.as_uri(), "python", app_source, 1)
+    python_document.update(app_source, 1, project)
+    documents = {document.uri: document, python_document.uri: python_document}
+    position = _position(template_source, "user", 2)
+
+    assert references(document, position, project, documents)
+    assert declaration(document, position, project, documents) is not None
+
+
+def test_dynamic_template_owner_is_withheld_when_its_source_is_synchronized(tmp_path: Path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ user }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_source = (
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    exec(\"template_file = 'card.html'\")\n"
+        "    class TemplateData:\n"
+        "        user: str\n"
+    )
+    app_file.write_text(app_source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    position = _position(template_source, "user", 2)
+    assert references(document, position, project, {document.uri: document})
+
+    synchronized = app_source.replace("card.html", "other.html")
+    python_document = DocumentState(app_file.as_uri(), "python", synchronized, 2)
+    python_document.update(synchronized, 2, project)
+    documents = {document.uri: document, python_document.uri: python_document}
+
+    assert references(document, position, project, documents) is None
+    assert declaration(document, position, project, documents) is None
+
+
+def test_imported_template_owner_is_withheld_for_synchronized_external_source(tmp_path: Path):
+    template_file = tmp_path / "card.html"
+    template_source = "{{ user }}"
+    template_file.write_text(template_source, encoding="utf-8")
+    settings_file = tmp_path / "settings.py"
+    settings_source = "CARD_TEMPLATE = 'card.html'\n"
+    settings_file.write_text(settings_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    app_file.write_text(
+        "from citry import Citry, Component\n"
+        "from settings import CARD_TEMPLATE\n"
+        "engine = Citry(autodiscover=False)\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = CARD_TEMPLATE\n"
+        "    class TemplateData:\n"
+        "        user: str\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+    position = _position(template_source, "user", 2)
+    assert references(document, position, project, {document.uri: document})
+
+    synchronized_source = settings_source.replace("card.html", "other.html")
+    python_document = DocumentState(settings_file.as_uri(), "python", synchronized_source, 2)
+    python_document.update(synchronized_source, 2, project)
+    documents = {document.uri: document, python_document.uri: python_document}
+
+    assert references(document, position, project, documents) is None
+    assert declaration(document, position, project, documents) is None
+
+
 def test_loop_variables_complete_and_hover_without_a_registry():
     project = _syntax_state()
     source = '<c-for each="item, index in items"><span>{{ item }}</span></c-for>'
@@ -1599,7 +4053,7 @@ def test_loop_variables_complete_and_hover_without_a_registry():
     assert all("loop variable" in (item.detail or "") for item in items)
     assert hint is not None
     assert isinstance(hint.contents, types.MarkupContent)
-    assert "Loop variable introduced by c-for" in hint.contents.value
+    assert hint.contents.value == ("```python\n(variable) item\n```\n\nLoop variable introduced by c-for.")
 
 
 def test_shorthand_loop_variable_is_in_scope_for_same_element_python_attributes():
@@ -1634,10 +4088,14 @@ def test_fill_bindings_complete_and_describe_alias_rest_and_fallback():
     assert "remaining slot data" in (by_label["rest"].detail or "")
     assert alias_hint is not None
     assert isinstance(alias_hint.contents, types.MarkupContent)
-    assert "from 'source'" in alias_hint.contents.value
+    assert alias_hint.contents.value == (
+        "```python\n(variable) alias\n```\n\nSlot-data variable introduced from 'source' by c-fill."
+    )
     assert fallback_hint is not None
     assert isinstance(fallback_hint.contents, types.MarkupContent)
-    assert "Fallback variable" in fallback_hint.contents.value
+    assert fallback_hint.contents.value == (
+        "```python\n(variable) fallback\n```\n\nFallback variable introduced by c-fill."
+    )
 
 
 def test_fill_c_bind_clears_and_later_direct_attributes_restore_bindings():
@@ -1941,14 +4399,14 @@ def test_nested_unknown_component_and_self_closing_symbol_are_mapped():
     nested = _document(nested_source, project)
     symbols = document_symbols(_document(symbol_source, project))
 
-    assert [diagnostic.code for diagnostic in nested.diagnostics] == ["citry.component.unknown"]
+    assert [diagnostic.code for diagnostic in nested.diagnostics] == ["citry.template.unknown-component"]
     assert nested.diagnostics[0].range.start.character == nested_source.index("c-ghost")
     assert symbols[0].name == "<br>"
     assert symbols[0].children is None
 
     fragment_source = '<div c-body="<><c-ghost /></>"></div>'
     fragment = _document(fragment_source, project)
-    assert [diagnostic.code for diagnostic in fragment.diagnostics] == ["citry.component.unknown"]
+    assert [diagnostic.code for diagnostic in fragment.diagnostics] == ["citry.template.unknown-component"]
     assert fragment.diagnostics[0].range.start.character == fragment_source.index("c-ghost")
 
 
@@ -1960,4 +4418,7 @@ def test_configuration_parse_error_uses_zero_width_fallback(monkeypatch):
     document = _document("<div />", _syntax_state())
 
     assert document.diagnostics[0].code == "citry.parse.configuration"
+    assert document.diagnostics[0].code_description == types.CodeDescription(
+        "https://citry.dev/ide/diagnostics/#citry.parse.configuration"
+    )
     assert document.diagnostics[0].range.start == types.Position(0, 0)

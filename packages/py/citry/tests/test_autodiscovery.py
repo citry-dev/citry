@@ -856,9 +856,16 @@ class TestEndToEnd:
     def test_component_referenced_in_template_is_discovered(self, project):
         # A root component renders <c-card>; Card lives in a sibling module that
         # only autodiscovery imports. Rendering must find it.
-        _build_app(project, "e2e")
-        project("e2e/components/card.py", _component("e2e", "Card", template="<span>card</span>"))
-        app = _load_app("e2e")
+        # Do not call the synthetic package `e2e`: pytest imports the real
+        # tests/e2e directory during collection, and that unrelated namespace
+        # package must not decide whether this fixture can be imported.
+        package = "autodiscovery_render_app"
+        _build_app(project, package)
+        project(
+            f"{package}/components/card.py",
+            _component(package, "Card", template="<span>card</span>"),
+        )
+        app = _load_app(package)
 
         class Page(Component):
             citry = app

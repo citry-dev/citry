@@ -1,0 +1,60 @@
+{
+  "cold_ms": 4.824,
+  "host_specific": true,
+  "iterations": 25,
+  "one_catalog_change_ms": 4.279,
+  "render": {
+    "added_median_ms": 1.4827,
+    "added_p95_ms": 1.5084,
+    "gates": {
+      "localized_added_median_within_budget": true,
+      "localized_added_p95_within_budget": true,
+      "unconfigured_mean_within_literal_95pct_ci": true
+    },
+    "host_specific": true,
+    "literal_95pct_mean_ci_ms": [
+      0.2419,
+      0.2484
+    ],
+    "memory": {
+      "peak_rss_after": 66256896,
+      "peak_rss_before": 66125824,
+      "peak_rss_delta": 131072,
+      "platform_units": "bytes on macOS; KiB on Linux"
+    },
+    "operations": {
+      "message_resolutions": 100,
+      "named_format_calls": 20
+    },
+    "samples_per_tree": 30,
+    "summaries": {
+      "literal": {
+        "max_ms": 0.2713,
+        "median_ms": 0.2414,
+        "min_ms": 0.2365,
+        "p95_ms": 0.2628,
+        "stdev_ms": 0.0092
+      },
+      "localized": {
+        "max_ms": 1.795,
+        "median_ms": 1.7241,
+        "min_ms": 1.6775,
+        "p95_ms": 1.7712,
+        "stdev_ms": 0.0238
+      },
+      "unconfigured": {
+        "max_ms": 0.2609,
+        "median_ms": 0.2417,
+        "min_ms": 0.2371,
+        "p95_ms": 0.2597,
+        "stdev_ms": 0.0078
+      }
+    },
+    "thresholds_ms": {
+      "added_median": 2.0,
+      "added_p95": 3.0
+    },
+    "warmups_per_tree": 5
+  },
+  "warm_mean_ms": 4.123
+}

@@ -6,7 +6,10 @@ from docs_site._internal.guards.ui_library_projection import check
 from docs_site._internal.project import default_docs_project, use_docs_project
 from docs_site._internal.ui_library_projection import (
     UiLibraryCatalog,
+    UiLibraryGroup,
     UiLibraryProjection,
+    ui_library_nav_groups,
+    ui_library_overview_groups,
     ui_library_projection_for_path,
     ui_library_source_path,
     ui_library_source_routes,
@@ -164,3 +167,51 @@ def test_catalog_resolves_source_routes_without_a_content_copy(tmp_path):
     assert routes == {(tmp_path / "package/components/button/api.md").resolve(): "/ui-library/components/button/"}
     assert ui_library_projection_for_path(catalog, "ui-library/components/button") is projection
     assert ui_library_projection_for_path(catalog, "/ui-library/components/missing/") is None
+
+
+def test_functional_groups_drive_nav_and_overview_from_the_same_order(tmp_path):
+    button = UiLibraryProjection(
+        "button",
+        "button",
+        PurePosixPath("package/components/button/api.md"),
+    )
+    toggle = UiLibraryProjection(
+        "toggle",
+        "toggle",
+        PurePosixPath("package/components/toggle/api.md"),
+    )
+    for projection, description in ((button, "Run an action."), (toggle, "Keep a pressed state.")):
+        source = tmp_path.joinpath(*projection.source.parts)
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(
+            f"---\ntitle: {projection.family.title()}\ndescription: {description}\n---\n",
+            encoding="utf-8",
+        )
+    catalog = UiLibraryCatalog(
+        (button, toggle),
+        (UiLibraryGroup("actions", "Actions", (button, toggle)),),
+    )
+
+    [nav_group] = ui_library_nav_groups(catalog, repo_root=tmp_path)
+    [overview_group] = ui_library_overview_groups(catalog, repo_root=tmp_path)
+
+    assert nav_group.label == "Actions"
+    assert [item.title for item in nav_group.items] == ["Button", "Toggle"]
+    assert nav_group.collapsible
+    assert nav_group.section_style
+    assert overview_group == {
+        "id": "actions",
+        "label": "Actions",
+        "items": [
+            {
+                "title": "Button",
+                "description": "Run an action.",
+                "path": "/ui-library/components/button/",
+            },
+            {
+                "title": "Toggle",
+                "description": "Keep a pressed state.",
+                "path": "/ui-library/components/toggle/",
+            },
+        ],
+    }

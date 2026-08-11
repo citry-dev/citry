@@ -1,0 +1,33 @@
+{
+  "host_specific": true,
+  "measurements": {
+    "chromium": {
+      "max_ms": 0.6,
+      "median_ms": 0.4,
+      "min_ms": 0.2,
+      "mixed_frames": 0,
+      "p95_ms": 0.4,
+      "sample_count": 30,
+      "sampled_frames": 60
+    },
+    "firefox": {
+      "max_ms": 1,
+      "median_ms": 1,
+      "min_ms": 0,
+      "mixed_frames": 0,
+      "p95_ms": 1,
+      "sample_count": 30,
+      "sampled_frames": 60
+    },
+    "webkit": {
+      "max_ms": 1,
+      "median_ms": 1,
+      "min_ms": 0,
+      "mixed_frames": 0,
+      "p95_ms": 1,
+      "sample_count": 30,
+      "sampled_frames": 60
+    }
+  },
+  "threshold_p95_ms": 50
+}

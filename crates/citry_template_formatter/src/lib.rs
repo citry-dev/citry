@@ -5,6 +5,7 @@
 //! verbatim content.
 
 mod comments;
+mod diagnostic_catalog;
 mod embedded;
 mod error;
 mod formatter;

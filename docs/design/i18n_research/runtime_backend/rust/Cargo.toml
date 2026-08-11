@@ -1,0 +1,12 @@
+[package]
+name = "citry-i18n-fluent-runtime-spike"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+fluent-bundle = "=0.16.0"
+serde_json = "=1.0.145"
+unic-langid = "=0.9.6"
+
+[workspace]

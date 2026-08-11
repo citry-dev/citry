@@ -102,6 +102,24 @@ class Grid(Component):
 `Grid()` uses the constant default. `Grid(columns=4)` receives an ordinary
 dynamic value unless the caller passes `Const(4)`.
 
+## Inspect a marker at an exact-type boundary
+
+Most component code can treat a marked value like the value inside it. When a
+library must pass an exact built-in type to another API, use
+[`is_const`][citry.is_const] to detect the marker and
+[`const_value`][citry.const_value] to retrieve its value:
+
+```python
+from citry import const_value, is_const
+
+
+if is_const(columns):
+    columns = const_value(columns)
+```
+
+These helpers are mainly for component and extension authors. Application
+templates normally do not need them.
+
 ## Know where the marker stops
 
 In templates and ordinary Python operations, a marked value usually behaves

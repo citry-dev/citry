@@ -25,8 +25,9 @@ release:
    For every job, record the shortest intended template and Python expression
    and whether Citry solves it through direct API, native attributes, CSS or
    utility classes, composition, or a separate component.
-3. **Refresh the research.** Start with the shared
-   [`ui_research` index](../../../../docs/design/ui_research/README.md),
+3. **Refresh the research.** Start with the
+   [active component inventory](../../../../docs/design/ui_component_inventory.md),
+   shared [`ui_research` index](../../../../docs/design/ui_research/README.md),
    [component taxonomy](../../../../docs/design/ui_research/component-taxonomy.md),
    [complaint register](../../../../docs/design/ui_research/complaint-register.md),
    and relevant ecosystem dossiers. Then inspect current component-specific
@@ -193,6 +194,13 @@ override and a public part-selector override. Presence assertions alone do not
 prove the cascade contract. When a variant or density changes a fallback, test
 both its fallback and a public override that must still win.
 
+Do not describe `class_` as an unconditional bridge to every framework utility
+sheet. Unlayered consumer rules override `citry-ui.theme`; named consumer
+layers do so only when the application orders them after the Citry UI layer as
+documented in the theme contract. Test an unlayered class override both before
+and after the component stylesheet. If a guide demonstrates a named-layer
+utility, show the required combined layer-order declaration.
+
 ## Slot contracts
 
 Follow the repository-wide slot research and specification rules. Every Citry
@@ -315,7 +323,10 @@ browser or swap hidden prerendered output.
 
 ## Production gate and deferred work
 
-Button, Field/Input, Form, Tabs, Dialog, Combobox, and Table have Phase 7
+Button, Field/Input, Form, Tabs, Dialog, Combobox, Table, Icon, Card, Textarea,
+Native Select, Checkbox, Alert, Accordion, Flow layout, Badge, Progress,
+Spinner, Radio, Switch, Breadcrumbs, Avatar, Skeleton, Toggle, ButtonGroup,
+Divider, List, Pagination, Grid/Container, Popover, Tooltip, and Menu have
 production specifications and direct styled implementations. They remain
 pre-release until the complete acceptance and release matrices pass. Apply the
 global specification process before adding or promoting another family.

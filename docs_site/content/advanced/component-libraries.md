@@ -100,6 +100,22 @@ __citry_library__ = ComponentLibrary(
 Installation fails before publishing any component if a required extension is
 missing.
 
+## Use the library catalog in the editor
+
+The Citry VS Code extension accepts the manifest itself as its registry target:
+
+```json
+{
+  "citry.app": "acme_ui:__citry_library__"
+}
+```
+
+The language server creates a library-only registry containing Citry's
+built-ins and the manifest's components. It does not include host-application
+components, configuration, or host-provided extensions. If the manifest has a
+custom `required_extensions` entry, expose a configured `Citry` instance that
+installs the library and select that instance instead.
+
 ## Install and use the library
 
 Applications pass either the package or its manifest to

@@ -170,6 +170,7 @@ class CDialog(LibraryComponent):
         </c-if>
         <dialog
           class="cui-dialog"
+          data-citry-dialog-surface
           c-id="dialog_id"
           c-open="open"
           c-aria-labelledby="title_id"
@@ -270,7 +271,7 @@ class CDialog(LibraryComponent):
         init: ({ els, data, props, effect }) => {
           const host = els[0];
           const nearestHost = (element) => element?.closest?.("[data-citry-dialog-host]") ?? null;
-          const dialog = [...host.querySelectorAll('[data-citry-ui-part="dialog"]')]
+          const dialog = [...host.querySelectorAll('[data-citry-dialog-surface]')]
             .find((candidate) => nearestHost(candidate) === host);
           const surface = dialog.querySelector(':scope > [data-citry-ui-part="surface"]');
           const title = surface.querySelector('[data-citry-ui-part="title"]');
@@ -698,7 +699,9 @@ class CDialog(LibraryComponent):
               scroll: resolveEnum("scroll"),
             };
             onOpenChange = resolveCallback();
-            closeButton.hidden = !configuration.dismissible;
+            if (closeButton) {
+              closeButton.hidden = !configuration.dismissible;
+            }
             if (configuration.initialFocus === "title") {
               title.setAttribute("tabindex", "-1");
             } else {
@@ -712,6 +715,9 @@ class CDialog(LibraryComponent):
             }
           });
           host.setAttribute("data-citry-dialog-initialized", "");
+          if (dialog.getAttribute("role") === "alertdialog") {
+            host.setAttribute("data-citry-alert-dialog-initialized", "");
+          }
 
           return () => {
             host.removeEventListener("click", onHostClick);
@@ -732,6 +738,7 @@ class CDialog(LibraryComponent):
             unlockScroll();
             queueMicrotask(ensureFocusRestored);
             host.removeAttribute("data-citry-dialog-initialized");
+            host.removeAttribute("data-citry-alert-dialog-initialized");
           };
         },
       });

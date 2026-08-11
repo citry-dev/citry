@@ -1,9 +1,10 @@
 # Citry UI theme and color-scheme contract
 
-**Status (2026-07-30): Phase 7 working contract.** This document fixes theme
-ownership and acceptance requirements while leaving the final theme-provider
-API and global token inventory open until several production families and the
-Overlay slice provide enough evidence.
+**Status (2026-08-08): active working contract.** Seven production families
+and the Dialog overlay now provide enough evidence to begin the token,
+typography, icon, elevation, spacing, and responsive-vocabulary review. This
+document fixes theme ownership and acceptance requirements while that review
+and the final theme-provider decision remain open.
 
 ## 1. Vocabulary
 
@@ -84,6 +85,17 @@ fallbacks through private effective variables and does not assign public
 defaults on its root. Default rules live in the `citry-ui.theme` cascade layer
 with low specificity.
 
+Unlayered consumer CSS takes precedence over normal declarations in
+`citry-ui.theme`, regardless of stylesheet source order. Consumer CSS in a
+named layer takes precedence only when that layer is ordered after
+`citry-ui.theme`. Applications that use named utility or component layers must
+declare the combined order before either stylesheet establishes it, for
+example `@layer citry-ui.theme, app-components, utilities;`. Citry UI does not
+infer or reorder host layer names. Component guides must not promise that an
+arbitrary framework utility class overrides the default theme without this
+ordering contract. Inline `style`, public variables, and unlayered consumer
+rules remain order-independent override paths.
+
 The global semantic token set grows from repeated roles demonstrated by
 production components and two distinct brand adaptations. Similar literal
 values in one component are not sufficient evidence for a global token.
@@ -121,7 +133,7 @@ continuity. Visual review remains required because computed values and
 automated contrast checks do not prove coherent hierarchy or interaction
 feedback.
 
-## 7. Deferred theme API
+## 7. Theme API review
 
 After several production families and Overlay are implemented, revisit:
 
@@ -135,3 +147,12 @@ After several production families and Overlay are implemented, revisit:
 
 That work may extend this contract, but it must preserve the ownership and
 acceptance requirements above.
+
+The next component batch begins this revisit incrementally. Icon and Card must
+record every shared role they need. Generic Surface remains private styling
+infrastructure unless it earns an independent application job. Later source
+passes have now shipped Flow, Container, Grid, and Divider; AspectRatio remains
+a candidate rather than a theme prerequisite. Grid ratified fixed mobile-first
+viewport thresholds plus intrinsic CSS sizing while leaving bespoke container
+queries to consumer CSS. The final
+provider, named-theme, and serialization decisions remain Phase 8 work.

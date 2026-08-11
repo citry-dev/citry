@@ -210,23 +210,22 @@ Section 7 (deliberately deferred pieces) and neighbors:
 
 ---
 
-## 5. Current state: what is live vs planned (TODO docs)
+## 5. Historical repository baseline
 
-From `TODO/project_status_june_2026.md` (refreshed 2026-06-22):
+A repository audit refreshed on 2026-06-22 recorded:
 
 - **Live**: the full Python runtime; slots/fills, provide/inject, the
   dependencies system including the browser client and render strategies,
   dynamic components, Const optimization, `on_render` + error bubbling, and
   web integrations for Django, FastAPI, Flask, Starlette, WSGI, ASGI
-  (`project_status_june_2026.md:8-19`, `:194-204`). 1,126 Python tests pass
-  (`:206`). `citry` runtime is v0.1.0 on PyPI, `citry_core` v1.3.0
-  (`:174-193`).
+  at that baseline. At the time, 1,126 Python tests passed, `citry` runtime
+  was v0.1.0 on PyPI, and `citry_core` was v1.3.0.
 - **Multi-language reality**: only the Python `LangImpl` is real; JS, PHP, Go,
-  Rust are structural stubs (`:297-306`); other language bindings are
-  longer-term (#27, `:536-537`).
+  and Rust are structural stubs; other language bindings are longer-term
+  ([#27](https://github.com/citry-dev/citry/issues/27)).
 - **Performance decision settled**: the render walk stays in Python (~1.29x a
   bare Django template); the Rust render-walk prototype was measured and
-  archived (`:543-567`). No pending plan to move runtime logic to Rust.
+  archived. No pending plan to move runtime logic to Rust.
 - The extension substrate listed in section 1 of the roadmap
   (`ExtensionManager`, name-keyed dispatch, `emit()`, `Extension.urls` with
   contrib mount adapters, `ExtensionCommand` + CLI, `on_attrs_resolved` /

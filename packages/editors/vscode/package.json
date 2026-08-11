@@ -16,6 +16,7 @@
 		"onLanguage:python",
 		"onLanguage:citry-html",
 		"onLanguage:html",
+		"onLanguage:css",
 		"onCommand:citry.restartServer",
 		"onCommand:citry.showStatus",
 		"onCommand:citry.formatAtCursor",
@@ -43,7 +44,7 @@
 	"scripts": {
 		"compile": "tsc -p tsconfig.json --noEmit && esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node22 --external:vscode --sourcemap --outfile=out/extension.js",
 		"lint": "biome check .",
-		"test": "esbuild src/completionRetrigger.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/completionRetrigger.mjs && esbuild src/embedded.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embedded.mjs && esbuild src/embeddedFormatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embeddedFormatting.mjs && esbuild src/formatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/formatting.mjs && esbuild src/nativeHtmlAttributes.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/nativeHtmlAttributes.mjs && node --test",
+		"test": "esbuild src/browserRouting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/browserRouting.mjs && esbuild src/clientLifecycle.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/clientLifecycle.mjs && esbuild src/completionRetrigger.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/completionRetrigger.mjs && esbuild src/embedded.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embedded.mjs && esbuild src/embeddedFormatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/embeddedFormatting.mjs && esbuild src/formatting.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/formatting.mjs && esbuild src/nativeHtmlAttributes.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/nativeHtmlAttributes.mjs && esbuild src/providerPipeline.ts --bundle --platform=node --format=esm --target=node22 --outfile=out/tests/providerPipeline.mjs && node --test",
 		"check": "pnpm run compile && pnpm run lint && pnpm run test && vsce ls --tree --no-dependencies",
 		"prepackage": "pnpm run compile && node -e \"require('node:fs').mkdirSync('dist', { recursive: true })\"",
 		"package": "vsce package --no-dependencies --out dist/citry.vsix"
@@ -153,7 +154,7 @@
 					"type": "string",
 					"default": "",
 					"scope": "resource",
-					"description": "Citry app as module:attribute. Empty uses syntax-only analysis."
+					"description": "Citry instance or ComponentLibrary as module:attribute. Empty uses syntax-only analysis."
 				},
 				"citry.python": {
 					"type": "string",
@@ -171,6 +172,12 @@
 					"default": "off",
 					"scope": "window",
 					"description": "Trace communication with the Citry language server."
+				},
+				"citry.trace.performance": {
+					"type": "boolean",
+					"default": false,
+					"scope": "window",
+					"description": "Write structured completion, hover, and definition stage timings to the Citry Performance output channel."
 				}
 			}
 		}

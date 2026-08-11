@@ -1,3 +1,7 @@
+// src/diagnosticCatalog.ts
+var FORMAT_STALE_DOCUMENT = "citry.format.stale-document";
+var FORMAT_CANCELLED = "citry.format.cancelled";
+
 // src/embeddedFormatting.ts
 var embeddedFormatterTimeoutMilliseconds = 3e4;
 function embeddedFormattingOptions(tabSize, insertSpaces) {
@@ -23,13 +27,13 @@ function embeddedFormattingDocumentIdentity(params, region, session) {
 }
 var EmbeddedFormattingStaleError = class extends Error {
   constructor() {
-    super("citry.format.stale-document: the document changed during embedded formatting");
+    super(`${FORMAT_STALE_DOCUMENT}: the document changed during embedded formatting`);
     this.name = "EmbeddedFormattingStaleError";
   }
 };
 var EmbeddedFormattingCancelledError = class extends Error {
   constructor() {
-    super("citry.format.cancelled: embedded formatting was cancelled");
+    super(`${FORMAT_CANCELLED}: embedded formatting was cancelled`);
     this.name = "EmbeddedFormattingCancelledError";
   }
 };

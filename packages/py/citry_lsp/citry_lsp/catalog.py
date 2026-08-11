@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import MappingProxyType
 from typing import cast
-from urllib.parse import unquote, urlparse
 
 from citry_lsp.protocol import CATALOG_SCHEMA_VERSION
+from citry_lsp.uri import file_uri_path
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +38,7 @@ class SchemaRecord:
     declared_on: str | None
     import_path: str | None
     fields: tuple[FieldRecord, ...]
+    namespace_policy: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -315,8 +316,12 @@ def _schema_record(value: object, component: str, role: str) -> SchemaRecord:
         msg = f"component {component!r} {role} schema is invalid"
         raise ValueError(msg)
     kind = value.get("kind")
+    namespace_policy = value.get("namespace_policy")
     if kind not in {"absent", "fields", "opaque"}:
         msg = f"component {component!r} {role} schema kind is invalid"
+        raise ValueError(msg)
+    if namespace_policy not in {"closed", "allow-extra", "unknown"}:
+        msg = f"component {component!r} {role} schema namespace policy is invalid"
         raise ValueError(msg)
     declared_on = _optional_nonempty_str(value.get("declared_on"), "declared_on")
     import_path = _optional_nonempty_str(value.get("import_path"), "import_path")
@@ -326,6 +331,9 @@ def _schema_record(value: object, component: str, role: str) -> SchemaRecord:
         raise ValueError(msg)
     if kind == "absent" and (import_path is not None or fields):
         msg = f"component {component!r} {role} absent schema has field state"
+        raise ValueError(msg)
+    if kind in {"absent", "opaque"} and namespace_policy != "unknown":
+        msg = f"component {component!r} {role} schema namespace policy contradicts its kind"
         raise ValueError(msg)
     if kind in {"fields", "opaque"} and (declared_on is None or import_path is None):
         msg = f"component {component!r} {role} schema provenance is invalid"
@@ -338,6 +346,7 @@ def _schema_record(value: object, component: str, role: str) -> SchemaRecord:
         declared_on=declared_on,
         import_path=import_path,
         fields=fields,
+        namespace_policy=namespace_policy,
     )
 
 
@@ -475,10 +484,7 @@ def _asset_record(value: object, component: str, role: str) -> AssetRecord:
 
 
 def _file_uri_path(uri: str) -> Path | None:
-    parsed = urlparse(uri)
-    if parsed.scheme != "file" or parsed.netloc:
-        return None
-    return Path(unquote(parsed.path))
+    return file_uri_path(uri)
 
 
 def _required_str(value: object, field_name: str) -> str:

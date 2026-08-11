@@ -60,9 +60,10 @@ The browser half is tracked separately in
   delegate into [`assets.py:289-322`](../../packages/py/citry/citry/assets.py#L289):
   `reset_template` drops the cached `CitryTemplate` (source and compiled form,
   one object) and evicts the class's const-body cache entries; `reset_files`
-  drops the cached JS/CSS and fires the `on_files_reset` hook so extensions
-  evict their own per-class state. Invalidation is lazy: nothing re-reads
-  eagerly, the next render re-resolves and re-compiles.
+  drops cached messages/JS/CSS and fires the `on_files_reset` hook so
+  extensions evict their own state. Message reload is compile-then-swap: a bad
+  edit raises for that reload while the last valid source and catalog remain
+  available. Invalidation is otherwise lazy; the next access reads the file.
 
 ### The django-components watcher (the whole mechanism, host-specific)
 
@@ -197,7 +198,7 @@ goes through:
 ```python
 def invalidate_file(self, path: str | Path) -> list[type[Component]]:
     """
-    Drop cached template/JS/CSS for every component that loaded an asset from
+    Drop cached template/messages/JS/CSS for every component that loaded an asset from
     ``path``, so the next render re-reads it from disk. Returns the classes it
     reset; an empty list means the file backs no loaded component (a host can
     read that as "not mine", e.g. fall through to a restart).
@@ -379,7 +380,7 @@ citry models the two useful modes but owns neither the watching nor the restart:
 
 The honest division of labour:
 
-- **File-backed asset edits (template, JS, CSS): citry's hot reload.** These are
+- **File-backed asset edits (template, messages, JS, CSS): citry's hot reload.** These are
   what the index tracks and what `reset_template` / `reset_files` clear.
 - **New component files and Python logic edits: the host's reloader.** These are
   restart-class. This is why the Django path is a piggyback (you get hot asset

@@ -1,6 +1,6 @@
 ---
 title: Update page from Python
-description: Render a new component into one chosen part of the page, including the component's JavaScript and CSS.
+description: Render a new component into one chosen part of the page, including its browser data and CSS.
 ---
 
 # Update page from Python
@@ -49,7 +49,10 @@ class Confirmation(Component):
       <section class="confirmation">
         <strong>Request received</strong>
         <p>We will write to {{ email }}.</p>
-        <p class="confirmation__status">
+        <p
+          class="confirmation__status"
+          x-text="'Confirmation ready for ' + email"
+        >
           Preparing confirmation...
         </p>
       </section>
@@ -57,7 +60,7 @@ class Confirmation(Component):
 ```
 
 The complete class above also includes its Citry instance, `Slots`, browser
-data, JavaScript, and CSS. This smaller excerpt shows the first connection:
+data, and CSS. This smaller excerpt shows the first connection:
 `Confirmation(email=email)` supplies the value that `{{ email }}` inserts.
 
 ## Render action
@@ -75,7 +78,7 @@ return actions.Render(
 
 `Confirmation(email=email)` builds a fresh component for this response. Citry
 renders it as a browser update, including the information needed for that
-component's CSS and JavaScript. The validation path still raises the same
+component's CSS and browser data. The validation path still raises the same
 `EventError`; only a successful submission reaches this return statement.
 
 ## Swap target selector
@@ -98,30 +101,31 @@ technology announce the new confirmation without moving keyboard focus.
 Use a selector that identifies the intended area without matching unrelated
 elements.
 
-## Confirmation JS data
+## Confirmation browser data
 
 The confirmation sends its email address to browser code through
 [`js_data()`][citry.Component.js_data]:
 
 ```python
-class JsData:
-    email: str
-
-def js_data(self, kwargs: Kwargs, slots: Slots) -> JsData:
-    return self.JsData(email=kwargs.email)
+def js_data(self, kwargs: Kwargs, slots: Slots):
+    return {"email": kwargs.email}
 ```
 
-The [`$component`][$component] callback receives that value as `data.email`:
+Citry seeds the top-level `email` key directly into this component's Alpine
+scope. The template can use it without a `$component` callback:
 
-```javascript
-$component(({ els, data }) => {
-  els[0].querySelector(".confirmation__status").textContent =
-    `Confirmation ready for ${data.email}`;
-});
+```citry-html
+<p
+  class="confirmation__status"
+  x-text="'Confirmation ready for ' + email"
+>
+  Preparing confirmation...
+</p>
 ```
 
-When the new component starts, this changes “Preparing confirmation...” to the
-finished status.
+When the new component starts, Alpine replaces “Preparing confirmation...”
+with the finished status. Use `$component` only when a component also needs
+imperative JavaScript setup, client prop declarations, effects, or cleanup.
 
 !!! note
 
@@ -139,13 +143,14 @@ finished status.
 }
 ```
 
-## Asset loading order
+## Asset and data loading order
 
-There's two steps when the component CSS and JS scripts are inserted into the page:
+There are two steps when component assets and browser data reach the page:
 
 ### 1. First response - Full page
 
-When you first loaded the entire page `TutorialPage`, Citry automatically collected all CSS and JS assets and inserted them into the HTML.
+When you first loaded the entire page, `TutorialPage`, Citry automatically
+collected its CSS and JavaScript assets and inserted them into the HTML.
 
 You can customize where to insert the assets with [`<c-css />`][c-css] and [`<c-js />`][c-js]. Adding the tags makes the positions explicit. Read more about [asset placement](/advanced/asset-placement/).
 
@@ -162,10 +167,13 @@ You can customize where to insert the assets with [`<c-css />`][c-css] and [`<c-
 
 ### 2. Second response - Fragment
 
-`Confirmation` is created later, its JS/CSS assets arrive in the **second** response when server responds to the form submission. So `Confirmation` never sees the `<c-css />` and `<c-js />`.
+`Confirmation` is created later. Its CSS and browser data arrive in the
+**second** response when the server responds to the form submission, so it
+never sees the `<c-css />` and `<c-js />` tags from the first render.
 
-The second response inserts the `Confirmation` into the page. Citry is smart enough to notice that and collect JS and CSS assets of the inserted fragment. Citry then loads the JS/CSS assets before
-the new component starts.
+The second response inserts `Confirmation` into the page. Citry collects the
+inserted fragment's assets, loads what is still missing, and seeds its Alpine
+scope before the new component starts.
 
 That is why the green border appears and the status changes after the confirmation enters the page.
 

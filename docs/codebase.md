@@ -25,6 +25,7 @@ citry/
 ├── crates/              # Rust workspace crates (core + internal crates)
 │   ├── citry_core_py/   # Main Rust crate exposed to Python
 │   ├── citry_html_transform/
+│   ├── citry_i18n/     # Language-neutral Fluent catalog runtime
 │   ├── citry_template_formatter/
 │   ├── python_safe_eval/
 │   └── citry_template_parser/
@@ -59,7 +60,8 @@ As such, the Rust crates are ideal for:
 
 ### Prerequisites
 
-- **Rust**: Install via [rustup](https://rustup.rs/) v1.93 or higher (nightly toolchain required for edition 2024)
+- **Rust**: Install via [rustup](https://rustup.rs/). Vendored Ruff requires
+  Rust 1.95 or higher, and this repository selects the nightly channel.
 - **Python**: 3.10 or higher
 - **UV**: Fast Python package installer (recommended)
 - **Node.js and [pnpm](https://pnpm.io/)**: needed for the gate's Node-based
@@ -74,7 +76,11 @@ As such, the Rust crates are ideal for:
 
 ### Installing and Managing Rust
 
-This codebase uses **Rust edition 2024**, which requires the **nightly** toolchain. The required Rust version is pinned in [`rust-toolchain.toml`](../rust-toolchain.toml).
+This codebase uses **Rust edition 2024**, and vendored Ruff requires Rust 1.95
+or higher. The edition and minimum version are both available on stable Rust;
+the repository separately chooses to track nightly in
+[`rust-toolchain.toml`](../rust-toolchain.toml) so local and CI builds use one
+development channel.
 
 **Check your Rust version:**
 
@@ -94,7 +100,7 @@ rustup show
 # Install rustup (if not already installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# Install the nightly toolchain (required for edition 2024)
+# Install the nightly toolchain selected by this repository
 rustup toolchain install nightly
 
 # Update to the latest nightly
@@ -156,7 +162,10 @@ pip install uv
    rustup override set nightly
    ```
 
-   The [`rust-toolchain.toml`](../rust-toolchain.toml) file automatically selects the nightly toolchain when you run cargo commands in this directory. This is required because the codebase uses Rust edition 2024.
+   The [`rust-toolchain.toml`](../rust-toolchain.toml) file automatically
+   selects the repository's nightly development channel when you run cargo
+   commands in this directory. Rust edition 2024 itself does not require
+   nightly.
 
 3. **Install the workspace** (from the repository root):
 
@@ -185,7 +194,7 @@ pip install uv
    uv run pytest
 
    # Or run Rust tests first (scoped to our crates, see "Running tests" below)
-   cargo test -p citry_core_py -p citry_html_transform -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+   cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_template_formatter -p citry_template_parser -p python_safe_eval
    ```
 
 ## Common Development Tasks
@@ -214,11 +223,51 @@ would also run ruff's own test suite. CI scopes the run the same way
 uv run pytest
 
 # Rust tests (our crates only)
-cargo test -p citry_core_py -p citry_html_transform -p citry_template_formatter -p citry_template_parser -p python_safe_eval
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_template_formatter -p citry_template_parser -p python_safe_eval
 
 # Both (Rust first, then Python)
-cargo test -p citry_core_py -p citry_html_transform -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
+cargo test -p citry_core_py -p citry_html_transform -p citry_i18n -p citry_template_formatter -p citry_template_parser -p python_safe_eval && uv run pytest
 ```
+
+#### Browser end-to-end tests
+
+Install the browser-test dependencies and Chromium before running the E2E
+suite locally:
+
+```bash
+uv sync --all-packages --group e2e
+uv run playwright install chromium
+```
+
+The Citry and Citry UI browser suites run by file across four pytest workers,
+matching the four CPUs on the standard public GitHub Linux runner. Each worker
+owns its own browser process and test servers; `loadfile` keeps all tests from
+one file on the same worker so file-local fixtures are not split across
+processes:
+
+```bash
+uv run --no-sync pytest \
+  packages/py/citry/tests/e2e \
+  packages/py/citry_ui/citry_ui/components \
+  packages/py/citry_ui/citry_ui/quality/tests/e2e \
+  -m e2e \
+  --browser chromium \
+  -n 4 \
+  --dist loadfile \
+  --durations 30
+```
+
+The pull-request Chromium job and the scheduled Chromium, Firefox, and WebKit
+jobs use this same distribution. The browser matrix still assigns each browser
+to a separate GitHub job; the four workers run inside that browser's one job
+and do not request four GitHub runners. `--durations 30` reports the slowest
+tests so an oversized file that limits parallelism remains visible.
+
+Do not put the worker flags in pytest's global `addopts`. Small focused runs,
+the ordinary Python matrix, and the docs-site E2E suite stay serial. In
+particular, distributing the docs-site suite would repeat its session-scoped
+site build once per worker. On a machine with fewer than four CPUs or limited
+memory, lower `-n`; four is the CI default, not a correctness requirement.
 
 ### Formatting and linting code
 
@@ -249,20 +298,92 @@ cargo clippy
 
 ### Checks and validators
 
-Quality is enforced by one explicit command, not a commit-time hook: `python scripts/check.py` runs the whole gate and is the same thing CI runs. Nothing runs automatically on `git commit`, so the tools never change your files behind your back; you run the gate when you choose and fix what it reports.
+Quality is enforced by explicit commands, not a commit-time hook. Nothing runs
+automatically on `git commit`, so the tools never change files behind your
+back; run the appropriate check when you choose and fix what it reports.
+
+#### Testing practices in a shared worktree
+
+Tests provide evidence at three different boundaries. Use the narrowest one
+that answers the question at hand:
+
+1. **While implementing, run focused checks.** Run the affected test file,
+   package check, formatter, type checker, or a small falsifier suite. Repeat
+   these freely because they should complete in seconds. A reviewer should
+   likewise run the cases that could disprove the change, not the entire
+   repository.
+2. **When the touched surfaces settle, run the fast repository profile.** It
+   runs every static, type, package, and validator phase plus the portable
+   non-browser Python tests, distributed by file across four workers. It omits
+   coverage and the small `qualification` stress slice so routine integration
+   feedback is not dominated by instrumentation or deliberately deep boundary
+   proofs.
+3. **At an integration boundary, one owner runs the full profile.** An
+   integration boundary is when a substantial piece of work is settled and
+   ready for handoff, a pull request, or release. In a shared worktree, the
+   primary integration owner waits for other edits to finish and runs the full
+   coverage profile once. Subagents and reviewers report their focused checks;
+   they do not each repeat the full gate. If files change after that run, the
+   integration owner decides which evidence must be refreshed.
+
+Browser E2E is a separate fourth lane because it requires Playwright and a
+browser binary. The repository profiles always pass `-m "not e2e"`, so their
+behavior does not change merely because someone installed the optional E2E
+group. Use the dedicated four-worker command in
+[Browser end-to-end tests](#browser-end-to-end-tests), and let its Chromium and
+cross-browser CI jobs provide the final browser evidence.
+
+This ownership rule avoids concurrent full gates by practice rather than by a
+workspace lock. A full result belongs to the source generation it checked; it
+is not evidence for edits made while or after it ran.
+
+#### Writing tests that stay fast
+
+Test fidelity comes first, but setup cost should match the boundary under test:
+
+- Reuse immutable, module-scoped applications, registries, catalogs, and
+  library installations when a test is checking many inputs against the same
+  configuration. Create a fresh instance when isolation, registration,
+  lifecycle, cache invalidation, or failure cleanup is the behavior under test.
+- Batch homogeneous render cases through one small test component instead of
+  defining and registering a new component class for every row. Keep each row
+  separately identified so failures remain local.
+- Test source mapping and response joining with fake analyzer responses. Keep a
+  smaller acceptance matrix against the real `ty` subprocess for transport,
+  protocol, environment, and lifecycle boundaries. Cache immutable executable
+  validation within one server process; never share analyzer state across
+  unrelated temporary workspaces.
+- Inject short shutdown/request bounds into lifecycle tests. Production timeout
+  values are user-safety policy, not a duration that every unit test must sleep
+  through.
+- In Playwright, wait for the state that proves success. For debounce,
+  throttle, polling, and timer behavior, use Playwright's clock rather than
+  sleeping through wall time. A fixed sleep is appropriate only when elapsed
+  real time is itself the contract.
+- Mark an unusually expensive stress or depth proof with `qualification` only
+  when a cheaper test already covers the ordinary behavior. The fast profile
+  omits that marker. The full profile runs it in a separate two-worker phase
+  without coverage instrumentation, and the Python version matrix retains it.
+
+When a file becomes a load-balancing outlier under `--dist loadfile`, first
+remove avoidable waits and repeated setup. Split the file only when it still
+contains independent fixture groups large enough to schedule separately.
 
 #### Running the checks
 
 ```bash
-# The full gate: lock validation, cargo fmt/clippy/test, ruff check/format,
-# mypy, pyright, the citry-client, docs-playground, and VS Code extension
-# package checks, pytest, and the custom validators. Runs every phase, then
-# reports all results in one pass.
-python scripts/check.py
+# Routine integration: all repository phases and non-browser tests, without
+# coverage. This is the profile agents normally run after focused checks.
+python scripts/check.py --profile fast
 
-# Machine-readable: one JSON object with per-phase status (and the tail of any
-# failing phase's output). Handy for tools and AI agents.
-python scripts/check.py --reporter agent
+# Final integration: the same non-browser phases with the coverage threshold.
+# With no --profile argument, `full` remains the backward-compatible default.
+python scripts/check.py --profile full
+
+# Machine-readable: progress and 30-second heartbeats go to stderr; stdout ends
+# with one JSON object containing the profile, phase status and duration, and
+# the tail of any failing phase's output.
+python scripts/check.py --profile fast --reporter agent
 
 # Run only the custom validators (fast; no compiling or tests).
 python scripts/validate.py
@@ -271,7 +392,20 @@ python scripts/validate.py
 `check.py` only checks; it never edits files. It assumes the workspace is set
 up (`uv sync --all-packages`, plus `pnpm install` for the pinned Node tools)
 and that `cargo`, `uv`, `node`, `pnpm`, and the Rust toolchain are on PATH. The
-`pyright` phase runs the pinned pyright from `node_modules` alongside mypy.
+human and JSON reports include each phase's elapsed time and the total. In
+agent mode, phase starts, finishes, and a heartbeat every 30 seconds go to
+stderr while stdout remains a single parseable JSON result. Both profiles run
+the non-browser pytest suite with `-n 4 --dist loadfile --durations 30`. The
+main pytest phase selects `not e2e and not qualification`; the full profile
+enables pytest-cov there, enforces the repository threshold, and then runs the
+`qualification and not e2e` stress slice separately without coverage.
+Coverage measures shipped runtime modules. It omits tests, repository-only
+qualification helpers, subprocess adapters whose execution belongs to child
+processes, and Citry UI's public demo `snippets/`, which are excluded from the
+wheel and verified through the docs and UI scenario suites. The threshold is a
+ratchet immediately below the current measured runtime coverage; raise it as
+focused tests recover headroom.
+The `pyright` phase runs the pinned pyright from `node_modules` alongside mypy.
 The package-local Node phases run `pnpm run check` for `citry-client`, the docs
 playground, and the VS Code language extension. One root `pnpm install` covers
 all of them, the same way `uv sync` installs the Python tools.
@@ -300,7 +434,12 @@ The runner prints `PASS`/`FAIL` per validator and exits non-zero if any returns 
 
 #### CI integration
 
-The gate runs in CI via the [`repo--check.yml`](../.github/workflows/repo--check.yml) workflow, which builds the workspace and runs `python scripts/check.py` on every change (no path filters). The per-language matrix workflows ([`rust--tests.yml`](../.github/workflows/rust--tests.yml), [`py--tests.yml`](../.github/workflows/py--tests.yml)) add cross-version and cross-OS test breadth on top of that single-environment gate.
+The gate runs in CI via the [`repo--check.yml`](../.github/workflows/repo--check.yml)
+workflow, which builds the workspace and explicitly runs
+`python scripts/check.py --profile full` on every change (no path filters).
+The per-language matrix workflows ([`rust--tests.yml`](../.github/workflows/rust--tests.yml),
+[`py--tests.yml`](../.github/workflows/py--tests.yml)) add cross-version,
+cross-OS, and dedicated browser breadth on top of that single-environment gate.
 
 ### Protocol packages and shipped copies
 
@@ -776,7 +915,7 @@ only be uploaded through the web interface; there is no API for either.
 
 The top-level `Cargo.toml` defines a workspace that includes:
 
-- Core crates (`citry_core_py`, `citry_html_transform`,
+- Core crates (`citry_core_py`, `citry_html_transform`, `citry_i18n`,
   `citry_template_formatter`, `python_safe_eval`, `citry_template_parser`)
 - Shared dependencies and toolchain configuration
 - Unified linting, formatting, and testing
@@ -992,7 +1131,7 @@ can ship on its own cadence. The ordering rule applies when `citry` and
 new must likewise wait for that Citry release to reach PyPI. `pygments-citry`
 has no cross-package release ordering requirement.
 
-**`citry` pins one exact `citry-core` version** (`citry-core==1.4.0`, not a
+**`citry` pins one exact `citry-core` version** (`citry-core==1.5.0`, not a
 range). The runtime node classes in `citry.nodes` read the source that
 citry-core's compiler emits, so a citry-core release that changes that output
 would otherwise reach an already-published `citry` that cannot read it. Raise
@@ -1151,22 +1290,25 @@ The repository uses **three separate test workflows** to optimize CI performance
 
 #### 1. `repo--check.yml` - The full gate
 
-**Purpose**: Runs the whole check suite (`python scripts/check.py`) on all changes: formatting, lints, types, the custom validators, and a single-environment test pass.
+**Purpose**: Runs the full non-browser check profile
+(`python scripts/check.py --profile full`) on all changes: formatting, lints,
+types, coverage, the custom validators, and a single-environment test pass.
 
 **Triggers**: Runs on all pushes and pull requests (no path filters).
 
 **What it runs**:
 
-- `python scripts/check.py`: lock validation, cargo fmt/clippy/test, Ruff,
+- `python scripts/check.py --profile full`: lock validation, cargo
+  fmt/clippy/test, Ruff,
   mypy, Pyright, the client/docs-playground/VS Code package checks, pytest, and
   the custom validators, every phase followed by a combined report
 - The single source of truth for "does everything pass"
 
 **Configuration**:
 
-- Python 3.13 on ubuntu-latest, with the Rust nightly toolchain and Node 22
+- Python 3.14 on ubuntu-latest, with the Rust nightly toolchain and Node 22
 - `uv sync --locked --all-packages` and `pnpm install --frozen-lockfile` to
-  build both workspaces, then `python scripts/check.py`
+  build both workspaces, then `python scripts/check.py --profile full`
 
 #### 2. `rust--tests.yml` - Rust Tests
 
@@ -1207,7 +1349,9 @@ The repository uses **three separate test workflows** to optimize CI performance
 **What it tests**:
 
 - Installs the whole workspace with `uv sync --locked --all-packages`, which builds the `citry_core` extension through maturin and installs `citry` editable, so both packages' suites run (`citry` did not run in CI before the uv workspace)
-- Runs Python tests via `uv run --no-sync pytest`
+- Runs the portable Python tests via
+  `uv run --no-sync pytest -m "not e2e" -n 4 --dist loadfile --durations 30`;
+  four file-level workers share one GitHub runner
 
 **Configuration**:
 
@@ -1221,8 +1365,12 @@ The repository uses **three separate test workflows** to optimize CI performance
 ### Testing
 
 - **Rust tests**: Run via `rust--tests.yml` workflow using `cargo test`
-- **Python tests**: Run via `py--tests.yml` workflow, which installs the uv workspace (`uv sync --locked --all-packages`) and runs `uv run --no-sync pytest`
-- **The full gate**: Run via `repo--check.yml`, which runs `python scripts/check.py` (lint, types, validators, single-env tests)
+- **Python tests**: Run via `py--tests.yml`, which installs the uv workspace
+  (`uv sync --locked --all-packages`) and distributes the non-browser suite by
+  file across four workers on each matrix runner
+- **The full non-browser gate**: Run via `repo--check.yml`, which runs
+  `python scripts/check.py --profile full` (lint, types, coverage, validators,
+  and single-environment portable tests)
 - **Dependencies**: Installed from the uv workspace lockfile; `--locked` keeps CI reproducible
 - **Matrix testing**: Python tests run across Python versions (3.10-3.14) and OSes
 

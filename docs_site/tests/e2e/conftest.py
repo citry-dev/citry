@@ -16,6 +16,7 @@ Playwright is not installed (the default dev env).
 from __future__ import annotations
 
 import functools
+import json
 import os
 import secrets
 import shutil
@@ -109,7 +110,11 @@ title: TOC history fixture
 
     handler = functools.partial(_QuietHandler, directory=str(site))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=server.serve_forever,
+        kwargs={"poll_interval": 0.01},
+        daemon=True,
+    ).start()
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}"
     finally:
@@ -123,7 +128,11 @@ def workspace_static_url() -> Iterator[str]:
     workspace = Path(__file__).resolve().parents[3]
     handler = functools.partial(_QuietHandler, directory=str(workspace))
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(
+        target=server.serve_forever,
+        kwargs={"poll_interval": 0.01},
+        daemon=True,
+    ).start()
     try:
         yield f"http://127.0.0.1:{server.server_address[1]}"
     finally:
@@ -169,6 +178,27 @@ def local_docs_site_url() -> Iterator[str]:
     else:
         process.terminate()
         pytest.fail("Local docs server did not start within 30 seconds")
+
+    # The server falls back to the committed runtime when the workspace Citry UI
+    # does not fit the pinned Citry, and these tests exist to exercise the local
+    # wheel, so say why they cannot run instead of testing the wrong runtime.
+    ui_version = None
+    try:
+        with urllib.request.urlopen(f"{url}/static/playground/runtime.json", timeout=5) as response:  # noqa: S310
+            runtime = json.loads(response.read())
+        # Only a locally built runtime carries ui_version, so it is the one field
+        # that separates the workspace wheel from the committed pins.
+        if isinstance(runtime, dict) and isinstance(runtime.get("citry"), dict):
+            ui_version = runtime["citry"].get("ui_version")
+    except (OSError, ValueError) as error:
+        process.terminate()
+        pytest.fail(f"Local docs server did not serve a playground runtime: {error}")
+    if not ui_version:
+        process.terminate()
+        pytest.fail(
+            "Local docs server is serving the committed playground runtime without the workspace "
+            "Citry UI wheel. Its startup output reports why the local wheel was rejected."
+        )
 
     try:
         yield url

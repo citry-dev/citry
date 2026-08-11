@@ -1,3 +1,5 @@
+import { FORMAT_CANCELLED, FORMAT_STALE_DOCUMENT } from "./diagnosticCatalog.js";
+
 export type EmbeddedFormattingLanguage = "javascript" | "css";
 
 export type EmbeddedFormattingRegionKind = "script-body" | "style-body" | "component-js" | "component-css";
@@ -113,7 +115,7 @@ export function embeddedFormattingDocumentIdentity(
 /** Raised when an editor document changes during an embedded provider round trip. */
 export class EmbeddedFormattingStaleError extends Error {
 	constructor() {
-		super("citry.format.stale-document: the document changed during embedded formatting");
+		super(`${FORMAT_STALE_DOCUMENT}: the document changed during embedded formatting`);
 		this.name = "EmbeddedFormattingStaleError";
 	}
 }
@@ -121,7 +123,7 @@ export class EmbeddedFormattingStaleError extends Error {
 /** Raised when the originating language-server request is cancelled. */
 export class EmbeddedFormattingCancelledError extends Error {
 	constructor() {
-		super("citry.format.cancelled: embedded formatting was cancelled");
+		super(`${FORMAT_CANCELLED}: embedded formatting was cancelled`);
 		this.name = "EmbeddedFormattingCancelledError";
 	}
 }

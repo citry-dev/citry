@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://citry.dev/protocol/diagnostics/v1/catalog.schema.json",
+  "title": "Citry diagnostic catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "documentationBaseUrl", "externalCodePrefixes", "diagnostics"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "documentationBaseUrl": { "type": "string", "format": "uri" },
+    "externalCodePrefixes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["prefix", "provider", "summary"],
+        "properties": {
+          "prefix": { "type": "string", "pattern": "^citry\\.[a-z0-9.-]+\\.$" },
+          "provider": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "constant",
+          "title",
+          "summary",
+          "when",
+          "defaultSeverity",
+          "surfaces",
+          "parameters",
+          "messages",
+          "documentationPath"
+        ],
+        "properties": {
+          "code": { "type": "string", "pattern": "^citry\\.[a-z0-9.-]+$" },
+          "constant": {
+            "type": "string",
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "description": "Generator-only name for the Python, Rust, and TypeScript constant that holds this code."
+          },
+          "title": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string", "minLength": 1 },
+          "when": { "type": "string", "minLength": 1 },
+          "defaultSeverity": {
+            "enum": ["error", "warning", "information"]
+          },
+          "configurableSeverity": { "type": "boolean" },
+          "surfaces": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": ["parser", "formatter", "check", "lsp", "vscode"]
+            }
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": { "type": "string", "minLength": 1 }
+          },
+          "messages": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": { "type": "string", "minLength": 1 }
+          },
+          "examples": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["title", "language", "source"],
+              "properties": {
+                "title": { "type": "string", "minLength": 1 },
+                "language": { "type": "string", "minLength": 1 },
+                "source": { "type": "string", "minLength": 1 },
+                "description": { "type": "string", "minLength": 1 }
+              }
+            }
+          },
+          "documentationPath": {
+            "type": "string",
+            "pattern": "^/ide/diagnostics/#citry\\.[a-z0-9.-]+$"
+          }
+        }
+      }
+    }
+  }
+}

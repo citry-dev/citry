@@ -47,17 +47,39 @@ handler, one component holds all of it. No second application, no separate build
 </div>
 </section>
 
+<!-- TODO: Social-proof - companies/orgs/projects
+           that use Citry.
+           Also mention Sponsors
+-->
+
+<!-- TODO: Overview video how it all works (incl VSCode, UI Lib, etc)
+-->
+
 <section class="landing-section" id="proof" markdown="1">
-## One file holds the whole component end-to-end.
+## One file holds the entire component end-to-end.
 
 <p class="landing-section__intro">
-Inputs, slots, server state, Python handlers, markup, browser behavior, and
-styles live together. No context switching.
+Inputs, slots, markup, server events and state, browser behavior, and
+styles, all live together. No context switching.
 </p>
 
-Point at any marked line below to see what it does:
-
 <c-landing-tour />
+</section>
+
+<section class="landing-section landing-section--band" id="integrated" markdown="1">
+## Use with any web server <br/>or standalone.
+
+<p class="landing-section__intro">
+Citry's server-side events need a route on your application.
+Two lines of code and you're all set. If you don't need events,
+you can use Citry without a server.
+</p>
+
+See the [web framework integrations](/web-frameworks/) and
+[server events](/events/).
+
+<c-landing-hosts />
+
 </section>
 
 <section class="landing-section" id="reliability" markdown="1">
@@ -69,13 +91,19 @@ If a mistake stops being reported, or the report loses its detail, this page
 fails to build. -->
 
 <p class="landing-section__intro">
-Explicit component inputs and isolated contexts turn silent UI
-failures into loud ERRORS.
+Citry was born out of frustration with Django's silent coerctions and leaky
+isolations.
 </p>
 
 <p class="landing-section__intro">
-Iterate faster than ever before. Errors give critical context to your AI coding agents.
+In Citry, what you see (in your component) is what you get:
 </p>
+
+<ul class="landing-section__intro" style="margin: 1.4rem 0;">
+  <li>Variables NEVER leak to other components.</li>
+  <li>Data passing is ALWAYS explicit contracts.</li>
+  <li>Missing values are ALWAYS error in Citry.</li>
+</ul>
 
 Read about [inputs and validation](/concepts/inputs-and-validation/),
 [error boundaries](/concepts/error-boundaries/), and
@@ -85,55 +113,33 @@ Read about [inputs and validation](/concepts/inputs-and-validation/),
 
 </section>
 
-<section class="landing-section landing-section--band" id="integrated" markdown="1">
-## Use with any web server.
+<section class="landing-section landing-section--band" id="editor" markdown="1">
+## Your editor understands the whole component.
 
 <p class="landing-section__intro">
-Citry serves its own component assets, fragments, and events, so it needs a
-route on your application. Your routes, database, authentication, and deployment do not move.
+Citry's VSCode extension connects all parts of the component. Surface errors or trace values across the file. Add completions, diagnostics, and hover hints.
 </p>
 
-<p class="landing-section__intro">
-Two lines of code and you're all set. 
-</p>
+Install the [VS Code extension](/ide/vscode/).
 
-See the [web framework integrations](/web-frameworks/) and
-[server events](/events/).
-
-<c-landing-hosts />
+<c-landing-editor-demo />
 
 </section>
 
 <section class="landing-section" id="capabilities" markdown="1">
-## Start small. Keep the same model as the interface grows.
+## A component library for real interfaces.
 
 <p class="landing-section__intro">
-One component can be a button, a dashboard region, or the page around them.
-The primitives compose without forcing every project into a new application
-architecture.
+Citry UI gives you accessible, themeable components for layout, forms, actions,
+navigation, feedback, and data display. Browse the collection below, then drag
+a few onto the sample page to see how naturally they fit together.
 </p>
-
-<ul class="landing-capabilities">
-  <li>
-    <strong>Compose</strong>
-    <span>Checked inputs, slots, provide and inject, and dynamic components.</span>
-  </li>
-  <li>
-    <strong>Interact</strong>
-    <span>Scoped Alpine behavior, state, forms, events, and loading states.</span>
-  </li>
-  <li>
-    <strong>Deliver</strong>
-    <span>Assets, caching, HTML fragments, host adapters, and extensions.</span>
-  </li>
-  <li>
-    <strong>Verify</strong>
-    <span>Plain Python tests, executable examples, loud failures, and tracing.</span>
-  </li>
-</ul>
 
 Explore the [component concepts](/concepts/components/),
 [interactive examples](/examples/), and [advanced guides](/advanced/testing/).
+
+<c-landing-composer />
+
 </section>
 
 <section class="landing-section" id="depth" markdown="1">
@@ -166,13 +172,10 @@ Read about [caching](/advanced/caching/),
 </div>
 
 <div markdown="1">
-Citry grows from
-[django-components](https://github.com/django-components/django-components)
-and the work of its contributors. The project is young, the decisions are open,
-and useful questions are contributions too.
+Citry is the successor to
+[django-components](https://github.com/django-components/django-components) (1.5k stars), distilling years of experience into an elegant and powerful framework.
 
-The people below have merged work into Citry or django-components. Recognition
-follows the whole history of both projects, not a launch-day count.
+This project would be nothing without its community. The people below have contributes into Citry or django-components:
 
 <c-people group="contributors" avatars />
 
@@ -195,33 +198,6 @@ on this layer and you want it moving faster.
   <a href="/community/contributing/">Help improve Citry</a>
   <a href="/blog/">Read the build notes</a>
 </div>
-</div>
-</div>
-</section>
-
-<section class="landing-section landing-section--plain" id="trust" markdown="1">
-## Open source, inspectable, and honest about its stage.
-
-<div class="landing-trust-grid" markdown="1">
-<div class="landing-trust-card" markdown="1">
-### What is available now
-
-- free and open source under the MIT license;
-- CPython 3.10 through 3.14;
-- FastAPI, Starlette, Flask, Django, ASGI, and WSGI adapters;
-- server rendering, scoped browser behavior, events, forms, and fragments; and
-- source, tests, examples, and benchmark method in the public repository.
-</div>
-
-<div class="landing-trust-card" markdown="1">
-### What we will not pretend
-
-Citry is a pre-1.0 project. APIs can still change, the community is still
-forming, and the future IDE linter is not shipped yet. Use the compatibility,
-security, and release notes to make a decision with the current facts.
-
-[Compatibility](/about/compatibility/) · [Security](/security/) ·
-[Benchmarks](/about/benchmarks/) · [Source]({{ repo_url }})
 </div>
 </div>
 </section>

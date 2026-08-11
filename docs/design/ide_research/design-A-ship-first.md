@@ -51,8 +51,6 @@ Mechanism 1:
   the extension layer; issues [#22](https://github.com/citry-dev/citry/issues/22)
   formatter, [#23](https://github.com/citry-dev/citry/issues/23) LSP/linter,
   [#24](https://github.com/citry-dev/citry/issues/24) syntax highlighting).
-- **Status**: `TODO/project_status_june_2026.md:527-537` (section 9.4 files the
-  formatter and LSP as longer-term, with variable tracking already in the AST).
 - **Existing assets, read from source**: the Pygments package
   `packages/py/pygments_citry/` (two lexers: `citry` for full component files,
   `citry-html` for templates alone; the embedded-region detection in
@@ -473,7 +471,7 @@ Repo sources are cited inline as `file:line`; the load-bearing ones:
 `crates/citry_template_parser/src/{parser_context.rs,ast.rs,parser.rs}`,
 `crates/citry_core_py/src/template_parser.rs`, `README.md`,
 `docs/design/source_languages.md`, `docs/design/extensions_roadmap.md`,
-`TODO/project_status_june_2026.md`, and GitHub issues
+and GitHub issues
 [#22](https://github.com/citry-dev/citry/issues/22),
 [#23](https://github.com/citry-dev/citry/issues/23),
 [#24](https://github.com/citry-dev/citry/issues/24).

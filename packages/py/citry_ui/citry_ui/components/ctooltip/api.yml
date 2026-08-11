@@ -1,0 +1,127 @@
+schema_version: 1
+family: tooltip
+
+components:
+  - CTooltip
+
+inputs:
+  - id: ctooltip-server-inputs
+    component: CTooltip
+    channel: server
+    column_widths: [fit, 12rem, 7rem, auto]
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the Tooltip identity and activator description relationship.}
+      - {id: text, name: text, type: 'str | None', default: {kind: literal, value: null}, effect: 'Supplies concise plain text. Use either `text` or the default fill, never both.'}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets the server-visible initial state and uncontrolled fallback.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Suppresses visual opening without changing the activator itself.}
+      - {id: delay, name: delay, type: int, default: {kind: literal, value: 600}, effect: Sets the first fine-pointer hover delay in milliseconds from 0 through 60000. Focus remains immediate.}
+      - {id: close-delay, name: close_delay, type: int, default: {kind: literal, value: 100}, effect: Sets the pointer bridge delay in milliseconds from 0 through 60000.}
+      - id: placement
+        name: placement
+        type: {display: '"top-start" | "top" | "top-end" | "bottom-start" | "bottom" | "bottom-end"', interfaces: [CTooltipPlacement]}
+        default: {kind: literal, value: top}
+        effect: Sets the preferred logical placement. Collision fallback may choose another rendered side.
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds surface classes and merges them with `attrs`.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds surface inline styles and merges them with `attrs`; Citry retains anchor ownership.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds allowed native, Alpine, and data attributes to the Tooltip surface. Owned presence, semantics, focus, and relationships are rejected.'}
+
+  - id: ctooltip-client-inputs
+    component: CTooltip
+    channel: client
+    column_widths: [fit, 13rem, 12rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control and preserves the current committed state. `null` has the same effect., effect: Controls visual visibility while supplied as a Boolean. Disabled still dominates.}
+      - {id: text, name: text, type: string, omitted: Uses server `text`., effect: Replaces plain text in text mode. Supplying it to a slotted Tooltip is invalid.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls Tooltip-local availability.}
+      - {id: delay, name: delay, type: integer, omitted: Uses the server input., effect: Controls future first-hover delay from 0 through 60000 milliseconds.}
+      - {id: close-delay, name: closeDelay, type: integer, omitted: Uses the server input., effect: Controls the pointer bridge from 0 through 60000 milliseconds.}
+      - id: placement
+        name: placement
+        type: {display: '"top-start" | "top" | "top-end" | "bottom-start" | "bottom" | "bottom-end"', interfaces: [CTooltipPlacement]}
+        omitted: Uses the server input.
+        effect: Controls requested placement and `data-placement`.
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Does not notify a component callback., effect: "Receives hover, focus, dismissal, peer, press, and external-native visibility requests."}
+
+slots:
+  - id: ctooltip-slots
+    component: CTooltip
+    entries:
+      - id: activator
+        name: activator
+        required: true
+        data: {display: '{activator_attrs: dict[str, object], tooltip_id: str}', interfaces: [CTooltipActivatorSlotData]}
+        fallback: none
+      - id: default
+        name: default
+        required: false
+        data: {display: '{}', interfaces: [CTooltipDefaultSlotData]}
+        fallback: Escaped `text`. Required when `text` is omitted and forbidden when it is supplied.
+
+events:
+  - id: ctooltip-events
+    component: CTooltip
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(requestedOpen: boolean, detail: CTooltipOpenChangeDetail) => void', interfaces: [CTooltipOpenChangeDetail]}
+        trigger: Hover, focus, pointer departure, blur, Escape, trigger press, a peer Tooltip, or external native visibility requests another state.
+        detail: {display: '{reason: "hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal", controlled: boolean, forced: boolean, source: EventTarget | null}', interfaces: [CTooltipOpenChangeDetail]}
+        behavior: Uncontrolled requests commit before notification. Controlled requests wait for the owner. Owner commits do not notify.
+
+methods: []
+
+css:
+  - id: ctooltip-css-variables
+    component: CTooltip
+    entries:
+      - {id: cui-tooltip-background, name: --cui-tooltip-background, type: color, purpose: Surface background., default: Scheme-aware dark/light inverse surface.}
+      - {id: cui-tooltip-foreground, name: --cui-tooltip-foreground, type: color, purpose: Surface text., default: Scheme-aware inverse foreground.}
+      - {id: cui-tooltip-border-color, name: --cui-tooltip-border-color, type: color, purpose: Surface boundary., default: Subtle currentColor mix.}
+      - {id: cui-tooltip-border-width, name: --cui-tooltip-border-width, type: length, purpose: Boundary width., default: 1px}
+      - {id: cui-tooltip-radius, name: --cui-tooltip-radius, type: length, purpose: Surface corner radius., default: 0.375rem}
+      - {id: cui-tooltip-shadow, name: --cui-tooltip-shadow, type: shadow, purpose: Top-layer elevation., default: 0 0.5rem 1.25rem rgb(15 23 42 / 24%)}
+      - {id: cui-tooltip-max-inline-size, name: --cui-tooltip-max-inline-size, type: length, purpose: Maximum text width., default: 18rem}
+      - {id: cui-tooltip-padding-block, name: --cui-tooltip-padding-block, type: length, purpose: Block-axis content padding., default: 0.375rem}
+      - {id: cui-tooltip-padding-inline, name: --cui-tooltip-padding-inline, type: length, purpose: Inline-axis content padding., default: 0.625rem}
+      - {id: cui-tooltip-offset, name: --cui-tooltip-offset, type: length, purpose: Gap between activator and surface., default: 0.375rem}
+      - {id: cui-tooltip-duration, name: --cui-tooltip-duration, type: time, purpose: Entry and exit duration; reduced motion resolves to zero., default: 100ms}
+      - {id: cui-tooltip-easing, name: --cui-tooltip-easing, type: easing, purpose: Entry and exit easing., default: 'cubic-bezier(0.2, 0.8, 0.2, 1)'}
+
+attributes:
+  - id: ctooltip-attributes
+    component: CTooltip
+    entries:
+      - {id: popover, name: popover, element: Surface, type: '"manual"', meaning: Uses native top-layer presence while Citry owns timing and dismissal.}
+      - {id: role, name: role, element: Surface, type: '"tooltip"', meaning: Identifies the noninteractive description.}
+      - {id: data-open, name: data-open, element: Surface, type: present | absent, meaning: Mirrors logical visual visibility; absent during exit.}
+      - {id: data-placement, name: data-placement, element: Surface, type: {display: six placement strings, interfaces: [CTooltipPlacement]}, meaning: 'Mirrors requested placement, not the collision fallback result.'}
+      - {id: aria-describedby, name: aria-describedby, element: Activator, type: IDREF list, meaning: Includes the Tooltip ID without replacing existing description relationships.}
+
+selectors:
+  - id: ctooltip-selectors
+    component: CTooltip
+    entries:
+      - {id: data-citry-ui-part-tooltip, selector: '[data-citry-ui-part="tooltip"]', element: Surface, purpose: 'Semantic root, visual surface, and attrs destination.'}
+
+interfaces:
+  - id: input-type-aliases
+    kind: aliases
+    entries:
+      - {id: input-type-aliases-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: input-type-aliases-ctooltip-placement, name: CTooltipPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]'}
+  - id: ctooltip-activator-slot-data
+    kind: record
+    name: CTooltipActivatorSlotData
+    entries:
+      - {id: activator-attrs, name: activator_attrs, type: 'dict[str, object]', meaning: 'Owned trigger marker, CSS anchor, and `aria-describedby` relationship.'}
+      - {id: tooltip-id, name: tooltip_id, type: str, meaning: Tooltip ID for composing additional activator description IDREFs.}
+  - {id: ctooltip-default-slot-data, kind: record, name: CTooltipDefaultSlotData, entries: []}
+  - id: ctooltip-open-change-detail
+    kind: record
+    name: CTooltipOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: '"hover" | "focus" | "pointer-leave" | "blur" | "escape" | "press" | "peer" | "native" | "ancestor" | "modal"', meaning: Source of the requested visibility change.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client `open` Boolean currently owns state.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether structural or modal safety required the component to close regardless of controlled ownership.}
+      - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source associated with the request.}

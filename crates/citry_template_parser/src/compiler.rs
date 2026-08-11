@@ -93,11 +93,11 @@ use crate::constants::{
     is_dynamic_target_static_attr, is_html_void_element, COMPONENT_METADATA_ENTRY_KEY,
     COMPONENT_METADATA_ENTRY_MORPH, COMPONENT_METADATA_LOCUS_ELEMENT,
     COMPONENT_METADATA_LOCUS_RANGE, COMPONENT_NODE, CONTROL_FLOW_GROUPS, CONTROL_FLOW_TAGS,
-    C_COMPONENT_TAG, C_ELEMENT_TAG, C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG, C_FOR_TAG,
-    C_IF_TAG, C_RAW_TAG, C_SLOT_TAG, ELEMENT_ATTRS_NODE, ELEMENT_KEY_NODE, EXPR_ATTR_NODE,
-    EXPR_NODE, FILL_DATA_BINDING, FILL_NODE, FOR_NODE, IF_NODE, META_ATTR_IGNORE, META_ATTR_KEY,
-    MORPH_OUTPUT_ATTR, MORPH_OUTPUT_IGNORE_VALUE, SLOT_NODE, STATIC_ATTR_NODE, TAG_ATTR_RULES,
-    TEMPLATE_ATTR_NODE,
+    C_BIND_ATTR, C_COMPONENT_TAG, C_ELEMENT_TAG, C_ELIF_TAG, C_ELSE_TAG, C_EMPTY_TAG, C_FILL_TAG,
+    C_FOR_TAG, C_IF_TAG, C_RAW_TAG, C_SLOT_TAG, ELEMENT_ATTRS_NODE, ELEMENT_KEY_NODE,
+    EXPR_ATTR_NODE, EXPR_NODE, FILL_DATA_BINDING, FILL_NODE, FOR_NODE, IF_NODE, META_ATTR_IGNORE,
+    META_ATTR_KEY, MORPH_OUTPUT_ATTR, MORPH_OUTPUT_IGNORE_VALUE, SLOT_NODE, STATIC_ATTR_NODE,
+    TAG_ATTR_RULES, TEMPLATE_ATTR_NODE,
 };
 use crate::error::CompileError;
 use crate::lang::lang::{Lang, LangImpl, LangSpecArgument, LangSpecStruct};
@@ -684,7 +684,11 @@ fn find_static_is_rewrite_value(node: &Node) -> Option<String> {
     // A spread may also supply `is`, and attribute source order decides which
     // value wins. Keep every mixed form on the runtime path, where the spread
     // can be resolved before selecting the target.
-    if node.attrs().iter().any(|attr| attr.key.content == "c-bind") {
+    if node
+        .attrs()
+        .iter()
+        .any(|attr| attr.key.content == C_BIND_ATTR)
+    {
         return None;
     }
 

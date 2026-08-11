@@ -22,15 +22,17 @@ each entry to one paragraph and link to longer docs rather than copying them.
 |---|---|
 | Template parser: grammar, AST, parser, compiler, lang impls | [`crates/citry_template_parser/docs/agent/INDEX.md`](../../crates/citry_template_parser/docs/agent/INDEX.md) |
 | Template parser: quick pointers + gotchas | [`crates/citry_template_parser/AGENTS.md`](../../crates/citry_template_parser/AGENTS.md) |
+| IDE tooling: add an embedded component language or code block | [`docs/design/embedded_language_ide.md`](../design/embedded_language_ide.md) |
 | Template formatter: Rust core, Python rewrites, CLI, LSP, and editors | [`docs/design/template_formatter.md`](../design/template_formatter.md) |
 | PyO3 glue: what Python sees, module registration | [`crates/citry_core_py/AGENTS.md`](../../crates/citry_core_py/AGENTS.md) |
+| Internationalization runtime: checked Fluent catalogs | [`crates/citry_i18n/AGENTS.md`](../../crates/citry_i18n/AGENTS.md) |
 | Sandboxed Python expression transform | [`crates/python_safe_eval/AGENTS.md`](../../crates/python_safe_eval/AGENTS.md) |
 | HTML attribute transformer | [`crates/citry_html_transform/AGENTS.md`](../../crates/citry_html_transform/AGENTS.md) |
 | Python package surface (`citry_core` on PyPI) | [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md) |
 | Monorepo dev / build / release conventions | [`docs/codebase.md`](../codebase.md) |
 | Alpine, browser ownership graph, props, boundary handlers, slots, and morph lifecycle | [`docs/design/alpinejs.md`](../design/alpinejs.md) |
 | ComponentRange identity, physical placements, matching, and range-level morph policy | [`docs/design/component_ranges.md`](../design/component_ranges.md) |
-| Current status snapshot (dated) | [`docs/../TODO/project_status_june_2026.md`](../../TODO/project_status_june_2026.md) |
+| Internationalization: locale context, messages, formatting, direction, tooling, and Citry UI | [`docs/design/i18n.md`](../design/i18n.md) |
 
 ---
 
@@ -92,7 +94,10 @@ and wrapped by Python modules under
 These four must stay in sync (see CLAUDE.md Mechanism 4). The
 `template_parser` module is registered in `lib.rs` (`parse_template`,
 `compile_template`, and the AST classes), alongside `safe_eval` and
-`html_transform`.
+`html_transform`. The `i18n` submodule exposes ICU4X locale canonicalization
+and direction lookup plus the checked Fluent catalog runtime. The language-
+neutral message code lives in `citry_i18n`; `citry_core_py` only wraps it for
+Python.
 
 ---
 

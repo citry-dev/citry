@@ -359,8 +359,12 @@ dynamic attribute loses one `c-` prefix:
 The [template flags](#c-template-flags) `#c-key` and `#c-ignore` cannot arrive
 through `c-bind`. Write them on the tag instead.
 
-Structural built-in tags such as [`<c-if>`][c-if] and [`<c-for>`][c-for] do not accept an attribute spread. Put `c-bind` on
-the HTML element or component tag that should receive the values.
+Most structural built-in tags, including [`<c-if>`][c-if] and
+[`<c-for>`][c-for], do not accept an attribute spread. Put `c-bind` on the
+HTML element or component tag that should receive those values. `<c-slot>` and
+`<c-fill>` are the deliberate exceptions: they use a spread to choose a slot
+and bind its data. Their accepted keys are documented in
+[Spread slot and fill settings](/concepts/slots/#spread-slot-and-fill-settings).
 
 ### On HTML elements
 

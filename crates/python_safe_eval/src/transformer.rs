@@ -859,11 +859,11 @@ impl Transformer for SandboxTransformer {
                 self.handle_comprehension(&mut dict_comp.generators, |transformer, comp_vars| {
                     // Transform key and value with comprehension variables
                     // Comprehensions propagate walrus assignments
-                    transformer.visit_expr_with_locals(
-                        &mut dict_comp.key,
-                        comp_vars.clone(),
-                        HashSet::new(),
-                    );
+                    // Ruff represents unsupported dict-unpack comprehensions
+                    // without a key, so transform one only when parsing proved it.
+                    if let Some(key) = &mut dict_comp.key {
+                        transformer.visit_expr_with_locals(key, comp_vars.clone(), HashSet::new());
+                    }
                     transformer.visit_expr_with_locals(
                         &mut dict_comp.value,
                         comp_vars,

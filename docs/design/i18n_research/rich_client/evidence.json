@@ -1,0 +1,97 @@
+{
+  "artifacts": {
+    "browser_bundle": "9d62b9d77a605d7bac4ac34c1d7e1279677235963b21949c72a91cf03781b3ba",
+    "browser_runner": "810532560c540b7bb673f533fd551695b462aafc2b3a5e4d54c8d00cc83f3ca0",
+    "fixture_ar": "5ab50881242aa830dff9138e30a995a845fb8d1812639107c1b22ae7df21179f",
+    "fixture_en_us": "a8a1674c68716ea12980e9ccc70f6cc4a58c7ee760a875652c59eda815fc5a4e",
+    "fixture_missing_slot": "51e2e29e2c8ea3bf0dd4be9db9ddc268e948d7a0a6cd3cd00375718b324625e7",
+    "harness": "db23435f04da470fb659e6150f53d2f23ada054a5d6dfd6878a22121c3ccd7c9",
+    "shared_browser_lock": "680bf1fe2f0bb85b1384f34325c33bbb0355690631308631ed241827080966ad",
+    "shared_browser_manifest": "ad18a66f0e30586accee964caf954d525d72b1456458d6d8f8ed97e488378c84",
+    "uv_lock": "63f3934cbad55ed0f8d4f9e57beea45f995f4dd62f195ff98481365945941ede"
+  },
+  "bounded_limits": [
+    "the probe uses a production-shaped range reconciler, not Citry's current ownership runtime",
+    "the probe starts from compiled FTL that already contains SLOT; authored-source compilation was proved separately",
+    "cross-language rich fallback is rejected rather than rendered with a metadata-bearing rich wrapper",
+    "the timing gate uses a tiny two-locale fixture and is not the full catalog performance benchmark"
+  ],
+  "browser_results_equal": true,
+  "browser_versions": {
+    "chromium": "151.0.7922.34",
+    "firefox": "153.0",
+    "webkit": "26.5"
+  },
+  "dependencies": {
+    "esbuild": "0.28.1",
+    "fluent_bundle": "0.19.1",
+    "greenlet": "3.5.3",
+    "playwright": "1.62.0",
+    "pnpm": "10.32.1",
+    "pyee": "13.0.1",
+    "uv": "uv 0.12.0 (Homebrew 2026-07-28 aarch64-apple-darwin)"
+  },
+  "environment": {
+    "machine": "arm64",
+    "node": "v26.5.0",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12",
+    "python_executable_name": "python3",
+    "python_implementation": "CPython"
+  },
+  "result": "PASS_BOUNDED",
+  "semantic_result": {
+    "counts": {
+      "arabic_terms": 3,
+      "english_terms": 2
+    },
+    "gates": {
+      "application_language_on_slot_survived": true,
+      "catalog_markup_stayed_text": true,
+      "cleanup_ran_once_per_created_instance": true,
+      "collision_retry_worked": true,
+      "commit_event_saw_complete_state": true,
+      "existing_occurrences_kept_dom_identity": true,
+      "focus_and_selection_survived_move": true,
+      "focus_was_rehomed_when_occurrence_disappeared": true,
+      "inherited_slot_followed_provider": true,
+      "marker_per_fill_was_distinct": true,
+      "markers_changed_per_resolution": true,
+      "markers_never_reached_dom": true,
+      "missing_slot_failed_before_commit": true,
+      "moved_slot_kept_application_state": true,
+      "mutation_observer_saw_complete_commit": true,
+      "new_occurrence_got_new_instance": true,
+      "repeated_slots_became_distinct_instances": true,
+      "rootless_multi_node_slot_was_supported": true,
+      "translated_text_used_no_private_wrapper": true,
+      "wrapper_carried_active_language_and_direction": true,
+      "wrapperless_cross_language_fallback_rejected": true
+    },
+    "orders": {
+      "arabic": [
+        "rich:help_link:0",
+        "rich:terms_link:0",
+        "rich:terms_link:1",
+        "rich:terms_link:2"
+      ],
+      "english": [
+        "rich:terms_link:0",
+        "rich:terms_link:1",
+        "rich:help_link:0"
+      ]
+    },
+    "performance": {
+      "commit_p95_under_50_ms": true
+    },
+    "rejection_codes": [
+      "I18N_RICH_LANGUAGE_MISMATCH",
+      "I18N_SLOT_MISSING"
+    ]
+  },
+  "tested_browsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ]
+}

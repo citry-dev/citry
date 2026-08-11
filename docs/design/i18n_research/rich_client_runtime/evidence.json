@@ -1,0 +1,126 @@
+{
+  "artifacts": {
+    "browser_probe": "a7a9e5ac0d633eed9ab779a4de1594311297de1b6df13a3f6d54ca9560bc8d45",
+    "client_runtime": "a722144962d6edd937fd58b97641be2ebee47566c42bba69139392e398992219",
+    "events_runtime_source": "eb46df4d5dfd8c6fb43dd1ab467dc0ff248b7aadef65da38409682a51c5aeaa7",
+    "harness": "37b537b30bf1ecf0dc1a7948c59a893bcc2640df76a892a57622fdcd615e3a3c",
+    "native_clone_test": "195d4f1c0842078ad8a82d15ee06fcdc71791597a3a0d2476788f59f25e45417",
+    "slot_scope_tests": "6ca226a420d0bb3e9eaa95fe5b7d4b750799427d232cbaf33c69229e7e3caf69",
+    "uv_lock": "63f3934cbad55ed0f8d4f9e57beea45f995f4dd62f195ff98481365945941ede"
+  },
+  "bounded_limits": [
+    "the server-backed count change uses an Events fragment rather than a catalog-only browser switch",
+    "the client-only path calls current private graph records because no checked relocation API exists",
+    "the client-only path can move only occurrences that the server already rendered",
+    "the direct keyed Slot path cannot see the caller's Alpine scope",
+    "the normal slot-forwarding path renders caller scope but the ownership manifest rejects it",
+    "the server-backed path recreates surviving supplied content and fails the rich-switch lifecycle contract",
+    "provider inheritance, stale generations, chunk loading, and cache variation are separate Phase 0 work"
+  ],
+  "browser_results_equal": true,
+  "browser_versions": {
+    "chromium": "151.0.7922.34",
+    "firefox": "153.0",
+    "webkit": "26.5"
+  },
+  "current_runtime_can_move_only_existing_keyed_occurrences_without_lifecycle_loss": true,
+  "current_runtime_cannot_combine_keyed_occurrences_with_caller_slot_scope": true,
+  "dependencies": {
+    "playwright": "1.62.0",
+    "pytest_playwright": "0.8.0"
+  },
+  "environment": {
+    "machine": "arm64",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12"
+  },
+  "native_component_clone_rejected_in_all_browsers": true,
+  "normal_supplied_slot_and_teleport_baselines_passed": true,
+  "result": "PASS_BOUNDED",
+  "semantic_result": {
+    "client_only": {
+      "gates": {
+        "all_ranges_remained_live": true,
+        "client_only_failure_was_atomic": true,
+        "dom_identity_survived": true,
+        "focus_and_selection_survived": true,
+        "logical_identity_survived": true,
+        "mutation_observer_saw_complete_context": true,
+        "no_component_cleanup_ran": true,
+        "one_graph_revision_remained": true,
+        "retained_state_survived": true,
+        "slot_region_records_survived": true,
+        "teleport_dom_and_state_survived": true
+      },
+      "integration_findings": {
+        "repeated_slot_source_projection_missing": true
+      },
+      "ownership_surface": {
+        "has_browser_slot_instantiation": false,
+        "has_range_relocation": false
+      }
+    },
+    "forwarded_slot_failure": {
+      "manifest_rejected": true,
+      "owner_text_rendered_before_rejection": true,
+      "pointed_owner_mismatch": true
+    },
+    "server_backed": {
+      "final_observations": {
+        "added_occurrence_cleaned_once": false,
+        "existing_ranges_survived_round_trip": true,
+        "focus_did_not_remain_on_removed_dom": true,
+        "generic_runtime_did_not_choose_provider_focus": true,
+        "provider_returned_to_english": true,
+        "revisions_pruned": false,
+        "surviving_state_remained": false
+      },
+      "growth_observations": {
+        "added_occurrence_initialized": true,
+        "existing_component_ranges_kept_logical_identity": true,
+        "existing_inputs_kept_dom_identity": false,
+        "focus_and_selection_survived": false,
+        "input_state_survived": true,
+        "provider_switched": true,
+        "retained_inner_ranges_were_not_recreated": false,
+        "slot_region_records_grew_with_occurrence": true,
+        "teleport_dom_identity_survived": false,
+        "teleport_kept_local_state": false,
+        "teleport_kept_native_placement": true
+      },
+      "integration_findings": {
+        "repeated_slot_source_projection_missing": true
+      },
+      "lifecycle_counts": {
+        "cleanups": [
+          "rich:terms_link:0",
+          "rich:terms_link:1",
+          "rich:terms_link:0",
+          "rich:terms_link:1",
+          "rich:terms_link:2"
+        ],
+        "inits": [
+          "rich:terms_link:0",
+          "rich:terms_link:1",
+          "rich:terms_link:0",
+          "rich:terms_link:1",
+          "rich:terms_link:2",
+          "rich:terms_link:0",
+          "rich:terms_link:1"
+        ],
+        "revision_count_after_return": 2
+      },
+      "occurrence_counts": {
+        "after_growth": 4,
+        "after_return": 3,
+        "initial": 3
+      }
+    }
+  },
+  "server_fragment_count_change_recreated_surviving_slot_content": true,
+  "tested_browsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ]
+}

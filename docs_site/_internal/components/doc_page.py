@@ -1294,6 +1294,9 @@ class DocPage(Component):
           <c-if cond="has_interactive_live_code">
             <script type="module" src="/static/playground/live_code.js"></script>
           </c-if>
+          <c-if cond="is_landing">
+            <script type="module" src="/static/playground/landing_composer.js"></script>
+          </c-if>
         </body>
       </html>
     """

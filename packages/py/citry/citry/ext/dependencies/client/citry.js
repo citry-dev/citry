@@ -5,13 +5,14 @@
  * strategy (or, once a web integration is mounted, serves it at a URL). It
  * has three jobs:
  *
- * 1. Run components' per-instance JS. A component's JS registers a callback
- *    with `$component(...)` (expanded server-side to
- *    `Citry.manager.registerComponent("<classId>", ...)`); the page carries
- *    a JSON manifest naming which instances to call with which data; the
- *    manager matches the two and calls the callback with the instance's
- *    elements (the ones carrying its `data-cid-<id>` marker) and its
- *    `js_data()` result. A callback may return a cleanup function; the
+ * 1. Seed component-local Alpine scopes and run optional per-instance JS. A
+ *    component's JS registers a callback with `$component(...)` (expanded
+ *    server-side to `Citry.manager.registerComponent("<classId>", ...)`),
+ *    while canonical `js_data()` JSON is content-deduplicated by hash. The
+ *    page manifest names each instance and whether it needs seed-only or
+ *    seed-then-init behavior. Every call parses a fresh data graph, seeds the
+ *    scope, and then invokes the callback when present. A callback may return
+ *    a cleanup function; the
  *    manager runs it before the callback fires again for the same instance
  *    through a correlated update or an explicit graph-independent call.
  *    Instead of a bare callback, `$component` also accepts a config object
@@ -87,7 +88,9 @@
   var loadingCss = new Map();
   // classId -> the class's single $component registration.
   var componentRegistrations = new Map();
-  // "classId:varsHash" -> the registered js_data() payload.
+  // "classId:varsHash" -> validated canonical JSON source (or its validation
+  // error). Calls parse the source anew, so content dedupe never shares one
+  // mutable object graph between component instances.
   var componentData = new Map();
   // "classId:varsHash" -> active call/instance owners. Data scripts are
   // content-addressed and shared. Ownership references are released after
@@ -1924,9 +1927,13 @@
     var state = ownershipStates.get(match.fromRevision);
     if (!state) return null;
     return physicalRangesForKey(state, match.fromKey).find(function (physical) {
+      // An enclosing portable holder temporarily detaches the whole subtree.
+      // Nested cap pairs remain operational inside their own physical parent;
+      // requiring that parent to equal the outer pair's immediate parent
+      // incorrectly drops ranges routed through transparent supplied slots.
       var operationallyLive =
-        physical.start.parentNode === outer.start.parentNode &&
-        physical.end.parentNode === outer.end.parentNode &&
+        physical.start.parentNode !== null &&
+        physical.start.parentNode === physical.end.parentNode &&
         physical.start.data === physical.startMarker &&
         physical.end.data === physical.endMarker;
       return (
@@ -2069,6 +2076,10 @@
         throw new TypeError(
           "[Citry] planned keyed component range is absent from one physical parent range" +
             " (old=" + Boolean(oldPhysical) + ", new=" + Boolean(newPair) +
+            ", match=" + match.fromRevision + ":" + match.fromKey + "->" +
+              match.toRevision + ":" + match.toKey +
+            ", parent=" + match.parentFromRenderId + "->" + match.parentToRenderId +
+            ", current=" + currentMatch.fromRenderId + "->" + currentMatch.toRenderId +
             ", fresh=" + freshPairs.map(function (pair) { return pair.recordKey; }).join(",") + ")."
         );
       }
@@ -2163,7 +2174,7 @@
         "portable-new",
         entry.match
       );
-      portable.push({ match: entry.match, oldHolder: oldHolder, newHolder: newHolder });
+      portable.push({ match: entry.match, token: entry.token, oldHolder: oldHolder, newHolder: newHolder });
     });
 
     // A logically direct sibling may be physically nested inside a stationary
@@ -2307,6 +2318,30 @@
     });
 
     expandPlannedHolders(oldPair);
+    // A portable range may itself contain other portable ranges. Restore the
+    // outer destination first so nested destination templates are connected
+    // before their entries are processed. DocumentFragment ancestry is the
+    // stable relationship while Alpine has the holders detached.
+    var portableDepth = function (entry, side) {
+      var holder = side === "old" ? entry.oldHolder : entry.newHolder;
+      var root = holder.getRootNode();
+      var depth = 0;
+      while (root instanceof DocumentFragment) {
+        var parent = portable.find(function (candidate) {
+          var candidateHolder = side === "old" ? candidate.oldHolder : candidate.newHolder;
+          return candidateHolder.content === root;
+        });
+        if (!parent) break;
+        depth += 1;
+        var parentHolder = side === "old" ? parent.oldHolder : parent.newHolder;
+        root = parentHolder.getRootNode();
+      }
+      return depth;
+    };
+    portable.sort(function (left, right) {
+      return portableDepth(left, "new") - portableDepth(right, "new") ||
+        portableDepth(left, "old") - portableDepth(right, "old");
+    });
     portable.forEach(function (entry) {
       var selector =
         "template[" + PLANNED_RANGE_PORTABLE_ATTR + '="' + CSS.escape(entry.newHolder.getAttribute(
@@ -2316,7 +2351,10 @@
         return candidate.getAttribute(PLANNED_RANGE_HOLDER_ATTR) === "portable-new";
       });
       if (!destination) {
-        throw new TypeError("[Citry] keyed component range destination vanished during morph.");
+        throw new TypeError(
+          "[Citry] keyed component range destination vanished during morph" +
+          " (token=" + entry.token + ")."
+        );
       }
       var oldNested = pairForRecord(
         rangePairsUnder(entry.oldHolder.content, null),
@@ -3734,6 +3772,10 @@
       if (alpineStarted && root.isConnected && !root._x_marker) {
         try {
           alpineOwner.initTree(root);
+          // A rootless child may take its props from this component's x-data.
+          // Its lexical carrier cannot be captured until the held source root
+          // has completed the deferred Alpine initialization.
+          queueMicrotask(activateRootlessBoundaries);
         } catch (err) {
           console.error("[Citry] Alpine initialization after component callback settlement failed:", err);
         }
@@ -3852,6 +3894,7 @@
         els: link.logicalState.els,
         calls: new Set(),
         dataKey: null,
+        seededDataKeys: new Set(),
         invocation: null,
         componentBoundaries: new Set(),
         propsController: null,
@@ -4084,6 +4127,11 @@
       try {
         value = evaluateBoundaryExpression(boundary, clientBinding.payload.expression, null, null, false);
       } catch (err) {
+        // Alpine may flush a supplier effect while a correlated morph is
+        // retiring either endpoint, before boundary reconciliation releases
+        // this runner. A dead boundary is lifecycle teardown, not an invalid
+        // prop supply; do not turn it into a transient consumer diagnostic.
+        if (!boundary.sourceCarrier || !boundaryIsLive(boundary, null)) return;
         error = err;
       }
       observeRejectedThenable(value, function () {});
@@ -4222,6 +4270,9 @@
     liveComponentBoundaries.forEach(function (boundary) {
       if (boundary.destroyed || boundary.sourceCarrier) return;
       if (!lifecycleCapsAreLive(boundary.targetLifecycle)) return;
+      if (Array.from(boundary.sourceLifecycle.calls).some(function (call) {
+        return call.status === "staged" || call.status === "waiting" || call.status === "running";
+      })) return;
       if (boundary.targetLifecycle.els.length) {
         var targetRoot = boundary.targetLifecycle.els.find(function (root) {
           return root.isConnected && root._x_marker;
@@ -6306,8 +6357,71 @@
   };
 
   var registerComponentData = function (classId, varsHash, data) {
-    componentData.set(classId + ":" + varsHash, data);
+    var source = null;
+    var error = null;
+    try {
+      if (typeof data === "string") {
+        source = data;
+      } else {
+        var inputIssue = validateStrictJson(data);
+        if (inputIssue) throw new TypeError(inputIssue.message);
+        if (!isPlainObject(data)) throw new TypeError("Component data must be a JSON object.");
+        source = JSON.stringify(data);
+      }
+      var parsed = JSON.parse(source);
+      var issue = validateStrictJson(parsed);
+      if (issue) throw new TypeError(issue.message);
+      if (!isPlainObject(parsed)) throw new TypeError("Component data must be a JSON object.");
+    } catch (err) {
+      error = err instanceof Error ? err : new TypeError(String(err));
+      source = null;
+    }
+    componentData.set(classId + ":" + varsHash, { source: source, error: error });
     flushCalls();
+  };
+
+  var instantiateCallData = function (call) {
+    if (call.dataKey == null) return null;
+    var registered = componentData.get(call.dataKey);
+    if (!registered) throw new Error("Component data has not arrived.");
+    if (registered.error) throw registered.error;
+    var data = JSON.parse(registered.source);
+    var issue = validateStrictJson(data);
+    if (issue || !isPlainObject(data)) {
+      throw new TypeError(issue ? issue.message : "Component data must be a JSON object.");
+    }
+    return data;
+  };
+
+  var seedLifecycleScope = function (lifecycle, data) {
+    if (!lifecycle) return;
+    if (!lifecycle.scope) throw new Error("The component's Alpine scope is unavailable.");
+    if (!lifecycle.seededDataKeys) lifecycle.seededDataKeys = new Set();
+    var next = data === null ? {} : data;
+    var nextKeys = new Set(Object.keys(next));
+    var touched = new Set(Array.from(lifecycle.seededDataKeys).concat(Array.from(nextKeys)));
+    touched.forEach(function (key) {
+      var descriptor = Object.getOwnPropertyDescriptor(lifecycle.scope, key);
+      if (descriptor && descriptor.configurable === false) {
+        throw new TypeError("JsData scope key '" + key + "' was made non-configurable by component code.");
+      }
+    });
+    lifecycle.seededDataKeys.forEach(function (key) {
+      if (!nextKeys.has(key) && !Reflect.deleteProperty(lifecycle.scope, key)) {
+        throw new TypeError("JsData scope key '" + key + "' could not be removed.");
+      }
+    });
+    nextKeys.forEach(function (key) {
+      if (!Reflect.defineProperty(lifecycle.scope, key, {
+        value: next[key],
+        writable: true,
+        enumerable: true,
+        configurable: true,
+      })) {
+        throw new TypeError("JsData scope key '" + key + "' could not be seeded.");
+      }
+    });
+    lifecycle.seededDataKeys = nextKeys;
   };
 
   var retainCallData = function (call) {
@@ -6347,13 +6461,18 @@
     call.dataKey = null;
   };
 
-  var callComponent = function (classId, componentId, varsHash, revision) {
+  var callComponent = function (classId, componentId, varsHash, revision, mode) {
+    mode = mode || "init";
+    if (mode !== "init" && mode !== "seed") {
+      throw new TypeError("[Citry] component call mode must be 'init' or 'seed'.");
+    }
     var route = revision == null ? null : resolveOwnershipRoute(revision, componentId, classId);
     var lifecycle = revision == null ? lifecycleForRender(componentId) : null;
     var call = {
       classId: classId,
       componentId: componentId,
       varsHash: varsHash,
+      mode: mode,
       dataKey: null,
       revision: revision || null,
       route: route,
@@ -6385,10 +6504,11 @@
     if (call.dependencyCalls.some(function (dependency) {
       return dependency.status !== "settled" && dependency.status !== "cancelled";
     })) return false;
-    if (!componentRegistrations.has(call.classId)) return false;
+    if (call.mode === "init" && !componentRegistrations.has(call.classId)) return false;
     if (call.dataKey != null && !componentData.has(call.dataKey)) return false;
     if (call.lifecycle) {
-      var props = ensureLifecycleProps(call.lifecycle, componentRegistrations.get(call.classId));
+      var entry = call.mode === "init" ? componentRegistrations.get(call.classId) : null;
+      var props = entry ? ensureLifecycleProps(call.lifecycle, entry) : null;
       if (props && !props.initialSettled) return false;
       if (callWaitsForAmbientMagic && callWaitsForAmbientMagic(call)) return false;
     }
@@ -6995,9 +7115,18 @@
     liveInstances.set(componentId, classId);
   };
 
-  // Run every pending call whose callback and data have both arrived. Calls
-  // stay queued (in order) until they are ready, so the manifest, the
-  // component's JS, and the data script may arrive in any order.
+  var releaseLifecycleCall = function (call) {
+    if (!call.lifecycle) return;
+    call.lifecycle.calls.delete(call);
+    // Rootless child boundaries may be waiting to capture this lifecycle as
+    // their lexical source. For rooted calls, releaseCallHolds queued the
+    // deferred Alpine init first, so this capture runs after x-data is ready.
+    queueMicrotask(activateRootlessBoundaries);
+  };
+
+  // Run every pending call whose mode-specific registration and data have
+  // arrived. Calls stay queued in order, so the manifest, component JS, and
+  // data script may arrive in any order. Seed-only calls need no callback.
   var flushCalls = function () {
     if (flushingCalls) {
       flushAgain = true;
@@ -7017,6 +7146,17 @@
             return;
           }
           progressed = true;
+          var data;
+          try {
+            data = instantiateCallData(call);
+          } catch (err) {
+            call.status = "cancelled";
+            releaseCallHolds(call);
+            releaseCallData(call);
+            releaseLifecycleCall(call);
+            console.error("[Citry] component data for '" + call.classId + "' was rejected; its call was cancelled:", err);
+            return;
+          }
           call.status = "running";
           var lifecycle = call.lifecycle;
           var invocation = null;
@@ -7024,13 +7164,40 @@
           if (lifecycle) {
             disposeInvocation(lifecycle);
             reconcileComponentLifecycles();
-            invocation = makeInvocation(lifecycle);
-            control = invocationControl(invocation);
+            try {
+              seedLifecycleScope(lifecycle, data);
+            } catch (err) {
+              call.status = "cancelled";
+              releaseCallHolds(call);
+              releaseCallData(call);
+              releaseLifecycleCall(call);
+              console.error("[Citry] JsData scope for '" + call.classId + "' could not be seeded:", err);
+              return;
+            }
+            if (call.mode === "init") {
+              invocation = makeInvocation(lifecycle);
+              control = invocationControl(invocation);
+            }
           } else {
+            if (call.mode === "seed") {
+              call.status = "cancelled";
+              releaseCallHolds(call);
+              releaseCallData(call);
+              console.error("[Citry] a seed-only component call had no graph-owned lifecycle.");
+              return;
+            }
             runCleanups(call);
           }
 
-          var data = call.dataKey == null ? null : componentData.get(call.dataKey);
+          if (call.mode === "seed") {
+            call.status = "settled";
+            releaseCallHolds(call);
+            releaseLifecycleCall(call);
+            transferCallDataToInstance(call, lifecycle);
+            liveInstances.set(call.componentId, call.classId);
+            return;
+          }
+
           var els = lifecycle ? lifecycle.els : rootsForRender(call.componentId);
           var ctx = { id: call.componentId, els: els, data: data };
           if (call.route) ctx.graph = call.route;
@@ -7096,7 +7263,7 @@
           }
           call.status = "settled";
           releaseCallHolds(call);
-          if (lifecycle) lifecycle.calls.delete(call);
+          releaseLifecycleCall(call);
           transferCallDataToInstance(call, lifecycle);
           liveInstances.set(call.componentId, call.classId);
         });
@@ -7113,13 +7280,17 @@
   // Process one manifest object (already JSON-parsed; string fields base64):
   //   markLoaded: {js: [url...], css: [url...]}   already on the page
   //   fetch:      {js: [tag descriptor JSON...], css: [...]}   load now
-  //   calls:      [[classId, componentId, varsHash | null], ...]
+  //   calls:      [[classId, componentId, varsHash | null, "init" | "seed"], ...]
   var stageManifestCalls = function (manifest, revision) {
     var calls = (manifest.calls || []).map(function (call) {
+      if (!Array.isArray(call) || call.length !== 4 || (call[3] !== "init" && call[3] !== "seed")) {
+        throw new TypeError("[Citry] a component call must declare an explicit 'init' or 'seed' mode.");
+      }
       var staged = {
         classId: fromBase64(call[0]),
         componentId: fromBase64(call[1]),
         varsHash: call[2] == null ? null : fromBase64(call[2]),
+        mode: call[3],
         dataKey: null,
         revision: revision || null,
         route: null,
@@ -7146,7 +7317,7 @@
     calls.forEach(function (call) {
       if (local.has(call.componentId) || state.graphCalls.has(call.componentId)) {
         throw new TypeError(
-          "[Citry] graph-linked dependency manifest repeats callback render id '" + call.componentId + "'."
+          "[Citry] graph-linked dependency manifest repeats component-call render id '" + call.componentId + "'."
         );
       }
       local.set(call.componentId, call);
@@ -7214,10 +7385,10 @@
       call.status = "cancelled";
       releaseCallHolds(call);
       releaseCallData(call);
-      if (call.lifecycle) call.lifecycle.calls.delete(call);
+      releaseLifecycleCall(call);
     });
     flushCalls();
-    if (reason) console.error("[Citry] component callback branch was cancelled because an asset failed:", reason);
+    if (reason) console.error("[Citry] component-call branch was cancelled because an asset failed:", reason);
   };
 
   var prepareComponentAssets = function (manifest) {
@@ -7359,13 +7530,16 @@
     if (!state) throw new TypeError("[Citry] dependency manifest refers to an unknown prepared graph.");
     var seen = new Set();
     requireArray(manifest.calls, "calls").forEach(function (call) {
-      if (!Array.isArray(call) || call.length !== 3) {
-        throw new TypeError("[Citry] graph-linked dependency call must be a three-item tuple.");
+      if (
+        !Array.isArray(call) || call.length !== 4 ||
+        (call[3] !== "init" && call[3] !== "seed")
+      ) {
+        throw new TypeError("[Citry] graph-linked dependency call must declare an explicit mode.");
       }
       var classId = decode(call[0], "calls");
       var renderId = decode(call[1], "calls");
       if (seen.has(renderId)) {
-        throw new TypeError("[Citry] graph-linked dependency manifest repeats callback render id '" + renderId + "'.");
+        throw new TypeError("[Citry] graph-linked dependency manifest repeats component-call render id '" + renderId + "'.");
       }
       seen.add(renderId);
       resolveOwnershipRoute(revision, renderId, classId);
@@ -7594,6 +7768,13 @@
 
   var processManifestTag = function (el) {
     if (processedDependencyTags.has(el)) return;
+    // A streaming HTML parser can expose the script start tag to this
+    // observer at a microtask checkpoint before it attaches the JSON text
+    // node. Leave that transient empty tag unclaimed; the DOMContentLoaded
+    // drain processes the completed parser-created manifest. Dynamically
+    // inserted empty manifests after parsing remain ordinary invalid JSON and
+    // retain the diagnostic below.
+    if (document.readyState === "loading" && el.textContent.trim() === "") return;
     processedDependencyTags.add(el);
     // Kept as an observable diagnostic marker only. Identity comes from the
     // WeakSet above, so a clone that copies this attribute is still processed.

@@ -61,10 +61,12 @@ only via the recon reports):
   tree-sitter grammar as the way to get correct highlighting boundaries
   before the server exists (`source_languages.md:367-377`, `:402-417`).
 - The tooling issues and their placement:
-  `TODO/project_status_june_2026.md:527-537` (formatter #22, LSP #23, other
-  bindings #27) and `docs/design/extensions_roadmap.md:110-117` (LSP,
-  formatter, and highlighting are standalone tooling, not extensions;
-  component introspection is core work, issue #26).
+  [#22](https://github.com/citry-dev/citry/issues/22) for the formatter,
+  [#23](https://github.com/citry-dev/citry/issues/23) for the LSP,
+  [#27](https://github.com/citry-dev/citry/issues/27) for other bindings, and
+  `docs/design/extensions_roadmap.md:110-117` (LSP, formatter, and
+  highlighting are standalone tooling, not extensions; component
+  introspection is core work, issue #26).
 - The existing highlight asset: `packages/py/pygments_citry/`, whose
   builtin-tag list is a hand-kept mirror of `RESERVED_TAG_NAMES`
   (`packages/py/pygments_citry/pygments_citry/citry_html.py:29-33`,
@@ -717,8 +719,7 @@ Repo citations appear inline as `file:line`; the load-bearing ones are
 `packages/py/citry/citry/{component.py,component_registry.py}`,
 `packages/py/pygments_citry/pygments_citry/citry_html.py`,
 `docs/design/source_languages.md`, `docs/design/extensions_roadmap.md`,
-`TODO/project_status_june_2026.md`, and `scripts/check.py` /
-`scripts/validators/`.
+and `scripts/check.py` / `scripts/validators/`.
 
 The five recon reports in this directory are the primary research base; all
 their web claims were verified 2026-07-07 and are relied on here as cited

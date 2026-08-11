@@ -1,30 +1,193 @@
-# Ordered Citry UI page catalog. Each component requires a unique
-# non-empty `family`, a unique safe `slug`, and a safe repository-relative `.md`
-# `source`. Every source requires a sibling api.yml containing its
-# schema-validated API reference. `nav_title` is an optional non-empty override. Unknown fields
-# fail validation. See docs_site/_internal/ui_library_projection.py and
-# ui_library_reference.py. The build and development server render each
-# declared source directly; no copy under docs_site/content is required.
-components:
-  - family: button
-    slug: button
-    source: packages/py/citry_ui/citry_ui/components/cbutton/api.md
-  - family: field-input
-    slug: field-input
-    source: packages/py/citry_ui/citry_ui/components/cfield/api.md
-    nav_title: Field and Input
-  - family: form
-    slug: form
-    source: packages/py/citry_ui/citry_ui/components/cform/api.md
-  - family: tabs
-    slug: tabs
-    source: packages/py/citry_ui/citry_ui/components/ctabs/api.md
-  - family: dialog
-    slug: dialog
-    source: packages/py/citry_ui/citry_ui/components/cdialog/api.md
-  - family: combobox
-    slug: combobox
-    source: packages/py/citry_ui/citry_ui/components/ccombobox/api.md
-  - family: table
-    slug: table
-    source: packages/py/citry_ui/citry_ui/components/ctable/api.md
+# Ordered Citry UI component catalog. Functional groups drive both the sidebar
+# and the overview page. Every component entry requires a unique non-empty
+# `family`, a unique safe `slug`, and a safe repository-relative `.md` `source`.
+# Every source requires a sibling api.yml containing its schema-validated API
+# reference. `nav_title` is an optional non-empty override. Unknown fields fail
+# validation. See docs_site/_internal/ui_library_projection.py and
+# ui_library_reference.py.
+groups:
+  - id: actions
+    label: Actions
+    components:
+      - family: button
+        slug: button
+        source: packages/py/citry_ui/citry_ui/components/cbutton/api.md
+      - family: button-group
+        slug: button-group
+        source: packages/py/citry_ui/citry_ui/components/cbutton_group/api.md
+        nav_title: Button Group
+      - family: toggle
+        slug: toggle
+        source: packages/py/citry_ui/citry_ui/components/ctoggle/api.md
+      - family: toolbar
+        slug: toolbar
+        source: packages/py/citry_ui/citry_ui/components/ctoolbar/api.md
+
+  - id: forms-inputs
+    label: Forms and inputs
+    components:
+      - family: field-input
+        slug: field-input
+        source: packages/py/citry_ui/citry_ui/components/cfield/api.md
+        nav_title: Field and Input
+      - family: textarea
+        slug: textarea
+        source: packages/py/citry_ui/citry_ui/components/ctextarea/api.md
+      - family: native-select
+        slug: native-select
+        source: packages/py/citry_ui/citry_ui/components/cnative_select/api.md
+        nav_title: Native Select
+      - family: checkbox
+        slug: checkbox
+        source: packages/py/citry_ui/citry_ui/components/ccheckbox/api.md
+      - family: radio
+        slug: radio
+        source: packages/py/citry_ui/citry_ui/components/cradio/api.md
+      - family: switch
+        slug: switch
+        source: packages/py/citry_ui/citry_ui/components/cswitch/api.md
+      - family: combobox
+        slug: combobox
+        source: packages/py/citry_ui/citry_ui/components/ccombobox/api.md
+      - family: listbox
+        slug: listbox
+        source: packages/py/citry_ui/citry_ui/components/clistbox/api.md
+      - family: select
+        slug: select
+        source: packages/py/citry_ui/citry_ui/components/cselect/api.md
+      - family: multi-select
+        slug: multi-select
+        source: packages/py/citry_ui/citry_ui/components/cmulti_select/api.md
+        nav_title: MultiSelect
+      - family: editable
+        slug: editable
+        source: packages/py/citry_ui/citry_ui/components/ceditable/api.md
+      - family: file-input
+        slug: file-input
+        source: packages/py/citry_ui/citry_ui/components/cfile_input/api.md
+        nav_title: File input and drop target
+      - family: form
+        slug: form
+        source: packages/py/citry_ui/citry_ui/components/cform/api.md
+
+  - id: layout
+    label: Layout
+    components:
+      - family: flow-layout
+        slug: stack-group
+        source: packages/py/citry_ui/citry_ui/components/cflow/api.md
+        nav_title: Stack and Group
+      - family: grid-container
+        slug: container-grid
+        source: packages/py/citry_ui/citry_ui/components/cgrid/api.md
+        nav_title: Container and Grid
+      - family: divider
+        slug: divider
+        source: packages/py/citry_ui/citry_ui/components/cdivider/api.md
+      - family: splitter
+        slug: splitter
+        source: packages/py/citry_ui/citry_ui/components/csplitter/api.md
+
+  - id: data-display
+    label: Data display
+    components:
+      - family: avatar
+        slug: avatar
+        source: packages/py/citry_ui/citry_ui/components/cavatar/api.md
+      - family: badge
+        slug: badge
+        source: packages/py/citry_ui/citry_ui/components/cbadge/api.md
+      - family: card
+        slug: card
+        source: packages/py/citry_ui/citry_ui/components/ccard/api.md
+      - family: carousel
+        slug: carousel
+        source: packages/py/citry_ui/citry_ui/components/ccarousel/api.md
+      - family: icon
+        slug: icon
+        source: packages/py/citry_ui/citry_ui/components/cicon/api.md
+      - family: list
+        slug: list
+        source: packages/py/citry_ui/citry_ui/components/clist/api.md
+      - family: table
+        slug: table
+        source: packages/py/citry_ui/citry_ui/components/ctable/api.md
+      - family: tag
+        slug: tag
+        source: packages/py/citry_ui/citry_ui/components/ctag/api.md
+        nav_title: Tag and TagGroup
+      - family: tree
+        slug: tree
+        source: packages/py/citry_ui/citry_ui/components/ctree/api.md
+
+  - id: navigation
+    label: Navigation
+    components:
+      - family: breadcrumbs
+        slug: breadcrumbs
+        source: packages/py/citry_ui/citry_ui/components/cbreadcrumbs/api.md
+      - family: pagination
+        slug: pagination
+        source: packages/py/citry_ui/citry_ui/components/cpagination/api.md
+      - family: stepper
+        slug: stepper
+        source: packages/py/citry_ui/citry_ui/components/cstepper/api.md
+      - family: tabs
+        slug: tabs
+        source: packages/py/citry_ui/citry_ui/components/ctabs/api.md
+      - family: navigation-menu
+        slug: navigation-menu
+        source: packages/py/citry_ui/citry_ui/components/cnavigation_menu/api.md
+        nav_title: NavigationMenu
+
+  - id: feedback-status
+    label: Feedback and status
+    components:
+      - family: alert
+        slug: alert
+        source: packages/py/citry_ui/citry_ui/components/calert/api.md
+      - family: progress
+        slug: progress
+        source: packages/py/citry_ui/citry_ui/components/cprogress/api.md
+      - family: skeleton
+        slug: skeleton
+        source: packages/py/citry_ui/citry_ui/components/cskeleton/api.md
+      - family: spinner
+        slug: spinner
+        source: packages/py/citry_ui/citry_ui/components/cspinner/api.md
+      - family: toast
+        slug: toast
+        source: packages/py/citry_ui/citry_ui/components/ctoast/api.md
+
+  - id: overlays-disclosure
+    label: Overlays and disclosure
+    components:
+      - family: accordion
+        slug: accordion
+        source: packages/py/citry_ui/citry_ui/components/caccordion/api.md
+      - family: disclosure
+        slug: disclosure
+        source: packages/py/citry_ui/citry_ui/components/cdisclosure/api.md
+      - family: alert-dialog
+        slug: alert-dialog
+        source: packages/py/citry_ui/citry_ui/components/calert_dialog/api.md
+        nav_title: AlertDialog
+      - family: dialog
+        slug: dialog
+        source: packages/py/citry_ui/citry_ui/components/cdialog/api.md
+      - family: drawer
+        slug: drawer
+        source: packages/py/citry_ui/citry_ui/components/cdrawer/api.md
+      - family: menu
+        slug: menu
+        source: packages/py/citry_ui/citry_ui/components/cmenu/api.md
+      - family: popover
+        slug: popover
+        source: packages/py/citry_ui/citry_ui/components/cpopover/api.md
+      - family: tooltip
+        slug: tooltip
+        source: packages/py/citry_ui/citry_ui/components/ctooltip/api.md
+      - family: hover-card
+        slug: hover-card
+        source: packages/py/citry_ui/citry_ui/components/chover_card/api.md
+        nav_title: HoverCard

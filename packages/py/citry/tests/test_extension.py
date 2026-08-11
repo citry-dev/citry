@@ -12,9 +12,12 @@ from citry import (
     Component,
     Extension,
     ExtensionCommand,
+    LintSettings,
     Slot,
+    TemplateNamespaceContribution,
 )
 from citry.ext.events.openapi import OpenApiCommand
+from citry.ext.i18n.commands import I18N_COMMANDS
 
 
 class _StringPathExt(Extension):
@@ -60,7 +63,7 @@ class TestManagerConstruction:
         c = _Citry()
         # Every instance carries the built-in extensions (prepended by the
         # manager); with no user extensions, that is all there is.
-        assert [ext.name for ext in c.extensions._extensions] == ["cache", "dependencies", "events"]
+        assert [ext.name for ext in c.extensions._extensions] == ["cache", "dependencies", "events", "i18n"]
 
     @pytest.mark.xfail(
         strict=True,
@@ -75,8 +78,14 @@ class TestManagerConstruction:
         # xpass and strict mode fails it, prompting removal of the marker.
         prod = _Citry()
         dev = _Citry(mode="development")
-        assert [ext.name for ext in prod.extensions._extensions] == ["cache", "dependencies", "events"]
-        assert [ext.name for ext in dev.extensions._extensions] == ["cache", "dependencies", "events", "debug"]
+        assert [ext.name for ext in prod.extensions._extensions] == ["cache", "dependencies", "events", "i18n"]
+        assert [ext.name for ext in dev.extensions._extensions] == [
+            "cache",
+            "dependencies",
+            "events",
+            "i18n",
+            "debug",
+        ]
 
     def test_accepts_class_and_instance(self):
         class E1(Extension):
@@ -87,7 +96,39 @@ class TestManagerConstruction:
 
         c = _Citry(extensions=[E1, E2()])
         # Built-ins come first, then the user's extensions in spec order.
-        assert [ext.name for ext in c.extensions._extensions] == ["cache", "dependencies", "events", "e1", "e2"]
+        assert [ext.name for ext in c.extensions._extensions] == [
+            "cache",
+            "dependencies",
+            "events",
+            "i18n",
+            "e1",
+            "e2",
+        ]
+
+    def test_template_namespace_contributions_are_detached_and_lower_priority(self):
+        class Framework(Extension):
+            name = "framework"
+
+            def inspect_template_namespace(self, ctx):
+                return TemplateNamespaceContribution(
+                    template_variables={"request": int, "extension_only": str},
+                    allows_extra_variables=True,
+                )
+
+        app = _Citry(
+            extensions=[Framework],
+            lint=LintSettings(template_variables={"request": bool}),
+        )
+
+        class Card(Component):
+            citry = app
+
+        lint = app.template_analysis().component_lint[Card.definition_id]
+        by_name = {item.name: item for item in lint.template_variables}
+        assert by_name["request"].type_display == "bool"
+        assert by_name["request"].source == "application"
+        assert by_name["extension_only"].type_display == "str"
+        assert lint.allows_extra_variables is True
 
     def test_rejects_instance_already_installed_on_another_citry(self):
         class E(Extension):
@@ -1244,9 +1285,9 @@ class TestConfigFieldValidation:
 
 class TestCommands:
     def test_no_commands_by_default(self):
-        # The default instance carries only built-in extensions; of those,
-        # only the events extension declares a command (its OpenAPI export).
-        assert _Citry().commands == {"events": (OpenApiCommand,)}
+        # The default instance exposes the Events OpenAPI command and the
+        # built-in i18n project commands.
+        assert _Citry().commands == {"events": (OpenApiCommand,), "i18n": I18N_COMMANDS}
 
     def test_commands_keyed_by_extension(self):
         class Hello(ExtensionCommand):
@@ -1260,6 +1301,7 @@ class TestCommands:
 
         assert _Citry(extensions=[Greeter]).commands == {
             "events": (OpenApiCommand,),
+            "i18n": I18N_COMMANDS,
             "greeter": (Hello,),
         }
 
@@ -1277,7 +1319,7 @@ class TestCommands:
             name = "withoutcmd"
 
         # Built-ins come first; only extensions that declare commands appear.
-        assert list(_Citry(extensions=[WithCmd, WithoutCmd]).commands) == ["events", "withcmd"]
+        assert list(_Citry(extensions=[WithCmd, WithoutCmd]).commands) == ["events", "i18n", "withcmd"]
 
     def test_get_extension_command_resolves(self):
         class Hello(ExtensionCommand):

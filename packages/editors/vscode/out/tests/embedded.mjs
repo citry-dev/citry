@@ -1,5 +1,6 @@
 // src/embedded.ts
 var assignmentPattern = /^[\t ]*(template|js|css)[\t ]*(?::[^=\r\n]+?)?[\t ]*=[\t ]*("""|''')/gm;
+var templateLiteralAssignmentPattern = /^[\t ]*template[\t ]*(?::[^=\r\n]+?)?[\t ]*=[\t ]*[rRuU]?("""|'''|"|')/gm;
 var languageByAttribute = {
   template: "html",
   js: "javascript",
@@ -36,15 +37,51 @@ function embeddedLanguageAt(source, languageId, offset) {
   }
   return pythonEmbeddedRegions(source).find((region) => region.start <= offset && offset <= region.end)?.language;
 }
+function pythonTemplatePrefixAt(source, offset) {
+  if (offset < 0 || offset > source.length) {
+    return void 0;
+  }
+  const { excluded, strings } = scanPython(source);
+  for (const match of source.matchAll(templateLiteralAssignmentPattern)) {
+    const delimiter = match[1];
+    if (match.index === void 0 || delimiter !== '"""' && delimiter !== "'''" && delimiter !== '"' && delimiter !== "'" || spanContaining(excluded, match.index) !== void 0) {
+      continue;
+    }
+    const quoteStart = match.index + match[0].lastIndexOf(delimiter);
+    const string = strings.find((span) => span.start === quoteStart && span.delimiter === delimiter);
+    if (string !== void 0 && string.bodyStart <= offset && offset <= string.bodyEnd) {
+      return source.slice(string.bodyStart, offset);
+    }
+  }
+  return void 0;
+}
 function virtualDocumentSource(source, languageId, language) {
   if (languageId === "citry-html" && language === "html") {
     return source;
   }
-  const masked = source.split("").map((character) => character === "\n" || character === "\r" ? character : " ");
   if (languageId !== "python") {
-    return masked.join("");
+    return source.split("").map((character) => character === "\n" || character === "\r" ? character : " ").join("");
   }
-  for (const region of pythonEmbeddedRegions(source)) {
+  return virtualDocumentSourceFromRegions(source, language, pythonEmbeddedRegions(source));
+}
+function virtualDocumentSourceAt(source, languageId, language, offset) {
+  const view = embeddedVirtualDocumentAt(source, languageId, offset);
+  return view?.language === language ? view.source : void 0;
+}
+function embeddedVirtualDocumentAt(source, languageId, offset) {
+  if (languageId === "citry-html") {
+    return offset >= 0 && offset <= source.length ? { language: "html", source } : void 0;
+  }
+  if (languageId !== "python") {
+    return void 0;
+  }
+  const regions = pythonEmbeddedRegions(source);
+  const region = regions.find((candidate) => candidate.start <= offset && offset <= candidate.end);
+  return region === void 0 ? void 0 : { language: region.language, source: virtualDocumentSourceFromRegions(source, region.language, regions) };
+}
+function virtualDocumentSourceFromRegions(source, language, regions) {
+  const masked = source.split("").map((character) => character === "\n" || character === "\r" ? character : " ");
+  for (const region of regions) {
     if (region.language !== language) {
       continue;
     }
@@ -110,6 +147,9 @@ function spanContaining(spans, offset) {
 }
 export {
   embeddedLanguageAt,
+  embeddedVirtualDocumentAt,
   pythonEmbeddedRegions,
-  virtualDocumentSource
+  pythonTemplatePrefixAt,
+  virtualDocumentSource,
+  virtualDocumentSourceAt
 };

@@ -55,7 +55,7 @@ if TYPE_CHECKING:
 
         def on_render(self) -> Any: ...
 
-        def provide(self, key: str, /, **data: Any) -> None: ...
+        def provide(self, key: str, value: Any = ..., /, **data: Any) -> None: ...
 
         def inject(self, key: str, default: Any = ...) -> Any: ...
 
@@ -270,6 +270,7 @@ class LibraryComponentInvocation:
         *,
         citry: Citry | None = None,
         template_globals: Mapping[str, Any] | None = None,
+        provides: Mapping[str, Any] | None = None,
     ) -> CitryRender:
         """
         Render this invocation through an explicit Citry instance.
@@ -277,6 +278,8 @@ class LibraryComponentInvocation:
         Args:
             citry: The instance with the component's library installed.
             template_globals: Values added to this render's template globals.
+            provides: Values the root and its rendered descendants may read
+                with ``inject()``.
 
         Returns:
             The resulting deferred render tree.
@@ -294,7 +297,7 @@ class LibraryComponentInvocation:
                 "a component template where Citry can resolve it contextually."
             )
             raise LibraryComponentContextError(msg)
-        return self.resolve(citry).render(template_globals=template_globals)
+        return self.resolve(citry).render(template_globals=template_globals, provides=provides)
 
     def __str__(self) -> str:
         return str(self.render())

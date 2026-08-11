@@ -574,13 +574,15 @@ def test_bare_debounce_collapses_a_burst_and_carries_the_last_value(page: Any, s
     c, html, _matrix = _make_matrix_app()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
+    page.clock.install()
 
     page.type(".deb", "abc", delay=40)
+    page.clock.run_for(250)
     _wait_requests(page, captured, 1)
-    page.wait_for_timeout(350)
     assert _args_of(captured) == [{"q": "abc"}]
 
     page.type(".deb", "d", delay=10)
+    page.clock.run_for(250)
     _wait_requests(page, captured, 2)
     assert _args_of(captured) == [{"q": "abc"}, {"q": "abcd"}]
     assert _citry_errors(messages) == []
@@ -594,11 +596,13 @@ def test_an_explicit_debounce_time_segment_overrides_the_bare_default(page: Any,
     c, html, _matrix = _make_matrix_app()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
+    page.clock.install()
 
     page.type(".deb600", "zz", delay=40)
-    page.wait_for_timeout(350)
+    page.clock.run_for(350)
     assert captured == []
 
+    page.clock.run_for(250)
     _wait_requests(page, captured, 1)
     assert _args_of(captured) == [{"q": "zz"}]
     assert _citry_errors(messages) == []
@@ -611,10 +615,11 @@ def test_handler_configured_debounce_applies_to_a_bare_binding(page: Any, serve_
     c, html, _matrix = _make_matrix_app()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
+    page.clock.install()
 
     page.type(".cfg", "xy", delay=40)
+    page.clock.run_for(200)
     _wait_requests(page, captured, 1)
-    page.wait_for_timeout(350)
 
     assert _args_of(captured) == [{"q": "xy"}]
     assert _citry_errors(messages) == []
@@ -627,6 +632,7 @@ def test_bare_throttle_admits_the_first_trigger_and_drops_the_window(page: Any, 
     c, html, _matrix = _make_matrix_app()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
+    page.clock.install()
 
     # Three synchronous clicks land well inside one 250 ms window.
     page.evaluate(
@@ -640,7 +646,7 @@ def test_bare_throttle_admits_the_first_trigger_and_drops_the_window(page: Any, 
         """
     )
     _wait_requests(page, captured, 1)
-    page.wait_for_timeout(400)
+    page.clock.run_for(250)
     assert _args_of(captured) == [{"kind": "thr"}]
 
     page.evaluate("document.querySelector('.thr').click()")
@@ -738,6 +744,7 @@ def test_debounce_flush_on_a_replaced_region_drops_with_a_debug_log_never_a_thro
     messages = _goto(page, serve_live, c, html)
     errors = _collect_pageerrors(page)
     captured = _collect_event_requests(page)
+    page.clock.install()
 
     page.type(".q", "x", delay=10)
     # Replace the whole region before the 250 ms debounce flushes (the
@@ -750,7 +757,7 @@ def test_debounce_flush_on_a_replaced_region_drops_with_a_debug_log_never_a_thro
         """
     )
     page.wait_for_function("document.querySelector('.emptied') !== null")
-    page.wait_for_timeout(500)
+    page.clock.run_for(250)
 
     assert captured == []
     assert errors == []
@@ -766,6 +773,7 @@ def test_removing_an_event_attribute_keeps_work_already_accepted_by_debounce(pag
     c, html, _typer = _make_typer_app()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
+    page.clock.install()
 
     assert page.evaluate("Citry.events._internal.debug().bindingListenerTargets") == 1
     page.evaluate(
@@ -790,6 +798,7 @@ def test_debounce_flush_drops_after_the_element_moves_to_another_document(page: 
     c, html, _typer = _make_typer_app()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
+    page.clock.install()
 
     adopted = page.evaluate(
         """
@@ -805,7 +814,7 @@ def test_debounce_flush_drops_after_the_element_moves_to_another_document(page: 
         """
     )
     assert adopted is True
-    page.wait_for_timeout(500)
+    page.clock.run_for(250)
 
     assert captured == []
     assert page.evaluate("window.__log.stale") == [{"instance": None, "event": "ping", "reason": "cancelled"}]
@@ -959,19 +968,18 @@ def test_poll_sends_on_its_interval_and_a_morph_survivor_never_double_polls(page
     # and the re-scan dedupes against the running timer, so the cadence
     # stays one send per interval instead of compounding.
     c, html, _poller = _make_poll_app()
+    page.clock.install()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
 
-    _wait_requests(page, captured, 1, timeout_ms=4000)
-    started = len(captured)
-    page.wait_for_timeout(2600)
-    ticks = len(captured) - started
+    # Advancing one interval at a time lets each response morph the survivor
+    # before the next tick, exactly as real elapsed time does.
+    for expected in range(1, 4):
+        page.clock.run_for(1000)
+        _wait_requests(page, captured, expected)
+        page.wait_for_function(f"document.querySelector('.n').innerText === '{expected}'")
 
-    # One send per second over ~2.6 s: two or three at single cadence; a
-    # doubled timer would produce five or more.
-    assert 2 <= ticks <= 4
-    # Every tick applied: the counter advanced with the requests.
-    assert int(page.inner_text(".n")) >= 2
+    assert len(captured) == 3
     assert _citry_errors(messages) == []
 
 
@@ -980,10 +988,12 @@ def test_a_replaced_poll_region_stops_polling_with_no_dead_interval_left_firing(
     # after the replacement no further poll requests happen, and no ghost
     # timer keeps firing dropped sends into the console.
     c, html, _poller = _make_poll_app()
+    page.clock.install()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
 
-    _wait_requests(page, captured, 1, timeout_ms=4000)
+    page.clock.run_for(1000)
+    _wait_requests(page, captured, 1)
     page.evaluate(
         """
         () => Citry.events.applyActions([
@@ -993,7 +1003,7 @@ def test_a_replaced_poll_region_stops_polling_with_no_dead_interval_left_firing(
     )
     page.wait_for_function("document.querySelector('.eplaced') !== null")
     count_after_replace = len(captured)
-    page.wait_for_timeout(2600)
+    page.clock.run_for(3000)
 
     assert len(captured) == count_after_replace
     # A dead interval would keep firing and leave a dropped-send debug line
@@ -1007,13 +1017,15 @@ def test_a_tick_overlapping_its_previous_call_skips_with_the_breadcrumb(page: An
     # per recurring binding. With the first tick's request held, the next
     # tick skips with the debug breadcrumb instead of queueing behind it.
     c, html, poller = _make_poll_app()
+    page.clock.install()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
     held = _hold_route(page, _event_url(poller, "tick"))
 
-    _wait_held(page, held, 1, timeout_ms=4000)
+    page.clock.run_for(1000)
+    _wait_held(page, held, 1)
     # Two more intervals elapse while the call is in flight; each tick skips.
-    page.wait_for_timeout(2300)
+    page.clock.run_for(3000)
     assert len(held) == 1
     assert len(captured) == 1
     breadcrumbs = [m for m in messages if "skipped a recurring 'tick' tick" in m]
@@ -1032,10 +1044,12 @@ def test_poll_ticks_pause_while_the_tab_is_hidden_and_resume_when_visible(page: 
     # property with an own getter exercises the exact pause path; deleting
     # the shadow restores the native getter and the next tick sends again.
     c, html, _poller = _make_poll_app()
+    page.clock.install()
     messages = _goto(page, serve_live, c, html)
     captured = _collect_event_requests(page)
 
-    _wait_requests(page, captured, 1, timeout_ms=4000)
+    page.clock.run_for(1000)
+    _wait_requests(page, captured, 1)
     page.evaluate(
         """
         () => {
@@ -1044,10 +1058,8 @@ def test_poll_ticks_pause_while_the_tab_is_hidden_and_resume_when_visible(page: 
         }
         """
     )
-    # Let a tick that was already past the check land, then freeze the count.
-    page.wait_for_timeout(150)
     frozen = len(captured)
-    page.wait_for_timeout(2600)
+    page.clock.run_for(3000)
     assert len(captured) == frozen
 
     page.evaluate(
@@ -1058,7 +1070,8 @@ def test_poll_ticks_pause_while_the_tab_is_hidden_and_resume_when_visible(page: 
         }
         """
     )
-    _wait_requests(page, captured, frozen + 1, timeout_ms=4000)
+    page.clock.run_for(1000)
+    _wait_requests(page, captured, frozen + 1)
     assert _citry_errors(messages) == []
 
 

@@ -2,6 +2,20 @@
 var citryDirectiveNames = /* @__PURE__ */ new Set(["c-if", "c-elif", "c-else", "c-for", "c-empty", "c-bind"]);
 var rawTextTagNames = /* @__PURE__ */ new Set(["script", "style", "textarea", "title", "c-raw"]);
 function projectNativeHtmlAttributes(source) {
+  return scanHtml(source, []);
+}
+function htmlProjectionCandidateAt(source, offset) {
+  return htmlProjectionCandidateRangeAt(source, offset) !== void 0;
+}
+function htmlProjectionCandidateRangeAt(source, offset) {
+  if (offset < 0 || offset > source.length) {
+    return void 0;
+  }
+  const candidates = [];
+  scanHtml(source, candidates);
+  return candidates.filter(({ start, end }) => start <= offset && offset <= end).sort((left, right) => left.end - left.start - (right.end - right.start))[0];
+}
+function scanHtml(source, htmlCandidates) {
   const projected = source.split("");
   const attributes = [];
   let index = 0;
@@ -42,7 +56,7 @@ function projectNativeHtmlAttributes(source) {
       index = end;
       continue;
     }
-    const tag = scanStartTag(source, index, projected, attributes);
+    const tag = scanStartTag(source, index, projected, attributes, htmlCandidates);
     if (tag === void 0) {
       index += 1;
       continue;
@@ -70,7 +84,7 @@ function nativeDynamicAttributeHoverProjection(source, offset) {
   const providerOffset = Math.max(attribute.projectedStart, Math.min(offset, lastProviderOffset));
   return { ...attribute, source: projection.source, providerOffset };
 }
-function scanStartTag(source, start, projected, attributes) {
+function scanStartTag(source, start, projected, attributes, htmlCandidates) {
   let index = start + 1;
   if (!isAsciiLetter(source[index])) {
     return void 0;
@@ -82,6 +96,7 @@ function scanStartTag(source, start, projected, attributes) {
   const authoredTagName = source.slice(nameStart, index);
   const name = asciiLowercase(authoredTagName);
   const eligibleTag = !authoredTagName.startsWith("c-");
+  const cElementCandidateStart = authoredTagName.startsWith("c-") && asciiLowercase(authoredTagName.slice(2)) === "element" ? index : void 0;
   while (index < source.length) {
     index = skipWhitespace(source, index);
     if (source.startsWith("{#", index)) {
@@ -93,9 +108,15 @@ function scanStartTag(source, start, projected, attributes) {
       continue;
     }
     if (source.startsWith("/>", index)) {
+      if (cElementCandidateStart !== void 0) {
+        htmlCandidates.push({ start: cElementCandidateStart, end: index + 2 });
+      }
       return { name, end: index + 2, selfClosing: true };
     }
     if (source[index] === ">") {
+      if (cElementCandidateStart !== void 0) {
+        htmlCandidates.push({ start: cElementCandidateStart, end: index + 1 });
+      }
       return { name, end: index + 1, selfClosing: false };
     }
     if (source[index] === "<" || source.startsWith("{{", index)) {
@@ -139,6 +160,19 @@ function scanStartTag(source, start, projected, attributes) {
       if (closingQuote < 0) {
         return { name, end: source.length, selfClosing: false };
       }
+      const valueStart = index + 1;
+      const value = source.slice(valueStart, closingQuote).trim();
+      if (authoredName.startsWith("c-") && nestedTemplateValue(value)) {
+        htmlCandidates.push({ start: valueStart, end: closingQuote });
+        const nestedCandidates = [];
+        scanHtml(source.slice(valueStart, closingQuote), nestedCandidates);
+        for (const candidate of nestedCandidates) {
+          htmlCandidates.push({
+            start: valueStart + candidate.start,
+            end: valueStart + candidate.end
+          });
+        }
+      }
       index = closingQuote + 1;
       continue;
     }
@@ -147,6 +181,9 @@ function scanStartTag(source, start, projected, attributes) {
     }
   }
   return { name, end: source.length, selfClosing: false };
+}
+function nestedTemplateValue(value) {
+  return value.startsWith("<>") && value.endsWith("</>") || /^<[A-Za-z]/.test(value);
 }
 function skipPythonExpression(source, start) {
   const brackets = [];
@@ -293,6 +330,8 @@ function asciiLowercase(value) {
   return value.replace(/[A-Z]/g, (character) => character.toLowerCase());
 }
 export {
+  htmlProjectionCandidateAt,
+  htmlProjectionCandidateRangeAt,
   nativeDynamicAttributeHoverProjection,
   projectNativeHtmlAttributes
 };

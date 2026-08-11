@@ -51,7 +51,7 @@ class ProductCard(Component):
         </c-empty>
 
         <button type="button" @c-click="like">
-          Like {{ likes }}
+          Like <span x-text="likes">{{ likes }}</span>
         </button>
 
         <c-slot name="footer">

@@ -41,6 +41,9 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      # A failure on one interpreter must not hide portability results from
+      # the other supported Windows and Linux versions.
+      fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
         os: [ubuntu-latest, windows-latest]
@@ -84,12 +87,59 @@ jobs:
         run: uv sync --locked --all-packages
 
       - name: Run Python tests
-        run: uv run --no-sync pytest
+        run: >-
+          uv run --no-sync pytest
+          -m "not e2e"
+          -n 4
+          --dist loadfile
+          --durations 30
+
+  windows-contracts:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install the workspace
+        run: uv sync --locked --all-packages
+
+      - name: Check Windows editor paths and server startup
+        run: >-
+          uv run --no-sync pytest
+          packages/py/citry_lsp/tests/test_uri.py
+          packages/py/citry_lsp/tests/test_catalog.py
+          packages/py/citry_lsp/tests/test_server.py
+
+      - name: Check Windows formatter provider ownership
+        run: >-
+          uv run --no-sync pytest
+          packages/py/citry/tests/test_embedded_provider.py
+          packages/py/citry/tests/test_format_command.py::test_windows_cli_accepts_a_native_provider
+          packages/py/citry/tests/test_format_command.py::test_cli_closes_an_initialized_provider_when_the_next_provider_fails
 
   # Browser end-to-end tests, including Citry UI's co-located component tests,
   # run in Chromium for PR-time speed. The weekly cross-browser workflow runs
-  # the same paths on all three engines. The `test` job above does not sync
-  # `e2e`, so those tests skip there (they importorskip pytest-playwright).
+  # the same paths on all three engines. The `test` job above excludes `e2e`
+  # explicitly and does not sync that dependency group.
   e2e:
     runs-on: ubuntu-latest
     steps:
@@ -105,7 +155,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master
@@ -172,6 +222,9 @@ jobs:
           packages/py/citry_ui/citry_ui/quality/tests/e2e
           -m e2e
           --browser chromium
+          -n 4
+          --dist loadfile
+          --durations 30
 
       - name: Build the Citry UI qualification record
         shell: bash
@@ -210,7 +263,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Build the Citry UI wheel once
         run: uv build --package citry-ui --wheel --out-dir dist
@@ -321,7 +374,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install the wheel and pinned browser tools
         run: python -m pip install dist/citry_ui-*.whl "playwright==1.61.0"
@@ -391,7 +444,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@master

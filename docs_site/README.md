@@ -24,7 +24,7 @@ Run every command in this README from the repository root.
 | `_internal/` | The site builder and its private components |
 | `settings.yml` | Site identity, links, Markdown profiles, and product policy |
 | `reference.yml` | Ordered Reference pages, Python symbols, and authored API anchors |
-| `ui_library.yml` | Ordered Citry UI source pages and public routes |
+| `ui_library.yml` | Functionally grouped Citry UI source pages and public routes |
 | `redirects.yml` | Published clean-URL redirects |
 | `people_sources.yml` | People-generator repositories, featured people, and ignored bots |
 | `docs_versions.yml` | Version selection and publication policy |
@@ -83,16 +83,17 @@ areas:
 
 `source: releases` fills its group from `CHANGELOG.md`.
 `source: reference` fills its area from `reference.yml`.
-`source: ui_library` fills the Citry UI Components group from
-`ui_library.yml`; each component page's front matter supplies its title and
-description.
+`source: ui_library` replaces the Citry UI Components placeholder with the
+functional groups from `ui_library.yml`; each component page's front matter
+supplies its title and description.
 `source: blog` fills its area from the dated Markdown posts under
 `content/blog/`, newest first, with **All posts** at the top.
-Ordinary groups use the always-open section styling. Set `collapsible: true`
-only when readers benefit from hiding a long or secondary list, as with
-Release notes and the Examples groups. `section_style: true` keeps a
-collapsible toggle visually aligned with the always-open section labels; it is
-used by Release notes.
+Groups in the Docs area set both `collapsible: true` and
+`section_style: true`. They start closed on the Docs overview so the growing
+category list stays easy to scan. The group containing the current page opens
+automatically, and readers can open or close the others without hiding the
+active link. Their choices persist in local storage. Groups in other areas may
+stay open or opt into either presentation as their navigation requires.
 Adding an ordinary top-level area needs no Python or template change: add the
 area and its pages to `_nav.yml`.
 
@@ -381,12 +382,12 @@ uv run --no-sync python -m docs_site serve
 Open <http://127.0.0.1:8000/>. The server reads content and navigation on each
 request, renders through Citry, and serves component assets and examples.
 Refresh the browser after changing Markdown. Uvicorn reloads when Python or
-YAML docs configuration changes. Each server start or reload builds universal
-wheels from the workspace `citry` and `citry-ui` packages for the browser
-playground. This
-local-only runtime lets interactive snippets import `citry_ui` before the
-package is published. `serve-built`, static builds, CI, and deployed docs keep
-using the committed pinned runtime.
+YAML docs configuration changes. Each server start or reload builds a universal
+wheel from the workspace `citry-ui` package and combines it with the browser
+playground's pinned Citry release. This local-only runtime lets interactive
+snippets import `citry_ui` before that package is published, when its Citry
+requirement accepts the pinned release. `serve-built`, static builds, CI, and
+deployed docs use the committed pinned runtime unchanged.
 
 Example recipes live at `/examples/<slug>/`. Their bare runnable pages live at
 `/examples/<slug>/demo/`, so opening a recipe and opening its iframe directly
@@ -599,11 +600,12 @@ pipeline ordering.
 
 To change Reference order or symbol ownership, edit `reference.yml`. Authored
 Reference entries declare their Markdown source and stable anchors there. To
-add or reorder Citry UI pages, edit `ui_library.yml`. A component-owned
+add, group, or reorder Citry UI pages, edit `ui_library.yml`. A component-owned
 `api.md` supplies the guide, and its sibling `api.yml` supplies a structured API
-reference. Both files are required. The builder validates and combines them at the catalog
-route. The same catalog drives sidebar order and the UI overview; there is no
-synchronized copy under `docs_site/content`.
+reference. Both files are required. The builder validates and combines them at
+the catalog route. The same functional groups drive the collapsible sidebar and
+the grouped UI overview; there is no synchronized copy under
+`docs_site/content`.
 Add a published redirect to `redirects.yml`; redirect chains and unsafe paths
 are rejected.
 

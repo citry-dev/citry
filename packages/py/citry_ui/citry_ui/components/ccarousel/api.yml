@@ -1,0 +1,153 @@
+schema_version: 1
+family: carousel
+
+components:
+  - CCarousel
+  - CCarouselSlide
+
+inputs:
+  - id: carousel-server-inputs
+    component: CCarousel
+    channel: server
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Names the carousel region without repeating the word carousel.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets root identity.}
+      - {id: index, name: index, type: int, default: {kind: literal, value: 0}, effect: Selects the initial zero-based Slide and uncontrolled fallback.}
+      - {id: orientation, name: orientation, type: {display: '"horizontal" | "vertical"', interfaces: [CCarouselOrientation]}, default: {kind: literal, value: horizontal}, effect: Sets scroll axis.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: false}, effect: Allows previous and next controls to wrap.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables owned controls and drag handling.}
+      - {id: controls, name: controls, type: bool, default: {kind: literal, value: true}, effect: Shows previous and next Buttons.}
+      - {id: indicators, name: indicators, type: bool, default: {kind: literal, value: true}, effect: Shows the grouped picker Buttons.}
+      - {id: draggable, name: draggable, type: bool, default: {kind: literal, value: true}, effect: Enables fine-pointer drag; native touch scroll remains available.}
+      - {id: variant, name: variant, type: {display: '"plain" | "surface"', interfaces: [CCarouselVariant]}, default: {kind: literal, value: plain}, effect: Selects root treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CCarouselSize]}, default: {kind: literal, value: md}, effect: Selects complete-family geometry.}
+      - {id: previous-label, name: previous_label, type: str, default: {kind: literal, value: Previous slide}, effect: Names the previous Button for the current locale.}
+      - {id: next-label, name: next_label, type: str, default: {kind: literal, value: Next slide}, effect: Names the next Button for the current locale.}
+      - {id: picker-label, name: picker_label, type: str, default: {kind: literal, value: Choose slide}, effect: Names the picker Button group for the current locale.}
+      - {id: class, name: class_, type: {display: CClassValue, interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: CStyleValue, interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed native and data attributes to the root.}
+  - id: carousel-client-inputs
+    component: CCarousel
+    channel: client
+    entries:
+      - {id: index, name: index, type: integer, omitted: Releases control and preserves the current committed index., effect: Controls the active zero-based Slide while supplied.}
+      - {id: orientation, name: orientation, type: CCarouselOrientation, omitted: Uses the server input., effect: Reactively changes scroll axis.}
+      - {id: loop, name: loop, type: boolean, omitted: Uses the server input., effect: Controls boundary wrapping.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls owned interaction availability.}
+      - {id: controls, name: controls, type: boolean, omitted: Uses the server input., effect: Shows or hides previous and next controls.}
+      - {id: indicators, name: indicators, type: boolean, omitted: Uses the server input., effect: Shows or hides picker controls.}
+      - {id: draggable, name: draggable, type: boolean, omitted: Uses the server input., effect: Controls fine-pointer dragging.}
+      - {id: variant, name: variant, type: CCarouselVariant, omitted: Uses the server input., effect: Changes root treatment.}
+      - {id: size, name: size, type: CCarouselSize, omitted: Uses the server input., effect: Changes complete-family geometry.}
+      - {id: on-index-change, name: onIndexChange, type: function, omitted: Does not notify a component callback., effect: Receives navigation scroll and structural index requests.}
+  - id: carousel-slide-server-inputs
+    component: CCarouselSlide
+    channel: server
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Sets unique stable Slide identity.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Names Slide content without repeating the word slide.}
+      - {id: class, name: class_, type: {display: CClassValue, interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds Slide classes.}
+      - {id: style, name: style, type: {display: CStyleValue, interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds Slide inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed native and data attributes to the Slide.}
+
+slots:
+  - id: carousel-slots
+    component: CCarousel
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CCarouselDefaultSlotData]}, fallback: none}
+  - id: carousel-slide-slots
+    component: CCarouselSlide
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CCarouselSlideDefaultSlotData]}, fallback: none}
+
+events:
+  - id: carousel-events
+    component: CCarousel
+    entries:
+      - id: on-index-change
+        name: onIndexChange
+        signature: {display: '(index: integer, detail: CCarouselIndexChangeDetail) => void', interfaces: [CCarouselIndexChangeDetail]}
+        trigger: Previous next picker native-scroll or structure requests a different index.
+        detail: {display: '{index, previousIndex, value, reason, controlled, forced, source}', interfaces: [CCarouselIndexChangeDetail]}
+        behavior: Uncontrolled requests commit before notification; controlled requests wait for acceptance; removal fallback is forced.
+
+methods: []
+
+css:
+  - id: carousel-css-variables
+    component: CCarousel
+    entries:
+      - {id: background, name: --cui-carousel-background, type: color, purpose: Root background., default: transparent}
+      - {id: foreground, name: --cui-carousel-foreground, type: color, purpose: Root foreground., default: CanvasText}
+      - {id: border-color, name: --cui-carousel-border-color, type: color, purpose: Surface boundaries., default: Scheme-aware neutral.}
+      - {id: radius, name: --cui-carousel-radius, type: length, purpose: Root viewport and Slide radius., default: 0.9rem}
+      - {id: gap, name: --cui-carousel-gap, type: length, purpose: Slide and region gap., default: Size-derived.}
+      - {id: padding, name: --cui-carousel-padding, type: length, purpose: Root padding., default: Size-derived.}
+      - {id: block-size, name: --cui-carousel-block-size, type: length, purpose: Vertical viewport and Slide block size., default: 20rem}
+      - {id: control-background, name: --cui-carousel-control-background, type: color, purpose: Previous and next Button background., default: Scheme-aware neutral.}
+      - {id: control-foreground, name: --cui-carousel-control-foreground, type: color, purpose: Previous and next Button foreground., default: CanvasText}
+      - {id: control-size, name: --cui-carousel-control-size, type: length, purpose: Previous and next Button size., default: Size-derived.}
+      - {id: focus-color, name: --cui-carousel-focus-color, type: color, purpose: Focus ring., default: Highlight}
+      - {id: indicator-size, name: --cui-carousel-indicator-size, type: length, purpose: Picker dot size., default: 0.65rem}
+      - {id: indicator-color, name: --cui-carousel-indicator-color, type: color, purpose: Inactive picker color., default: Scheme-aware neutral.}
+      - {id: indicator-active-color, name: --cui-carousel-indicator-active-color, type: color, purpose: Current picker color., default: Highlight}
+      - {id: duration, name: --cui-carousel-duration, type: time, purpose: Reserved scroll transition duration and reduced-motion input., default: 260ms}
+      - {id: easing, name: --cui-carousel-easing, type: easing, purpose: Reserved scroll transition easing., default: ease-out}
+
+attributes:
+  - id: carousel-attributes
+    component: CCarousel
+    entries:
+      - {id: role, name: role, element: Root and Slide, type: '"region" | "group"', meaning: Identifies carousel region and Slide groups.}
+      - {id: aria-label, name: aria-label, element: Root Slide controls and picker group, type: string, meaning: Names each owned semantic surface.}
+      - {id: aria-roledescription, name: aria-roledescription, element: Root and Slide, type: '"carousel" | "slide"', meaning: Supplies concise role descriptions.}
+      - {id: data-orientation, name: data-orientation, element: Root, type: CCarouselOrientation, meaning: Reflects scroll axis.}
+      - {id: data-loop, name: data-loop, element: Root, type: present | absent, meaning: Reflects boundary wrapping.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present | absent, meaning: Reflects owned disabledness.}
+      - {id: data-draggable, name: data-draggable, element: Root, type: present | absent, meaning: Reflects fine-pointer drag availability.}
+      - {id: data-variant, name: data-variant, element: Root, type: CCarouselVariant, meaning: Reflects treatment.}
+      - {id: data-size, name: data-size, element: Root, type: CCarouselSize, meaning: Reflects geometry.}
+      - {id: data-index, name: data-index, element: Root Slide and picker, type: integer string, meaning: Reflects active or collection position according to destination.}
+      - {id: data-value, name: data-value, element: Slide, type: string, meaning: Reflects stable Slide identity.}
+      - {id: data-active, name: data-active, element: Current Slide, type: present | absent, meaning: Reflects the nearest selected snap point.}
+      - {id: disabled, name: disabled, element: Owned Buttons, type: present | absent, meaning: Reflects navigation availability.}
+      - {id: aria-current, name: aria-current, element: Current picker, type: '"true"', meaning: Identifies the picker for the active Slide.}
+      - {id: tabindex, name: tabindex, element: Viewport, type: '"0"', meaning: Makes the native scroll region keyboard reachable.}
+
+selectors:
+  - id: carousel-selectors
+    component: CCarousel
+    entries:
+      - {id: carousel, selector: '[data-citry-ui-part="carousel"]', element: section, purpose: Root state and styling boundary.}
+      - {id: controls, selector: '[data-citry-ui-part="controls"]', element: div, purpose: Previous and next control row.}
+      - {id: previous, selector: '[data-citry-ui-part="previous"]', element: Button, purpose: Previous control.}
+      - {id: next, selector: '[data-citry-ui-part="next"]', element: Button, purpose: Next control.}
+      - {id: viewport, selector: '[data-citry-ui-part="viewport"]', element: div, purpose: Native Scroll Snap viewport.}
+      - {id: track, selector: '[data-citry-ui-part="track"]', element: div, purpose: Direct Slide layout track.}
+      - {id: slide, selector: '[data-citry-ui-part="slide"]', element: div, purpose: Named composed Slide.}
+      - {id: indicators, selector: '[data-citry-ui-part="indicators"]', element: div, purpose: Picker Button group.}
+      - {id: indicator, selector: '[data-citry-ui-part="indicator"]', element: Button, purpose: Runtime picker for one Slide.}
+
+interfaces:
+  - id: carousel-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: orientation, name: CCarouselOrientation, definition: 'Literal["horizontal", "vertical"]'}
+      - {id: variant, name: CCarouselVariant, definition: 'Literal["plain", "surface"]'}
+      - {id: size, name: CCarouselSize, definition: 'Literal["sm", "md", "lg"]'}
+  - {id: carousel-slot, kind: record, name: CCarouselDefaultSlotData, entries: []}
+  - {id: slide-slot, kind: record, name: CCarouselSlideDefaultSlotData, entries: []}
+  - id: index-change-detail
+    kind: record
+    name: CCarouselIndexChangeDetail
+    entries:
+      - {id: index, name: index, type: int, meaning: Requested active index.}
+      - {id: previous, name: previousIndex, type: int, meaning: Previously effective index.}
+      - {id: value, name: value, type: str, meaning: Stable requested Slide value.}
+      - {id: reason, name: reason, type: string, meaning: Request source.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client index owns state.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether structure forced fallback.}
+      - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source.}

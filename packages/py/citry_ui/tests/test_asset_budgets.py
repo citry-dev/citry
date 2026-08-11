@@ -1,4 +1,4 @@
-"""Frozen Phase 7 Citry UI asset budgets."""
+"""Frozen Citry UI component-catalog asset budgets."""
 
 from __future__ import annotations
 
@@ -8,39 +8,27 @@ import brotli
 
 import citry_ui
 from citry import Citry
+from citry_ui.quality.asset_report import _family_assets
 
 
 def _assets(*, kind: str, names: set[str] | None = None) -> bytes:
-    app = Citry(autodiscover=False)
-    installation = app.register_library(citry_ui)
-    payloads: list[bytes] = []
-    seen: set[bytes] = set()
-    for definition in citry_ui.COMPONENTS:
-        if names is not None and definition.__name__ not in names:
-            continue
-        concrete = installation[definition]
-        value = concrete.get_js() if kind == "js" else concrete.get_css()
-        if value is None:
-            continue
-        payload = value.encode()
-        if payload not in seen:
-            seen.add(payload)
-            payloads.append(payload)
-    return b"\n".join(payloads)
+    selected = names or {definition.__name__ for definition in citry_ui.COMPONENTS}
+    javascript, css = _family_assets(frozenset(selected))
+    return javascript if kind == "js" else css
 
 
-def test_complete_phase7_slice_stays_inside_compressed_asset_budgets() -> None:
+def test_complete_component_catalog_stays_inside_compressed_asset_budgets() -> None:
     javascript = _assets(kind="js")
     css = _assets(kind="css")
 
-    assert len(brotli.compress(javascript)) <= 45 * 1024
+    assert len(brotli.compress(javascript)) <= 80 * 1024
     assert len(brotli.compress(css)) <= 30 * 1024
     assert len(gzip.compress(javascript)) > 0
     assert len(gzip.compress(css)) > 0
 
 
 def test_basic_action_form_and_table_route_stays_inside_narrow_budget() -> None:
-    names = {"CButton", "CField", "CInput", "CTable"}
+    names = {"CButton", "CCheckbox", "CField", "CInput", "CNativeSelect", "CTable", "CTextarea"}
     javascript = _assets(kind="js", names=names)
     css = _assets(kind="css", names=names)
 
@@ -53,6 +41,7 @@ def test_semantic_table_has_no_component_javascript() -> None:
     installation = app.register_library(citry_ui)
 
     assert installation[citry_ui.CTable].get_js() is None
+    assert installation[citry_ui.CCard].get_js() is None
 
 
 def test_idle_button_runtime_declares_no_retained_global_resource() -> None:

@@ -817,7 +817,7 @@ def test_manifest_marks_urls_fetches_tags_and_runs_calls(page: Any, serve_live: 
             "js": [_b64(json.dumps(js_descriptor, ensure_ascii=False))],
             "css": [_b64(json.dumps(css_descriptor, ensure_ascii=False))],
         },
-        "calls": [[_b64("manifest_cls"), _b64("cman"), _b64("hman")]],
+        "calls": [[_b64("manifest_cls"), _b64("cman"), _b64("hman"), "init"]],
     }
 
     base = _serve_runtime_page(serve_live)
@@ -896,7 +896,7 @@ def test_manifest_present_before_runtime_is_processed_at_startup(page: Any, serv
         {
             "markLoaded": {"js": [], "css": []},
             "fetch": {"js": [], "css": []},
-            "calls": [[_b64("boot_cls"), _b64("cboot"), None]],
+            "calls": [[_b64("boot_cls"), _b64("cboot"), None, "init"]],
         }
     )
     page_html = f"""
@@ -977,6 +977,37 @@ def test_processed_manifest_is_not_reprocessed_when_reobserved(page: Any, serve_
     page.evaluate("() => window.__insertFreshCallManifest()")
     page.wait_for_function("window.__log.length === 2")
     assert page.evaluate("window.__log") == ["call", "call"]
+
+
+def test_parser_created_manifest_waits_for_its_json_text(page: Any, serve_live: Any) -> None:
+    # While a document is streaming, the HTML parser may yield a mutation
+    # record for the script start tag before its JSON text node has landed.
+    # The runtime must leave that transient empty element for the final
+    # DOMContentLoaded drain instead of consuming it as invalid JSON.
+    c = Citry()
+    c.set_mounted_prefix("/citry")
+    page_html = """
+      <html>
+        <head><script src="/citry/citry.js"></script></head>
+        <body>
+          <script type="application/json" data-citry>{}</script>
+          <output id="after-parser">ready</output>
+        </body>
+      </html>
+    """
+    base = serve_live(c, page_html, "")
+    errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: errors.append(message.text) if message.type == "error" else None,
+    )
+
+    page.goto(base + "/", wait_until="networkidle")
+
+    assert page.locator("#after-parser").text_content() == "ready"
+    manifest = page.locator("script[data-citry]")
+    assert manifest.get_attribute("data-citry-processed") == ""
+    assert errors == []
 
 
 def test_invalid_manifest_json_does_not_break_later_manifests(page: Any, serve_live: Any) -> None:

@@ -71,8 +71,11 @@ class TestFragmentStrategy:
 
         # The instance call rides along; nothing is marked as loaded (the
         # manager marks what it fetches itself).
-        calls = [[_unb64(part) if part is not None else None for part in call] for call in manifest["calls"]]
-        assert calls == [[widget.class_id, record.component_id, record.js_vars_hash]]
+        calls = [
+            [_unb64(call[0]), _unb64(call[1]), None if call[2] is None else _unb64(call[2]), call[3]]
+            for call in manifest["calls"]
+        ]
+        assert calls == [[widget.class_id, record.component_id, record.js_vars_hash, "init"]]
         assert manifest["markLoaded"] == {"js": [], "css": []}
 
     def test_graph_fetches_union_sorted_component_owners(self):

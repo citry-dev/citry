@@ -612,7 +612,7 @@ Repo sources cited inline as `file:line`; load-bearing ones:
 `packages/py/citry/citry/{component.py,component_registry.py}`,
 `packages/py/pygments_citry/pygments_citry/`,
 `docs/design/{source_languages.md,extensions_roadmap.md,template_grammar.md}`,
-`TODO/project_status_june_2026.md`, issues #22, #23, #24, #26, #27.
+and issues #22, #23, #24, #26, #27.
 
 Web claims are grounded in the four recon reports in this directory, whose
 sources were all accessed and version-checked 2026-07-07:

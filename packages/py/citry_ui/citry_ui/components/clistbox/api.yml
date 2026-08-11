@@ -1,0 +1,186 @@
+schema_version: 1
+family: listbox
+
+components:
+  - CListbox
+  - CListboxOption
+  - CListboxGroup
+
+inputs:
+  - id: clistbox-server-inputs
+    component: CListbox
+    channel: server
+    column_widths: [fit, 14rem, 8rem, auto]
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the visible accessible Listbox name.}
+      - {id: value, name: value, type: {display: 'str | None | Sequence[str]', interfaces: [CListboxValue]}, default: {kind: literal, value: null}, effect: Sets initial single or multiple selection.}
+      - {id: multiple, name: multiple, type: bool, default: {kind: literal, value: false}, effect: Enables independent multiple selection.}
+      - {id: mandatory, name: mandatory, type: bool, default: {kind: literal, value: false}, effect: Prevents user interaction from clearing the final selected Option.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables focus and selection throughout the collection.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: false}, effect: Wraps arrow navigation at collection edges.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CListboxVariant]}, default: {kind: literal, value: outline}, effect: Selects surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CListboxSize]}, default: {kind: literal, value: md}, effect: Selects Option geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted root attributes without replacing owned state structure or runtime.}
+      - {id: listbox-attrs, name: listbox_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted attributes to the role listbox surface without replacing owned semantics or focus.}
+  - id: clistbox-client-inputs
+    component: CListbox
+    channel: client
+    column_widths: [fit, 14rem, 12rem, auto]
+    entries:
+      - {id: value, name: value, type: 'string | string[] | null', omitted: Releases control to committed selection., effect: Controls single or multiple selection while supplied.}
+      - {id: mandatory, name: mandatory, type: bool, omitted: Uses the server value., effect: Reactively prevents the final user-selected value from clearing.}
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server value., effect: Reactively disables collection interaction.}
+      - {id: loop, name: loop, type: bool, omitted: Uses the server value., effect: Reactively changes arrow wrapping.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CListboxVariant]}, omitted: Uses the server value., effect: Reactively changes surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CListboxSize]}, omitted: Uses the server value., effect: Reactively changes Option geometry.}
+      - {id: on-value-change, name: onValueChange, type: '((value: string | string[] | null, detail: CListboxValueChangeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives selection and structural-recovery requests.}
+  - id: clistbox-option-server-inputs
+    component: CListboxOption
+    channel: server
+    column_widths: [fit, 14rem, 8rem, auto]
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Supplies stable unique Option identity.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Prevents focus and selection for this Option.}
+      - {id: text-value, name: text_value, type: 'str | None', default: {kind: literal, value: null}, effect: Overrides normalized visible label text for typeahead.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the concrete Option.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds inline styles to the concrete Option.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted Option attributes without replacing semantics identity focus or state.}
+  - id: clistbox-option-client-inputs
+    component: CListboxOption
+    channel: client
+    column_widths: [fit, 14rem, 12rem, auto]
+    entries:
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server value., effect: Reactively disables this Option.}
+      - {id: text-value, name: textValue, type: 'string | null', omitted: Uses the server value or visible label., effect: Reactively changes typeahead text.}
+  - id: clistbox-group-server-inputs
+    component: CListboxGroup
+    channel: server
+    column_widths: [fit, 14rem, 8rem, auto]
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies the visible accessible group name.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the group.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds inline styles to the group.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted group attributes without replacing owned semantics or label relationship.}
+
+slots:
+  - id: clistbox-slots
+    component: CListbox
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CListboxDefaultSlotData]}, fallback: None. Accepts direct CListboxOption or CListboxGroup declarations.}
+  - id: clistbox-option-slots
+    component: CListboxOption
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{value}', interfaces: [CListboxOptionDefaultSlotData]}, fallback: None. Supplies visible accessible label content.}
+      - {id: start, name: start, required: false, data: {display: '{value, selected, disabled}', interfaces: [CListboxOptionStateSlotData]}, fallback: Omitted. Decorative leading content.}
+      - {id: description, name: description, required: false, data: {display: '{value}', interfaces: [CListboxOptionDescriptionSlotData]}, fallback: Omitted. Supplies separately described supporting text.}
+      - {id: end, name: end, required: false, data: {display: '{value, selected, disabled}', interfaces: [CListboxOptionStateSlotData]}, fallback: Omitted. Decorative trailing content.}
+  - id: clistbox-group-slots
+    component: CListboxGroup
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CListboxGroupDefaultSlotData]}, fallback: None. Accepts one or more direct CListboxOption declarations.}
+
+events:
+  - id: clistbox-events
+    component: CListbox
+    entries:
+      - {id: value-change, name: onValueChange, signature: {display: '(value: string | string[] | null, detail: CListboxValueChangeDetail) => void', interfaces: [CListboxValueChangeDetail]}, trigger: Enabled pointer or keyboard selection request or settled structural recovery., detail: {display: '{value, previousValue, option, selected, controlled, source, sourceEvent}', interfaces: [CListboxValueChangeDetail]}, behavior: Commits immediately when uncontrolled and waits for owner acceptance when controlled.}
+
+methods: []
+
+css:
+  - id: clistbox-css-variables
+    component: CListbox
+    entries:
+      - {id: cui-listbox-gap, name: --cui-listbox-gap, type: length, purpose: Gap between label and collection., default: 0.375rem}
+      - {id: cui-listbox-max-block-size, name: --cui-listbox-max-block-size, type: length, purpose: Maximum scrollable collection height., default: 18rem}
+      - {id: cui-listbox-background, name: --cui-listbox-background, type: color, purpose: Collection background., default: variant-derived Canvas surface}
+      - {id: cui-listbox-foreground, name: --cui-listbox-foreground, type: color, purpose: Collection foreground., default: CanvasText}
+      - {id: cui-listbox-muted-color, name: --cui-listbox-muted-color, type: color, purpose: Disabled and secondary foreground., default: 'light #667085; dark #a4a7ae'}
+      - {id: cui-listbox-border-color, name: --cui-listbox-border-color, type: color, purpose: Outline border., default: 'light #d0d5dd; dark #535862'}
+      - {id: cui-listbox-hover-background, name: --cui-listbox-hover-background, type: color, purpose: Enabled hover surface., default: '7% CanvasText mix'}
+      - {id: cui-listbox-selected-background, name: --cui-listbox-selected-background, type: color, purpose: Selected Option surface., default: 'light #dbeafe; dark #1e3a5f'}
+      - {id: cui-listbox-selected-foreground, name: --cui-listbox-selected-foreground, type: color, purpose: Selected Option foreground., default: 'light #1849a9; dark #d1e9ff'}
+      - {id: cui-listbox-focus-color, name: --cui-listbox-focus-color, type: color, purpose: Roving focus outline., default: Highlight}
+      - {id: cui-listbox-radius, name: --cui-listbox-radius, type: length, purpose: Collection corner radius., default: 0.625rem}
+      - {id: cui-listbox-option-padding, name: --cui-listbox-option-padding, type: length, purpose: Option block and inline padding., default: size-derived}
+
+attributes:
+  - id: clistbox-attributes
+    component: CListbox
+    entries:
+      - {id: role-listbox, name: role, element: Collection div, type: listbox, meaning: Declares the persistent selection widget.}
+      - {id: role-option, name: role, element: Option div, type: option, meaning: Declares each selectable value.}
+      - {id: role-group, name: role, element: Group div, type: group, meaning: Groups related Options under a visible label.}
+      - {id: aria-labelledby, name: aria-labelledby, element: Collection Option or Group div, type: IDREF, meaning: Connects each semantic owner to its visible label.}
+      - {id: aria-selected, name: aria-selected, element: Option div, type: 'true | false', meaning: Reflects effective selection.}
+      - {id: aria-disabled, name: aria-disabled, element: Collection or Option div, type: 'true | false', meaning: Reflects effective unavailability.}
+      - {id: aria-multiselectable, name: aria-multiselectable, element: Collection div, type: 'true', meaning: Present only in multiple mode.}
+      - {id: tabindex, name: tabindex, element: Option div, type: '0 | -1', meaning: Implements one enabled roving Tab stop.}
+      - {id: data-selected, name: data-selected, element: Option div, type: present-or-absent, meaning: Mirrors selected styling state.}
+      - {id: data-active, name: data-active, element: Option div, type: present-or-absent, meaning: Mirrors roving focus identity.}
+      - {id: data-disabled, name: data-disabled, element: Root or Option div, type: present-or-absent, meaning: Mirrors effective unavailability.}
+      - {id: data-value, name: data-value, element: Option div, type: string, meaning: Exposes canonical Option identity.}
+      - {id: data-multiple, name: data-multiple, element: Root div, type: present-or-absent, meaning: Mirrors multiple selection mode.}
+      - {id: data-mandatory, name: data-mandatory, element: Root div, type: present-or-absent, meaning: Mirrors final-selection protection.}
+      - {id: data-variant, name: data-variant, element: Root div, type: 'plain | soft | outline', meaning: Mirrors effective surface treatment.}
+      - {id: data-size, name: data-size, element: Root div, type: 'sm | md | lg', meaning: Mirrors effective geometry.}
+
+selectors:
+  - id: clistbox-selectors
+    component: CListbox
+    entries:
+      - {id: part-root, selector: '[data-citry-ui-part="listbox-root"]', element: Root div, purpose: Stable root attrs and state surface.}
+      - {id: part-label, selector: '[data-citry-ui-part="listbox-label"]', element: Label span, purpose: Visible collection label.}
+      - {id: part-listbox, selector: '[data-citry-ui-part="listbox"]', element: Collection div, purpose: Semantic and scrolling selection surface.}
+      - {id: part-option, selector: '[data-citry-ui-part="listbox-option"]', element: Option div, purpose: Stable Option attrs focus and state surface.}
+      - {id: part-indicator, selector: '[data-citry-ui-part="listbox-indicator"]', element: Indicator span, purpose: Decorative selected-state mark.}
+      - {id: part-option-start, selector: '[data-citry-ui-part="listbox-option-start"]', element: Start span, purpose: Decorative leading content wrapper.}
+      - {id: part-option-copy, selector: '[data-citry-ui-part="listbox-option-copy"]', element: Copy span, purpose: Stable label and description layout wrapper.}
+      - {id: part-option-label, selector: '[data-citry-ui-part="listbox-option-label"]', element: Label span, purpose: Visible Option name and default typeahead source.}
+      - {id: part-option-description, selector: '[data-citry-ui-part="listbox-option-description"]', element: Description span, purpose: Separately described supporting text.}
+      - {id: part-option-end, selector: '[data-citry-ui-part="listbox-option-end"]', element: End span, purpose: Decorative trailing content wrapper.}
+      - {id: part-group, selector: '[data-citry-ui-part="listbox-group"]', element: Group div, purpose: Stable semantic grouping surface.}
+      - {id: part-group-label, selector: '[data-citry-ui-part="listbox-group-label"]', element: Group label span, purpose: Visible group name.}
+
+interfaces:
+  - id: clistbox-aliases
+    kind: aliases
+    entries:
+      - {id: clistbox-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: clistbox-style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: clistbox-value, name: CListboxValue, definition: 'str | None | Sequence[str]'}
+      - {id: clistbox-variant, name: CListboxVariant, definition: 'Literal["plain", "soft", "outline"]'}
+      - {id: clistbox-size, name: CListboxSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: clistbox-source, name: CListboxChangeSource, definition: 'Literal["pointer", "keyboard", "structure"]'}
+  - {id: clistbox-default-slot-data, kind: record, name: CListboxDefaultSlotData, entries: []}
+  - {id: clistbox-group-default-slot-data, kind: record, name: CListboxGroupDefaultSlotData, entries: []}
+  - id: clistbox-option-default-slot-data
+    kind: record
+    name: CListboxOptionDefaultSlotData
+    entries:
+      - {id: value, name: value, type: str, meaning: Canonical Option identity.}
+  - id: clistbox-option-state-slot-data
+    kind: record
+    name: CListboxOptionStateSlotData
+    entries:
+      - {id: value, name: value, type: str, meaning: Canonical Option identity.}
+      - {id: selected, name: selected, type: bool, meaning: Server-rendered initial selected state.}
+      - {id: disabled, name: disabled, type: bool, meaning: Server-rendered initial Option disabled state.}
+  - id: clistbox-option-description-slot-data
+    kind: record
+    name: CListboxOptionDescriptionSlotData
+    entries:
+      - {id: value, name: value, type: str, meaning: Canonical Option identity.}
+  - id: clistbox-value-change-detail
+    kind: record
+    name: CListboxValueChangeDetail
+    entries:
+      - {id: value, name: value, type: 'str | list[str] | None', meaning: Requested next effective value.}
+      - {id: previous-value, name: previousValue, type: 'str | list[str] | None', meaning: Prior effective value.}
+      - {id: option, name: option, type: 'HTMLElement | None', meaning: Changed Option or None for structural recovery.}
+      - {id: selected, name: selected, type: bool, meaning: Whether the Option is requested selected.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether the client value currently controls selection.}
+      - {id: source, name: source, type: {display: '"pointer" | "keyboard" | "structure"', interfaces: [CListboxChangeSource]}, meaning: Request source.}
+      - {id: source-event, name: sourceEvent, type: 'Event | None', meaning: Native source event or None for structure.}

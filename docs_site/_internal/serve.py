@@ -33,6 +33,7 @@ from docs_site._internal.config import config as default_config
 from docs_site._internal.examples import get_example_by_slug
 from docs_site._internal.local_playground_runtime import (
     LocalPlaygroundRuntime,
+    LocalPlaygroundRuntimeError,
     build_local_playground_runtime,
 )
 from docs_site._internal.paths import md_to_url, url_to_md
@@ -370,13 +371,27 @@ def create_app(
 
 
 def create_local_app() -> Starlette:
-    """Add workspace Citry UI to the pinned browser runtime and serve it."""
+    """Add workspace Citry UI to the pinned browser runtime, or serve the docs without it."""
     owner = tempfile.TemporaryDirectory(prefix="citry-docs-playground-")
     print("Building the local Citry UI wheel for the browser playground...")
-    local_runtime = build_local_playground_runtime(
-        repo_root=default_config.repo_root,
-        output_dir=Path(owner.name),
-    )
+    try:
+        local_runtime = build_local_playground_runtime(
+            repo_root=default_config.repo_root,
+            output_dir=Path(owner.name),
+        )
+    except LocalPlaygroundRuntimeError as error:
+        # The workspace Citry UI usually needs a Citry newer than the pinned
+        # release, and stays that way for the whole stretch between releases.
+        # Every page still renders without the local wheel, so keep serving
+        # rather than blocking docs authoring until the next Citry ships.
+        owner.cleanup()
+        print(f"Citry UI is missing from the browser playground: {error}")
+        print(
+            "Serving the committed playground runtime instead. Citry UI examples show their code "
+            "without a live preview until docs_site/static/playground/runtime.json pins a Citry "
+            "release that the workspace Citry UI accepts."
+        )
+        return create_app()
     local_app = create_app(local_playground_runtime=local_runtime)
     # Keep the generated wheel directory alive for as long as the ASGI app.
     local_app.state.local_playground_runtime_owner = owner

@@ -29,8 +29,8 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
 ]
 license = "MIT"
-license-files = ["LICENSE"]
-dependencies = ["citry>=0.3.1,<0.4.0"]
+license-files = ["LICENSE", "THIRD_PARTY_LICENSES.md"]
+dependencies = ["citry>=0.3.2,<0.4.0"]
 
 [dependency-groups]
 dev = [

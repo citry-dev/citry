@@ -18,6 +18,7 @@ from citry.extension import Extension
 
 
 class TestInfiniteDepth:
+    @pytest.mark.qualification
     def test_renders_far_past_recursion_limit(self):
         # A chain C0 -> C1 -> ... -> C600, each rendering the next. Eager
         # recursion blows the Python stack around ~60 levels; the queue is

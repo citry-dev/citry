@@ -9,8 +9,16 @@ import {
 	type ServerOptions,
 	SettingMonitor,
 } from "vscode-languageclient/node";
-import { advanceTagCompletionRetrigger } from "./completionRetrigger.js";
-import { type EmbeddedLanguage, embeddedLanguageAt, virtualDocumentSource } from "./embedded.js";
+import { browserProjectionCandidateAt } from "./browserRouting.js";
+import { RestartCoordinator, stopLanguageClient, WatchedFileChangeBatcher } from "./clientLifecycle.js";
+import { advanceExpressionCompletionRetrigger, advanceTagCompletionRetrigger } from "./completionRetrigger.js";
+import { FORMAT_PROVIDER_INVALID, FORMAT_STALE_DOCUMENT } from "./diagnosticCatalog.js";
+import {
+	type EmbeddedLanguage,
+	embeddedLanguageAt,
+	virtualDocumentSource,
+	virtualDocumentSourceAt,
+} from "./embedded.js";
 import {
 	type EmbeddedFormatterInvocation,
 	type EmbeddedFormattingParams,
@@ -27,14 +35,30 @@ import {
 	sourceFormattingAction,
 	workspaceOwnsDocument,
 } from "./formatting.js";
-import { nativeDynamicAttributeHoverProjection, projectNativeHtmlAttributes } from "./nativeHtmlAttributes.js";
+import {
+	type HtmlProjectionCandidate,
+	htmlProjectionCandidateRangeAt,
+	nativeDynamicAttributeHoverProjection,
+	projectNativeHtmlAttributes,
+} from "./nativeHtmlAttributes.js";
+import {
+	delegatedCompletionResolveCount,
+	delegatedProviderTimeoutMs,
+	linearlyMappedProjectionPosition,
+	projectionTimeoutMs,
+	virtualDocumentTimeoutMs,
+	withTimeout,
+} from "./providerPipeline.js";
 
 const protocolVersion = 1;
 const statusMethod = "citry/status";
 const reloadMethod = "citry/reload";
+const browserProjectionMethod = "citry/browserProjection";
+const htmlProjectionMethod = "citry/htmlProjection";
 const formatComponentAssetsMethod = "citry/formatComponentAssets";
 const formatEmbeddedMethod = "citry/formatEmbedded";
 const embeddedScheme = "citry-embedded";
+const browserScheme = "citry-browser";
 const embeddedFormattingScheme = "citry-embedded-format";
 const nativeHtmlAttributeHoverProjection = "native-html-attribute-hover";
 const sourceFormatKind = vscode.CodeActionKind.Source.append("format.citry");
@@ -107,16 +131,163 @@ interface FormatMetadata {
 	};
 }
 
+interface ProviderProjectionResponse {
+	source: string;
+	position: { line: number; character: number };
+	sourceRange: {
+		start: { line: number; character: number };
+		end: { line: number; character: number };
+	};
+	virtualRange: {
+		start: { line: number; character: number };
+		end: { line: number; character: number };
+	};
+}
+
+interface BrowserProjectionResponse extends ProviderProjectionResponse {
+	ownedRootNames: string[];
+	citryOwnsPosition: boolean;
+}
+
 type FormatResponse = (FormatEditResponse | FormatUnchangedResponse | FormatRefusedResponse) & FormatMetadata;
 
 const clients = new Map<string, ClientEntry>();
+const restartCoordinator = new RestartCoordinator(restartAllOnce);
 let statusBar: vscode.StatusBarItem;
 let formatterOutput: vscode.OutputChannel;
+let performanceOutput: vscode.OutputChannel;
 let lastQuietFormattingFailure: string | undefined;
 const activeEmbeddedFormatting = new Set<string>();
+const browserProjectionResponses = new Map<string, BrowserProjectionResponse | null>();
+const htmlProjectionResponses = new Map<string, ProviderProjectionResponse | null>();
+let projectionGeneration = 0;
+let embeddedDocuments: EmbeddedContentProvider;
 let embeddedFormattingDocuments: EmbeddedFormattingContentProvider;
-let pendingTagCompletionRetrigger: { uri: string; offset: number } | undefined;
-let pendingTagCompletionDispatch: { uri: string; version: number; position: vscode.Position } | undefined;
+let browserDocuments: BrowserContentProvider;
+let pendingCompletionRetrigger: { uri: string; offset: number } | undefined;
+let pendingCompletionDispatch: { uri: string; version: number; position: vscode.Position } | undefined;
+let nextPerformanceRequest = 0;
+
+function clearProjectionResponses(): void {
+	projectionGeneration += 1;
+	browserProjectionResponses.clear();
+	htmlProjectionResponses.clear();
+}
+
+type ProviderOperation = "completion" | "hover" | "definition";
+
+class ProviderTrace {
+	private readonly started = performance.now();
+	private readonly stages: Array<{ name: string; durationMs: number; outcome: string }> = [];
+	private finished = false;
+
+	constructor(
+		private readonly enabled: boolean,
+		private readonly request: number,
+		private readonly route: "browser" | "html",
+		private readonly operation: ProviderOperation,
+		private readonly document: vscode.TextDocument,
+		private readonly position: vscode.Position,
+	) {}
+
+	async stage<T>(name: string, action: () => Promise<T>): Promise<T> {
+		const started = performance.now();
+		try {
+			const value = await action();
+			this.stages.push({ name, durationMs: performance.now() - started, outcome: "ok" });
+			return value;
+		} catch (error) {
+			this.stages.push({
+				name,
+				durationMs: performance.now() - started,
+				outcome: error instanceof Error ? error.name : "error",
+			});
+			throw error;
+		}
+	}
+
+	measure<T>(name: string, action: () => T): T {
+		const started = performance.now();
+		try {
+			const value = action();
+			this.stages.push({ name, durationMs: performance.now() - started, outcome: "ok" });
+			return value;
+		} catch (error) {
+			this.stages.push({
+				name,
+				durationMs: performance.now() - started,
+				outcome: error instanceof Error ? error.name : "error",
+			});
+			throw error;
+		}
+	}
+
+	finish(outcome: string): void {
+		if (!this.enabled || this.finished) {
+			return;
+		}
+		this.finished = true;
+		performanceOutput.appendLine(
+			JSON.stringify({
+				kind: "citry.provider-timing",
+				request: this.request,
+				route: this.route,
+				operation: this.operation,
+				uri: this.document.uri.toString(),
+				version: this.document.version,
+				position: { line: this.position.line, character: this.position.character },
+				outcome,
+				totalMs: roundedMilliseconds(performance.now() - this.started),
+				stages: this.stages.map((stage) => ({
+					...stage,
+					durationMs: roundedMilliseconds(stage.durationMs),
+				})),
+			}),
+		);
+	}
+}
+
+function providerTrace(
+	route: "browser" | "html",
+	operation: ProviderOperation,
+	document: vscode.TextDocument,
+	position: vscode.Position,
+): ProviderTrace {
+	nextPerformanceRequest += 1;
+	const enabled = vscode.workspace.getConfiguration("citry", document.uri).get<boolean>("trace.performance", false);
+	return new ProviderTrace(enabled, nextPerformanceRequest, route, operation, document, position);
+}
+
+function roundedMilliseconds(value: number): number {
+	return Math.round(value * 100) / 100;
+}
+
+class ProviderCancelledError extends Error {
+	constructor() {
+		super("Citry provider request was cancelled");
+		this.name = "ProviderCancelledError";
+	}
+}
+
+async function waitForProvider<T>(
+	promise: PromiseLike<T>,
+	token: vscode.CancellationToken,
+	stage: string,
+	timeoutMs = delegatedProviderTimeoutMs,
+): Promise<T> {
+	let cancellation: vscode.Disposable | undefined;
+	const cancelled = new Promise<never>((_resolve, reject) => {
+		cancellation = token.onCancellationRequested(() => reject(new ProviderCancelledError()));
+		if (token.isCancellationRequested) {
+			reject(new ProviderCancelledError());
+		}
+	});
+	try {
+		return await withTimeout(Promise.race([Promise.resolve(promise), cancelled]), timeoutMs, stage);
+	} finally {
+		cancellation?.dispose();
+	}
+}
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
 	statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 40);
@@ -125,16 +296,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 	statusBar.tooltip = "Citry language server is starting";
 	statusBar.show();
 	formatterOutput = vscode.window.createOutputChannel("Citry Formatter");
+	performanceOutput = vscode.window.createOutputChannel("Citry Performance", { log: true });
+	embeddedDocuments = new EmbeddedContentProvider();
 	embeddedFormattingDocuments = new EmbeddedFormattingContentProvider();
-	context.subscriptions.push(statusBar, formatterOutput, embeddedFormattingDocuments);
+	browserDocuments = new BrowserContentProvider();
+	context.subscriptions.push(
+		statusBar,
+		formatterOutput,
+		performanceOutput,
+		embeddedDocuments,
+		embeddedFormattingDocuments,
+		browserDocuments,
+	);
 	context.subscriptions.push(...registerEmbeddedLanguageProviders());
+	context.subscriptions.push(...registerBrowserLanguageProviders());
 	context.subscriptions.push(
 		vscode.workspace.registerTextDocumentContentProvider(embeddedFormattingScheme, embeddedFormattingDocuments),
 	);
 	context.subscriptions.push(registerSourceFormattingAction());
 	context.subscriptions.push(registerStandaloneFormattingProvider());
-	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(handleTagCompletionChange));
-	context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(handleTagCompletionSelection));
+	context.subscriptions.push(vscode.workspace.onDidChangeTextDocument(handleCompletionChange));
+	context.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(handleCompletionSelection));
 
 	for (const folder of vscode.workspace.workspaceFolders ?? []) {
 		await startFolder(folder);
@@ -172,8 +354,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export async function deactivate(): Promise<void> {
+	// Let an in-flight restart finish registering its final clients before the
+	// extension performs the terminal shutdown.
+	await restartCoordinator.settled();
 	await Promise.all([...clients.values()].map((entry) => stopEntry(entry)));
 	clients.clear();
+	// Projection results belong to the client generation that produced them.
+	// Drop them during terminal shutdown just as restart and reload already do.
+	clearProjectionResponses();
 }
 
 async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
@@ -202,6 +390,12 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		{ language: "python", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*.py" } },
 		{ language: "citry-html", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
 		{ language: "html", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
+		// Citry accepts any css_file name; the language ID and registry ownership
+		// provide the proof instead of a filename convention.
+		{ language: "css", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
+		// As with css_file, registry ownership rather than an extension decides
+		// whether a JavaScript document belongs to a component.
+		{ language: "javascript", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
 	];
 	const ownsDocument = (document: vscode.TextDocument): boolean =>
 		workspaceOwnsDocument(key, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.toString());
@@ -214,6 +408,12 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		provideHover: (document, position, token, next) =>
 			ownsDocument(document) ? next(document, position, token) : undefined,
 		provideDefinition: (document, position, token, next) =>
+			ownsDocument(document) ? next(document, position, token) : undefined,
+		provideReferences: (document, position, context, token, next) =>
+			ownsDocument(document) ? next(document, position, context, token) : undefined,
+		provideDeclaration: (document, position, token, next) =>
+			ownsDocument(document) ? next(document, position, token) : undefined,
+		provideTypeDefinition: (document, position, token, next) =>
 			ownsDocument(document) ? next(document, position, token) : undefined,
 		provideDocumentSymbols: (document, token, next) => (ownsDocument(document) ? next(document, token) : undefined),
 	};
@@ -248,6 +448,9 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 	);
 	client.onNotification(statusMethod, (status: ProjectStatus) => {
 		entry.status = status;
+		// The authored document version does not change when a Python save
+		// replaces registry, schema, event, or browser-projection facts.
+		clearProjectionResponses();
 		updateStatusBar();
 	});
 	try {
@@ -266,11 +469,11 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 	updateStatusBar();
 }
 
-function handleTagCompletionChange(event: vscode.TextDocumentChangeEvent): void {
+function handleCompletionChange(event: vscode.TextDocumentChangeEvent): void {
 	const document = event.document;
 	const editor = vscode.window.activeTextEditor;
 	const uri = document.uri.toString();
-	pendingTagCompletionDispatch = undefined;
+	pendingCompletionDispatch = undefined;
 	const supportedLanguage =
 		document.languageId === "python" || document.languageId === "citry-html" || document.languageId === "html";
 	const entry = entryForUri(document.uri);
@@ -282,36 +485,43 @@ function handleTagCompletionChange(event: vscode.TextDocumentChangeEvent): void 
 		entry === undefined ||
 		!entry.client.isRunning()
 	) {
-		pendingTagCompletionRetrigger = undefined;
+		pendingCompletionRetrigger = undefined;
 		return;
 	}
 
 	const contentChange = event.contentChanges[0];
 	if (contentChange === undefined) {
-		pendingTagCompletionRetrigger = undefined;
+		pendingCompletionRetrigger = undefined;
 		return;
 	}
 	const source = document.getText();
-	const priorOffset = pendingTagCompletionRetrigger?.uri === uri ? pendingTagCompletionRetrigger.offset : undefined;
-	const decision = advanceTagCompletionRetrigger(
+	const priorOffset = pendingCompletionRetrigger?.uri === uri ? pendingCompletionRetrigger.offset : undefined;
+	const completionChange = {
+		startOffset: contentChange.rangeOffset,
+		removedLength: contentChange.rangeLength,
+		insertedText: contentChange.text,
+		history: event.reason !== undefined,
+	};
+	const tagDecision = advanceTagCompletionRetrigger(source, completionChange, priorOffset);
+	const expressionDecision = advanceExpressionCompletionRetrigger(
 		source,
-		{
-			startOffset: contentChange.rangeOffset,
-			removedLength: contentChange.rangeLength,
-			insertedText: contentChange.text,
-			history: event.reason !== undefined,
-		},
+		document.languageId,
+		completionChange,
 		priorOffset,
 	);
-	pendingTagCompletionRetrigger = undefined;
+	const decision =
+		tagDecision.pendingOffset !== undefined || tagDecision.triggerOffset !== undefined
+			? tagDecision
+			: expressionDecision;
+	pendingCompletionRetrigger = undefined;
 	const decisionOffset = decision.pendingOffset ?? decision.triggerOffset;
 	if (decisionOffset === undefined) {
 		return;
 	}
-	// The LSP owns Python template-region proof; duplicating its AST rules here
-	// would exclude valid raw, ordinary, or concatenated template literals.
+	// The client scan only makes a completion request timely. The LSP still
+	// owns exact region and Python-host proof before returning any item.
 	if (decision.pendingOffset !== undefined) {
-		pendingTagCompletionRetrigger = { uri, offset: decision.pendingOffset };
+		pendingCompletionRetrigger = { uri, offset: decision.pendingOffset };
 	}
 	if (decision.triggerOffset === undefined) {
 		return;
@@ -320,27 +530,27 @@ function handleTagCompletionChange(event: vscode.TextDocumentChangeEvent): void 
 	const expectedVersion = document.version;
 	const expectedPosition = document.positionAt(decision.triggerOffset);
 	const dispatch = { uri, version: expectedVersion, position: expectedPosition };
-	pendingTagCompletionDispatch = dispatch;
-	setTimeout(() => dispatchTagCompletion(dispatch), 0);
+	pendingCompletionDispatch = dispatch;
+	setTimeout(() => dispatchCompletion(dispatch), 0);
 	setTimeout(() => {
-		if (pendingTagCompletionDispatch === dispatch) {
-			pendingTagCompletionDispatch = undefined;
+		if (pendingCompletionDispatch === dispatch) {
+			pendingCompletionDispatch = undefined;
 		}
 	}, 250);
 }
 
-function handleTagCompletionSelection(event: vscode.TextEditorSelectionChangeEvent): void {
+function handleCompletionSelection(event: vscode.TextEditorSelectionChangeEvent): void {
 	const uri = event.textEditor.document.uri.toString();
 	const active = event.selections.length === 1 ? event.selections[0]?.active : undefined;
 	if (
-		pendingTagCompletionRetrigger !== undefined &&
-		(uri !== pendingTagCompletionRetrigger.uri ||
+		pendingCompletionRetrigger !== undefined &&
+		(uri !== pendingCompletionRetrigger.uri ||
 			active === undefined ||
-			event.textEditor.document.offsetAt(active) !== pendingTagCompletionRetrigger.offset)
+			event.textEditor.document.offsetAt(active) !== pendingCompletionRetrigger.offset)
 	) {
-		pendingTagCompletionRetrigger = undefined;
+		pendingCompletionRetrigger = undefined;
 	}
-	const dispatch = pendingTagCompletionDispatch;
+	const dispatch = pendingCompletionDispatch;
 	if (dispatch === undefined) {
 		return;
 	}
@@ -350,14 +560,14 @@ function handleTagCompletionSelection(event: vscode.TextEditorSelectionChangeEve
 		active === undefined ||
 		!active.isEqual(dispatch.position)
 	) {
-		pendingTagCompletionDispatch = undefined;
+		pendingCompletionDispatch = undefined;
 		return;
 	}
-	dispatchTagCompletion(dispatch);
+	dispatchCompletion(dispatch);
 }
 
-function dispatchTagCompletion(expected: NonNullable<typeof pendingTagCompletionDispatch>): void {
-	if (pendingTagCompletionDispatch !== expected) {
+function dispatchCompletion(expected: NonNullable<typeof pendingCompletionDispatch>): void {
+	if (pendingCompletionDispatch !== expected) {
 		return;
 	}
 	const activeEditor = vscode.window.activeTextEditor;
@@ -370,7 +580,7 @@ function dispatchTagCompletion(expected: NonNullable<typeof pendingTagCompletion
 	) {
 		return;
 	}
-	pendingTagCompletionDispatch = undefined;
+	pendingCompletionDispatch = undefined;
 	void vscode.commands.executeCommand("editor.action.triggerSuggest").then(undefined, () => undefined);
 }
 
@@ -379,13 +589,16 @@ async function stopEntry(entry: ClientEntry): Promise<void> {
 		disposable.dispose();
 	}
 	entry.disposables.length = 0;
-	if (entry.client.needsStop()) {
-		await entry.client.stop();
-	}
+	await stopLanguageClient(entry.client);
 }
 
 async function restartAll(): Promise<void> {
+	return restartCoordinator.request();
+}
+
+async function restartAllOnce(): Promise<void> {
 	const folders = [...(vscode.workspace.workspaceFolders ?? [])];
+	clearProjectionResponses();
 	await Promise.all([...clients.values()].map((entry) => stopEntry(entry)));
 	clients.clear();
 	for (const folder of folders) {
@@ -396,16 +609,18 @@ async function restartAll(): Promise<void> {
 
 function watchPythonFiles(entry: ClientEntry): vscode.Disposable[] {
 	const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(entry.folder, "**/*.py"));
-	const send = (uri: vscode.Uri, type: FileChangeType) => {
+	const batcher = new WatchedFileChangeBatcher<FileChangeType>((changes) => {
 		void entry.client.sendNotification(DidChangeWatchedFilesNotification.type, {
-			changes: [{ uri: uri.toString(), type }],
+			changes,
 		});
-	};
+	});
+	const collect = (uri: vscode.Uri, type: FileChangeType) => batcher.push(uri.toString(), type);
 	return [
 		watcher,
-		watcher.onDidCreate((uri) => send(uri, FileChangeType.Created)),
-		watcher.onDidChange((uri) => send(uri, FileChangeType.Changed)),
-		watcher.onDidDelete((uri) => send(uri, FileChangeType.Deleted)),
+		{ dispose: () => batcher.dispose() },
+		watcher.onDidCreate((uri) => collect(uri, FileChangeType.Created)),
+		watcher.onDidChange((uri) => collect(uri, FileChangeType.Changed)),
+		watcher.onDidDelete((uri) => collect(uri, FileChangeType.Deleted)),
 	];
 }
 
@@ -466,6 +681,7 @@ async function showStatus(): Promise<void> {
 	const choice = await vscode.window.showInformationMessage(detail, { modal: true }, "Reload registry");
 	if (choice === "Reload registry") {
 		entry.status = await entry.client.sendRequest<ProjectStatus>(reloadMethod, {});
+		clearProjectionResponses();
 		updateStatusBar();
 	}
 }
@@ -550,10 +766,7 @@ async function applyCitryFormatting(document: vscode.TextDocument, scope: Format
 			apply: (edit) => vscode.workspace.applyEdit(edit),
 		});
 		if (outcome === "stale") {
-			await reportFormattingFailure(
-				"citry.format.stale-document: the document changed before formatting applied",
-				quiet,
-			);
+			await reportFormattingFailure(`${FORMAT_STALE_DOCUMENT}: the document changed before formatting applied`, quiet);
 			return;
 		}
 		if (outcome === "invalid") {
@@ -594,7 +807,7 @@ async function handleEmbeddedFormatting(
 ): Promise<EmbeddedFormattingResponse> {
 	const key = `${params.textDocument?.uri ?? ""}\u0000${String(params.textDocument?.version)}\u0000${params.planId ?? ""}`;
 	if (activeEmbeddedFormatting.has(key)) {
-		throw new Error("citry.format.provider-invalid: recursive embedded formatting request refused");
+		throw new Error(`${FORMAT_PROVIDER_INVALID}: recursive embedded formatting request refused`);
 	}
 	activeEmbeddedFormatting.add(key);
 	const formattingSession = embeddedFormattingDocuments.createSession();
@@ -664,7 +877,7 @@ function registerStandaloneFormattingProvider(): vscode.Disposable {
 				});
 				if (prepared.kind === "stale") {
 					await reportFormattingFailure(
-						"citry.format.stale-document: the document changed before formatting applied",
+						`${FORMAT_STALE_DOCUMENT}: the document changed before formatting applied`,
 						quiet,
 					);
 					return undefined;
@@ -729,26 +942,93 @@ function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
 
-class EmbeddedContentProvider implements vscode.TextDocumentContentProvider {
+class EmbeddedContentProvider implements vscode.TextDocumentContentProvider, vscode.Disposable {
+	private readonly changes = new vscode.EventEmitter<vscode.Uri>();
+	readonly onDidChange = this.changes.event;
+
+	dispose(): void {
+		this.changes.dispose();
+	}
+
+	refresh(uri: vscode.Uri): void {
+		this.changes.fire(uri);
+	}
+
 	provideTextDocumentContent(uri: vscode.Uri): string {
 		const parameters = new URLSearchParams(uri.query);
 		const sourceValue = parameters.get("source");
-		const requestedVersion = Number(parameters.get("version"));
 		const language = embeddedLanguageFromAuthority(uri.authority);
-		if (sourceValue === null || language === undefined || !Number.isInteger(requestedVersion)) {
+		if (sourceValue === null || language === undefined) {
 			return "";
 		}
 		const sourceUri = vscode.Uri.parse(sourceValue);
 		const document = vscode.workspace.textDocuments.find(
 			(candidate) => candidate.uri.toString() === sourceUri.toString(),
 		);
-		if (document === undefined || document.version !== requestedVersion) {
+		if (document === undefined) {
 			return "";
 		}
 		const source = virtualDocumentSource(document.getText(), document.languageId, language);
 		return language === "html" && parameters.get("projection") === nativeHtmlAttributeHoverProjection
 			? projectNativeHtmlAttributes(source).source
 			: source;
+	}
+}
+
+class BrowserContentProvider implements vscode.TextDocumentContentProvider, vscode.Disposable {
+	private readonly sources = new Map<string, string>();
+	private readonly uriByIdentity = new Map<string, vscode.Uri>();
+	private readonly identityByUri = new Map<string, string>();
+	private readonly changes = new vscode.EventEmitter<vscode.Uri>();
+	private nextSession = 0;
+	readonly onDidChange = this.changes.event;
+
+	dispose(): void {
+		this.changes.dispose();
+		this.sources.clear();
+		this.uriByIdentity.clear();
+		this.identityByUri.clear();
+	}
+
+	provideTextDocumentContent(uri: vscode.Uri): string {
+		return this.sources.get(uri.toString()) ?? "";
+	}
+
+	refresh(uri: vscode.Uri): void {
+		this.changes.fire(uri);
+	}
+
+	create(identity: string, source: string, language: "javascript" | "html" = "javascript"): vscode.Uri {
+		let uri = this.uriByIdentity.get(identity);
+		if (uri === undefined) {
+			this.nextSession += 1;
+			uri = vscode.Uri.from({
+				scheme: browserScheme,
+				authority: language,
+				path: `/projection-${this.nextSession}.${language === "html" ? "html" : "js"}`,
+			});
+			this.uriByIdentity.set(identity, uri);
+			this.identityByUri.set(uri.toString(), identity);
+		}
+		const uriKey = uri.toString();
+		const changed = this.sources.get(uriKey) !== source;
+		this.sources.set(uriKey, source);
+		if (changed) {
+			this.changes.fire(uri);
+		}
+		while (this.sources.size > 64) {
+			const oldestUri = this.sources.keys().next().value;
+			if (oldestUri === undefined) {
+				break;
+			}
+			this.sources.delete(oldestUri);
+			const oldestIdentity = this.identityByUri.get(oldestUri);
+			if (oldestIdentity !== undefined) {
+				this.uriByIdentity.delete(oldestIdentity);
+				this.identityByUri.delete(oldestUri);
+			}
+		}
+		return uri;
 	}
 }
 
@@ -865,30 +1145,516 @@ class EmbeddedFormattingContentProvider implements vscode.TextDocumentContentPro
 	}
 }
 
-function registerEmbeddedLanguageProviders(): vscode.Disposable[] {
-	const selector: vscode.DocumentSelector = [{ language: "python" }, { language: "citry-html" }];
-	const contentProvider = vscode.workspace.registerTextDocumentContentProvider(
-		embeddedScheme,
-		new EmbeddedContentProvider(),
-	);
+interface MappedProviderRequest {
+	projection: ProviderProjectionResponse;
+	sourceDocument: vscode.TextDocument;
+	sourceVersion: number;
+	virtualDocument: vscode.TextDocument;
+	virtualUri: vscode.Uri;
+}
+
+interface BrowserProviderRequest extends MappedProviderRequest {
+	projection: BrowserProjectionResponse;
+}
+
+interface HtmlProviderRequest extends MappedProviderRequest {
+	projectedAttributeRange?: vscode.Range;
+	sourceAttributeRange?: vscode.Range;
+	providerPosition: vscode.Position;
+}
+
+function registerBrowserLanguageProviders(): vscode.Disposable[] {
+	const selector: vscode.DocumentSelector = [
+		{ language: "python", scheme: "file" },
+		{ language: "citry-html", scheme: "file" },
+		{ language: "html", scheme: "file" },
+		{ language: "javascript", scheme: "file" },
+	];
+	const contentProvider = vscode.workspace.registerTextDocumentContentProvider(browserScheme, browserDocuments);
 	const completions = vscode.languages.registerCompletionItemProvider(
 		selector,
 		{
 			async provideCompletionItems(document, position, token) {
+				const trace = providerTrace("browser", "completion", document, position);
+				try {
+					const candidate = trace.measure("lexical-routing", () =>
+						browserProjectionCandidateAt(document.getText(), document.languageId, document.offsetAt(position)),
+					);
+					if (!candidate) {
+						trace.finish("not-candidate");
+						return undefined;
+					}
+					const request = await trace.stage("projection-and-virtual-document", () =>
+						browserProviderRequest(document, position, token, trace),
+					);
+					if (request === undefined || request.projection.citryOwnsPosition) {
+						trace.finish(request?.projection.citryOwnsPosition === true ? "citry-owned" : "no-projection");
+						return undefined;
+					}
+					const result = await trace.stage("delegated-provider", () =>
+						waitForProvider(
+							vscode.commands.executeCommand<vscode.CompletionList>(
+								"vscode.executeCompletionItemProvider",
+								request.virtualUri,
+								new vscode.Position(request.projection.position.line, request.projection.position.character),
+								undefined,
+								delegatedCompletionResolveCount,
+							),
+							token,
+							"browser-completion",
+						),
+					);
+					if (token.isCancellationRequested || document.version !== request.sourceVersion) {
+						trace.finish("stale-or-cancelled");
+						return undefined;
+					}
+					const items = (result?.items ?? [])
+						.filter((item) => !request.projection.ownedRootNames.includes(completionLabel(item)))
+						.map((item) => mapProviderCompletion(item, request))
+						.filter((item): item is vscode.CompletionItem => item !== undefined);
+					trace.finish(items.length === 0 ? "no-result" : "result");
+					return new vscode.CompletionList(items, result?.isIncomplete ?? false);
+				} catch (error) {
+					trace.finish(error instanceof Error ? error.name : "error");
+					return undefined;
+				}
+			},
+		},
+		".",
+		" ",
+		"(",
+		"[",
+		"'",
+		'"',
+		"$",
+	);
+	const hovers = vscode.languages.registerHoverProvider(selector, {
+		async provideHover(document, position, token) {
+			const trace = providerTrace("browser", "hover", document, position);
+			try {
+				const candidate = trace.measure("lexical-routing", () =>
+					browserProjectionCandidateAt(document.getText(), document.languageId, document.offsetAt(position)),
+				);
+				if (!candidate) {
+					trace.finish("not-candidate");
+					return undefined;
+				}
+				const request = await trace.stage("projection-and-virtual-document", () =>
+					browserProviderRequest(document, position, token, trace),
+				);
+				if (request === undefined || request.projection.citryOwnsPosition) {
+					trace.finish(request?.projection.citryOwnsPosition === true ? "citry-owned" : "no-projection");
+					return undefined;
+				}
+				const results = await trace.stage("delegated-provider", () =>
+					waitForProvider(
+						vscode.commands.executeCommand<vscode.Hover[]>(
+							"vscode.executeHoverProvider",
+							request.virtualUri,
+							new vscode.Position(request.projection.position.line, request.projection.position.character),
+						),
+						token,
+						"browser-hover",
+					),
+				);
+				if (token.isCancellationRequested || document.version !== request.sourceVersion || results === undefined) {
+					trace.finish("stale-or-cancelled");
+					return undefined;
+				}
+				const exact = results
+					.map((hover) => {
+						const range = hover.range === undefined ? undefined : mapProviderRange(hover.range, request);
+						return hover.range === undefined || range !== undefined
+							? new vscode.Hover(hover.contents, range)
+							: undefined;
+					})
+					.filter((hover): hover is vscode.Hover => hover !== undefined);
+				trace.finish(exact.length === 0 ? "no-result" : "result");
+				return exact.length === 0
+					? undefined
+					: new vscode.Hover(
+							exact.flatMap((hover) => hover.contents),
+							exact.find((hover) => hover.range !== undefined)?.range,
+						);
+			} catch (error) {
+				trace.finish(error instanceof Error ? error.name : "error");
+				return undefined;
+			}
+		},
+	});
+	const definitions = vscode.languages.registerDefinitionProvider(selector, {
+		async provideDefinition(document, position, token) {
+			const trace = providerTrace("browser", "definition", document, position);
+			try {
+				const candidate = trace.measure("lexical-routing", () =>
+					browserProjectionCandidateAt(document.getText(), document.languageId, document.offsetAt(position)),
+				);
+				if (!candidate) {
+					trace.finish("not-candidate");
+					return undefined;
+				}
+				const request = await trace.stage("projection-and-virtual-document", () =>
+					browserProviderRequest(document, position, token, trace),
+				);
+				if (request === undefined || request.projection.citryOwnsPosition) {
+					trace.finish(request?.projection.citryOwnsPosition === true ? "citry-owned" : "no-projection");
+					return undefined;
+				}
+				const results = await trace.stage("delegated-provider", () =>
+					waitForProvider(
+						vscode.commands.executeCommand<vscode.Location[] | vscode.LocationLink[]>(
+							"vscode.executeDefinitionProvider",
+							request.virtualUri,
+							new vscode.Position(request.projection.position.line, request.projection.position.character),
+						),
+						token,
+						"browser-definition",
+					),
+				);
+				if (token.isCancellationRequested || document.version !== request.sourceVersion || results === undefined) {
+					trace.finish("stale-or-cancelled");
+					return undefined;
+				}
+				const mapped = results
+					.map((result) => mapProviderDefinition(result, request))
+					.filter((result): result is vscode.Location => result !== undefined);
+				trace.finish(mapped.length === 0 ? "no-result" : "result");
+				return mapped;
+			} catch (error) {
+				trace.finish(error instanceof Error ? error.name : "error");
+				return undefined;
+			}
+		},
+	});
+	return [contentProvider, completions, hovers, definitions];
+}
+
+function completionLabel(item: vscode.CompletionItem): string {
+	return typeof item.label === "string" ? item.label : item.label.label;
+}
+
+async function browserProviderRequest(
+	document: vscode.TextDocument,
+	position: vscode.Position,
+	token: vscode.CancellationToken,
+	trace: ProviderTrace,
+): Promise<BrowserProviderRequest | undefined> {
+	if (document.uri.scheme !== "file" || token.isCancellationRequested) {
+		return undefined;
+	}
+	const version = document.version;
+	const projection = await browserProjectionAt(document, position, token, trace);
+	if (projection === null || token.isCancellationRequested || document.version !== version) {
+		return undefined;
+	}
+	const identity = JSON.stringify([
+		document.uri.toString(),
+		projection.sourceRange.start.line,
+		projection.sourceRange.start.character,
+	]);
+	const virtualUri = browserDocuments.create(identity, projection.source);
+	let virtualDocument = await trace.stage("virtual-document-open", () =>
+		waitForProvider(
+			vscode.workspace.openTextDocument(virtualUri),
+			token,
+			"browser-virtual-document-open",
+			virtualDocumentTimeoutMs,
+		),
+	);
+	if (virtualDocument.getText() !== projection.source) {
+		try {
+			virtualDocument = await trace.stage("virtual-document-refresh", () =>
+				waitForBrowserDocument(virtualUri, projection.source, token),
+			);
+		} catch {
+			return undefined;
+		}
+	}
+	if (virtualDocument.languageId !== "javascript") {
+		virtualDocument = await trace.stage("virtual-document-language", () =>
+			waitForProvider(
+				vscode.languages.setTextDocumentLanguage(virtualDocument, "javascript"),
+				token,
+				"browser-virtual-document-language",
+				virtualDocumentTimeoutMs,
+			),
+		);
+	}
+	return token.isCancellationRequested
+		? undefined
+		: { projection, sourceDocument: document, sourceVersion: version, virtualDocument, virtualUri };
+}
+
+async function browserProjectionAt(
+	document: vscode.TextDocument,
+	position: vscode.Position,
+	token: vscode.CancellationToken,
+	trace: ProviderTrace,
+): Promise<BrowserProjectionResponse | null> {
+	const entry = entryForUri(document.uri);
+	if (entry === undefined || !entry.client.isRunning()) {
+		return null;
+	}
+	const generation = projectionGeneration;
+	const key = JSON.stringify([
+		generation,
+		document.uri.toString(),
+		document.version,
+		position.line,
+		position.character,
+	]);
+	if (browserProjectionResponses.has(key)) {
+		return browserProjectionResponses.get(key) ?? null;
+	}
+	const linked = new vscode.CancellationTokenSource();
+	const cancellation = token.onCancellationRequested(() => linked.cancel());
+	try {
+		const response = await trace.stage("projection-rpc", () =>
+			withTimeout(
+				entry.client.sendRequest<BrowserProjectionResponse | null>(
+					browserProjectionMethod,
+					{
+						textDocument: { uri: document.uri.toString(), version: document.version },
+						position: { line: position.line, character: position.character },
+					},
+					linked.token,
+				),
+				projectionTimeoutMs,
+				"browser-projection",
+				() => linked.cancel(),
+			),
+		);
+		if (token.isCancellationRequested || generation !== projectionGeneration) {
+			return null;
+		}
+		if (generation === projectionGeneration) {
+			browserProjectionResponses.set(key, response);
+			while (browserProjectionResponses.size > 256) {
+				const oldest = browserProjectionResponses.keys().next().value;
+				if (oldest === undefined) {
+					break;
+				}
+				browserProjectionResponses.delete(oldest);
+			}
+		}
+		return response;
+	} catch {
+		linked.cancel();
+		return null;
+	} finally {
+		cancellation.dispose();
+		linked.dispose();
+	}
+}
+
+async function waitForBrowserDocument(
+	uri: vscode.Uri,
+	source: string,
+	token: vscode.CancellationToken,
+): Promise<vscode.TextDocument> {
+	const key = uri.toString();
+	return new Promise((resolve, reject) => {
+		let documentSubscription: vscode.Disposable | undefined;
+		let cancellationSubscription: vscode.Disposable | undefined;
+		let timeout: NodeJS.Timeout | undefined;
+		const finish = (value: vscode.TextDocument | Error): void => {
+			documentSubscription?.dispose();
+			cancellationSubscription?.dispose();
+			if (timeout !== undefined) {
+				clearTimeout(timeout);
+			}
+			if (value instanceof Error) {
+				reject(value);
+			} else {
+				resolve(value);
+			}
+		};
+		documentSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
+			if (event.document.uri.toString() === key && event.document.getText() === source) {
+				finish(event.document);
+			}
+		});
+		cancellationSubscription = token.onCancellationRequested(() =>
+			finish(new Error("browser provider request was cancelled")),
+		);
+		if (token.isCancellationRequested) {
+			finish(new Error("browser provider request was cancelled"));
+			return;
+		}
+		timeout = setTimeout(
+			() => finish(new Error("browser virtual document refresh timed out")),
+			virtualDocumentTimeoutMs,
+		);
+		browserDocuments.refresh(uri);
+	});
+}
+
+function mapProviderCompletion(
+	item: vscode.CompletionItem,
+	request: MappedProviderRequest,
+): vscode.CompletionItem | undefined {
+	const mapped = Object.assign(new vscode.CompletionItem(item.label, item.kind), item);
+	if (item.textEdit !== undefined) {
+		const range = mapProviderRange(item.textEdit.range, request);
+		if (range === undefined) {
+			return undefined;
+		}
+		mapped.textEdit = new vscode.TextEdit(range, item.textEdit.newText);
+	}
+	if (item.range !== undefined) {
+		if (item.range instanceof vscode.Range) {
+			const range = mapProviderRange(item.range, request);
+			if (range === undefined) {
+				return undefined;
+			}
+			mapped.range = range;
+		} else {
+			const inserting = mapProviderRange(item.range.inserting, request);
+			const replacing = mapProviderRange(item.range.replacing, request);
+			if (inserting === undefined || replacing === undefined) {
+				return undefined;
+			}
+			mapped.range = { inserting, replacing };
+		}
+	}
+	// Auto-imports and provider commands target the generated document and
+	// must never escape into authored Citry source.
+	mapped.additionalTextEdits = undefined;
+	mapped.command = undefined;
+	return mapped;
+}
+
+function mapProviderDefinition(
+	result: vscode.Location | vscode.LocationLink,
+	request: MappedProviderRequest,
+): vscode.Location | undefined {
+	if (isLocationLink(result)) {
+		const selection = result.targetSelectionRange ?? result.targetRange;
+		if (result.targetUri.toString() !== request.virtualUri.toString()) {
+			return new vscode.Location(result.targetUri, selection);
+		}
+		const targetSelectionRange = mapProviderRange(selection, request);
+		if (targetSelectionRange === undefined) {
+			return undefined;
+		}
+		return new vscode.Location(request.sourceDocument.uri, targetSelectionRange);
+	}
+	if (result.uri.toString() !== request.virtualUri.toString()) {
+		return result;
+	}
+	const range = mapProviderRange(result.range, request);
+	return range === undefined ? undefined : new vscode.Location(request.sourceDocument.uri, range);
+}
+
+function mapProviderRange(range: vscode.Range, request: MappedProviderRequest): vscode.Range | undefined {
+	const virtual = protocolRange(request.projection.virtualRange);
+	if (!virtual.contains(range.start) || !virtual.contains(range.end)) {
+		return undefined;
+	}
+	const source = protocolRange(request.projection.sourceRange);
+	const virtualBase = request.virtualDocument.offsetAt(virtual.start);
+	const sourceBase = request.sourceDocument.offsetAt(source.start);
+	const start = sourceBase + request.virtualDocument.offsetAt(range.start) - virtualBase;
+	const end = sourceBase + request.virtualDocument.offsetAt(range.end) - virtualBase;
+	if (start < sourceBase || end < start || end > request.sourceDocument.offsetAt(source.end)) {
+		return undefined;
+	}
+	return new vscode.Range(request.sourceDocument.positionAt(start), request.sourceDocument.positionAt(end));
+}
+
+function protocolRange(range: ProviderProjectionResponse["sourceRange"]): vscode.Range {
+	return new vscode.Range(
+		new vscode.Position(range.start.line, range.start.character),
+		new vscode.Position(range.end.line, range.end.character),
+	);
+}
+
+function registerEmbeddedLanguageProviders(): vscode.Disposable[] {
+	const selector: vscode.DocumentSelector = [{ language: "python" }, { language: "citry-html" }];
+	const contentProvider = vscode.workspace.registerTextDocumentContentProvider(embeddedScheme, embeddedDocuments);
+	const completions = vscode.languages.registerCompletionItemProvider(
+		selector,
+		{
+			async provideCompletionItems(document, position, token) {
+				const trace = providerTrace("html", "completion", document, position);
+				let htmlRequest: HtmlProviderRequest | null | undefined;
+				try {
+					htmlRequest = await trace.stage("projection-and-virtual-document", () =>
+						htmlProviderRequest(document, position, token, trace),
+					);
+				} catch (error) {
+					trace.finish(error instanceof Error ? error.name : "error");
+					return undefined;
+				}
+				if (htmlRequest === null) {
+					trace.finish("no-projection");
+					return undefined;
+				}
+				if (htmlRequest !== undefined) {
+					try {
+						const result = await trace.stage("delegated-provider", () =>
+							waitForProvider(
+								vscode.commands.executeCommand<vscode.CompletionList>(
+									"vscode.executeCompletionItemProvider",
+									htmlRequest.virtualUri,
+									htmlRequest.providerPosition,
+									undefined,
+									delegatedCompletionResolveCount,
+								),
+								token,
+								"html-completion",
+							),
+						);
+						if (token.isCancellationRequested || document.version !== htmlRequest.sourceVersion) {
+							trace.finish("stale-or-cancelled");
+							return undefined;
+						}
+						const items = (result?.items ?? [])
+							.map((item) => mapProviderCompletion(item, htmlRequest))
+							.filter((item): item is vscode.CompletionItem => item !== undefined);
+						trace.finish(items.length === 0 ? "no-result" : "result");
+						return new vscode.CompletionList(items, result?.isIncomplete ?? false);
+					} catch {
+						trace.finish("provider-error");
+						return undefined;
+					}
+				}
 				const request = embeddedRequest(document, position);
 				if (request === undefined || token.isCancellationRequested) {
+					trace.finish(token.isCancellationRequested ? "cancelled" : "not-embedded");
+					return undefined;
+				}
+				if (await typedBrowserProjectionOwnsRegion(document, position, request, token, trace)) {
+					trace.finish("typed-browser-owned");
 					return undefined;
 				}
 				try {
-					const result = await vscode.commands.executeCommand<vscode.CompletionList>(
-						"vscode.executeCompletionItemProvider",
-						request.virtualUri,
-						position,
-						undefined,
-						50,
+					const prepared = await prepareEmbeddedRequest(document, request, token, trace);
+					if (!prepared) {
+						trace.finish("virtual-document-unavailable");
+						return undefined;
+					}
+					const result = await trace.stage("delegated-provider", () =>
+						waitForProvider(
+							vscode.commands.executeCommand<vscode.CompletionList>(
+								"vscode.executeCompletionItemProvider",
+								request.virtualUri,
+								position,
+								undefined,
+								delegatedCompletionResolveCount,
+							),
+							token,
+							"embedded-completion",
+						),
 					);
+					if (document.version !== request.sourceVersion) {
+						trace.finish("stale");
+						return undefined;
+					}
+					trace.finish(result === undefined ? "no-result" : "result");
 					return token.isCancellationRequested ? undefined : result;
 				} catch {
+					trace.finish("provider-error");
 					return undefined;
 				}
 			},
@@ -906,16 +1672,101 @@ function registerEmbeddedLanguageProviders(): vscode.Disposable[] {
 	);
 	const hovers = vscode.languages.registerHoverProvider(selector, {
 		async provideHover(document, position, token) {
+			const trace = providerTrace("html", "hover", document, position);
 			const version = document.version;
+			let htmlRequest: HtmlProviderRequest | null | undefined;
+			try {
+				htmlRequest = await trace.stage("projection-and-virtual-document", () =>
+					htmlProviderRequest(document, position, token, trace),
+				);
+			} catch (error) {
+				trace.finish(error instanceof Error ? error.name : "error");
+				return undefined;
+			}
+			if (htmlRequest === null) {
+				trace.finish("no-projection");
+				return undefined;
+			}
+			if (htmlRequest !== undefined) {
+				try {
+					const results = await trace.stage("delegated-provider", () =>
+						waitForProvider(
+							vscode.commands.executeCommand<vscode.Hover[]>(
+								"vscode.executeHoverProvider",
+								htmlRequest.virtualUri,
+								htmlRequest.providerPosition,
+							),
+							token,
+							"html-hover",
+						),
+					);
+					if (
+						token.isCancellationRequested ||
+						document.version !== version ||
+						results === undefined ||
+						results.length === 0
+					) {
+						trace.finish(token.isCancellationRequested ? "cancelled" : "no-result");
+						return undefined;
+					}
+					if (htmlRequest.projectedAttributeRange !== undefined && htmlRequest.sourceAttributeRange !== undefined) {
+						const projectedAttributeRange = htmlRequest.projectedAttributeRange;
+						const exact = results.filter(
+							(hover) => hover.range !== undefined && sameRange(hover.range, projectedAttributeRange),
+						);
+						trace.finish(exact.length === 0 ? "no-result" : "result");
+						return exact.length === 0
+							? undefined
+							: new vscode.Hover(
+									exact.flatMap((hover) => hover.contents),
+									htmlRequest.sourceAttributeRange,
+								);
+					}
+					const mapped = results
+						.map((hover) => {
+							const range = hover.range === undefined ? undefined : mapProviderRange(hover.range, htmlRequest);
+							return hover.range === undefined || range !== undefined
+								? new vscode.Hover(hover.contents, range)
+								: undefined;
+						})
+						.filter((hover): hover is vscode.Hover => hover !== undefined);
+					trace.finish(mapped.length === 0 ? "no-result" : "result");
+					return mapped.length === 0
+						? undefined
+						: new vscode.Hover(
+								mapped.flatMap((hover) => hover.contents),
+								mapped.find((hover) => hover.range !== undefined)?.range,
+							);
+				} catch {
+					trace.finish("provider-error");
+					return undefined;
+				}
+			}
 			const request = embeddedHoverRequest(document, position);
 			if (request === undefined || token.isCancellationRequested) {
+				trace.finish(token.isCancellationRequested ? "cancelled" : "not-embedded");
+				return undefined;
+			}
+			if (await typedBrowserProjectionOwnsRegion(document, position, request, token, trace)) {
+				trace.finish("typed-browser-owned");
 				return undefined;
 			}
 			try {
-				const results = await vscode.commands.executeCommand<vscode.Hover[]>(
-					"vscode.executeHoverProvider",
-					request.virtualUri,
-					request.providerPosition,
+				const prepared = await prepareEmbeddedRequest(document, request, token, trace);
+				if (!prepared) {
+					trace.finish("virtual-document-unavailable");
+					return undefined;
+				}
+				const results = await trace.stage("delegated-provider", () =>
+					waitForProvider(
+						vscode.commands.executeCommand<vscode.Hover[]>(
+							"vscode.executeHoverProvider",
+							request.virtualUri,
+							request.providerPosition,
+						),
+						token,
+						"embedded-hover",
+					),
 				);
 				if (
 					token.isCancellationRequested ||
@@ -923,6 +1774,7 @@ function registerEmbeddedLanguageProviders(): vscode.Disposable[] {
 					results === undefined ||
 					results.length === 0
 				) {
+					trace.finish(token.isCancellationRequested ? "cancelled" : "no-result");
 					return undefined;
 				}
 				if (request.projectedAttributeRange !== undefined && request.sourceAttributeRange !== undefined) {
@@ -930,6 +1782,7 @@ function registerEmbeddedLanguageProviders(): vscode.Disposable[] {
 					const exactResults = results.filter(
 						(hover) => hover.range !== undefined && sameRange(hover.range, projectedAttributeRange),
 					);
+					trace.finish(exactResults.length === 0 ? "no-result" : "result");
 					return exactResults.length === 0
 						? undefined
 						: new vscode.Hover(
@@ -937,37 +1790,106 @@ function registerEmbeddedLanguageProviders(): vscode.Disposable[] {
 								request.sourceAttributeRange,
 							);
 				}
+				trace.finish("result");
 				return new vscode.Hover(
 					results.flatMap((hover) => hover.contents),
 					results.find((hover) => hover.range !== undefined)?.range,
 				);
 			} catch {
+				trace.finish("provider-error");
 				return undefined;
 			}
 		},
 	});
 	const definitions = vscode.languages.registerDefinitionProvider(selector, {
 		async provideDefinition(document, position, token) {
+			const trace = providerTrace("html", "definition", document, position);
+			let htmlRequest: HtmlProviderRequest | null | undefined;
+			try {
+				htmlRequest = await trace.stage("projection-and-virtual-document", () =>
+					htmlProviderRequest(document, position, token, trace),
+				);
+			} catch (error) {
+				trace.finish(error instanceof Error ? error.name : "error");
+				return undefined;
+			}
+			if (htmlRequest === null) {
+				trace.finish("no-projection");
+				return undefined;
+			}
+			if (htmlRequest !== undefined) {
+				try {
+					const results = await trace.stage("delegated-provider", () =>
+						waitForProvider(
+							vscode.commands.executeCommand<vscode.Location[] | vscode.LocationLink[]>(
+								"vscode.executeDefinitionProvider",
+								htmlRequest.virtualUri,
+								htmlRequest.providerPosition,
+							),
+							token,
+							"html-definition",
+						),
+					);
+					if (
+						token.isCancellationRequested ||
+						document.version !== htmlRequest.sourceVersion ||
+						results === undefined
+					) {
+						trace.finish(token.isCancellationRequested ? "cancelled" : "no-result");
+						return undefined;
+					}
+					const mapped = results
+						.map((result) => mapProviderDefinition(result, htmlRequest))
+						.filter((result): result is vscode.Location => result !== undefined);
+					trace.finish(mapped.length === 0 ? "no-result" : "result");
+					return mapped;
+				} catch {
+					trace.finish("provider-error");
+					return undefined;
+				}
+			}
 			const request = embeddedRequest(document, position);
 			if (request === undefined || token.isCancellationRequested) {
+				trace.finish(token.isCancellationRequested ? "cancelled" : "not-embedded");
+				return undefined;
+			}
+			if (await typedBrowserProjectionOwnsRegion(document, position, request, token, trace)) {
+				trace.finish("typed-browser-owned");
 				return undefined;
 			}
 			try {
-				const results = await vscode.commands.executeCommand<vscode.Location[] | vscode.LocationLink[]>(
-					"vscode.executeDefinitionProvider",
-					request.virtualUri,
-					position,
+				const prepared = await prepareEmbeddedRequest(document, request, token, trace);
+				if (!prepared) {
+					trace.finish("virtual-document-unavailable");
+					return undefined;
+				}
+				const results = await trace.stage("delegated-provider", () =>
+					waitForProvider(
+						vscode.commands.executeCommand<vscode.Location[] | vscode.LocationLink[]>(
+							"vscode.executeDefinitionProvider",
+							request.virtualUri,
+							position,
+						),
+						token,
+						"embedded-definition",
+					),
 				);
-				if (token.isCancellationRequested || results === undefined) {
+				if (token.isCancellationRequested || document.version !== request.sourceVersion || results === undefined) {
+					trace.finish(token.isCancellationRequested ? "cancelled" : "no-result");
 					return undefined;
 				}
 				if (results.every(isLocationLink)) {
-					return results.map((result) => mapEmbeddedDefinitionLink(result, request));
+					const mapped = results.map((result) => mapEmbeddedDefinitionLink(result, request));
+					trace.finish(mapped.length === 0 ? "no-result" : "result");
+					return mapped;
 				}
-				return results
+				const mapped = results
 					.filter((result): result is vscode.Location => !isLocationLink(result))
 					.map((result) => mapEmbeddedLocation(result, request));
+				trace.finish(mapped.length === 0 ? "no-result" : "result");
+				return mapped;
 			} catch {
+				trace.finish("provider-error");
 				return undefined;
 			}
 		},
@@ -975,9 +1897,209 @@ function registerEmbeddedLanguageProviders(): vscode.Disposable[] {
 	return [contentProvider, completions, hovers, definitions];
 }
 
+async function htmlProviderRequest(
+	document: vscode.TextDocument,
+	position: vscode.Position,
+	token: vscode.CancellationToken,
+	trace: ProviderTrace,
+): Promise<HtmlProviderRequest | null | undefined> {
+	if (document.uri.scheme !== "file" || token.isCancellationRequested) {
+		return undefined;
+	}
+	const source = document.getText();
+	const sourceOffset = document.offsetAt(position);
+	const htmlSource = virtualDocumentSourceAt(source, document.languageId, "html", sourceOffset);
+	if (htmlSource === undefined) {
+		return undefined;
+	}
+	const candidate = htmlProjectionCandidateRangeAt(htmlSource, sourceOffset);
+	if (candidate === undefined) {
+		return undefined;
+	}
+	const version = document.version;
+	const projection = await htmlProjectionAt(document, position, candidate, token, trace);
+	if (projection === null || token.isCancellationRequested || document.version !== version) {
+		return null;
+	}
+	const nativeProjection = projectNativeHtmlAttributes(projection.source);
+	const identity = JSON.stringify([
+		"html",
+		document.uri.toString(),
+		projection.sourceRange.start.line,
+		projection.sourceRange.start.character,
+	]);
+	const virtualUri = browserDocuments.create(identity, nativeProjection.source, "html");
+	let virtualDocument = await trace.stage("virtual-document-open", () =>
+		waitForProvider(
+			vscode.workspace.openTextDocument(virtualUri),
+			token,
+			"html-virtual-document-open",
+			virtualDocumentTimeoutMs,
+		),
+	);
+	if (virtualDocument.getText() !== nativeProjection.source) {
+		try {
+			virtualDocument = await trace.stage("virtual-document-refresh", () =>
+				waitForBrowserDocument(virtualUri, nativeProjection.source, token),
+			);
+		} catch {
+			return null;
+		}
+	}
+	if (virtualDocument.languageId !== "html") {
+		virtualDocument = await trace.stage("virtual-document-language", () =>
+			waitForProvider(
+				vscode.languages.setTextDocumentLanguage(virtualDocument, "html"),
+				token,
+				"html-virtual-document-language",
+				virtualDocumentTimeoutMs,
+			),
+		);
+	}
+	const projectedPosition = new vscode.Position(projection.position.line, projection.position.character);
+	const projectedOffset = virtualDocument.offsetAt(projectedPosition);
+	const dynamicAttribute = nativeDynamicAttributeHoverProjection(projection.source, projectedOffset);
+	const request: HtmlProviderRequest = {
+		projection,
+		sourceDocument: document,
+		sourceVersion: version,
+		virtualDocument,
+		virtualUri,
+		providerPosition:
+			dynamicAttribute === undefined ? projectedPosition : virtualDocument.positionAt(dynamicAttribute.providerOffset),
+	};
+	if (dynamicAttribute !== undefined) {
+		request.projectedAttributeRange = new vscode.Range(
+			virtualDocument.positionAt(dynamicAttribute.projectedStart),
+			virtualDocument.positionAt(dynamicAttribute.projectedEnd),
+		);
+		const sourceAttributeRange = mapProviderRange(
+			new vscode.Range(
+				virtualDocument.positionAt(dynamicAttribute.sourceStart),
+				virtualDocument.positionAt(dynamicAttribute.sourceEnd),
+			),
+			request,
+		);
+		if (sourceAttributeRange === undefined) {
+			return null;
+		}
+		request.sourceAttributeRange = sourceAttributeRange;
+	}
+	return token.isCancellationRequested ? null : request;
+}
+
+async function htmlProjectionAt(
+	document: vscode.TextDocument,
+	position: vscode.Position,
+	candidate: HtmlProjectionCandidate,
+	token: vscode.CancellationToken,
+	trace: ProviderTrace,
+): Promise<ProviderProjectionResponse | null> {
+	const entry = entryForUri(document.uri);
+	if (entry === undefined || !entry.client.isRunning()) {
+		return null;
+	}
+	const generation = projectionGeneration;
+	const key = JSON.stringify([generation, document.uri.toString(), document.version, candidate.start, candidate.end]);
+	if (htmlProjectionResponses.has(key)) {
+		const cached = htmlProjectionResponses.get(key);
+		if (cached !== undefined && cached !== null) {
+			const mapped = projectionAtCachedPosition(document, position, cached);
+			if (mapped !== null) {
+				return mapped;
+			}
+		}
+	}
+	const linked = new vscode.CancellationTokenSource();
+	const cancellation = token.onCancellationRequested(() => linked.cancel());
+	try {
+		const response = await trace.stage("projection-rpc", () =>
+			withTimeout(
+				entry.client.sendRequest<ProviderProjectionResponse | null>(
+					htmlProjectionMethod,
+					{
+						textDocument: { uri: document.uri.toString(), version: document.version },
+						position: { line: position.line, character: position.character },
+					},
+					linked.token,
+				),
+				projectionTimeoutMs,
+				"html-projection",
+				() => linked.cancel(),
+			),
+		);
+		if (token.isCancellationRequested || generation !== projectionGeneration) {
+			return null;
+		}
+		// No-result is cursor-specific at fragment delimiters, so it cannot
+		// represent every other cursor covered by the lexical candidate.
+		if (response !== null && generation === projectionGeneration) {
+			htmlProjectionResponses.set(key, response);
+			while (htmlProjectionResponses.size > 256) {
+				const oldest = htmlProjectionResponses.keys().next().value;
+				if (oldest === undefined) {
+					break;
+				}
+				htmlProjectionResponses.delete(oldest);
+			}
+		}
+		return response;
+	} catch {
+		linked.cancel();
+		return null;
+	} finally {
+		cancellation.dispose();
+		linked.dispose();
+	}
+}
+
+function projectionAtCachedPosition(
+	document: vscode.TextDocument,
+	position: vscode.Position,
+	projection: ProviderProjectionResponse | null,
+): ProviderProjectionResponse | null {
+	if (projection === null) {
+		return null;
+	}
+	const sourceStart = document.offsetAt(protocolRange(projection.sourceRange).start);
+	const sourceEnd = document.offsetAt(protocolRange(projection.sourceRange).end);
+	const sourceOffset = document.offsetAt(position);
+	const mappedPosition = linearlyMappedProjectionPosition(
+		projection.source,
+		sourceOffset,
+		sourceStart,
+		sourceEnd,
+		projection.virtualRange.start,
+		projection.virtualRange.end,
+	);
+	if (mappedPosition === undefined) {
+		return null;
+	}
+	return { ...projection, position: mappedPosition };
+}
+
+async function typedBrowserProjectionOwnsRegion(
+	document: vscode.TextDocument,
+	position: vscode.Position,
+	request: EmbeddedRequest,
+	token: vscode.CancellationToken,
+	trace: ProviderTrace,
+): Promise<boolean> {
+	if (request.virtualUri.authority !== "javascript") {
+		return false;
+	}
+	const version = document.version;
+	if (!browserProjectionCandidateAt(document.getText(), document.languageId, document.offsetAt(position))) {
+		return false;
+	}
+	const projection = await browserProjectionAt(document, position, token, trace);
+	return projection !== null && !token.isCancellationRequested && document.version === version;
+}
+
 interface EmbeddedRequest {
 	virtualUri: vscode.Uri;
 	sourceUri: vscode.Uri;
+	sourceVersion: number;
 	providerPosition: vscode.Position;
 	projectedAttributeRange?: vscode.Range;
 	sourceAttributeRange?: vscode.Range;
@@ -993,11 +2115,11 @@ function embeddedRequest(document: vscode.TextDocument, position: vscode.Positio
 	}
 	const parameters = new URLSearchParams({
 		source: document.uri.toString(),
-		version: String(document.version),
 	});
 	return {
 		providerPosition: position,
 		sourceUri: document.uri,
+		sourceVersion: document.version,
 		virtualUri: vscode.Uri.from({
 			scheme: embeddedScheme,
 			authority: language,
@@ -1005,6 +2127,88 @@ function embeddedRequest(document: vscode.TextDocument, position: vscode.Positio
 			query: parameters.toString(),
 		}),
 	};
+}
+
+async function prepareEmbeddedRequest(
+	document: vscode.TextDocument,
+	request: EmbeddedRequest,
+	token: vscode.CancellationToken,
+	trace: ProviderTrace,
+): Promise<boolean> {
+	const version = document.version;
+	const language = embeddedLanguageFromAuthority(request.virtualUri.authority);
+	if (language === undefined) {
+		return false;
+	}
+	const parameters = new URLSearchParams(request.virtualUri.query);
+	let expected = virtualDocumentSource(document.getText(), document.languageId, language);
+	if (language === "html" && parameters.get("projection") === nativeHtmlAttributeHoverProjection) {
+		expected = projectNativeHtmlAttributes(expected).source;
+	}
+	let virtualDocument = await trace.stage("virtual-document-open", () =>
+		waitForProvider(
+			vscode.workspace.openTextDocument(request.virtualUri),
+			token,
+			"embedded-virtual-document-open",
+			virtualDocumentTimeoutMs,
+		),
+	);
+	if (virtualDocument.getText() !== expected) {
+		virtualDocument = await trace.stage("virtual-document-refresh", () =>
+			waitForEmbeddedDocument(request.virtualUri, expected, token),
+		);
+	}
+	if (virtualDocument.languageId !== language) {
+		virtualDocument = await trace.stage("virtual-document-language", () =>
+			waitForProvider(
+				vscode.languages.setTextDocumentLanguage(virtualDocument, language),
+				token,
+				"embedded-virtual-document-language",
+				virtualDocumentTimeoutMs,
+			),
+		);
+	}
+	return !token.isCancellationRequested && document.version === version;
+}
+
+async function waitForEmbeddedDocument(
+	uri: vscode.Uri,
+	source: string,
+	token: vscode.CancellationToken,
+): Promise<vscode.TextDocument> {
+	const key = uri.toString();
+	return new Promise((resolve, reject) => {
+		let documentSubscription: vscode.Disposable | undefined;
+		let cancellationSubscription: vscode.Disposable | undefined;
+		let timeout: NodeJS.Timeout | undefined;
+		const finish = (value: vscode.TextDocument | Error): void => {
+			documentSubscription?.dispose();
+			cancellationSubscription?.dispose();
+			if (timeout !== undefined) {
+				clearTimeout(timeout);
+			}
+			if (value instanceof Error) {
+				reject(value);
+			} else {
+				resolve(value);
+			}
+		};
+		documentSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
+			if (event.document.uri.toString() === key && event.document.getText() === source) {
+				finish(event.document);
+			}
+		});
+		cancellationSubscription = token.onCancellationRequested(() => finish(new ProviderCancelledError()));
+		if (token.isCancellationRequested) {
+			finish(new ProviderCancelledError());
+			return;
+		}
+		timeout = setTimeout(
+			() => finish(new Error("embedded virtual document refresh timed out")),
+			virtualDocumentTimeoutMs,
+		);
+		embeddedDocuments.refresh(uri);
+	});
 }
 
 function embeddedHoverRequest(document: vscode.TextDocument, position: vscode.Position): EmbeddedRequest | undefined {

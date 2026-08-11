@@ -15,19 +15,25 @@ plus `pnpm install` for the pinned Node tools and package-local checks) and that
 `cargo`, `uv`, `node`, `pnpm`, and a Rust toolchain are on PATH.
 
 Usage:
-    python scripts/check.py                    # human-readable, streamed output
-    python scripts/check.py --reporter agent   # one JSON object for tools/agents
+    python scripts/check.py                         # full integration gate
+    python scripts/check.py --profile fast          # routine development gate
+    python scripts/check.py --reporter agent        # final JSON plus stderr progress
 """
 
 import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
+from typing import Literal, cast
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _CRATES_DIR = _REPO_ROOT / "crates"
 _TAIL_LINES = 60
+_HEARTBEAT_SECONDS = 30.0
+
+CheckProfile = Literal["fast", "full"]
 
 
 def _crate_flags() -> list[str]:
@@ -39,7 +45,48 @@ def _crate_flags() -> list[str]:
     return flags
 
 
-def _phases() -> list[tuple[str, list[str]]]:
+def _pytest_command(profile: CheckProfile) -> list[str]:
+    """Build the deterministic non-browser pytest command for one profile."""
+    command = [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest",
+        "-m",
+        "not e2e and not qualification",
+        "-n",
+        "4",
+        "--dist",
+        "loadfile",
+        "--durations",
+        "30",
+    ]
+    if profile == "full":
+        # Coverage is integration evidence, so routine implementation checks do
+        # not pay its instrumentation cost on every edit.
+        command.extend(["--cov", "--cov-report=term-missing:skip-covered"])
+    return command
+
+
+def _qualification_pytest_command() -> list[str]:
+    """Run expensive boundary proofs without multiplying their cost under coverage."""
+    return [
+        "uv",
+        "run",
+        "--no-sync",
+        "pytest",
+        "-m",
+        "qualification and not e2e",
+        "-n",
+        "2",
+        "--dist",
+        "loadfile",
+        "--durations",
+        "30",
+    ]
+
+
+def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
     crates = _crate_flags()
     uvr = ["uv", "run", "--no-sync"]
     return [
@@ -140,37 +187,81 @@ def _phases() -> list[tuple[str, list[str]]]:
             "vscode-extension",
             ["pnpm", "--dir", "packages/editors/vscode", "run", "check"],
         ),
-        # `--cov` (no target) uses [tool.coverage.run] source; pytest-cov enforces
-        # `fail_under` from [tool.coverage.report] (docs/design/migration_djc_tests.md).
-        ("pytest", [*uvr, "pytest", "--cov", "--cov-report=term-missing:skip-covered"]),
+        # Browser tests have their own four-worker CI lane. Excluding them by
+        # marker keeps this command identical whether Playwright is installed or
+        # not, while xdist makes the large portable suite use all four CI CPUs.
+        ("pytest", _pytest_command(profile)),
+        # These deep stress proofs are part of the full integration boundary,
+        # but tracing them makes their run several times slower without adding
+        # useful coverage. The version matrix also runs them without coverage.
+        *([("pytest qualification", _qualification_pytest_command())] if profile == "full" else []),
         ("validators", [sys.executable, "scripts/validate.py"]),
     ]
 
 
-def _run(cmd: list[str], *, capture: bool) -> tuple[int, str]:
+def _run(cmd: list[str], *, capture: bool, phase_name: str) -> tuple[int, str]:
+    """Run one phase, emitting heartbeats while agent output is captured."""
     try:
-        proc = subprocess.run(cmd, cwd=_REPO_ROOT, capture_output=capture, text=True, check=False)
+        if not capture:
+            completed = subprocess.run(cmd, cwd=_REPO_ROOT, text=True, check=False)
+            return completed.returncode, ""
+        # Merge the child streams so the failure tail preserves the order in
+        # which diagnostics appeared, while stdout remains reserved for JSON.
+        process = subprocess.Popen(
+            cmd,
+            cwd=_REPO_ROOT,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
     except FileNotFoundError as exc:
         return 127, str(exc)
-    output = (proc.stdout or "") + (proc.stderr or "") if capture else ""
-    return proc.returncode, output
+
+    started = time.monotonic()
+    while True:
+        try:
+            output, _ = process.communicate(timeout=_HEARTBEAT_SECONDS)
+            code = process.returncode if process.returncode is not None else 1
+            return code, output or ""
+        except subprocess.TimeoutExpired:
+            elapsed = time.monotonic() - started
+            print(
+                f"[check] {phase_name} still running ({elapsed:.0f}s elapsed)",
+                file=sys.stderr,
+                flush=True,
+            )
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(description="Run the full check suite (lint, types, tests, custom validators).")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run the repository check suite (lint, types, tests, validators).")
+    parser.add_argument(
+        "--profile",
+        choices=["fast", "full"],
+        default="full",
+        help=(
+            "Use 'fast' during implementation (no coverage or qualification tests); 'full' adds both (default: full)."
+        ),
+    )
     parser.add_argument("--reporter", choices=["agent"], help="Emit one JSON object instead of streaming output.")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    profile = cast("CheckProfile", args.profile)
     agent = args.reporter == "agent"
 
     results: list[dict[str, object]] = []
-    for name, cmd in _phases():
+    gate_started = time.monotonic()
+    for name, cmd in _phases(profile):
         if not agent:
             print(f"\n=== {name} ===")
-        code, output = _run(cmd, capture=agent)
+        else:
+            print(f"[check] starting {name}", file=sys.stderr, flush=True)
+        phase_started = time.monotonic()
+        code, output = _run(cmd, capture=agent, phase_name=name)
+        duration = time.monotonic() - phase_started
         result: dict[str, object] = {
             "name": name,
             "command": " ".join(cmd),
             "status": "PASSED" if code == 0 else "FAILED",
+            "durationSeconds": round(duration, 3),
         }
         if code != 0:
             result["exitCode"] = code
@@ -178,15 +269,34 @@ def main() -> int:
                 result["details"] = "\n".join(output.splitlines()[-_TAIL_LINES:]).strip() or "(no output)"
         results.append(result)
         if not agent:
-            print(f"{'PASS' if code == 0 else 'FAIL'}: {name}")
+            print(f"{'PASS' if code == 0 else 'FAIL'}: {name} ({duration:.2f}s)")
+        else:
+            print(
+                f"[check] {'PASS' if code == 0 else 'FAIL'} {name} ({duration:.2f}s)",
+                file=sys.stderr,
+                flush=True,
+            )
 
     failed = [str(r["name"]) for r in results if r["status"] == "FAILED"]
+    total_duration = time.monotonic() - gate_started
     if agent:
-        print(json.dumps({"status": "FAILED" if failed else "PASSED", "phases": results}))
+        print(
+            json.dumps(
+                {
+                    "status": "FAILED" if failed else "PASSED",
+                    "profile": profile,
+                    "durationSeconds": round(total_duration, 3),
+                    "phases": results,
+                }
+            )
+        )
     elif failed:
-        print(f"\n{len(failed)} of {len(results)} checks failed: {', '.join(failed)}", file=sys.stderr)
+        print(
+            f"\n{len(failed)} of {len(results)} checks failed in {total_duration:.2f}s: {', '.join(failed)}",
+            file=sys.stderr,
+        )
     else:
-        print(f"\nAll {len(results)} checks passed.")
+        print(f"\nAll {len(results)} checks passed in {total_duration:.2f}s.")
     return 1 if failed else 0
 
 

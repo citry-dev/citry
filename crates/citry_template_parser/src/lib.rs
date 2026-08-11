@@ -12,8 +12,10 @@
 #![allow(clippy::doc_overindented_list_items)]
 
 pub mod ast;
+pub mod browser;
 pub mod compiler;
 pub mod constants;
+mod diagnostic_catalog;
 pub mod error;
 pub mod grammar;
 pub mod lang {
@@ -35,6 +37,11 @@ pub mod utils {
 pub use crate::ast::{
     Comment, Expr, FillDataField, FillDataPattern, HtmlAttr, HtmlAttrKind, HtmlEndTag,
     HtmlStartTag, Node, StaticNamedSlot, Template, TemplateElement, Text, Token,
+};
+pub use crate::browser::{
+    analyze_browser_source, analyze_component_scope_writes, analyze_component_source,
+    BrowserAnalysis, BrowserAnalysisMode, BrowserComponentAnalysis, BrowserComponentBinding,
+    BrowserReference, BrowserScopeWrite,
 };
 pub use crate::error::{ParseDiagnostic, ParseError};
 pub use crate::lang::lang::{Lang, LangImpl, ParseExprResult};

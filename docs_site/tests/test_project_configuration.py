@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from docs_site._internal.config import DocsConfig
+from docs_site._internal.config import config as default_config
 from docs_site._internal.config_loading import DocsConfigError
 from docs_site._internal.examples import get_example_registry
 from docs_site._internal.guards import make_source_context, run_guards
@@ -15,6 +16,7 @@ from docs_site._internal.project import current_docs_project, load_docs_project,
 from docs_site._internal.redirects import load_redirect_catalog
 from docs_site._internal.reference_pages import load_reference_catalog, validate_reference_crossref_keys
 from docs_site._internal.settings import load_site_settings
+from docs_site._internal.site_nav import load_site_nav
 from docs_site._internal.ui_library_projection import load_ui_library_catalog
 
 DOCS_DIR = Path(__file__).resolve().parents[1]
@@ -27,9 +29,90 @@ def test_default_project_loads_every_manifest() -> None:
     assert project.settings.repository.full_name == "citry-dev/citry"
     assert project.site_url == "https://citry.dev/"
     assert len(project.reference.categories) == 17
-    assert len(project.ui_library.projections) == 7
+    assert [(group.id, group.label) for group in project.ui_library.groups] == [
+        ("actions", "Actions"),
+        ("forms-inputs", "Forms and inputs"),
+        ("layout", "Layout"),
+        ("data-display", "Data display"),
+        ("navigation", "Navigation"),
+        ("feedback-status", "Feedback and status"),
+        ("overlays-disclosure", "Overlays and disclosure"),
+    ]
+    assert [(projection.family, projection.slug) for projection in project.ui_library.projections] == [
+        ("button", "button"),
+        ("button-group", "button-group"),
+        ("toggle", "toggle"),
+        ("toolbar", "toolbar"),
+        ("field-input", "field-input"),
+        ("textarea", "textarea"),
+        ("native-select", "native-select"),
+        ("checkbox", "checkbox"),
+        ("radio", "radio"),
+        ("switch", "switch"),
+        ("combobox", "combobox"),
+        ("listbox", "listbox"),
+        ("select", "select"),
+        ("multi-select", "multi-select"),
+        ("editable", "editable"),
+        ("file-input", "file-input"),
+        ("form", "form"),
+        ("flow-layout", "stack-group"),
+        ("grid-container", "container-grid"),
+        ("divider", "divider"),
+        ("splitter", "splitter"),
+        ("avatar", "avatar"),
+        ("badge", "badge"),
+        ("card", "card"),
+        ("carousel", "carousel"),
+        ("icon", "icon"),
+        ("list", "list"),
+        ("table", "table"),
+        ("tag", "tag"),
+        ("tree", "tree"),
+        ("breadcrumbs", "breadcrumbs"),
+        ("pagination", "pagination"),
+        ("stepper", "stepper"),
+        ("tabs", "tabs"),
+        ("navigation-menu", "navigation-menu"),
+        ("alert", "alert"),
+        ("progress", "progress"),
+        ("skeleton", "skeleton"),
+        ("spinner", "spinner"),
+        ("toast", "toast"),
+        ("accordion", "accordion"),
+        ("disclosure", "disclosure"),
+        ("alert-dialog", "alert-dialog"),
+        ("dialog", "dialog"),
+        ("drawer", "drawer"),
+        ("menu", "menu"),
+        ("popover", "popover"),
+        ("tooltip", "tooltip"),
+        ("hover-card", "hover-card"),
+    ]
     assert project.redirects.redirects == ()
     assert project.versions.index_keep_recent == 2
+
+
+def test_ui_catalog_groups_drive_sidebar_order_and_breadcrumbs() -> None:
+    project = load_docs_project()
+    tree = load_site_nav(default_config, project=project)
+    area = next(area for area in tree.areas if area.label == "Citry UI")
+
+    assert [(group.label, len(group.items), group.collapsible) for group in area.groups] == [
+        ("Get started", 2, False),
+        ("Actions", 4, True),
+        ("Forms and inputs", 9, True),
+        ("Layout", 4, True),
+        ("Data display", 8, True),
+        ("Navigation", 4, True),
+        ("Feedback and status", 5, True),
+        ("Overlays and disclosure", 7, True),
+    ]
+    assert tree.find_breadcrumbs("/ui-library/components/tree/") == [
+        ("Citry UI", "/ui-library/"),
+        ("Data display", ""),
+        ("Tree", ""),
+    ]
 
 
 def test_settings_reject_unknown_root_table(tmp_path: Path) -> None:
@@ -430,6 +513,26 @@ def test_ui_catalog_rejects_legacy_required_headings(tmp_path: Path) -> None:
     )
 
     with pytest.raises(DocsConfigError, match=r"unknown key.*required_headings"):
+        load_ui_library_catalog(path)
+
+
+def test_ui_catalog_rejects_duplicate_families_across_groups(tmp_path: Path) -> None:
+    path = tmp_path / "ui_library.yml"
+    component = "      - { family: button, slug: button, source: button/api.md }\n"
+    path.write_text(
+        "groups:\n"
+        "  - id: actions\n"
+        "    label: Actions\n"
+        "    components:\n"
+        f"{component}"
+        "  - id: inputs\n"
+        "    label: Inputs\n"
+        "    components:\n"
+        f"{component}",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(DocsConfigError, match="duplicate family 'button'"):
         load_ui_library_catalog(path)
 
 

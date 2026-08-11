@@ -1,6 +1,6 @@
 # Citry baseline for the UI library
 
-**Snapshot: 2026-07-29.** This report separates implemented Citry capabilities
+**Snapshot: 2026-08-08.** This report separates implemented Citry capabilities
 from proposals and parked work. The component library may rely on the first
 group. It must design around the second group or make a missing capability an
 explicit prerequisite.
@@ -9,7 +9,8 @@ explicit prerequisite.
 
 | Capability | Current contract | Evidence |
 |---|---|---|
-| Released floor | `citry 0.3.1` and `citry_core 1.4.0` are published and contain the Python, browser ownership, and corrected Events asset contracts needed by Citry UI. | [`../../../packages/py/citry/pyproject.toml`](../../../packages/py/citry/pyproject.toml); [`../../../packages/py/citry_core/pyproject.toml`](../../../packages/py/citry_core/pyproject.toml) |
+| Current source target | `citry 0.3.2` and `citry_core 1.5.0` contain the framework contracts used by current Citry UI source. Their release artifacts are pending, so publication and clean-install compatibility evidence remain blocked. | [`../../../packages/py/citry/pyproject.toml`](../../../packages/py/citry/pyproject.toml); [`../../../packages/py/citry_core/pyproject.toml`](../../../packages/py/citry_core/pyproject.toml) |
+| Phase 7 artifact floor | Published `citry 0.3.1` and `citry_core 1.4.0` supplied the initial publishing, browser ownership, and corrected Events asset contracts used to begin Phase 7. | Phase 7 implementation history in [`prototype-report.md`](prototype-report.md) |
 | Events | The v1 server, protocol, client applier, transport, dependency queue, bindings, forms, preservation, conformance, docs, and migration guides are implemented. | [`../events_plan.md`](../events_plan.md) lines 3-25 |
 | Client ownership | Graph-first Alpine is the landed source of truth. Citry owns logical component, slot-source, physical-region, and stable browser identity while pinned Alpine supplies expressions, directives, reactivity, and morphing. | [`../alpinejs.md`](../alpinejs.md) lines 3-32 |
 | Client component context | `$component` receives live roots, inert render data, Events State, reactive props, stable scope, managed effects/reactivity, graph data, and event helpers. Cleanup runs across compatible render revisions. | [`../alpinejs.md`](../alpinejs.md) lines 124-198 |
@@ -52,7 +53,7 @@ The leading package shape is:
 ```text
 Distribution: citry-ui
 Import:       citry_ui
-Dependency:   citry>=0.3.1,<0.4.0
+Dependency:   citry>=0.3.2,<0.4.0
 Assets:       templates and prebuilt CSS/JS inside the citry-ui wheel
 Registration: explicit engine-local installation before app.initialize()
 ```
@@ -96,9 +97,6 @@ distributions writing files into the same `citry/` directory.
 
 ## 5. Conflicts and stale status text
 
-- [`../../../TODO/project_status_june_2026.md`](../../../TODO/project_status_june_2026.md)
-  predates Events v1, graph-first Alpine, and current introspection. It is a
-  dated historical snapshot for this project area.
 - The opening line of [`../component_introspection.md`](../component_introspection.md)
   says phases 0 through 3 are implemented, while the implementation ledger
   later also marks the Events metadata phase implemented. The ledger and live

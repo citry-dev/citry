@@ -220,10 +220,13 @@ value. Citry uses the constructed schema instance as the normalized result, so
 declared defaults are filled and validating schema libraries such as Pydantic
 can coerce values before templates and extensions receive them.
 
-When you use `JsData`, the returned names and values become a JSON payload for
-the component's [`$component()`][$component] callback. The payload must be
-JSON-serializable. Primary JavaScript without `$component()` has nowhere to
-receive it, so Citry does not send the data.
+When you use `JsData`, the returned names and values become a strict-JSON
+payload for that rendered component. Citry seeds its top-level keys into the
+component's Alpine scope and also passes a fresh instance-local graph to the
+component's [`$component()`][$component] callback when one exists. A component
+with Alpine expressions does not need `$component()` only to copy data into
+scope. When a render has neither Alpine expressions nor `$component()`, Citry
+does not send the payload.
 
 ```citry
 from citry import Component
@@ -244,7 +247,7 @@ class Counter(Component):
         return self.JsData(initial_count=kwargs.initial_count)
 
     template = """
-      <button class="counter">Count</button>
+      <button class="counter" x-text="initial_count">Count</button>
     """
 
     js = """
@@ -255,9 +258,9 @@ class Counter(Component):
     """
 ```
 
-Python writes the payload key `initial_count`. Browser code assigns it to the
-JavaScript variable `initialCount`. Keeping each language's naming convention
-makes it clear which side owns each name. See
+Python writes the payload key `initial_count`, and the Alpine expression reads
+that exact key directly. Component JavaScript can still assign it to a
+`camelCase` local when useful. See
 [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) for delivery
 and CSS custom properties.
 

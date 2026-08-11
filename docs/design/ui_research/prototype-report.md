@@ -1,10 +1,11 @@
 # Phase 7 Citry UI production-slice report
 
 **Status: implementation slice complete; release-quality evidence in
-progress. Snapshot: 2026-07-30.** Phase 7 advances one public architecture:
+progress. Snapshot updated: 2026-08-08.** Phase 7 advances one public architecture:
 styled `LibraryComponent` definitions in the separate `citry-ui` distribution,
-registered explicitly into each `Citry` instance. The released development
-floor is `citry>=0.3.1,<0.4.0` with `citry_core 1.4.0`.
+registered explicitly into each `Citry` instance. Current source development
+targets `citry>=0.3.2,<0.4.0` with `citry_core 1.5.0`; release-artifact
+qualification waits for those versions to publish.
 
 This is a cumulative implementation report, not a release declaration. The
 remaining quality profiles and artifact matrix are listed in section 5.

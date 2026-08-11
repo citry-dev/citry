@@ -1,0 +1,107 @@
+{
+  "artifacts": {
+    "ambient_tests": "f2ca4ffb1673467e41be677450e676d291e4c9c2d1ca354a6f8b239e26f8e9d6",
+    "candidate": "97dd62c43e914d866fcfe84728ba52675fd6b7e3e57e38e8deacf5103d2f20a4",
+    "client_runtime": "a722144962d6edd937fd58b97641be2ebee47566c42bba69139392e398992219",
+    "harness": "d3b556b2282c34ada0b94d016aa1523feca0cf0a1d825801d8b51796c5fdac27",
+    "probe": "09a5208b70606bdfb11ab1f38f2e89808fad66319acfd7d4e176153d9541bc9d",
+    "provide_component": "c6c908f0122efcaaf919f60b196c5cc2e6d6699cf10d051efaca68a5a3ff9371",
+    "provide_source": "e89c480d7d6331815a84fc24d4bc25c690c7afb655c50ba076067f22e8ae6733",
+    "uv_lock": "63f3934cbad55ed0f8d4f9e57beea45f995f4dd62f195ff98481365945941ede"
+  },
+  "browser_results_equal": true,
+  "browser_versions": {
+    "chromium": "151.0.7922.34",
+    "firefox": "153.0",
+    "webkit": "26.5"
+  },
+  "dependencies": {
+    "playwright": "1.62.0",
+    "pytest_playwright": "0.8.0"
+  },
+  "environment": {
+    "machine": "arm64",
+    "platform": "macOS-26.6-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12"
+  },
+  "result": "PASS_BOUNDED",
+  "semantic_result": {
+    "candidate_format": "citry-i18n-provider-research/1",
+    "failures": {
+      "bad_revision": {
+        "atomic": true,
+        "code": "I18N_PROVIDER_ARTIFACT_INVALID"
+      },
+      "failed_chunk": {
+        "atomic": true,
+        "code": "I18N_PROVIDER_CHUNK_FAILED"
+      },
+      "invalid_alias": {
+        "atomic": true,
+        "code": "I18N_PROVIDER_LOCALE_INVALID",
+        "skippedLoad": true
+      }
+    },
+    "initial_gates": {
+      "blocked_reader_has_no_service": true,
+      "browser_context_matches_server_context": true,
+      "explicit_child_is_fixed": true,
+      "false_then_true_is_independent": true,
+      "inherited_child_merged_fields": true,
+      "readonly_service": true,
+      "server_values_visible": true
+    },
+    "load_calls": [
+      {
+        "generation": 1,
+        "locale": "pl-PL"
+      },
+      {
+        "generation": 2,
+        "locale": "ar-EG"
+      },
+      {
+        "generation": 3,
+        "locale": "ar-EG"
+      },
+      {
+        "generation": 4,
+        "locale": "en-US"
+      },
+      {
+        "generation": 5,
+        "locale": "ar-EG"
+      }
+    ],
+    "stale_generation": {
+      "latestCommitted": true,
+      "oldIgnored": true,
+      "stateStayedComplete": true
+    },
+    "switch_gates": {
+      "atomic_observer_state": true,
+      "blocked_subtree_stayed_fixed": true,
+      "committed": true,
+      "explicit_child_stayed_fixed": true,
+      "independent_child_stayed_fixed": true,
+      "inherited_child_recomputed": true,
+      "outer_context_changed": true,
+      "unknown_message_rejected": true
+    }
+  },
+  "server_binding_gates": {
+    "async_tasks_isolated": true,
+    "exception_restored_binding": true,
+    "threads_isolated": true
+  },
+  "server_provider_gates": {
+    "component_provide_reached_descendant": true,
+    "server_only_provider_has_no_i18n_browser_payload": true,
+    "server_only_provider_has_no_own_wrapper": true
+  },
+  "tested_browsers": [
+    "chromium",
+    "firefox",
+    "webkit"
+  ]
+}

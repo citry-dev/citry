@@ -3,18 +3,30 @@
 from __future__ import annotations
 
 import ast
+from typing import Annotated
 
 import pytest
 
 from citry import (
     Citry,
     Component,
+    LintSettings,
     LspPosition,
     LspRange,
     PythonTemplateSourceMap,
     TemplateAnalysis,
+    TemplateLintConsumer,
     discover_python_templates,
+    lint_unknown_template_variables,
 )
+from citry.analysis import (
+    css_data_completion_at,
+    css_data_reference_at,
+    css_data_references,
+    python_application_lint_variable_range,
+    python_component_lint_variable_range,
+)
+from citry_core.template_parser import parse_template
 
 
 def _assigned_string(source: str) -> ast.Constant:
@@ -32,6 +44,41 @@ def _lsp_position(source: str, offset: int) -> LspPosition:
     line_text = before.rsplit("\n", 1)[-1]
     character = len(line_text.encode("utf-16-le")) // 2
     return LspPosition(line, character)
+
+
+def test_css_data_reference_scanner_keeps_exact_var_arguments_only():
+    source = """
+    .card {
+      --declared: 1px;
+      width: var(--chart_height);
+      color: VAR( /* current */ --row-color, var(--fallback));
+      content: "var(--inside-string)";
+      /* var(--inside-comment) */
+    }
+    """
+
+    references = css_data_references(source)
+
+    assert [reference.name for reference in references] == ["chart_height", "row-color", "fallback"]
+    chart = references[0]
+    assert source.encode()[chart.start_index : chart.end_index].decode() == "--chart_height"
+    assert css_data_reference_at(source, chart.start_index + 4) == chart
+
+
+def test_css_data_completion_covers_empty_partial_unicode_and_declines_escapes():
+    source = ".card { color: var(--café"
+    cursor = len(source.encode())
+
+    completion = css_data_completion_at(source, cursor)
+
+    assert completion is not None
+    assert completion.prefix == "café"
+    assert source.encode()[completion.start_index : completion.end_index].decode() == "--café"
+    empty = "a { color: var(--"
+    assert css_data_completion_at(empty, len(empty.encode())).prefix == ""  # type: ignore[union-attr]
+    escaped = "a { color: var(--\\63 olor) }"
+    assert css_data_references(escaped) == ()
+    assert css_data_completion_at(escaped, len(b"a { color: var(--")) is None
 
 
 class TestTemplateAnalysis:
@@ -73,7 +120,16 @@ class TestTemplateAnalysis:
         assert "later-card" in after.component_names
 
     def test_portable_round_trip_preserves_component_rules(self):
-        engine = Citry(autodiscover=False)
+        engine = Citry(
+            autodiscover=False,
+            template_globals={"site_name": "Citry"},
+            lint=LintSettings(
+                rule_unknown_template_variable="warning",
+                template_variables={
+                    "request": Annotated[str, "Current request."],
+                },
+            ),
+        )
 
         class PortableCard(Component):
             citry = engine
@@ -85,8 +141,101 @@ class TestTemplateAnalysis:
         restored = TemplateAnalysis.from_dict(original.to_dict())
 
         assert restored.component_names == original.component_names
+        assert restored.lint == original.lint
+        assert dict(restored.component_lint) == dict(original.component_lint)
+        assert {item.name for item in restored.lint.template_variables} == {"request", "site_name"}
         with pytest.raises(SyntaxError, match="must have one of the following attributes"):
             restored.parse_template("<c-portable-card />")
+
+    def test_runtime_global_cycles_and_executable_annotation_text_drop_only_the_type(self):
+        cyclic: list[object] = []
+        cyclic.append(cyclic)
+        engine = Citry(
+            autodiscover=False,
+            template_globals={"cyclic": cyclic},
+            lint=LintSettings(template_variables={"request": "factory()"}),
+        )
+
+        by_name = {item.name: item for item in engine.template_analysis().lint.template_variables}
+
+        assert by_name["cyclic"].type_display is None
+        assert by_name["request"].type_display is None
+        assert set(by_name) == {"cyclic", "request"}
+
+
+class TestLintVariableSourceRanges:
+    def test_application_range_follows_direct_settings_aliases(self):
+        source = (
+            "from citry import Citry, LintSettings\n"
+            "variables = {'request': str}\n"
+            "settings = LintSettings(template_variables=variables)\n"
+            "app = Citry(autodiscover=False, lint=settings)\n"
+        )
+        start = source.index("'request'")
+
+        assert python_application_lint_variable_range(source, "app", "request") == LspRange(
+            _lsp_position(source, start),
+            _lsp_position(source, start + len("'request'")),
+        )
+
+    def test_component_range_uses_the_exact_nested_lint_class(self):
+        source = (
+            "class Outer:\n    class Card:\n        class Lint:\n            template_variables = {'request': str}\n"
+        )
+        start = source.index("'request'")
+
+        assert python_component_lint_variable_range(source, "Outer.Card.Lint", "request") == LspRange(
+            _lsp_position(source, start),
+            _lsp_position(source, start + len("'request'")),
+        )
+
+    @pytest.mark.parametrize(
+        ("source", "resolver"),
+        [
+            ("app = Citry(lint=build_settings())\n", "application"),
+            (
+                "class Card:\n    class Lint:\n        template_variables = build_variables()\n",
+                "component",
+            ),
+        ],
+    )
+    def test_dynamic_settings_decline_navigation(self, source, resolver):
+        if resolver == "application":
+            result = python_application_lint_variable_range(source, "app", "request")
+        else:
+            result = python_component_lint_variable_range(source, "Card.Lint", "request")
+
+        assert result is None
+
+    def test_unknown_root_lint_uses_parser_free_names_and_severity_matrix(self):
+        template = parse_template(
+            '<div c-title="known + missing"><c-for each="item in items">{{ item }}</c-for></div>'
+        )
+        closed = TemplateLintConsumer(frozenset({"known", "items"}), "closed", "error")
+        allowed = TemplateLintConsumer(frozenset({"known", "items"}), "allow-extra", "error")
+
+        closed_findings = lint_unknown_template_variables(template, (closed,))
+        allowed_findings = lint_unknown_template_variables(template, (allowed,))
+
+        assert [(item.name, item.severity) for item in closed_findings] == [("missing", "error")]
+        assert [(item.name, item.severity) for item in allowed_findings] == [("missing", "warning")]
+        assert closed_findings[0].code == "citry.template.unknown-variable"
+
+    def test_shared_template_uses_the_strictest_missing_consumer(self):
+        template = parse_template("{{ shared }} {{ absent }}")
+        warning = TemplateLintConsumer(frozenset({"shared"}), "allow-extra", "error")
+        strict = TemplateLintConsumer(frozenset({"shared"}), "unknown", "error")
+        ignored = TemplateLintConsumer(frozenset(), "closed", "ignore")
+
+        findings = lint_unknown_template_variables(template, (warning, strict, ignored))
+
+        assert [(item.name, item.severity) for item in findings] == [("absent", "error")]
+
+    def test_unknown_root_lint_joins_python_identifier_identity(self):
+        template = parse_template("{{ K }}")  # noqa: RUF001 - normalization is the behavior under test
+        consumer = TemplateLintConsumer(frozenset({"K"}), "closed", "error")
+
+        assert lint_unknown_template_variables(template, (consumer,)) == ()
 
 
 class TestPythonTemplateSourceMap:
@@ -159,6 +308,14 @@ class TestPythonTemplateSourceMap:
             _lsp_position(source, host_start),
             _lsp_position(source, host_start + 1),
         )
+        assert source_map.range_is_unambiguous(byte_start, byte_end) is True
+        assert source_map.range_is_unambiguous(0, byte_end) is False
+
+    def test_normalized_multiline_range_remains_unambiguous(self):
+        source = 'template = """\n  {{ (\n    value\n  ) }}\n  """'
+        source_map = PythonTemplateSourceMap.from_ast(source, _assigned_string(source))
+
+        assert source_map.range_is_unambiguous(0, len(source_map.template_source.encode())) is True
 
     def test_maps_concatenation_across_a_python_comment(self):
         source = 'template = ("a"  # authored note\n            r"\\nb")'

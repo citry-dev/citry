@@ -180,7 +180,7 @@ The target context is:
 {
   id,       // current server render id
   els,      // stable live array of all current element roots
-  data,     // inert js_data() payload for this render
+  data,     // instance-local js_data() snapshot for this render
   state,    // Events State facade, or null
   props,    // reactive read-only declared-props view
   scope,    // stable reactive component-local Alpine scope
@@ -201,10 +201,51 @@ policy, one logical owner sees all governed live roots in physical document
 order while ordinary Alpine state and directive lifetime remain local to each
 physical copy.
 
-`data` remains the hash-deduplicated, inert result of `js_data()`. It must not
-be mutated to expose instance-local Alpine variables because sibling
-instances can share it. `scope` is the mutable client-local bag. `state` is
-the server contract. `props` is the one-way input contract.
+The server still sends identical `js_data()` JSON only once, but the manager
+parses a fresh value graph for every invocation. Sibling instances therefore
+never share nested arrays or objects through `data`. `data` is the current
+server snapshot; `scope` is the mutable client-local bag. `state` is the
+server contract. `props` is the one-way input contract.
+
+Before the callback runs, Citry copies every top-level `data` entry into the
+stable component scope under its exact key. The callback can add fields or
+replace a seeded field:
+
+```js
+$component(({ scope }) => {
+  scope.mode = "client-override";
+  scope.open = () => showDialog();
+});
+```
+
+On a correlated rerender, Citry runs the prior cleanup, refreshes every key
+owned by the new JS data, and removes keys that the previous JS data owned but
+the new payload omits. Callback-only keys such as `open` survive. If the
+callback writes a seeded key such as `mode`, its write wins for that
+invocation because the callback runs after seeding.
+
+Automatic seeding also works without component JavaScript:
+
+```citry
+class Counter(Component):
+    def js_data(self, kwargs, slots):
+        return {"count": 0}
+
+    template = """
+      <button @click="count++" x-text="count"></button>
+    """
+```
+
+This rendered instance receives a seed-only lifecycle call. Citry ships no JS
+data and activates no browser runtime when a rendered instance has neither a
+`$component` callback nor an Alpine expression. A data-only call participates
+in the same parent-before-child initialization order as a callback.
+
+The payload remains strict JSON: null, booleans, finite numbers, strings,
+arrays, and objects with string keys. Seeding copies only top-level keys and
+does not rename them. Non-identifier keys remain object properties but cannot
+be written as bare JavaScript names. The manager defines every key as an own
+property so data cannot change the scope object's prototype.
 
 ### 4.2 Supplying props with `$c-props`
 

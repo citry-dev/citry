@@ -69,10 +69,15 @@ def test_client_runtime_bundle_budget():
     # Typed custom-element values then add upgrade-aware activation, strict
     # JSON uplink validation, raw-object identity, and pointed property
     # diagnostics. The measured baseline is 728,847 raw / 151,867 gzip.
+    # Automatic instance-local JsData parsing, Alpine scope seeding, explicit
+    # init/seed calls, and rerender key ownership move the measured raw
+    # baseline to 734,546 raw / 153,229 gzip bytes.
+    # The final seed lifecycle and ownership-manifest integration move that
+    # baseline to 737,241 raw / 154,025 gzip bytes.
     # These are deliberate validation and identity features, not incidental
     # bundle drift.
-    assert len(payload) <= 731_000
-    assert len(gzip.compress(payload, mtime=0)) <= 153_000
+    assert len(payload) <= 738_000
+    assert len(gzip.compress(payload, mtime=0)) <= 154_500
 
 
 def test_325_instance_client_payload_budget():
@@ -83,8 +88,9 @@ def test_325_instance_client_payload_budget():
     assert sizes.document_raw <= 1_425_000
     # Owner-aware fragment fetch entries and the ComponentRange client runtime
     # plus strict live input validation move the realistic document baseline
-    # to 1,413,161 raw / 182,460 bytes compressed.
-    assert sizes.document_gzip <= 183_000
+    # to 1,413,161 raw / 182,460 bytes compressed. Automatic JsData scope
+    # seeding then moves the compressed 325-instance document to 183,637.
+    assert sizes.document_gzip <= 184_500
 
 
 def test_450_instance_large_graph_regression_budget():

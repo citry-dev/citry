@@ -15,6 +15,11 @@ from citry import (
     format_python_templates,
     prepare_python_component_assets,
 )
+from citry._diagnostic_catalog import (
+    FORMAT_INELIGIBLE,
+    FORMAT_PROVIDER_INVALID,
+    FORMAT_STALE_DOCUMENT,
+)
 from citry_core.template_formatter import (
     EmbeddedFormatNotice,
     EmbeddedFormatPlan,
@@ -72,19 +77,19 @@ def format_templates(
     """Format current authored text and return one protocol-ready result."""
     if document.version != requested_version:
         return _refused(
-            "citry.format.stale-document",
+            FORMAT_STALE_DOCUMENT,
             f"document version {requested_version} is stale; current version is {document.version}",
         )
     if _is_standalone_template_document(document):
         if scope != "document":
             return _refused(
-                "citry.format.ineligible",
+                FORMAT_INELIGIBLE,
                 "standalone Citry templates support document formatting only",
             )
         return _format_standalone(document)
     if document.language_id != "python":
         return _refused(
-            "citry.format.ineligible",
+            FORMAT_INELIGIBLE,
             f"Citry formatting is unavailable for language {document.language_id!r}",
         )
     return _format_python(document, scope=scope, position=position)
@@ -100,14 +105,14 @@ def prepare_component_assets(
     """Prepare current component assets without running a language provider."""
     if document.version != requested_version:
         return _refused(
-            "citry.format.stale-document",
+            FORMAT_STALE_DOCUMENT,
             f"document version {requested_version} is stale; current version is {document.version}",
         )
     plan: _UnderlyingAssetPlan
     if _is_standalone_template_document(document):
         if scope != "document":
             return _refused(
-                "citry.format.ineligible",
+                FORMAT_INELIGIBLE,
                 "standalone Citry templates support document formatting only",
             )
         try:
@@ -120,14 +125,14 @@ def prepare_component_assets(
         host_offset: int | None = None
         if scope == "position":
             if position is None:
-                return _refused("citry.format.ineligible", "position scope requires a document position")
+                return _refused(FORMAT_INELIGIBLE, "position scope requires a document position")
             try:
                 host_offset = document_offset_at(
                     document.source,
                     LspPosition(position.line, position.character),
                 )
             except ValueError as error:
-                return _refused("citry.format.ineligible", str(error))
+                return _refused(FORMAT_INELIGIBLE, str(error))
         try:
             python_plan = prepare_python_component_assets(document.source, host_offset=host_offset)
         except PythonTemplateFormatError as error:
@@ -136,12 +141,12 @@ def prepare_component_assets(
         requests = tuple(_python_provider_request(request) for request in python_plan.requests)
     else:
         return _refused(
-            "citry.format.ineligible",
+            FORMAT_INELIGIBLE,
             f"Citry formatting is unavailable for language {document.language_id!r}",
         )
     if document.version is None:
         return _refused(
-            "citry.format.stale-document",
+            FORMAT_STALE_DOCUMENT,
             "document does not have a synchronized version",
         )
     return PreparedComponentAssets(
@@ -166,7 +171,7 @@ def finish_component_assets(
         or document.source != prepared.document_source
     ):
         return _refused(
-            "citry.format.stale-document",
+            FORMAT_STALE_DOCUMENT,
             "document changed while embedded formatting was in progress",
         )
     try:
@@ -216,14 +221,14 @@ def _format_python(
     host_offset: int | None = None
     if scope == "position":
         if position is None:
-            return _refused("citry.format.ineligible", "position scope requires a document position")
+            return _refused(FORMAT_INELIGIBLE, "position scope requires a document position")
         try:
             host_offset = document_offset_at(
                 document.source,
                 LspPosition(position.line, position.character),
             )
         except ValueError as error:
-            return _refused("citry.format.ineligible", str(error))
+            return _refused(FORMAT_INELIGIBLE, str(error))
     try:
         result = format_python_templates(document.source, host_offset=host_offset)
     except PythonTemplateFormatError as error:
@@ -322,7 +327,7 @@ def _python_notice_dict(notice: PythonComponentAssetNotice) -> dict[str, object]
 
 def _template_refusal(document: DocumentState, error: TemplateFormatError) -> FormatTemplatesResponse:
     mapped: LspRange | None = None
-    if error.range is not None and error.code != "citry.format.provider-invalid":
+    if error.range is not None and error.code != FORMAT_PROVIDER_INVALID:
         try:
             mapped = standalone_region(document.source).source_map.map_range(*error.range)
         except ValueError:

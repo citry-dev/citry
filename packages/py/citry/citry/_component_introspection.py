@@ -177,7 +177,12 @@ def _inspect_component_assets(
         )
         for inline_attr, file_attr in ASSET_PAIRS
     }
-    return ComponentAssets(template=assets["template"], js=assets["js"], css=assets["css"])
+    return ComponentAssets(
+        template=assets["template"],
+        messages=assets["messages"],
+        js=assets["js"],
+        css=assets["css"],
+    )
 
 
 def _primary_name(comp_cls: type[Component], names: tuple[str, ...]) -> str:

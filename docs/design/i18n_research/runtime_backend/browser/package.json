@@ -1,0 +1,12 @@
+{
+  "name": "citry-i18n-runtime-spike-browser",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.32.1",
+  "dependencies": {
+    "@fluent/bundle": "0.19.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1"
+  }
+}

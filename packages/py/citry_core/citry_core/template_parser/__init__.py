@@ -30,11 +30,16 @@ See ``nodes.py`` for the full list and their constructor signatures.
 """
 
 # ruff: noqa: RUF022
+from collections.abc import Mapping
 from typing import TypeAlias
 
 from citry_core import _rust
 from citry_core.template_parser.compile import compile_template
 from citry_core.template_parser.parse import parse_diagnostic, parse_template
+
+analyze_browser_source = _rust.template_parser.analyze_browser_source
+analyze_component_scope_writes = _rust.template_parser.analyze_component_scope_writes
+analyze_component_source = _rust.template_parser.analyze_component_source
 
 # AST types (re-exported from Rust)
 ParseDiagnostic: TypeAlias = _rust.template_parser.ParseDiagnostic
@@ -62,9 +67,15 @@ TagRules: TypeAlias = _rust.template_parser.TagRules
 HTML_VOID_ELEMENTS: frozenset[str] = _rust.template_parser.HTML_VOID_ELEMENTS
 # Structural ``<c-*>`` tags, single-sourced from the Rust parser.
 RESERVED_TAG_NAMES: frozenset[str] = _rust.template_parser.RESERVED_TAG_NAMES
+# Fixed directives and structural attributes, single-sourced from the parser.
+CITRY_DIRECTIVE_NAMES: frozenset[str] = _rust.template_parser.CITRY_DIRECTIVE_NAMES
+STRUCTURAL_TAG_ATTRIBUTE_NAMES: Mapping[str, frozenset[str]] = _rust.template_parser.STRUCTURAL_TAG_ATTRIBUTE_NAMES
 
 __all__ = [
     # Functions
+    "analyze_browser_source",
+    "analyze_component_scope_writes",
+    "analyze_component_source",
     "parse_template",
     "parse_diagnostic",
     "compile_template",
@@ -89,4 +100,6 @@ __all__ = [
     # Constants
     "HTML_VOID_ELEMENTS",
     "RESERVED_TAG_NAMES",
+    "CITRY_DIRECTIVE_NAMES",
+    "STRUCTURAL_TAG_ATTRIBUTE_NAMES",
 ]

@@ -1,10 +1,12 @@
 """
 Provide/inject: passing data deep down the component tree.
 
-A component makes data available to everything rendered below it with
-``Component.provide(key, **data)`` (or the ``<c-provide>`` built-in
-component), and a descendant opts in with ``Component.inject(key)``. The data
-never enters the template variables; only components that ask for it see it.
+A component makes a value available to everything rendered below it with
+``Component.provide(key, value)``. The keyword-field form
+``Component.provide(key, **data)`` and the ``<c-provide>`` built-in create an
+immutable structured payload. A descendant opts in with
+``Component.inject(key)``. The value never enters the template variables;
+only components that ask for it see it.
 This is the citry form of React's ContextProvider and Vue's
 ``provide()``/``inject()``.
 

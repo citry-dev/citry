@@ -212,15 +212,16 @@ class Debug(Extension):
             if not ctx.citry._has_component_class(ctx.component_class):
                 self._registered_components.discard(ctx.component_class)
 
-    def _render_cache_bypass(self) -> bool:
-        """Whether any registered component currently enables highlighting."""
+    def render_cache_bypass_reason(self) -> str | None:
+        """Require live rendering while debug highlighting is enabled."""
         with self._registered_components_lock:
             component_classes = tuple(self._registered_components)
-        return any(
+        active = any(
             (config := getattr(component_class, self.class_name, None)) is not None
             and (config.highlight_components or config.highlight_slots)
             for component_class in component_classes
         )
+        return "debug-active" if active else None
 
     def on_component_rendered(self, ctx: OnComponentRenderedContext) -> CitryRender | None:
         config = cast("Debug.Config", getattr(ctx.component, self.name))

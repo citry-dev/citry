@@ -8,8 +8,16 @@ from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput
 from citry_ui.components._aria import merge_idrefs
-from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
-from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
+from citry_ui.components._attrs import (
+    CClassValue,
+    CStyleValue,
+    get_html_attr,
+    get_html_form_owner,
+    merge_root_attrs,
+    pop_html_attr,
+    reject_html_attr_bindings,
+)
+from citry_ui.components._context import FIELD_CONTEXT_KEY, FIELD_CONTROL_MARKER, FORM_CONTEXT_KEY
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -27,18 +35,25 @@ CInputVariant = Literal["outline", "filled", "plain"]
 CInputSize = Literal["sm", "md", "lg"]
 
 
-_FIELD_CONTROL_MARKER = "data-citry-field-control"
-
-
 @dataclass(slots=True)
 class _FieldRegistry:
     control_name: str | None = None
+    supports_required: bool = True
+    supports_readonly: bool = True
 
-    def register(self, control_name: str) -> None:
+    def register(
+        self,
+        control_name: str,
+        *,
+        supports_required: bool = True,
+        supports_readonly: bool = True,
+    ) -> None:
         if self.control_name is not None:
             msg = f"CField accepts exactly one library control, but received {self.control_name} and {control_name}."
             raise ValueError(msg)
         self.control_name = control_name
+        self.supports_required = supports_required
+        self.supports_readonly = supports_readonly
 
 
 class CFieldLabelSlotData:
@@ -133,6 +148,9 @@ class CField(LibraryComponent):
         has_description = "description" in self.raw_slots
         has_error = "error" in self.raw_slots
         registry = _FieldRegistry()
+        self._field_registry = registry
+        self._field_required = kwargs.required
+        self._field_readonly = readonly
         described_by = merge_idrefs(
             description_id if has_description else None,
             error_id if kwargs.invalid and has_error else None,
@@ -145,7 +163,7 @@ class CField(LibraryComponent):
             "aria-invalid": "true" if kwargs.invalid else None,
             "aria-describedby": described_by,
             "aria-errormessage": error_id if kwargs.invalid and has_error else None,
-            _FIELD_CONTROL_MARKER: True,
+            FIELD_CONTROL_MARKER: True,
         }
         self.provide(
             FIELD_CONTEXT_KEY,
@@ -180,6 +198,23 @@ class CField(LibraryComponent):
             "show_error": kwargs.invalid and has_error,
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
         }
+
+    def on_render(self) -> Any:
+        rendered, error = yield
+        if error is not None:
+            raise error
+        if rendered is None:
+            msg = "CField completed without a render result."
+            raise RuntimeError(msg)
+        registry = self._field_registry
+        if registry.control_name is None:
+            return
+        if self._field_required and not registry.supports_required:
+            msg = f"CField required=True is not supported by its {registry.control_name} control."
+            raise ValueError(msg)
+        if self._field_readonly and not registry.supports_readonly:
+            msg = f"CField readonly=True is not supported by its {registry.control_name} control."
+            raise ValueError(msg)
 
     def js_data(
         self,
@@ -296,6 +331,13 @@ class CField(LibraryComponent):
               `[citry-ui] CField requires exactly one marked control, but found ${controls.length}.`,
             );
           }
+          const control = controls[0];
+          const initialSupportsRequired = control.getAttribute(
+            "data-citry-field-supports-required",
+          ) !== "false";
+          const initialSupportsReadonly = control.getAttribute(
+            "data-citry-field-supports-readonly",
+          ) !== "false";
           const form = inject(Symbol.for("citry-ui:form"), null);
           const allowedValues = {
             orientation: ["vertical", "horizontal"],
@@ -303,6 +345,8 @@ class CField(LibraryComponent):
           };
           const invalidEpisodes = new Map();
           let externalInvalid = data.invalid;
+          let capabilityGeneration = 0;
+          let activeCapabilityGeneration = null;
 
           const describeValue = (value) => {
             try {
@@ -321,6 +365,18 @@ class CField(LibraryComponent):
             console.error(
               `[citry-ui] CField ${name} received invalid client value ${describedValue}; `
                 + "using the server-rendered fallback.",
+              root,
+            );
+          };
+          const reportUnsupported = (name) => {
+            const episode = `capability:${name}`;
+            const fingerprint = "unsupported:true";
+            if (invalidEpisodes.get(episode) === fingerprint) {
+              return;
+            }
+            invalidEpisodes.set(episode, fingerprint);
+            console.error(
+              `[citry-ui] CField ${name}=true is not supported by its registered control; using false.`,
               root,
             );
           };
@@ -353,6 +409,22 @@ class CField(LibraryComponent):
             readonly: data.readonly,
             invalid: data.invalid,
             nativeInvalid: false,
+            supportsRequired: initialSupportsRequired,
+            supportsReadonly: initialSupportsReadonly,
+            registerCapabilities(capabilities) {
+              const generation = ++capabilityGeneration;
+              activeCapabilityGeneration = generation;
+              context.supportsRequired = capabilities.required !== false;
+              context.supportsReadonly = capabilities.readonly !== false;
+              return () => {
+                if (activeCapabilityGeneration !== generation) {
+                  return;
+                }
+                activeCapabilityGeneration = null;
+                context.supportsRequired = true;
+                context.supportsReadonly = true;
+              };
+            },
             setNativeInvalid(value) {
               context.nativeInvalid = Boolean(value);
               applyInvalid();
@@ -367,12 +439,24 @@ class CField(LibraryComponent):
             error.hidden = !(invalid && context.hasError);
           };
           effect(() => {
-            const required = resolveBoolean("required", data.required);
+            const requestedRequired = resolveBoolean("required", data.required);
             const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
             // CForm uses a native disabled fieldset, so its disabled state
             // must win over a descendant's local configuration.
             const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
-            const readonly = resolveBoolean("readonly", readonlyFallback);
+            const requestedReadonly = resolveBoolean("readonly", readonlyFallback);
+            const required = requestedRequired && context.supportsRequired;
+            const readonly = requestedReadonly && context.supportsReadonly;
+            if (requestedRequired && !context.supportsRequired) {
+              reportUnsupported("required");
+            } else {
+              invalidEpisodes.delete("capability:required");
+            }
+            if (requestedReadonly && !context.supportsReadonly) {
+              reportUnsupported("readonly");
+            } else {
+              invalidEpisodes.delete("capability:readonly");
+            }
             externalInvalid = resolveBoolean("invalid", data.invalid);
             const orientation = resolveChoice("orientation");
             const density = resolveChoice("density");
@@ -519,7 +603,7 @@ class CInput(LibraryComponent):
                 "aria-invalid",
                 "autocomplete",
                 "data-citry-input-initialized",
-                _FIELD_CONTROL_MARKER,
+                FIELD_CONTROL_MARKER,
                 "data-citry-ui-part",
                 "data-disabled",
                 "data-invalid",
@@ -539,6 +623,7 @@ class CInput(LibraryComponent):
             },
             "CInput",
         )
+        reject_html_attr_bindings(kwargs.attrs, {"form"}, "CInput")
 
         field = self.inject(FIELD_CONTEXT_KEY, None)
         form = self.inject(FORM_CONTEXT_KEY, None)
@@ -565,8 +650,19 @@ class CInput(LibraryComponent):
                 "set the same value on CField.control_id and CInput.id."
             )
             raise ValueError(msg)
+        for html_attribute in ("form", "aria-describedby", "aria-errormessage"):
+            get_html_attr(
+                kwargs.attrs or {},
+                html_attribute,
+                component_name="CInput",
+            )
         caller_attrs = merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style)
-        if form is not None and "form" in caller_attrs and caller_attrs["form"] != form.form_id:
+        form_owner = get_html_form_owner(
+            caller_attrs,
+            component_name="CInput",
+            default=form.form_id if form is not None else None,
+        )
+        if form is not None and form_owner != form.form_id:
             msg = "CInput inside CForm cannot target a different native form owner."
             raise ValueError(msg)
 
@@ -584,8 +680,18 @@ class CInput(LibraryComponent):
             )
             invalid = kwargs.invalid if kwargs.invalid is not None else False
         input_id = kwargs.id or field_control_id or f"cui-input-{self.id}"
-        external_described_by = caller_attrs.pop("aria-describedby", None)
-        external_error_message = caller_attrs.pop("aria-errormessage", None)
+        external_described_by = pop_html_attr(
+            caller_attrs,
+            "aria-describedby",
+            component_name="CInput",
+        )
+        external_error_message = pop_html_attr(
+            caller_attrs,
+            "aria-errormessage",
+            component_name="CInput",
+        )
+        self._input_external_described_by = external_described_by
+        self._input_external_error_message = external_error_message
         described_by = merge_idrefs(
             field.description_id if field is not None and field.has_description else None,
             field.error_id if field is not None and field.has_error and invalid else None,
@@ -623,7 +729,6 @@ class CInput(LibraryComponent):
     ) -> dict[str, object]:
         field = self.inject(FIELD_CONTEXT_KEY, None)
         form = self.inject(FORM_CONTEXT_KEY, None)
-        caller_attrs = dict(kwargs.attrs or {})
         return {
             "value": kwargs.value,
             "required": bool(field.required)
@@ -651,8 +756,8 @@ class CInput(LibraryComponent):
             "inheritsReadonly": field is None and kwargs.readonly is None,
             "variant": kwargs.variant,
             "size": kwargs.size,
-            "externalDescribedBy": caller_attrs.get("aria-describedby"),
-            "externalErrorMessage": caller_attrs.get("aria-errormessage"),
+            "externalDescribedBy": self._input_external_described_by,
+            "externalErrorMessage": self._input_external_error_message,
         }
 
     template = """
@@ -707,7 +812,7 @@ class CInput(LibraryComponent):
           let controlled = false;
           let controlledValue = null;
           let composing = false;
-          let resetTimer = null;
+          const resetTimers = new Set();
 
           const describeValue = (value) => {
             try {
@@ -879,11 +984,8 @@ class CInput(LibraryComponent):
             }
           };
           const onReset = (event) => {
-            if (resetTimer !== null) {
-              clearTimeout(resetTimer);
-            }
-            resetTimer = setTimeout(() => {
-              resetTimer = null;
+            const resetTimer = setTimeout(() => {
+              resetTimers.delete(resetTimer);
               if (event.defaultPrevented) {
                 return;
               }
@@ -894,6 +996,7 @@ class CInput(LibraryComponent):
               }
               applyState();
             }, 0);
+            resetTimers.add(resetTimer);
           };
           const nativeForm = input.form;
 
@@ -934,9 +1037,8 @@ class CInput(LibraryComponent):
             input.removeEventListener("compositionstart", onCompositionStart);
             input.removeEventListener("compositionend", onCompositionEnd);
             nativeForm?.removeEventListener("reset", onReset);
-            if (resetTimer !== null) {
-              clearTimeout(resetTimer);
-            }
+            resetTimers.forEach((resetTimer) => clearTimeout(resetTimer));
+            resetTimers.clear();
             if (nativeInvalid) {
               field?.setNativeInvalid(false);
             }

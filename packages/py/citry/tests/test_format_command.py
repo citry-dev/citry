@@ -104,6 +104,9 @@ def test_windows_cli_accepts_a_native_provider(
 ) -> None:
     executable = tmp_path / "biome.exe"
     shutil.copy2(sys.executable, executable)
+    provider_cache = tmp_path / "provider-cache"
+    provider_cache.mkdir()
+    monkeypatch.setattr(embedded_provider_module, "_private_executable_root", lambda _language: provider_cache)
 
     def fake_provider(
         _executable: Path,
@@ -123,6 +126,50 @@ def test_windows_cli_accepts_a_native_provider(
 
     assert _run_main(["format", "--javascript-provider", f"biome:{executable}", str(target)]) == 0
     assert target.read_text(encoding="utf-8") == "const value = 1;\n"
+    assert list(provider_cache.iterdir()) == []
+
+
+def test_cli_closes_an_initialized_provider_when_the_next_provider_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / ("biome.exe" if os.name == "nt" else "biome")
+    if os.name == "nt":
+        shutil.copy2(sys.executable, executable)
+
+        def fake_provider(
+            _executable: Path,
+            arguments: tuple[str, ...],
+            *,
+            input_text: str | None,
+            **_kwargs: object,
+        ) -> str:
+            if arguments == ("--version",):
+                return "2.5.6"
+            assert input_text is not None
+            return input_text
+
+        monkeypatch.setattr(embedded_provider_module, "_run_provider", fake_provider)
+    else:
+        _write_fake_biome(executable)
+    provider_cache = tmp_path / "provider-cache"
+    provider_cache.mkdir()
+    monkeypatch.setattr(embedded_provider_module, "_private_executable_root", lambda _language: provider_cache)
+
+    assert (
+        _run_main(
+            [
+                "format",
+                "--javascript-provider",
+                f"biome:{executable}",
+                "--css-provider",
+                f"biome:{tmp_path / 'missing-biome'}",
+                str(tmp_path / "component.js"),
+            ]
+        )
+        == 2
+    )
+    assert list(provider_cache.iterdir()) == []
 
 
 def test_standalone_cli_consumes_the_shared_structural_corpus(
@@ -307,7 +354,7 @@ def test_verbose_reports_the_pinned_python_provider(
 
     captured = capsys.readouterr()
     assert (
-        "citry-html@1, python-expressions:ruff@0.14.10+45bbb4cbff, javascript:unavailable, css:unavailable\n"
+        "citry-html@1, python-expressions:ruff@0.16.2+5b48a04097, javascript:unavailable, css:unavailable\n"
     ) in captured.err
 
 

@@ -186,9 +186,9 @@ authoring path rather than replace either primitive.
 | Python input | Type | Default | Class | Validation and effect |
 |---|---|---|---|---|
 | `control_id` | `str | None` | generated | structural server-only | fixes the control ID and derives Field, label, description, and error IDs |
-| `required` | `bool` | `False` | reactive configuration fallback | owns native required state and the visual indicator for the Field control |
+| `required` | `bool` | `False` | reactive configuration fallback | owns native required state and the visual indicator when the registered control supports required |
 | `disabled` | `bool | None` | inherit Form | reactive configuration fallback | disables the Field control; an enclosing disabled Form always wins |
-| `readonly` | `bool | None` | inherit Form | reactive configuration fallback | makes the Field control read-only |
+| `readonly` | `bool | None` | inherit Form | reactive configuration fallback | makes a supporting Field control read-only; an unsupported true value raises after server control registration |
 | `invalid` | `bool` | `False` | reactive external-invalid fallback | combines with native invalid state without changing native validity |
 | `orientation` | `vertical | horizontal` | `vertical` | reactive layout fallback | selects stacked or side-by-side layout |
 | `density` | `default | comfortable | compact` | `default` | reactive spacing fallback | changes Field-region spacing, not native Input character width |
@@ -200,9 +200,9 @@ authoring path rather than replace either primitive.
 
 | Client input | Type | Omitted | `null` | Invalid value | Affected surfaces |
 |---|---|---|---|---|---|
-| `required` | Boolean | server fallback | invalid, server fallback | log once per episode and use fallback | required marker, Field context, native control, reflected attribute |
+| `required` | Boolean | server fallback | invalid, server fallback | unsupported true resolves to false with one diagnostic | required marker, Field context, native control, reflected attribute |
 | `disabled` | Boolean | server/Form fallback | invalid, fallback | same | Field context, native control, reflected attribute; disabled Form still wins |
-| `readonly` | Boolean | server/Form fallback | invalid, fallback | same | Field context, native control, reflected attribute |
+| `readonly` | Boolean | server/Form fallback | invalid, fallback | unsupported true resolves to false with one diagnostic | Field context, supporting native control, reflected attribute |
 | `invalid` | Boolean | server fallback | invalid, fallback | same | external-invalid source, Field context, error visibility, Input ARIA, reflected attribute |
 | `orientation` | enum | server fallback | invalid, fallback | same | layout and reflected attribute |
 | `density` | enum | server fallback | invalid, fallback | same | spacing and reflected attribute |
@@ -259,16 +259,30 @@ diagnostic per distinct episode. Configure the Field instead.
 
 Field effective state is:
 
-- `required`: the current Field configuration;
+- `required`: the current Field configuration, then false when the registered
+  control does not support required;
 - `disabled`: enclosing native Form disabled OR current Field configuration;
-- `readonly`: explicit Field configuration, otherwise inherited Form value;
+- `readonly`: explicit Field configuration, otherwise inherited Form value,
+  then false when the registered control does not support read-only;
 - `external invalid`: current Field invalid configuration; and
 - `effective invalid`: external invalid OR the one control's native invalid
   episode.
 
 Inside a Field, a library control consumes those values and cannot override
-them. Outside a Field, Input resolves its own server and client values, with an
+them. Controls register whether they support required and read-only. An
+effective server true value raises after an unsupported capability registers.
+In the browser, an unsupported true request reports once and resolves to false
+before Field context, the required indicator, and reflected attributes update.
+`CInput` supports both capabilities, so its existing behavior is unchanged.
+Outside a Field, Input resolves its own server and client values, with an
 enclosing Form's disabled state still dominant.
+
+Client capability registration is reactive and generation-scoped. A control
+initialization registers its current required/read-only support through the
+private Field context and cleanup unregisters only that generation. A child
+replacement may change capabilities while Field is retained; the new
+registration becomes authoritative in the same lifecycle turn before Field
+effects settle. Stale cleanup cannot erase a newer registration.
 
 | Transition | Trigger and guard | Native, ARIA, visual, and form result |
 |---|---|---|
@@ -490,6 +504,11 @@ Static external-form association is resolved at initialization. A morph that
 changes native form ownership must reinitialize registration and reset
 listening; silently retaining the old owner is invalid.
 
+Every native reset event owns an independent bounded deferred task. A later
+reset cannot cancel an earlier task because either event may be canceled
+independently. Each task checks its event's final `defaultPrevented` state and
+reads the latest controlled value. Cleanup cancels every outstanding task.
+
 ## 15. Security and content trust
 
 Label, description, error, placeholder, and values follow Citry's ordinary
@@ -520,9 +539,15 @@ Automated evidence must cover:
   explicit IDs, owned-attribute rejection, direct classes/styles, all slots,
   and Python composition;
 - one-control enforcement, nested Field rejection, Input and Combobox Field
-  registration, and Field-owned state agreement;
+  registration, required/read-only capability registration, unsupported
+  server/client fallback, unchanged Input behavior, and Field-owned state
+  agreement;
+- retained-Field child replacement with changing capabilities, generation-safe
+  unregister, and no stale or transient reflected Field state;
 - Form disabled dominance, read-only fallback, native successful-control and
   reset behavior, external form ownership, and dynamic cleanup;
+- same-turn uncanceled then canceled reset and canceled then uncanceled reset,
+  plus cleanup of every pending reset task;
 - all client omitted, valid, `null`, invalid, removal, and recovery paths;
 - native invalid entry and clearing, external plus native invalid sources,
   consumer IDREF merging, and persistent error-region behavior;

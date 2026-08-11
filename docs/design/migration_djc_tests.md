@@ -10,8 +10,7 @@ user-observable difference between the two frameworks, so the migration
 accumulates a [Divergences for djc users](#divergences-for-djc-users-migration-guide-seed)
 catalogue at the end, the seed of a djc-to-citry upgrade guide.
 
-For operating rules see [`/CLAUDE.md`](../../CLAUDE.md). For current project
-state see [`/TODO/project_status_june_2026.md`](../../TODO/project_status_june_2026.md).
+For operating rules see [`/CLAUDE.md`](../../CLAUDE.md).
 
 The migration was completed on 2026-07-23. All 54 upstream files received a
 test-by-test disposition, every applicable Citry behavior has native regression
@@ -237,7 +236,7 @@ Upstream drives everything through tox (`tox.ini`):
 
 | Upstream lane | citry status | Action |
 |---|---|---|
-| Coverage gate (`--cov-fail-under`) | **Restored.** `pytest-cov` is a dev dependency, `scripts/check.py` runs `pytest --cov --cov-report=term-missing:skip-covered`, and root `pyproject.toml` currently enforces `fail_under = 93` at `precision = 2`. | Treat 93% as the current ratchet floor and raise it as coverage recovers. |
+| Coverage gate (`--cov-fail-under`) | **Restored.** `pytest-cov` is a dev dependency, the `full` `scripts/check.py` profile runs four-worker non-E2E pytest with coverage, and root `pyproject.toml` owns the ratchet. | Raise the configured floor as coverage recovers; the `fast` profile deliberately omits coverage. |
 | Python x Django matrix | citry dropped Django as a runtime dependency; `django` appears only as a benchmark baseline pin. There is no Django axis to test. | No action. citry's CI matrix is Python x OS only. |
 | `e2e` marker + browser lane | At parity: the `e2e` marker is registered in [`tests/e2e/conftest.py`](../../packages/py/citry/tests/e2e/conftest.py), with a chromium PR lane and a weekly three-browser lane in CI. | No action. |
 | `benchmark_snapshot` marker | citry gates benchmarks by import in `conftest.py` (the optional `benchmark` / `jinja2` groups) rather than by marker. | No action. Different mechanism, same effect. |
@@ -257,7 +256,8 @@ test-migration and transport hardening work raised the ratchet to 93% on
 2. Root `[tool.coverage.run]` measures line and branch coverage for `citry`,
    the `citry_core` Python wrapper, `citry_ui`, and `pygments_citry`. The Rust
    code remains covered separately by `cargo test`.
-3. `scripts/check.py` runs `pytest --cov --cov-report=term-missing:skip-covered`;
+3. the `full` `scripts/check.py` profile runs non-E2E pytest through xdist with
+   `--cov --cov-report=term-missing:skip-covered`;
    pytest-cov reads the source list, `fail_under = 93`, and `precision = 2`
    from root config.
 4. Raise `fail_under` as migration tests lift measured coverage; record each

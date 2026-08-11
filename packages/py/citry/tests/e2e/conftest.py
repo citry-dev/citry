@@ -40,7 +40,15 @@ def pytest_configure(config: pytest.Config) -> None:
 
 def _start(server: Any) -> str:
     """Start a server on a daemon thread and return its base URL."""
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    # The stdlib default polls every 0.5 seconds, so every fixture teardown can
+    # spend half a second waiting for an otherwise idle server to notice
+    # shutdown. A short test-only interval keeps the same server behavior while
+    # making hundreds of browser-test teardowns substantially cheaper.
+    threading.Thread(
+        target=server.serve_forever,
+        kwargs={"poll_interval": 0.01},
+        daemon=True,
+    ).start()
     return f"http://127.0.0.1:{server.server_address[1]}"
 
 

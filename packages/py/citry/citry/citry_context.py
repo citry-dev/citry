@@ -74,10 +74,10 @@ class CitryContext:
             collected JS/CSS dependency records). Top-level keys are
             namespaced by owner; see the module docstring.
         provides: The provide/inject entries active at this point of the
-            render. Values are immutable payloads or a private blocked marker.
-            Read-only by convention; ``Component.provide`` and
-            ``Component.unprovide`` build a new mapping rather than
-            mutating this one.
+            render. Entries may hold a direct caller value, a frozen keyword-
+            field payload, or a private blocked marker. Read-only by convention;
+            ``Component.provide`` and ``Component.unprovide`` build a new
+            mapping rather than mutating this one.
 
     """
 

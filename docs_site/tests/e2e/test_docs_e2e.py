@@ -53,6 +53,24 @@ def _wait_for_attribute(locator: Any, name: str, value: str | None) -> None:
     )
 
 
+def _wait_for_focus(locator: Any) -> None:
+    locator.evaluate(
+        """element => new Promise((resolve, reject) => {
+          const deadline = Date.now() + 2_000;
+          const check = () => {
+            if (element === element.ownerDocument.activeElement) {
+              resolve();
+            } else if (Date.now() >= deadline) {
+              reject(new Error('element did not receive focus'));
+            } else {
+              requestAnimationFrame(check);
+            }
+          };
+          check();
+        })"""
+    )
+
+
 def _wait_for_style_property(locator: Any, name: str, value: str) -> None:
     locator.evaluate(
         """(element, expected) => new Promise((resolve, reject) => {
@@ -1112,6 +1130,891 @@ def test_table_ui_examples_cover_semantics_footer_overflow_theme_and_environment
     environment = demos.nth(8).frame_locator("[data-ui-preview-frame]")
     assert environment.locator(".table-environment").get_attribute("dir") == "rtl"
     assert environment.get_by_role("table", name="نظام نجمي").count() == 1
+
+    assert console_errors == []
+
+
+def test_textarea_ui_examples_cover_configuration_forms_control_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/textarea/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 11
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(11))
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    assert sampler.locator(".cui-textarea[data-citry-textarea-initialized]").count() == 2
+    assert sampler.get_by_label("Canopy observation").input_value().startswith("Beech leaves")
+    assert sampler.get_by_label("Nocturnal call").get_attribute("aria-invalid") == "true"
+
+    configurator_demo = demos.nth(2)
+    controls = configurator_demo.locator("[data-ui-preview-controls] form")
+    configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
+    configured = configurator.get_by_label("Understory survey")
+    controls.get_by_label("Visible rows").select_option("7")
+    controls.get_by_label("Resize").select_option("both")
+    page.wait_for_timeout(0)
+    assert configured.evaluate("element => element.rows") == 7
+    _wait_for_attribute(configured, "data-resize", "both")
+
+    form_demo = demos.nth(6)
+    form_demo.scroll_into_view_if_needed()
+    form = form_demo.frame_locator("[data-ui-preview-frame]")
+    report = form.get_by_label("Habitat report")
+    report.fill("Moss beneath the old cedar")
+    form.get_by_role("button", name="Save report").click()
+    assert form.locator("output").inner_text() == "Moss beneath the old cedar"
+    form.get_by_role("button", name="Reset").click()
+    assert report.input_value() == "Moss"
+
+    controlled_demo = demos.nth(7)
+    controlled_demo.scroll_into_view_if_needed()
+    controlled = controlled_demo.frame_locator("[data-ui-preview-frame]")
+    draft = controlled.get_by_label("Patrol draft")
+    controlled.get_by_role("button", name="Release").click()
+    draft.fill("Owls called from the western ridge.")
+    controlled.get_by_role("button", name="Replace draft").click()
+    assert draft.input_value() == "Fresh tracks followed the creek north."
+
+    theme_demo = demos.nth(10)
+    theme_demo.scroll_into_view_if_needed()
+    theme = theme_demo.frame_locator("[data-ui-preview-frame]")
+    assert (
+        theme.locator(".forest-themes__fern textarea").evaluate("element => getComputedStyle(element).backgroundColor")
+        == "rgb(247, 255, 247)"
+    )
+    assert (
+        theme.locator(".forest-themes__charcoal").evaluate("element => getComputedStyle(element).colorScheme")
+        == "dark"
+    )
+
+    assert console_errors == []
+
+
+def test_native_select_ui_examples_cover_groups_control_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/native-select/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 10
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(10))
+    for index in range(10):
+        demos.nth(index).scroll_into_view_if_needed()
+        frame = demos.nth(index).frame_locator("[data-ui-preview-frame]")
+        frame.locator(".cui-native-select[data-citry-native-select-initialized]").first.wait_for()
+        assert frame.locator(".cui-native-select[data-citry-native-select-initialized]").count() >= 1
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    assert sampler.locator(".cui-native-select[data-citry-native-select-initialized]").count() == 2
+    assert sampler.get_by_label("Primary habitat").input_value() == "reef"
+    assert sampler.get_by_label("Unverified station").get_attribute("aria-invalid") == "true"
+
+    groups = demos.nth(2).frame_locator("[data-ui-preview-frame]")
+    grouped_select = groups.get_by_label("Expedition region")
+    assert grouped_select.locator("optgroup").count() == 2
+    assert grouped_select.locator('option[value="closure"]').is_disabled()
+
+    controlled = demos.nth(7).frame_locator("[data-ui-preview-frame]")
+    vessel = controlled.get_by_label("Survey vessel")
+    controlled.get_by_role("button", name="Release").click()
+    vessel.select_option("aronnax")
+    controlled.get_by_role("button", name="Assign Calypso").click()
+    assert vessel.input_value() == "calypso"
+    controlled.get_by_role("button", name="Clear").click()
+    assert vessel.input_value() == ""
+
+    theme = demos.nth(9).frame_locator("[data-ui-preview-frame]")
+    assert (
+        theme.locator(".ocean-themes__lagoon select").evaluate("element => getComputedStyle(element).backgroundColor")
+        == "rgb(243, 254, 255)"
+    )
+    assert (
+        theme.locator(".ocean-themes__trench").evaluate("element => getComputedStyle(element).colorScheme") == "dark"
+    )
+
+    assert console_errors == []
+
+
+def test_checkbox_ui_examples_cover_configuration_control_mixed_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/checkbox/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 10
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(10))
+    for index in range(10):
+        demos.nth(index).scroll_into_view_if_needed()
+        frame = demos.nth(index).frame_locator("[data-ui-preview-frame]")
+        frame.locator("[data-citry-checkbox-initialized]").first.wait_for()
+        assert frame.locator("[data-citry-checkbox-initialized]").count() >= 1
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    assert sampler.locator('[data-citry-ui-part="input"]').count() == 4
+    sampler.get_by_role("checkbox", name="Cushion moss fruiting").check()
+    assert sampler.get_by_role("checkbox", name="Cushion moss fruiting").is_checked()
+
+    configurator_demo = demos.nth(2)
+    controls = configurator_demo.locator("[data-ui-preview-controls] form")
+    configured = configurator_demo.frame_locator("[data-ui-preview-frame]").get_by_role(
+        "checkbox",
+        name="Verified against the herbarium sheet",
+    )
+    controls.get_by_label("Variant").select_option("outline")
+    controls.get_by_label("Size").select_option("lg")
+    controls.get_by_label("Indeterminate").check()
+    page.wait_for_timeout(0)
+    configured_root = configured.locator("xpath=..")
+    assert configured_root.get_attribute("data-variant") == "outline"
+    assert configured_root.get_attribute("data-size") == "lg"
+    _wait_for_attribute(configured_root, "data-indeterminate", "")
+    assert configured.evaluate("element => element.indeterminate") is True
+
+    form = demos.nth(3).frame_locator("[data-ui-preview-frame]")
+    form.get_by_role("checkbox", name="I checked the location against the field map").check()
+    form.get_by_role("button", name="Record survey").click()
+    assert form.locator("output").inner_text() == ('[["habitat","meadow"],["habitat","woodland"],["confirmed","yes"]]')
+
+    controlled = demos.nth(4).frame_locator("[data-ui-preview-frame]")
+    controlled_checkbox = controlled.get_by_role("checkbox", name="Press this leaf in the field journal")
+    controlled.get_by_role("button", name="Release").click()
+    controlled_checkbox.check()
+    controlled.get_by_role("button", name="Clear and reacquire").click()
+    assert controlled_checkbox.is_checked() is False
+
+    aggregate = demos.nth(5).frame_locator("[data-ui-preview-frame]")
+    summary = aggregate.get_by_role("checkbox", name="All survey habitats")
+    assert summary.evaluate("element => element.indeterminate") is True
+    summary.check()
+    assert aggregate.get_by_role("checkbox", name="Beech woodland").is_checked()
+
+    theme = demos.nth(9).frame_locator("[data-ui-preview-frame]")
+    assert (
+        theme.locator(".checkbox-themes__conservatory input").first.evaluate(
+            """element => parseFloat(getComputedStyle(element).borderRadius)
+          === parseFloat(getComputedStyle(element.ownerDocument.documentElement).fontSize) * 0.45"""
+        )
+        is True
+    )
+    assert (
+        theme.locator(".checkbox-themes__night").evaluate("element => getComputedStyle(element).colorScheme") == "dark"
+    )
+
+    assert console_errors == []
+
+
+@pytest.mark.parametrize(
+    ("slug", "preview_count", "ready_selector"),
+    [
+        ("stack-group", 8, '[data-citry-ui-part="stack"], [data-citry-ui-part="group"]'),
+        (
+            "container-grid",
+            8,
+            '[data-citry-ui-part="container"], [data-citry-ui-part="grid"]',
+        ),
+        ("badge", 9, '[data-citry-ui-part="badge"]'),
+        ("progress", 9, "[data-citry-progress-initialized]"),
+        ("spinner", 9, "[data-citry-spinner-initialized]"),
+        ("radio", 9, "[data-citry-radio-group-initialized]"),
+        ("switch", 9, "[data-citry-switch-initialized]"),
+        ("divider", 8, '[data-citry-ui-part="divider"]'),
+        ("avatar", 8, "[data-citry-avatar-initialized]"),
+        ("skeleton", 7, '[data-citry-ui-part="skeleton"]'),
+        ("button-group", 6, '[data-citry-ui-part="button-group"]'),
+        ("toggle", 7, "[data-citry-toggle-initialized]"),
+        ("pagination", 7, "[data-citry-pagination-initialized]"),
+        ("list", 8, '[data-citry-ui-part="list"]'),
+        ("popover", 9, "[data-citry-popover-initialized]"),
+        ("drawer", 10, "[data-citry-drawer-initialized]"),
+        ("menu", 13, "[data-citry-menu-initialized]"),
+        ("tooltip", 10, "[data-citry-tooltip-initialized]"),
+        ("toast", 10, "[data-citry-toast-initialized]"),
+    ],
+)
+def test_recent_batch_ui_previews_render_in_the_public_docs_host(
+    page: Any,
+    docs_site_url: str,
+    slug: str,
+    preview_count: int,
+    ready_selector: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + f"/ui-library/components/{slug}/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == preview_count
+    for index in range(preview_count):
+        demo = demos.nth(index)
+        demo.scroll_into_view_if_needed()
+        assert demo.locator(".citry-ui-demo__source").get_attribute("open") is None
+        frame = demo.frame_locator("[data-ui-preview-frame]")
+        frame.locator(ready_selector).first.wait_for(state="attached")
+        assert frame.locator(ready_selector).count() >= 1
+
+    assert console_errors == []
+
+
+def test_popover_ui_examples_cover_composition_control_nesting_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/popover/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    moon = demos.nth(1).frame_locator("[data-ui-preview-frame]")
+    moon.get_by_role("button", name="Inspect Europa").click()
+    moon.locator('[data-citry-ui-part="popover"]').wait_for(state="visible")
+    assert moon.get_by_role("dialog", name="Europa").count() == 1
+
+    form = demos.nth(2).frame_locator("[data-ui-preview-frame]")
+    form.get_by_role("button", name="Adjust orbit note").click()
+    form_surface = form.get_by_role("dialog", name="Orbit note")
+    form_surface.wait_for(state="visible")
+    field = form.get_by_role("textbox", name="Label")
+    field.fill("Apogee pass")
+    form.get_by_role("button", name="Keep note").click()
+    form_surface.wait_for(state="hidden")
+    form.get_by_role("button", name="Adjust orbit note").click()
+    form_surface.wait_for(state="visible")
+    assert field.input_value() == "Apogee pass"
+
+    placement_demo = demos.nth(5)
+    controls = placement_demo.locator("[data-ui-preview-controls] form")
+    controls.get_by_label("Placement").select_option("top-end")
+    controls.get_by_label("Match activator width").check()
+    placement = placement_demo.frame_locator("[data-ui-preview-frame]")
+    placement.get_by_role("button", name="Position orbital summary").click()
+    positioned = placement.get_by_role("dialog", name="Orbital summary")
+    assert positioned.get_attribute("data-placement") == "top-end"
+    assert positioned.get_attribute("data-match-width") == ""
+
+    nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    nested.get_by_role("button", name="Inspect Saturn").click()
+    nested.get_by_role("dialog", name="Saturn").wait_for(state="visible")
+    nested.get_by_role("button", name="Inspect ring gap").click()
+    nested.get_by_role("dialog", name="Cassini Division").wait_for(state="visible")
+    assert nested.get_by_role("dialog").count() == 2
+    nested.locator("body").press("Escape")
+    assert nested.get_by_role("dialog", name="Saturn").is_visible()
+
+    theme = demos.nth(7).frame_locator("[data-ui-preview-frame]")
+    theme.get_by_role("button", name="Aurora palette").click()
+    assert theme.locator(".aurora-popover").evaluate("element => getComputedStyle(element).borderRadius") == "17.5px"
+
+    assert console_errors == []
+
+
+def test_drawer_ui_examples_cover_sheet_control_forms_nesting_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/drawer/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    sampler.get_by_role("button", name="Bottom Sheet").click()
+    sheet = sampler.get_by_role("dialog", name="Quick actions")
+    sheet.wait_for(state="visible")
+    assert sheet.get_attribute("data-placement") == "block-end"
+
+    edit = demos.nth(1).frame_locator("[data-ui-preview-frame]")
+    edit_trigger = edit.get_by_role("button", name="Edit field note")
+    edit_trigger.click()
+    editor = edit.get_by_role("dialog", name="Aurora field note")
+    editor.wait_for(state="visible")
+    edit.get_by_label("Observation").fill("Violet bands above the ridge.")
+    edit.get_by_role("button", name="Save note").click()
+    editor.wait_for(state="hidden")
+    assert edit_trigger.evaluate("element => element === document.activeElement")
+
+    configuration_demo = demos.nth(3)
+    controls = configuration_demo.locator("[data-ui-preview-controls] form")
+    controls.get_by_label("Placement").select_option("block-start")
+    controls.get_by_label("Size").select_option("lg")
+    controls.get_by_label("Scroll").select_option("drawer")
+    configured = configuration_demo.frame_locator("[data-ui-preview-frame]")
+    configured.get_by_role("button", name="Preview geometry").click()
+    configured_drawer = configured.get_by_role("dialog", name="Configurable archive")
+    assert configured_drawer.get_attribute("data-placement") == "block-start"
+    assert configured_drawer.get_attribute("data-size") == "lg"
+    assert configured_drawer.get_attribute("data-scroll") == "drawer"
+
+    controlled = demos.nth(4).frame_locator("[data-ui-preview-frame]")
+    controlled.get_by_label("Accept requests").uncheck()
+    controlled.get_by_role("button", name="Controlled archive").click()
+    assert controlled.get_by_role("dialog", name="Controlled archive").is_hidden()
+    assert "trigger: open" in controlled.locator("output").inner_text()
+    controlled.get_by_label("Accept requests").check()
+    controlled.get_by_role("button", name="Controlled archive").click()
+    controlled.get_by_role("dialog", name="Controlled archive").wait_for(state="visible")
+
+    native_form = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    native_form.get_by_role("button", name="Choose a chart").click()
+    native_form.get_by_role("button", name="Intensity chart").click()
+    assert native_form.locator("output").inner_text() == "Selected: intensity"
+
+    nested = demos.nth(7).frame_locator("[data-ui-preview-frame]")
+    nested.get_by_role("button", name="Open archive tools").click()
+    nested.get_by_role("button", name="Choose action").click()
+    nested.get_by_role("menu").wait_for(state="visible")
+    assert nested.get_by_role("dialog", name="Archive tools").is_visible()
+
+    explicit = demos.nth(8).frame_locator("[data-ui-preview-frame]")
+    explicit.get_by_role("button", name="Review coordinates").click()
+    required = explicit.get_by_role("dialog", name="Confirm coordinates")
+    required.wait_for(state="visible")
+    required.press("Escape")
+    assert required.is_visible()
+    explicit.get_by_role("button", name="Coordinates verified").click()
+    required.wait_for(state="hidden")
+
+    theme = demos.nth(9).frame_locator("[data-ui-preview-frame]")
+    theme.get_by_role("button", name="Open polar archive").click()
+    assert (
+        theme.locator(".polar-drawer").evaluate(
+            """element => parseFloat(getComputedStyle(element).borderStartStartRadius)
+              === parseFloat(getComputedStyle(element.ownerDocument.documentElement).fontSize) * 1.25"""
+        )
+        is True
+    )
+
+    assert console_errors == []
+
+
+def test_menu_ui_examples_cover_choices_submenus_control_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/menu/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    sampler.get_by_role("button", name="Open archive menu").click()
+    sampler.locator('[role="menu"]:popover-open').wait_for(state="visible")
+    assert sampler.get_by_role("menuitem", name="Rename folio").is_visible()
+    assert sampler.get_by_role("menuitem", name="Open moon catalog").get_attribute("href") == "#moon-catalog"
+
+    controlled_demo = demos.nth(3)
+    controlled_controls = controlled_demo.locator("[data-ui-preview-controls] form")
+    controlled_controls.get_by_label("Decline visibility requests").check()
+    controlled = controlled_demo.frame_locator("[data-ui-preview-frame]")
+    controlled.get_by_role("button", name="Controlled grimoire").click()
+    assert controlled.locator('[role="menu"]:popover-open').count() == 0
+    controlled_controls.get_by_label("Decline visibility requests").uncheck()
+    controlled.get_by_role("button", name="Controlled grimoire").click()
+    controlled.locator('[role="menu"]:popover-open').wait_for(state="visible")
+
+    choices = demos.nth(4).frame_locator("[data-ui-preview-frame]")
+    choices.get_by_role("button", name="Reading preferences").click()
+    check = choices.get_by_role("menuitemcheckbox", name="Glow around enchanted passages")
+    assert check.get_attribute("aria-checked") == "mixed"
+    check.click()
+    assert check.get_attribute("aria-checked") == "true"
+    assert choices.locator('[role="menu"]:popover-open').count() == 1
+    celestial = choices.get_by_role("menuitemradio", name="Celestial")
+    celestial.click()
+    _wait_for_attribute(celestial, "aria-checked", "true")
+
+    nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    nested.get_by_role("button", name="Choose a collection").click()
+    nested.get_by_role("menuitem", name="Celestial archives").click()
+    nested.get_by_role("menuitem", name="Moon records").click()
+    assert nested.locator('[role="menu"]:popover-open').count() == 3
+    nested.get_by_role("menuitem", name="Silver moon").press("Escape")
+    nested.locator('[role="menu"]:popover-open').nth(2).wait_for(state="hidden")
+    assert nested.locator('[role="menu"]:popover-open').count() == 2
+
+    placement_demo = demos.nth(9)
+    placement_controls = placement_demo.locator("[data-ui-preview-controls] form")
+    placement_controls.get_by_label("Placement").select_option("top-end")
+    placement_controls.get_by_label("Right-to-left").check()
+    placement = placement_demo.frame_locator("[data-ui-preview-frame]")
+    placement.get_by_role("button", name="A deliberately wide enchanted-volume trigger").click()
+    placed_surface = placement.locator('[role="menu"]:popover-open')
+    placed_surface.wait_for(state="visible")
+    assert placed_surface.get_attribute("data-placement") == "top-end"
+    assert placed_surface.get_attribute("data-match-width") == ""
+    assert placement.locator(".archive-placement-demo").get_attribute("dir") == "rtl"
+
+    theme = demos.nth(11).frame_locator("[data-ui-preview-frame]")
+    theme.get_by_role("button", name="Moon archive").click()
+    assert (
+        theme.locator(".archive-theme-demo__moon [role=menu]").evaluate(
+            """element => parseFloat(getComputedStyle(element).borderRadius)
+              === parseFloat(getComputedStyle(element.ownerDocument.documentElement).fontSize)"""
+        )
+        is True
+    )
+
+    lifecycle = demos.nth(12).frame_locator("[data-ui-preview-frame]")
+    lifecycle.get_by_role("button", name="Open reading room").click()
+    lifecycle.get_by_role("button", name="Nested folio menu").click()
+    lifecycle.get_by_role("menuitem", name="Other editions").click()
+    assert lifecycle.locator('[role="menu"]:popover-open').count() == 2
+    lifecycle.get_by_role("button", name="Open modal vault").click()
+    assert lifecycle.locator('[role="menu"][data-open]').count() == 0
+    assert (
+        lifecycle.locator('[role="menu"]:popover-open').evaluate_all(
+            "elements => elements.every((element) => element.inert)"
+        )
+        is True
+    )
+    vault = lifecycle.locator("dialog")
+    assert vault.get_attribute("open") == ""
+    lifecycle.locator('[role="menu"]').first.wait_for(state="hidden")
+    lifecycle.get_by_role("button", name="Close vault").click()
+    assert lifecycle.locator('[role="menu"]:popover-open').count() == 0
+
+    axe_path = Path("node_modules/axe-core/axe.min.js").resolve()
+    assert axe_path.is_file(), "run `pnpm install` before Citry UI axe tests"
+    for index in range(13):
+        frame = demos.nth(index).locator("[data-ui-preview-frame]").element_handle().content_frame()
+        frame.add_script_tag(path=str(axe_path))
+        violations = frame.evaluate(
+            """async () => {
+              const result = await axe.run(document, { resultTypes: ['violations'] });
+              return result.violations.filter(
+                (violation) => violation.impact === 'serious'
+                  || violation.impact === 'critical',
+              );
+            }"""
+        )
+        assert violations == [], f"Menu preview {index} has high-impact axe findings"
+
+    assert console_errors == []
+
+
+def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/toast/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    assert sampler.locator('[data-citry-ui-part="toast"]').count() == 5
+    assert sampler.locator('[data-intent="error"]').count() == 1
+
+    reactive = demos.nth(1).frame_locator("[data-ui-preview-frame]")
+    reactive.get_by_role("button", name="Add notification").click()
+    reactive.locator('[data-citry-toast-id="note-1"]').wait_for(state="visible")
+
+    replacement = demos.nth(2).frame_locator("[data-ui-preview-frame]")
+    assert replacement.locator('[data-citry-toast-id="upload"]').count() == 1
+    replacement.get_by_role("button", name="Advance upload").click()
+    replacement.get_by_text("Upload 40% complete", exact=True).wait_for(state="visible")
+    assert replacement.locator('[data-citry-toast-id="upload"]').count() == 1
+
+    action = demos.nth(4).frame_locator("[data-ui-preview-frame]")
+    action.get_by_role("button", name="Show persistent action").click()
+    action.get_by_role("button", name="Retry").click()
+    assert action.get_by_text("Retry requested", exact=True).is_visible()
+    assert action.locator('[data-citry-toast-id="offline"]').count() == 1
+
+    limited = demos.nth(5).frame_locator("[data-ui-preview-frame]")
+    assert limited.locator('[data-citry-ui-part="toast"]').count() == 2
+    dismiss_first = limited.get_by_role("button", name="Dismiss Queue item 1")
+    dismiss_first.focus()
+    dismiss_first.press("Enter")
+    limited.locator('[data-citry-toast-id="queue-3"]').wait_for(state="visible")
+
+    focus = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    focus.get_by_role("button", name="Focus before F6").focus()
+    focus.locator("body").press("F6")
+    assert focus.locator('[data-citry-toast-id="f6"]').evaluate("element => element === document.activeElement")
+    focus.locator("body").press("F6")
+    assert focus.get_by_role("button", name="Focus before F6").evaluate(
+        "element => element === document.activeElement"
+    )
+
+    modal = demos.nth(7).frame_locator("[data-ui-preview-frame]")
+    modal.get_by_role("button", name="Open modal task").click()
+    modal.get_by_role("dialog", name="Modal-local feedback").wait_for(state="visible")
+    assert modal.locator('[data-citry-ui-part="region"]').evaluate("element => element.inert")
+
+    rtl = demos.nth(8).frame_locator("[data-ui-preview-frame]")
+    assert rtl.locator('[data-citry-ui-part="region"]').get_attribute("data-placement") == "block-end-start"
+    assert rtl.locator(".toast-example").get_attribute("dir") == "rtl"
+
+    theme = demos.nth(9).frame_locator("[data-ui-preview-frame]")
+    assert (
+        theme.locator('.polar-toast [data-citry-ui-part="toast"]').evaluate(
+            """element => parseFloat(getComputedStyle(element).borderRadius)
+              === parseFloat(getComputedStyle(element.ownerDocument.documentElement).fontSize) * 1.25"""
+        )
+        is True
+    )
+
+    assert console_errors == []
+
+
+def test_breadcrumbs_ui_examples_cover_semantics_overflow_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/breadcrumbs/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 9
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(9))
+    for index in range(9):
+        demos.nth(index).scroll_into_view_if_needed()
+        frame = demos.nth(index).frame_locator("[data-ui-preview-frame]")
+        frame.locator('[data-citry-ui-part="breadcrumbs"]').first.wait_for()
+        assert frame.locator('[data-citry-ui-part="breadcrumbs"]').count() >= 1
+
+    basic = demos.nth(1).frame_locator("[data-ui-preview-frame]")
+    trail = basic.get_by_role("navigation", name="Book location")
+    assert trail.locator("ol > li").count() == 3
+    assert trail.get_by_role("link").count() == 2
+    assert trail.locator('[aria-current="page"]').inner_text().strip() == "The left hand of darkness"
+
+    linked = demos.nth(2).frame_locator("[data-ui-preview-frame]")
+    assert linked.get_by_role("link", name="New arrivals").get_attribute("aria-current") == "page"
+
+    overflow = demos.nth(5).frame_locator("[data-ui-preview-frame]")
+    scrolling = overflow.get_by_role("navigation", name="Scrolling book location").locator("ol")
+    assert scrolling.evaluate("element => getComputedStyle(element).flexWrap") == "nowrap"
+    assert scrolling.evaluate("element => element.scrollWidth >= element.clientWidth")
+
+    theme = demos.nth(8).frame_locator("[data-ui-preview-frame]")
+    assert (
+        theme.locator(".rare-trail ol").evaluate(
+            """element => Math.abs(
+          parseFloat(getComputedStyle(element).columnGap)
+          - parseFloat(getComputedStyle(element.ownerDocument.documentElement).fontSize) * 0.8
+        ) < 0.01"""
+        )
+        is True
+    )
+
+    assert console_errors == []
+
+
+def test_tooltip_ui_examples_cover_focus_text_control_placement_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/tooltip/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    europa = sampler.get_by_role("button", name="Europa")
+    europa.focus()
+    tooltip = sampler.get_by_role("tooltip")
+    tooltip.wait_for(state="visible")
+    assert "Ocean world" in tooltip.inner_text()
+    assert europa.get_attribute("aria-describedby") == tooltip.get_attribute("id")
+
+    live = demos.nth(3).frame_locator("[data-ui-preview-frame]")
+    live.get_by_label("Units").select_option("miles")
+    live.get_by_role("button", name="Europa diameter").focus()
+    assert "1,940 miles" in live.get_by_role("tooltip").inner_text()
+
+    placement_demo = demos.nth(6)
+    placement_demo.locator("[data-ui-preview-controls] form").get_by_label("Placement").select_option("bottom-end")
+    placement = placement_demo.frame_locator("[data-ui-preview-frame]")
+    placement.get_by_role("button", name="Place orbital note").focus()
+    assert placement.get_by_role("tooltip").get_attribute("data-placement") == "bottom-end"
+
+    theme = demos.nth(8).frame_locator("[data-ui-preview-frame]")
+    theme.get_by_role("button", name="Auroral oval").focus()
+    assert theme.locator(".aurora-tooltip").evaluate("element => getComputedStyle(element).borderRadius") == "14px"
+
+    responsive = demos.nth(9).frame_locator("[data-ui-preview-frame]")
+    responsive.get_by_role("button", name="Catalog ID").focus()
+    wrapped = responsive.get_by_role("tooltip")
+    assert wrapped.evaluate("element => element.scrollWidth <= element.clientWidth")
+
+    assert console_errors == []
+
+
+def test_alert_ui_examples_cover_intent_actions_configuration_and_theme(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/alert/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 10
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(10))
+    for index in range(10):
+        demos.nth(index).scroll_into_view_if_needed()
+        frame = demos.nth(index).frame_locator("[data-ui-preview-frame]")
+        frame.locator("[data-citry-alert-initialized]").first.wait_for()
+        assert frame.locator("[data-citry-alert-initialized]").count() >= 1
+
+    sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
+    assert sampler.locator('[data-citry-ui-part="alert"]').count() == 4
+    assert sampler.locator('[data-intent="error"] svg').count() == 1
+
+    actions = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    action_group = actions.get_by_role("group", name="Cloud-cover actions")
+    assert action_group.get_by_role("link", name="Open forecast").count() == 1
+    action_group.get_by_role("button", name="Dismiss").click()
+    restore = actions.get_by_role("button", name="Restore observatory notice")
+    assert restore.evaluate("element => element === document.activeElement") is True
+    restore.click()
+    restored_group = actions.get_by_role("group", name="Cloud-cover actions")
+    restored_group.wait_for()
+    assert restored_group.is_visible()
+
+    configurator_demo = demos.nth(7)
+    controls = configurator_demo.locator("[data-ui-preview-controls] form")
+    configured = configurator_demo.frame_locator("[data-ui-preview-frame]").locator('[data-citry-ui-part="alert"]')
+    controls.get_by_label("Intent").select_option("success")
+    controls.get_by_label("Variant").select_option("outline")
+    controls.get_by_label("Size").select_option("lg")
+    controls.get_by_label("Announcement").select_option("polite")
+    controls.get_by_label("Show icon").uncheck()
+    _wait_for_attribute(configured, "data-icon", None)
+    assert configured.get_attribute("data-intent") == "success"
+    assert configured.get_attribute("data-variant") == "outline"
+    assert configured.get_attribute("data-size") == "lg"
+    assert configured.get_attribute("data-icon") is None
+    content = configured.locator('[data-citry-ui-part="content"]')
+    _wait_for_attribute(content, "role", "status")
+
+    theme = demos.nth(9).frame_locator("[data-ui-preview-frame]")
+    assert (
+        theme.locator(".alert-themes__solar [data-citry-ui-part=alert]").evaluate(
+            "element => getComputedStyle(element).borderColor"
+        )
+        == "rgb(217, 157, 19)"
+    )
+    assert (
+        theme.locator(".radio-success").evaluate(
+            """element => parseFloat(getComputedStyle(element).borderRadius)
+          === parseFloat(getComputedStyle(element.ownerDocument.documentElement).fontSize) * 1.25"""
+        )
+        is True
+    )
+
+    assert console_errors == []
+
+
+def test_accordion_ui_examples_cover_expansion_nesting_and_configuration(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/accordion/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 9
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(9))
+    for index in range(9):
+        demos.nth(index).scroll_into_view_if_needed()
+        frame = demos.nth(index).frame_locator("[data-ui-preview-frame]")
+        frame.locator("[data-citry-accordion-initialized]").first.wait_for()
+        assert frame.locator("[data-citry-accordion-initialized]").count() >= 1
+
+    basic = demos.nth(1).frame_locator("[data-ui-preview-frame]")
+    basic.get_by_role("button", name="Cold streams").click()
+    assert basic.get_by_role("button", name="Cold streams").get_attribute("aria-expanded") == "true"
+    assert basic.get_by_text("Shaded water stays cool enough").is_visible()
+
+    controlled = demos.nth(2).frame_locator("[data-ui-preview-frame]")
+    controlled.get_by_role("button", name="Mushrooms").click()
+    assert "mushrooms" in controlled.locator(".controlled-accordion > p").inner_text()
+
+    nested = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    nested.get_by_role("button", name="Bigleaf maple").click()
+    assert nested.get_by_text("Broad leaves support hanging gardens").is_visible()
+
+    configurator_demo = demos.nth(8)
+    controls = configurator_demo.locator("[data-ui-preview-controls] form")
+    configured = configurator_demo.frame_locator("[data-ui-preview-frame]").locator('[data-citry-ui-part="accordion"]')
+    controls.get_by_label("Variant").select_option("soft")
+    controls.get_by_label("Size").select_option("lg")
+    controls.get_by_label("Indicator position").select_option("start")
+    controls.get_by_label("Show indicator").uncheck()
+    _wait_for_attribute(configured, "data-indicator", None)
+    assert configured.get_attribute("data-variant") == "soft"
+    assert configured.get_attribute("data-size") == "lg"
+    assert configured.get_attribute("data-indicator-pos") == "start"
+
+    assert console_errors == []
+
+
+def test_disclosure_ui_examples_cover_expansion_composition_and_forms(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    console_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.goto(docs_site_url + "/ui-library/components/disclosure/", wait_until="networkidle")
+    demos = page.locator("[data-citry-ui-demo]")
+
+    assert demos.count() == 9
+    for index in range(9):
+        demos.nth(index).scroll_into_view_if_needed()
+        frame = demos.nth(index).frame_locator("[data-ui-preview-frame]")
+        frame.locator("[data-citry-disclosure-initialized]").first.wait_for()
+
+    basic = demos.nth(1).frame_locator("[data-ui-preview-frame]")
+    optional = basic.get_by_role("button", name="Optional database tools")
+    optional.click()
+    _wait_for_attribute(optional, "aria-expanded", "true")
+    assert basic.get_by_text("Add the PostgreSQL client").is_visible()
+
+    controlled = demos.nth(2).frame_locator("[data-ui-preview-frame]")
+    controlled.get_by_role("button", name="Show").click()
+    controlled_trigger = controlled.get_by_role("button", name="Advanced logging")
+    _wait_for_attribute(controlled_trigger, "aria-expanded", "true")
+    controlled.get_by_role("button", name="Hide").click()
+    _wait_for_attribute(controlled_trigger, "aria-expanded", "false")
+    controlled.get_by_label("Accept trigger requests").uncheck()
+    controlled_trigger.click()
+    assert controlled_trigger.get_attribute("aria-expanded") == "false"
+    controlled.get_by_label("Accept trigger requests").check()
+    controlled_trigger.click()
+    _wait_for_attribute(controlled_trigger, "aria-expanded", "true")
+    controlled.get_by_role("button", name="Release control").click()
+    _wait_for_attribute(controlled_trigger, "aria-expanded", "false")
+
+    actions = demos.nth(3).frame_locator("[data-ui-preview-frame]")
+    actions_wrapper = actions.get_by_role("group", name="Release note actions")
+    assert actions_wrapper.get_by_role("button", name="Copy link").count() == 1
+    assert actions_wrapper.get_attribute("data-demo-actions") == "release"
+    assert actions.locator('[data-citry-ui-part="disclosure-heading"] button button').count() == 0
+    managed = actions.get_by_role("button", name="Managed policy")
+    actions.get_by_label("Disable managed policy").check()
+    _wait_for_attribute(managed, "data-disabled", "")
+    managed.evaluate("node => node.click()")
+    assert managed.get_attribute("aria-expanded") == "true"
+    unavailable = actions.get_by_role("button", name="Unavailable audit appendix")
+    assert unavailable.is_disabled()
+    assert unavailable.get_attribute("aria-expanded") == "false"
+    fieldset_trigger = actions.get_by_role("button", name="Fieldset-owned policy")
+    actions.get_by_label("Disable native fieldset").check()
+    _wait_for_attribute(fieldset_trigger, "data-disabled", "")
+    actions.get_by_label("Disable native fieldset").uncheck()
+    _wait_for_attribute(fieldset_trigger, "data-disabled", None)
+
+    variants_demo = demos.nth(4)
+    variant_controls = variants_demo.locator("[data-ui-preview-controls] form")
+    variant_subject = variants_demo.frame_locator("[data-ui-preview-frame]").locator(".disclosure-variants__subject")
+    variant_controls.get_by_label("Variant").select_option("soft")
+    variant_controls.get_by_label("Size").select_option("lg")
+    variant_controls.get_by_label("Indicator position").select_option("start")
+    variant_controls.get_by_label("Show indicator").uncheck()
+    _wait_for_attribute(variant_subject, "data-indicator", None)
+    assert variant_subject.get_attribute("data-variant") == "soft"
+    assert variant_subject.get_attribute("data-size") == "lg"
+    assert variant_subject.get_attribute("data-indicator-pos") == "start"
+
+    nested = demos.nth(5).frame_locator("[data-ui-preview-frame]")
+    assert nested.locator('[data-citry-ui-part="disclosure"]').count() == 2
+    assert nested.locator('[data-citry-ui-part="accordion"]').count() == 1
+    nested_parent = nested.get_by_role("button", name="Network setup")
+    parent_background = nested_parent.evaluate("node => getComputedStyle(node).backgroundColor")
+    nested.get_by_role("button", name="Proxy settings").click()
+    assert nested_parent.get_attribute("aria-expanded") == "true"
+    assert nested_parent.evaluate("node => getComputedStyle(node).backgroundColor") == parent_background
+    assert nested.locator(".nested-disclosure-demo").get_attribute("dir") == "rtl"
+    assert nested.locator("html").evaluate("node => node.scrollWidth <= node.clientWidth")
+
+    overlays = demos.nth(6).frame_locator("[data-ui-preview-frame]")
+    assert overlays.locator('[data-citry-ui-part="disclosure"] dialog').count() == 0
+    assert overlays.locator('[data-citry-ui-part="dialog"]').count() == 1
+    overlays.get_by_role("button", name="Rotate credential").click()
+    overlays.get_by_role("dialog", name="Rotate credential").wait_for(state="visible")
+
+    forms = demos.nth(7).frame_locator("[data-ui-preview-frame]")
+    email = forms.get_by_label("Notification email")
+    notification_trigger = forms.get_by_role("button", name="Notification settings")
+    email.fill("not-an-email")
+    notification_trigger.click()
+    _wait_for_attribute(notification_trigger, "aria-expanded", "false")
+    forms.get_by_role("button", name="Save settings").click()
+    _wait_for_attribute(notification_trigger, "aria-expanded", "true")
+    escalation_trigger = forms.get_by_role("button", name="Required escalation contact")
+    _wait_for_attribute(escalation_trigger, "aria-expanded", "true")
+    _wait_for_focus(email)
+    email.fill("team@example.com")
+    notification_trigger.click()
+    _wait_for_attribute(notification_trigger, "aria-expanded", "false")
+    notification_trigger.click()
+    _wait_for_attribute(notification_trigger, "aria-expanded", "true")
+    assert email.input_value() == "team@example.com"
+    forms.get_by_role("button", name="Save settings").click()
+    _wait_for_attribute(escalation_trigger, "aria-expanded", "true")
+    _wait_for_focus(forms.get_by_label("Contact"))
+
+    customization = demos.nth(8).frame_locator("[data-ui-preview-frame]")
+    harbor = customization.locator(".disclosure-brand--harbor")
+    assert harbor.get_attribute("dir") == "rtl"
+    assert "dark" in harbor.evaluate("node => getComputedStyle(node).colorScheme")
+    assert customization.locator('.disclosure-brand [data-citry-ui-part="disclosure-title"]').first.evaluate(
+        "node => parseFloat(getComputedStyle(node).letterSpacing) > 0"
+    )
 
     assert console_errors == []
 

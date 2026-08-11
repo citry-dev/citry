@@ -68,9 +68,9 @@ templates means parsing Python source; a Rust server does not need a Python
 runtime to locate `class Card(Component): template = "..."` statically.
 
 **Bindings status.** Python bindings are live via PyO3; JS bindings are planned
-via wasm-bindgen (`TODO/project_status_june_2026.md:536-537`, issue
-[#27](https://github.com/citry-dev/citry/issues/27)). A wasm build of the
-parser is therefore already on the roadmap independent of editor tooling.
+via wasm-bindgen (issue [#27](https://github.com/citry-dev/citry/issues/27)).
+A wasm build of the parser is therefore already on the roadmap independent of
+editor tooling.
 
 **Highlighting prior art in-tree.** Two Pygments lexers exist: `citry` (Python
 with embedded template/js/css) and `citry-html` (template only), registered in

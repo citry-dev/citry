@@ -13,9 +13,74 @@ from difflib import SequenceMatcher
 from enum import Enum
 from itertools import pairwise
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
+from citry._browser_expressions import (
+    SERVER_EVENT_CALL_NAMES,
+    BrowserBinding,
+    BrowserCompletion,
+    BrowserComponentBinding,
+    BrowserComponentPropsUse,
+    BrowserComponentSourceAnalysis,
+    BrowserDeclarativeEvent,
+    BrowserExpression,
+    BrowserExpressionMode,
+    BrowserFreeReference,
+    BrowserIdentifier,
+    BrowserLiteralCall,
+    BrowserMember,
+    BrowserObjectProperty,
+    BrowserProp,
+    BrowserScopeWrite,
+    BrowserSourceAnalysis,
+    analyze_browser_component_source,
+    analyze_browser_expression,
+    browser_bindings,
+    browser_client_prop_accepts,
+    browser_completion_at,
+    browser_component_prop_uses,
+    browser_component_props,
+    browser_component_scope_writes,
+    browser_declarative_events,
+    browser_expression_at,
+    browser_expressions,
+    browser_identifier_at,
+    browser_identifiers,
+    browser_literal_calls,
+    browser_literal_wire_type,
+    browser_member_at,
+)
+from citry._browser_expressions import (
+    python_event_handler_coordinates as _python_event_handler_coordinates,
+)
+from citry._diagnostic_catalog import (
+    ALPINE_UNKNOWN_VARIABLE,
+    COMPONENT_JS_UNKNOWN_VARIABLE,
+    FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
+    FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
+    FORMAT_HOST_SYNTAX,
+    FORMAT_INELIGIBLE,
+    FORMAT_INVARIANT,
+    FORMAT_PROVIDER_INVALID,
+    FORMAT_PROVIDER_UNAVAILABLE,
+    TEMPLATE_UNKNOWN_VARIABLE,
+)
+from citry._diagnostics import render_diagnostic
 from citry._inline_assets import normalize_inline_asset
+from citry._json_wire import JsonWireField, JsonWireKind, JsonWireType, merge_json_wire_types
+from citry._json_wire import json_wire_type_from_annotation as _json_wire_type_from_annotation
+from citry._json_wire import json_wire_type_from_expression as _json_wire_type_from_expression
+from citry._linting import TemplateLintInfo
+from citry._template_python import ShadowPythonCopy as _ShadowPythonCopy
+from citry._template_python import ShadowPythonDocument as _ShadowPythonDocument
+from citry._template_python import ShadowPythonSourceCopy as _ShadowPythonSourceCopy
+from citry._template_python import TemplatePythonControl as _TemplatePythonControl
+from citry._template_python import TemplatePythonQuery as _TemplatePythonQuery
+from citry._template_python import TemplatePythonRoot as _TemplatePythonRoot
+from citry._template_python import build_inferred_template_shadow as _build_inferred_template_shadow
+from citry._template_python import build_schema_template_shadow as _build_schema_template_shadow
+from citry._template_python import template_python_queries as _template_python_queries
+from citry._template_python import template_python_query_at as _template_python_query_at
 from citry_core.template_formatter import (
     EmbeddedFormatPlan as _CoreEmbeddedFormatPlan,
 )
@@ -41,10 +106,556 @@ from citry_core.template_parser import parse_template as _parse_template
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from citry._template_data_source import TemplateDataSourceShape
     from citry_core.template_parser import Template
 
 
 TEMPLATE_ANALYSIS_SCHEMA_VERSION = 1
+# Compatibility name for callers that already import the analysis constant.
+UNKNOWN_TEMPLATE_VARIABLE_CODE = TEMPLATE_UNKNOWN_VARIABLE
+
+# Keep the portable query records on the supported analysis surface while the
+# implementation details remain in a focused private module.
+TemplatePythonControl = _TemplatePythonControl
+TemplatePythonQuery = _TemplatePythonQuery
+TemplatePythonRoot = _TemplatePythonRoot
+ShadowPythonCopy = _ShadowPythonCopy
+ShadowPythonDocument = _ShadowPythonDocument
+ShadowPythonSourceCopy = _ShadowPythonSourceCopy
+
+
+@dataclass(frozen=True, slots=True)
+class CssDataReference:
+    """One exact unescaped ``var(--name)`` custom-property reference."""
+
+    name: str
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class CssDataCompletion:
+    """One incomplete or complete custom-property token at the cursor."""
+
+    prefix: str
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateLintConsumer:
+    """
+    Describe one proven component namespace used by a physical template.
+
+    Attributes:
+        known_names: Root names available to this component's template.
+        namespace_policy: Whether those names exhaust normalized template data.
+        rule_unknown_template_variable: Configured severity for undeclared
+            free roots.
+
+    """
+
+    known_names: frozenset[str]
+    namespace_policy: Literal["closed", "allow-extra", "unknown"]
+    rule_unknown_template_variable: Literal["ignore", "warning", "error"]
+
+    def __post_init__(self) -> None:
+        if type(self.known_names) is not frozenset or any(
+            type(name) is not str or not name for name in self.known_names
+        ):
+            msg = "TemplateLintConsumer.known_names must be a frozenset of non-empty strings"
+            raise TypeError(msg)
+        if type(self.namespace_policy) is not str or self.namespace_policy not in {
+            "closed",
+            "allow-extra",
+            "unknown",
+        }:
+            msg = f"Unknown template namespace policy: {self.namespace_policy!r}"
+            raise ValueError(msg)
+        if type(self.rule_unknown_template_variable) is not str or self.rule_unknown_template_variable not in {
+            "ignore",
+            "warning",
+            "error",
+        }:
+            msg = f"Unknown template-variable rule severity: {self.rule_unknown_template_variable!r}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class TemplateLintFinding:
+    """Report one parser-proven free root missing from a known namespace."""
+
+    name: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+    line: int
+    column: int
+
+
+@dataclass(frozen=True, slots=True)
+class AlpineLintConsumer:
+    """Describe one proven browser namespace used by a physical template."""
+
+    known_names: frozenset[str]
+    rule_unknown_alpine_variable: Literal["ignore", "warning", "error"]
+
+    def __post_init__(self) -> None:
+        if type(self.known_names) is not frozenset or any(
+            type(name) is not str or not name for name in self.known_names
+        ):
+            msg = "AlpineLintConsumer.known_names must be a frozenset of non-empty strings"
+            raise TypeError(msg)
+        if type(self.rule_unknown_alpine_variable) is not str or self.rule_unknown_alpine_variable not in {
+            "ignore",
+            "warning",
+            "error",
+        }:
+            msg = f"Unknown Alpine-variable rule severity: {self.rule_unknown_alpine_variable!r}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class AlpineLintFinding:
+    """Report one OXC-proven free root missing from a browser namespace."""
+
+    name: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentJsLintConsumer:
+    """Describe globals and severity for one component JavaScript consumer."""
+
+    known_names: frozenset[str]
+    rule_unknown_component_js_variable: Literal["ignore", "warning", "error"]
+
+    def __post_init__(self) -> None:
+        if type(self.known_names) is not frozenset or any(
+            type(name) is not str or not name for name in self.known_names
+        ):
+            msg = "ComponentJsLintConsumer.known_names must be a frozenset of non-empty strings"
+            raise TypeError(msg)
+        if type(self.rule_unknown_component_js_variable) is not str or self.rule_unknown_component_js_variable not in {
+            "ignore",
+            "warning",
+            "error",
+        }:
+            msg = f"Unknown component-JavaScript-variable rule severity: {self.rule_unknown_component_js_variable!r}"
+            raise ValueError(msg)
+
+
+@dataclass(frozen=True, slots=True)
+class ComponentJsLintFinding:
+    """Report one OXC-proven free name inside a `$component` initializer."""
+
+    name: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+COMPONENT_JS_AMBIENT_NAMES = frozenset(
+    {
+        # ECMAScript built-ins and browser globals are supplied by the runtime,
+        # not by the component callback's destructuring pattern.
+        "AggregateError",
+        "Array",
+        "ArrayBuffer",
+        "Atomics",
+        "BigInt",
+        "BigInt64Array",
+        "BigUint64Array",
+        "Boolean",
+        "CustomEvent",
+        "DataView",
+        "Date",
+        "Element",
+        "Error",
+        "EvalError",
+        "Event",
+        "FinalizationRegistry",
+        "Float32Array",
+        "Float64Array",
+        "Function",
+        "HTMLElement",
+        "Infinity",
+        "Int16Array",
+        "Int32Array",
+        "Int8Array",
+        "Intl",
+        "JSON",
+        "Map",
+        "Math",
+        "NaN",
+        "Number",
+        "Object",
+        "Promise",
+        "Proxy",
+        "RangeError",
+        "ReferenceError",
+        "Reflect",
+        "RegExp",
+        "Set",
+        "SharedArrayBuffer",
+        "String",
+        "Symbol",
+        "SyntaxError",
+        "TypeError",
+        "URIError",
+        "URL",
+        "URLSearchParams",
+        "Uint16Array",
+        "Uint32Array",
+        "Uint8Array",
+        "Uint8ClampedArray",
+        "WeakMap",
+        "WeakRef",
+        "WeakSet",
+        "WebAssembly",
+        "cancelAnimationFrame",
+        "clearInterval",
+        "clearTimeout",
+        "console",
+        "decodeURI",
+        "decodeURIComponent",
+        "document",
+        "encodeURI",
+        "encodeURIComponent",
+        "escape",
+        "eval",
+        "fetch",
+        "globalThis",
+        "history",
+        "isFinite",
+        "isNaN",
+        "localStorage",
+        "location",
+        "navigator",
+        "parseFloat",
+        "parseInt",
+        "performance",
+        "queueMicrotask",
+        "requestAnimationFrame",
+        "sessionStorage",
+        "setInterval",
+        "setTimeout",
+        "structuredClone",
+        "undefined",
+        "unescape",
+        "window",
+    }
+)
+
+
+ALPINE_AMBIENT_NAMES = frozenset(
+    {
+        *COMPONENT_JS_AMBIENT_NAMES,
+        # Alpine's documented magic properties.
+        "$data",
+        "$dispatch",
+        "$el",
+        "$event",
+        "$id",
+        "$nextTick",
+        "$refs",
+        "$root",
+        "$store",
+        "$watch",
+        # Citry's Alpine magic/context surface.
+        "$error",
+        "$inject",
+        "$loading",
+        "$onEvent",
+        "$provide",
+        "$sendEvent",
+        "$state",
+        "$unprovide",
+        "sendEvent",
+        "onEvent",
+    }
+)
+
+
+def lint_unknown_template_variables(
+    template: object,
+    consumers: Sequence[TemplateLintConsumer],
+) -> tuple[TemplateLintFinding, ...]:
+    """
+    Diagnose free roots missing from at least one proven component namespace.
+
+    Args:
+        template: Parsed Citry template AST. Its parser-reported free variables
+            already exclude lexical and Python-local bindings.
+        consumers: Every proven component that consumes this physical template.
+
+    Returns:
+        Findings in the parser's stable free-variable order. No consumer means
+        no finding because syntax-only analysis cannot prove ownership.
+
+    Raises:
+        TypeError: If the parsed object lacks Citry free-variable records.
+
+    """
+    if not consumers:
+        return ()
+    uses = getattr(template, "used_variables", None)
+    if type(uses) is not list:
+        msg = "template must expose parser-reported used_variables"
+        raise TypeError(msg)
+
+    findings: list[TemplateLintFinding] = []
+    normalized_consumers = [
+        (consumer, {_identifier_identity(name) for name in consumer.known_names}) for consumer in consumers
+    ]
+    for use in uses:
+        name = getattr(use, "content", None)
+        start_index = getattr(use, "start_index", None)
+        end_index = getattr(use, "end_index", None)
+        line_col = getattr(use, "line_col", None)
+        if (
+            type(name) is not str
+            or type(start_index) is not int
+            or type(end_index) is not int
+            or type(line_col) is not tuple
+            or len(line_col) != 2
+            or type(line_col[0]) is not int
+            or type(line_col[1]) is not int
+        ):
+            msg = "template used_variables contains an invalid token"
+            raise TypeError(msg)
+        missing = [
+            consumer for consumer, known_names in normalized_consumers if _identifier_identity(name) not in known_names
+        ]
+        active = [consumer for consumer in missing if consumer.rule_unknown_template_variable != "ignore"]
+        if not active:
+            continue
+        severity: Literal["warning", "error"] = (
+            "error"
+            if any(
+                consumer.rule_unknown_template_variable == "error" and consumer.namespace_policy != "allow-extra"
+                for consumer in active
+            )
+            else "warning"
+        )
+        policies = {consumer.namespace_policy for consumer in active}
+        if policies == {"allow-extra"}:
+            variant = "allow-extra"
+        elif "unknown" in policies:
+            variant = "unknown"
+        else:
+            variant = "closed"
+        findings.append(
+            TemplateLintFinding(
+                name=name,
+                message=render_diagnostic(TEMPLATE_UNKNOWN_VARIABLE, variant=variant, name=name),
+                code=UNKNOWN_TEMPLATE_VARIABLE_CODE,
+                severity=severity,
+                start_index=start_index,
+                end_index=end_index,
+                line=line_col[0],
+                column=line_col[1],
+            )
+        )
+    return tuple(findings)
+
+
+def lint_unknown_alpine_variables(
+    expressions: Sequence[BrowserExpression],
+    consumers: Sequence[AlpineLintConsumer],
+) -> tuple[AlpineLintFinding, ...]:
+    """Diagnose OXC-proven Alpine roots missing from any physical owner."""
+    if not consumers:
+        return ()
+    findings: list[AlpineLintFinding] = []
+    for expression in expressions:
+        analysis = analyze_browser_expression(expression)
+        if not analysis.valid:
+            continue
+        lexical = frozenset((*ALPINE_AMBIENT_NAMES, *expression.bindings))
+        for reference in analysis.references:
+            if reference.name in lexical:
+                continue
+            missing = [consumer for consumer in consumers if reference.name not in consumer.known_names]
+            active = [consumer for consumer in missing if consumer.rule_unknown_alpine_variable != "ignore"]
+            if not active:
+                continue
+            severity: Literal["warning", "error"] = (
+                "error" if any(consumer.rule_unknown_alpine_variable == "error" for consumer in active) else "warning"
+            )
+            findings.append(
+                AlpineLintFinding(
+                    name=reference.name,
+                    message=render_diagnostic(ALPINE_UNKNOWN_VARIABLE, name=reference.name),
+                    code=ALPINE_UNKNOWN_VARIABLE,
+                    severity=severity,
+                    start_index=reference.start_index,
+                    end_index=reference.end_index,
+                )
+            )
+    return tuple(findings)
+
+
+def lint_unknown_component_js_variables(
+    source: str,
+    consumers: Sequence[ComponentJsLintConsumer],
+) -> tuple[ComponentJsLintFinding, ...]:
+    """Diagnose free names inside proven `$component` initializers."""
+    if not consumers:
+        return ()
+    analysis = analyze_browser_component_source(source)
+    if not analysis.valid:
+        return ()
+    findings: list[ComponentJsLintFinding] = []
+    for reference in analysis.references:
+        if reference.name in COMPONENT_JS_AMBIENT_NAMES:
+            continue
+        missing = [consumer for consumer in consumers if reference.name not in consumer.known_names]
+        active = [consumer for consumer in missing if consumer.rule_unknown_component_js_variable != "ignore"]
+        if not active:
+            continue
+        severity: Literal["warning", "error"] = (
+            "error"
+            if any(consumer.rule_unknown_component_js_variable == "error" for consumer in active)
+            else "warning"
+        )
+        findings.append(
+            ComponentJsLintFinding(
+                name=reference.name,
+                message=render_diagnostic(COMPONENT_JS_UNKNOWN_VARIABLE, name=reference.name),
+                code=COMPONENT_JS_UNKNOWN_VARIABLE,
+                severity=severity,
+                start_index=reference.start_index,
+                end_index=reference.end_index,
+            )
+        )
+    return tuple(findings)
+
+
+def _identifier_identity(name: str) -> str:
+    """Join parser tokens and Python schema fields by normalized identifier identity."""
+    return unicodedata.normalize("NFKC", name)
+
+
+def template_python_query_at(
+    template: object,
+    index: int,
+    *,
+    parse_nested: Callable[[str], object] = _parse_template,
+) -> TemplatePythonQuery | None:
+    """
+    Return the analyzer context for one parser byte index in a template.
+
+    Args:
+        template: Parsed Citry template AST.
+        index: UTF-8 byte index in the parsed template source.
+        parse_nested: Parser used for nested-template attribute values.
+
+    Returns:
+        The exact Python host and lexical controls, or ``None`` outside one.
+
+    """
+    return _template_python_query_at(template, index, parse_nested=parse_nested)
+
+
+def template_python_queries(
+    template: object,
+    *,
+    parse_nested: Callable[[str], object] = _parse_template,
+) -> tuple[TemplatePythonQuery, ...]:
+    """
+    Return every analyzer-ready Python host in a parsed template.
+
+    Args:
+        template: Parsed Citry template AST.
+        parse_nested: Parser used for nested-template attribute values.
+
+    Returns:
+        Analyzer-ready hosts ordered by their authored source position.
+
+    """
+    return _template_python_queries(template, parse_nested=parse_nested)
+
+
+def build_inferred_template_shadow(
+    module_source: str,
+    class_qualname: str,
+    roots: tuple[TemplatePythonRoot, ...],
+    query: TemplatePythonQuery,
+    *,
+    source_module: str | None = None,
+    source_is_package: bool = False,
+    kwargs_type: tuple[str, str] | None = None,
+) -> ShadowPythonDocument | None:
+    """
+    Build analyzer input from one statically accepted ``template_data`` method.
+
+    Args:
+        module_source: Current Python module source.
+        class_qualname: Exact class that directly owns ``template_data``.
+        roots: Conservatively proven template roots.
+        query: Authored expression and its lexical template controls.
+        source_module: Importable module name used to mirror relative imports.
+        source_is_package: Whether that module is implemented by ``__init__.py``.
+        kwargs_type: Optional module and qualified name for typed ``Kwargs``.
+
+    Returns:
+        Generated Python plus exact source mappings, or ``None`` when the
+        source no longer matches the accepted static shape.
+
+    """
+    return _build_inferred_template_shadow(
+        module_source,
+        class_qualname,
+        roots,
+        query,
+        source_module=source_module,
+        source_is_package=source_is_package,
+        kwargs_type=kwargs_type,
+    )
+
+
+def build_schema_template_shadow(
+    module_source: str,
+    schema_qualname: str,
+    roots: tuple[TemplatePythonRoot, ...],
+    query: TemplatePythonQuery,
+    *,
+    source_module: str | None = None,
+    source_is_package: bool = False,
+) -> ShadowPythonDocument | None:
+    """
+    Build analyzer input from one statically resolved ``TemplateData`` schema.
+
+    Args:
+        module_source: Current Python module source.
+        schema_qualname: Exact qualified name of the schema class.
+        roots: Conservatively proven template roots.
+        query: Authored expression and its lexical template controls.
+        source_module: Importable module name used to mirror relative imports.
+        source_is_package: Whether that module is implemented by ``__init__.py``.
+
+    Returns:
+        Generated Python plus exact source mappings, or ``None`` when the
+        schema cannot be resolved from current source.
+
+    """
+    return _build_schema_template_shadow(
+        module_source,
+        schema_qualname,
+        roots,
+        query,
+        source_module=source_module,
+        source_is_package=source_is_package,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -85,10 +696,15 @@ class TemplateAnalysis:
     Attributes:
         component_names: Normalized registered names without the ``c-`` tag
             prefix. The set includes aliases and built-in component names.
+        lint: Application lint settings and known global variables.
+        component_lint: Effective lint settings and known variables keyed by
+            stable component definition ID.
 
     """
 
     component_names: frozenset[str]
+    lint: TemplateLintInfo
+    component_lint: Mapping[str, TemplateLintInfo]
     _tag_rules: Mapping[str, TagRules] = field(repr=False)
 
     @classmethod
@@ -96,9 +712,13 @@ class TemplateAnalysis:
         cls,
         component_names: frozenset[str],
         tag_rules: Mapping[str, TagRules],
+        lint: TemplateLintInfo,
+        component_lint: Mapping[str, TemplateLintInfo],
     ) -> TemplateAnalysis:
         analysis = object.__new__(cls)
         object.__setattr__(analysis, "component_names", component_names)
+        object.__setattr__(analysis, "lint", lint)
+        object.__setattr__(analysis, "component_lint", MappingProxyType(dict(component_lint)))
         object.__setattr__(analysis, "_tag_rules", MappingProxyType(dict(tag_rules)))
         return analysis
 
@@ -130,6 +750,10 @@ class TemplateAnalysis:
         return {
             "schema_version": TEMPLATE_ANALYSIS_SCHEMA_VERSION,
             "component_names": sorted(self.component_names),
+            "lint": self.lint.to_dict(),
+            "component_lint": {
+                definition_id: info.to_dict() for definition_id, info in sorted(self.component_lint.items())
+            },
             "tag_rules": {
                 name: {
                     "allowed_attrs": rule.allowed_attrs,
@@ -153,12 +777,19 @@ class TemplateAnalysis:
             msg = f"unsupported template analysis schema version: {payload.get('schema_version')!r}"
             raise ValueError(msg)
         names = payload.get("component_names")
+        lint = payload.get("lint")
+        component_lint = payload.get("component_lint")
         rules = payload.get("tag_rules")
         if type(names) is not list or any(type(name) is not str or not name for name in names):
             msg = "component_names must be a list of non-empty strings"
             raise ValueError(msg)
         if type(rules) is not dict or any(type(name) is not str or not name for name in rules):
             msg = "tag_rules must be a string-keyed dict"
+            raise ValueError(msg)
+        if type(component_lint) is not dict or any(
+            type(definition_id) is not str or not definition_id for definition_id in component_lint
+        ):
+            msg = "component_lint must be a non-empty-string-keyed dict"
             raise ValueError(msg)
 
         restored: dict[str, TagRules] = {}
@@ -173,7 +804,15 @@ class TemplateAnalysis:
                 required_slots=_string_list(raw_rule.get("required_slots"), "required_slots"),
                 slot_data_fields=_string_list_mapping(raw_rule.get("slot_data_fields"), "slot_data_fields"),
             )
-        return cls._create(frozenset(names), restored)
+        return cls._create(
+            frozenset(names),
+            restored,
+            TemplateLintInfo.from_dict(lint),
+            {
+                definition_id: TemplateLintInfo.from_dict(raw_info)
+                for definition_id, raw_info in component_lint.items()
+            },
+        )
 
 
 def _string_list(value: object, field_name: str) -> list[str]:
@@ -559,6 +1198,29 @@ class PythonTemplateSourceMap:
             start=_lsp_position(self._host_source, self._line_starts, host_start),
             end=_lsp_position(self._host_source, self._line_starts, host_end),
         )
+
+    def range_is_unambiguous(self, start_index: int, end_index: int) -> bool:
+        """
+        Return whether a parser range stays inside one authored literal body.
+
+        Normalized indentation and Python escapes remain mappable inside one
+        literal. Crossing an implicit-concatenation boundary is ambiguous for
+        editor edits and semantic result ranges.
+
+        Args:
+            start_index: Inclusive UTF-8 byte offset in ``template_source``.
+            end_index: Exclusive UTF-8 byte offset in ``template_source``.
+
+        Returns:
+            ``True`` when both boundaries belong to one literal body.
+
+        Raises:
+            ValueError: If the range is reversed, outside the template, or
+                splits a UTF-8 code point.
+
+        """
+        host_start, host_end = self._host_range(start_index, end_index)
+        return any(part.body_start <= host_start <= host_end <= part.body_end for part in self._literal_parts)
 
     def _host_range(self, start_index: int, end_index: int) -> tuple[int, int]:
         start_boundary = self._boundary_index(start_index)
@@ -1255,7 +1917,7 @@ def prepare_python_component_assets(
         msg = f"Python source is invalid: {error.msg}"
         raise PythonTemplateFormatError(
             msg,
-            code="citry.format.host-syntax",
+            code=FORMAT_HOST_SYNTAX,
             host_range=_syntax_error_host_range(source, error),
             diagnostic=error,
         ) from None
@@ -1270,7 +1932,7 @@ def prepare_python_component_assets(
         if relevant_notices:
             raise PythonTemplateFormatError(
                 _component_asset_notice_message(relevant_notices),
-                code="citry.format.ineligible",
+                code=FORMAT_INELIGIBLE,
             )
         selected = [(index, region) for index, region in enumerate(regions) if region.kind in selected_kinds]
         plan_notices: list[PythonComponentAssetNotice] = []
@@ -1284,7 +1946,7 @@ def prepare_python_component_assets(
             msg = f"host offset {host_offset} does not contain a definite selected Citry component asset"
             raise PythonTemplateFormatError(
                 msg,
-                code="citry.format.ineligible",
+                code=FORMAT_INELIGIBLE,
             )
         plan_notices = list(relevant_notices)
 
@@ -1380,16 +2042,16 @@ def prepare_python_component_assets(
                 PythonComponentAssetNotice(
                     region.component_name,
                     region.kind,
-                    "citry.format.ineligible",
+                    FORMAT_INELIGIBLE,
                     str(error),
                 ),
             )
             if first_failure is None:
-                first_failure = ("citry.format.ineligible", None, None)
+                first_failure = (FORMAT_INELIGIBLE, None, None)
 
     if failures:
         failure_code, failure_range, failure_diagnostic = first_failure or (
-            "citry.format.ineligible",
+            FORMAT_INELIGIBLE,
             None,
             None,
         )
@@ -1458,15 +2120,15 @@ def finish_python_component_assets(
         for notice in notices
         if notice.code
         in {
-            "citry.format.provider-unavailable",
-            "citry.format.embedded-interpolation-unsupported",
-            "citry.format.embedded-language-unsupported",
+            FORMAT_PROVIDER_UNAVAILABLE,
+            FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
+            FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
         }
     ]
     if require_providers and unavailable_plan_notices:
         raise PythonTemplateFormatError(
             _component_asset_notice_message(unavailable_plan_notices),
-            code="citry.format.provider-unavailable",
+            code=FORMAT_PROVIDER_UNAVAILABLE,
         )
 
     replacements: list[_HostReplacement] = []
@@ -1495,9 +2157,7 @@ def finish_python_component_assets(
                     code=error.code,
                     diagnostic=error.diagnostic,
                 ) from None
-            if require_providers and any(
-                notice.code == "citry.format.provider-unavailable" for notice in outcome.notices
-            ):
+            if require_providers and any(notice.code == FORMAT_PROVIDER_UNAVAILABLE for notice in outcome.notices):
                 unavailable = [
                     PythonComponentAssetNotice(
                         prepared.region.component_name,
@@ -1506,11 +2166,11 @@ def finish_python_component_assets(
                         notice.message,
                     )
                     for notice in outcome.notices
-                    if notice.code == "citry.format.provider-unavailable"
+                    if notice.code == FORMAT_PROVIDER_UNAVAILABLE
                 ]
                 raise PythonTemplateFormatError(
                     _component_asset_notice_message(unavailable),
-                    code="citry.format.provider-unavailable",
+                    code=FORMAT_PROVIDER_UNAVAILABLE,
                 )
             for outcome_notice in outcome.notices:
                 translated_notice = PythonComponentAssetNotice(
@@ -1539,7 +2199,7 @@ def finish_python_component_assets(
                 if require_providers:
                     raise PythonTemplateFormatError(
                         _component_asset_notice_message((direct_notice,)),
-                        code="citry.format.provider-unavailable",
+                        code=FORMAT_PROVIDER_UNAVAILABLE,
                     )
                 notices.append(direct_notice)
             if result.status is EmbeddedResultStatus.FORMATTED and result.provider is not None:
@@ -1554,12 +2214,12 @@ def finish_python_component_assets(
             notice = PythonComponentAssetNotice(
                 prepared.region.component_name,
                 prepared.region.kind,
-                "citry.format.ineligible",
+                FORMAT_INELIGIBLE,
                 str(error),
             )
             raise PythonTemplateFormatError(
                 _component_asset_notice_message((notice,)),
-                code="citry.format.ineligible",
+                code=FORMAT_INELIGIBLE,
             ) from None
         if region_replacements:
             replacements.extend(region_replacements)
@@ -1569,7 +2229,7 @@ def finish_python_component_assets(
     if any(current.start < previous.end for previous, current in pairwise(ordered)):
         raise PythonTemplateFormatError(
             "component asset formatter rewrites overlap",
-            code="citry.format.invariant",
+            code=FORMAT_INVARIANT,
         )
 
     candidate = plan.source
@@ -1644,13 +2304,13 @@ def format_python_component_assets(
             notice = PythonComponentAssetNotice(
                 request.component_name,
                 request.asset_kind,
-                "citry.format.provider-invalid",
+                FORMAT_PROVIDER_INVALID,
                 f"provider raised {type(error).__name__}: {error}",
                 request.id,
             )
             raise PythonTemplateFormatError(
                 _component_asset_notice_message((notice,)),
-                code="citry.format.provider-invalid",
+                code=FORMAT_PROVIDER_INVALID,
             ) from error
         results.append(result)
     return finish_python_component_assets(
@@ -1705,7 +2365,7 @@ def format_python_templates(
         msg = f"Python source is invalid: {error.msg}"
         raise PythonTemplateFormatError(
             msg,
-            code="citry.format.host-syntax",
+            code=FORMAT_HOST_SYNTAX,
             host_range=_syntax_error_host_range(source, error),
             diagnostic=error,
         ) from None
@@ -1720,7 +2380,7 @@ def format_python_templates(
         if notices:
             raise PythonTemplateFormatError(
                 _notice_message(notices),
-                code="citry.format.ineligible",
+                code=FORMAT_INELIGIBLE,
                 notices=notices,
             )
         selected = list(enumerate(regions))
@@ -1734,7 +2394,7 @@ def format_python_templates(
             msg = f"host offset {host_offset} does not contain a definite Citry template"
             raise PythonTemplateFormatError(
                 msg,
-                code="citry.format.ineligible",
+                code=FORMAT_INELIGIBLE,
                 notices=notices,
             )
 
@@ -1761,7 +2421,7 @@ def format_python_templates(
         except ValueError as error:
             failure_notices.append(PythonTemplateNotice(region.component_name, str(error)))
             if first_failure is None:
-                first_failure = ("citry.format.ineligible", None, None)
+                first_failure = (FORMAT_INELIGIBLE, None, None)
             continue
 
         if region_replacements:
@@ -1770,7 +2430,7 @@ def format_python_templates(
 
     if failure_notices:
         failure_code, failure_range, failure_diagnostic = first_failure or (
-            "citry.format.ineligible",
+            FORMAT_INELIGIBLE,
             None,
             None,
         )
@@ -1794,7 +2454,7 @@ def format_python_templates(
         )
         raise PythonTemplateFormatError(
             _notice_message(changed_notices),
-            code="citry.format.invariant",
+            code=FORMAT_INVARIANT,
             notices=changed_notices,
         )
 
@@ -1814,7 +2474,7 @@ def format_python_templates(
         )
         raise PythonTemplateFormatError(
             _notice_message(changed_notices),
-            code="citry.format.ineligible",
+            code=FORMAT_INELIGIBLE,
             notices=changed_notices,
         ) from None
 
@@ -1829,7 +2489,7 @@ def format_python_templates(
     ):
         raise PythonTemplateFormatError(
             "formatted Python source did not rediscover the same component templates",
-            code="citry.format.invariant",
+            code=FORMAT_INVARIANT,
         )
     for region_index, formatted in formatted_sources.items():
         if candidate_regions[region_index].source_map.template_source != normalize_inline_asset(formatted):
@@ -1839,7 +2499,7 @@ def format_python_templates(
             )
             raise PythonTemplateFormatError(
                 notice.message,
-                code="citry.format.invariant",
+                code=FORMAT_INVARIANT,
                 notices=(notice,),
             )
 
@@ -1913,22 +2573,22 @@ def _validate_python_component_asset_results(
 ) -> dict[str, EmbeddedFormatResult]:
     if len(results) != len(plan.requests):
         msg = f"provider result count {len(results)} does not match request count {len(plan.requests)}"
-        raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+        raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
     expected_ids = {request.id for request in plan.requests}
     by_id: dict[str, EmbeddedFormatResult] = {}
     for result in results:
         if type(result) is not EmbeddedFormatResult:
             msg = "provider results must be EmbeddedFormatResult values"
-            raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+            raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
         if result.plan_id != plan.id:
             msg = "provider result belongs to a different Python component-asset plan"
-            raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+            raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
         if result.region_id not in expected_ids:
             msg = f"unknown Python component-asset request ID {result.region_id!r}"
-            raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+            raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
         if result.region_id in by_id:
             msg = f"duplicate provider result for {result.region_id!r}"
-            raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+            raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
         _validate_embedded_result_payload(result)
         by_id[result.region_id] = result
     return by_id
@@ -1937,32 +2597,32 @@ def _validate_python_component_asset_results(
 def _validate_embedded_result_payload(result: EmbeddedFormatResult) -> None:
     if type(result.status) is not EmbeddedResultStatus:
         msg = "provider result status must be an EmbeddedResultStatus"
-        raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+        raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
     if result.status is EmbeddedResultStatus.FORMATTED:
         if type(result.text) is not str:
             msg = "a formatted provider result requires string text"
-            raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+            raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
         if result.provider is not None and type(result.provider) is not str:
             msg = "a provider identity must be a string or None"
-            raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+            raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
         if result.message is not None:
             msg = "a formatted provider result cannot carry an error message"
-            raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+            raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
         return
     if result.status is EmbeddedResultStatus.UNCHANGED:
         if result.text is not None or result.provider is not None or result.message is not None:
             msg = "an unchanged provider result cannot carry output fields"
-            raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+            raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
         return
     if (
         result.status in {EmbeddedResultStatus.UNAVAILABLE, EmbeddedResultStatus.ERROR}
         and type(result.message) is not str
     ):
         msg = f"a {result.status.value} provider result requires a string message"
-        raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+        raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
     if result.text is not None or result.provider is not None:
         msg = f"a {result.status.value} provider result cannot carry formatted output"
-        raise PythonTemplateFormatError(msg, code="citry.format.provider-invalid")
+        raise PythonTemplateFormatError(msg, code=FORMAT_PROVIDER_INVALID)
 
 
 def _finish_direct_component_asset_result(
@@ -1977,9 +2637,9 @@ def _finish_direct_component_asset_result(
         region.component_name,
         region.kind,
         (
-            "citry.format.provider-unavailable"
+            FORMAT_PROVIDER_UNAVAILABLE
             if result.status is EmbeddedResultStatus.UNAVAILABLE
-            else "citry.format.provider-invalid"
+            else FORMAT_PROVIDER_INVALID
         ),
         result.message or "embedded provider failed",
         result.region_id,
@@ -1987,7 +2647,7 @@ def _finish_direct_component_asset_result(
     if result.status is EmbeddedResultStatus.ERROR:
         raise PythonTemplateFormatError(
             _component_asset_notice_message((notice,)),
-            code="citry.format.provider-invalid",
+            code=FORMAT_PROVIDER_INVALID,
         )
     return region.source_map.template_source, notice
 
@@ -2002,7 +2662,7 @@ def _validate_python_component_asset_candidate(
     except SyntaxError:
         raise PythonTemplateFormatError(
             "formatted component assets cannot be represented with the existing Python literal framing",
-            code="citry.format.ineligible",
+            code=FORMAT_INELIGIBLE,
         ) from None
     candidate_regions, candidate_files, _notices = _ast_component_asset_discovery(
         candidate,
@@ -2014,7 +2674,7 @@ def _validate_python_component_asset_candidate(
     if candidate_identities != original_identities or candidate_files != list(plan._files):
         raise PythonTemplateFormatError(
             "formatted Python source did not rediscover the same component assets",
-            code="citry.format.invariant",
+            code=FORMAT_INVARIANT,
         )
     for region_index, formatted in formatted_sources.items():
         if candidate_regions[region_index].source_map.template_source != normalize_inline_asset(formatted):
@@ -2022,12 +2682,12 @@ def _validate_python_component_asset_candidate(
             notice = PythonComponentAssetNotice(
                 region.component_name,
                 region.kind,
-                "citry.format.invariant",
+                FORMAT_INVARIANT,
                 "rewritten Python literal does not decode to the formatter output",
             )
             raise PythonTemplateFormatError(
                 _component_asset_notice_message((notice,)),
-                code="citry.format.invariant",
+                code=FORMAT_INVARIANT,
             )
 
 
@@ -2190,7 +2850,7 @@ def _ast_component_asset_discovery(
                     PythonComponentAssetNotice(
                         statement.name,
                         kind,
-                        "citry.format.ineligible",
+                        FORMAT_INELIGIBLE,
                         notice,
                     ),
                 )
@@ -2206,7 +2866,7 @@ def _ast_component_asset_discovery(
                         PythonComponentAssetNotice(
                             statement.name,
                             kind,
-                            "citry.format.ineligible",
+                            FORMAT_INELIGIBLE,
                             f"{inline_name} literal cannot be mapped for rewriting: {error}",
                         ),
                     )
@@ -2629,7 +3289,410 @@ def _is_template_component_base(
     )
 
 
+def analyze_template_data_source(
+    source: str,
+    class_qualname: str,
+    *,
+    kwargs_fields: tuple[str, ...] | None,
+) -> TemplateDataSourceShape | None:
+    """Run Citry's conservative ``template_data()`` source-shape pass."""
+    from citry._template_data_source import analyze_template_data_source as analyze  # noqa: PLC0415
+
+    return analyze(source, class_qualname, kwargs_fields=kwargs_fields)
+
+
+def analyze_css_data_source(source: str, class_qualname: str) -> TemplateDataSourceShape | None:
+    """Run Citry's conservative ``css_data()`` source-shape pass."""
+    from citry._template_data_source import analyze_css_data_source as analyze  # noqa: PLC0415
+
+    return analyze(source, class_qualname)
+
+
+def analyze_js_data_source(source: str, class_qualname: str) -> TemplateDataSourceShape | None:
+    """Run Citry's conservative ``js_data()`` source-shape pass."""
+    from citry._template_data_source import analyze_js_data_source as analyze  # noqa: PLC0415
+
+    return analyze(source, class_qualname)
+
+
+def python_event_handler_range(
+    source: str,
+    function_qualname: str,
+    method_name: str,
+    wire_name: str,
+) -> LspRange | None:
+    """Locate one effective server-event method in synchronized source."""
+    coordinates = _python_event_handler_coordinates(source, function_qualname, method_name, wire_name)
+    if coordinates is None:
+        return None
+    start_line, start_character, end_line, end_character = coordinates
+    return LspRange(
+        LspPosition(start_line, start_character),
+        LspPosition(end_line, end_character),
+    )
+
+
+def json_wire_type_from_annotation(source: str) -> JsonWireType:
+    """Convert one Python annotation into portable JSON-wire metadata."""
+    if type(source) is not str:
+        msg = "source must be a str"
+        raise TypeError(msg)
+    return _json_wire_type_from_annotation(source)
+
+
+def json_wire_type_from_expression(
+    source: str,
+    *,
+    member_types: Mapping[str, Mapping[str, JsonWireType]] | None = None,
+) -> JsonWireType:
+    """Infer portable JSON-wire metadata using optional proven members."""
+    if type(source) is not str:
+        msg = "source must be a str"
+        raise TypeError(msg)
+    return _json_wire_type_from_expression(source, member_types=member_types)
+
+
+def css_data_references(source: str) -> tuple[CssDataReference, ...]:
+    """Return exact unescaped custom-property arguments of CSS ``var()`` calls."""
+    if type(source) is not str:
+        msg = "source must be a str"
+        raise TypeError(msg)
+    boundaries = _utf8_boundaries(source)
+    return tuple(
+        CssDataReference(argument[0], boundaries[argument[1]], boundaries[argument[2]])
+        for argument in _css_var_arguments(source)
+        if argument[0] and argument[3]
+    )
+
+
+def css_data_reference_at(source: str, index: int) -> CssDataReference | None:
+    """Return the exact ``var(--name)`` reference containing one UTF-8 index."""
+    references = css_data_references(source)
+    return next(
+        (reference for reference in references if reference.start_index <= index < reference.end_index),
+        None,
+    )
+
+
+def css_data_completion_at(source: str, index: int) -> CssDataCompletion | None:
+    """Return the custom-property token that completion should replace."""
+    if type(source) is not str:
+        msg = "source must be a str"
+        raise TypeError(msg)
+    boundaries = _utf8_boundaries(source)
+    try:
+        cursor = boundaries.index(index)
+    except ValueError:
+        return None
+    for name, start, end, _terminated in _css_var_arguments(source):
+        if start + 2 <= cursor <= end:
+            return CssDataCompletion(name[: max(0, cursor - start - 2)], boundaries[start], boundaries[end])
+    return None
+
+
+def _css_var_arguments(source: str) -> tuple[tuple[str, int, int, bool], ...]:
+    """Scan only the first custom-property argument while leaving CSS to its provider."""
+    arguments: list[tuple[str, int, int, bool]] = []
+    index = 0
+    while index < len(source):
+        if source.startswith("/*", index):
+            closing = source.find("*/", index + 2)
+            index = len(source) if closing < 0 else closing + 2
+            continue
+        if source[index] in {'"', "'"}:
+            index = _skip_css_string(source, index)
+            continue
+        if (
+            source[index : index + 3].lower() == "var"
+            and index + 3 < len(source)
+            and source[index + 3] == "("
+            and (index == 0 or not _css_name_char(source[index - 1]))
+        ):
+            argument = _css_var_argument(source, index + 4)
+            if argument is not None:
+                arguments.append(argument)
+            index += 4
+            continue
+        index += 1
+    return tuple(arguments)
+
+
+def _css_var_argument(source: str, index: int) -> tuple[str, int, int, bool] | None:
+    start = _skip_css_trivia(source, index)
+    if not source.startswith("--", start):
+        return None
+    end = start + 2
+    while end < len(source) and _css_name_char(source[end]):
+        end += 1
+    # CSS escapes can denote the same custom property with different authored
+    # text, so the first slice declines them until a positioned decoder exists.
+    if end < len(source) and source[end] == "\\":
+        return None
+    after = _skip_css_trivia(source, end)
+    terminated = after < len(source) and source[after] in {",", ")"}
+    return source[start + 2 : end], start, end, terminated
+
+
+def _skip_css_trivia(source: str, index: int) -> int:
+    while index < len(source):
+        if source[index] in " \t\r\n\f":
+            index += 1
+            continue
+        if source.startswith("/*", index):
+            closing = source.find("*/", index + 2)
+            return len(source) if closing < 0 else _skip_css_trivia(source, closing + 2)
+        return index
+    return index
+
+
+def _skip_css_string(source: str, start: int) -> int:
+    quote = source[start]
+    index = start + 1
+    while index < len(source):
+        if source[index] == "\\":
+            index += 2
+            continue
+        if source[index] == quote:
+            return index + 1
+        index += 1
+    return len(source)
+
+
+def _css_name_char(char: str) -> bool:
+    codepoint = ord(char)
+    return (char.isascii() and (char.isalnum() or char in "-_")) or (
+        codepoint >= 0x80 and not 0xD800 <= codepoint <= 0xDFFF
+    )
+
+
+def _utf8_boundaries(source: str) -> tuple[int, ...]:
+    boundaries = [0]
+    for char in source:
+        boundaries.append(boundaries[-1] + len(char.encode("utf-8")))
+    return tuple(boundaries)
+
+
+def python_application_lint_variable_range(
+    source: str,
+    target_name: str,
+    variable_name: str,
+) -> LspRange | None:
+    """Locate one variable in a direct application ``LintSettings`` call."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, UnicodeError, ValueError, MemoryError, RecursionError):
+        return None
+    target = _unique_python_binding(tree.body, target_name, before_line=None)
+    if target is None:
+        return None
+    target_value, target_line = target
+    app_call = _resolve_python_value(tree, tree.body, target_value, before_line=target_line)
+    lint_value = _call_keyword(app_call, "lint")
+    if lint_value is None:
+        return None
+    lint_call = _resolve_python_value(tree, tree.body, lint_value, before_line=target_line)
+    variables_value = _call_keyword(lint_call, "template_variables")
+    if variables_value is None:
+        return None
+    variables = _resolve_python_value(tree, tree.body, variables_value, before_line=target_line)
+    key = _unique_string_mapping_key(variables, variable_name)
+    return _python_node_lsp_range(source, key) if key is not None else None
+
+
+def python_component_lint_variable_range(
+    source: str,
+    lint_qualname: str,
+    variable_name: str,
+) -> LspRange | None:
+    """Locate one variable in an exact nested component ``Lint`` class."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, UnicodeError, ValueError, MemoryError, RecursionError):
+        return None
+    lint_class = _python_class_for_qualname(tree, lint_qualname)
+    if lint_class is None:
+        return None
+    binding = _unique_python_binding(lint_class.body, "template_variables", before_line=None)
+    if binding is None:
+        return None
+    value, line = binding
+    variables = _resolve_python_value(tree, lint_class.body, value, before_line=line)
+    key = _unique_string_mapping_key(variables, variable_name)
+    return _python_node_lsp_range(source, key) if key is not None else None
+
+
+def _resolve_python_value(
+    tree: ast.Module,
+    local_body: list[ast.stmt],
+    value: ast.expr,
+    *,
+    before_line: int,
+) -> ast.expr:
+    """Follow only direct earlier name bindings needed by authored settings."""
+    current = value
+    seen: set[str] = set()
+    for _depth in range(8):
+        if not isinstance(current, ast.Name) or current.id in seen:
+            return current
+        seen.add(current.id)
+        binding = _unique_python_binding(local_body, current.id, before_line=before_line)
+        if binding is None and local_body is not tree.body:
+            binding = _unique_python_binding(tree.body, current.id, before_line=before_line)
+        if binding is None:
+            return current
+        current, before_line = binding
+    return current
+
+
+def _unique_python_binding(
+    body: list[ast.stmt],
+    name: str,
+    *,
+    before_line: int | None,
+) -> tuple[ast.expr, int] | None:
+    if not name.isidentifier():
+        return None
+    candidates: list[tuple[ast.expr, int]] = []
+    for statement in body:
+        if before_line is not None and statement.lineno >= before_line:
+            continue
+        value: ast.expr | None = None
+        if isinstance(statement, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name for target in statement.targets
+        ):
+            value = statement.value
+        if (
+            isinstance(statement, ast.AnnAssign)
+            and isinstance(statement.target, ast.Name)
+            and statement.target.id == name
+            and statement.value is not None
+        ):
+            value = statement.value
+        if value is not None:
+            candidates.append((value, statement.lineno))
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _call_keyword(value: ast.expr, name: str) -> ast.expr | None:
+    if not isinstance(value, ast.Call):
+        return None
+    matches = [keyword.value for keyword in value.keywords if keyword.arg == name]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _unique_string_mapping_key(value: ast.expr, name: str) -> ast.Constant | None:
+    if not isinstance(value, ast.Dict):
+        return None
+    matches = [
+        key for key in value.keys if isinstance(key, ast.Constant) and type(key.value) is str and key.value == name
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _python_class_for_qualname(tree: ast.Module, qualname: str) -> ast.ClassDef | None:
+    if not qualname or "<locals>" in qualname:
+        return None
+    body = tree.body
+    current: ast.ClassDef | None = None
+    for part in qualname.split("."):
+        matches = [statement for statement in body if isinstance(statement, ast.ClassDef) and statement.name == part]
+        if len(matches) != 1:
+            return None
+        current = matches[0]
+        body = current.body
+    return current
+
+
+def _python_node_lsp_range(source: str, node: ast.expr) -> LspRange | None:
+    end_line = getattr(node, "end_lineno", None)
+    end_column = getattr(node, "end_col_offset", None)
+    if type(end_line) is not int or type(end_column) is not int:
+        return None
+    try:
+        start = _python_coordinate_to_offset(source, node.lineno, node.col_offset)
+        end = _python_coordinate_to_offset(source, end_line, end_column)
+    except (TypeError, ValueError, UnicodeError):
+        return None
+    starts = _line_starts(source)
+    return LspRange(
+        start=_lsp_position(source, starts, start),
+        end=_lsp_position(source, starts, end),
+    )
+
+
+def python_class_defines_direct_method(source: str, class_qualname: str, method_name: str) -> bool | None:
+    """Return direct method presence, or ``None`` for unprovable source."""
+    from citry._template_data_source import python_class_defines_direct_method as resolve  # noqa: PLC0415
+
+    return resolve(source, class_qualname, method_name)
+
+
+def python_class_direct_method_first_line(source: str, class_qualname: str, method_name: str) -> int | None:
+    """Return the authored first line of one exact direct function binding."""
+    from citry._template_data_source import python_class_direct_method_first_line as resolve  # noqa: PLC0415
+
+    return resolve(source, class_qualname, method_name)
+
+
+def python_class_resolution_signature(source: str, class_qualname: str) -> str | None:
+    """Fingerprint source that can change one loaded class resolution chain."""
+    from citry._template_data_source import python_class_resolution_signature as resolve  # noqa: PLC0415
+
+    return resolve(source, class_qualname)
+
+
+def python_class_asset_resolution_signature(
+    source: str,
+    class_qualname: str,
+    kind: Literal["template", "js", "css"] = "template",
+) -> str | None:
+    """Fingerprint current MRO and asset bindings for one component class."""
+    from citry._template_data_source import python_class_asset_resolution_signature as resolve  # noqa: PLC0415
+
+    return resolve(source, class_qualname, kind)
+
+
+def python_class_static_asset_matches(
+    source: str,
+    class_qualname: str,
+    inline_value: object,
+    file_value: object,
+    kind: Literal["template", "js", "css"] = "template",
+) -> bool:
+    """Prove that one direct static asset declaration matches runtime state."""
+    from citry._template_data_source import python_class_static_asset_matches as resolve  # noqa: PLC0415
+
+    return resolve(source, class_qualname, inline_value, file_value, kind)
+
+
 __all__ = [
+    "ALPINE_AMBIENT_NAMES",
+    "SERVER_EVENT_CALL_NAMES",
+    "AlpineLintConsumer",
+    "AlpineLintFinding",
+    "BrowserBinding",
+    "BrowserCompletion",
+    "BrowserComponentBinding",
+    "BrowserComponentPropsUse",
+    "BrowserComponentSourceAnalysis",
+    "BrowserDeclarativeEvent",
+    "BrowserExpression",
+    "BrowserExpressionMode",
+    "BrowserFreeReference",
+    "BrowserIdentifier",
+    "BrowserLiteralCall",
+    "BrowserMember",
+    "BrowserObjectProperty",
+    "BrowserProp",
+    "BrowserScopeWrite",
+    "BrowserSourceAnalysis",
+    "ComponentJsLintConsumer",
+    "ComponentJsLintFinding",
+    "CssDataCompletion",
+    "CssDataReference",
+    "JsonWireField",
+    "JsonWireKind",
+    "JsonWireType",
     "LspPosition",
     "LspRange",
     "PythonComponentAssetDiscovery",
@@ -2646,11 +3709,57 @@ __all__ = [
     "PythonTemplateNotice",
     "PythonTemplateRegion",
     "PythonTemplateSourceMap",
+    "ShadowPythonCopy",
+    "ShadowPythonDocument",
+    "ShadowPythonSourceCopy",
     "TemplateAnalysis",
+    "TemplateLintConsumer",
+    "TemplateLintFinding",
+    "TemplatePythonControl",
+    "TemplatePythonQuery",
+    "TemplatePythonRoot",
+    "analyze_browser_component_source",
+    "analyze_browser_expression",
+    "analyze_css_data_source",
+    "analyze_js_data_source",
+    "analyze_template_data_source",
+    "browser_bindings",
+    "browser_client_prop_accepts",
+    "browser_completion_at",
+    "browser_component_prop_uses",
+    "browser_component_props",
+    "browser_component_scope_writes",
+    "browser_declarative_events",
+    "browser_expression_at",
+    "browser_expressions",
+    "browser_identifier_at",
+    "browser_identifiers",
+    "browser_literal_calls",
+    "browser_literal_wire_type",
+    "browser_member_at",
+    "build_inferred_template_shadow",
+    "build_schema_template_shadow",
+    "css_data_completion_at",
+    "css_data_reference_at",
+    "css_data_references",
     "discover_python_component_assets",
     "discover_python_templates",
     "finish_python_component_assets",
     "format_python_component_assets",
     "format_python_templates",
+    "json_wire_type_from_annotation",
+    "json_wire_type_from_expression",
+    "lint_unknown_alpine_variables",
+    "lint_unknown_component_js_variables",
+    "lint_unknown_template_variables",
+    "merge_json_wire_types",
     "prepare_python_component_assets",
+    "python_class_asset_resolution_signature",
+    "python_class_defines_direct_method",
+    "python_class_direct_method_first_line",
+    "python_class_resolution_signature",
+    "python_class_static_asset_matches",
+    "python_event_handler_range",
+    "template_python_queries",
+    "template_python_query_at",
 ]

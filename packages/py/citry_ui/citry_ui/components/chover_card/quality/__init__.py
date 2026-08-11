@@ -1,0 +1,1 @@
+"""HoverCard quality fixtures."""

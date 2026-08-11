@@ -1,6 +1,6 @@
 ---
 title: Add browser behavior
-description: Use Alpine directives in a Citry component, then pass Python data into component-owned browser code with js_data and $component.
+description: Use Alpine directives in a Citry component, then seed its browser scope from Python with js_data.
 ---
 
 # Add browser behavior
@@ -10,18 +10,14 @@ that responds immediately in the browser, without a request or page reload.
 
 Citry uses [Alpine.js](https://alpinejs.dev/){: target="_blank" rel="noopener"}
 for these small interactions. In this step, Python gives each counter its name,
-component JavaScript creates its browser state, and Alpine attributes update
-the visible count.
+`js_data()` seeds its browser state, and Alpine attributes update the visible
+count.
 
 ## Build independent counters
 
-Use [`js_data()`][citry.Component.js_data] and [`$component`][$component] to
-pass data from Python to JavaScript.
-
-`$component()` is special Citry syntax inside a component's `js` block. It
-connects that JavaScript to the component class and gives Citry a function to
-run for each rendered instance. With each call, Citry passes in that instance's
-Python data and its own reactive Alpine scope.
+Use [`js_data()`][citry.Component.js_data] to pass initial values from Python
+directly into the component's Alpine scope. A `$component()` callback is only
+needed when the component also has JavaScript setup to run.
 
 !!! note
 
@@ -57,32 +53,36 @@ Two Alpine attributes connect the button to that browser state:
 - [`x-text`](https://alpinejs.dev/directives/text){: target="_blank" rel="noopener"}
   writes the current name and count into their spans.
 
-The component's `$component` callback tells Citry that this page needs its
-owned browser runtime. You do not need a separate JavaScript entry file or
-Alpine setup.
+The Alpine attributes tell Citry that this page needs its owned browser
+runtime. You do not need a separate JavaScript entry file or Alpine setup.
 
-## Access JS data in browser
+## Use JS data directly in Alpine
 
 Python sends the browser value through `js_data()`:
 
 ```python
 def js_data(self, kwargs: Kwargs, slots: Slots):
-    return {"name": kwargs.name}
+    return {"name": kwargs.name, "count": 0}
 ```
 
-That value arrives as `data.name` inside the component's JavaScript. The
-`$component` callback copies it into Alpine's reactive `scope` and creates the
-counter:
+Citry seeds both top-level keys into the component's reactive Alpine scope, so
+the template can use `name` and `count` directly. Each rendered component gets
+a fresh nested value graph, even when identical JSON is sent only once.
+
+Add `$component` later when the component needs JavaScript setup beyond data
+seeding. Its `data` argument receives the same instance-local snapshot, and
+its `scope` is already seeded before the callback runs:
 
 ```js
 $component(({ data, scope }) => {
-  scope.name = data.name;
-  scope.count = 0;
+  console.log(data.name, scope.name);
+  scope.reset = () => {
+    scope.count = 0;
+  };
 });
 ```
 
-Citry runs this callback once for Ada and once for Grace. Each rendered
-component receives its own `data` and `scope`, so one click cannot change the
+Ada and Grace each receive their own scope, so one click cannot change the
 other counter.
 
 The [Alpine runtime](/advanced/alpine-runtime/) page covers plugins, lifecycle,

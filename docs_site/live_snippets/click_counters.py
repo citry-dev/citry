@@ -9,7 +9,7 @@ class ClickCounter(Component):
         pass
 
     def js_data(self, kwargs: Kwargs, slots: Slots):
-        return {"name": kwargs.name}
+        return {"name": kwargs.name, "count": 0}
 
     template = """
       <button class="counter" type="button" @click="count += 1">
@@ -18,14 +18,6 @@ class ClickCounter(Component):
         <span class="counter__count" x-text="count"></span>
         times
       </button>
-    """
-
-    js = """
-      $component(({ data, scope }) => {
-        // Pass data from Python to Alpine
-        scope.name = data.name;
-        scope.count = 0;
-      });
     """
 
 

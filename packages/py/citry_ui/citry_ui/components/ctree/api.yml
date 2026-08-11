@@ -1,0 +1,163 @@
+schema_version: 1
+family: tree
+
+components:
+  - CTree
+  - CTreeItem
+
+inputs:
+  - id: ctree-server-inputs
+    component: CTree
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Names the Tree widget.}
+      - {id: expanded, name: expanded, type: 'Sequence[str]', default: {kind: derived, display: '()'}, effect: Sets initially expanded branch values.}
+      - {id: selected, name: selected, type: 'Sequence[str]', default: {kind: derived, display: '()'}, effect: Sets initially selected Item values.}
+      - {id: selection-mode, name: selection_mode, type: {display: '"none" | "single" | "multiple"', interfaces: [CTreeSelectionMode]}, default: {kind: literal, value: single}, effect: Selects no-selection single-selection or independent multi-selection behavior.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables expansion selection and action throughout the Tree.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CTreeVariant]}, default: {kind: literal, value: plain}, effect: Selects surface treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CTreeSize]}, default: {kind: literal, value: md}, effect: Selects row and indentation geometry.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted root attributes without replacing owned semantics focus state structure or runtime.}
+  - id: ctree-client-inputs
+    component: CTree
+    channel: client
+    column_widths: [fit, 14rem, 12rem, auto]
+    entries:
+      - {id: expanded, name: expanded, type: 'string[] | null', omitted: Uses uncontrolled committed expansion., effect: Controls expanded branches while supplied; null releases control.}
+      - {id: selected, name: selected, type: 'string[] | null', omitted: Uses uncontrolled committed selection., effect: Controls selected Items while supplied; null releases control.}
+      - {id: selection-mode, name: selectionMode, type: {display: '"none" | "single" | "multiple"', interfaces: [CTreeSelectionMode]}, omitted: Uses the server value., effect: Reactively changes selection behavior.}
+      - {id: disabled, name: disabled, type: bool, omitted: Uses the server value., effect: Reactively disables Tree operations.}
+      - {id: variant, name: variant, type: {display: '"plain" | "soft" | "outline"', interfaces: [CTreeVariant]}, omitted: Uses the server value., effect: Reactively changes presentation.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CTreeSize]}, omitted: Uses the server value., effect: Reactively changes geometry.}
+      - {id: on-expanded-change, name: onExpandedChange, type: '((expanded: string[], detail: CTreeExpandedChangeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives branch expansion requests.}
+      - {id: on-selection-change, name: onSelectionChange, type: '((selected: string[], detail: CTreeSelectionChangeDetail) => void) | undefined', omitted: No component callback runs., effect: Receives Item selection requests.}
+      - {id: on-action, name: onAction, type: '((value: string, detail: CTreeActionDetail) => void) | undefined', omitted: No component callback runs., effect: Receives enabled Enter or double-click actions.}
+  - id: ctree-item-server-inputs
+    component: CTreeItem
+    channel: server
+    column_widths: [fit, 14rem, 7rem, auto]
+    entries:
+      - {id: value, name: value, type: str, default: {kind: required}, effect: Supplies stable unique Item identity.}
+      - {id: label, name: label, type: str, default: {kind: required}, effect: Supplies visible text accessible naming and typeahead text.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Keeps the Item focusable by Tree navigation but prevents operations.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the concrete Item.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds inline styles to the concrete Item.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds trusted Item attributes without replacing owned semantics identity focus state or children.}
+
+slots:
+  - id: ctree-slots
+    component: CTree
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CTreeDefaultSlotData]}, fallback: None. Requires one or more direct CTreeItem declarations.}
+  - id: ctree-item-slots
+    component: CTreeItem
+    entries:
+      - {id: default, name: default, required: false, data: {display: '{parent_value, level}', interfaces: [CTreeItemDefaultSlotData]}, fallback: Omitted for a leaf; otherwise accepts child CTreeItem declarations only.}
+
+events:
+  - id: ctree-events
+    component: CTree
+    entries:
+      - {id: expanded-change, name: onExpandedChange, signature: {display: '(expanded: string[], detail: CTreeExpandedChangeDetail) => void', interfaces: [CTreeExpandedChangeDetail]}, trigger: Enabled pointer-indicator or keyboard branch request., detail: {display: '{value, expanded, previousExpanded, controlled, source, item, sourceEvent}', interfaces: [CTreeExpandedChangeDetail]}, behavior: Commits immediately when uncontrolled and waits when controlled.}
+      - {id: selection-change, name: onSelectionChange, signature: {display: '(selected: string[], detail: CTreeSelectionChangeDetail) => void', interfaces: [CTreeSelectionChangeDetail]}, trigger: Enabled row click Space or Enter in a selectable mode., detail: {display: '{value, selected, previousSelected, controlled, source, item, sourceEvent}', interfaces: [CTreeSelectionChangeDetail]}, behavior: Applies single or independent multiple selection policy.}
+      - {id: action, name: onAction, signature: {display: '(value: string, detail: CTreeActionDetail) => void', interfaces: [CTreeActionDetail]}, trigger: Enabled Enter or double-click., detail: {display: '{value, item, sourceEvent}', interfaces: [CTreeActionDetail]}, behavior: Notifies application action without navigation or form submission.}
+
+methods: []
+
+css:
+  - id: ctree-css-variables
+    component: CTree
+    entries:
+      - {id: cui-tree-indent, name: --cui-tree-indent, type: length, purpose: Logical child indentation., default: 'sm 1rem; md 1.25rem; lg 1.5rem'}
+      - {id: cui-tree-row-gap, name: --cui-tree-row-gap, type: length, purpose: Gap between sibling rows., default: 0.125rem}
+      - {id: cui-tree-row-padding, name: --cui-tree-row-padding, type: length, purpose: Row block and inline padding., default: 'size-derived'}
+      - {id: cui-tree-radius, name: --cui-tree-radius, type: length, purpose: Root and row corner radius., default: 0.5rem}
+      - {id: cui-tree-background, name: --cui-tree-background, type: color, purpose: Root background., default: 'plain and outline transparent; soft subtle CanvasText mix'}
+      - {id: cui-tree-border-color, name: --cui-tree-border-color, type: color, purpose: Outline border., default: 'light #d0d5dd; dark #535862'}
+      - {id: cui-tree-hover-background, name: --cui-tree-hover-background, type: color, purpose: Enabled row hover background., default: '7% CanvasText mix'}
+      - {id: cui-tree-selected-background, name: --cui-tree-selected-background, type: color, purpose: Selected row background., default: 'light #dbeafe; dark #1e3a5f'}
+      - {id: cui-tree-selected-color, name: --cui-tree-selected-color, type: color, purpose: Selected row foreground., default: 'light #1849a9; dark #d1e9ff'}
+      - {id: cui-tree-muted-color, name: --cui-tree-muted-color, type: color, purpose: Disabled Item foreground., default: 'light #667085; dark #a4a7ae'}
+      - {id: cui-tree-focus-color, name: --cui-tree-focus-color, type: color, purpose: Roving focus outline., default: Highlight}
+
+attributes:
+  - id: ctree-attributes
+    component: CTree
+    entries:
+      - {id: role, name: role, element: Root or Item/group div, type: 'tree | treeitem | group', meaning: Owns Tree hierarchy semantics.}
+      - {id: aria-label, name: aria-label, element: Root or Item div, type: string, meaning: Names the Tree and each Item.}
+      - {id: tabindex, name: tabindex, element: Item div, type: '0 | -1', meaning: Implements one roving visible Tab stop.}
+      - {id: aria-disabled, name: aria-disabled, element: Item div, type: 'true | false', meaning: Reflects effective Item unavailability.}
+      - {id: aria-expanded, name: aria-expanded, element: Branch Item div, type: 'true | false', meaning: Reflects branch visibility; omitted on leaves.}
+      - {id: aria-selected, name: aria-selected, element: Selectable Item div, type: 'true | false', meaning: Reflects selection; omitted in none mode.}
+      - {id: data-selection-mode, name: data-selection-mode, element: Root div, type: 'none | single | multiple', meaning: Mirrors effective selection model.}
+      - {id: data-disabled, name: data-disabled, element: Root or Item div, type: present-or-absent, meaning: Reflects effective unavailability.}
+      - {id: data-variant, name: data-variant, element: Root div, type: 'plain | soft | outline', meaning: Mirrors effective presentation.}
+      - {id: data-size, name: data-size, element: Root div, type: 'sm | md | lg', meaning: Mirrors effective geometry.}
+      - {id: data-value, name: data-value, element: Item div, type: string, meaning: Exposes canonical Item identity.}
+      - {id: data-level, name: data-level, element: Item div, type: positive-integer-string, meaning: Exposes settled hierarchy depth.}
+      - {id: data-expanded, name: data-expanded, element: Branch Item div, type: present-or-absent, meaning: Present while expanded.}
+      - {id: data-selected, name: data-selected, element: Item div, type: present-or-absent, meaning: Present while selected.}
+      - {id: hidden, name: hidden, element: Child group div, type: present-or-absent, meaning: Removes collapsed descendants from rendering.}
+      - {id: inert, name: inert, element: Child group div, type: present-or-absent, meaning: Guards collapsed descendants from interaction.}
+
+selectors:
+  - id: ctree-selectors
+    component: CTree
+    entries:
+      - {id: part-tree, selector: '[data-citry-ui-part="tree"]', element: Root div, purpose: Stable root and attrs destination.}
+      - {id: part-item, selector: '[data-citry-ui-part="item"]', element: Tree Item div, purpose: Stable Item attrs and state surface.}
+      - {id: part-row, selector: '[data-citry-ui-part="row"]', element: Row span, purpose: Stable visible Item surface.}
+      - {id: part-indicator, selector: '[data-citry-ui-part="indicator"]', element: Decorative span, purpose: Pointer expansion target and branch indicator.}
+      - {id: part-label, selector: '[data-citry-ui-part="label"]', element: Label span, purpose: Stable visible and typeahead text.}
+      - {id: part-group, selector: '[data-citry-ui-part="group"]', element: Child group div, purpose: Stable nested collection and visibility surface.}
+
+interfaces:
+  - id: ctree-aliases
+    kind: aliases
+    entries:
+      - {id: ctree-class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: ctree-style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: ctree-selection-mode, name: CTreeSelectionMode, definition: 'Literal["none", "single", "multiple"]'}
+      - {id: ctree-variant, name: CTreeVariant, definition: 'Literal["plain", "soft", "outline"]'}
+      - {id: ctree-size, name: CTreeSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: ctree-change-source, name: CTreeChangeSource, definition: 'Literal["pointer", "keyboard", "structure"]'}
+  - {id: ctree-default-slot-data, kind: record, name: CTreeDefaultSlotData, entries: []}
+  - id: ctree-item-default-slot-data
+    kind: record
+    name: CTreeItemDefaultSlotData
+    entries:
+      - {id: parent-value, name: parent_value, type: str, meaning: Canonical parent Item identity.}
+      - {id: level, name: level, type: int, meaning: One-based child hierarchy level.}
+  - id: ctree-expanded-change-detail
+    kind: record
+    name: CTreeExpandedChangeDetail
+    entries:
+      - {id: value, name: value, type: str, meaning: Changed branch identity.}
+      - {id: expanded, name: expanded, type: bool, meaning: Requested branch state.}
+      - {id: previous-expanded, name: previousExpanded, type: 'string[]', meaning: Prior vector.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client expanded controls state.}
+      - {id: source, name: source, type: {display: '"pointer" | "keyboard" | "structure"', interfaces: [CTreeChangeSource]}, meaning: Request source.}
+      - {id: item, name: item, type: HTMLElement, meaning: Changed Item.}
+      - {id: source-event, name: sourceEvent, type: Event, meaning: Native source event.}
+  - id: ctree-selection-change-detail
+    kind: record
+    name: CTreeSelectionChangeDetail
+    entries:
+      - {id: value, name: value, type: str, meaning: Changed Item identity.}
+      - {id: selected, name: selected, type: bool, meaning: Requested selection state.}
+      - {id: previous-selected, name: previousSelected, type: 'string[]', meaning: Prior vector.}
+      - {id: controlled, name: controlled, type: bool, meaning: Whether client selected controls state.}
+      - {id: source, name: source, type: {display: '"pointer" | "keyboard" | "structure"', interfaces: [CTreeChangeSource]}, meaning: Request source.}
+      - {id: item, name: item, type: HTMLElement, meaning: Changed Item.}
+      - {id: source-event, name: sourceEvent, type: Event, meaning: Native source event.}
+  - id: ctree-action-detail
+    kind: record
+    name: CTreeActionDetail
+    entries:
+      - {id: value, name: value, type: str, meaning: Activated Item identity.}
+      - {id: item, name: item, type: HTMLElement, meaning: Activated Item.}
+      - {id: source-event, name: sourceEvent, type: Event, meaning: Native Enter or double-click event.}

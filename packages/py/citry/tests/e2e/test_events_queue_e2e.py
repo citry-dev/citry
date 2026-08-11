@@ -620,6 +620,15 @@ def _make_removing_parent_app() -> tuple[Citry, str, type[Component], type[Compo
         citry = c
         State = ChildState
 
+        js = """
+          $component({
+            props: { value: { type: Number, required: true } },
+            init: ({ props, effect, els }) => {
+              effect(() => { els[0].dataset.boundaryValue = String(props.value); });
+            },
+          });
+        """
+
         class Events:
             def ping(self, state):
                 return None
@@ -648,7 +657,7 @@ def _make_removing_parent_app() -> tuple[Citry, str, type[Component], type[Compo
           <div class="parent">
             <span class="keep" x-text="$state.keep">{{ keep }}</span>
             <c-for each="i in items">
-              <c-child />
+              <c-child $c-props="{ value: $state.keep }" />
             </c-for>
           </div>
         """
@@ -678,6 +687,7 @@ def test_dead_dispatcher_cancels_early_at_dequeue(page: Any, serve_live: Any) ->
     # click on a replaced region must not fire a ghost call.
     c, html, parent, _child = _make_removing_parent_app()
     messages = _goto(page, serve_live, c, html)
+    page.wait_for_function("document.querySelector('.child')?.dataset.boundaryValue === '1'")
     requests = _collect_event_requests(page)
     held_drop = _hold_route(page, _event_url(parent, "drop_child"))
 

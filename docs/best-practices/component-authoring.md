@@ -20,6 +20,12 @@ installation machinery. Package builds must explicitly exclude family docs,
 fixtures, reports, screenshots, and tests when those files live beside runtime
 code.
 
+Core built-in components live in `citry/components/`. A component that exists
+only because an extension is installed lives with that extension, such as
+`citry/ext/cache/components.py` or `citry/ext/i18n/components.py`. The central
+built-in registry may create it, but its source and tests stay with the feature
+that owns its behavior.
+
 ## Nest component-owned schemas
 
 Define `Kwargs` and `Slots` on the component that owns them. This keeps the
@@ -88,7 +94,8 @@ rendering implementation. Use this order inside a component class:
 1. nested `Kwargs`, `Slots`, and `State` schemas;
 2. event handlers, when present;
 3. data methods such as `template_data()`, `js_data()`, and `css_data()`; and
-4. `template`, `js`, and `css`.
+4. `template`, `js`, and `css`; and
+5. `messages`, which normally comes after the other primary assets.
 
 Keep a helper or lifecycle method near the behavior it supports, but preserve
 that overall direction. In particular, do not place a data method below the
@@ -96,7 +103,7 @@ template that reads its values.
 
 ## Declare inline assets directly
 
-Assign multiline `template`, `js`, and `css` assets directly to triple-quoted
+Assign multiline `template`, `js`, `css`, and `messages` assets directly to triple-quoted
 class fields. Citry removes their common indentation when it loads them, so
 the declarations can follow ordinary Python indentation without changing the
 rendered HTML or the loaded JavaScript and CSS:
@@ -111,10 +118,91 @@ class Notice(Component):
 ```
 
 Do not wrap these literals in `dedent()`, `strip()`, or a package-specific
-whitespace helper. Direct assignments let the checker, formatter, language
-server, and syntax highlighter recognize the embedded language. Use a file
-asset when leading indentation itself is significant or the source should be
-kept byte-for-byte.
+whitespace helper. Do not split one asset across implicitly concatenated string
+literals. Direct assignments let the checker, formatter, language server, and
+syntax highlighter recognize the embedded language. Use a file asset when
+leading indentation itself is significant or the source should be kept
+byte-for-byte.
+
+## Compose extensions through public values
+
+Citry's component rules also apply when two extensions meet:
+
+- values do not leak between extensions;
+- the handoff uses an existing public contract;
+- missing required values fail clearly; and
+- each extension keeps one small set of rules that works with every peer.
+
+For example, Cache already lets a component return any stable value from
+`Cache.vary()`. I18n already exposes the component's locale context. A localized
+component combines them through those two ordinary APIs:
+
+```python
+class Cache:
+    enabled = True
+
+    def vary(self, kwargs, slots):
+        return {
+            "kwargs": kwargs,
+            "locale_context": self.component.i18n.context.identity,
+        }
+```
+
+Cache does not need a dependency flag for each peer extension, a peer-only
+argument to `vary()`, or an import from the i18n extension. The same `vary()` rule works for
+an authenticated user, a feature flag, a tenant, or any future extension.
+
+Avoid these pair-specific bridges:
+
+- adding one extension's field to another extension's nested config;
+- changing a callback signature only when a named peer is installed;
+- importing another extension's private class or reaching into its private
+  state; and
+- adding one branch per extension combination.
+
+When every extension needs the same integration point, add one generic core
+hook. For example, any extension may ask Cache to bypass a lookup through the
+same render-cache hook. The hook must not name or special-case its callers.
+
+## Pass provided values explicitly at render roots
+
+Every direct `render()` call starts a new component tree. Pass the values that
+tree may inject through the call itself:
+
+```python
+context = app.extensions.get_extension("i18n").make_context(
+    locale="cs-CZ",
+)
+html = Page().render(
+    provides={"citry_i18n": context},
+)
+```
+
+The root and everything rendered below it may inject those values. Components,
+expressions, and slot content rendered as part of that tree receive the values
+through the normal render path.
+
+A component rendered directly inside `template_data()` is different. That call
+starts another root, so it receives nothing from the caller's tree unless the
+call passes the value again:
+
+```python
+def template_data(self, kwargs, slots):
+    locale_context = self.i18n.context
+    card_html = AccountCard().render(
+        provides={"citry_i18n": locale_context},
+    )
+    return {"card_html": card_html}
+```
+
+This small amount of repetition keeps the provided-value dependency
+predictable. Another page, task, test, or thread cannot silently change the
+nested component's locale merely by changing its own provided context.
+
+A page may accept a context through a Kwarg and call `provide()` itself when
+that makes its public dependency clearer. The root `provides` argument is the
+shorter form when the request handler already owns the value. Both use the same
+provide/inject channel, and neither puts the value into template variables.
 
 ## Use each language's naming style at the browser boundary
 

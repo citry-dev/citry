@@ -15,6 +15,8 @@ areas:
       - { title: Overview, path: /docs/ }
     groups:
       - label: Getting started
+        collapsible: true
+        section_style: true
         items:
           - { title: Install Citry, path: /getting-started/installation/ }
           - { title: Your first component, path: /getting-started/your-first-component/ }
@@ -31,6 +33,8 @@ areas:
           - { title: Build CRUD pages, path: /getting-started/build-crud-pages/ }
 
       - label: Template syntax
+        collapsible: true
+        section_style: true
         items:
           - { title: Template basics, path: /syntax/ }
           - { title: Expressions, path: /syntax/expressions/ }
@@ -41,6 +45,8 @@ areas:
           - { title: Markup in attributes, path: /syntax/nested-templates/, needs_review: true }
 
       - label: Concepts
+        collapsible: true
+        section_style: true
         items:
           - { title: Components, path: /concepts/components/, needs_review: true }
           - { title: Inputs and validation, path: /concepts/inputs-and-validation/, needs_review: true }
@@ -52,6 +58,8 @@ areas:
           - { title: Error boundaries, path: /concepts/error-boundaries/, needs_review: true }
 
       - label: Events
+        collapsible: true
+        section_style: true
         items:
           - { title: Server events, path: /events/, needs_review: true }
           - { title: Keep state between calls, path: /events/state/, needs_review: true }
@@ -60,7 +68,16 @@ areas:
           - { title: Event actions, path: /events/actions/, needs_review: true }
           - { title: Use event routes directly, path: /events/http/, needs_review: true }
 
+      - label: Caching
+        collapsible: true
+        section_style: true
+        items:
+          - { title: Cache rendered output, path: /advanced/caching/, needs_review: true }
+          - { title: Cache backends, path: /advanced/cache-backends/, needs_review: true }
+
       - label: Advanced
+        collapsible: true
+        section_style: true
         items:
           - { title: Dynamic components, path: /advanced/dynamic-components/, needs_review: true }
           - { title: Custom component values, path: /advanced/custom-component-values/, needs_review: true }
@@ -73,8 +90,6 @@ areas:
           - { title: Alpine runtime, path: /advanced/alpine-runtime/, needs_review: true }
           - { title: HTML fragments, path: /advanced/html-fragments/, needs_review: true }
           - { title: Const optimization, path: /advanced/const-optimization/, needs_review: true }
-          - { title: Cache rendered output, path: /advanced/caching/, needs_review: true }
-          - { title: Cache backends, path: /advanced/cache-backends/, needs_review: true }
           - { title: Extensions, path: /advanced/extensions/, needs_review: true }
           - { title: Component hooks, path: /advanced/hooks/, needs_review: true }
           - { title: Component libraries, path: /advanced/component-libraries/, needs_review: true }
@@ -82,6 +97,8 @@ areas:
           - { title: Command line, path: /cli/, needs_review: true }
 
       - label: Guides
+        collapsible: true
+        section_style: true
         items:
           - { title: Web frameworks, path: /web-frameworks/, needs_review: true }
           - { title: Troubleshooting, path: /guides/troubleshooting/, needs_review: true }
@@ -93,6 +110,8 @@ areas:
           - { title: Events migration parity, path: /guides/events-migration-parity/, needs_review: true }
 
       - label: About
+        collapsible: true
+        section_style: true
         items:
           - { title: Compatibility, path: /about/compatibility/ }
           - { title: Benchmarks, path: /about/benchmarks/, needs_review: true }
@@ -158,6 +177,10 @@ areas:
         items:
           - { title: VS Code, path: /ide/vscode/, needs_review: true }
           - { title: PyCharm, path: /ide/pycharm/, needs_review: true }
+      - label: Analysis
+        items:
+          - { title: Template linting, path: /ide/template-linting/, needs_review: true }
+          - { title: Diagnostics, path: /ide/diagnostics/, needs_review: true }
 
   - label: Community
     scope: site

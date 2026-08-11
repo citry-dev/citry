@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import subprocess
 import sys
+from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal, cast
 
 from citry import TemplateAnalysis
 from citry_lsp.catalog import CatalogIndex
@@ -17,11 +20,358 @@ from citry_lsp.protocol import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from citry_lsp.catalog import ComponentRecord
 
 WORKER_TIMEOUT_SECONDS = 5.0
+_SOURCE_ANALYSIS_VERSION = 1
+
+
+@dataclass(frozen=True, slots=True)
+class SourceClassRecord:
+    """One class in a statically copied Python method-resolution chain."""
+
+    module: str
+    qualname: str
+    source_file: Path
+    resolution: str
+
+
+@dataclass(frozen=True, slots=True)
+class SourceLintRecord:
+    """One direct authored lint-variable mapping copied by the app worker."""
+
+    name: str
+    kind: Literal["application", "component"]
+    owner: str
+    source_file: Path
+
+
+@dataclass(frozen=True, slots=True)
+class SourceEventRecord:
+    """One effective server-event handler copied from the worker."""
+
+    name: str
+    method_name: str
+    module: str
+    qualname: str
+    source_file: Path
+
+
+@dataclass(frozen=True, slots=True)
+class SourceStateFieldRecord:
+    """One public Events State field copied from the worker."""
+
+    name: str
+    type_display: str | None
+    description: str | None
+    module: str
+    qualname: str
+    source_file: Path
+
+
+class SourceAnalysisIndex:
+    """Validated private worker provenance keyed by component generation."""
+
+    __slots__ = (
+        "_css_asset",
+        "_css_data",
+        "_events",
+        "_js_asset",
+        "_js_data",
+        "_state",
+        "_template_asset",
+        "_template_data",
+        "_template_lint",
+    )
+
+    def __init__(self, payload: object, catalog: CatalogIndex) -> None:
+        if type(payload) is not dict or set(payload) != {"version", "components"}:
+            raise ValueError("source analysis envelope is invalid")
+        if payload.get("version") != _SOURCE_ANALYSIS_VERSION:
+            raise ValueError(f"source analysis version {payload.get('version')!r} is unsupported")
+        raw_components = payload.get("components")
+        if type(raw_components) is not list:
+            raise ValueError("source analysis components must be a list")
+        template_data: dict[str, tuple[SourceClassRecord, ...] | None] = {}
+        css_data: dict[str, tuple[SourceClassRecord, ...] | None] = {}
+        js_data: dict[str, tuple[SourceClassRecord, ...] | None] = {}
+        template_asset: dict[str, tuple[SourceClassRecord, ...] | None] = {}
+        css_asset: dict[str, tuple[SourceClassRecord, ...] | None] = {}
+        js_asset: dict[str, tuple[SourceClassRecord, ...] | None] = {}
+        events: dict[str, tuple[SourceEventRecord, ...] | None] = {}
+        state: dict[str, tuple[SourceStateFieldRecord, ...] | None] = {}
+        template_lint: dict[str, dict[str, SourceLintRecord]] = {}
+        for raw_component in raw_components:
+            (
+                definition_id,
+                data_chain,
+                css_data_chain,
+                js_data_chain,
+                asset_chain,
+                css_asset_chain,
+                js_asset_chain,
+                event_handlers,
+                state_fields,
+                lint_variables,
+            ) = _source_component(raw_component)
+            if definition_id in template_data:
+                raise ValueError(f"duplicate source analysis definition id {definition_id!r}")
+            template_data[definition_id] = data_chain
+            css_data[definition_id] = css_data_chain
+            js_data[definition_id] = js_data_chain
+            template_asset[definition_id] = asset_chain
+            css_asset[definition_id] = css_asset_chain
+            js_asset[definition_id] = js_asset_chain
+            events[definition_id] = event_handlers
+            state[definition_id] = state_fields
+            template_lint[definition_id] = lint_variables
+        expected = {component.definition_id for component in catalog.components}
+        if set(template_data) != expected:
+            raise ValueError("source analysis definition ids do not match the component catalog")
+        self._template_data = template_data
+        self._css_data = css_data
+        self._js_data = js_data
+        self._template_asset = template_asset
+        self._css_asset = css_asset
+        self._js_asset = js_asset
+        self._events = events
+        self._state = state
+        self._template_lint = template_lint
+
+    def template_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
+        """Return copied provenance for one exact catalog component."""
+        return self._template_data.get(component.definition_id)
+
+    def template_asset_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
+        """Return concrete-to-owner provenance for the effective template asset."""
+        return self._template_asset.get(component.definition_id)
+
+    def css_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
+        """Return copied provenance for the effective ``css_data`` method."""
+        return self._css_data.get(component.definition_id)
+
+    def css_asset_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
+        """Return concrete-to-owner provenance for the effective CSS asset."""
+        return self._css_asset.get(component.definition_id)
+
+    def js_data_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
+        """Return copied provenance for the effective ``js_data`` method."""
+        return self._js_data.get(component.definition_id)
+
+    def js_asset_chain(self, component: ComponentRecord) -> tuple[SourceClassRecord, ...] | None:
+        """Return concrete-to-owner provenance for the effective JS asset."""
+        return self._js_asset.get(component.definition_id)
+
+    def event_handlers(self, component: ComponentRecord) -> tuple[SourceEventRecord, ...] | None:
+        """Return exact effective server-event handler origins."""
+        return self._events.get(component.definition_id)
+
+    def state_fields(self, component: ComponentRecord) -> tuple[SourceStateFieldRecord, ...] | None:
+        """Return public browser-visible State fields with authored origins."""
+        return self._state.get(component.definition_id)
+
+    def template_lint_definition(self, component: ComponentRecord, name: str) -> SourceLintRecord | None:
+        """Return a direct lint-variable mapping for one exact component."""
+        return self._template_lint.get(component.definition_id, {}).get(name)
+
+
+def _source_component(
+    value: object,
+) -> tuple[
+    str,
+    tuple[SourceClassRecord, ...] | None,
+    tuple[SourceClassRecord, ...] | None,
+    tuple[SourceClassRecord, ...] | None,
+    tuple[SourceClassRecord, ...] | None,
+    tuple[SourceClassRecord, ...] | None,
+    tuple[SourceClassRecord, ...] | None,
+    tuple[SourceEventRecord, ...] | None,
+    tuple[SourceStateFieldRecord, ...] | None,
+    dict[str, SourceLintRecord],
+]:
+    if type(value) is not dict or set(value) != {
+        "definition_id",
+        "css_data",
+        "css_asset",
+        "js_data",
+        "js_asset",
+        "events",
+        "template_data",
+        "template_asset",
+        "template_lint",
+    }:
+        raise ValueError("source analysis component entry is invalid")
+    definition_id = value.get("definition_id")
+    if type(definition_id) is not str or not definition_id:
+        raise ValueError("source analysis definition id must be a non-empty string")
+    return (
+        definition_id,
+        _source_resolution_chain(value.get("template_data"), definition_id, "template_data"),
+        _source_resolution_chain(value.get("css_data"), definition_id, "css_data"),
+        _source_resolution_chain(value.get("js_data"), definition_id, "js_data"),
+        _source_resolution_chain(value.get("template_asset"), definition_id, "template_asset"),
+        _source_resolution_chain(value.get("css_asset"), definition_id, "css_asset"),
+        _source_resolution_chain(value.get("js_asset"), definition_id, "js_asset"),
+        *_source_event_info(value.get("events"), definition_id),
+        _source_lint_variables(value.get("template_lint"), definition_id),
+    )
+
+
+def _source_event_info(
+    value: object,
+    definition_id: str,
+) -> tuple[tuple[SourceEventRecord, ...] | None, tuple[SourceStateFieldRecord, ...] | None]:
+    if type(value) is not dict or set(value) != {"handlers", "state"}:
+        raise ValueError(f"source analysis for {definition_id!r} has invalid events metadata")
+    raw_handlers = value.get("handlers")
+    raw_state = value.get("state")
+    if raw_handlers is not None and type(raw_handlers) is not list:
+        raise ValueError(f"source analysis for {definition_id!r} has invalid event handlers")
+    handlers: list[SourceEventRecord] = []
+    names: set[str] = set()
+    for raw_handler in raw_handlers or []:
+        if type(raw_handler) is not dict or set(raw_handler) != {
+            "name",
+            "method_name",
+            "module",
+            "qualname",
+            "file",
+        }:
+            raise ValueError(f"source analysis for {definition_id!r} has an invalid event handler")
+        name = raw_handler.get("name")
+        method_name = raw_handler.get("method_name")
+        module = raw_handler.get("module")
+        qualname = raw_handler.get("qualname")
+        source_file = raw_handler.get("file")
+        if any(type(item) is not str or not item for item in (name, method_name, module, qualname, source_file)):
+            raise ValueError(f"source analysis for {definition_id!r} has empty event provenance")
+        name = cast("str", name)
+        method_name = cast("str", method_name)
+        module = cast("str", module)
+        qualname = cast("str", qualname)
+        source_file = cast("str", source_file)
+        if name in names:
+            raise ValueError(f"source analysis for {definition_id!r} has duplicate event names")
+        path = Path(source_file)
+        if not path.is_absolute():
+            raise ValueError(f"source analysis for {definition_id!r} has a relative event source")
+        names.add(name)
+        handlers.append(SourceEventRecord(name, method_name, module, qualname, path.resolve()))
+    if raw_state is not None and type(raw_state) is not list:
+        raise ValueError(f"source analysis for {definition_id!r} has invalid State fields")
+    state_fields: list[SourceStateFieldRecord] = []
+    state_names: set[str] = set()
+    for raw_field in raw_state or []:
+        if type(raw_field) is not dict or set(raw_field) != {
+            "name",
+            "type_display",
+            "description",
+            "module",
+            "qualname",
+            "file",
+        }:
+            raise ValueError(f"source analysis for {definition_id!r} has an invalid State field")
+        field_name = raw_field.get("name")
+        type_display = raw_field.get("type_display")
+        description = raw_field.get("description")
+        field_module = raw_field.get("module")
+        field_qualname = raw_field.get("qualname")
+        field_file = raw_field.get("file")
+        if (
+            type(field_name) is not str
+            or not field_name
+            or (type_display is not None and type(type_display) is not str)
+            or (description is not None and type(description) is not str)
+            or type(field_module) is not str
+            or not field_module
+            or type(field_qualname) is not str
+            or not field_qualname
+            or type(field_file) is not str
+            or not field_file
+        ):
+            raise ValueError(f"source analysis for {definition_id!r} has invalid State provenance")
+        if field_name in state_names:
+            raise ValueError(f"source analysis for {definition_id!r} has duplicate State fields")
+        path = Path(field_file)
+        if not path.is_absolute():
+            raise ValueError(f"source analysis for {definition_id!r} has a relative State source")
+        state_names.add(field_name)
+        state_fields.append(
+            SourceStateFieldRecord(
+                field_name,
+                type_display,
+                description,
+                field_module,
+                field_qualname,
+                path.resolve(),
+            )
+        )
+    return (
+        tuple(handlers) if raw_handlers is not None else None,
+        tuple(state_fields) if raw_state is not None else None,
+    )
+
+
+def _source_lint_variables(value: object, definition_id: str) -> dict[str, SourceLintRecord]:
+    """Validate direct source locators without trusting worker paths implicitly."""
+    if type(value) is not dict or set(value) != {"variables"}:
+        raise ValueError(f"source analysis for {definition_id!r} has invalid template_lint metadata")
+    raw_variables = value.get("variables")
+    if type(raw_variables) is not list:
+        raise ValueError(f"source analysis for {definition_id!r} has invalid template_lint variables")
+    variables: dict[str, SourceLintRecord] = {}
+    for raw_variable in raw_variables:
+        if type(raw_variable) is not dict or set(raw_variable) != {"name", "kind", "owner", "file"}:
+            raise ValueError(f"source analysis for {definition_id!r} has an invalid lint variable")
+        name = raw_variable.get("name")
+        kind = raw_variable.get("kind")
+        owner = raw_variable.get("owner")
+        source_file = raw_variable.get("file")
+        if type(name) is not str or not name or type(owner) is not str or not owner:
+            raise ValueError(f"source analysis for {definition_id!r} has empty lint provenance")
+        if kind not in {"application", "component"}:
+            raise ValueError(f"source analysis for {definition_id!r} has an unknown lint origin")
+        if type(source_file) is not str:
+            raise ValueError(f"source analysis for {definition_id!r} has an invalid lint source file")
+        path = Path(source_file)
+        if not path.is_absolute():
+            raise ValueError(f"source analysis for {definition_id!r} has a relative lint source path")
+        if name in variables:
+            raise ValueError(f"source analysis for {definition_id!r} has a duplicate lint variable")
+        variables[name] = SourceLintRecord(name, cast("Literal['application', 'component']", kind), owner, path)
+    return variables
+
+
+def _source_resolution_chain(
+    metadata: object,
+    definition_id: str,
+    kind: str,
+) -> tuple[SourceClassRecord, ...] | None:
+    """Validate one private concrete-to-owner class chain."""
+    if type(metadata) is not dict or set(metadata) != {"resolution_chain"}:
+        raise ValueError(f"source analysis for {definition_id!r} has invalid {kind} metadata")
+    raw_chain = metadata.get("resolution_chain")
+    if raw_chain is None:
+        return None
+    if type(raw_chain) is not list or not raw_chain:
+        raise ValueError(f"source analysis for {definition_id!r} has an invalid {kind} resolution chain")
+    chain: list[SourceClassRecord] = []
+    for raw_class in raw_chain:
+        if type(raw_class) is not dict or set(raw_class) != {"module", "qualname", "file", "resolution"}:
+            raise ValueError(f"source analysis for {definition_id!r} has an invalid class record")
+        module = raw_class.get("module")
+        qualname = raw_class.get("qualname")
+        source_file = raw_class.get("file")
+        resolution = raw_class.get("resolution")
+        if any(type(item) is not str or not item for item in (module, qualname, source_file, resolution)):
+            raise ValueError(f"source analysis for {definition_id!r} has empty class provenance")
+        module = cast("str", module)
+        qualname = cast("str", qualname)
+        path = Path(cast("str", source_file))
+        if not path.is_absolute():
+            raise ValueError(f"source analysis for {definition_id!r} has a relative source path")
+        chain.append(SourceClassRecord(module, qualname, path, cast("str", resolution)))
+    return tuple(chain)
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +381,7 @@ class ProjectState:
     status: ProjectStatus
     analysis: TemplateAnalysis | None = None
     catalog: CatalogIndex | None = None
+    source_analysis: SourceAnalysisIndex | None = None
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -101,20 +452,100 @@ def load_project(workspace: Path, app: str | None, *, timeout: float = WORKER_TI
         )
     except subprocess.TimeoutExpired:
         return _failure(workspace, app, f"App discovery exceeded the {timeout:g}s startup limit.")
-    if not completed.stdout.strip():
-        detail = completed.stderr.strip()
-        message = f"App worker exited with status {completed.returncode} without a response."
+    return _project_from_worker_output(
+        workspace,
+        app,
+        completed.returncode,
+        completed.stdout,
+        completed.stderr,
+    )
+
+
+async def load_project_async(
+    workspace: Path,
+    app: str | None,
+    *,
+    timeout: float = WORKER_TIMEOUT_SECONDS,
+) -> ProjectState:
+    """
+    Load a project without blocking the language-server event loop.
+
+    The one-shot worker remains the only process that imports project code.
+    Cancellation kills and reaps that worker before it reaches the caller, so
+    an editor shutdown or superseded reload cannot leave discovery children
+    behind.
+    """
+    workspace = workspace.resolve()
+    if app is None:
+        return _syntax_only_project(workspace)
+    process = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "citry_lsp.app_worker",
+        "--app",
+        app,
+        "--workspace",
+        str(workspace),
+        cwd=workspace,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    try:
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout)
+    except asyncio.TimeoutError:
+        await _reap_project_worker(process)
+        return _failure(workspace, app, f"App discovery exceeded the {timeout:g}s startup limit.")
+    except asyncio.CancelledError:
+        await _reap_project_worker_cancellation_safe(process)
+        raise
+    return _project_from_worker_output(
+        workspace,
+        app,
+        process.returncode,
+        stdout.decode(errors="replace"),
+        stderr.decode(errors="replace"),
+    )
+
+
+def _syntax_only_project(workspace: Path) -> ProjectState:
+    return ProjectState(
+        ProjectStatus(
+            interpreter=sys.executable,
+            workspace=str(workspace),
+            mode="syntax-only",
+            message="No Citry app configured; registry-derived checks and editor features are disabled.",
+        )
+    )
+
+
+def _project_from_worker_output(
+    workspace: Path,
+    app: str,
+    returncode: int | None,
+    stdout: str,
+    stderr: str,
+) -> ProjectState:
+    """Validate one completed worker response for sync and async callers."""
+    if not stdout.strip():
+        detail = stderr.strip()
+        message = f"App worker exited with status {returncode} without a response."
         if detail:
             message = f"{message} {detail[:1000]}"
         return _failure(workspace, app, message)
     try:
-        payload = json.loads(completed.stdout)
+        payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
         return _failure(workspace, app, f"App worker returned invalid JSON: {exc}")
     if type(payload) is not dict or payload.get("ok") is not True:
         worker_detail: object = payload.get("error") if type(payload) is dict else None
-        message = str(worker_detail or f"App worker exited with status {completed.returncode}.")
+        message = str(worker_detail or f"App worker exited with status {returncode}.")
         return _failure(workspace, app, message)
+    # The target kind changes what the copied registry can claim, so status
+    # must carry that boundary even though both paths provide registry facts.
+    try:
+        target_message = _target_status_message(payload.get("target"))
+    except (TypeError, ValueError) as exc:
+        return _failure(workspace, app, f"App worker protocol mismatch: {exc}")
     raw_catalog = payload.get("catalog")
     if type(raw_catalog) is dict:
         raw_schema_version = raw_catalog.get("schema_version")
@@ -130,6 +561,11 @@ def load_project(workspace: Path, app: str | None, *, timeout: float = WORKER_TI
     try:
         analysis = TemplateAnalysis.from_dict(payload.get("analysis"))
         catalog = CatalogIndex(raw_catalog)
+        lint_ids = set(analysis.component_lint)
+        catalog_ids = {component.definition_id for component in catalog.components}
+        if lint_ids != catalog_ids:
+            msg = "template lint component ids do not match the component catalog"
+            raise ValueError(msg)
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}")
     series = _version_series(catalog.citry_version)
@@ -150,10 +586,17 @@ def load_project(workspace: Path, app: str | None, *, timeout: float = WORKER_TI
             citry_version=catalog.citry_version,
             catalog_schema_version=catalog.schema_version,
         )
+    try:
+        source_analysis = SourceAnalysisIndex(payload.get("source_analysis"), catalog)
+    except (TypeError, ValueError) as exc:
+        return _failure(workspace, app, f"App worker protocol mismatch: {exc}")
     project_output = payload.get("project_output")
-    status_message: str | None = (
-        f"Project output was captured during discovery: {project_output}" if project_output else None
-    )
+    # Preserve both the registry boundary and captured import output instead
+    # of letting one useful status message hide the other.
+    status_messages = [target_message] if target_message is not None else []
+    if project_output:
+        status_messages.append(f"Project output was captured during discovery: {project_output}")
+    status_message = " ".join(status_messages) or None
     return ProjectState(
         ProjectStatus(
             interpreter=sys.executable,
@@ -167,7 +610,33 @@ def load_project(workspace: Path, app: str | None, *, timeout: float = WORKER_TI
         ),
         analysis=analysis,
         catalog=catalog,
+        source_analysis=source_analysis,
     )
+
+
+async def _reap_project_worker(process: asyncio.subprocess.Process) -> None:
+    """Terminate and reap a disposable app-discovery worker."""
+    if process.returncode is None:
+        with suppress(ProcessLookupError, PermissionError):
+            process.kill()
+    try:
+        await process.communicate()
+    except (BrokenPipeError, ConnectionResetError, ProcessLookupError):
+        await process.wait()
+
+
+async def _reap_project_worker_cancellation_safe(process: asyncio.subprocess.Process) -> None:
+    """Finish worker ownership cleanup even under repeated cancellation."""
+    reaping = asyncio.create_task(_reap_project_worker(process))
+    cancellation: asyncio.CancelledError | None = None
+    while not reaping.done():
+        try:
+            await asyncio.shield(reaping)
+        except asyncio.CancelledError as exc:
+            cancellation = exc
+    await reaping
+    if cancellation is not None:
+        raise cancellation
 
 
 def _failure(
@@ -192,6 +661,28 @@ def _failure(
     )
 
 
+def _target_status_message(value: object) -> str | None:
+    """Describe when the worker copied a library rather than a host app."""
+    if type(value) is not dict:
+        raise TypeError("target metadata must be an object")
+    kind = value.get("kind")
+    if kind == "citry":
+        if set(value) != {"kind"}:
+            raise ValueError("Citry target metadata contains unsupported fields")
+        return None
+    if kind != "component-library":
+        raise ValueError(f"target kind {kind!r} is unsupported")
+    name = value.get("name")
+    if type(name) is not str or not name:
+        raise TypeError("component-library target name must be a non-empty string")
+    if set(value) != {"kind", "name"}:
+        raise ValueError("component-library target metadata contains unsupported fields")
+    return (
+        f"Component library {name!r} loaded with Citry's built-ins in library-only registry mode; "
+        "host-app components, configuration, and host-provided extensions are not included."
+    )
+
+
 def _version_series(version: str) -> tuple[int, int] | None:
     try:
         major, minor, *_ = version.split(".")
@@ -200,4 +691,11 @@ def _version_series(version: str) -> tuple[int, int] | None:
         return None
 
 
-__all__ = ["WORKER_TIMEOUT_SECONDS", "ProjectState", "load_project"]
+__all__ = [
+    "WORKER_TIMEOUT_SECONDS",
+    "ProjectState",
+    "SourceAnalysisIndex",
+    "SourceClassRecord",
+    "load_project",
+    "load_project_async",
+]

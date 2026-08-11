@@ -14,17 +14,29 @@ from lxml import html as lxml_html
 
 from docs_site._internal.components.landing import (
     _DEPTH_CASES,
+    _EDITOR_MARKS,
+    _EDITOR_NOTES,
+    _EDITOR_PATH,
     _ERROR_CASES,
     _HOST_CASES,
     _TOUR_PATH,
     _TOUR_STOPS,
     LandingDepth,
+    LandingEditorDemoMarkup,
     LandingTour,
     _capture,
     _check_depth_docs,
     _check_host_entrypoints,
+    _editor_code,
+    _editor_ranges,
     _render_diagnostics,
     _tour_code,
+)
+from docs_site._internal.components.landing_composer import (
+    _RECIPES,
+    _initial_state,
+    _instantiate,
+    _serialize_source,
 )
 from docs_site._internal.nav import SCOPE_SITE, NavArea, NavItem, NavTree
 from docs_site._internal.pipeline import render_page
@@ -60,6 +72,83 @@ def test_landing_layout_keeps_shared_header_and_omits_document_chrome() -> None:
     assert not document.xpath('//aside[@id="djc-toc"]')
     assert not document.xpath('//nav[contains(@class, "djc-breadcrumbs")]')
     assert not document.xpath('//div[contains(@class, "djc-layout")]')
+    assert document.xpath('//script[@type="module" and @src="/static/playground/landing_composer.js"]')
+
+
+def test_landing_composer_catalog_and_fallback_are_generated_together() -> None:
+    """The palette and inert recipe bank share one checked catalog."""
+    source = Path("docs_site/content/index.md").read_text(encoding="utf-8")
+    document = lxml_html.document_fromstring(render_page(source, current_path="").html)
+    composer = document.xpath("//*[@data-landing-composer]")[0]
+    banks = composer.xpath('.//script[@type="application/json" and @data-composer-recipe-bank]')
+    assert len(banks) == 1
+    recipe_markup = json.loads(banks[0].text)
+    recipe_document = lxml_html.fragment_fromstring(recipe_markup, create_parent="div")
+    templates = recipe_document.xpath(".//template[@data-composer-recipe-template]")
+
+    assert {template.get("data-composer-recipe-template") for template in templates} == {
+        recipe["id"] for recipe in _RECIPES
+    }
+    assert len(composer.xpath(".//*[@data-composer-palette-item]")) == len(_RECIPES)
+    assert not composer.xpath('.//*[@data-composer-palette-drag="stack"]')
+    assert composer.xpath(
+        './/div[contains(@class, "landing-composer__bar")]'
+        '//h3[@id="landing-composer-palette-title" and normalize-space(.)="Citry UI components"]'
+    )
+    assert composer.xpath(
+        './/aside[contains(@class, "landing-composer__palette")][@aria-labelledby="landing-composer-palette-title"]'
+    )
+    assert len(composer.xpath('./div[contains(@class, "landing-composer__layout")]/*')) == 2
+    assert len(composer.xpath(".//aside")) == 1
+    assert not composer.xpath(".//textarea | .//iframe")
+    assert not composer.xpath(
+        ".//*[@data-composer-announcer or @data-composer-status]"
+        " | .//*[contains(@class, 'landing-composer__workspace-heading')]"
+    )
+    assert composer.xpath('.//section[@aria-label="Component sample page"]')
+    assert all(len(item.xpath("./button")) == 1 for item in composer.xpath(".//*[@data-composer-palette-item]"))
+    assert len(composer.xpath(".//*[@data-composer-canvas]/*[@data-composer-drop]")) == 1
+    assert not composer.xpath(".//*[@data-composer-undo] | .//*[@data-composer-node] | .//*[@data-composer-slot]")
+    assert recipe_document.xpath(".//style[@data-citry-css-class]")
+    assert not composer.xpath('.//script[not(@type="application/json")]')
+    assert not recipe_document.xpath(".//p")
+
+    for template in templates:
+        assert template.xpath(".//*[@data-citry-ui-part]")
+        assert len(template.xpath(".//*[@data-composer-drop]")) <= 2
+
+    card = recipe_document.xpath('.//template[@data-composer-recipe-template="card"]')[0]
+    assert card.xpath('.//*[@data-citry-ui-part="card"]')
+    assert card.xpath('.//*[@data-citry-ui-part="skeleton"]')
+    assert card.xpath('.//*[@data-citry-ui-part="actions"]/*[@data-composer-drop]')
+    grid = recipe_document.xpath('.//template[@data-composer-recipe-template="grid"]')[0]
+    assert len(grid.xpath(".//*[@data-composer-drop]")) == 2
+
+
+def test_every_landing_composer_recipe_produces_runnable_citry_source() -> None:
+    """A palette entry cannot ship unless the generated source constructs the real family."""
+    state = _initial_state()
+    state["root"]["slots"]["default"] = []
+    for recipe in _RECIPES:
+        node, state["nextId"] = _instantiate(recipe["node"], start=state["nextId"])
+        state["root"]["slots"]["default"].append(node)
+
+    source = _serialize_source(state)
+    namespace: dict[str, object] = {}
+    exec(compile(source, "<landing-composer>", "exec"), namespace)  # noqa: S102 - generated trusted fixture
+    rendered = str(namespace["preview"])
+    document = lxml_html.fragment_fromstring(rendered, create_parent="div")
+
+    assert document.xpath('.//*[@data-citry-ui-part="tabs"]')
+    assert document.xpath('.//*[@data-citry-ui-part="card"]')
+    assert document.xpath('.//button[@data-citry-ui-part="button"]')
+    assert document.xpath('.//*[@data-citry-ui-part="grid"]')
+
+
+def test_non_landing_pages_do_not_load_the_composer_controller() -> None:
+    result = render_page("---\ntitle: Guide\n---\n\n# Guide\n", current_path="guide/")
+
+    assert "/static/playground/landing_composer.js" not in result.html
 
 
 def test_reliability_diagnostics_come_from_real_failed_renders() -> None:
@@ -124,9 +213,6 @@ def test_the_landing_page_publishes_no_unrendered_markdown() -> None:
     text = "\n".join(content.itertext())
 
     assert not [line for line in text.split("\n") if line.startswith(("### ", "- "))]
-    # The trust cards carry real headings and links, not markdown source.
-    assert content.xpath('//div[@class="landing-trust-card"]/h3')
-    assert content.xpath('//a[@href="/about/compatibility/"]')
 
     # Component markup that lands in a markdown block must be flushed left.
     # Indented HTML there is read as an indented code block, which printed the
@@ -248,6 +334,126 @@ def test_walkthrough_notes_render_markup_rather_than_escaping_it() -> None:
             assert not control.xpath(f".//{rendered.strip('<>').split()[0]}")
 
 
+def test_editor_demo_marks_exact_symbols_without_changing_the_source() -> None:
+    """Interactive wrappers add behavior, but must not repaint or rewrite the sample."""
+    source = Path(_EDITOR_PATH).read_text(encoding="utf-8")
+    rendered = _editor_code(source, _EDITOR_MARKS)
+    document = lxml_html.fragment_fromstring(rendered, create_parent="div")
+    annotations = document.xpath(".//*[@data-editor-annotation]")
+    symbols = document.xpath(".//button[@data-editor-symbol]")
+    definitions = document.xpath(".//span[@data-editor-definition]")
+
+    assert len(annotations) == len(_EDITOR_MARKS)
+    assert document.xpath(".//pre")[0].text_content() == source
+    assert {item.get("data-editor-annotation") for item in annotations} == {mark["id"] for mark in _EDITOR_MARKS}
+    assert {item.get("data-editor-definition") for item in definitions} == {
+        mark["definition"] for mark in _EDITOR_MARKS if mark.get("definition")
+    }
+    assert {item.get("data-editor-symbol") for item in symbols} == {
+        mark["id"] for mark in _EDITOR_MARKS if not mark.get("definition")
+    }
+    # The Pygments token span remains inside the button, so the dotted target
+    # keeps exactly the syntax colour it had before becoming interactive.
+    assert all(item.xpath(".//span[@class]") for item in annotations)
+
+
+def test_editor_demo_annotations_fail_closed_when_the_source_drifts() -> None:
+    """A stale or ambiguous annotation must fail the page instead of marking the wrong name."""
+    stale = ({**_EDITOR_MARKS[0], "needle": "text that is not in the source"},)
+    ambiguous = ({**_EDITOR_MARKS[0], "needle": "title", "symbol": "title"},)
+    source = Path(_EDITOR_PATH).read_text(encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="needs one occurrence"):
+        _editor_ranges(source, stale)
+    with pytest.raises(RuntimeError, match="needs one occurrence"):
+        _editor_ranges(source, ambiguous)
+
+
+def test_editor_demo_pairs_symbols_hovers_notes_and_definitions() -> None:
+    """Every interactive affordance names a server-rendered target that exists."""
+    document = lxml_html.document_fromstring(str(LandingEditorDemoMarkup()))
+    showcase = document.xpath("//*[@data-editor-showcase]")[0]
+    symbols = {item.get("data-editor-symbol"): item for item in document.xpath("//*[@data-editor-symbol]")}
+    hover = document.xpath("//*[@data-editor-hover]")[0]
+    definitions = {item.get("data-editor-definition") for item in document.xpath("//*[@data-editor-definition]")}
+
+    assert "landing-editor__code" in showcase[0].classes
+    assert "landing-editor__notes" in showcase[1].classes
+    assert hover.get("role") == "dialog"
+    assert hover.get("hidden") == ""
+    assert hover.xpath(".//*[@data-editor-hover-signature]")
+    docs_link = hover.xpath(".//a[@data-editor-hover-docs]")[0]
+    assert docs_link.get("target") == "_blank"
+    assert docs_link.get("rel") == "noopener"
+    assert hover.xpath(".//a[@data-editor-jump]")
+    for symbol in symbols.values():
+        assert symbol.get("aria-controls") == hover.get("id")
+        assert symbol.get("aria-expanded") == "false"
+        assert symbol.get("aria-label")
+        assert symbol.get("data-editor-signature")
+        assert '<span class="' in symbol.get("data-editor-signature-html")
+        assert symbol.get("data-editor-provenance")
+        assert symbol.get("data-editor-description")
+        assert symbol.get("data-editor-docs").startswith("/")
+        if target := symbol.get("data-editor-target"):
+            assert target in definitions
+
+    # Destination declarations remain visually inert until a jump flashes them.
+    assert not document.xpath("//*[@data-editor-definition and @data-editor-symbol]")
+
+    assert symbols["title-use"].get("data-editor-placement") == "below"
+    assert all(
+        symbol.get("data-editor-placement") is None for mark_id, symbol in symbols.items() if mark_id != "title-use"
+    )
+
+    expected_targets = {
+        "title-use": "template-title",
+        "member-type-use": "member-type",
+        "invite-type-use": "invite-type",
+        "kwargs-title-use": "kwarg-title",
+        "kwargs-members-use": "kwarg-members",
+        "member-chip-use": "member-chip",
+        "member-chip-name-use": "member-chip-name",
+        "member-chip-status-use": "member-chip-status",
+        "member-name-use": "member-name",
+        "nested-title-use": "template-title",
+        "member-chip-online-use": "member-chip-online",
+        "member-online-use": "member-online",
+        "event-name": "event-invite",
+        "email-use": "scope-email",
+        "inviting-use": "js-inviting",
+        "visible-members-use": "visible-members",
+        "data-members-slice-use": "js-members",
+        "data-members-fallback-use": "js-members",
+    }
+    assert {mark_id: symbols[mark_id].get("data-editor-target") for mark_id in expected_targets} == expected_targets
+
+    expected_diagnostics = {
+        "unknown-template-variable": "citry.template.unknown-variable",
+        "unknown-alpine-variable": "citry.alpine.unknown-variable",
+        "unknown-event": "citry.browser.unknown-server-event",
+    }
+    for mark_id, code in expected_diagnostics.items():
+        symbol = symbols[mark_id]
+        assert "landing-editor__symbol--error" in symbol.classes
+        assert symbol.get("data-editor-severity") == "error"
+        assert symbol.get("data-editor-diagnostic") == code
+
+    note_targets = {note.get("data-editor-note") for note in document.xpath("//*[@data-editor-note]")}
+    assert note_targets == {note["mark"] for note in _EDITOR_NOTES}
+    assert note_targets <= symbols.keys()
+
+
+def test_the_editor_demo_source_is_valid_python() -> None:
+    """The interactive surface is generated from code a reader can copy and edit."""
+    source = Path(_EDITOR_PATH).read_text(encoding="utf-8")
+
+    ast.parse(source)
+    assert source.index("class InvitePanel(Component):") < source.index("class MemberChip(Component):")
+    assert 'c-status="<>\n' in source
+    assert "<small c-title='title'>" in source
+
+
 def test_injected_component_markup_survives_the_markdown_pass() -> None:
     """
     Generated markup must reach the page as written, not as paragraphs.
@@ -259,7 +465,7 @@ def test_injected_component_markup_survives_the_markdown_pass() -> None:
     source = (Path("docs_site/content/index.md")).read_text(encoding="utf-8")
     html = render_page(source, current_path="").html
 
-    for stray in ("<p><div", "<p></div>", "<p></p>"):
+    for stray in ("<p><div", "<p></div>", "<p></p>", "<p></template>"):
         assert stray not in html, stray
     # The attribute that asks for this is consumed, not published.
     assert 'markdown="0"' not in html

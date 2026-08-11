@@ -4,10 +4,11 @@
 
 from dataclasses import FrozenInstanceError
 from pathlib import Path
+from typing import Annotated
 
 import pytest
 
-from citry import Citry, CitrySettings, Component, Extension
+from citry import Citry, CitrySettings, Component, Extension, LintSettings
 from citry import citry as default_citry
 
 
@@ -16,7 +17,17 @@ class TestCitryInstance:
         c = Citry()
         # A fresh instance carries exactly the built-in components (created
         # lazily on the first lookup), nothing else.
-        assert set(c.components) == {"provide", "cache", "component", "element", "error-fallback", "js", "css"}
+        assert set(c.components) == {
+            "provide",
+            "cache",
+            "component",
+            "element",
+            "error-fallback",
+            "js",
+            "css",
+            "i18n",
+            "trans",
+        }
 
     def test_repr(self):
         c = Citry()
@@ -35,6 +46,62 @@ class TestCitryInstance:
         with pytest.raises(ValueError, match="mode must be one of"):
             CitrySettings(mode="prod")
 
+    def test_lint_settings_are_typed_copied_and_stored(self):
+        variables = {"request": Annotated[str, "Current request."]}
+        alpine_variables = {"$featureFlags": Annotated[dict[str, bool], "Feature flags."]}
+        component_js_globals = {"analytics": Annotated[object, "Application analytics client."]}
+        lint = LintSettings(
+            rule_unknown_template_variable="warning",
+            template_variables=variables,
+            rule_unknown_alpine_variable="warning",
+            alpine_variables=alpine_variables,
+            rule_unknown_component_js_variable="warning",
+            component_js_globals=component_js_globals,
+        )
+        app = Citry(lint=lint)
+        variables["later"] = str
+        alpine_variables["later"] = str
+        component_js_globals["later"] = str
+
+        assert app.settings.lint is lint
+        assert lint.template_variables == {
+            "request": Annotated[str, "Current request."],
+        }
+        assert lint.alpine_variables == {
+            "$featureFlags": Annotated[dict[str, bool], "Feature flags."],
+        }
+        assert lint.rule_unknown_component_js_variable == "warning"
+        assert lint.component_js_globals == {
+            "analytics": Annotated[object, "Application analytics client."],
+        }
+
+    @pytest.mark.parametrize("severity", ["warn", "ERROR", "", 1, None])
+    def test_lint_settings_reject_invalid_severity(self, severity):
+        with pytest.raises(ValueError, match="rule_unknown_template_variable"):
+            LintSettings(rule_unknown_template_variable=severity)
+        with pytest.raises(ValueError, match="rule_i18n_missing_param_type"):
+            LintSettings(rule_i18n_missing_param_type=severity)
+        with pytest.raises(ValueError, match="rule_unknown_alpine_variable"):
+            LintSettings(rule_unknown_alpine_variable=severity)
+        with pytest.raises(ValueError, match="rule_unknown_component_js_variable"):
+            LintSettings(rule_unknown_component_js_variable=severity)
+
+    @pytest.mark.parametrize("name", ["", "two words", "class", "K"])  # noqa: RUF001
+    def test_lint_settings_reject_names_without_exact_python_identity(self, name):
+        with pytest.raises(ValueError, match="invalid template variable name"):
+            LintSettings(template_variables={name: str})
+
+    @pytest.mark.parametrize("name", ["", "two words", "class", "item.name", "1value"])
+    def test_lint_settings_reject_invalid_alpine_variable_names(self, name):
+        with pytest.raises(ValueError, match="invalid Alpine variable name"):
+            LintSettings(alpine_variables={name: str})
+        with pytest.raises(ValueError, match="invalid JavaScript identifier"):
+            LintSettings(component_js_globals={name: str})
+
+    def test_settings_reject_a_non_lint_settings_value(self):
+        with pytest.raises(TypeError, match="must be a LintSettings"):
+            CitrySettings(lint={})
+
     def test_clear(self):
         c = Citry()
 
@@ -44,7 +111,17 @@ class TestCitryInstance:
         assert "a" in c.components
         c.clear()
         # User components are gone; the built-ins are recreated on lookup.
-        assert set(c.components) == {"provide", "cache", "component", "element", "error-fallback", "js", "css"}
+        assert set(c.components) == {
+            "provide",
+            "cache",
+            "component",
+            "element",
+            "error-fallback",
+            "js",
+            "css",
+            "i18n",
+            "trans",
+        }
 
     def test_settings_stored(self):
         # Citry now takes a typed settings schema (CitrySettings) rather than

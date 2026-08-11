@@ -11,13 +11,20 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import (
+    CAlert,
     CButton,
+    CCard,
+    CCheckbox,
     CCombobox,
     CComboboxOption,
     CDialog,
+    CDrawer,
     CField,
     CForm,
+    CIcon,
     CInput,
+    CNativeSelect,
+    CNativeSelectOption,
     CTab,
     CTable,
     CTableCell,
@@ -25,6 +32,9 @@ from citry_ui import (
     CTableRow,
     CTabPanel,
     CTabs,
+    CTextarea,
+    CToastMessage,
+    CToastRegion,
 )
 
 
@@ -45,7 +55,27 @@ def _page_html(app: Citry, value: object, *, include_css: bool = False) -> str:
 
 
 def test_every_public_styled_component_exposes_root_class_and_style_inputs():
+    # One immutable installation covers the whole public-input matrix; the
+    # assertions exercise component roots, not registration isolation.
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    class StyledInputsPage(Component):
+        citry = app
+
+        class Kwargs:
+            value: object
+
+        template = """
+          <main>{{ value }}</main>
+        """
+
     component_factories = (
+        (
+            CAlert,
+            "alert",
+            lambda: CAlert(slots={"default": "Notice"}),
+        ),
         (
             CButton,
             "button",
@@ -62,6 +92,16 @@ def test_every_public_styled_component_exposes_root_class_and_style_inputs():
             lambda: CDialog(slots={"title": "Details", "default": "Body"}),
         ),
         (
+            CDrawer,
+            "drawer",
+            lambda: CDrawer(slots={"title": "Details", "default": "Body"}),
+        ),
+        (
+            CToastRegion,
+            "region",
+            lambda: CToastRegion(items=(CToastMessage(id="ready", title="Ready"),)),
+        ),
+        (
             CField,
             "field",
             lambda: CField(slots={"label": "Name", "default": "Control"}),
@@ -72,9 +112,34 @@ def test_every_public_styled_component_exposes_root_class_and_style_inputs():
             lambda: CInput(name="name"),
         ),
         (
+            CTextarea,
+            "textarea",
+            lambda: CTextarea(name="notes"),
+        ),
+        (
+            CNativeSelect,
+            "native-select",
+            lambda: CNativeSelect(options=[CNativeSelectOption("reef", "Coral reef")]),
+        ),
+        (
+            CCheckbox,
+            "checkbox",
+            lambda: CCheckbox(slots={"default": "Choice"}),
+        ),
+        (
             CForm,
             "form",
             lambda: CForm(slots={"default": "Fields"}),
+        ),
+        (
+            CIcon,
+            "icon",
+            lambda: CIcon(name="leaf"),
+        ),
+        (
+            CCard,
+            "card",
+            lambda: CCard(slots={"default": "Details"}),
         ),
         (
             CTable,
@@ -90,8 +155,6 @@ def test_every_public_styled_component_exposes_root_class_and_style_inputs():
         field_names = {field.name for field in fields(definition.Kwargs)}
         assert {"class_", "style"} <= field_names
 
-        app = Citry(autodiscover=False)
-        app.register_library(citry_ui)
         invocation = factory()
         invocation = definition(
             **dict(invocation.kwargs),
@@ -99,7 +162,7 @@ def test_every_public_styled_component_exposes_root_class_and_style_inputs():
             style={"--consumer-token": definition.__name__},
             slots=dict(invocation.slots),
         )
-        html = _page_html(app, invocation)
+        html = str(StyledInputsPage(value=invocation))
         root = re.search(rf'<[^>]+data-citry-ui-part="{part}"[^>]*>', html)
 
         assert root is not None
@@ -568,8 +631,8 @@ def test_input_merges_external_descriptions_without_dropping_field_relationships
             "default": CInput(
                 name="name",
                 attrs={
-                    "aria-describedby": "external-description name-control-description",
-                    "aria-errormessage": "external-error",
+                    "ARIA-DESCRIBEDBY": "external-description name-control-description",
+                    "ARIA-ERRORMESSAGE": "external-error",
                 },
             ),
             "description": "Public name",
@@ -581,6 +644,42 @@ def test_input_merges_external_descriptions_without_dropping_field_relationships
 
     assert 'aria-describedby="name-control-description name-control-error external-description"' in html
     assert 'aria-errormessage="name-control-error external-error"' in html
+
+
+def test_input_rejects_case_insensitive_form_conflicts_and_dynamic_rebinding():
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+
+    with pytest.raises(ValueError, match="different native form owner"):
+        _page_html(
+            app,
+            CForm(
+                id="inside",
+                slots={"default": CInput(attrs={"FORM": "outside"})},
+            ),
+        )
+
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+    with pytest.raises(ValueError, match="dynamically bind HTML attribute 'form'"):
+        _page_html(app, CInput(attrs={"X-BIND:FORM": "owner"}))
+
+
+@pytest.mark.parametrize("omitted_value", [None, False])
+def test_input_omitted_case_insensitive_form_attr_keeps_enclosing_owner(omitted_value):
+    app = Citry(autodiscover=False)
+    app.register_library(citry_ui)
+    html = _page_html(
+        app,
+        CForm(
+            id="inside",
+            slots={"default": CInput(attrs={"FORM": omitted_value})},
+        ),
+    )
+
+    input_tag = re.search(r'<input[^>]*data-citry-ui-part="input"[^>]*>', html)
+    assert input_tag is not None
+    assert " form=" not in input_tag.group(0).lower()
 
 
 def test_explicit_field_control_ids_always_generate_unique_relationship_ids():

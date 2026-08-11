@@ -31,13 +31,20 @@ class CheckCommand(ExtensionCommand):
     template loaders and transform hooks are not called because their output
     cannot yet be mapped back to authored source.
 
+    Registry mode also applies the application's template lint policy. Unknown
+    free roots are errors by default, while an explicitly extra-preserving
+    schema caps its finding at warning. Runtime globals and declared
+    analysis-only variables count as known. Static mode has no component
+    namespace and therefore does not run this rule.
+
     If explicit app import or registry preparation fails, report that failure
     once, discard all registry-derived facts, finish the static check, and exit
-    with status 2. Otherwise, exit with status 1 for source or template findings
-    and return normally for a clean status 0 result. A missing mode or a command
-    that combines ``--app`` with ``--static`` exits with status 2 without
-    importing the app or scanning source. ``build_check_command`` binds the
-    per-invocation app-selection state used by :meth:`handle`.
+    with status 2. Otherwise, exit with status 1 when any source or template
+    error is present. Warning-only and clean reports return normally with status
+    0. A missing mode or a command that combines ``--app`` with ``--static``
+    exits with status 2 without importing the app or scanning source.
+    ``build_check_command`` binds the per-invocation app-selection state used by
+    :meth:`handle`.
     """
 
     name = "check"
@@ -88,7 +95,7 @@ class CheckCommand(ExtensionCommand):
             for note in report.notes:
                 sys.stderr.write(f"citry check: note: {note}\n")
             for finding in report.findings:
-                sys.stderr.write(f"{finding.origin}: {finding.message}\n")
+                sys.stderr.write(f"{finding.origin}: {finding.severity}: {finding.message}\n")
         if report.exit_code:
             raise SystemExit(report.exit_code)
 
@@ -107,6 +114,7 @@ def _json_report(report: CheckReport, *, static: bool, app_spec: str | None) -> 
             {
                 "origin": finding.origin,
                 "code": finding.code,
+                "severity": finding.severity,
                 "message": finding.message,
                 "range": (
                     {

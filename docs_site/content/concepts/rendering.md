@@ -131,6 +131,27 @@ this order, with later entries winning:
 The component therefore keeps control of names it returns itself. Render
 globals add shared defaults; they do not overwrite component data.
 
+## Start a tree with provided values
+
+Pass `provides` when the root and several descendants need the same value, but
+that value should not become a template variable:
+
+```python
+rendered = AccountPage().render(
+    provides={"request": request},
+)
+```
+
+The root and everything Citry renders below it may opt in with
+[`inject()`][citry.Component.inject]. Each direct `render()` call is a new
+root. A component rendered directly inside `template_data()` receives no
+provided values from the outer render unless that nested call passes them
+again. This keeps the nested call's inputs visible and its output independent
+of the outer tree's provided values.
+
+Read [Provide and inject](/concepts/provide-and-inject/) for subtree providers, slot
+behavior, and explicit boundaries.
+
 ## Pass ordinary component data explicitly
 
 A child does not inherit the variables returned by its parent's

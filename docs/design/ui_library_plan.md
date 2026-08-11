@@ -1,18 +1,32 @@
 # Plan: the Citry UI component library
 
-**Status (2026-08-06): Tabs, Button, Field/Input, Form, Dialog, Combobox, and
-Table reference families are complete in code and public documentation.**
+**Status (2026-08-09): thirty-one production families are complete in code and
+public documentation.**
 Phases 0 through 6 are complete. Citry's
 generic publishing contracts, slot contracts, client ambient context, and
-docs live-component host are implemented. `citry 0.3.1` and `citry_core 1.4.0`
-provide the released floor for the work, including the corrected Events
-browser asset. Phase 7 has direct styled implementations for Button,
-Field/Input, Form, Tabs, Dialog, Combobox, and semantic Table, plus
-repeatable-form and representative branded compositions. Tabs is the reference
-quality bar. Button, Field/Input, Form, Dialog, and Combobox have now repeated
-that full research, specification, example-planning, implementation, test, and
-documentation pass. Human visual and content polish plus live browser review
-remain for all seven families.
+docs live-component host are implemented. Phase 7 began on the released
+`citry 0.3.1` and `citry_core 1.4.0` floor. Current source development targets
+`citry 0.3.2` and `citry_core 1.5.0`; publication waits for those artifacts.
+Phase 7 has direct styled implementations for Button, Field/Input, Form, Tabs,
+Dialog, Combobox, semantic Table, Icon, Card, Textarea, Native Select,
+Checkbox, Alert, and Accordion, plus repeatable-form and representative branded
+compositions. Flow layout adds server-only Stack and Group, Badge adds a
+static inline status/metadata primitive, Progress adds native determinate and
+indeterminate task feedback, Spinner adds compact unknown-duration activity
+feedback, and Radio adds native single-choice groups integrated with
+Field and Form, while Switch adds immediate native on/off settings with a
+distinct semantic and visual contract. Breadcrumbs adds zero-JavaScript,
+semantic hierarchical navigation. Divider, Avatar, Skeleton, ButtonGroup,
+Toggle, Pagination, and semantic List complete the third source-development
+batch with separation, identity, loading-placeholder, grouped-action,
+pressed-choice, finite-navigation, and collection surfaces. Every family has repeated the research,
+specification, example-planning, implementation, focused-test, and
+documentation pipeline established by Tabs. The family-specific human release
+matrix remains for all thirty-one families. Container and Grid have now
+completed the first post-batch unblocking pass with a fixed flat responsive
+vocabulary, intrinsic auto-fit mode, asymmetric spans, and no utility-framework
+expansion. Popover and Tooltip complete the first two overlay-family passes on
+the ratified private anchored-layer foundation.
 
 This plan defines the research and decision process for Citry's
 official component library. The ratified product
@@ -30,7 +44,9 @@ implemented. Production families follow the reusable
 [`component specification template`](ui_components/_template.md). The working
 [`theme and color-scheme contract`](ui_theme.md) fixes light/dark ownership and
 acceptance while the production slice supplies evidence for the final provider
-and global token architecture. The v1 inventory remains a Phase 8 decision.
+and global token architecture. The
+[active component inventory](ui_component_inventory.md) orders source work;
+the public v1 contract remains a Phase 8 decision.
 For repository operating rules, see [`/CLAUDE.md`](../../CLAUDE.md).
 
 ---
@@ -286,10 +302,11 @@ The packaging and registration spike covers:
   download.
 
 **Gate:** the publishing architecture is proven. Local-artifact installation,
-registration, assets, and atomic
-rollback have passed. The current development and API contract is
-`citry>=0.3.1,<0.4.0`. Multi-release upgrade, downgrade, uninstall, and wheel
-fixtures remain publication work. Phase 7 uses one public architecture:
+registration, assets, and atomic rollback have passed. Current source
+development targets `citry>=0.3.2,<0.4.0` with `citry_core 1.5.0`. The
+released-artifact floor remains provisional until both releases are published
+and pass the clean-install matrix. Multi-release upgrade, downgrade,
+uninstall, and wheel fixtures remain publication work. Phase 7 uses one public architecture:
 `LibraryComponent` definitions in the separate `citry-ui` distribution,
 registered explicitly into each Citry engine. The earlier H1/H2/H3 comparison
 is historical research rather than multiple advancing production architectures.
@@ -310,8 +327,8 @@ The framework and quality foundations needed to begin Phase 7 now exist:
   registration are implemented;
 - server and client `provide`, `inject`, and `unprovide` contracts are
   implemented and browser-tested; and
-- the released `citry 0.3.1` and `citry_core 1.4.0` line is the production
-  development floor.
+- the `citry 0.3.2` and `citry_core 1.5.0` source line is the current
+  development target, with publication waiting for released artifacts.
 
 Storybook is now independent optional extension work, tracked in
 [`extensions_storybook.md`](extensions_storybook.md) and its supporting
@@ -321,7 +338,7 @@ activation, preview replacement, and contributor workflow. Adapter selection
 and broader interactive coverage do not gate Citry UI specifications,
 implementation, documentation, or publication.
 
-The implementation slice now contains the seven required public families.
+The implementation slice now contains thirty-one production families.
 Direct cross-browser suites cover native actions and forms, compound Tabs,
 native modal Dialog, remote Combobox request ordering, keyed semantic Table,
 browser-owned dynamic Form membership, and the repeatable business workflow. Tabs includes
@@ -352,16 +369,28 @@ the docs live-component host is the first-party preview surface, and a
 different state browser should be designed only if a concrete need remains
 unserved by the docs site and the optional Storybook extension.
 
-The remaining sequence is now:
+The release qualification sequence remains:
 
-1. run the hosted Nu, Lighthouse, visual-candidate, and clean-wheel jobs;
+1. run the hosted workspace Nu, Lighthouse, and visual-candidate jobs;
 2. review and approve or reject the visual candidates, including the final
    Tabs human polish and live browser pass;
 3. complete manual assistive-technology and real-device evidence;
-4. add multi-release upgrade and downgrade evidence after two Citry UI
+4. after the required Citry releases publish, run clean-wheel and
+   released-artifact compatibility jobs;
+5. add multi-release upgrade and downgrade evidence after two Citry UI
    releases exist; and
-5. write the Phase 8 production contract and v1 roadmap from the accepted
+6. write the Phase 8 production contract and v1 roadmap from the accepted
    evidence.
+
+Workspace-hosted qualification and source development can proceed while clean
+released-artifact installation waits. Source development follows the next
+batch in the
+[active component inventory](ui_component_inventory.md). Each planning group
+receives a bounded family-boundary and dependency pass before implementation
+begins. The resulting batch reserves capacity across foundations/layout,
+native forms/choice controls, and feedback/compound interaction. Each selected
+family then completes the full research, specification, example,
+implementation, documentation, and review pipeline before the next begins.
 
 Button completed first, followed by Field/Input, Form, Dialog, and Combobox. Dialog now
 has its revised native-modal runtime, nested ownership and focus evidence,
@@ -375,6 +404,51 @@ column-wide cell attributes, named responsive scrolling, distinct sticky
 modes, nested-Table CSS isolation, structured reference, and nine
 astronomy-themed live examples. Human visual, keyboard,
 assistive-technology, print, and real-device review remains release evidence.
+
+Publication and released-artifact qualification currently wait for compatible
+`citry` and `citry_core` releases. The active component inventory pulls forward
+only the Phase 8 inventory and source work that can continue safely. Its
+bounded family pass selected Icon, Card, Textarea, Native Select, Checkbox,
+Alert, and Accordion, in that order. IconButton remains a Button + Icon
+composition, generic Surface remains private styling infrastructure, and this
+seven-slot batch carries layout forward behind the selected foundation, form,
+choice, feedback, and interaction jobs. Named responsive Grid inputs originally
+had the additional prerequisite of a public breakpoint or container-query
+vocabulary; the post-third-batch layout pass has now resolved it with fixed
+mobile-first `sm` through `xxl` viewport thresholds and consumer CSS for
+bespoke queries.
+Callout is an Alert recipe, and standalone Disclosure remains separate from
+grouped Accordion. Each selected family received its own research,
+specification, example, implementation, documentation, and review pass. The
+final v1 contract, compatibility range, and release contents remain Phase 8
+decisions.
+
+Icon completed that pipeline on 2026-08-08. It ships a static local Lucide
+catalog with semantic aliases, decorative and labelled accessibility modes,
+logical RTL mirroring, strict SVG trust boundaries, exact third-party notice
+qualification, public documentation, and focused server/browser/wheel
+evidence. Card also completed the pipeline with static optional anatomy,
+explicit part destinations, overlay-safe overflow, one-child row geometry,
+media-only edge handling, nine public examples, focused evidence, exact wheel
+qualification, and independent closure review. Textarea completed the same
+pipeline with native multiline editing, controlled and uncontrolled browser
+ownership, Field/Form integration, safe RCDATA handling, eleven public
+examples, scaling and quality coverage, exact wheel qualification, and
+independent closure review. Native Select completed the same pipeline with a
+native single-Select root, structured options and groups,
+placeholder-required conformance, controlled and uncontrolled ownership,
+reactive Field capabilities, ten public examples, exact wheel qualification,
+and independent closure review. Checkbox completed its production runtime,
+public guide, structured reference, focused family evidence, quality scenario,
+and wheel wiring; final cross-family qualification remains pending. Alert
+completed the pipeline with persistent feedback,
+announcement-role ownership, one allowlisted icon path, actions, ten public
+previews, focused evidence, wheel qualification, and independent closure
+review. Accordion completed it with direct declaration ownership, single and
+multiple expansion, keyboard and focus recovery, nested groups, ten public
+previews, reusable quality evidence, wheel qualification, and independent
+closure review.
+
 This follows component dependencies and increases interaction risk gradually.
 Each pass starts by auditing the existing
 design, source, tests, quality scenarios, public guide, and structured
@@ -955,7 +1029,7 @@ review.
 
 #### Phase 7.5 implementation record
 
-Repository implementation status through 2026-08-05:
+Repository implementation status through 2026-08-09:
 
 - component families co-locate runtime code, maintainer notes, public docs
   source, reader-facing snippets, family scenarios, and focused browser tests
@@ -966,8 +1040,8 @@ Repository implementation status through 2026-08-05:
   schema-validated `api.yml` data generates the categorical Inputs, Slots,
   Events, Methods, CSS, Attributes, Selectors, and Interfaces reference. The
   renderer derives stable entry anchors and the docs guard enforces the direct
-  source-to-route contract. Tabs, Button, Field/Input, Form, Dialog, and
-  Combobox, and Table have complete feature-by-feature preview catalogs;
+  source-to-route contract. All thirty-one production families have complete
+  feature-by-feature preview catalogs;
 - the Field/Input pass retains a separate relationship owner and native Input,
   makes Field authoritative for composed state, makes Form-disabled state
   dominant, enforces exactly one control across library and custom content,
@@ -984,8 +1058,8 @@ Repository implementation status through 2026-08-05:
   examples covering configuration, native validation, reset, submitting,
   multiple submitters, external ownership, server errors, dynamic controls,
   and theming;
-- the machine-readable catalog has ten ready routes: all seven component
-  families, the repeatable contact workflow, and the Orbit and Ledger
+- the machine-readable catalog has thirty-four ready routes: all thirty-one
+  component families, the repeatable contact workflow, and the Orbit and Ledger
   compositions. Embedded and complete-document renders are checked for the
   same normalized component markup;
 - the bounded Chromium profile scans every route before and after one
@@ -1027,13 +1101,22 @@ Safari, mobile hardware, touch, zoom, and high-contrast samples remain
 unavailable until somebody runs them. The first hosted Nu, Lighthouse, and
 clean-wheel CI artifacts remain pending until these workflow changes run.
 Multi-release upgrade and downgrade evidence remains unavailable until at least
-two `citry-ui` releases exist. Localization and headless counterparts remain
-the separate follow-up work already described in this plan.
+two `citry-ui` releases exist. Localization is now tracked in
+[`i18n.md`](i18n.md); headless counterparts remain separate follow-up work.
 
 ### Phase 8: decision and v1 roadmap
 
 **Goal:** freeze the production component contract from Phase 7 evidence and
 define the public v1 product.
+
+The provisional
+[component inventory](ui_component_inventory.md) advances the candidate
+ledger, dependency order, and source-development batches while release
+qualification waits. Its completed third batch contains Divider, Avatar,
+Skeleton, ButtonGroup, Toggle, Pagination, and List, each with runtime, public
+docs/reference, previews, focused automation, quality/scaling wiring, and wheel
+qualification. It is input to this phase, not the final contract or release
+commitment.
 
 **Outputs:**
 
@@ -1057,21 +1140,52 @@ define the public v1 product.
 - playground integration after publication: pin the compatible `citry-ui`
   wheel, register it after each playground registry reset, allow `citry_ui`
   imports, and resolve direct library-component final expressions;
-- a separate follow-up research brief for localization after component text,
-  formatting, direction, and locale-selection requirements are concrete;
+- the research-backed [`i18n.md`](i18n.md) follow-up for component text,
+  locale selection, formatting, direction, extraction, delivery, and
+  locale-sensitive controls;
 - release, compatibility, and maintenance policy.
 
 **Gate:** independent adversarial review of the prototype-backed decision
 before implementation dispatch.
 
-The timing remains deliberate: the released `citry 0.3.1` and
-`citry_core 1.4.0` baseline supports production component work. Production
-component work proceeds through specifications, docs live examples,
+The timing remains deliberate: the `citry 0.3.2` and `citry_core 1.5.0`
+workspace supports production component work while its release artifacts are
+pending. Production component work proceeds through specifications, docs live examples,
 standalone scenarios, and direct quality tools. Storybook may later add an
 optional contributor previewer, but it is not an entry gate. No separate
 custom gallery is planned unless a concrete need remains after using the docs
 site and evaluating the optional Storybook extension. Publication still needs
 the released-artifact compatibility matrix.
+
+The post-third-batch review has resolved and implemented Grid and Container.
+The research pass for Menu, Tooltip, Popover, Drawer, and Toast is complete in
+[`ui_overlay_foundations.md`](ui_overlay_foundations.md). It found that the
+group does not need one monolithic public Overlay: anchored positioning,
+dismissible-layer ordering, focus/modality, presence, physical context, and a
+Toast host are distinct capabilities. The disposable Chromium, Firefox, and
+WebKit [prototype pass](ui_overlay_foundations_spikes/prototype-report.md)
+ratifies the platform-first hybrid with native manual Popover and CSS anchors,
+a bounded private dismissal/presence controller, no default teleport, native
+Dialog for modal Drawer, and a separate Toast host. The shared architecture
+gate is cleared for one-family-at-a-time work. Popover has completed its
+production implementation pass: authoritative specification, runtime and
+exports, structured API, nine public previews, focused server and
+Chromium/Firefox/WebKit evidence, retained-rerender coverage, reusable quality
+and scaling routes, docs projection, and exact wheel qualification. Its human
+visual/assistive-technology and independent review remain release evidence.
+Tooltip has also completed its production pass: authoritative specification,
+runtime/exports, structured API, ten public previews, focused server and
+Chromium/Firefox/WebKit evidence, retained-rerender coverage, quality/scaling
+wiring, docs projection, and exact wheel qualification. Its human
+visual/assistive-technology, hosted Nu, and independent review remain release
+evidence. Menu has now completed its production pass and independent
+implementation review: the eight-class runtime/export family, structured API,
+thirteen public previews, focused three-engine evidence, correlated-rerender
+coverage, quality/scaling wiring, docs projection, and exact wheel
+qualification are checked in. Modal Drawer/Sheet and Toast follow as separate
+passes. Number, date, time, and advanced range controls remain gated on the
+formatter, parser, time-zone, direction, and server/browser contracts proposed
+in [`i18n.md`](i18n.md) before a later batch is selected.
 
 ## 5. Evaluation rubric
 
@@ -1133,3 +1247,6 @@ ui_research/
 
 Every report records its snapshot date, versions, sources, confidence, and
 unresolved evidence. The README remains the status and routing index.
+Current family status and batch order live in
+[`ui_component_inventory.md`](ui_component_inventory.md); the Phase 5
+taxonomy remains the dated ecosystem evidence behind it.

@@ -148,8 +148,28 @@ def test_windows_accepts_a_native_executable_without_using_command_shells(
 
     monkeypatch.setattr(embedded_provider_module, "_run_provider", fake_provider)
     provider = BiomeEmbeddedProvider.from_spec(f"biome:{executable}", language="css")
+    private_root = Path(provider._private_executable_owner.name)
 
-    assert provider.format_source(".card {}", source_path=tmp_path / "component.css") == ".card {}"
+    try:
+        assert provider.format_source(".card {}", source_path=tmp_path / "component.css") == ".card {}"
+    finally:
+        provider.close()
+    provider.close()
+
+    assert provider._private_executable_stream.closed is True
+    assert private_root.exists() is False
+
+
+def test_closed_provider_rejects_later_formatting(tmp_path: Path) -> None:
+    executable = _provider_script(
+        tmp_path / "biome",
+        'if [ "$1" = "--version" ]; then printf \'2.5.6\'; else cat; fi',
+    )
+    provider = BiomeEmbeddedProvider.from_spec(f"biome:{executable}", language="css")
+    provider.close()
+
+    with pytest.raises(EmbeddedProviderUnavailableError, match="closed"):
+        provider.format_source(".card {}", source_path=(tmp_path / "component.css").resolve())
 
 
 def test_nonzero_formatter_result_is_provider_invalid(tmp_path: Path) -> None:
