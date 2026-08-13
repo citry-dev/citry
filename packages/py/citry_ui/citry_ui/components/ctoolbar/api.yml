@@ -79,3 +79,5 @@ interfaces:
       - {id: input-type-aliases-ctoolbar-variant, name: CToolbarVariant, definition: 'Literal["plain", "soft", "outline"]'}
       - {id: input-type-aliases-ctoolbar-size, name: CToolbarSize, definition: 'Literal["sm", "md", "lg"]'}
   - {id: ctoolbar-default-slot-data, kind: record, name: CToolbarDefaultSlotData, entries: []}
+
+translations: []

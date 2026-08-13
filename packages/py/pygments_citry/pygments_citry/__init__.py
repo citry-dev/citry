@@ -23,7 +23,7 @@ __all__ = ["CitryHtmlLexer", "CitryPythonLexer"]
 # a deterministic loader. Each tuple is (module, name, aliases, filenames,
 # mimetypes); _load_lexers imports the module and finds the class via __all__.
 #
-# `citry` is the full component lexer (Python + embedded template/js/css);
+# `citry` is the full component lexer (Python + embedded template/js/css/messages);
 # `citry-html` is the template lexer alone, for a fence that shows only a
 # template (`<c-*>` tags, `{{ }}`, `{# #}`) with no surrounding Python.
 LEXERS["CitryPythonLexer"] = (

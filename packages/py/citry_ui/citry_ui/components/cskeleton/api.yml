@@ -59,3 +59,5 @@ interfaces:
       - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
       - {id: kind, name: CSkeletonKind, definition: 'Literal["rect", "text", "circle"]'}
       - {id: animation, name: CSkeletonAnimation, definition: 'Literal["pulse", "wave", "none"]'}
+
+translations: []

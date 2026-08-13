@@ -12,6 +12,16 @@ _Unreleased_
   and the checked number, currency, date, relative-time, and list profiles.
   Parameter metadata includes descriptions and exact declaration spans, and
   currency formatting applies CLDR fraction digits and half-expand rounding.
+- Expose the compiler's source-only Fluent analysis so editor tools can reuse
+  the production parser, `@param` validation, symbol inventory, references,
+  and exact spans without building a complete locale artifact.
+- Expose checked percent-ratio and unit formatting plus strict localized
+  number, percent, date, time, and local-datetime parsing. Number input can opt
+  into scientific notation. Date input supports localized month names,
+  explicit two-digit-year windows, and checked calendar shapes. Time and
+  datetime input accept whole text fields or named segments and return
+  structured local fields so the Python layer can resolve an explicit IANA
+  zone, including DST gaps and folds.
 - Expose OXC-backed JavaScript expression analysis and conservative
   `$component` initializer facts for Citry's batch and editor tooling,
   including exact context bindings, free references, and synchronous scope

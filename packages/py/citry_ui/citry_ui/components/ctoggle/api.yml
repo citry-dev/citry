@@ -137,3 +137,5 @@ interfaces:
   - {id: ctoggle-value-change-detail, kind: record, name: CToggleValueChangeDetail, entries: [{id: value, name: value, type: 'str | list[str] | None', meaning: Requested selection.}, {id: previous-value, name: previousValue, type: 'str | list[str] | None', meaning: Selection before activation.}, {id: source, name: source, type: '"activation"', meaning: Change origin.}]}
   - {id: ctoggle-group-default-slot-data, kind: record, name: CToggleGroupDefaultSlotData, entries: []}
   - {id: ctoggle-default-slot-data, kind: record, name: CToggleDefaultSlotData, entries: []}
+
+translations: []

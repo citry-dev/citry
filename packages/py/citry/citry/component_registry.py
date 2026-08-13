@@ -184,6 +184,18 @@ class _ComponentRegistry:
             raise RuntimeError(msg)
         self._register(comp_cls, is_builtin=True)
 
+    def _authorize_internal(self, comp_cls: type[Component], token: object) -> None:
+        """Allow one private class created while built-ins initialize, without registering a public tag."""
+        if token is not self._builtin_registration_token or not self._initializing_builtins:
+            raise RuntimeError("Cannot create a private internal component outside built-in initialization.")
+        existing = self._owner._classes_by_id.get(comp_cls.class_id)
+        if existing is not None and existing is not comp_cls:
+            raise AlreadyRegistered(
+                f"Cannot create private component {comp_cls.__name__!r}: "
+                f"class_id {comp_cls.class_id!r} is already owned by {existing.__name__!r}."
+            )
+        self._owner._classes_by_id[comp_cls.class_id] = comp_cls
+
     def _unregister(self, comp_cls_or_name: type[Component] | str) -> None:
         """Unregister directly, after the owning Citry has handled its state."""
         # Case: unregister by name

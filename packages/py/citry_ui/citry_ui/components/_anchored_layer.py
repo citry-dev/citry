@@ -200,7 +200,9 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
 
           const descendantsOf = (layer) => layers.filter((candidate) => {
             let parent = candidate.__citryAnchoredParent ?? null;
-            while (parent) {
+            const seen = new Set();
+            while (parent && !seen.has(parent)) {
+              seen.add(parent);
               if (parent === layer) {
                 return true;
               }
@@ -418,7 +420,9 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
           const containsEvent = (layer, event) => {
             const path = event?.composedPath?.() ?? [];
             let current = layer;
-            while (current) {
+            const seen = new Set();
+            while (current && !seen.has(current)) {
+              seen.add(current);
               for (const element of layerElements(current)) {
                 if (path.includes(element)) {
                   return true;
@@ -649,6 +653,25 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             layer.__citryAnchoredSuppressed = false;
             layer.__citryAnchoredBlockedReason = null;
           };
+          /* citry-ui:command-palette-attribution:dialog-layer-preparation:begin */
+          coordinator.prepareModal = (container, source = container) => {
+            if (!(container instanceof HTMLDialogElement)) {
+              throw new TypeError(
+                "[citry-ui] anchored-layer modal preparation requires a native Dialog.",
+              );
+            }
+            for (let index = layers.length - 1; index >= 0; index -= 1) {
+              const layer = layers[index];
+              if (
+                layer.isOpen?.()
+                && !layerElements(layer).some((element) => composedContains(container, element))
+              ) {
+                forceClose(layer, "modal", source);
+              }
+            }
+            syncScopes();
+          };
+          /* citry-ui:command-palette-attribution:dialog-layer-preparation:end */
           coordinator.beginAncestorClose = (container, source = container) => {
             if (!(container instanceof Element)) {
               throw new TypeError(
@@ -692,13 +715,19 @@ _ANCHORED_LAYER_RUNTIME_SOURCE = r"""
             }
             const oldIndex = layers.indexOf(layer);
             if (oldIndex === -1) {
-              layer.__citryAnchoredParent = inferLogicalParent(layer);
               layer.__citryAnchoredRegistration = {
                 generation: ++nextRegistrationGeneration,
               };
               layers.push(layer);
-            } else if (layer.logicalParent) {
-              layer.__citryAnchoredParent = layer.logicalParent;
+            }
+            const nextParents = new Map(
+              layers.map((candidate) => [
+                candidate,
+                candidate.logicalParent ?? inferLogicalParent(candidate),
+              ]),
+            );
+            for (const [candidate, parent] of nextParents) {
+              candidate.__citryAnchoredParent = parent;
             }
             syncScopes();
             return true;

@@ -348,3 +348,13 @@ dispatch advances only after application code proves reactive-array composition
 is materially awkward. Custom content advances only with an announceable,
 focus-safe, client-creatable renderer contract. Swipe/drag must earn its touch,
 selection, scroll, direction, and accessibility cost independently.
+
+## 21. Internationalization
+
+Region, dismiss, and action-announcement text use the keys and typed values in
+the structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/ctoast/api.yml).
+The stable region and initial dismiss controls use `$c-tr`; browser-created
+dismiss controls use `i18n.bind()` against each toast's current title. The
+action announcement translates once when the toast is added so a later locale
+switch does not replay an old notification. `CToastMessages` overrides each
+runtime pattern independently.

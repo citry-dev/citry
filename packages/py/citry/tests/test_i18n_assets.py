@@ -13,6 +13,10 @@ def test_inline_messages_are_normalized_and_cached():
 
     class Card(Component):
         citry = app
+
+        class I18n:
+            messages_locale = "en-US"
+
         messages = """
             my-app-card-title = Card
         """
@@ -27,6 +31,10 @@ def test_messages_file_is_lazy_watched_and_reset(tmp_path):
 
     class Card(Component):
         citry = app
+
+        class I18n:
+            messages_locale = "en-US"
+
         messages_file = "card.ftl"
 
     path.write_text("my-app-card-title = One", encoding="utf8")
@@ -72,6 +80,10 @@ def test_messages_pair_inherits_as_one_unit():
 
     class Parent(Component):
         citry = app
+
+        class I18n:
+            messages_locale = "en-US"
+
         messages = "parent = Parent"
 
     class Child(Parent):
@@ -105,6 +117,10 @@ def test_messages_loaded_hook_can_validate_or_replace_source():
 
     class Card(Component):
         citry = app
+
+        class I18n:
+            messages_locale = "en-US"
+
         messages = "card = Card"
 
     assert Card.get_messages() == "card = Card\nextra = Added"
@@ -130,8 +146,8 @@ def test_configured_i18n_compiles_the_final_transformed_source():
 
     class Card(Component):
         citry = app
-        messages = "card = Original"
         template = '{{ tr("card") }}'
+        messages = "card = Original"
 
     assert Card.get_messages() == "card = Changed"
     assert str(Card()) == "Changed"
@@ -151,6 +167,10 @@ def test_inherited_messages_are_transformed_once_per_source_unit():
 
     class Parent(Component):
         citry = app
+
+        class I18n:
+            messages_locale = "en-US"
+
         messages = "card = Card"
 
     class Child(Parent):
@@ -175,6 +195,10 @@ def test_concurrent_inherited_first_load_transforms_source_once():
 
     class Parent(Component):
         citry = app
+
+        class I18n:
+            messages_locale = "en-US"
+
         messages = "card = Card"
 
     class Child(Parent):
@@ -197,6 +221,10 @@ def test_parent_reset_makes_owner_cache_authoritative_for_child(tmp_path):
 
     class Parent(Component):
         citry = app
+
+        class I18n:
+            messages_locale = "en-US"
+
         messages_file = "shared.ftl"
 
     class Child(Parent):

@@ -24611,7 +24611,8 @@ async function startFolder(folder) {
     { language: "css", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
     // As with css_file, registry ownership rather than an extension decides
     // whether a JavaScript document belongs to a component.
-    { language: "javascript", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } }
+    { language: "javascript", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*" } },
+    { language: "fluent", scheme: "file", pattern: { baseUri: folder.uri.toString(), pattern: "**/*.ftl" } }
   ];
   const ownsDocument = (document) => workspaceOwnsDocument(key, vscode.workspace.getWorkspaceFolder(document.uri)?.uri.toString());
   const middleware = {

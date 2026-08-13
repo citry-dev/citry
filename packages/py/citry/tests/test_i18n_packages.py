@@ -7,18 +7,21 @@ import importlib
 import json
 import sys
 import zipfile
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from citry import Citry, Component
+from citry import Citry, Component, ComponentLibrary, LibraryComponent
 from citry.command import run
 from citry.ext.i18n.commands import (
     CheckI18nCommand,
     CompileI18nCommand,
+    CoverageI18nCommand,
     ExtractI18nCommand,
     InspectI18nCommand,
 )
+from citry.ext.i18n.formats import FormatRegistry, NumberFormat
 from citry.ext.i18n.packages import compile_catalog_package
 
 
@@ -28,6 +31,7 @@ def _write_package(
     *,
     locales: dict[str, dict[str, str]],
     manifest: bool = False,
+    formats: dict[str, object] | None = None,
 ) -> None:
     package = root / name
     package.mkdir()
@@ -36,6 +40,11 @@ def _write_package(
         'schema_version = 1\nowner = "demo"\nsource_locale = "en-US"\n',
         encoding="utf8",
     )
+    if formats is not None:
+        (package / "formats.json").write_text(
+            json.dumps(formats, separators=(",", ":")),
+            encoding="utf8",
+        )
     source_records = []
     for locale, resources in locales.items():
         locale_root = package / "locales" / locale
@@ -118,6 +127,125 @@ def test_package_translation_owner_fallback_and_application_override(tmp_path, m
     # Locale-major lookup chooses the library's Czech translation before
     # considering the application's English-only override.
     assert str(Page(name="Ada").render(provides=czech)) == "Ahoj, \u2068Ada\u2069. / English only"
+
+
+def test_matching_library_catalog_owns_exported_component_message_at_runtime(tmp_path, monkeypatch):
+    name = "exported_library_catalog"
+    _write_package(
+        tmp_path,
+        name,
+        locales={
+            "en-US": {"common.ftl": "# @param {str} $name - User name.\ndemo-greeting = Packaged hello, { $name }.\n"}
+        },
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    app = Citry(
+        mode="development",
+        autodiscover=False,
+        extensions_defaults={
+            "i18n": {
+                "source_locale": "en-US",
+                "locales": ("en-US",),
+                "catalogs": (name,),
+            }
+        },
+    )
+
+    class CGreeting(LibraryComponent):
+        messages = "# @param {str} $name - User name.\ndemo-greeting = Authored hello, { $name }."
+
+    app.register_library(ComponentLibrary("demo", (CGreeting,)))
+    i18n = app.extensions.get_extension("i18n")
+
+    assert i18n.tr("demo-greeting", name="Ada") == "Packaged hello, \u2068Ada\u2069."
+
+
+def test_new_development_engine_reads_updated_editable_catalog_source(tmp_path, monkeypatch):
+    name = "editable_catalog_package"
+    _write_package(
+        tmp_path,
+        name,
+        locales={"en-US": {"common.ftl": "demo-status = One\n"}},
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    config = {
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US",),
+            "catalogs": (name,),
+        }
+    }
+
+    first = Citry(mode="development", autodiscover=False, extensions_defaults=config)
+    assert first.extensions.get_extension("i18n").tr("demo-status") == "One"
+
+    source = tmp_path / name / "locales" / "en-US" / "common.ftl"
+    source.write_text("demo-status = Two\n", encoding="utf8")
+    importlib.invalidate_caches()
+    second = Citry(mode="development", autodiscover=False, extensions_defaults=config)
+    assert second.extensions.get_extension("i18n").tr("demo-status") == "Two"
+
+
+def test_package_owned_format_profiles_load_in_development_and_production(tmp_path, monkeypatch):
+    name = "formatted_catalog_package"
+    _write_package(
+        tmp_path,
+        name,
+        locales={"en-US": {"common.ftl": "demo-count = Count\n"}},
+        formats={"number": {"demo-count": {"input": {"notation": "decimal"}}}},
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    config = {
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US",),
+            "catalogs": (name,),
+        }
+    }
+
+    development = Citry(mode="development", extensions_defaults=config)
+    service = development.extensions.get_extension("i18n")
+    formatter = service.for_context(service.make_context(locale="en-US")).format
+    assert formatter.number(Decimal("1234.5"), format="demo-count") == "1,234.5"
+
+    compile_catalog_package(name)
+    production = Citry(mode="production", extensions_defaults=config)
+    service = production.extensions.get_extension("i18n")
+    formatter = service.for_context(service.make_context(locale="en-US")).format
+    assert formatter.number(Decimal("1234.5"), format="demo-count") == "1,234.5"
+
+
+def test_package_format_profiles_are_namespaced_and_cannot_replace_application_profiles(tmp_path, monkeypatch):
+    name = "colliding_format_catalog_package"
+    _write_package(
+        tmp_path,
+        name,
+        locales={"en-US": {"common.ftl": "demo-count = Count\n"}},
+        formats={"number": {"count": {}}},
+    )
+    monkeypatch.syspath_prepend(str(tmp_path))
+    importlib.invalidate_caches()
+    config = {
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US",),
+            "catalogs": (name,),
+        }
+    }
+    with pytest.raises(ValueError, match="must start with the package namespace 'demo-'"):
+        Citry(mode="development", extensions_defaults=config)
+
+    (tmp_path / name / "formats.json").write_text(
+        json.dumps({"number": {"demo-count": {}}}),
+        encoding="utf8",
+    )
+    importlib.invalidate_caches()
+    config["i18n"]["formats"] = FormatRegistry(number={"demo-count": NumberFormat()})
+    with pytest.raises(ValueError, match="collides with application"):
+        Citry(mode="development", extensions_defaults=config)
 
 
 def test_production_package_requires_and_validates_manifest(tmp_path, monkeypatch):
@@ -375,9 +503,9 @@ def test_compile_command_writes_checked_manifest_and_server_artifact(tmp_path, m
 
     production_i18n = production.extensions.get_extension("i18n")
     context = production_i18n.make_context(locale="cs-CZ")
-    assert production_i18n.tr("demo-title", context=context) == "Titulek"
+    assert production_i18n.for_context(context).tr("demo-title") == "Titulek"
     english = production_i18n.make_context(locale="en-US")
-    assert production_i18n.tr("demo-title", context=english) == "Application title"
+    assert production_i18n.for_context(english).tr("demo-title") == "Application title"
 
 
 def test_project_commands_check_extract_and_inspect_the_same_catalog(tmp_path, capsys):
@@ -419,3 +547,82 @@ def test_project_commands_check_extract_and_inspect_the_same_catalog(tmp_path, c
     artifact = json.loads(artifact_path.read_text(encoding="utf8"))
     assert artifact["revision"] == checked["catalog_revision"]
     assert artifact["manifest"]["en-US"]["demo-title"]["selected_path"] == extracted["sources"][0]["path"]
+
+
+def test_coverage_command_reports_exact_and_source_fallback_outputs(capsys):
+    app = Citry(
+        autodiscover=False,
+        extensions_defaults={
+            "i18n": {
+                "source_locale": "en-US",
+                "locales": ("en-US", "cs-CZ"),
+            }
+        },
+    )
+
+    class Page(Component):
+        citry = app
+        messages = "demo-title = Title\n    .aria-label = Page title\n"
+
+    assert run(CoverageI18nCommand, ["--locale", "CS-cz", "--json"], citry=app) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["schema_version"] == 1
+    assert report["locales"] == [
+        {
+            "locale": "cs-CZ",
+            "summary": {"exact": 0, "source_fallback": 2, "translation_fallback": 0},
+            "outputs": [
+                {
+                    "definition_path": f"{Path(__file__).resolve()}::Page.messages",
+                    "output": "demo-title",
+                    "owner": "__citry_application__",
+                    "owner_source_locale": "en-US",
+                    "selected_locale": "en-US",
+                    "status": "source_fallback",
+                },
+                {
+                    "definition_path": f"{Path(__file__).resolve()}::Page.messages",
+                    "output": "demo-title.aria-label",
+                    "owner": "__citry_application__",
+                    "owner_source_locale": "en-US",
+                    "selected_locale": "en-US",
+                    "status": "source_fallback",
+                },
+            ],
+        }
+    ]
+
+    assert run(CoverageI18nCommand, ["--locale", "en-US"], citry=app) == 0
+    assert "en-US: 2 exact, 0 translation fallback, 0 source fallback" in capsys.readouterr().out
+    with pytest.raises(SystemExit) as failure:
+        run(CoverageI18nCommand, ["--locale", "cs-CZ", "--fail-on-missing"], citry=app)
+    assert failure.value.code == 1
+    assert "demo-title: source fallback via en-US" in capsys.readouterr().out
+
+
+def test_coverage_command_runs_in_zero_configuration_source_mode(capsys):
+    app = Citry(autodiscover=False)
+
+    class Page(Component):
+        citry = app
+
+        class I18n:
+            messages_locale = "en-US"
+
+        messages = "demo-title = Title\n"
+
+    assert run(CoverageI18nCommand, ["--json"], citry=app) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["locales"][0]["locale"] == "en-US"
+    assert report["locales"][0]["summary"] == {
+        "exact": 1,
+        "source_fallback": 0,
+        "translation_fallback": 0,
+    }
+
+    assert run(CheckI18nCommand, [], citry=app) == 0
+    assert json.loads(capsys.readouterr().out)["schema_version"] == 1
+    assert run(ExtractI18nCommand, [], citry=app) == 0
+    assert json.loads(capsys.readouterr().out)["sources"][0]["locale"] == "en-US"
+    assert run(InspectI18nCommand, [], citry=app) == 0
+    assert json.loads(capsys.readouterr().out)["manifest"]["en-US"]["demo-title"]

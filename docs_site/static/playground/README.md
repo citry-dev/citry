@@ -46,11 +46,14 @@ beside the error.
 |---|---|---|
 | `runtime.json` | Pins Pyodide, Python, Citry, Citry Core, and every browser wheel. | This file. |
 | `worker.js` | Owns Pyodide, installs the runtime, runs Python, and dispatches Python event handlers. | This file. |
-| `executor.py` | Executes one module, normalizes its final value, reports Python diagnostics, and adapts Events requests. | This file. |
+| `executor.py` | Executes one module, normalizes its final value, reports Python diagnostics, adapts Events requests, and projects an exact-version component catalog. | This file. |
+| `analysis_adapter.py` | Converts parser diagnostics, structural and registered-component results, and catalog-backed findings into validated browser records. | This file. |
+| `portable_ide.py` | Generated parser and component-name rules shared with the desktop LSP. | [`../../../packages/py/citry/citry/_portable_ide.py`](../../../packages/py/citry/citry/_portable_ide.py). |
 | `preview.html` | Provides the sandboxed result document, ordered script activation, diagnostics, and the Events transport. | This file. |
 | `playground.css` | Styles the full-page editor and result workspace. | This file. |
 | `live_code.css` | Styles inline `<c-live-code>` blocks and their activated workspace. | This file. |
 | `playground.js` | Generated bundle for the full-page playground. | [`../../_internal/frontend/src/playground.js`](../../_internal/frontend/src/playground.js) and its imports. |
+| `analysis_worker.js` | Generated Worker for the full-page editor's Citry analysis. | [`../../_internal/frontend/src/analysis_worker.js`](../../_internal/frontend/src/analysis_worker.js). |
 | `live_code.js` | Generated lightweight activator loaded on pages that contain live examples. | [`../../_internal/frontend/src/live_code.js`](../../_internal/frontend/src/live_code.js). |
 | `live_code_runtime.js` | Generated deferred bundle containing the inline editor and runtime. | [`../../_internal/frontend/src/live_code_runtime.js`](../../_internal/frontend/src/live_code_runtime.js) and its imports. |
 | `landing_composer.js` | Generated landing-only component collection and sample-board controller. | [`../../_internal/frontend/src/landing_composer.js`](../../_internal/frontend/src/landing_composer.js). |
@@ -59,6 +62,8 @@ The shared authored JavaScript modules live in
 [`../../_internal/frontend/src/`](../../_internal/frontend/src/):
 
 - `citry_editor.js` configures CodeMirror and nested Citry syntax.
+- `browser_ide.js` maps versioned CodeMirror requests and results.
+- `citry_regions.js` proves the direct asset ranges shared by both paths.
 - `preview_bridge.js` owns the parent side of the iframe protocol.
 - `worker_session.js` owns Worker lifetime, timeouts, and run, event, and asset
   request matching.
@@ -122,9 +127,11 @@ Worker verify Citry UI.
 
 ## Keep the protocols synchronized
 
-The runtime uses two small internal protocols:
+The runtime uses three small internal protocols:
 
 - `worker_session.js` and `worker.js` pair Worker generations with run IDs.
+- `browser_ide.js` and `analysis_worker.js` pair source versions with parser
+  diagnostics, completion, and hover requests.
 - `preview_bridge.js` and `preview.html` pair protocol version, session, run ID,
   and nonce before accepting a message.
 
@@ -155,6 +162,7 @@ Run the generated-file check and focused unit tests:
 pnpm --dir docs_site/_internal/frontend check
 uv run --no-sync pytest \
   docs_site/tests/test_playground_executor.py \
+  docs_site/tests/test_playground_analysis.py \
   docs_site/tests/test_local_playground_runtime.py \
   docs_site/tests/test_live_code.py \
   docs_site/tests/test_serve.py

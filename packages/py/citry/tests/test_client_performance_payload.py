@@ -74,10 +74,48 @@ def test_client_runtime_bundle_budget():
     # baseline to 734,546 raw / 153,229 gzip bytes.
     # The final seed lifecycle and ownership-manifest integration move that
     # baseline to 737,241 raw / 154,025 gzip bytes.
+    # Alpine and morph 3.16.1 move the generated standard runtime baseline to
+    # 740,041 raw / 154,683 gzip bytes.
+    # Document-nonce capture, descriptor propagation, and atomic nonce-conflict
+    # preflight move the combined baseline to 742,471 raw / 155,224 gzip bytes.
+    # Phase 8 adds explicit standard/CSP runtime identity plus manifest preflight
+    # before dependency adoption. The measured baseline is 744,463 raw / 155,660
+    # gzip bytes.
+    # I18n phase 5 adds the shared async framework-manifest transaction around
+    # fragment adoption, including rollback after failed current-locale staging.
+    # The measured baseline is 754,238 raw / 157,891 gzip bytes.
     # These are deliberate validation and identity features, not incidental
     # bundle drift.
-    assert len(payload) <= 738_000
-    assert len(gzip.compress(payload, mtime=0)) <= 154_500
+    assert len(payload) <= 755_500
+    assert len(gzip.compress(payload, mtime=0)) <= 158_500
+
+
+def test_csp_events_runtime_bundle_budget():
+    """Keep the alternative CSP Events runtime close to its measured build."""
+    path = _ROOT / "packages/py/citry/citry/ext/events/client/citry-events-csp.js"
+    payload = path.read_bytes()
+
+    # The CSP parser replaces dynamic evaluation but the rest of the Events,
+    # ownership, and morph runtime is identical to the standard build. The
+    # phase-7 baseline was 387,046 raw / 77,715 gzip bytes. I18n phase 5's
+    # fragment transaction moves it to 390,324 raw / 78,515 gzip bytes.
+    assert len(payload) <= 391_000
+    assert len(gzip.compress(payload, mtime=0)) <= 79_000
+
+
+def test_i18n_runtime_bundle_budget():
+    """Keep the opt-in i18n runtime inside its release payload budget."""
+    path = _ROOT / "packages/py/citry/citry/ext/i18n/client/citry-i18n.js"
+    payload = path.read_bytes()
+
+    # The production bundle contains the Fluent runtime, locale switching,
+    # every current formatter, strict number and percent parsing, and wire
+    # validation. Checked declarative/imperative bindings, transactional
+    # switching, and current-locale fragment preparation move the phase-5
+    # baseline to 109,446 raw / 23,730 gzip bytes.
+    # Keep only narrow headroom so new browser work has to account for its cost.
+    assert len(payload) <= 110_500
+    assert len(gzip.compress(payload, mtime=0)) <= 24_000
 
 
 def test_325_instance_client_payload_budget():
@@ -85,12 +123,17 @@ def test_325_instance_client_payload_budget():
 
     assert sizes.graph_raw <= 660_000
     assert sizes.graph_gzip <= 38_000
-    assert sizes.document_raw <= 1_425_000
     # Owner-aware fragment fetch entries and the ComponentRange client runtime
     # plus strict live input validation move the realistic document baseline
     # to 1,413,161 raw / 182,460 bytes compressed. Automatic JsData scope
     # seeding then moves the compressed 325-instance document to 183,637.
-    assert sizes.document_gzip <= 184_500
+    # Alpine and morph 3.16.1 move it to 1,426,955 raw / 184,972 gzip bytes.
+    # Phase 5 nonce propagation moves it to 1,429,385 raw / 185,489 gzip.
+    # Phase 8 runtime identity and preflight move it to 1,431,406 raw / 185,931
+    # gzip bytes. I18n phase 5's framework-manifest transaction moves the
+    # measured document to 1,441,181 raw / 187,232 gzip bytes.
+    assert sizes.document_raw <= 1_442_500
+    assert sizes.document_gzip <= 188_000
 
 
 def test_450_instance_large_graph_regression_budget():

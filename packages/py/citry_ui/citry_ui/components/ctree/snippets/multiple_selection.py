@@ -4,7 +4,7 @@ from citry import Component, citry
 citry.register_library(citry_ui)
 
 
-class MultipleSelection(Component):
+class TreeMultipleSelection(Component):
     template = """
       <section x-data="{ selected: ['alder'] }">
         <c-CTree
@@ -22,5 +22,5 @@ class MultipleSelection(Component):
     """
 
 
-preview = MultipleSelection()
+preview = TreeMultipleSelection()
 preview  # noqa: B018

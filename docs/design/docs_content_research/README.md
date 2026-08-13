@@ -14,11 +14,12 @@ Stage 2 adds reader-job evidence and prioritization. Stage 3 adds the first
 fact ledger and a bounded Docs, Examples, and Reference content slice. The full
 content map and subsystem fact sweep remain later approved stages.
 
-The 2026-07-28 Blog implementation adds its index, first post, stable public
-route, generated Atom surface, navigation, consumers, outputs, tests, and source
-fingerprints to the Stage 1 inventory. Those inventory columns are the scoped
-Blog content map for this delivery. This is an addendum to an already stale
-baseline, not a claim that the broader inventory has been reconciled. The
+The 2026-07-28 Blog implementation adds its index, conditional generated Atom
+surface, navigation, consumers, outputs, tests, and source fingerprints to the
+Stage 1 inventory. The original dummy post and its fingerprint were removed on
+2026-08-13; no post is currently published. Those inventory columns are the
+scoped Blog content map for this delivery. This is an addendum to an already
+stale baseline, not a claim that the broader inventory has been reconciled. The
 separate program-wide `content_map.tsv` and its schema remain deferred with the
 rest of that later stage.
 

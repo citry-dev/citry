@@ -1,0 +1,1 @@
+"""Reusable Image quality fixtures."""

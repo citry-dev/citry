@@ -62,3 +62,5 @@ interfaces:
       - {id: input-type-aliases-style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
       - {id: input-type-aliases-cspinner-intent, name: CSpinnerIntent, definition: 'Literal["neutral", "primary", "success", "warn", "danger"]'}
       - {id: input-type-aliases-cspinner-size, name: CSpinnerSize, definition: 'Literal["sm", "md", "lg"]'}
+
+translations: []

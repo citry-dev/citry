@@ -36,9 +36,10 @@ from docs_site._internal.ui_library_projection import (
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from citry.settings import SecurityCspMode
     from docs_site._internal.config import DocsConfig
 
-_PREVIEW_NAME_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*\Z")
+_PREVIEW_NAME_RE = re.compile(r"[a-z0-9]+(?:_[a-z0-9]+)*\Z")
 _CONTROL_NAME_RE = re.compile(r"[a-z][a-z0-9_]*\Z")
 _PROJECTION_BLOCK_RE = re.compile(
     r"<!-- docs-ui-preview:(?P<payload>[A-Za-z0-9_-]+):start -->.*?"
@@ -56,7 +57,12 @@ class UiPreviewError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class UiPreview:
-    """One component-owned source module and its private rendered route."""
+    """
+    Represent one component-owned source module and its private rendered route.
+
+    ``name`` is the exact Python filename stem. ``slug`` is its derived URL
+    spelling and never substitutes for the source-facing name.
+    """
 
     family: str
     name: str
@@ -64,6 +70,15 @@ class UiPreview:
     source: PurePosixPath
     public_path: str
     source_open: bool = False
+
+    def __post_init__(self) -> None:
+        if self.name != self.source.stem:
+            raise UiPreviewError(f"preview name {self.name!r} must match source filename stem {self.source.stem!r}")
+
+    @property
+    def slug(self) -> str:
+        """Return the stable kebab-case public-route segment."""
+        return self.name.replace("_", "-")
 
 
 @dataclass(frozen=True, slots=True)
@@ -262,10 +277,23 @@ def load_ui_preview_source(preview: UiPreview, *, repo_root: Path) -> str:
     )
 
 
-def render_ui_preview_document(preview: UiPreview, *, repo_root: Path) -> str:
+def render_ui_preview_document(
+    preview: UiPreview,
+    *,
+    repo_root: Path,
+    security_csp: SecurityCspMode | None = None,
+    csp_nonce: str | None = None,
+) -> str:
     """Execute one trusted preview module and serialize its standalone document."""
     loaded = _load_ui_preview(preview, repo_root=repo_root)
-    return str(UiPreviewDocument(title=preview.title, content=loaded.value))
+    return (
+        UiPreviewDocument(title=preview.title, content=loaded.value)
+        .render()
+        .serialize(
+            security_csp=security_csp,
+            csp_nonce=csp_nonce,
+        )
+    )
 
 
 def load_ui_preview_controls(
@@ -295,11 +323,12 @@ def project_ui_previews_for_text(source: str, *, repo_root: Path) -> str:
 
     def replace(match: re.Match[str]) -> str:
         path, title, public_path = _decode_ui_preview_projection(match.group("payload"))
+        preview_source = PurePosixPath(path)
         preview = UiPreview(
             family="",
-            name="",
+            name=preview_source.stem,
             title=title,
-            source=PurePosixPath(path),
+            source=preview_source,
             public_path=public_path,
         )
         code = load_ui_preview_source(preview, repo_root=repo_root).rstrip()
@@ -345,9 +374,10 @@ def _preview_from_attrs(
     snippet_owner = authored.parts[prefix_length]
     if not source_owner or snippet_owner != source_owner:
         raise UiPreviewError(f"<c-ui-demo> for {projection.family!r} may not use a snippet owned by {snippet_owner!r}")
-    name = authored.stem.replace("_", "-")
+    name = authored.stem
     if not _PREVIEW_NAME_RE.fullmatch(name):
-        raise UiPreviewError("<c-ui-demo> filenames must produce a lowercase kebab-case preview name")
+        raise UiPreviewError("<c-ui-demo> filenames must use a lowercase snake_case stem")
+    slug = name.replace("_", "-")
     load_live_source(
         path,
         repo_root=repo_root,
@@ -360,7 +390,7 @@ def _preview_from_attrs(
         name=name,
         title=title,
         source=authored,
-        public_path=f"{projection.public_path}_previews/{name}/",
+        public_path=f"{projection.public_path}_previews/{slug}/",
         source_open=source_open_value is None,
     )
 
@@ -399,7 +429,7 @@ def _load_ui_preview(preview: UiPreview, *, repo_root: Path) -> _LoadedUiPreview
 
         digest = hashlib.sha256(str(source_path).encode()).hexdigest()[:16]
         module_family = preview.family.replace("-", "_")
-        module_name = f"docs_site.ui_previews.{module_family}.{preview.name.replace('-', '_')}_{digest}"
+        module_name = f"docs_site.ui_previews.{module_family}.{preview.name}_{digest}"
         spec = importlib.util.spec_from_file_location(module_name, source_path)
         if spec is None or spec.loader is None:
             raise UiPreviewError(f"could not load preview module {preview.source.as_posix()!r}")
@@ -516,9 +546,35 @@ def _decode_ui_preview_projection(payload: str) -> tuple[str, str, str]:
     return path, title, public_path
 
 
-_RESIZE_SCRIPT = """
-  <script>
-    (() => {
+class UiPreviewDocument(Component):
+    """Private standalone document wrapping one component preview."""
+
+    class Kwargs:
+        title: str
+        content: object
+
+    class Slots:
+        pass
+
+    template = """
+      <!doctype html>
+      <html lang="en">
+        <head>
+          <meta charset="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <meta name="robots" content="noindex,nofollow" />
+          <meta name="color-scheme" content="light dark" />
+          <title>{{ title }}</title>
+          <c-css />
+        </head>
+        <body>
+          <main>{{ content }}</main>
+          <c-js />
+        </body>
+      </html>
+    """
+
+    js = """
       const publish = () => {
         const height = Math.ceil(document.documentElement.scrollHeight);
         parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
@@ -549,38 +605,6 @@ _RESIZE_SCRIPT = """
       addEventListener("load", publish);
       new ResizeObserver(publish).observe(document.documentElement);
       publish();
-    })();
-  </script>
-"""
-
-
-class UiPreviewDocument(Component):
-    """Private standalone document wrapping one component preview."""
-
-    class Kwargs:
-        title: str
-        content: object
-
-    class Slots:
-        pass
-
-    template = f"""
-      <!doctype html>
-      <html lang="en">
-        <head>
-          <meta charset="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <meta name="robots" content="noindex,nofollow" />
-          <meta name="color-scheme" content="light dark" />
-          <title>{{{{ title }}}}</title>
-          <c-css />
-        </head>
-        <body>
-          <main>{{{{ content }}}}</main>
-          <c-js />
-          {_RESIZE_SCRIPT}
-        </body>
-      </html>
     """
 
     css = """

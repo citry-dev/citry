@@ -108,6 +108,136 @@ def test_catalog_compiler_returns_checked_runtime_and_resolution_metadata() -> N
     }
 
 
+def test_compiled_catalog_exposes_exact_browser_message_partitions() -> None:
+    request = _compile_request(source="hello = Hello\nunused = Unused\n")
+    request["packages"] = [{"name": "app", "source_locale": "en-US", "exports": []}]
+    catalog = CatalogCompiler().compile(json.dumps(request))
+
+    artifact = json.loads(
+        catalog.browser_artifact_json(
+            "en-US",
+            json.dumps({"outputs": ["hello"], "messages": []}),
+        )
+    )
+
+    assert artifact["runtime"] == "@fluent/bundle@0.19.1"
+    assert artifact["requested_locale"] == "en-US"
+    assert list(artifact["messages"]) == ["hello"]
+    assert "Unused" not in artifact["bundles"]["en-US"]
+    assert artifact["catalog_revision"] == catalog.revision
+
+
+def test_compiled_catalog_exposes_localized_format_and_input_bindings() -> None:
+    request = _compile_request(source="hello = Hello\n")
+    request["formats"] = {
+        "number": {
+            "scientific-edit": {
+                "input": {"notation": "decimal_or_scientific"},
+            },
+        },
+        "percent": {
+            "completion": {"input": {"affix": "required"}},
+        },
+        "unit": {
+            "measurement": {"width": "long"},
+        },
+        "date": {
+            "date-text": {
+                "length": "short",
+                "input": {"mode": "strict_text"},
+            },
+            "date-segments": {
+                "length": "long",
+                "input": {"mode": "segments"},
+            },
+        },
+        "time": {
+            "time-text": {
+                "length": "medium",
+                "input": {"mode": "strict_text"},
+            },
+            "time-segments": {
+                "length": "medium",
+                "input": {"mode": "segments"},
+            },
+        },
+        "datetime": {
+            "datetime-text": {
+                "length": "medium",
+                "time_zone_name": "none",
+                "input": {"mode": "strict_text"},
+            },
+            "datetime-segments": {
+                "length": "medium",
+                "time_zone_name": "none",
+                "input": {"mode": "segments"},
+            },
+        },
+    }
+    catalog = CatalogCompiler().compile(json.dumps(request))
+    parser_artifact = json.loads(catalog.browser_parser_artifact_json("en-US"))
+
+    assert parser_artifact["formats_revision"] == catalog.formats_revision
+    assert parser_artifact["number"]["scientific-edit"]["notation"] == "decimal_or_scientific"
+    assert parser_artifact["percent"]["completion"]["affix"] == "required"
+    assert json.loads(catalog.parse_number_json("en-US", "scientific-edit", "1.25e3"))["value"] == "1250"
+    assert catalog.format_percent("en-US", "completion", "0.125") == "12.5%"
+    assert json.loads(catalog.parse_percent_json("en-US", "completion", "12.5%"))["value"] == "0.125"
+    assert catalog.format_unit("en-US", "measurement", "1.5", "meter") == "1.5 meters"
+    assert json.loads(catalog.parse_date_json("en-US", "date-text", "8/10/2026"))["value"] == {
+        "year": 2026,
+        "month": 8,
+        "day": 10,
+    }
+    assert json.loads(
+        catalog.parse_date_segments_json(
+            "en-US",
+            "date-segments",
+            "2026",
+            "8",
+            "10",
+        )
+    )["value"] == {"year": 2026, "month": 8, "day": 10}
+    time_text = catalog.format_time("en-US", "time-text", 14, 5, 9, 0)
+    assert json.loads(catalog.parse_time_json("en-US", "time-text", time_text))["value"] == {
+        "hour": 14,
+        "minute": 5,
+        "second": 9,
+        "nanosecond": 0,
+    }
+    assert json.loads(
+        catalog.parse_time_segments_json(
+            "en-US",
+            "time-segments",
+            "2",
+            "05",
+            "09",
+            "PM",
+        )
+    )["value"] == {"hour": 14, "minute": 5, "second": 9, "nanosecond": 0}
+    assert json.loads(
+        catalog.parse_datetime_segments_json(
+            "en-US",
+            "datetime-segments",
+            "2026",
+            "8",
+            "10",
+            "2",
+            "05",
+            "09",
+            "PM",
+        )
+    )["value"] == {
+        "year": 2026,
+        "month": 8,
+        "day": 10,
+        "hour": 14,
+        "minute": 5,
+        "second": 9,
+        "nanosecond": 0,
+    }
+
+
 def test_catalog_compiler_exposes_structured_diagnostic() -> None:
     request = _compile_request(source="hello = One\n")
     request["catalogs"].append(
@@ -128,3 +258,27 @@ def test_catalog_compiler_exposes_structured_diagnostic() -> None:
         "app/duplicate.ftl",
         "app/en-US.ftl",
     }
+
+
+def test_catalog_compiler_analyzes_one_editor_source_unit() -> None:
+    compiler = CatalogCompiler()
+    source = "hello = { -product }\n-product = Citry\n"
+    analysis = json.loads(compiler.analyze_source("card.ftl", source))
+    assert analysis["schema_version"] == 1
+    assert [(item["kind"], item["token"]) for item in analysis["definitions"]] == [
+        ("message", "hello"),
+        ("term", "-product"),
+    ]
+    assert [(item["kind"], item["token"]) for item in analysis["references"]] == [
+        ("term", "-product"),
+    ]
+    for item in (*analysis["definitions"], *analysis["references"]):
+        expected = item["token"].removeprefix("-").split(".", maxsplit=1)[-1]
+        assert source[item["start"] : item["end"]] == expected
+
+    with pytest.raises(I18nCompileError) as caught:
+        compiler.analyze_source(
+            "card.ftl",
+            "# @param {Slot1} $link\nhello = { $link }\n",
+        )
+    assert caught.value.code == "I18N_PARAM_TYPE_UNSUPPORTED"

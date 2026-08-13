@@ -41,8 +41,9 @@ options.
   title="Use flat options, groups, and disabled choices"
 />
 
-Labels are plain text. Put rich rows, search, remote data, or virtualization
-in a future custom Select rather than native options.
+Labels are plain text. Put rich rows or search in `CSelect`, `CMultiSelect`,
+or `CListbox` rather than native options. Remote data and virtualization still
+need application ownership or a later dedicated collection family.
 
 ## Prompt and require a choice
 

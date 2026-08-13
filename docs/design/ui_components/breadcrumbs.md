@@ -182,3 +182,11 @@ Responsive collapse, ellipsis disclosure, route-provider integration, icons,
 and explicit current-item selection remain deferred. Revisit collapse only
 after Menu/Popover exists; revisit a client route adapter only with one actual
 router integration and a stable locale contract for the landmark/expand text.
+
+## 21. Internationalization
+
+The navigation landmark is the family-owned translatable output. The
+structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/cbreadcrumbs/api.yml)
+is normative: the catalog default renders on the server and `$c-tr` keeps the
+stable `aria-label` current in a client-enabled provider. An explicitly supplied
+`label` remains caller-owned and registers no catalog binding.

@@ -1,12 +1,13 @@
 """
 The HTTP routes and URL builders of the ``events`` extension.
 
-Three endpoints, mounted under the citry prefix (built-in extensions own
+Four endpoints, mounted under the citry prefix (built-in extensions own
 their paths directly; see ``ExtensionManager.urls``), fixed by design
 ``docs/design/events.md`` 3.8::
 
     POST      <prefix>/ext/events/call                  batch endpoint (envelope with calls[])
-    GET       <prefix>/ext/events/runtime.js            the events client runtime
+    GET       <prefix>/ext/events/runtime.js            standard events client runtime
+    GET       <prefix>/ext/events/runtime-csp.js        CSP events client runtime
     GET|POST  <prefix>/ext/events/e/{class_id}/{event}  per-event dispatch
 
 The route handlers are the HTTP transport of the dispatcher: they pick a
@@ -42,7 +43,6 @@ error naming ``EventsDispatcher.dispatch_async`` and the deployment fix.
 
 from __future__ import annotations
 
-import functools
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,6 +73,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "CALL_PATH",
+    "CSP_RUNTIME_PATH",
+    "EVENTS_CSP_RUNTIME_SRC",
     "EVENTS_RUNTIME_SRC",
     "EVENT_PATH",
     "MAX_ENVELOPE_BYTES",
@@ -87,12 +89,12 @@ __all__ = [
 # (citry/ext/events/emission.py; the path is design-pinned on both sides).
 CALL_PATH = "ext/events/call"
 RUNTIME_PATH = "ext/events/runtime.js"
+CSP_RUNTIME_PATH = "ext/events/runtime-csp.js"
 EVENT_PATH = "ext/events/e/{class_id}/{event}"
 
-# The events client runtime file this route serves: the built bundle,
-# generated from packages/js/citry-client/src/citry-events.ts (pnpm run
-# build there regenerates it).
+# The committed browser bundle built from packages/js/citry-client.
 EVENTS_RUNTIME_SRC = Path(__file__).parent / "client" / "citry-events.js"
+EVENTS_CSP_RUNTIME_SRC = Path(__file__).parent / "client" / "citry-events-csp.js"
 
 # The default transport-layer byte cap on one envelope (design 7.4 abuse
 # limits; oversized bodies answer payload_too_large without being parsed).
@@ -103,12 +105,6 @@ MAX_ENVELOPE_BYTES = 1024 * 1024
 
 _JSON_CONTENT_TYPE = "application/json"
 _NO_STORE = ("Cache-Control", "no-store")
-
-
-@functools.cache
-def _runtime_js() -> str:
-    """The events client runtime source, read once per process."""
-    return EVENTS_RUNTIME_SRC.read_text(encoding="utf-8")
 
 
 ################################################
@@ -208,11 +204,14 @@ def events_routes(citry: Citry) -> list[URLRoute]:
     dispatcher = EventsDispatcher()
 
     def serve_runtime(_request: RouteRequest) -> RouteResponse:
-        return RouteResponse(
-            content=_runtime_js(),
-            content_type="text/javascript",
-            headers=(_NO_STORE,),
-        )
+        from citry.ext.events.emission import _runtime_resource  # noqa: PLC0415
+
+        return _runtime_resource(citry, "standard").response()
+
+    def serve_csp_runtime(_request: RouteRequest) -> RouteResponse:
+        from citry.ext.events.emission import _runtime_resource  # noqa: PLC0415
+
+        return _runtime_resource(citry, "csp").response()
 
     # Each dispatch route is a sync/async pair: the plain handler is what the
     # sync hosts (WSGI, sync Django) mount and run, and the async twin rides
@@ -239,6 +238,12 @@ def events_routes(citry: Citry) -> list[URLRoute]:
             methods=("POST",),
         ),
         URLRoute(RUNTIME_PATH, handler=serve_runtime, name="citry_events_runtime", methods=("GET",)),
+        URLRoute(
+            CSP_RUNTIME_PATH,
+            handler=serve_csp_runtime,
+            name="citry_events_runtime_csp",
+            methods=("GET",),
+        ),
         URLRoute(
             EVENT_PATH,
             handler=serve_event,

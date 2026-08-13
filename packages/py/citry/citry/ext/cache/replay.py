@@ -944,7 +944,7 @@ def _replay_boundary_artifact(
         instance_ids=tuple(id_by_instance),
         instance_class_ids=tuple(instance.class_id for instance in instances),
     )
-    staged_frame_markers = _validate_replay_plan(
+    staged_frame_markers, staged_text_replacements = _validate_replay_plan(
         artifact,
         staged,
         instance_count=len(instances),
@@ -988,6 +988,7 @@ def _replay_boundary_artifact(
                     graph=graph,
                     region_ids=region_ids,
                     staged_frame_markers=staged_frame_markers,
+                    staged_text_replacements=staged_text_replacements,
                 )
     except Exception:
         context.extra = original_extra
@@ -1004,7 +1005,7 @@ def _validate_replay_plan(
     instance_count: int,
     region_count: int,
     existing_extra: dict[str, Any],
-) -> dict[int, tuple[str, ...]]:
+) -> tuple[dict[int, tuple[str, ...]], tuple[tuple[str, str], ...]]:
     """Cross-check every staged reference before any repair write occurs."""
     for frame_index, frame in enumerate(artifact.frames):
         pending = list(frame.parts)
@@ -1019,6 +1020,7 @@ def _validate_replay_plan(
 
     extra_keys = set(existing_extra)
     frame_markers: dict[int, list[str]] = {}
+    text_replacements: dict[str, str] = {}
     for contribution in staged:
         for key, _value in contribution.extra_items:
             if type(key) is not str or not key:
@@ -1032,7 +1034,14 @@ def _validate_replay_plan(
                     f"Render-cache replay contribution refers to missing instance {marker_instance}."
                 )
             frame_markers.setdefault(marker_instance, []).extend(markers)
-    return {instance: tuple(dict.fromkeys(markers)) for instance, markers in frame_markers.items()}
+        for old, new in contribution.text_replacements:
+            previous = text_replacements.setdefault(old, new)
+            if previous != new:
+                raise CacheArtifactError("Render-cache replay contributions conflict on a text replacement.")
+    return (
+        {instance: tuple(dict.fromkeys(markers)) for instance, markers in frame_markers.items()},
+        tuple(text_replacements.items()),
+    )
 
 
 def _decode_instances(value: FrozenJsonObject) -> tuple[_ArtifactInstance, ...]:
@@ -1919,6 +1928,7 @@ def _build_replayed_tree(
     graph: OwnershipGraph,
     region_ids: dict[PhysicalRegionId, PhysicalRegionId],
     staged_frame_markers: dict[int, tuple[str, ...]],
+    staged_text_replacements: tuple[tuple[str, str], ...],
 ) -> CitryRender:
     built: dict[int, CitryRender] = {}
     pending: list[tuple[int, bool]] = [(root_frame, False)]
@@ -1937,7 +1947,10 @@ def _build_replayed_tree(
 
             def build_part(part: ArtifactPart) -> Any:
                 if type(part) is ArtifactTextPart:
-                    return part.text
+                    text = part.text
+                    for old, new in staged_text_replacements:
+                        text = text.replace(old, new)
+                    return text
                 if type(part) is ArtifactFramePart:
                     return built[part.frame]
                 if type(part) is ArtifactPlaceholderPart:

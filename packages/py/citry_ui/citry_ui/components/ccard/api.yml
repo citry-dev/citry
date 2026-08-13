@@ -131,3 +131,5 @@ interfaces:
   - {id: ccard-default-slot-data, kind: record, name: CCardDefaultSlotData, entries: []}
   - {id: ccard-footer-slot-data, kind: record, name: CCardFooterSlotData, entries: []}
   - {id: ccard-actions-slot-data, kind: record, name: CCardActionsSlotData, entries: []}
+
+translations: []

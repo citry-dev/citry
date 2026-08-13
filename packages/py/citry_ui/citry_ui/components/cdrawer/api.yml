@@ -150,3 +150,9 @@ interfaces:
       - {id: forced, name: forced, type: boolean, meaning: True for a non-rejectable structural or external-native closure.}
       - {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the transition.}
       - {id: return-value, name: returnValue, type: string, meaning: Explicit action/native Dialog Form result; otherwise empty.}
+
+translations:
+  - id: cdrawer-translations
+    component: CDrawer
+    entries:
+      - {id: close, key: citry-ui-drawer-close, purpose: Names the generated close control., variables: None, override: '`close_label` input or `close` slot', updates: '$c-tr updates `aria-label`.'}

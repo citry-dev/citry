@@ -118,3 +118,5 @@ interfaces:
       - {id: options, name: options, type: 'Sequence[CNativeSelectOption]', meaning: Ordered direct options; groups cannot nest.}
       - {id: disabled, name: disabled, type: bool, meaning: Disables every option in the native group., default: 'False'}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', meaning: Adds trusted unowned native optgroup attributes., default: 'None'}
+
+translations: []

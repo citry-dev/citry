@@ -28,7 +28,7 @@ def test_default_project_loads_every_manifest() -> None:
     assert project.settings.repository.owner == "citry-dev"
     assert project.settings.repository.full_name == "citry-dev/citry"
     assert project.site_url == "https://citry.dev/"
-    assert len(project.reference.categories) == 17
+    assert len(project.reference.categories) == 18
     assert [(group.id, group.label) for group in project.ui_library.groups] == [
         ("actions", "Actions"),
         ("forms-inputs", "Forms and inputs"),
@@ -41,6 +41,7 @@ def test_default_project_loads_every_manifest() -> None:
     assert [(projection.family, projection.slug) for projection in project.ui_library.projections] == [
         ("button", "button"),
         ("button-group", "button-group"),
+        ("split-button", "split-button"),
         ("toggle", "toggle"),
         ("toolbar", "toolbar"),
         ("field-input", "field-input"),
@@ -53,14 +54,17 @@ def test_default_project_loads_every_manifest() -> None:
         ("listbox", "listbox"),
         ("select", "select"),
         ("multi-select", "multi-select"),
+        ("tags-input", "tags-input"),
         ("editable", "editable"),
         ("file-input", "file-input"),
         ("form", "form"),
         ("flow-layout", "stack-group"),
         ("grid-container", "container-grid"),
+        ("scroll-area", "scroll-area"),
         ("divider", "divider"),
         ("splitter", "splitter"),
         ("avatar", "avatar"),
+        ("image", "image"),
         ("badge", "badge"),
         ("card", "card"),
         ("carousel", "carousel"),
@@ -85,6 +89,8 @@ def test_default_project_loads_every_manifest() -> None:
         ("dialog", "dialog"),
         ("drawer", "drawer"),
         ("menu", "menu"),
+        ("context-menu", "context-menu"),
+        ("command-palette", "command-palette"),
         ("popover", "popover"),
         ("tooltip", "tooltip"),
         ("hover-card", "hover-card"),
@@ -100,13 +106,13 @@ def test_ui_catalog_groups_drive_sidebar_order_and_breadcrumbs() -> None:
 
     assert [(group.label, len(group.items), group.collapsible) for group in area.groups] == [
         ("Get started", 2, False),
-        ("Actions", 4, True),
-        ("Forms and inputs", 9, True),
-        ("Layout", 4, True),
-        ("Data display", 8, True),
-        ("Navigation", 4, True),
+        ("Actions", 5, True),
+        ("Forms and inputs", 14, True),
+        ("Layout", 5, True),
+        ("Data display", 10, True),
+        ("Navigation", 5, True),
         ("Feedback and status", 5, True),
-        ("Overlays and disclosure", 7, True),
+        ("Overlays and disclosure", 11, True),
     ]
     assert tree.find_breadcrumbs("/ui-library/components/tree/") == [
         ("Citry UI", "/ui-library/"),

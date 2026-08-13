@@ -91,3 +91,5 @@ interfaces:
       - {id: input-type-aliases-cform-enctype, name: CFormEnctype, definition: 'Literal["application/x-www-form-urlencoded", "multipart/form-data", "text/plain"]'}
       - {id: input-type-aliases-cform-autocomplete, name: CFormAutocomplete, definition: 'Literal["on", "off"]'}
   - {id: cform-default-slot-data, kind: record, name: CFormDefaultSlotData, entries: []}
+
+translations: []

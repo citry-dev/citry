@@ -21,6 +21,12 @@ The graph-first target is the supported production baseline. Section 12
 summarizes the landed architecture and the separate future extensions that
 were deliberately left outside it. Implementation history and closeout
 evidence live in [`alpinejs_plan.md`](alpinejs_plan.md).
+The proposed constrained evaluator, implemented request-scoped CSP nonce
+propagation, and JavaScript delivery policies live separately in
+[`security_csp.md`](security_csp.md). Typed settings, structured security
+results, SRI, central nonce transport, the compatibility checker,
+settled-output validation, strict selection of the version-matched CSP
+runtime, and JavaScript inventory, omission, and enforcement are implemented.
 
 For operating rules see [`/CLAUDE.md`](../../CLAUDE.md).
 
@@ -312,7 +318,7 @@ Authoring, diagnostics, implementation, and normative examples use
 The name is lowercase and its expression is non-empty. Stock Alpine ignores
 it; Citry discovers and evaluates it. Alpine `x-bind:$c-props` and an
 `$c-props` key in Alpine's object-form `x-bind` do not create the directive on
-Alpine 3.15.12, so dynamic server-time presence uses `c-$c-props` or Citry
+the pinned Alpine build, so dynamic server-time presence uses `c-$c-props` or Citry
 `c-bind`. Runtime code uses attribute APIs or `CSS.escape`; a raw
 `[$c-props]` selector is invalid CSS. HTML parsing, cloning, mutation, morph,
 table/select contextual parsing, and HTML-parsed SVG preserve the name.
@@ -744,7 +750,7 @@ restore arbitrary pre-morph DOM after such a runtime failure.
 
 ### 6.1 Version and boot ownership
 
-Citry embeds exact Alpine 3.15.12 and `@alpinejs/morph` 3.15.12 today. The
+Citry embeds exact Alpine 3.16.1 and `@alpinejs/morph` 3.16.1 today. The
 runtime follows the Livewire ownership pattern:
 
 - one bundled Alpine instance serves the page;
@@ -1242,9 +1248,12 @@ source-linked content.
 ### 11.2 CSP
 
 The standard Alpine build evaluates expression strings and therefore requires
-`unsafe-eval` on pages that use those expressions. This is an explicit current
-tradeoff. A constrained future mode may combine Alpine's CSP build with a
-restricted expression vocabulary, but it is not part of this target.
+`unsafe-eval` on pages that use those expressions. This remains the default
+until CSP serialization is enabled. Citry now also builds a version-matched
+Alpine CSP artifact from the same Events source, guarded by evaluator,
+ownership, morph, Events, and fragment canaries. The restricted expression
+vocabulary, checker, selection boundary, and remaining work are specified in
+[`security_csp.md`](security_csp.md).
 
 ### 11.3 ESM and compiled languages
 

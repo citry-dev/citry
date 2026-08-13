@@ -4,6 +4,7 @@ import { css, cssLanguage } from "@codemirror/lang-css";
 import { html, htmlLanguage } from "@codemirror/lang-html";
 import { javascript, javascriptLanguage } from "@codemirror/lang-javascript";
 import { python, pythonLanguage } from "@codemirror/lang-python";
+import { fluent, fluentLanguage } from "@citry/codemirror-lang-fluent";
 import {
   HighlightStyle,
   LanguageSupport,
@@ -29,6 +30,7 @@ import {
 } from "@codemirror/view";
 import { parseMixed } from "@lezer/common";
 import { tags } from "@lezer/highlight";
+import { citryAssetAt } from "./citry_regions.js";
 
 // Parse the Python module normally, then switch parsers only inside Citry's
 // triple-quoted template, JavaScript, and CSS class fields.
@@ -36,27 +38,21 @@ const embeddedParsers = {
   template: htmlLanguage.parser,
   js: javascriptLanguage.parser,
   css: cssLanguage.parser,
+  messages: fluentLanguage.parser,
 };
 
 function mixedCitryRegion(node, input) {
-  if (node.name !== "String") return null;
-  const prefix = input.read(Math.max(0, node.from - 220), node.from);
-  const line = prefix.slice(prefix.lastIndexOf("\n") + 1);
-  const assignment = line.match(/\b(template|js|css)(?:\s*:\s*[^=\n]+)?\s*=\s*(?:[rubfRUBF]*)$/);
-  if (!assignment) return null;
-
-  const quoted = input.read(node.from, node.to);
-  const opener = quoted.startsWith('\"\"\"') ? '\"\"\"' : quoted.startsWith("'''") ? "'''" : null;
-  if (!opener || !quoted.endsWith(opener) || node.to - node.from < 6) return null;
+  const asset = citryAssetAt(node, (from, to) => input.read(from, to));
+  if (asset === null) return null;
   return {
-    parser: embeddedParsers[assignment[1]],
-    overlay: [{ from: node.from + 3, to: node.to - 3 }],
+    parser: embeddedParsers[asset.kind],
+    overlay: [{ from: asset.from, to: asset.to }],
   };
 }
 
-const citryPython = new LanguageSupport(
+export const citryPython = new LanguageSupport(
   pythonLanguage.configure({ wrap: parseMixed(mixedCitryRegion) }, "Citry Python"),
-  [python().support, html().support, javascript().support, css().support],
+  [python().support, html().support, javascript().support, css().support, fluent().support],
 );
 
 // Lezer understands the embedded languages, while these marks add Citry-only
@@ -139,7 +135,7 @@ const citryTheme = EditorView.theme({
 
 // Both playground consumers use this small adapter so CodeMirror lifecycle and
 // keyboard behavior stay out of their run-state coordinators.
-export function createCitryEditor({ parent, initialSource, onChange, onRun }) {
+export function createCitryEditor({ parent, initialSource, onChange, onRun, ide = null }) {
   const view = new EditorView({
     parent,
     state: EditorState.create({
@@ -164,12 +160,15 @@ export function createCitryEditor({ parent, initialSource, onChange, onRun }) {
         citryPython,
         citryDecorationPlugin,
         citryTheme,
+        ...(ide?.extensions() || []),
         EditorView.contentAttributes.of({
           "aria-label": "Citry Python module",
           spellcheck: "false",
         }),
         EditorView.updateListener.of((update) => {
-          if (update.docChanged) onChange();
+          if (!update.docChanged) return;
+          ide?.update(update.state);
+          onChange();
         }),
         keymap.of([
           { key: "Mod-Enter", run: () => { onRun(); return true; } },
@@ -182,6 +181,7 @@ export function createCitryEditor({ parent, initialSource, onChange, onRun }) {
       ],
     }),
   });
+  ide?.attach(view);
 
   return {
     getSource: () => view.state.doc.toString(),
@@ -194,6 +194,15 @@ export function createCitryEditor({ parent, initialSource, onChange, onRun }) {
       if (focus) view.focus();
     },
     focus: () => view.focus(),
-    destroy: () => view.destroy(),
+    setCursor(position) {
+      if (!Number.isSafeInteger(position) || position < 0 || position > view.state.doc.length) return false;
+      view.dispatch({ selection: { anchor: position }, scrollIntoView: true });
+      view.focus();
+      return true;
+    },
+    destroy() {
+      ide?.destroy();
+      view.destroy();
+    },
   };
 }

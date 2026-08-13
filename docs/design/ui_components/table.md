@@ -390,8 +390,8 @@ plus explicit widths provides predictable truncation; `auto` preserves
 intrinsic sizing. Long cells must wrap or scroll without expanding the page.
 
 Library-authored visible strings are `loading_label`, `empty_label`, and
-`error_label`. Locale selection and translation ownership remain separate
-follow-up work.
+`error_label`. The Citry UI i18n migration assigns stable keys to those
+defaults and defines their server/browser ownership.
 
 ## 12. Overlay and layering behavior
 
@@ -552,3 +552,12 @@ collapsed by default, and every snippet exports one explicit `preview` value.
   specialist companion boundary.
 - Human visual, keyboard, assistive-technology, print, and real-device review
   remain release evidence after automated qualification.
+
+## 21. Internationalization
+
+Loading, empty, and error states use separate keys in the structured
+[Translation keys table](../../../packages/py/citry_ui/citry_ui/components/ctable/api.yml).
+Server `tr()` initializes component fallback text and the persistent live
+announcer; `$c-tr` follows locale changes for the currently active state. A
+matching explicit label or state slot owns its output and suppresses the
+catalog binding for that destination.

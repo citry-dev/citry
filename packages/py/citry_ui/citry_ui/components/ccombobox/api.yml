@@ -264,3 +264,15 @@ interfaces:
     entries:
       - {id: query, name: query, type: string, meaning: Query associated with the failed current request.}
       - {id: request-id, name: requestId, type: number, meaning: Failed request identity.}
+
+translations:
+  - id: ccombobox-translations
+    component: CCombobox
+    entries:
+      - {id: required, key: citry-ui-combobox-required, purpose: Supplies native required-selection validity text., variables: None, override: '`required_message` input', updates: '`i18n.bind()` updates the native validation message.'}
+      - {id: clear, key: citry-ui-combobox-clear, purpose: Names the clear-selection control., variables: None, override: '`clear_label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: open, key: citry-ui-combobox-open, purpose: Names the trigger while the popup is closed., variables: None, override: '`open_label` input', updates: '`i18n.bind()` updates the stateful `aria-label`.'}
+      - {id: close, key: citry-ui-combobox-close, purpose: Names the trigger while the popup is open., variables: None, override: '`close_label` input', updates: '`i18n.bind()` updates the stateful `aria-label`.'}
+      - {id: loading, key: citry-ui-combobox-loading, purpose: Reports asynchronous option loading., variables: None, override: '`loading_label` input or `loading` slot', updates: '$c-tr updates fallback text.'}
+      - {id: empty, key: citry-ui-combobox-empty, purpose: Reports an empty option result., variables: None, override: '`empty_label` input or `empty` slot', updates: '$c-tr updates fallback text.'}
+      - {id: error, key: citry-ui-combobox-error, purpose: Reports option-loading failure., variables: None, override: '`error_label` input or `error` slot', updates: '$c-tr updates fallback text.'}

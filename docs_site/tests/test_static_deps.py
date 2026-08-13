@@ -33,6 +33,18 @@ def test_playground_transport_uses_protocol_v1_everywhere() -> None:
     } == {"1"}
 
 
+def test_playground_analysis_transport_uses_schema_v1() -> None:
+    browser_ide = (DOCS_SITE_DIR / "_internal/frontend/src/browser_ide.js").read_text(encoding="utf-8")
+    worker = (DOCS_SITE_DIR / "_internal/frontend/src/analysis_worker.js").read_text(encoding="utf-8")
+
+    browser_version = re.search(r"const SCHEMA_VERSION = (\d+);", browser_ide)
+    worker_version = re.search(r"const SCHEMA_VERSION = (\d+);", worker)
+
+    assert browser_version is not None
+    assert worker_version is not None
+    assert {browser_version.group(1), worker_version.group(1)} == {"1"}
+
+
 def test_export_runtime_writes_under_mount_prefix(tmp_path: Path) -> None:
     default_citry.set_mounted_prefix(CITRY_MOUNT_PREFIX)
 

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pygments.lexers import get_lexer_by_name
+
 from docs_site._internal.build import configure_docs_globals
 from docs_site._internal.config import DocsConfig, config
 from docs_site._internal.pipeline import render_page
@@ -88,6 +90,21 @@ def test_citry_fence_styles_builtin_names_as_html_tags() -> None:
     assert '<span class="nt">c-template</span>' in result.html
     assert '<span class="nt">c-component</span>' in result.html
     assert '<span class="nb">c-slot</span>' not in result.html
+
+
+def test_fluent_lexer_alias_is_registered() -> None:
+    lexer = get_lexer_by_name("fluent")
+
+    assert "fluent" in lexer.aliases
+    assert "ftl" in lexer.aliases
+    assert "*.ftl" in lexer.filenames
+
+
+def test_fluent_fence_highlights_messages_and_variables() -> None:
+    result = render_page("```fluent\nhello = Hello, { $name }\n```")
+
+    assert '<span class="no">hello</span>' in result.html
+    assert '<span class="nv">$name</span>' in result.html
 
 
 def test_markdown_body_captures_snippet_expansion_once(tmp_path: Path) -> None:

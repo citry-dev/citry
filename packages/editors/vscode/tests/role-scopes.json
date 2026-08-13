@@ -4,7 +4,11 @@
 	"python": "meta.embedded.inline.python.citry",
 	"javascript": ["meta.embedded.inline.javascript.citry", "meta.embedded.block.javascript", "source.js"],
 	"css": ["meta.embedded.block.css", "source.css"],
+	"message-id": "entity.name.label.message.fluent",
+	"message-variable": "variable.other.fluent",
 	"handler": "entity.name.function.handler.citry",
+	"function": "entity.name.function.python",
+	"method": "entity.name.function.member.python",
 	"comment": "comment",
 	"text": "text"
 }

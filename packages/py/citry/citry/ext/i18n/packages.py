@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from importlib.resources.abc import Traversable
     from typing import Literal
 
+    from .formats import FormatRegistry
+
 _OWNER_RE = re.compile(r"[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?\Z")
 
 
@@ -49,6 +51,7 @@ class LoadedCatalogPackage:
     sources: tuple[CatalogSource, ...]
     manifest_revision: str
     link_artifact: str | None = None
+    formats: FormatRegistry | None = None
 
 
 def load_catalog_packages(
@@ -96,6 +99,7 @@ def _load_catalog_package(
     if type(owner) is not str or _OWNER_RE.fullmatch(owner) is None:
         raise ValueError(f"{name!r}/citry-i18n.toml has invalid stable owner {owner!r}.")
     source_locale = _canonical_exact_locale(descriptor["source_locale"], source=f"{name!r} source_locale")
+    formats = _load_package_formats(name=name, owner=owner, root=root)
 
     manifest_path = root.joinpath("_compiled", "manifest.json")
     if mode == "production":
@@ -110,6 +114,8 @@ def _load_catalog_package(
             source_locale=source_locale,
             path=manifest_path,
             artifacts_root=root.joinpath("_compiled"),
+            formats_path=root.joinpath("formats.json"),
+            formats=formats,
         )
         return LoadedCatalogPackage(
             import_package=name,
@@ -118,6 +124,7 @@ def _load_catalog_package(
             sources=(),
             manifest_revision=manifest_revision,
             link_artifact=link_artifact,
+            formats=formats,
         )
 
     locales_root = root.joinpath("locales")
@@ -166,6 +173,8 @@ def _load_catalog_package(
             sources=tuple(sources),
             path=manifest_path,
             artifacts_root=root.joinpath("_compiled"),
+            formats_path=root.joinpath("formats.json"),
+            formats=formats,
         )
     return LoadedCatalogPackage(
         import_package=name,
@@ -173,6 +182,7 @@ def _load_catalog_package(
         source_locale=source_locale,
         sources=tuple(sources),
         manifest_revision=manifest_revision,
+        formats=formats,
     )
 
 
@@ -194,6 +204,7 @@ def compile_catalog_package(name: str) -> tuple[Path, Path, Path]:
         owner=package.owner,
         source_locale=package.source_locale,
         sources=package.sources,
+        formats=package.formats,
     )
     compiler = CatalogCompiler()
     request_json = json.dumps(request, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
@@ -220,6 +231,12 @@ def compile_catalog_package(name: str) -> tuple[Path, Path, Path]:
             },
         },
     }
+    formats_path = root / "formats.json"
+    if formats_path.is_file():
+        manifest["formats"] = {
+            "path": "formats.json",
+            "sha256": sha256(formats_path.read_bytes()).hexdigest(),
+        }
     manifest_path = compiled_root / "manifest.json"
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n",
@@ -234,6 +251,7 @@ def _package_compile_request(
     owner: str,
     source_locale: str,
     sources: tuple[CatalogSource, ...],
+    formats: FormatRegistry | None,
 ) -> dict[str, object]:
     """Build the one canonical compiler request used to write and verify a package artifact."""
     active_locales = sorted({source.locale for source in sources} | {source_locale})
@@ -259,7 +277,7 @@ def _package_compile_request(
             }
             for source in sources
         ],
-        "formats": {},
+        "formats": {} if formats is None else formats.to_wire(),
     }
 
 
@@ -272,6 +290,28 @@ def _walk_ftl(root: Traversable, prefix: str = "") -> list[tuple[Traversable, st
         elif item.is_file() and item.name.endswith(".ftl"):
             result.append((item, relative))
     return result
+
+
+def _load_package_formats(*, name: str, owner: str, root: Traversable) -> FormatRegistry | None:
+    path = root.joinpath("formats.json")
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"Could not read {name!r}/formats.json: {error}") from error
+    from .formats import format_registry_from_wire  # noqa: PLC0415
+
+    registry = format_registry_from_wire(payload, source=f"{name!r}/formats.json")
+    prefix = f"{owner}-"
+    for kind in registry.to_wire():
+        invalid = sorted(profile for profile in getattr(registry, kind) if not profile.startswith(prefix))
+        if invalid:
+            raise ValueError(
+                f"{name!r}/formats.json {kind} profile names must start with the package namespace "
+                f"{prefix!r}; got {invalid[0]!r}."
+            )
+    return registry
 
 
 def _canonical_exact_locale(value: object, *, source: str) -> str:
@@ -294,6 +334,8 @@ def _validate_manifest(
     sources: tuple[CatalogSource, ...],
     path: Traversable,
     artifacts_root: Traversable,
+    formats_path: Traversable,
+    formats: FormatRegistry | None,
 ) -> str:
     try:
         raw = path.read_text(encoding="utf-8")
@@ -303,6 +345,8 @@ def _validate_manifest(
     if type(manifest) is not dict:
         raise ValueError(f"{name!r}/_compiled/manifest.json must contain one JSON object.")
     expected_keys = {"schema_version", "owner", "source_locale", "sources", "artifacts"}
+    if formats_path.is_file():
+        expected_keys.add("formats")
     if set(manifest) != expected_keys:
         raise ValueError(f"{name!r}/_compiled/manifest.json must contain exactly {', '.join(sorted(expected_keys))}.")
     if manifest["schema_version"] != 1 or manifest["owner"] != owner or manifest["source_locale"] != source_locale:
@@ -320,6 +364,11 @@ def _validate_manifest(
         for artifact in ("link.json", "server.json")
     }:
         raise ValueError(f"{name!r}/_compiled/manifest.json does not match its installed server artifact.")
+    if "formats" in expected_keys and manifest["formats"] != {
+        "path": "formats.json",
+        "sha256": _resource_sha256(formats_path, source=f"{name!r} formats.json"),
+    }:
+        raise ValueError(f"{name!r}/_compiled/manifest.json does not match its installed format profiles.")
     try:
         server_payload = json.loads(artifacts_root.joinpath("server.json").read_text(encoding="utf-8"))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
@@ -329,7 +378,7 @@ def _validate_manifest(
     try:
         compiler = CatalogCompiler()
         request_json = json.dumps(
-            _package_compile_request(owner=owner, source_locale=source_locale, sources=sources),
+            _package_compile_request(owner=owner, source_locale=source_locale, sources=sources, formats=formats),
             ensure_ascii=False,
             separators=(",", ":"),
             sort_keys=True,
@@ -355,6 +404,8 @@ def _validate_production_artifacts(
     source_locale: str,
     path: Traversable,
     artifacts_root: Traversable,
+    formats_path: Traversable,
+    formats: FormatRegistry | None,
 ) -> tuple[str, str]:
     """Validate generated package inputs without opening an authored FTL file."""
     try:
@@ -363,6 +414,8 @@ def _validate_production_artifacts(
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ValueError(f"Could not read {name!r}/_compiled/manifest.json: {error}") from error
     expected_keys = {"schema_version", "owner", "source_locale", "sources", "artifacts"}
+    if formats_path.is_file():
+        expected_keys.add("formats")
     if type(manifest) is not dict or set(manifest) != expected_keys:
         raise ValueError(f"{name!r}/_compiled/manifest.json has an unsupported manifest shape.")
     if manifest["schema_version"] != 1 or manifest["owner"] != owner or manifest["source_locale"] != source_locale:
@@ -378,6 +431,11 @@ def _validate_production_artifacts(
     }
     if manifest["artifacts"] != expected_artifacts:
         raise ValueError(f"{name!r}/_compiled/manifest.json does not match its installed artifacts.")
+    if "formats" in expected_keys and manifest["formats"] != {
+        "path": "formats.json",
+        "sha256": _resource_sha256(formats_path, source=f"{name!r} formats.json"),
+    }:
+        raise ValueError(f"{name!r}/_compiled/manifest.json does not match its installed format profiles.")
     try:
         link_text = artifacts_root.joinpath("link.json").read_text(encoding="utf-8").strip()
         link_payload = json.loads(link_text)
@@ -431,7 +489,7 @@ def _validate_production_artifacts(
                             "precedence": 0,
                         }
                     ],
-                    "formats": {},
+                    "formats": {} if formats is None else formats.to_wire(),
                 },
                 ensure_ascii=False,
                 separators=(",", ":"),

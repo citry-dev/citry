@@ -6,12 +6,18 @@ import { build } from "esbuild";
 // the docs site. Citry's pinned wheel owns its matching Events client.
 const packageRoot = fileURLToPath(new URL("../", import.meta.url));
 const staticRoot = fileURLToPath(new URL("../../../static/playground/", import.meta.url));
+const portableIdeSource = fileURLToPath(
+  new URL("../../../../packages/py/citry/citry/_portable_ide.py", import.meta.url),
+);
 const checkOnly = process.argv.includes("--check");
 
 // The full page and deferred inline runtime bundle shared dependencies. The
 // small activator stays separate so ordinary docs pages do not load CodeMirror.
 const entries = [
   { source: "playground.js", output: "playground.js", bundle: true },
+  // The analysis Worker has no package imports, so keep its runtime-relative
+  // Pyodide and adapter URLs intact.
+  { source: "analysis_worker.js", output: "analysis_worker.js", bundle: false },
   // Keep the activator independent from CodeMirror. Bundling this dynamic
   // import without code splitting would pull the heavy runtime into every page.
   { source: "live_code.js", output: "live_code.js", bundle: false },
@@ -37,6 +43,9 @@ async function generate(entry) {
 }
 
 const generatedEntries = await Promise.all(entries.map(async (entry) => [entry, await generate(entry)]));
+const portableIde = Buffer.from(
+  `# Generated from packages/py/citry/citry/_portable_ide.py\n# by docs_site/_internal/frontend/scripts/build.mjs. Do not edit.\n${await readFile(portableIdeSource, "utf8")}`,
+);
 
 async function checkFile(path, expected, label) {
   let committed;
@@ -58,6 +67,7 @@ if (checkOnly) {
   for (const [entry, generated] of generatedEntries) {
     await checkFile(`${staticRoot}${entry.output}`, generated, entry.output);
   }
+  await checkFile(`${staticRoot}portable_ide.py`, portableIde, "portable_ide.py");
 } else {
   // The check command detects any partial output left by an interrupted build.
   for (const [entry, generated] of generatedEntries) {
@@ -65,4 +75,7 @@ if (checkOnly) {
     await writeFile(outputPath, generated);
     console.log(`Wrote ${outputPath} (${generated.byteLength} bytes)`);
   }
+  const portableOutput = `${staticRoot}portable_ide.py`;
+  await writeFile(portableOutput, portableIde);
+  console.log(`Wrote ${portableOutput} (${portableIde.byteLength} bytes)`);
 }

@@ -98,7 +98,10 @@ if TYPE_CHECKING:
 
     from citry.citry_render import OnRenderGenerator, RenderReplacement
     from citry.citry_template import CitryTemplate
-    from citry.ext.dependencies import CitryDependencies, Dependency
+    from citry.ext.cache import CacheConfig
+    from citry.ext.dependencies import CitryDependencies, DependenciesConfig, Dependency
+    from citry.ext.events.config import Events as EventsConfig
+    from citry.ext.i18n import I18n as I18nConfig
     from citry.ownership import ComponentInvocationId, ComponentTagClientBindingRecord, OwnershipGraph
 
 
@@ -337,6 +340,7 @@ class ComponentMeta(LibraryComponentMeta):
         attrs: dict[str, Any],
         *,
         _citry_builtin: object | None = None,
+        _citry_internal: object | None = None,
         _citry_library_materialization: object | None = None,
     ) -> ComponentMeta:
         # Detect whether we're defining the Component base class itself
@@ -373,6 +377,8 @@ class ComponentMeta(LibraryComponentMeta):
             raise TypeError(msg)
         if library_definition is None and _citry_library_materialization is not None:
             raise TypeError("Library component materialization requires a LibraryComponent definition base.")
+        if _citry_builtin is not None and _citry_internal is not None:
+            raise TypeError("A component cannot be both a registered built-in and a private internal component.")
 
         reserved_identities = {"class_id", "_class_id", "definition_id", "_definition_id"} & attrs.keys()
         if reserved_identities:
@@ -455,7 +461,9 @@ class ComponentMeta(LibraryComponentMeta):
             # Register with the Citry instance. Uses the class name (or
             # Component.name override) as the registration name; Citry.register()
             # handles normalization, duplicate detection, and registered hooks.
-            if _citry_builtin is None:
+            if _citry_internal is not None:
+                citry_instance._registry._authorize_internal(cls, _citry_internal)
+            elif _citry_builtin is None:
                 citry_instance.register(cls)
             else:
                 citry_instance._register_builtin(cls, _citry_builtin)
@@ -598,12 +606,18 @@ class Component(metaclass=ComponentMeta):
     messages: ClassVar[str | None] = None
     """Inline source-locale Fluent messages for this component.
 
-    Mutually exclusive with ``messages_file``. Read the loaded source with
-    ``get_messages()``.
+    Mutually exclusive with ``messages_file``. Declare the source language with
+    ``I18n.messages_locale``. A registered message asset activates server
+    source-mode translation for the complete engine catalog, even without
+    engine i18n settings. Read the loaded source with ``get_messages()``.
     """
 
     messages_file: ClassVar[str | None] = None
-    """Path to source-locale Fluent messages, resolved like ``template_file``."""
+    """Path to source-locale Fluent messages, resolved like ``template_file``.
+
+    This has the same source-mode and ``I18n.messages_locale`` contract as
+    ``messages``.
+    """
 
     js: ClassVar[str | None] = None
     """Inline primary JS for this component. Mutually exclusive with
@@ -628,11 +642,31 @@ class Component(metaclass=ComponentMeta):
     """Path to the component's primary CSS file. Mutually exclusive with
     ``css``. Resolved like ``template_file``."""
 
-    # NOTE: Secondary assets are declared in a nested ``Dependencies`` class,
-    # which belongs to the built-in `dependencies` extension (the extension
-    # manager rebuilds it into the extension's per-component config). There is
-    # deliberately no `Dependencies` ClassVar here; read the merged result
-    # with ``get_dependencies()``. See docs/design/asset_loading.md section 7.
+    Cache: ClassVar[type | None] = None
+    """Optional output-cache settings owned by the Cache extension.
+
+    Define a nested ``Cache`` class to enable caching, set its TTL and version,
+    or return additional variation values. Citry rebuilds the declaration on
+    [`CacheConfig`][citry.CacheConfig] when it creates the component class.
+    """
+
+    Dependencies: ClassVar[type | None] = None
+    """Optional secondary JavaScript and CSS assets.
+
+    Define a nested ``Dependencies`` class with ``js``, ``css``, ``extend``,
+    or ``local_files``. Read the normalized merged result with
+    [`get_dependencies()`][citry.Component.get_dependencies]. Citry rebuilds
+    the declaration on [`DependenciesConfig`][citry.DependenciesConfig].
+    """
+
+    I18n: ClassVar[type | None] = None
+    """Optional per-component settings for the built-in i18n extension.
+
+    Define ``client_messages`` here when browser code uses a finite dynamic
+    message name that static analysis cannot discover. The instance-level
+    [`i18n`][citry.Component.i18n] value provides translation, formatting,
+    parsing, and the explicit locale context during a render.
+    """
 
     Kwargs: ClassVar[type | None] = None
     """Optional typed keyword arguments.
@@ -707,9 +741,6 @@ class Component(metaclass=ComponentMeta):
     class. See [`event`][citry.ext.events.event] for per-handler options.
     """
 
-    TemplateData: ClassVar[type | None] = None
-    """Optional typed template data output, inherited like [`Kwargs`][citry.Component.Kwargs]."""
-
     Lint: ClassVar[type | None] = None
     """Optional per-component template-lint settings.
 
@@ -718,6 +749,9 @@ class Component(metaclass=ComponentMeta):
     declarations compose through the component C3 order. Assign ``None`` to
     return to the Citry instance's application lint policy.
     """
+
+    TemplateData: ClassVar[type | None] = None
+    """Optional typed template data output, inherited like [`Kwargs`][citry.Component.Kwargs]."""
 
     JsData: ClassVar[type | None] = None
     """Optional typed schema for the ``js_data()`` output. Like
@@ -775,6 +809,18 @@ class Component(metaclass=ComponentMeta):
     dataclass is defined. Useful when you need dict access regardless
     of typing.
     """
+
+    cache: CacheConfig
+    """The Cache extension settings bound to this rendered component."""
+
+    dependencies: DependenciesConfig
+    """The Dependencies extension settings bound to this rendered component."""
+
+    events: EventsConfig[Any]
+    """The Events extension settings and event URL helper for this component."""
+
+    i18n: I18nConfig
+    """Translation, formatting, parsing, and locale access for this component."""
 
     parent: Component | None
     """The component that wrote this one into its template. None for a root

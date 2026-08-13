@@ -1,0 +1,11 @@
+schema_version: 1
+previews:
+  - basic-context-menu
+  - choices-and-submenus
+  - controlled-open
+  - native-content
+  - touch-and-pen
+  - focus-and-keyboard
+  - layers-and-roots
+  - positioning-and-rtl
+  - customization-and-fallback

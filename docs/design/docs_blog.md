@@ -162,7 +162,7 @@ The Blog area is active on the index and post pages.
 | Source or generated artifact | Public URL |
 | --- | --- |
 | `content/blog/index.md` | `/blog/` |
-| `content/blog/2026-07-27-language-agnostic-tools.md` | `/blog/language-agnostic-tools/` |
+| `content/blog/YYYY-MM-DD-lowercase-kebab-slug.md` | `/blog/lowercase-kebab-slug/` |
 | Generated Atom feed | `/blog/feed.xml` |
 
 The catalog strips the leading date when it creates the public post slug. The
@@ -242,14 +242,14 @@ Example:
 
 ```yaml
 ---
-title: Why language-agnostic tools matter
-description: One implementation can give several language communities the same reliable behavior.
-date: 2026-07-28T09:00:00+02:00
-author: Juro Oravec
-author_url: https://github.com/jurooravec
+title: An example project update
+description: A concise summary of what changed and why it matters.
+date: 2026-07-27T09:00:00+02:00
+author: Example author
+author_url: https://github.com/example
 updated: 2026-08-02T16:30:00+02:00
-tags: Project updates, Architecture
-og_image: /static/img/blog/language-agnostic-tools.png
+tags: Project updates
+og_image: /static/img/blog/project-update.png
 ---
 ```
 
@@ -398,9 +398,10 @@ must not overlap the search, version, theme, or social controls.
 
 ## Feed and discovery
 
-The root build writes an Atom 1.0 feed at `/blog/feed.xml`. Atom is chosen
-because it has a precise standard for stable entry IDs, authors, updates,
-categories, and self links. The feed contains the 20 newest posts, with:
+When at least one post exists, the root build writes an Atom 1.0 feed at
+`/blog/feed.xml`. Atom is chosen because it has a precise standard for stable
+entry IDs, authors, updates, categories, and self links. The feed contains the
+20 newest posts, with:
 
 - `Citry blog` as its title, the absolute canonical feed URL as its stable ID,
   a self link, a `/blog/` alternate link, and the maximum effective-update
@@ -416,7 +417,7 @@ The feed publishes summaries and links to the canonical pages. It does not copy
 the full rendered HTML, which avoids rewriting internal asset URLs and embedded
 interactive examples for feed readers.
 
-Every current root page includes an autodiscovery link:
+While the feed exists, every current root page includes an autodiscovery link:
 
 ```html
 <link
@@ -467,7 +468,8 @@ an XML well-formedness and required-element check.
 Blog uses the docs site's declarative `site` scope rather than a Blog-only build
 exception. It is project-wide, not Citry-version-specific:
 
-- the current root build writes `/blog/`, post pages, and the feed;
+- the current root build always writes `/blog/` and writes post pages and the
+  feed when at least one post exists;
 - a `build --docs-version ...` snapshot skips `content/blog/` and Blog-generated
   artifacts;
 - Blog links in versioned page chrome point to the root `/blog/`;

@@ -77,6 +77,14 @@ def _page() -> str:
                 c-trigger_attrs="{'aria-label': 'Locked planets'}"
               />
             </fieldset>
+            <c-CMultiSelect
+              class_="exact-multi"
+              c-options="exact_options"
+              c-value="exact_values"
+              placeholder="Exact"
+              c-trigger_attrs="{'aria-label': 'Exact values'}"
+              $c-props="{value: $store.multi.exact}"
+            />
             <dialog id="modal"><button autofocus type="button">Modal action</button></dialog>
           </body></html>
         """
@@ -85,6 +93,7 @@ def _page() -> str:
             value:['earth'], open:undefined, disabled:false, readonly:false, loop:false,
             closeOnSelect:false, variant:'outline', size:'md', accept:false, acceptOpen:false,
             values:[], opens:[], submits:[],
+            exact:[' alpha ', 'line\\nfeed'],
           });
         """
 
@@ -95,7 +104,12 @@ def _page() -> str:
                     CMultiSelectOption("mars", "Mars", "The red planet", group="Rocky"),
                     CMultiSelectOption("venus", "Venus", disabled=True, group="Rocky"),
                     CMultiSelectOption("jupiter", "Jupiter", group="Gas giants"),
-                ]
+                ],
+                "exact_options": [
+                    CMultiSelectOption(" alpha ", "Spaced"),
+                    CMultiSelectOption("line\nfeed", "Line feed"),
+                ],
+                "exact_values": (" alpha ", "line\nfeed"),
             }
 
     return str(Page())
@@ -203,6 +217,33 @@ def test_native_repeated_form_reset_readonly_fieldset_and_modal_safety(page: Any
     page.locator("#modal").evaluate("element => element.showModal()")
     page.wait_for_function("document.querySelector('.primary-multi [role=combobox]').ariaExpanded === 'false'")
     assert page.evaluate("Alpine.store('multi').opens.at(-1).slice(1)") == ["ancestor", False, True]
+    assert errors == []
+
+
+def test_canceled_reset_after_target_listener_preserves_multiselect_state(page: Any) -> None:
+    errors = _load(page)
+    page.evaluate("Alpine.store('multi').value = undefined")
+    control = _control(page)
+    control.click()
+    _option(page, "mars").click()
+    control.press("Escape")
+    page.evaluate(
+        """() => document.querySelector('#planet-form')
+          .addEventListener('reset', event => event.preventDefault(), {once:true})"""
+    )
+    page.locator("#reset").click()
+    page.wait_for_timeout(50)
+    assert _chips(page) == ["Earth", "Mars"]
+    assert errors == []
+
+
+def test_exact_whitespace_and_line_feed_values_remain_selected(page: Any) -> None:
+    errors = _load(page)
+    selected = page.locator(".exact-multi select option:checked").evaluate_all(
+        "options => options.map(option => option.value)"
+    )
+    assert selected == [" alpha ", "line\nfeed"]
+    assert page.locator(".exact-multi [data-citry-ui-part=chip]").count() == 2
     assert errors == []
 
 

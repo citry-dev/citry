@@ -1,6 +1,7 @@
 from dataclasses import replace
 from pathlib import PurePosixPath
 
+from docs_site._internal.guards import ui_library_projection as projection_guard
 from docs_site._internal.guards.base import GuardContext
 from docs_site._internal.guards.ui_library_projection import check
 from docs_site._internal.project import default_docs_project, use_docs_project
@@ -36,8 +37,13 @@ def _context(tmp_path):
     )
 
 
-def _write_component_guide(tmp_path, *, body="# Widget\n\n## Use Widget\n\nExample.\n"):
-    source = tmp_path / "package/components/widget/api.md"
+def _write_component_guide(
+    tmp_path,
+    *,
+    body="# Widget\n\n## Use Widget\n\nExample.\n",
+    relative="package/components/widget/api.md",
+):
+    source = tmp_path / relative
     source.parent.mkdir(parents=True)
     source.write_text(body, encoding="utf-8")
     source.with_suffix(".yml").write_text(
@@ -51,7 +57,8 @@ def _write_component_guide(tmp_path, *, body="# Widget\n\n## Use Widget\n\nExamp
         "css: []\n"
         "attributes: []\n"
         "selectors: []\n"
-        "interfaces: []\n",
+        "interfaces: []\n"
+        "translations: []\n",
         encoding="utf-8",
     )
     return source
@@ -106,6 +113,24 @@ def test_projection_guard_rejects_thin_or_examples_owned_component_docs(tmp_path
     assert "component-owned source" in finding.message
 
 
+def test_projection_guard_applies_registered_guide_requirements_to_synthetic_source(
+    tmp_path,
+    monkeypatch,
+):
+    context = _context(tmp_path)
+    _write_component_guide(tmp_path)
+    monkeypatch.setitem(
+        projection_guard._GUIDE_REQUIRED_FRAGMENTS,
+        "widget",
+        (("required teaching token", "teach the registered synthetic contract"),),
+    )
+
+    with use_docs_project(_project_with(_widget_projection())):
+        [finding] = check(context)
+
+    assert "registered synthetic contract" in finding.message
+
+
 def test_projection_guard_rejects_missing_structured_api_data(tmp_path):
     context = _context(tmp_path)
     source = tmp_path / "package/components/widget/api.md"
@@ -139,6 +164,100 @@ def test_projection_guard_accepts_a_manifest_defined_new_family(tmp_path):
         findings = list(check(context))
 
     assert findings == []
+
+
+def test_projection_guard_accepts_an_opted_in_preview_catalog(tmp_path):
+    context = _context(tmp_path)
+    relative = "packages/py/citry_ui/citry_ui/components/cwidget/api.md"
+    projection = UiLibraryProjection("widget", "widget", PurePosixPath(relative))
+    source = _write_component_guide(
+        tmp_path,
+        relative=relative,
+        body=(
+            "# Widget\n\n## Use Widget\n\n"
+            '<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cwidget/snippets/first.py" '
+            'title="First" />\n\n'
+            '<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cwidget/snippets/second.py" '
+            'title="Second" />\n'
+        ),
+    )
+    snippets = source.parent / "snippets"
+    snippets.mkdir()
+    for name in ("first", "second"):
+        (snippets / f"{name}.py").write_text("preview = 1\npreview\n", encoding="utf-8")
+    (snippets / "catalog.yml").write_text(
+        "schema_version: 1\npreviews:\n  - first\n  - second\n",
+        encoding="utf-8",
+    )
+
+    with use_docs_project(_project_with(projection)):
+        findings = list(check(context))
+
+    assert findings == []
+
+
+def test_projection_guard_applies_registered_preview_requirements_to_synthetic_source(
+    tmp_path,
+    monkeypatch,
+):
+    context = _context(tmp_path)
+    relative = "packages/py/citry_ui/citry_ui/components/cwidget/api.md"
+    projection = UiLibraryProjection("widget", "widget", PurePosixPath(relative))
+    source = _write_component_guide(
+        tmp_path,
+        relative=relative,
+        body=(
+            "# Widget\n\n## Use Widget\n\n"
+            '<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cwidget/snippets/first.py" '
+            'title="First" />\n'
+        ),
+    )
+    snippets = source.parent / "snippets"
+    snippets.mkdir()
+    (snippets / "first.py").write_text("preview = 1\npreview\n", encoding="utf-8")
+    monkeypatch.setitem(
+        projection_guard._PREVIEW_REQUIRED_FRAGMENTS,
+        "widget",
+        {"first": (("required preview token", "include the registered synthetic fixture"),)},
+    )
+
+    with use_docs_project(_project_with(projection)):
+        [finding] = check(context)
+
+    assert finding.source.endswith("snippets/first.py")
+    assert "registered synthetic fixture" in finding.message
+
+
+def test_projection_guard_reports_opted_in_preview_order_at_the_component_guide(tmp_path):
+    context = _context(tmp_path)
+    relative = "packages/py/citry_ui/citry_ui/components/cwidget/api.md"
+    projection = UiLibraryProjection("widget", "widget", PurePosixPath(relative))
+    source = _write_component_guide(
+        tmp_path,
+        relative=relative,
+        body=(
+            "# Widget\n\n## Use Widget\n\n"
+            '<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cwidget/snippets/first.py" '
+            'title="First" />\n\n'
+            '<c-ui-demo path="packages/py/citry_ui/citry_ui/components/cwidget/snippets/second.py" '
+            'title="Second" />\n'
+        ),
+    )
+    snippets = source.parent / "snippets"
+    snippets.mkdir()
+    for name in ("first", "second"):
+        (snippets / f"{name}.py").write_text("preview = 1\npreview\n", encoding="utf-8")
+    (snippets / "catalog.yml").write_text(
+        "schema_version: 1\npreviews:\n  - second\n  - first\n",
+        encoding="utf-8",
+    )
+
+    with use_docs_project(_project_with(projection)):
+        [finding] = check(context)
+
+    assert finding.source == relative
+    assert finding.line == 5
+    assert "preview order" in finding.message
 
 
 def test_projection_guard_rejects_a_manual_api_reference(tmp_path):

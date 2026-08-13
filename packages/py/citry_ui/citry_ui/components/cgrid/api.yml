@@ -142,3 +142,5 @@ interfaces:
   - {id: ccontainer-default-slot-data, kind: record, name: CContainerDefaultSlotData, entries: []}
   - {id: cgrid-default-slot-data, kind: record, name: CGridDefaultSlotData, entries: []}
   - {id: cgriditem-default-slot-data, kind: record, name: CGridItemDefaultSlotData, entries: []}
+
+translations: []

@@ -22,8 +22,20 @@ _ENGINE_FIELDS = frozenset({"ttl", "namespace", "generation", "max_entry_bytes"}
 _COMPONENT_FIELDS = frozenset({"enabled", "ttl", "vary", "version"})
 
 
-class _CacheComponentConfig(ExtensionConfig):
-    """Defaults for one component's nested ``Cache`` declaration."""
+class CacheConfig(ExtensionConfig):
+    """
+    Typed runtime view of one component's ``Cache`` declaration.
+
+    Citry creates this value from the component's nested ``Cache`` class. Read
+    it through ``component.cache`` while the component is rendering.
+
+    Attributes:
+        enabled: Whether Citry may cache this component's rendered output.
+        ttl: How many seconds an entry remains valid, or ``None`` for no
+            expiry.
+        version: An application-controlled value included in the cache key.
+
+    """
 
     enabled: ClassVar[bool] = False
     ttl: ClassVar[float | None] = _DEFAULT_TTL

@@ -478,7 +478,8 @@ def test_build_renders_ui_library_source_directly_to_its_catalog_route(tmp_path:
         "attributes: []\n"
         "selectors: []\n"
         "css: []\n"
-        "interfaces: []\n",
+        "interfaces: []\n"
+        "translations: []\n",
         encoding="utf-8",
     )
     snippet = tmp_path / "packages/py/citry_ui/citry_ui/components/button/snippets/build_preview.py"

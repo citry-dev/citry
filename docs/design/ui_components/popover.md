@@ -32,7 +32,7 @@ Common jobs and their shortest supported paths:
 | Align to a trigger edge | `placement` | direct API |
 | Match the trigger's inline size | `match_width=True` | direct API |
 | Change width, gap, colors, radius, or shadow | public CSS variables | CSS |
-| Offer a list of commands or choices | future `CMenu` | separate component |
+| Offer a list of commands or choices | `CMenu` | separate component |
 | Explain a control with noninteractive text | `CTooltip` | separate component |
 | Block the page for a task or decision | `CDialog` | separate component |
 
@@ -562,3 +562,12 @@ Deferred until evidence justifies expansion:
 - rendered-placement reflection when CSS exposes a reliable mechanism;
 - modal Popover mode, which should normally be Dialog;
 - imperative methods after a job cannot use client `open`.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

@@ -175,3 +175,5 @@ interfaces:
       - {id: controlled, name: controlled, type: bool, meaning: Whether client open owns visibility.}
       - {id: forced, name: forced, type: bool, meaning: Whether safety made the close nonrejectable.}
       - {id: source, name: source, type: 'EventTarget | None', meaning: Native source or safety owner.}
+
+translations: []

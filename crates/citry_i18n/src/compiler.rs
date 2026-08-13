@@ -739,6 +739,11 @@ struct CompilerDiagnostic {
 struct ManifestEntry {
     owner: String,
     owner_source_locale: String,
+    definition_path: String,
+    definition_start: usize,
+    definition_end: usize,
+    definition_line: usize,
+    definition_column: usize,
     bundle_locale: String,
     internal_id: String,
     contract: BTreeMap<String, String>,
@@ -763,6 +768,21 @@ struct SourceMapEntry {
     generated_column: usize,
     kind: String,
     detail: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SourceAnalysis {
+    schema_version: u32,
+    definitions: Vec<SourceSymbol>,
+    references: Vec<SourceSymbol>,
+}
+
+#[derive(Debug, Serialize)]
+struct SourceSymbol {
+    kind: String,
+    token: String,
+    start: usize,
+    end: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -902,11 +922,21 @@ impl Linker {
                 }
                 let source = self.owner_source_message_definition(message_id)?;
                 if source.catalog != catalog_index {
+                    let owner = &self.owners[message_id];
+                    let owner_source_locale = &self.packages[owner].source_locale;
+                    let source_catalog = &self.catalogs[source.catalog];
+                    let source_message = &source_catalog.parsed.messages[message_id];
+                    let source_params = parse_params(source_message, &source_catalog.spec)?;
+                    let repeats_source_contract =
+                        catalog.spec.locale == *owner_source_locale && params == source_params;
+                    if repeats_source_contract {
+                        continue;
+                    }
                     let span = message.id.name.range();
                     return Err(Failure::new(
                         "I18N_TRANSLATION_PARAM_DECLARATION",
                         format!(
-                            "only the defining owner's source message may declare @param values for {message_id:?}"
+                            "only the defining owner's source message or an exact source-locale override may declare @param values for {message_id:?}"
                         ),
                     )
                     .at(&catalog.spec.path, &catalog.spec.source, span.start, span.end)
@@ -3360,11 +3390,21 @@ fn compile_request(
             let root_definition = graph.messages[root];
             let selected = &linker.catalogs[root_definition.catalog];
             let owner = linker.owners[&root.message_id].clone();
+            let source_definition = linker.owner_source_definition(root)?;
+            let source_catalog = &linker.catalogs[source_definition.catalog];
+            let definition_span = output_span(source_catalog, root);
+            let (definition_line, definition_column) =
+                line_column(&source_catalog.spec.source, definition_span.start);
             locale_manifest.insert(
                 root.token(),
                 ManifestEntry {
                     owner_source_locale: linker.packages[&owner].source_locale.clone(),
                     owner,
+                    definition_path: source_catalog.spec.path.clone(),
+                    definition_start: definition_span.start,
+                    definition_end: definition_span.end,
+                    definition_line,
+                    definition_column,
                     bundle_locale: graph.locale.clone(),
                     internal_id: internal_id(&graph.locale, root, selected),
                     contract,
@@ -3577,6 +3617,64 @@ impl CatalogCompiler {
         .map_err(|error| Failure::new("I18N_LINK_UNIT_JSON", error.to_string()))
     }
 
+    /// Parse and validate one source unit for interactive editor tooling.
+    pub fn analyze_source(&self, path: &str, source: &str) -> Result<String, Failure> {
+        let mut spec = CatalogSpec {
+            path: path.to_owned(),
+            package: "citry-editor".to_owned(),
+            layer: "citry-editor".to_owned(),
+            precedence: 0,
+            locale: "en-US".to_owned(),
+            source: source.to_owned(),
+            missing_param_type: MissingParamType::Warning,
+            entry_spans: BTreeMap::new(),
+        };
+        let parsed = parse_catalog(&spec)?;
+        spec.entry_spans = catalog_entry_spans(&parsed);
+
+        let mut definitions = vec![];
+        let mut references = vec![];
+        for (message_id, message) in &parsed.messages {
+            let declarations = parse_params(message, &spec)?;
+            validate_message_annotations(message, &declarations, &spec)?;
+            definitions.push(source_symbol(
+                "message",
+                message_id.clone(),
+                message.id.name.range(),
+            ));
+            if let Some(value) = &message.value {
+                collect_source_references(value, &mut references);
+            }
+            for attribute in &message.attributes {
+                definitions.push(source_symbol(
+                    "attribute",
+                    format!("{message_id}.{}", text(&attribute.id.name)),
+                    attribute.id.name.range(),
+                ));
+                collect_source_references(&attribute.value, &mut references);
+            }
+        }
+        for (term_id, term) in &parsed.terms {
+            definitions.push(source_symbol(
+                "term",
+                format!("-{term_id}"),
+                term.id.name.range(),
+            ));
+            collect_source_references(&term.value, &mut references);
+            for attribute in &term.attributes {
+                collect_source_references(&attribute.value, &mut references);
+            }
+        }
+        definitions.sort_by_key(|item| (item.start, item.end, item.token.clone()));
+        references.sort_by_key(|item| (item.start, item.end, item.token.clone()));
+        serde_json::to_string(&SourceAnalysis {
+            schema_version: SCHEMA_VERSION,
+            definitions,
+            references,
+        })
+        .map_err(|error| Failure::new("I18N_INTERNAL_JSON", error.to_string()))
+    }
+
     /// Clear every parsed-source cache entry.
     pub fn clear(&self) -> Result<(), Failure> {
         let mut state = self.state.lock().map_err(|_| {
@@ -3588,6 +3686,36 @@ impl CatalogCompiler {
         state.cache.clear();
         Ok(())
     }
+}
+
+fn source_symbol(kind: &str, token: String, span: Range<usize>) -> SourceSymbol {
+    SourceSymbol {
+        kind: kind.to_owned(),
+        token,
+        start: span.start,
+        end: span.end,
+    }
+}
+
+fn collect_source_references(pattern: &Pattern<SpannedSlice>, result: &mut Vec<SourceSymbol>) {
+    walk_pattern(pattern, &mut |inline| match inline {
+        InlineExpression::MessageReference { id, attribute } => {
+            let mut token = text(&id.name).to_owned();
+            let mut span = id.name.range();
+            if let Some(attribute) = attribute {
+                token.push('.');
+                token.push_str(text(&attribute.name));
+                span.end = attribute.name.range().end;
+            }
+            result.push(source_symbol("message", token, span));
+        }
+        InlineExpression::TermReference { id, .. } => result.push(source_symbol(
+            "term",
+            format!("-{}", text(&id.name)),
+            id.name.range(),
+        )),
+        _ => {}
+    });
 }
 
 impl Default for CatalogCompiler {
@@ -3863,6 +3991,7 @@ fn validate_tagged_arg(name: &str, type_name: &str, argument: &TaggedArg) -> Res
 pub struct I18nRuntime {
     revision: String,
     manifest: BTreeMap<String, BTreeMap<String, ManifestEntry>>,
+    artifacts: BTreeMap<String, String>,
     bundles: BTreeMap<String, RuntimeBundle>,
     collision_text: String,
     formats: FormatRegistry,
@@ -3899,6 +4028,118 @@ struct ResolvedRichMessage<'a> {
     selected_layer: &'a str,
     selected_path: &'a str,
     used_fallback: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BrowserArtifactRequest {
+    #[serde(default)]
+    outputs: Vec<String>,
+    #[serde(default)]
+    messages: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct BrowserArtifact {
+    schema_version: u32,
+    runtime: &'static str,
+    catalog_revision: String,
+    formats_revision: String,
+    requested_locale: String,
+    messages: BTreeMap<String, BrowserMessageEntry>,
+    bundles: BTreeMap<String, String>,
+    revision: String,
+}
+
+#[derive(Debug, Serialize)]
+struct BrowserMessageEntry {
+    bundle_locale: String,
+    internal_id: String,
+    contract: Contract,
+}
+
+#[derive(Debug)]
+struct CompiledBrowserEntry {
+    id: String,
+    start: usize,
+    end: usize,
+    references: BTreeSet<String>,
+}
+
+fn browser_bundle_subset(source: &str, roots: &BTreeSet<String>) -> Result<String, Failure> {
+    let resource = fluent_syntax::parser::parse(SpannedSlice::root(source)).map_err(
+        |(_resource, errors)| {
+            Failure::new(
+                "I18N_BROWSER_BUNDLE",
+                format!("could not parse checked browser bundle: {errors:?}"),
+            )
+        },
+    )?;
+    let mut raw = Vec::<(String, usize, BTreeSet<String>)>::new();
+    for entry in resource.body {
+        let Entry::Message(message) = entry else {
+            return Err(Failure::new(
+                "I18N_BROWSER_BUNDLE",
+                "checked browser bundle contains a non-message entry",
+            ));
+        };
+        let mut references = BTreeSet::new();
+        let mut inspect = |inline: &InlineExpression<SpannedSlice>| {
+            if let InlineExpression::MessageReference { id, .. } = inline {
+                references.insert(text(&id.name).to_owned());
+            }
+        };
+        if let Some(value) = &message.value {
+            walk_pattern(value, &mut inspect);
+        }
+        for attribute in &message.attributes {
+            walk_pattern(&attribute.value, &mut inspect);
+        }
+        raw.push((
+            text(&message.id.name).to_owned(),
+            message.id.name.range().start,
+            references,
+        ));
+    }
+    raw.sort_by_key(|(_, start, _)| *start);
+    let mut entries = Vec::with_capacity(raw.len());
+    for (index, (id, start, references)) in raw.iter().enumerate() {
+        let end = raw
+            .get(index + 1)
+            .map_or(source.len(), |(_, next, _)| *next);
+        entries.push(CompiledBrowserEntry {
+            id: id.clone(),
+            start: *start,
+            end,
+            references: references.clone(),
+        });
+    }
+    let by_id = entries
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| (entry.id.as_str(), index))
+        .collect::<BTreeMap<_, _>>();
+    let mut selected = BTreeSet::new();
+    let mut pending = roots.iter().cloned().collect::<Vec<_>>();
+    while let Some(id) = pending.pop() {
+        if !selected.insert(id.clone()) {
+            continue;
+        }
+        let entry = by_id.get(id.as_str()).ok_or_else(|| {
+            Failure::new(
+                "I18N_BROWSER_BUNDLE",
+                format!("browser bundle closure refers to missing internal message {id:?}"),
+            )
+        })?;
+        pending.extend(entries[*entry].references.iter().cloned());
+    }
+    let mut result = String::new();
+    for entry in entries {
+        if selected.contains(&entry.id) {
+            result.push_str(&source[entry.start..entry.end]);
+        }
+    }
+    Ok(result)
 }
 
 impl I18nRuntime {
@@ -3978,6 +4219,8 @@ impl I18nRuntime {
                 }
                 if entry.owner.is_empty()
                     || entry.owner_source_locale.is_empty()
+                    || entry.definition_path.is_empty()
+                    || entry.definition_start >= entry.definition_end
                     || entry.internal_id.is_empty()
                     || entry.selected_layer.is_empty()
                     || entry.selected_path.is_empty()
@@ -3989,6 +4232,7 @@ impl I18nRuntime {
                 }
             }
         }
+        let artifacts = compiled.artifacts.clone();
         let mut bundles = BTreeMap::new();
         let collision_text = compiled
             .artifacts
@@ -4050,6 +4294,7 @@ impl I18nRuntime {
         Ok(Self {
             revision: compiled.revision,
             manifest: compiled.manifest,
+            artifacts,
             bundles,
             collision_text,
             formats,
@@ -4064,6 +4309,116 @@ impl I18nRuntime {
     /// Revision of the checked named formatter registry.
     pub fn formats_revision(&self) -> &str {
         self.formats.revision()
+    }
+
+    /// Build locale-specific records for the checked browser parsers.
+    pub fn browser_parser_artifact_json(&self, locale: &str) -> Result<String, Failure> {
+        self.formats.browser_parser_artifact_json(locale)
+    }
+
+    /// Build one exact browser message partition for a requested locale.
+    pub fn browser_artifact_json(
+        &self,
+        locale: &str,
+        request_json: &str,
+    ) -> Result<String, Failure> {
+        let request: BrowserArtifactRequest =
+            serde_json::from_str(request_json).map_err(|error| {
+                Failure::new(
+                    "I18N_BROWSER_REQUEST_JSON",
+                    format!("invalid browser artifact request: {error}"),
+                )
+            })?;
+        let locale_manifest = self.manifest.get(locale).ok_or_else(|| {
+            Failure::new(
+                "I18N_BROWSER_LOCALE",
+                format!("browser artifact locale {locale:?} is not compiled"),
+            )
+        })?;
+        let mut requested = BTreeSet::new();
+        for output in request.outputs {
+            if output.is_empty() || !requested.insert(output.clone()) {
+                return Err(Failure::new(
+                    "I18N_BROWSER_OUTPUT",
+                    format!("browser output {output:?} is empty or repeated"),
+                ));
+            }
+        }
+        let mut groups = BTreeSet::new();
+        for message in request.messages {
+            if message.is_empty() || !groups.insert(message.clone()) {
+                return Err(Failure::new(
+                    "I18N_BROWSER_MESSAGE",
+                    format!("browser message {message:?} is empty or repeated"),
+                ));
+            }
+            let matches = locale_manifest
+                .keys()
+                .filter(|token| *token == &message || token.starts_with(&format!("{message}.")))
+                .cloned()
+                .collect::<Vec<_>>();
+            if matches.is_empty() {
+                return Err(Failure::new(
+                    "I18N_BROWSER_MESSAGE",
+                    format!("unknown browser message {message:?} for locale {locale:?}"),
+                ));
+            }
+            requested.extend(matches);
+        }
+        let mut browser_messages = BTreeMap::new();
+        let mut roots_by_locale = BTreeMap::<String, BTreeSet<String>>::new();
+        for token in requested {
+            let entry = locale_manifest.get(&token).ok_or_else(|| {
+                Failure::new(
+                    "I18N_BROWSER_OUTPUT",
+                    format!("unknown browser output {token:?} for locale {locale:?}"),
+                )
+            })?;
+            roots_by_locale
+                .entry(entry.bundle_locale.clone())
+                .or_default()
+                .insert(entry.internal_id.clone());
+            browser_messages.insert(
+                token,
+                BrowserMessageEntry {
+                    bundle_locale: entry.bundle_locale.clone(),
+                    internal_id: entry.internal_id.clone(),
+                    contract: entry.contract.clone(),
+                },
+            );
+        }
+        let mut browser_bundles = BTreeMap::new();
+        for (bundle_locale, roots) in roots_by_locale {
+            let source = self.artifacts.get(&bundle_locale).ok_or_else(|| {
+                Failure::new(
+                    "I18N_BROWSER_BUNDLE",
+                    format!("browser partition refers to missing bundle {bundle_locale:?}"),
+                )
+            })?;
+            browser_bundles.insert(bundle_locale, browser_bundle_subset(source, &roots)?);
+        }
+        let revision_payload = serde_json::to_string(&(
+            SCHEMA_VERSION,
+            "@fluent/bundle@0.19.1",
+            &self.revision,
+            self.formats.revision(),
+            locale,
+            &browser_messages,
+            &browser_bundles,
+        ))
+        .map_err(|error| Failure::new("I18N_INTERNAL_JSON", error.to_string()))?;
+        let artifact = BrowserArtifact {
+            schema_version: SCHEMA_VERSION,
+            runtime: "@fluent/bundle@0.19.1",
+            catalog_revision: self.revision.clone(),
+            formats_revision: self.formats.revision().to_owned(),
+            requested_locale: locale.to_owned(),
+            messages: browser_messages,
+            bundles: browser_bundles,
+            revision: digest_text(&revision_payload),
+        };
+        serde_json::to_string(&artifact)
+            .map_err(|error| Failure::new("I18N_INTERNAL_JSON", error.to_string()))
     }
 
     /// Format an exact integer or decimal through a named number profile.
@@ -4084,6 +4439,26 @@ impl I18nRuntime {
         input: &str,
     ) -> Result<String, Failure> {
         self.formats.parse_number_json(locale, profile, input)
+    }
+
+    /// Format an exact ratio through a named percent profile.
+    pub fn format_percent(
+        &self,
+        locale: &str,
+        profile: &str,
+        value: &str,
+    ) -> Result<String, Failure> {
+        self.formats.percent(locale, profile, value)
+    }
+
+    /// Parse one localized percent edit into its canonical ratio.
+    pub fn parse_percent_json(
+        &self,
+        locale: &str,
+        profile: &str,
+        input: &str,
+    ) -> Result<String, Failure> {
+        self.formats.parse_percent_json(locale, profile, input)
     }
 
     /// Format an exact amount and explicit ISO currency code.
@@ -4109,6 +4484,29 @@ impl I18nRuntime {
         self.formats.date(locale, profile, year, month, day)
     }
 
+    /// Parse one strict localized numeric date edit.
+    pub fn parse_date_json(
+        &self,
+        locale: &str,
+        profile: &str,
+        input: &str,
+    ) -> Result<String, Failure> {
+        self.formats.parse_date_json(locale, profile, input)
+    }
+
+    /// Parse named localized year, month, and day edit segments.
+    pub fn parse_date_segments_json(
+        &self,
+        locale: &str,
+        profile: &str,
+        year: &str,
+        month: &str,
+        day: &str,
+    ) -> Result<String, Failure> {
+        self.formats
+            .parse_date_segments_json(locale, profile, year, month, day)
+    }
+
     /// Format one wall-clock time through a named profile.
     pub fn format_time(
         &self,
@@ -4121,6 +4519,31 @@ impl I18nRuntime {
     ) -> Result<String, Failure> {
         self.formats
             .time(locale, profile, hour, minute, second, nanosecond)
+    }
+
+    /// Parse one strict localized wall-clock time edit.
+    pub fn parse_time_json(
+        &self,
+        locale: &str,
+        profile: &str,
+        input: &str,
+    ) -> Result<String, Failure> {
+        self.formats.parse_time_json(locale, profile, input)
+    }
+
+    /// Parse named localized wall-clock time edit segments.
+    #[allow(clippy::too_many_arguments)]
+    pub fn parse_time_segments_json(
+        &self,
+        locale: &str,
+        profile: &str,
+        hour: &str,
+        minute: &str,
+        second: Option<&str>,
+        day_period: Option<&str>,
+    ) -> Result<String, Failure> {
+        self.formats
+            .parse_time_segments_json(locale, profile, hour, minute, second, day_period)
     }
 
     /// Format one already-resolved local datetime and its explicit zone facts.
@@ -4156,6 +4579,35 @@ impl I18nRuntime {
         )
     }
 
+    /// Parse one strict localized local datetime edit.
+    pub fn parse_datetime_json(
+        &self,
+        locale: &str,
+        profile: &str,
+        input: &str,
+    ) -> Result<String, Failure> {
+        self.formats.parse_datetime_json(locale, profile, input)
+    }
+
+    /// Parse named localized date and time edit segments.
+    #[allow(clippy::too_many_arguments)]
+    pub fn parse_datetime_segments_json(
+        &self,
+        locale: &str,
+        profile: &str,
+        year: &str,
+        month: &str,
+        day: &str,
+        hour: &str,
+        minute: &str,
+        second: Option<&str>,
+        day_period: Option<&str>,
+    ) -> Result<String, Failure> {
+        self.formats.parse_datetime_segments_json(
+            locale, profile, year, month, day, hour, minute, second, day_period,
+        )
+    }
+
     /// Format a relative value through a named checked profile.
     pub fn format_relative_time(
         &self,
@@ -4175,6 +4627,17 @@ impl I18nRuntime {
         values: &[String],
     ) -> Result<String, Failure> {
         self.formats.list(locale, profile, values)
+    }
+
+    /// Format one exact value with an explicit CLDR unit ID.
+    pub fn format_unit(
+        &self,
+        locale: &str,
+        profile: &str,
+        value: &str,
+        unit: &str,
+    ) -> Result<String, Failure> {
+        self.formats.unit(locale, profile, value, unit)
     }
 
     /// Resolve and format one public output.
@@ -4462,6 +4925,103 @@ mod tests {
             }],
             "catalogs": catalogs,
         })
+    }
+
+    #[test]
+    fn browser_artifact_keeps_only_requested_outputs_and_their_closure() {
+        let compiler = CatalogCompiler::new();
+        let artifact = compiler
+            .compile(
+                &request(
+                    &["en-US"],
+                    vec![json!({
+                        "path": "app.ftl",
+                        "package": "app",
+                        "layer": "app",
+                        "precedence": 0,
+                        "locale": "en-US",
+                        "source": concat!(
+                            "target = Target\n",
+                            "root = Root { target }\n",
+                            "unused = Unused\n",
+                            "card = Card\n",
+                            "    .aria-label = Card label\n",
+                        ),
+                    })],
+                    &[],
+                )
+                .to_string(),
+            )
+            .unwrap();
+        let runtime = I18nRuntime::new(&artifact).unwrap();
+        let complete: Value = serde_json::from_str(&artifact).unwrap();
+        let browser: Value = serde_json::from_str(
+            &runtime
+                .browser_artifact_json("en-US", r#"{"outputs":["root"],"messages":["card"]}"#)
+                .unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(browser["runtime"], "@fluent/bundle@0.19.1");
+        assert_eq!(
+            browser["messages"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .cloned()
+                .collect::<Vec<_>>(),
+            ["card", "card.aria-label", "root"]
+        );
+        let linked = browser["bundles"]["en-US"].as_str().unwrap();
+        for token in ["root", "card", "card.aria-label"] {
+            let internal = complete["manifest"]["en-US"][token]["internal_id"]
+                .as_str()
+                .unwrap();
+            assert!(linked.contains(internal));
+        }
+        let target = complete["manifest"]["en-US"]["target"]["internal_id"]
+            .as_str()
+            .unwrap();
+        assert!(linked.contains(target));
+        let unused = complete["manifest"]["en-US"]["unused"]["internal_id"]
+            .as_str()
+            .unwrap();
+        assert!(!linked.contains(unused));
+        assert_eq!(browser["catalog_revision"], runtime.revision());
+        assert_eq!(browser["requested_locale"], "en-US");
+        assert_eq!(browser["revision"].as_str().unwrap().len(), 64);
+    }
+
+    #[test]
+    fn browser_artifact_rejects_unknown_and_duplicate_roots() {
+        let compiler = CatalogCompiler::new();
+        let artifact = compiler
+            .compile(
+                &request(
+                    &["en-US"],
+                    vec![json!({
+                        "path": "app.ftl",
+                        "package": "app",
+                        "layer": "app",
+                        "precedence": 0,
+                        "locale": "en-US",
+                        "source": "hello = Hello\n",
+                    })],
+                    &[],
+                )
+                .to_string(),
+            )
+            .unwrap();
+        let runtime = I18nRuntime::new(&artifact).unwrap();
+
+        let unknown = runtime
+            .browser_artifact_json("en-US", r#"{"outputs":["missing"],"messages":[]}"#)
+            .unwrap_err();
+        assert_eq!(unknown.code(), "I18N_BROWSER_OUTPUT");
+        let duplicate = runtime
+            .browser_artifact_json("en-US", r#"{"outputs":["hello","hello"],"messages":[]}"#)
+            .unwrap_err();
+        assert_eq!(duplicate.code(), "I18N_BROWSER_OUTPUT");
     }
 
     #[test]
@@ -4782,6 +5342,83 @@ mod tests {
     }
 
     #[test]
+    fn source_locale_override_may_repeat_the_exact_owner_contract() {
+        let value = json!({
+            "schema_version": SCHEMA_VERSION,
+            "active_locales": ["en-US"],
+            "fallbacks": {},
+            "packages": [
+                {"name": "library", "source_locale": "en-US", "exports": []},
+                {"name": "application", "source_locale": "en-US", "exports": []},
+            ],
+            "catalogs": [
+                catalog(
+                    "library/en-US.ftl",
+                    "en-US",
+                    "# @param {str} $name\nhello = Library { $name }\n",
+                ),
+                {
+                    "path": "application/component.ftl",
+                    "package": "application",
+                    "layer": "application",
+                    "precedence": 1,
+                    "locale": "en-US",
+                    "source": "# @param {str} $name\nhello = Application { $name }\n",
+                },
+            ],
+        });
+        let mut value = value;
+        value["catalogs"][0]["package"] = json!("library");
+        value["catalogs"][0]["layer"] = json!("library");
+
+        let compiled = CatalogCompiler::new()
+            .compile(&serde_json::to_string(&value).unwrap())
+            .unwrap();
+        let runtime = I18nRuntime::new(&compiled).unwrap();
+        let args = r#"{"name":{"type":"str","value":"Ada"}}"#;
+        assert_eq!(
+            runtime.format("en-US", "hello", args, None).unwrap(),
+            "Application \u{2068}Ada\u{2069}"
+        );
+    }
+
+    #[test]
+    fn source_locale_override_cannot_change_the_owner_contract() {
+        let value = json!({
+            "schema_version": SCHEMA_VERSION,
+            "active_locales": ["en-US"],
+            "fallbacks": {},
+            "packages": [
+                {"name": "library", "source_locale": "en-US", "exports": []},
+                {"name": "application", "source_locale": "en-US", "exports": []},
+            ],
+            "catalogs": [
+                catalog(
+                    "library/en-US.ftl",
+                    "en-US",
+                    "# @param {str} $name\nhello = Library { $name }\n",
+                ),
+                {
+                    "path": "application/component.ftl",
+                    "package": "application",
+                    "layer": "application",
+                    "precedence": 1,
+                    "locale": "en-US",
+                    "source": "# @param {int} $name\nhello = Application { $name }\n",
+                },
+            ],
+        });
+        let mut value = value;
+        value["catalogs"][0]["package"] = json!("library");
+        value["catalogs"][0]["layer"] = json!("library");
+
+        let error = CatalogCompiler::new()
+            .compile(&serde_json::to_string(&value).unwrap())
+            .unwrap_err();
+        assert_eq!(error.code(), "I18N_TRANSLATION_PARAM_DECLARATION");
+    }
+
+    #[test]
     fn semantic_diagnostics_point_at_param_comments_with_valid_message_spacing() {
         let source = "### Heading\n# @param {unknown} $name\nhello   = Hello { $name }\n";
         let error = CatalogCompiler::new()
@@ -4862,6 +5499,15 @@ mod tests {
         assert_eq!(parameter["declarations"][0]["path"], "app/en-US.ftl");
         assert_eq!(parameter["declarations"][0]["line"], 1);
         assert_eq!(parameter["declarations"][0]["annotated"], true);
+        let wrapper = &artifact["manifest"]["en-US"]["wrapper"];
+        assert_eq!(wrapper["definition_path"], "app/en-US.ftl");
+        assert_eq!(wrapper["definition_line"], 3);
+        assert_eq!(wrapper["definition_column"], 1);
+        assert_eq!(
+            &source[wrapper["definition_start"].as_u64().unwrap() as usize
+                ..wrapper["definition_end"].as_u64().unwrap() as usize],
+            "wrapper"
+        );
     }
 
     #[test]
@@ -4979,6 +5625,47 @@ mod tests {
                 .unwrap(),
             "Hello \u{2068}Ada\u{2069}"
         );
+    }
+
+    #[test]
+    fn source_analysis_uses_the_production_parser_and_indexes_private_terms() {
+        let source = concat!(
+            "# @param {str} $name\n",
+            "account-title = { -product } for { $name }\n",
+            "    .aria-label = { account-label }\n",
+            "account-label = Account\n",
+            "-product = Citry\n",
+        );
+        let analysis: Value = serde_json::from_str(
+            &CatalogCompiler::new()
+                .analyze_source("app.py::Account.messages", source)
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(analysis["schema_version"], 1);
+        for collection in ["definitions", "references"] {
+            let item = analysis[collection]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|item| item["kind"] == "term" && item["token"] == "-product")
+                .unwrap();
+            let start = item["start"].as_u64().unwrap() as usize;
+            let end = item["end"].as_u64().unwrap() as usize;
+            assert_eq!(&source[start..end], "product");
+        }
+    }
+
+    #[test]
+    fn source_analysis_rejects_unsupported_param_types_at_the_comment() {
+        let source = "# @param {Slot1} $link\nhello = { $link }\n";
+        let error = CatalogCompiler::new()
+            .analyze_source("app.py::Card.messages", source)
+            .unwrap_err();
+        let diagnostic: Value = serde_json::from_str(&error.diagnostic_json()).unwrap();
+        assert_eq!(error.code(), "I18N_PARAM_TYPE_UNSUPPORTED");
+        assert_eq!(diagnostic["start"], source.find("@param").unwrap());
+        assert_eq!(diagnostic["end"], source.find("\nhello").unwrap());
     }
 
     #[test]

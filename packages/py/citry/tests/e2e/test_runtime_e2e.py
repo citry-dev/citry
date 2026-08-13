@@ -123,6 +123,17 @@ def _serve_runtime_page(serve_live: Any, setup_js: str = "") -> str:
     return serve_live(c, _page(setup_js), "")
 
 
+def _serve_nonced_runtime_page(serve_live: Any, nonce: str) -> str:
+    """Serve the manager from a script tag carrying one document CSP nonce."""
+    c = Citry()
+    c.set_mounted_prefix("/citry")
+    html = _page().replace(
+        '<script src="/citry/citry.js"></script>',
+        f'<script nonce="{nonce}" src="/citry/citry.js"></script>',
+    )
+    return serve_live(c, html, "")
+
+
 def _serve_fragment(serve_live: Any, component_js: str, setup_js: str = "") -> str:
     """Build a one-component engine and serve the page + its fragment; returns the base URL."""
     c = Citry()
@@ -214,6 +225,98 @@ def test_runtime_preserves_a_preexisting_citry_namespace(page: Any, serve_live: 
 
 
 # ----- Script and style loading with URL dedupe -----
+
+
+def test_manager_propagates_its_document_nonce_and_preflights_conflicting_batches(
+    page: Any,
+    serve_live: Any,
+) -> None:
+    nonce = "browserNonce123"
+    base = _serve_nonced_runtime_page(serve_live, nonce)
+    page.goto(base + "/")
+
+    result = page.evaluate(
+        """
+        async (nonce) => {
+          const m = Citry.manager;
+          await m.loadJs({
+            tag: "script",
+            attrs: { "data-nonce-js": true },
+            content: "window.__nonceScriptRan = true;",
+          });
+          await m.loadCss({
+            tag: "style",
+            attrs: { "data-nonce-style": true },
+            content: ".nonce-probe { color: green; }",
+          });
+          await m.loadJs({
+            tag: "script",
+            attrs: { nonce: nonce, "data-matching-nonce": true },
+            content: "window.__matchingNonceRan = true;",
+          });
+
+          const encode = (value) => btoa(JSON.stringify(value));
+          const manifest = {
+            fetch: {
+              css: [encode({
+                tag: "style",
+                attrs: { "data-atomic-style": true },
+                content: ".atomic { color: blue; }",
+              })],
+              js: [encode({
+                tag: "script",
+                attrs: { nonce: "conflictingNonce", "data-atomic-script": true },
+                content: "window.__atomicScriptRan = true;",
+              })],
+            },
+          };
+          let conflict = null;
+          try {
+            m._loadComponentScripts(manifest);
+          } catch (error) {
+            conflict = String(error);
+          }
+          let nullConflict = null;
+          try {
+            await m.loadJs({
+              tag: "script",
+              attrs: { nonce: null, "data-null-nonce": true },
+              content: "window.__nullNonceRan = true;",
+            });
+          } catch (error) {
+            nullConflict = String(error);
+          }
+
+          const js = document.querySelector("script[data-nonce-js]");
+          const style = document.querySelector("style[data-nonce-style]");
+          const matching = document.querySelector("script[data-matching-nonce]");
+          return {
+            jsNonce: js && js.nonce,
+            styleNonce: style && style.nonce,
+            matchingNonce: matching && matching.nonce,
+            ran: window.__nonceScriptRan === true && window.__matchingNonceRan === true,
+            conflict,
+            nullConflict,
+            atomicStyleInserted: !!document.querySelector("style[data-atomic-style]"),
+            atomicScriptInserted: !!document.querySelector("script[data-atomic-script]"),
+            nullNonceInserted: !!document.querySelector("script[data-null-nonce]"),
+          };
+        }
+        """,
+        nonce,
+    )
+
+    assert result == {
+        "jsNonce": nonce,
+        "styleNonce": nonce,
+        "matchingNonce": nonce,
+        "ran": True,
+        "conflict": "TypeError: [Citry] dependency descriptor nonce differs from the loaded document nonce.",
+        "nullConflict": "TypeError: [Citry] dependency descriptor nonce differs from the loaded document nonce.",
+        "atomicStyleInserted": False,
+        "atomicScriptInserted": False,
+        "nullNonceInserted": False,
+    }
 
 
 def test_load_js_appends_once_per_url_and_marks_loaded(page: Any, serve_live: Any) -> None:

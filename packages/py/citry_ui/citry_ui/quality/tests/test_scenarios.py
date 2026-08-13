@@ -13,7 +13,9 @@ def test_scenario_catalog_has_stable_unique_ordered_ids():
         "disclosure.states",
         "alert.states",
         "button.states",
+        "split-button.states",
         "avatar.states",
+        "image.states",
         "badge.states",
         "divider.states",
         "field-input.states",
@@ -24,6 +26,7 @@ def test_scenario_catalog_has_stable_unique_ordered_ids():
         "stepper.states",
         "flow.states",
         "grid-container.states",
+        "scroll-area.states",
         "radio.states",
         "skeleton.states",
         "switch.states",
@@ -40,10 +43,12 @@ def test_scenario_catalog_has_stable_unique_ordered_ids():
         "tooltip.states",
         "hover-card.states",
         "menu.states",
+        "context-menu.states",
         "navigation-menu.states",
         "carousel.states",
         "toast.states",
         "combobox.states",
+        "command-palette.states",
         "table.states",
         "icon.states",
         "card.states",
@@ -56,6 +61,7 @@ def test_scenario_catalog_has_stable_unique_ordered_ids():
         "listbox.states",
         "select.states",
         "multi-select.states",
+        "tags-input.states",
         "editable.states",
         "tree.states",
         "workflow.repeatable-contacts",
@@ -185,6 +191,33 @@ def test_catalog_maps_every_phase_7_5_family_state_to_a_scenario():
             "rtl",
             "nested-dark",
         },
+        "image.states": {
+            "informative",
+            "decorative",
+            "empty-alt",
+            "geometry",
+            "responsive",
+            "source-order",
+            "candidate-switch",
+            "placeholder",
+            "fallback",
+            "error",
+            "reactive",
+            "native-events",
+            "cors",
+            "referrer-policy",
+            "csp",
+            "csp-blocked",
+            "functional-alt",
+            "lifecycle",
+            "retained-root",
+            "replacement-root",
+            "removal",
+            "restore",
+            "shadow-root",
+            "hostile-fail-closed",
+            "readiness",
+        },
         "button.states": {
             "button",
             "submit",
@@ -207,6 +240,90 @@ def test_catalog_maps_every_phase_7_5_family_state_to_a_scenario():
             "disabled",
             "start-slot",
             "end-slot",
+        },
+        "split-button.states": {
+            "submit",
+            "reset",
+            "open-layer",
+            "commands",
+            "link",
+            "choices",
+            "group",
+            "separator",
+            "submenu",
+            "danger",
+            "controlled",
+            "match-width",
+            "loading",
+            "primary-disabled",
+            "menu-disabled",
+            "fieldset-disabled",
+            "brand-orchard",
+            "brand-harbor",
+            "rtl",
+            "narrow",
+            "long-content",
+            "lifecycle",
+            "removal",
+            "restore",
+            "morph-target",
+        },
+        "tags-input.states": {
+            "required",
+            "ordered",
+            "form-data",
+            "repeated-values",
+            "draft",
+            "unfinished-validity",
+            "paste",
+            "selection",
+            "ime",
+            "delimiter",
+            "maximum",
+            "controlled",
+            "controlled-value",
+            "controlled-draft",
+            "refusal",
+            "acceptance",
+            "readonly",
+            "dormant-draft",
+            "hidden-transport",
+            "disabled",
+            "omitted-transport",
+            "external-form",
+            "fieldset-disabled",
+            "invalid-focus",
+            "lifecycle",
+            "morph-target",
+            "cleanup",
+            "composition-node",
+            "selection-preservation",
+        },
+        "scroll-area.states": {
+            "block",
+            "inline",
+            "both",
+            "named-region",
+            "unnamed",
+            "focus",
+            "keyboard",
+            "rtl",
+            "logical-offset",
+            "configuration",
+            "controlled",
+            "disabled-axis",
+            "callback",
+            "native-scroll",
+            "native-scrollend",
+            "nested",
+            "contain",
+            "print",
+            "forced-colors",
+            "lifecycle",
+            "retained-root",
+            "replacement-root",
+            "morph-target",
+            "cleanup",
         },
         "divider.states": {
             "semantic",
@@ -376,6 +493,24 @@ def test_catalog_maps_every_phase_7_5_family_state_to_a_scenario():
             "disabled",
             "readonly",
             "invalid",
+        },
+        "command-palette.states": {
+            "open",
+            "filter",
+            "disabled",
+            "controlled-open",
+            "controlled-query",
+            "action-once",
+            "form",
+            "ime",
+            "nested-dialog",
+            "open-shadow-root",
+            "retained-equal",
+            "changed-records",
+            "replacement-root",
+            "removal",
+            "restore",
+            "resource-cleanup",
         },
         "table.states": {
             "ready",
@@ -562,6 +697,48 @@ def test_catalog_maps_every_phase_7_5_family_state_to_a_scenario():
             "brand-moon",
             "brand-ember",
         },
+        "context-menu.states": {
+            "pointer",
+            "keyboard",
+            "controlled",
+            "claim",
+            "accept",
+            "refuse",
+            "native",
+            "selection",
+            "editable",
+            "link",
+            "media",
+            "custom-element",
+            "closed-shadow-marker",
+            "open-shadow",
+            "iframe",
+            "shift-secondary",
+            "touch",
+            "pen",
+            "long-press",
+            "derived-click",
+            "submit",
+            "nested",
+            "deepest-boundary",
+            "logical-layer",
+            "point",
+            "transform",
+            "visual-viewport",
+            "rtl",
+            "lifecycle",
+            "morph-target",
+            "retained-root",
+            "replacement-root",
+            "removal",
+            "restore",
+            "cleanup",
+            "focus",
+            "disabled",
+            "fieldset-disabled",
+            "no-js",
+            "server-open-fallback",
+        },
         "toast.states": {
             "queue",
             "polite",
@@ -626,11 +803,83 @@ def test_disclosure_fixture_marks_every_declared_state_on_a_component_root():
     assert covered == set(scenario.states)
 
 
+def test_split_button_fixture_marks_every_declared_state_on_a_component_root():
+    scenario = scenario_by_id("split-button.states")
+    html = render_scenario(scenario.id)
+    state_groups = re.findall(
+        r'<div(?=[^>]*data-citry-ui-part="split-button")[^>]*data-quality-states="([^"]+)"',
+        html,
+    )
+    covered = {state for group in state_groups for state in group.split()}
+
+    assert covered == set(scenario.states)
+
+
+def test_tags_input_fixture_marks_every_declared_state_on_a_component_root():
+    scenario = scenario_by_id("tags-input.states")
+    html = render_scenario(scenario.id)
+    state_groups = re.findall(
+        r'<div(?=[^>]*data-citry-ui-part="tags-input")[^>]*data-quality-states="([^"]+)"',
+        html,
+    )
+    covered = {state for group in state_groups for state in group.split()}
+
+    assert covered == set(scenario.states)
+
+
+def test_image_fixture_marks_every_declared_state_on_a_component_root():
+    scenario = scenario_by_id("image.states")
+    html = render_scenario(scenario.id)
+    state_groups = re.findall(
+        r'<span(?=[^>]*data-citry-ui-part="image-root")[^>]*data-quality-states="([^"]+)"',
+        html,
+    )
+    covered = {state for group in state_groups for state in group.split()}
+
+    assert covered == set(scenario.states)
+
+
+def test_scroll_area_fixture_marks_every_declared_state_on_a_component_root():
+    scenario = scenario_by_id("scroll-area.states")
+    html = render_scenario(scenario.id)
+    state_groups = re.findall(
+        r'<div(?=[^>]*data-citry-ui-part="scroll-area")[^>]*data-quality-states="([^"]+)"',
+        html,
+    )
+    covered = {state for group in state_groups for state in group.split()}
+
+    assert covered == set(scenario.states)
+
+
 def test_menu_fixture_marks_every_declared_state_on_a_component_root():
     scenario = scenario_by_id("menu.states")
     html = render_scenario(scenario.id)
     state_groups = re.findall(
         r'<div(?=[^>]*data-citry-menu-root)[^>]*data-quality-states="([^"]+)"',
+        html,
+    )
+    covered = {state for group in state_groups for state in group.split()}
+
+    assert covered == set(scenario.states)
+
+
+def test_context_menu_fixture_marks_every_declared_state_on_a_component_root():
+    scenario = scenario_by_id("context-menu.states")
+    html = render_scenario(scenario.id)
+    state_groups = re.findall(
+        r'<div(?=[^>]*data-citry-ui-part="context-menu")[^>]*data-quality-states="([^"]+)"',
+        html,
+    )
+    covered = {state for group in state_groups for state in group.split()}
+
+    assert covered == set(scenario.states)
+
+
+def test_command_palette_fixture_marks_every_declared_state_on_a_component_root():
+    scenario = scenario_by_id("command-palette.states")
+    html = render_scenario(scenario.id)
+    state_groups = re.findall(
+        r'<dialog(?=[^>]*data-citry-ui-part="command-palette")[^>]*data-quality-states="([^"]+)"',
         html,
     )
     covered = {state for group in state_groups for state in group.split()}

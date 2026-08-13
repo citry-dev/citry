@@ -12,6 +12,7 @@ from citry import Citry, Component
 from citry.__main__ import main
 from citry._app_selection import CheckAppSelection
 from citry._checker import TRANSFORM_NOTE, check_project
+from citry.ext.i18n import DateFormat, FormatRegistry, NumberFormat
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -521,6 +522,52 @@ class TestRegistryMode:
         assert [finding.code for finding in report.findings] == ["citry.i18n.argument-invalid"]
         assert "must be str, not int" in report.findings[0].message
 
+    def test_c_tr_checks_message_output_named_values_and_literal_types(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = """
+                # @param {str} $name
+                greeting = Hello, { $name }.
+                    .aria-label = Greeting for { $name }
+            """
+            template = """
+                <span $c-tr:missing></span>
+                <span $c-tr:greeting.missing></span>
+                <span $c-tr:greeting.aria-label[aria-label]="{ name: 1, extra: true }"></span>
+            """
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == [
+            "citry.i18n.unknown-message",
+            "citry.i18n.unknown-message",
+            "citry.i18n.argument-invalid",
+        ]
+        assert "unknown argument(s): extra" in report.findings[2].message
+        assert "must be str, not number" in report.findings[2].message
+
+    @pytest.mark.parametrize("attribute", ["$c-tr:", "$c-tr[]", "$c-tr:known[]", "$c-tr:known."])
+    def test_c_tr_malformed_owned_names_are_check_errors(self, tmp_path, attribute):
+        engine = Citry(autodiscover=False)
+
+        class Host(Component):
+            citry = engine
+            template = f"<span {attribute}></span>"
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == ["citry.i18n.argument-invalid"]
+
     def test_dynamic_trans_values_spread_defers_argument_checks_to_runtime(self, tmp_path):
         engine = Citry(
             autodiscover=False,
@@ -566,6 +613,96 @@ class TestRegistryMode:
 
         assert [finding.code for finding in report.findings] == ["citry.i18n.unknown-message"]
         assert "missing" in report.findings[0].message
+
+    def test_template_fmt_literal_profile_is_checked(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                    "formats": FormatRegistry(number={"measurement": NumberFormat()}),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            template = "{{ fmt.number(total, format='measurement') }} {{ fmt.number(total, format='missing') }}"
+            messages = "unused = Present"
+
+            class TemplateData:
+                total: int
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        profile_findings = [finding for finding in report.findings if finding.code == "citry.i18n.argument-invalid"]
+        assert len(profile_findings) == 1
+        assert "Unknown i18n format profile 'missing' for number" in profile_findings[0].message
+
+    def test_python_formatter_and_parser_literal_profiles_are_checked(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                    "formats": FormatRegistry(
+                        number={"measurement": NumberFormat()},
+                        date={"display": DateFormat()},
+                    ),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            messages = "unused = Present"
+
+            def labels(self) -> tuple[str, object]:
+                return (
+                    self.i18n.format.number(3, format="missing"),
+                    self.i18n.parse.date("1/2/2026", format="display"),
+                )
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        assert [finding.code for finding in report.findings] == [
+            "citry.i18n.argument-invalid",
+            "citry.i18n.argument-invalid",
+        ]
+        assert "Unknown i18n format profile 'missing' for number" in report.findings[0].message
+        assert "Unknown i18n parse profile 'display' for date" in report.findings[1].message
+
+    def test_browser_i18n_literal_profiles_are_checked(self, tmp_path):
+        engine = Citry(
+            autodiscover=False,
+            extensions_defaults={
+                "i18n": {
+                    "source_locale": "en-US",
+                    "locales": ("en-US",),
+                    "formats": FormatRegistry(number={"measurement": NumberFormat()}),
+                }
+            },
+        )
+
+        class Host(Component):
+            citry = engine
+            template = """
+            <c-i18n c-client="True" tag="main">
+              <span x-text="$i18n.format.number(total, {format: 'missing'})"></span>
+            </c-i18n>
+            """
+            messages = "unused = Present"
+
+            class TemplateData:
+                total: int
+
+        report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+        profile_findings = [finding for finding in report.findings if finding.code == "citry.i18n.argument-invalid"]
+        assert len(profile_findings) == 1
+        assert "Unknown i18n format profile 'missing' for number" in profile_findings[0].message
 
     @pytest.mark.parametrize("attr", ["which", "None"])
     def test_literal_missing_id_is_checked_when_attr_is_not_a_string(self, tmp_path, attr):
@@ -1164,6 +1301,70 @@ def test_registry_check_defaults_unknown_alpine_roots_to_error(tmp_path):
 
     assert len(findings) == 1
     assert findings[0].severity == "error"
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_severity", "expected_exit"),
+    [("off", None, 0), ("warn", "warning", 0), ("strict", "error", 1)],
+)
+def test_registry_check_applies_the_configured_csp_compatibility_mode(
+    tmp_path,
+    mode,
+    expected_severity,
+    expected_exit,
+):
+    engine = Citry(autodiscover=False, security_csp=mode)
+
+    class Card(Component):
+        citry = engine
+        template = '<button @click="items.map(item => item.id)"></button>'
+
+        class JsData:
+            items: list[dict[str, int]]
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
+
+    assert report.exit_code == expected_exit
+    assert [item.severity for item in findings] == ([] if expected_severity is None else [expected_severity])
+
+
+def test_registry_check_reports_one_csp_finding_for_a_shared_template(tmp_path):
+    (tmp_path / "shared.html").write_text('<button @click="items.map(item => item.id)"></button>', encoding="utf-8")
+    engine = Citry(dirs=[tmp_path], autodiscover=False, security_csp="strict")
+
+    class First(Component):
+        citry = engine
+        template_file = "shared.html"
+
+        class JsData:
+            items: list[dict[str, int]]
+
+    class Second(Component):
+        citry = engine
+        template_file = "shared.html"
+
+        class JsData:
+            items: list[dict[str, int]]
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+
+    assert [item.code for item in report.findings].count("citry.csp.incompatible-browser-code") == 1
+
+
+def test_registry_check_reports_malformed_csp_expression_without_crashing(tmp_path):
+    engine = Citry(autodiscover=False, security_csp="strict")
+
+    class Card(Component):
+        citry = engine
+        template = '<span x-text="\'unterminated"></span>'
+
+    report = check_project(CheckAppSelection(spec="app:engine", engine=engine), tmp_path)
+    findings = [item for item in report.findings if item.code == "citry.csp.incompatible-browser-code"]
+
+    assert report.exit_code == 1
+    assert len(findings) == 1
+    assert "unterminated string" in findings[0].message
 
 
 def test_registry_check_reports_unknown_component_js_variables_and_missing_context_binding(tmp_path):

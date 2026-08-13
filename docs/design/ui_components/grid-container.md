@@ -403,3 +403,12 @@ dedicated CSS query-container component or offset/order shorthand, but neither
 belongs in the initial contract. Applications that need utility breadth should
 use Tailwind or another utility layer through `class_`, not expand Citry UI
 into a parallel utility framework.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

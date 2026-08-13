@@ -4,6 +4,15 @@ All notable changes to `pygments-citry` are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Highlight Fluent inside component `messages` blocks and install the
+  standalone `fluent` / `ftl` Pygments lexer aliases with the package.
+- Highlight direct `$c-tr` named-value expressions as JavaScript and
+  server-dynamic `c-$c-tr` expressions as Python.
+
 ## [0.1.2] - 2026-08-06
 
 ### Fixed

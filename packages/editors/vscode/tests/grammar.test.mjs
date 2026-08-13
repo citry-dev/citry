@@ -29,6 +29,7 @@ const GRAMMAR_PATHS = new Map([
 	["source.python", path.join(TEST_DIR, "grammars/python.tmLanguage.json")],
 	["source.js", path.join(TEST_DIR, "grammars/javascript.tmLanguage.json")],
 	["source.css", path.join(TEST_DIR, "grammars/css.tmLanguage.json")],
+	["source.ftl", path.join(EXTENSION_DIR, "syntaxes/fluent.tmLanguage.json")],
 ]);
 
 const INJECTIONS = new Map([["source.python", ["citry.python.injection", "citry.html.attributes.injection"]]]);
@@ -123,6 +124,8 @@ function hasRole(token, role) {
 				scopeHasRole(scope, "python") ||
 				scopeHasRole(scope, "javascript") ||
 				scopeHasRole(scope, "css") ||
+				scopeHasRole(scope, "message-id") ||
+				scopeHasRole(scope, "message-variable") ||
 				scopeHasRole(scope, "handler") ||
 				scopeHasRole(scope, "comment"),
 		);
@@ -135,7 +138,7 @@ function formatToken(token) {
 	return token ? token.scopes.join(" ") : "<no token>";
 }
 
-test("the extension makes no automatic standalone filename claim", () => {
+test("the Citry Template language makes no automatic standalone filename claim", () => {
 	assert.equal(manifest.main, "./out/extension.js");
 	assert.equal(manifest.browser, undefined);
 	const language = manifest.contributes.languages.find(({ id }) => id === "citry-html");
@@ -143,6 +146,13 @@ test("the extension makes no automatic standalone filename claim", () => {
 	assert.equal(language.extensions, undefined);
 	assert.equal(language.filenamePatterns, undefined);
 	assert.equal(language.filenames, undefined);
+});
+
+test("the Fluent language owns standalone .ftl files", () => {
+	const language = manifest.contributes.languages.find(({ id }) => id === "fluent");
+	assert.ok(language);
+	assert.deepEqual(language.extensions, [".ftl"]);
+	assert.ok(manifest.activationEvents.includes("onLanguage:fluent"));
 });
 
 test("every contributed grammar file loads", async () => {
@@ -208,12 +218,49 @@ test("Python template attributes preserve Citry channel precedence", async () =>
 	}
 });
 
+test("Python call targets receive standard function and method scopes", async () => {
+	const template = [
+		'<p>{{ tr("hello") }}</p>',
+		'<p>{{ fmt.currency(amount, "USD") }}</p>',
+		'<c-if cond="is_visible (amount)"></c-if>',
+		'<c-for each="item in build_items()"></c-for>',
+		'<c-Card c-title="format_title(amount)" c-value=fmt.number(amount)></c-Card>',
+		"<p>{{ fmt.currency }}</p>",
+		'<p>{{ "quoted_call()" }}</p>',
+	].join("\n");
+	const sources = [
+		{ scopeName: "text.html.citry", source: template },
+		{
+			scopeName: "source.python",
+			source: ["class Card(Component):", '    template = """', template, '    """'].join("\n"),
+		},
+	];
+
+	for (const { scopeName, source } of sources) {
+		const tokens = await tokenize(scopeName, source);
+		for (const needle of ["tr", "is_visible", "build_items", "format_title"]) {
+			const token = tokenAt(tokens, findOccurrence(source, needle));
+			assert.ok(token && hasRole(token, "function"), `${needle} expected function, got ${formatToken(token)}`);
+		}
+		for (const needle of ["currency", "number"]) {
+			const token = tokenAt(tokens, findOccurrence(source, needle));
+			assert.ok(token && hasRole(token, "method"), `${needle} expected method, got ${formatToken(token)}`);
+		}
+
+		const plainMember = tokenAt(tokens, findOccurrence(source, "currency", 2));
+		assert.equal(hasRole(plainMember, "method"), false, formatToken(plainMember));
+		const quotedText = tokenAt(tokens, findOccurrence(source, "quoted_call"));
+		assert.equal(hasRole(quotedText, "function"), false, formatToken(quotedText));
+	}
+});
+
 test("typed and triple-single-quoted component attributes embed", async () => {
 	const source = [
 		"class Card(Component):",
 		"    template: ClassVar[str] = '''<c-Card>{{ title }}</c-Card>'''",
 		"    js: str = '''const enabled = true;'''",
 		"    css: str = '''.card { color: red; }'''",
+		"    messages: str = '''account-title = Welcome, { $name }.'''",
 	].join("\n");
 	const tokens = await tokenize("source.python", source);
 
@@ -222,10 +269,63 @@ test("typed and triple-single-quoted component attributes embed", async () => {
 		["title", "python"],
 		["true", "javascript"],
 		["red", "css"],
+		["account-title", "message-id"],
+		["$name", "message-variable"],
 	]) {
 		const token = tokenAt(tokens, findOccurrence(source, needle));
 		assert.ok(token && hasRole(token, role), `${needle} expected ${role}, got ${formatToken(token)}`);
 	}
+});
+
+test("standalone Fluent highlights messages, attributes, selectors, and variables", async () => {
+	const source = [
+		"# @param {int} $count - Item count.",
+		"account-count = { $count ->",
+		"  [one] One item",
+		" *[other] { NUMBER($count) } items",
+		"}",
+		"    .aria-label = Items for { $count }",
+		"-brand = Citry",
+		"account-summary = { account-count.aria-label } by { -brand }",
+	].join("\n");
+	const tokens = await tokenize("source.ftl", source);
+
+	for (const [needle, role, occurrence = 1] of [
+		["# @param", "comment"],
+		["account-count", "message-id"],
+		["$count", "message-variable", 2],
+	]) {
+		const token = tokenAt(tokens, findOccurrence(source, needle, occurrence));
+		assert.ok(token && hasRole(token, role), `${needle} expected ${role}, got ${formatToken(token)}`);
+	}
+	assert.ok(
+		tokenAt(tokens, findOccurrence(source, "aria-label"))?.scopes.some((scope) =>
+			scopeMatches(scope, "entity.other.attribute-name.fluent"),
+		),
+	);
+	assert.ok(
+		tokenAt(tokens, findOccurrence(source, "other"))?.scopes.some((scope) =>
+			scopeMatches(scope, "constant.other.variant.fluent"),
+		),
+	);
+	assert.ok(
+		tokenAt(tokens, findOccurrence(source, "account-count", 2))?.scopes.some((scope) =>
+			scopeMatches(scope, "variable.other.message.fluent"),
+		),
+	);
+	assert.ok(
+		tokenAt(tokens, findOccurrence(source, "brand", 2))?.scopes.some((scope) =>
+			scopeMatches(scope, "variable.other.term.fluent"),
+		),
+	);
+});
+
+test("Fluent prose that contains an equals sign is not a message definition", async () => {
+	const source = "actual = Plain text where not-a-message = remains prose";
+	const tokens = await tokenize("source.ftl", source);
+	const prose = tokenAt(tokens, findOccurrence(source, "not-a-message"));
+
+	assert.equal(hasRole(prose, "message-id"), false);
 });
 
 test("escaped triple delimiters do not end component embeds", async () => {
@@ -244,6 +344,12 @@ test("triple-string ends respect odd and even backslash runs", async () => {
 		{ assignment: "template", marker: "{{ parity_value }}", needle: "parity_value", role: "python" },
 		{ assignment: "js", marker: "const parityValue = true;", needle: "parityValue", role: "javascript" },
 		{ assignment: "css", marker: ".parity-value { color: red; }", needle: "parity-value", role: "css" },
+		{
+			assignment: "messages",
+			marker: "hello = { $parity_value }",
+			needle: "$parity_value",
+			role: "message-variable",
+		},
 	];
 
 	for (const { assignment, marker, needle, role } of variants) {

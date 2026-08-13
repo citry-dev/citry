@@ -29,6 +29,7 @@ from docs_site._internal.components.landing import (
     _check_host_entrypoints,
     _editor_code,
     _editor_ranges,
+    _inline_code_markup,
     _render_diagnostics,
     _tour_code,
 )
@@ -240,6 +241,18 @@ def test_contributor_grid_can_drop_the_per_person_counts() -> None:
     assert plain.html.count("avatar-wrapper") == counted.html.count("avatar-wrapper")
 
 
+def test_people_section_identifies_the_maintainer_and_keeps_the_people_route() -> None:
+    source = Path("docs_site/content/index.md").read_text(encoding="utf-8")
+    document = lxml_html.document_fromstring(render_page(source, current_path="").html)
+    section = document.xpath('//section[@id="people"]')[0]
+    maintainer = section.xpath('.//div[contains(@class, "landing-maintainer")]')[0]
+
+    assert len(maintainer.xpath('.//div[contains(@class, "landing-maintainer__portrait")]//img')) == 1
+    assert maintainer.xpath('.//p[contains(@class, "landing-maintainer__name")]/a[@href="/community/people/"]')
+    assert maintainer.xpath('.//p[contains(@class, "landing-maintainer__role")]')
+    assert section.xpath('.//div[contains(@class, "landing-human-links")]/a[@href="/community/people/"]')
+
+
 def test_walkthrough_stops_point_at_the_right_lines() -> None:
     """Line numbers drift as the example is edited; each stop must still land on it."""
     source = (Path(_TOUR_PATH)).read_text(encoding="utf-8").splitlines()
@@ -369,6 +382,21 @@ def test_editor_demo_annotations_fail_closed_when_the_source_drifts() -> None:
         _editor_ranges(source, ambiguous)
 
 
+def test_editor_note_inline_code_escapes_prose_and_code() -> None:
+    rendered = _inline_code_markup("Use <unsafe> & `call(<value>)`, then `result`.")
+    document = lxml_html.fragment_fromstring(str(rendered), create_parent="p")
+
+    assert not document.xpath(".//unsafe | .//value")
+    assert [node.text for node in document.xpath("./code")] == ["call(<value>)", "result"]
+    assert document.text_content() == "Use <unsafe> & call(<value>), then result."
+
+
+@pytest.mark.parametrize("text", ["An `unfinished span", "An empty `` span"])
+def test_editor_note_inline_code_rejects_malformed_spans(text: str) -> None:
+    with pytest.raises(ValueError, match="Editor note inline code"):
+        _inline_code_markup(text)
+
+
 def test_editor_demo_pairs_symbols_hovers_notes_and_definitions() -> None:
     """Every interactive affordance names a server-rendered target that exists."""
     document = lxml_html.document_fromstring(str(LandingEditorDemoMarkup()))
@@ -484,6 +512,25 @@ def test_advanced_capabilities_link_to_pages_that_exist() -> None:
 
     for case in _DEPTH_CASES:
         assert (Path("docs_site/content") / case["doc"]).is_file(), case["id"]
+
+
+def test_i18n_is_the_third_depth_case_before_fragments() -> None:
+    """The landing progression introduces i18n before fragment transport."""
+    case_ids = [case["id"] for case in _DEPTH_CASES]
+
+    assert case_ids[2] == "i18n"
+    assert case_ids.index("i18n") < case_ids.index("fragments")
+
+
+def test_security_depth_moves_from_csrf_rollout_to_strict_csp() -> None:
+    """The security progression names both request and browser-code policy."""
+    case_ids = [case["id"] for case in _DEPTH_CASES]
+    csp = next(case for case in _DEPTH_CASES if case["id"] == "csp")
+
+    assert case_ids.index("csrf") < case_ids.index("csp") < case_ids.index("fragments")
+    assert "web host" in str(csp["note"])
+    assert 'security_csp="strict"' in csp["code"]
+    assert "serialize_result(csp_nonce=nonce)" in csp["code"]
 
 
 def test_a_removed_capability_page_fails_the_build(monkeypatch: pytest.MonkeyPatch) -> None:

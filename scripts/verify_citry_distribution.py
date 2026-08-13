@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 REPO_ROOT: Final = Path(__file__).resolve().parents[1]
 PACKAGE_ROOT: Final = REPO_ROOT / "packages" / "py" / "citry"
 SOURCE_ROOT: Final = PACKAGE_ROOT / "citry"
+MAX_WHEEL_BYTES: Final = 1_100 * 1024
 
 
 class DistributionVerificationError(RuntimeError):
@@ -91,6 +92,11 @@ def require_equal(label: str, expected: Mapping[str, str], actual: Mapping[str, 
 
 def verify_artifacts(source_wheel: Path, sdist: Path, rebuilt_wheel: Path) -> dict[str, Any]:
     """Compare checkout, wheel, sdist, and rebuilt-wheel content."""
+    for wheel in (source_wheel, rebuilt_wheel):
+        if wheel.stat().st_size > MAX_WHEEL_BYTES:
+            raise DistributionVerificationError(
+                f"{wheel.name} is {wheel.stat().st_size} bytes; the release cap is {MAX_WHEEL_BYTES} bytes"
+            )
     source_files = source_inventory()
     source_wheel_files = wheel_inventory(source_wheel)
     rebuilt_wheel_files = wheel_inventory(rebuilt_wheel)
@@ -193,7 +199,9 @@ assert shutil.which("node") is None
 assert importlib.util.find_spec("jsonschema") is None
 
 import citry
+from citry import Citry, Component
 from citry._protocol import client_graph, events
+from citry.ext.i18n import make_context
 
 descriptor = events.build_descriptor("Page_1", {})
 instance = events.build_component_instance("page_1", "Page_1", None, {})
@@ -225,7 +233,34 @@ assert client_graph.validate_manifest(graph_manifest) is None
 root = importlib.resources.files("citry")
 assert root.joinpath("ext/dependencies/client/citry.js").is_file()
 assert root.joinpath("ext/events/client/citry-events.js").is_file()
+assert root.joinpath("ext/events/client/citry-events-csp.js").is_file()
+assert root.joinpath("ext/i18n/client/citry-i18n.js").is_file()
 assert root.joinpath("py.typed").is_file()
+
+i18n_app = Citry(
+    autodiscover=False,
+    extensions_defaults={
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US",),
+        }
+    },
+)
+
+class I18nPage(Component):
+    citry = i18n_app
+    template = '{{ tr("wheel-greeting", name=name) }}'
+
+    class Kwargs:
+        name: str
+
+    messages = '''
+    # @param {str} $name - User name.
+    wheel-greeting = Hello, { $name }.
+    '''
+
+context = make_context(i18n_app, locale="en-US")
+assert str(I18nPage(name="Ada").render(provides={"citry_i18n": context})) == "Hello, \u2068Ada\u2069."
 print(citry.__file__)
 """
 

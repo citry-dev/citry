@@ -494,15 +494,16 @@ fn compile_html_node(node: Node) -> Result<Vec<LangSpecArgument>, CompileError> 
         .partition(|attr| attr.kind == HtmlAttrKind::Meta);
 
     // Dynamic attributes must stay structured until render time. Literal
-    // Events bindings also stay structured long enough for the Events
-    // extension's compiled-node hook to validate and replace only attributes
-    // the parser proved were real. Compiler-owned output names stay visible
-    // for the same hook to reject authored spoofing. The hook collapses an
-    // otherwise-static region back to text after transforming it.
+    // Citry client directives also stay structured long enough for their
+    // extension-owned compiler hooks to validate and replace only attributes
+    // the parser proved were real. Compiler-owned Events output names stay
+    // visible for the same hook to reject authored spoofing. A hook may
+    // collapse an otherwise-static region back to text after transforming it.
     let has_structured_attr = ordinary_attrs.iter().any(|attr| {
         matches!(attr.kind, HtmlAttrKind::Expression | HtmlAttrKind::Template)
             || attr.key.content.starts_with("@c-")
             || attr.key.content.starts_with(":c-")
+            || attr.key.content.starts_with("$c-")
             || attr
                 .key
                 .content

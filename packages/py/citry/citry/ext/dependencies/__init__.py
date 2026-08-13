@@ -35,11 +35,17 @@ Design: docs/design/asset_loading.md section 7.
 """
 
 from citry.ext.dependencies.emission import OnDependenciesContext
-from citry.ext.dependencies.extension import CitryDependencies, DependenciesExtension, get_dependencies
+from citry.ext.dependencies.extension import (
+    CitryDependencies,
+    DependenciesConfig,
+    DependenciesExtension,
+    get_dependencies,
+)
 from citry.ext.dependencies.types import Dependency, DependencyRecord, Script, Style
 
 __all__ = [
     "CitryDependencies",
+    "DependenciesConfig",
     "DependenciesExtension",
     "Dependency",
     "DependencyRecord",

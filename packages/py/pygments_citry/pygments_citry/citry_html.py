@@ -232,6 +232,13 @@ _CLIENT_PROPS_ATTR_RULE = (
     bygroups(Name.Attribute, Text, Operator, Text),
     _JS_ATTR_STATE,
 )
+# `$c-tr` values are Alpine named-value expressions. Its c-prefixed form is
+# still matched by `_C_ATTR_RULE` and therefore remains a Python expression.
+_CLIENT_I18N_ATTR_RULE = (
+    rf"(\$c-tr(?=[:.\[]){_ATTR_TAIL})(\s*)(=)(\s*)",
+    bygroups(Name.Attribute, Text, Operator, Text),
+    _JS_ATTR_STATE,
+)
 # #c-key is a server-side expression. #c-ignore is a bare marker and falls
 # through to the common attribute-name rule.
 _META_KEY_ATTR_RULE = (
@@ -316,6 +323,7 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         "tag": [
             _WS_RULE,
             _CLIENT_PROPS_ATTR_RULE,
+            _CLIENT_I18N_ATTR_RULE,
             _META_KEY_ATTR_RULE,
             _C_ATTR_RULE,
             _EVENT_ATTR_RULE,
@@ -326,6 +334,7 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         "condition-tag": [
             _WS_RULE,
             _CLIENT_PROPS_ATTR_RULE,
+            _CLIENT_I18N_ATTR_RULE,
             _META_KEY_ATTR_RULE,
             _C_ATTR_RULE,
             _EVENT_ATTR_RULE,
@@ -337,6 +346,7 @@ class CitryHtmlLexer(ExtendedRegexLexer, HtmlLexer):
         "for-tag": [
             _WS_RULE,
             _CLIENT_PROPS_ATTR_RULE,
+            _CLIENT_I18N_ATTR_RULE,
             _META_KEY_ATTR_RULE,
             _C_ATTR_RULE,
             _EVENT_ATTR_RULE,

@@ -439,10 +439,12 @@ relevant crate's `AGENTS.md`, then its `docs/agent/INDEX.md`, then
   own line at the tag's indent.
 - **Order component members from inputs to output.** Put nested `Kwargs`,
   `Slots`, and `State` schemas first, event handlers next, data methods such as
-  `template_data()` next, then `template`, `js`, and `css`. Put `messages` after
-  those assets unless a concrete source-format constraint requires another
-  order. Keep helpers beside the behavior they support without reversing that
-  overall direction.
+  `template_data()` next, then `template`, `js`, and `css`. A component-owned
+  `messages` or `messages_file` declaration is always the final member of that
+  component class. A source-owning component declares
+  `I18n.messages_locale` near its nested schemas; do not duplicate those
+  source messages in a Python fallback table. Keep helpers beside the behavior
+  they support without reversing that overall direction.
 - **Extensions compose through public values, not pair-specific bridges.** An
   extension must not add fields to another extension's component config, change
   another extension's callback signature, import its private state, or add a

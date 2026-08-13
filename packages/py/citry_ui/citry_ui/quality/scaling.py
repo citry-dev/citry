@@ -146,6 +146,81 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
           </div>
         """
 
+    class SplitButtonScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {"items": tuple(range(kwargs.count))}
+
+        template = """
+          <div>
+            <c-for each="item in items">
+              <c-CSplitButton
+                #c-key="item"
+                c-id="f'cui-scale-split-button-{item}'"
+                c-label="f'Actions {item}'"
+                c-menu_label="f'More actions {item}'"
+              >
+                <c-fill name="default">Save {{ item }}</c-fill>
+                <c-fill name="menu">
+                  <c-CMenuItem c-value="f'copy-{item}'">Save a copy {{ item }}</c-CMenuItem>
+                </c-fill>
+              </c-CSplitButton>
+            </c-for>
+          </div>
+        """
+
+    class TagsInputScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {"items": tuple(range(kwargs.count))}
+
+        template = """
+          <div>
+            <c-for each="item in items">
+              <c-CTagsInput
+                #c-key="item"
+                c-id="f'cui-scale-tags-input-{item}'"
+                c-value="(f'tag-{item}-a', f'tag-{item}-b')"
+                c-input_attrs="{'aria-label':'Scale tags'}"
+              />
+            </c-for>
+          </div>
+        """
+
+    class TagsInputCollectionScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {"values": tuple(f"tag-{item}" for item in range(kwargs.count))}
+
+        template = """
+          <c-CTagsInput
+            id="cui-scale-tags-input-collection"
+            c-value="values"
+            c-input_attrs="{'aria-label':'Scale tag collection'}"
+          />
+        """
+
     class AvatarScale(Component):
         citry = app
 
@@ -162,6 +237,32 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
           <div>
             <c-for each="item in items">
               <c-CAvatar #c-key="item" c-alt="f'Guide {item}'">{{ item }}</c-CAvatar>
+            </c-for>
+          </div>
+        """
+
+    class ImageScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {"items": tuple(range(kwargs.count))}
+
+        template = """
+          <div>
+            <c-for each="item in items">
+              <c-CImage
+                #c-key="item"
+                src="/static/img/ui/image/orion-nebula-640.jpg"
+                c-alt="f'Orion scale image {item}'"
+                c-width="640"
+                c-height="360"
+              />
             </c-for>
           </div>
         """
@@ -534,6 +635,36 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
           </div>
         """
 
+    class ScrollAreaScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {"items": tuple(range(kwargs.count))}
+
+        template = """
+          <div>
+            <c-for each="item in items">
+              <c-CScrollArea
+                #c-key="item"
+                c-id="f'cui-scale-scroll-area-{item}'"
+                c-aria_label="f'Scroll records {item}'"
+                axis="both"
+                style="--cui-scroll-area-max-block-size:8rem"
+              >
+                <div style="inline-size:24rem;min-block-size:12rem">
+                  Scroll Area {{ item }} content
+                </div>
+              </c-CScrollArea>
+            </c-for>
+          </div>
+        """
+
     class ButtonGroupScale(Component):
         citry = app
 
@@ -772,6 +903,123 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
           </div>
         """
 
+    class ContextMenuScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {"items": tuple(range(kwargs.count))}
+
+        template = """
+          <div>
+            <c-for each="item in items">
+              <c-CContextMenu
+                #c-key="item"
+                c-id="f'cui-scale-context-menu-{item}'"
+                c-aria_label="f'Actions for record {item}'"
+              >
+                <c-fill name="target" data="{ target_attrs }">
+                  <button type="button" c-attrs="target_attrs">
+                    Record {{ item }}
+                  </button>
+                </c-fill>
+                <c-fill name="menu">
+                  <c-CMenuItem c-value="f'action-{item}'">Action {{ item }}</c-CMenuItem>
+                </c-fill>
+              </c-CContextMenu>
+            </c-for>
+          </div>
+        """
+
+    class CommandPaletteClosedScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {
+                "commands": (citry_ui.CCommandPaletteCommand(value="open", label="Open item"),),
+                "items": tuple(range(kwargs.count)),
+            }
+
+        template = """
+          <div>
+            <c-for each="item in items">
+              <c-CCommandPalette
+                #c-key="item"
+                c-label="f'Commands {item}'"
+                c-entries="commands"
+              />
+            </c-for>
+          </div>
+        """
+
+    class CommandPaletteOpenScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {
+                "commands": (citry_ui.CCommandPaletteCommand(value="open", label="Open item"),),
+                "items": tuple(range(kwargs.count)),
+            }
+
+        template = """
+          <div>
+            <c-for each="item in items">
+              <c-CCommandPalette
+                #c-key="item"
+                c-label="f'Open commands {item}'"
+                c-entries="commands"
+                c-open="True"
+              />
+            </c-for>
+          </div>
+        """
+
+    class CommandPaletteCollectionScale(Component):
+        citry = app
+
+        class Kwargs:
+            count: int
+
+        class Slots:
+            pass
+
+        def template_data(self, kwargs: Kwargs, slots: Slots) -> dict[str, object]:  # noqa: ARG002
+            return {
+                "commands": tuple(
+                    citry_ui.CCommandPaletteCommand(
+                        value=f"command-{item}",
+                        label=f"Command {item}",
+                        keywords=("scale", str(item)),
+                    )
+                    for item in range(kwargs.count)
+                )
+            }
+
+        template = """
+          <c-CCommandPalette
+            label="Command collection scale"
+            c-entries="commands"
+            c-open="True"
+          />
+        """
+
     results: list[ScalingSample] = []
     # Mypy does not apply ComponentMeta.__call__ to concrete component classes,
     # while Pyright correctly sees the composition call. Use the metaclass's
@@ -781,7 +1029,11 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
     disclosure_element = cast("Callable[..., object]", DisclosureScale)
     alert_element = cast("Callable[..., object]", AlertScale)
     button_element = cast("Callable[..., object]", ButtonScale)
+    split_button_element = cast("Callable[..., object]", SplitButtonScale)
+    tags_input_element = cast("Callable[..., object]", TagsInputScale)
+    tags_input_collection_element = cast("Callable[..., object]", TagsInputCollectionScale)
     avatar_element = cast("Callable[..., object]", AvatarScale)
+    image_element = cast("Callable[..., object]", ImageScale)
     badge_element = cast("Callable[..., object]", BadgeScale)
     divider_element = cast("Callable[..., object]", DividerScale)
     progress_element = cast("Callable[..., object]", ProgressScale)
@@ -798,6 +1050,7 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
     checkbox_element = cast("Callable[..., object]", CheckboxScale)
     flow_element = cast("Callable[..., object]", FlowScale)
     grid_element = cast("Callable[..., object]", GridScale)
+    scroll_area_element = cast("Callable[..., object]", ScrollAreaScale)
     button_group_element = cast("Callable[..., object]", ButtonGroupScale)
     toggle_element = cast("Callable[..., object]", ToggleScale)
     pagination_element = cast("Callable[..., object]", PaginationScale)
@@ -807,6 +1060,10 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
     toast_element = cast("Callable[..., object]", ToastScale)
     tooltip_element = cast("Callable[..., object]", TooltipScale)
     menu_element = cast("Callable[..., object]", MenuScale)
+    context_menu_element = cast("Callable[..., object]", ContextMenuScale)
+    command_palette_closed_element = cast("Callable[..., object]", CommandPaletteClosedScale)
+    command_palette_open_element = cast("Callable[..., object]", CommandPaletteOpenScale)
+    command_palette_collection_element = cast("Callable[..., object]", CommandPaletteCollectionScale)
     for count in counts:
         median_ms, output_bytes = _measure(partial(_render_scaled, accordion_element, count), samples=samples)
         results.append(ScalingSample("accordion-items", count, round(median_ms, 3), output_bytes))
@@ -816,8 +1073,19 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
         results.append(ScalingSample("alert-instances", count, round(median_ms, 3), output_bytes))
         median_ms, output_bytes = _measure(partial(_render_scaled, button_element, count), samples=samples)
         results.append(ScalingSample("button-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(partial(_render_scaled, split_button_element, count), samples=samples)
+        results.append(ScalingSample("split-button-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(partial(_render_scaled, tags_input_element, count), samples=samples)
+        results.append(ScalingSample("tags-input-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(
+            partial(_render_scaled, tags_input_collection_element, count),
+            samples=samples,
+        )
+        results.append(ScalingSample("tags-input-tags", count, round(median_ms, 3), output_bytes))
         median_ms, output_bytes = _measure(partial(_render_scaled, avatar_element, count), samples=samples)
         results.append(ScalingSample("avatar-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(partial(_render_scaled, image_element, count), samples=samples)
+        results.append(ScalingSample("image-instances", count, round(median_ms, 3), output_bytes))
         median_ms, output_bytes = _measure(partial(_render_scaled, badge_element, count), samples=samples)
         results.append(ScalingSample("badge-instances", count, round(median_ms, 3), output_bytes))
         median_ms, output_bytes = _measure(partial(_render_scaled, divider_element, count), samples=samples)
@@ -850,6 +1118,8 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
         results.append(ScalingSample("flow-groups", count, round(median_ms, 3), output_bytes))
         median_ms, output_bytes = _measure(partial(_render_scaled, grid_element, count), samples=samples)
         results.append(ScalingSample("grid-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(partial(_render_scaled, scroll_area_element, count), samples=samples)
+        results.append(ScalingSample("scroll-area-instances", count, round(median_ms, 3), output_bytes))
         median_ms, output_bytes = _measure(partial(_render_scaled, button_group_element, count), samples=samples)
         results.append(ScalingSample("button-group-instances", count, round(median_ms, 3), output_bytes))
         median_ms, output_bytes = _measure(partial(_render_scaled, toggle_element, count), samples=samples)
@@ -868,6 +1138,23 @@ def scaling_report(*, counts: tuple[int, ...], samples: int = 3) -> dict[str, ob
         results.append(ScalingSample("tooltip-instances", count, round(median_ms, 3), output_bytes))
         median_ms, output_bytes = _measure(partial(_render_scaled, menu_element, count), samples=samples)
         results.append(ScalingSample("menu-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(partial(_render_scaled, context_menu_element, count), samples=samples)
+        results.append(ScalingSample("context-menu-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(
+            partial(_render_scaled, command_palette_closed_element, count),
+            samples=samples,
+        )
+        results.append(ScalingSample("command-palette-closed-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(
+            partial(_render_scaled, command_palette_open_element, count),
+            samples=samples,
+        )
+        results.append(ScalingSample("command-palette-open-instances", count, round(median_ms, 3), output_bytes))
+        median_ms, output_bytes = _measure(
+            partial(_render_scaled, command_palette_collection_element, count),
+            samples=samples,
+        )
+        results.append(ScalingSample("command-palette-commands", count, round(median_ms, 3), output_bytes))
     return {
         "schema": "citry-ui-scaling-report/v1",
         "samples_per_count": samples,

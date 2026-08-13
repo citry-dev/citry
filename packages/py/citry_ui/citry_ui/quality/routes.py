@@ -22,6 +22,8 @@ from citry_ui.components.ccard.quality.scenario import card_states_component
 from citry_ui.components.ccarousel.quality.scenario import carousel_states_component
 from citry_ui.components.ccheckbox.quality.scenario import checkbox_states_component
 from citry_ui.components.ccombobox.quality.scenario import combobox_states_component
+from citry_ui.components.ccommand_palette.quality.scenario import command_palette_states_component
+from citry_ui.components.ccontext_menu.quality.scenario import context_menu_states_component
 from citry_ui.components.cdialog.quality.scenario import dialog_states_component
 from citry_ui.components.cdisclosure.quality.scenario import disclosure_states_component
 from citry_ui.components.cdivider.quality.scenario import divider_states_component
@@ -34,6 +36,7 @@ from citry_ui.components.cform.quality.scenario import form_states_component
 from citry_ui.components.cgrid.quality.scenario import grid_container_states_component
 from citry_ui.components.chover_card.quality.scenario import hover_card_states_component
 from citry_ui.components.cicon.quality.scenario import icon_states_component
+from citry_ui.components.cimage.quality.scenario import image_states_component
 from citry_ui.components.clist.quality.scenario import list_states_component
 from citry_ui.components.clistbox.quality.scenario import listbox_states_component
 from citry_ui.components.cmenu.quality.scenario import menu_states_component
@@ -44,15 +47,18 @@ from citry_ui.components.cpagination.quality.scenario import pagination_states_c
 from citry_ui.components.cpopover.quality.scenario import popover_states_component
 from citry_ui.components.cprogress.quality.scenario import progress_states_component
 from citry_ui.components.cradio.quality.scenario import radio_states_component
+from citry_ui.components.cscroll_area.quality.scenario import scroll_area_states_component
 from citry_ui.components.cselect.quality.scenario import select_states_component
 from citry_ui.components.cskeleton.quality.scenario import skeleton_states_component
 from citry_ui.components.cspinner.quality.scenario import spinner_states_component
+from citry_ui.components.csplitbutton.quality.scenario import split_button_states_component
 from citry_ui.components.csplitter.quality.scenario import splitter_states_component
 from citry_ui.components.cstepper.quality.scenario import stepper_states_component
 from citry_ui.components.cswitch.quality.scenario import switch_states_component
 from citry_ui.components.ctable.quality.scenario import table_states_component
 from citry_ui.components.ctabs.quality.scenario import tabs_overview_component
 from citry_ui.components.ctag.quality.scenario import tag_states_component
+from citry_ui.components.ctags_input.quality.scenario import tags_input_states_component
 from citry_ui.components.ctextarea.quality.scenario import textarea_states_component
 from citry_ui.components.ctoast.quality.scenario import toast_states_component
 from citry_ui.components.ctoggle.quality.scenario import toggle_states_component
@@ -74,7 +80,9 @@ _SCENARIO_FACTORIES = {
     "disclosure.states": disclosure_states_component,
     "alert.states": alert_states_component,
     "button.states": button_states_component,
+    "split-button.states": split_button_states_component,
     "avatar.states": avatar_states_component,
+    "image.states": image_states_component,
     "badge.states": badge_states_component,
     "divider.states": divider_states_component,
     "field-input.states": field_input_states_component,
@@ -85,6 +93,7 @@ _SCENARIO_FACTORIES = {
     "stepper.states": stepper_states_component,
     "flow.states": flow_states_component,
     "grid-container.states": grid_container_states_component,
+    "scroll-area.states": scroll_area_states_component,
     "radio.states": radio_states_component,
     "skeleton.states": skeleton_states_component,
     "switch.states": switch_states_component,
@@ -101,10 +110,12 @@ _SCENARIO_FACTORIES = {
     "tooltip.states": tooltip_states_component,
     "hover-card.states": hover_card_states_component,
     "menu.states": menu_states_component,
+    "context-menu.states": context_menu_states_component,
     "navigation-menu.states": navigation_menu_states_component,
     "carousel.states": carousel_states_component,
     "toast.states": toast_states_component,
     "combobox.states": combobox_states_component,
+    "command-palette.states": command_palette_states_component,
     "table.states": table_states_component,
     "icon.states": icon_states_component,
     "card.states": card_states_component,
@@ -117,6 +128,7 @@ _SCENARIO_FACTORIES = {
     "listbox.states": listbox_states_component,
     "select.states": select_states_component,
     "multi-select.states": multi_select_states_component,
+    "tags-input.states": tags_input_states_component,
     "editable.states": editable_states_component,
     "tree.states": tree_states_component,
     "workflow.repeatable-contacts": repeatable_contacts_component,

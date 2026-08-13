@@ -27,7 +27,7 @@ from citry.ext.events.codecs import (
 from citry.ext.events.csrf import build_csrf_check, enforce_floor
 from citry.ext.events.dispatcher import EventsDispatcher, TransportContext
 from citry.ext.events.errors import EventError
-from citry.ext.events.routes import RUNTIME_PATH, events_config_url, get_event_url
+from citry.ext.events.routes import CSP_RUNTIME_PATH, RUNTIME_PATH, events_config_url, get_event_url
 from citry.ext.events.schemas import StringArgs
 from citry.ext.events.tokens import mint_state_token
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse
@@ -1312,6 +1312,17 @@ class TestRuntimeRoute:
         # The bundle's generated-file banner is its identifying marker
         # (observed from the built file; the versions behind it may move).
         assert "Citry events client runtime. GENERATED FILE" in response.text
+
+    def test_serves_the_distinct_csp_runtime_bundle(self):
+        c = _citry()
+        client = _mounted(c)
+
+        response = client.get(f"/citry/{CSP_RUNTIME_PATH}")
+
+        assert response.status_code == 200
+        assert response.headers.get_list("cache-control") == ["no-store"]
+        assert "Citry events CSP client runtime. GENERATED FILE" in response.text
+        assert response.text != client.get(f"/citry/{RUNTIME_PATH}").text
 
     def test_the_emitted_script_url_is_servable(self):
         c = _citry()

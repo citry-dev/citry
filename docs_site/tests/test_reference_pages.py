@@ -52,6 +52,7 @@ def test_public_entrypoints_are_the_three_shapes() -> None:
         "citry.ext.debug",
         "citry.ext.dependencies",
         "citry.ext.events",
+        "citry.ext.i18n",
     ]
 
 
@@ -83,9 +84,22 @@ def test_component_public_class_members_are_visible_to_reference_extraction() ->
     assert extract_symbol("citry.Component.class_id") is not None
     assert extract_symbol("citry.Component.definition_id") is not None
     assert extract_symbol("citry.Component.State") is not None
+    cache = extract_symbol("citry.Component.Cache")
+    assert cache is not None
+    assert "output-cache settings" in cache.description
+    dependencies = extract_symbol("citry.Component.Dependencies")
+    assert dependencies is not None
+    assert "secondary JavaScript and CSS assets" in dependencies.description
     events = extract_symbol("citry.Component.Events")
     assert events is not None
     assert "Optional server event handlers" in events.description
+    i18n = extract_symbol("citry.Component.I18n")
+    assert i18n is not None
+    assert "per-component settings" in i18n.description
+    assert extract_symbol("citry.Component.cache") is not None
+    assert extract_symbol("citry.Component.dependencies") is not None
+    assert extract_symbol("citry.Component.events") is not None
+    assert extract_symbol("citry.Component.i18n") is not None
     assert extract_symbol("citry.Citry.engine_id") is not None
     assert extract_symbol("citry.Citry.inspect_component") is not None
     assert extract_symbol("citry.Citry.inspect_components") is not None

@@ -243,7 +243,7 @@ class TestFragmentStrategy:
         with pytest.raises(RuntimeError, match="needs a mounted web integration"):
             Bare().render().serialize(deps_strategy="fragment")
 
-    def test_fragment_rejects_a_quoted_runtime_url(self):
+    def test_fragment_escapes_a_quoted_runtime_url(self):
         c = Citry()
         c.set_mounted_prefix('/ci"try')
 
@@ -256,8 +256,9 @@ class TestFragmentStrategy:
             class Dependencies:
                 js = ["/static/card.js"]
 
-        with pytest.raises(ValueError, match="runtime URL cannot contain quotes"):
-            Card().render().serialize(deps_strategy="fragment")
+        html = Card().render().serialize(deps_strategy="fragment")
+
+        assert 's.src = "/ci\\"try/citry.js";' in html
 
     def test_whitespace_css_creates_no_variables_or_fragment_css(self):
         c = Citry()

@@ -1,0 +1,1 @@
+"""Executable CommandPalette documentation previews."""

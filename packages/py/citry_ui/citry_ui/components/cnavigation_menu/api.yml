@@ -168,3 +168,5 @@ interfaces:
       - {id: controlled, name: controlled, type: boolean, meaning: Whether a supplied client value owns state.}
       - {id: forced, name: forced, type: boolean, meaning: Whether safety close overrides control.}
       - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source.}
+
+translations: []

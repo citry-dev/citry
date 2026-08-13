@@ -1131,7 +1131,8 @@ def _transform_element_attrs_node(
     from citry.nodes import ElementAttrsNode, StaticHtmlAttr  # noqa: PLC0415
 
     had_runtime_attr = any(not isinstance(attr, StaticHtmlAttr) for attr in node.attrs)
-    if had_runtime_attr:
+    has_later_client_directive = any(isinstance(attr, StaticHtmlAttr) and attr.key.startswith("$c-") for attr in attrs)
+    if had_runtime_attr or has_later_client_directive:
         return ElementAttrsNode(node.source, node.position, attrs, node.used_vars)
 
     # This region was preserved only so the extension could see its literal

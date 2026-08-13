@@ -446,3 +446,12 @@ interface with stable entry anchors. Visual examples do not use private
   preserving every public variable's meaning and precedence.
 - Full manual assistive-technology and visual sign-off blocks release, not the
   initial Phase 7 implementation.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

@@ -229,8 +229,27 @@ Define and test:
 - narrow, wide, coarse-pointer, touch, and virtual-keyboard cases; and
 - print behavior when the component has meaningful printable content.
 
-Inventory every library-authored visible string even though locale selection
-and translation remain separate follow-up work.
+Complete the Citry UI
+[i18n family audit](../../../packages/py/citry_ui/docs/component-authoring.md#internationalize-every-component-family):
+
+- every library-authored visible and accessibility string, announcement, and
+  interpolation variable;
+- the exact prop or slot that overrides each output and how raw presence is
+  detected;
+- stable message IDs and the dormant exact-English fallback;
+- where each string is written: server HTML, stable `$c-tr` text/attribute, an
+  `i18n.bind()` custom destination, or a one-shot browser translation;
+- number/date/time/list/unit formatting and parsing profiles;
+- filtering, sorting, typeahead, case conversion, and comparison claims;
+- direction-sensitive layout, scrolling, keys, symbols, icons, and bidi
+  boundaries; and
+- configured, dormant, fallback, application-override, RTL,
+  reactive-value-before-switch, live-switch, imperative cleanup,
+  fragment/morph, and installed-wheel evidence that applies to this family.
+
+If an item does not apply, state that explicitly. Application-authored content
+does not move into the Citry UI catalog, but the family still documents how it
+preserves that content's locale and direction ownership.
 
 ## 12. Overlay and layering behavior
 
@@ -361,3 +380,14 @@ component that lacks it.
 List unresolved choices, the evidence that would settle them, the owner, and
 whether they block implementation or release. Do not describe removed APIs as
 future guidance.
+
+## 21. Internationalization
+
+Inventory every library-authored visible and accessibility string, validation
+message, announcement, browser-created output, locale-sensitive operation,
+format profile, and direction-sensitive behavior. Apply the three-way dormant,
+catalog-default, and explicit-override rules from the Citry UI component-
+authoring guide. The component's structured API reference must end with the
+authoritative **Translation keys** table, including typed variables, the prop
+or slot that overrides each key, and whether browser updates use `$c-tr`,
+`i18n.bind()`, or one-shot `tr()`.

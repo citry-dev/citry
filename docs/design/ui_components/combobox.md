@@ -400,7 +400,8 @@ zoomed container retains a usable input and scrollable popup. Touch relies on
 pointer ordering, not hover. No essential animation is present.
 
 Visible library strings are required, clear, open, close, loading, empty, and
-error labels. Locale selection and translation remain follow-up work.
+error labels. The Citry UI i18n migration assigns stable catalog keys to all
+seven defaults and keeps the browser-owned popup state live-switchable.
 
 ## 12. Overlay and layering behavior
 
@@ -562,5 +563,14 @@ table rows concise.
   context, mobile, focus, outside interaction, assistive technology, and cleanup.
 - Browser autofill requires continuing real-device observation even with the
   stale-canonical safety rule.
-- Locale-aware matching and every library-authored label belong to later
-  localization work.
+- Locale-aware matching remains a bounded-search claim that needs dedicated
+  cross-locale evidence; library-authored labels follow the contract below.
+
+## 21. Internationalization
+
+The localization pass is now ratified. The structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/ccombobox/api.yml)
+owns all seven keys and override paths. `$c-tr` updates stable clear/loading/
+empty/error destinations; `i18n.bind()` updates the native validation message
+and the trigger label whose open/closed state changes in JavaScript. Slots and
+explicit label inputs remain caller-owned. Locale-aware filtering remains a
+separate bounded-search claim and must use the active provider locale.

@@ -47,10 +47,21 @@ handler, one component holds all of it. No second application, no separate build
 </div>
 </section>
 
-<!-- TODO: Social-proof - companies/orgs/projects
-           that use Citry.
-           Also mention Sponsors
--->
+<!-- TODO: Add "Used by" belt -->
+
+<section class="landing-sponsor-belt" aria-labelledby="landing-sponsor-title">
+  <h2 id="landing-sponsor-title">Development sponsored by</h2>
+  <ul>
+    <li>
+      <a href="https://www.ohne-makler.net/" target="_blank" rel="noopener">
+        <img
+          src="/static/img/sponsors/ohne-makler.svg"
+          alt="Ohne Makler"
+        />
+      </a>
+    </li>
+  </ul>
+</section>
 
 <!-- TODO: Overview video how it all works (incl VSCode, UI Lib, etc)
 -->
@@ -59,7 +70,7 @@ handler, one component holds all of it. No second application, no separate build
 ## One file holds the entire component end-to-end.
 
 <p class="landing-section__intro">
-Inputs, slots, markup, server events and state, browser behavior, and
+Inputs, slots, markup, translated messages, server events and state, browser behavior, and
 styles, all live together. No context switching.
 </p>
 
@@ -117,7 +128,7 @@ Read about [inputs and validation](/concepts/inputs-and-validation/),
 ## Your editor understands the whole component.
 
 <p class="landing-section__intro">
-Citry's VSCode extension connects all parts of the component. Surface errors or trace values across the file. Add completions, diagnostics, and hover hints.
+Citry's VSCode extension connects all parts of the component - Py, HTML, JS, CSS. Surface errors or trace values across the languages. Add completions, diagnostics, and hover hints.
 </p>
 
 Install the [VS Code extension](/ide/vscode/).
@@ -127,16 +138,14 @@ Install the [VS Code extension](/ide/vscode/).
 </section>
 
 <section class="landing-section" id="capabilities" markdown="1">
-## A component library for real interfaces.
+## Build fast with 60+ ready-made components.
 
 <p class="landing-section__intro">
-Citry UI gives you accessible, themeable components for layout, forms, actions,
-navigation, feedback, and data display. Browse the collection below, then drag
-a few onto the sample page to see how naturally they fit together.
+<a href="/ui-library/">Citry UI</a>
+gives you accessible, themeable components for layout, forms, actions,
+navigation, feedback, and data display.
+<a href="/ui-library/installation/">Install here.</a>
 </p>
-
-Explore the [component concepts](/concepts/components/),
-[interactive examples](/examples/), and [advanced guides](/advanced/testing/).
 
 <c-landing-composer />
 
@@ -150,10 +159,13 @@ A product that works starts running into different problems. None of them need a
 </p>
 
 Read about [caching](/advanced/caching/),
-[`Const` optimization](/advanced/const-optimization/),
 [extensions](/advanced/extensions/),
-[HTML fragments](/advanced/html-fragments/), and
-[component libraries](/advanced/component-libraries/).
+[internationalization](/i18n/),
+[CSRF protection](/security/#protect-event-posts-from-csrf),
+[strict CSP](/security/#choose-a-csp-compatibility-mode),
+[HTML fragments](/advanced/html-fragments/),
+[component libraries](/advanced/component-libraries/), and
+[perf optimizations](/advanced/const-optimization/).
 
 <c-landing-depth />
 
@@ -162,55 +174,57 @@ Read about [caching](/advanced/caching/),
 <section class="landing-section" id="people" markdown="1">
 ## Built in public by people who care about Python and the web.
 
+<p class="landing-section__intro">
+Citry is the successor to
+<a href="https://github.com/django-components/django-components" target="_blank" rel="noopener">django-components</a>
+(1.5k stars), distilling years of experience into an elegant and powerful framework.
+</p>
+
 <div class="landing-human-grid" markdown="1">
-<div class="landing-human-note">
-  <blockquote>
-    “Python teams should not have to choose between loose template fragments
-    and maintaining a second application just to build a serious interface.”
-  </blockquote>
-  <footer>Juro Oravec · Citry maintainer</footer>
-</div>
 
 <div markdown="1">
-Citry is the successor to
-[django-components](https://github.com/django-components/django-components) (1.5k stars), distilling years of experience into an elegant and powerful framework.
 
-This project would be nothing without its community. The people below have contributes into Citry or django-components:
+<p style="margin-bottom: 0; margin-top: 0.5rem;">
+This project would be nothing without its community. The people below have contributed to Citry or django-components:
+</p>
 
 <c-people group="contributors" avatars />
 
-### Who funds the work
+## Fund the work
 
-Citry is built in the open and paid for by organizations that run it. Sponsors
-get the roadmap early, a direct line to the maintainer, and a say in what gets
-built next.
+Citry is built in the open with funding from its sponsors. They get the roadmap
+early, a direct line to the maintainer, and a say in what gets built next.
 
-<ul class="landing-sponsors">
-  <li><a href="https://www.ohnemakler.net/" target="_blank" rel="noopener">Ohne Makler</a></li>
-</ul>
+### [Sponsor Citry]({{ repo_sponsors_url }}){: target="_blank" rel="noopener"}
 
-[Sponsor Citry]({{ repo_sponsors_url }}) if your product depends
-on this layer and you want it moving faster.
+</div>
+<div markdown="1">
+
+<div class="landing-maintainer">
+<div class="landing-maintainer__portrait">
+<c-people group="maintainers" avatars />
+</div>
+<div class="landing-maintainer__identity">
+<p class="landing-maintainer__name"><a href="/community/people/">Juro Oravec</a></p>
+<p class="landing-maintainer__role">Creator and maintainer of Citry</p>
+</div>
+</div>
 
 <div class="landing-human-links">
   <a href="/community/people/">Meet the people building Citry</a>
   <a href="/community/help/">Ask a question</a>
   <a href="/community/contributing/">Help improve Citry</a>
-  <a href="/blog/">Read the build notes</a>
 </div>
 </div>
 </div>
 </section>
 
 <section class="landing-final" markdown="1">
-## Build your first component.
-
-Start with plain Python and HTML. Add composition, browser behavior, and Python
-events when the interface asks for them.
+## Discover frontend that brings joy.
 
 <div class="landing-actions">
-  <a class="landing-button landing-button--primary" href="/docs/">
-    Read the docs
+  <a class="landing-button landing-button--primary" href="/getting-started/installation/">
+    Start the tutorial
     <svg class="landing-button__arrow" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8h11M9 4l4 4-4 4"/></svg>
   </a>
   <a class="landing-button" href="/examples/">Explore examples</a>

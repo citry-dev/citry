@@ -1,5 +1,7 @@
 """Styled semantic Table component family."""
 
+# ruff: noqa: E501 - Citry text bindings require one exact expression body.
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -8,6 +10,7 @@ from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, merge_attrs
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -124,6 +127,9 @@ class CTableErrorSlotData:
 
 
 class CTable(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         columns: Sequence[CTableColumn]
@@ -163,6 +169,12 @@ class CTable(LibraryComponent):
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, Any]:
+        catalog_loading_label = uses_catalog_default(self, "loading_label")
+        catalog_empty_label = uses_catalog_default(self, "empty_label")
+        catalog_error_label = uses_catalog_default(self, "error_label")
+        loading_label = self.i18n.tr("citry-ui-table-loading") if catalog_loading_label else kwargs.loading_label
+        empty_label = self.i18n.tr("citry-ui-table-empty") if catalog_empty_label else kwargs.empty_label
+        error_label = self.i18n.tr("citry-ui-table-error") if catalog_error_label else kwargs.error_label
         validate_choice("CTable", "state", kwargs.state, ("ready", "loading", "error"))
         validate_html_id("CTable", kwargs.id)
         validate_choice("CTable", "variant", kwargs.variant, ("line", "outline"))
@@ -181,9 +193,9 @@ class CTable(LibraryComponent):
         validate_choice("CTable", "caption_side", kwargs.caption_side, ("top", "bottom"))
         if kwargs.scroll_label is not None:
             validate_non_empty_string("CTable", "scroll_label", kwargs.scroll_label)
-        validate_non_empty_string("CTable", "loading_label", kwargs.loading_label)
-        validate_non_empty_string("CTable", "empty_label", kwargs.empty_label)
-        validate_non_empty_string("CTable", "error_label", kwargs.error_label)
+        validate_non_empty_string("CTable", "loading_label", loading_label)
+        validate_non_empty_string("CTable", "empty_label", empty_label)
+        validate_non_empty_string("CTable", "error_label", error_label)
         root_attrs = merge_root_attrs(
             self._validated_attrs(kwargs.attrs, "CTable attrs"),
             kwargs.class_,
@@ -239,11 +251,11 @@ class CTable(LibraryComponent):
         is_empty = kwargs.state == "ready" and not rows
         announcement = ""
         if kwargs.state == "loading":
-            announcement = kwargs.loading_label
+            announcement = loading_label
         elif kwargs.state == "error":
-            announcement = kwargs.error_label
+            announcement = error_label
         elif is_empty:
-            announcement = kwargs.empty_label
+            announcement = empty_label
 
         region_role = None
         if kwargs.overflow == "auto" and (region_aria_label or region_aria_labelledby):
@@ -272,9 +284,12 @@ class CTable(LibraryComponent):
             "is_empty": is_empty,
             "has_footer": kwargs.state == "ready" and has_footer,
             "announcement": announcement,
-            "loading_label": kwargs.loading_label,
-            "empty_label": kwargs.empty_label,
-            "error_label": kwargs.error_label,
+            "loading_label": loading_label,
+            "empty_label": empty_label,
+            "error_label": error_label,
+            "catalog_loading_label": catalog_loading_label,
+            "catalog_empty_label": catalog_empty_label,
+            "catalog_error_label": catalog_error_label,
             "has_caption": has_caption,
             "attrs": root_attrs,
             "table_attrs": table_attrs,
@@ -459,9 +474,15 @@ class CTable(LibraryComponent):
           role="status"
           aria-live="polite"
           aria-atomic="true"
-        >
-          {{ announcement }}
-        </span>
+          c-$c-tr:citry-ui-table-loading="True if state == 'loading' and catalog_loading_label else None"
+          c-$c-tr:citry-ui-table-error="True if state == 'error' and catalog_error_label else None"
+          c-$c-tr:citry-ui-table-empty="True if is_empty and catalog_empty_label else None"
+        >{{
+            tr('citry-ui-table-loading') if state == 'loading' and catalog_loading_label
+            else tr('citry-ui-table-error') if state == 'error' and catalog_error_label
+            else tr('citry-ui-table-empty') if is_empty and catalog_empty_label
+            else announcement
+          }}</span>
         <table
           class="cui-table"
           c-aria-busy="aria_busy"
@@ -505,7 +526,7 @@ class CTable(LibraryComponent):
                 >
                   <div data-citry-ui-part="loading">
                     <c-slot name="loading">
-                      {{ loading_label }}
+                      <span c-$c-tr:citry-ui-table-loading="True if catalog_loading_label else None">{{ tr('citry-ui-table-loading') if catalog_loading_label else loading_label }}</span>
                     </c-slot>
                   </div>
                 </td>
@@ -519,7 +540,7 @@ class CTable(LibraryComponent):
                 >
                   <div data-citry-ui-part="error">
                     <c-slot name="error">
-                      {{ error_label }}
+                      <span c-$c-tr:citry-ui-table-error="True if catalog_error_label else None">{{ tr('citry-ui-table-error') if catalog_error_label else error_label }}</span>
                     </c-slot>
                   </div>
                 </td>
@@ -533,7 +554,7 @@ class CTable(LibraryComponent):
                 >
                   <div data-citry-ui-part="empty">
                     <c-slot name="empty">
-                      {{ empty_label }}
+                      <span c-$c-tr:citry-ui-table-empty="True if catalog_empty_label else None">{{ tr('citry-ui-table-empty') if catalog_empty_label else empty_label }}</span>
                     </c-slot>
                   </div>
                 </td>
@@ -943,6 +964,12 @@ class CTable(LibraryComponent):
           }
         }
       }
+    """
+
+    messages = """
+      citry-ui-table-loading = Loading data...
+      citry-ui-table-empty = No data.
+      citry-ui-table-error = Unable to load data.
     """
 
 

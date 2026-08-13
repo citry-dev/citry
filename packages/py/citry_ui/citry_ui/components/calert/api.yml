@@ -134,3 +134,5 @@ interfaces:
   - {id: alert-title-slot-data, kind: record, name: CAlertTitleSlotData, entries: []}
   - {id: alert-default-slot-data, kind: record, name: CAlertDefaultSlotData, entries: []}
   - {id: alert-actions-slot-data, kind: record, name: CAlertActionsSlotData, entries: []}
+
+translations: []

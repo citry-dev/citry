@@ -74,10 +74,16 @@ fraction and formats `0.125` as 12.5 percent. More importantly, ICU4X emitted
 the ASCII percent sign with left-to-right marks for Arabic, while `Intl`
 emitted the Arabic percent sign.
 
-The direct experimental Arabic long-unit formatter emitted the equivalent of
-"meter" without the grammatical ending that `Intl` emitted for this numeric
-context. This is more than whitespace or punctuation, so the full unit profile
-cannot accept it as a permitted presentation difference.
+The direct experimental Arabic long-unit formatter and `Intl` selected
+different forms for `9007199254740993.25`. The later
+[`formatting_followup`](../formatting_followup/prototype-report.md) added ordinary
+integer and fractional controls and corrected the diagnosis: ICU4X and all
+three browsers agree for those values. For this one exact decimal, ICU4X follows
+the CLDR `other` rule while the tested browsers lose precision in their ICU4C
+plural path and select `many`. The checked evidence key calls this a grammar
+difference because that was the earlier interpretation; it should be read as a
+historical raw-output difference, not as evidence that ICU4X generally misses
+Arabic unit grammar.
 
 ICU4X does not ship IANA time-zone offset transitions. It formats a zone once
 the application supplies the resolved identity, offset, and time. Citry should

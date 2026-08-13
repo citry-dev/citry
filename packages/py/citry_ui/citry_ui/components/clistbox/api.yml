@@ -184,3 +184,5 @@ interfaces:
       - {id: controlled, name: controlled, type: bool, meaning: Whether the client value currently controls selection.}
       - {id: source, name: source, type: {display: '"pointer" | "keyboard" | "structure"', interfaces: [CListboxChangeSource]}, meaning: Request source.}
       - {id: source-event, name: sourceEvent, type: 'Event | None', meaning: Native source event or None for structure.}
+
+translations: []

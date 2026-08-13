@@ -17,6 +17,7 @@ TEMPLATE_UNKNOWN_VARIABLE = 'citry.template.unknown-variable'
 TEMPLATE_UNKNOWN_COMPONENT = 'citry.template.unknown-component'
 JS_DATA_UNSUPPORTED_TYPE = 'citry.js-data.unsupported-type'
 ALPINE_UNKNOWN_VARIABLE = 'citry.alpine.unknown-variable'
+CSP_INCOMPATIBLE_BROWSER_CODE = 'citry.csp.incompatible-browser-code'
 COMPONENT_JS_UNKNOWN_VARIABLE = 'citry.component-js.unknown-variable'
 BROWSER_UNKNOWN_SERVER_EVENT = 'citry.browser.unknown-server-event'
 BROWSER_UNKNOWN_COMPONENT_PROP = 'citry.browser.unknown-component-prop'
@@ -29,6 +30,11 @@ CHECK_TEMPLATE_FILE_NOT_FOUND = 'citry.check.template-file-not-found'
 CHECK_TEMPLATE_FILE_UNREADABLE = 'citry.check.template-file-unreadable'
 CHECK_TEMPLATE_NAMESPACE_UNAVAILABLE = 'citry.check.template-namespace-unavailable'
 CHECK_PYTHON_SOURCE_UNREADABLE = 'citry.check.python-source-unreadable'
+I18N_CATALOG_INVALID = 'citry.i18n.catalog-invalid'
+I18N_UNKNOWN_MESSAGE = 'citry.i18n.unknown-message'
+I18N_ARGUMENT_INVALID = 'citry.i18n.argument-invalid'
+I18N_CROSS_LANGUAGE_FALLBACK = 'citry.i18n.cross-language-fallback'
+I18N_CLIENT_MESSAGE_INVALID = 'citry.i18n.client-message-invalid'
 FORMAT_SYNTAX = 'citry.format.syntax'
 FORMAT_SUPPRESSION = 'citry.format.suppression'
 FORMAT_INVARIANT = 'citry.format.invariant'
@@ -260,6 +266,27 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                                                  'locally, destructured from the callback context, supplied by the '
                                                  'JavaScript or browser environment, or configured as a lint-only '
                                                  'component JavaScript global.'},
+ 'citry.csp.incompatible-browser-code': {'code': 'citry.csp.incompatible-browser-code',
+                                         'configurableSeverity': True,
+                                         'constant': 'CSP_INCOMPATIBLE_BROWSER_CODE',
+                                         'defaultSeverity': 'error',
+                                         'documentationPath': '/ide/diagnostics/#citry.csp.incompatible-browser-code',
+                                         'examples': [{'language': 'citry-html',
+                                                       'source': '<button @click="items.map(item => '
+                                                                 'item.id)">Save</button>',
+                                                       'title': 'Move an arrow function into Component.js'}],
+                                         'messages': {'default': 'Alpine CSP 3.16.1 cannot evaluate {detail} here. '
+                                                                 'Move complex logic to Component.js and call a scope '
+                                                                 'method from the template.'},
+                                         'parameters': {'detail': 'The unsupported directive, host, token, or '
+                                                                  'operation.'},
+                                         'summary': 'An Alpine or Citry browser expression uses a host or source form '
+                                                    'unsupported by the pinned Alpine CSP evaluator.',
+                                         'surfaces': ['check', 'lsp'],
+                                         'title': 'Browser code is incompatible with strict CSP',
+                                         'when': 'The selected Citry application configures CSP warning or strict mode '
+                                                 'and a source-classifiable browser expression is incompatible with '
+                                                 'Alpine CSP 3.16.1.'},
  'citry.format.cancelled': {'code': 'citry.format.cancelled',
                             'constant': 'FORMAT_CANCELLED',
                             'defaultSeverity': 'information',
@@ -421,6 +448,67 @@ DIAGNOSTICS: Final = {'citry.alpine.unknown-variable': {'code': 'citry.alpine.un
                               'title': 'Formatting shape unsupported',
                               'when': "The template is valid, but its source shape is outside the formatter's "
                                       'currently supported rewrite rules.'},
+ 'citry.i18n.argument-invalid': {'code': 'citry.i18n.argument-invalid',
+                                 'constant': 'I18N_ARGUMENT_INVALID',
+                                 'defaultSeverity': 'error',
+                                 'documentationPath': '/ide/diagnostics/#citry.i18n.argument-invalid',
+                                 'messages': {'default': '{detail}'},
+                                 'parameters': {'detail': 'Argument-contract explanation.'},
+                                 'summary': 'A translation binding, formatter, parser, or rich-message call does not '
+                                            'match its checked contract.',
+                                 'surfaces': ['check', 'lsp'],
+                                 'title': 'Invalid i18n argument',
+                                 'when': 'A literal i18n call or $c-tr binding is malformed, has missing, unknown, or '
+                                         'mistyped message inputs, uses an unknown named profile, or supplies the '
+                                         'wrong <c-trans> values or fills.'},
+ 'citry.i18n.catalog-invalid': {'code': 'citry.i18n.catalog-invalid',
+                                'constant': 'I18N_CATALOG_INVALID',
+                                'defaultSeverity': 'error',
+                                'documentationPath': '/ide/diagnostics/#citry.i18n.catalog-invalid',
+                                'messages': {'default': '{detail}'},
+                                'parameters': {'detail': 'Compiler-provided catalog error.'},
+                                'summary': "A Fluent source unit failed Citry's production parser or i18n contract "
+                                           'checks.',
+                                'surfaces': ['check', 'lsp'],
+                                'title': 'Invalid Fluent catalog source',
+                                'when': 'A messages block or catalog file contains invalid Fluent syntax, an '
+                                        'unsupported parameter type, or another source-level i18n error.'},
+ 'citry.i18n.client-message-invalid': {'code': 'citry.i18n.client-message-invalid',
+                                       'constant': 'I18N_CLIENT_MESSAGE_INVALID',
+                                       'defaultSeverity': 'error',
+                                       'documentationPath': '/ide/diagnostics/#citry.i18n.client-message-invalid',
+                                       'messages': {'default': '{detail}'},
+                                       'parameters': {'detail': 'Client-message contract explanation.'},
+                                       'summary': 'A message declared for browser use is missing or lacks complete '
+                                                  'locale coverage.',
+                                       'surfaces': ['check'],
+                                       'title': 'Invalid client i18n message',
+                                       'when': 'Component.I18n.client_messages names an unknown output or an output '
+                                               'that would fall back across languages in a client-enabled subtree.'},
+ 'citry.i18n.cross-language-fallback': {'code': 'citry.i18n.cross-language-fallback',
+                                        'constant': 'I18N_CROSS_LANGUAGE_FALLBACK',
+                                        'defaultSeverity': 'error',
+                                        'documentationPath': '/ide/diagnostics/#citry.i18n.cross-language-fallback',
+                                        'messages': {'default': '{detail}'},
+                                        'parameters': {'detail': 'Fallback coverage explanation.'},
+                                        'summary': 'A plain translated string falls back to a different language '
+                                                   'without a place to carry that language metadata.',
+                                        'surfaces': ['check'],
+                                        'title': 'Cross-language i18n fallback',
+                                        'when': 'A text-only translation can select a source or fallback locale whose '
+                                                'canonical language tag differs from the requested locale.'},
+ 'citry.i18n.unknown-message': {'code': 'citry.i18n.unknown-message',
+                                'constant': 'I18N_UNKNOWN_MESSAGE',
+                                'defaultSeverity': 'error',
+                                'documentationPath': '/ide/diagnostics/#citry.i18n.unknown-message',
+                                'messages': {'default': '{detail}'},
+                                'parameters': {'detail': 'Unknown-message explanation.'},
+                                'summary': 'A literal translation key is absent from the checked project catalog.',
+                                'surfaces': ['check', 'lsp'],
+                                'title': 'Unknown i18n message',
+                                'when': 'A direct tr() call, <c-trans> tag, $c-tr binding, or bounded browser bind() '
+                                        'call names a message value or attribute that no component or configured '
+                                        'catalog package defines.'},
  'citry.js-data.unsupported-type': {'code': 'citry.js-data.unsupported-type',
                                     'constant': 'JS_DATA_UNSUPPORTED_TYPE',
                                     'defaultSeverity': 'warning',

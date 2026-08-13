@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping  # noqa: TC003
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
+from citry_ui.components._anchored_layer import ANCHORED_LAYER_RUNTIME_DEPENDENCY
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._dialog_controller import DIALOG_CONTROLLER_RUNTIME_DEPENDENCY
+from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -46,6 +49,9 @@ class CDialogCloseSlotData:
 
 
 class CDialog(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         id: str | None = None
@@ -83,7 +89,8 @@ class CDialog(LibraryComponent):
         validate_choice("CDialog", "initial_focus", kwargs.initial_focus, ("auto", "title"))
         validate_choice("CDialog", "size", kwargs.size, ("sm", "md", "lg", "full"))
         validate_choice("CDialog", "scroll", kwargs.scroll, ("body", "dialog"))
-        validate_non_empty_string("CDialog", "close_label", kwargs.close_label)
+        close_label = kwargs.close_label if "close_label" in self.raw_kwargs else self.i18n.tr("citry-ui-dialog-close")
+        validate_non_empty_string("CDialog", "close_label", close_label)
         reject_owned_attrs(
             kwargs.attrs,
             {
@@ -125,7 +132,8 @@ class CDialog(LibraryComponent):
             "title_tabindex": -1 if kwargs.initial_focus == "title" else None,
             "size": kwargs.size,
             "scroll": kwargs.scroll,
-            "close_label": kwargs.close_label,
+            "close_label": close_label,
+            "catalog_close_label": uses_catalog_default(self, "close_label"),
             "has_activator": "activator" in self.raw_slots,
             "has_description": has_description,
             "has_actions": "actions" in self.raw_slots,
@@ -201,7 +209,8 @@ class CDialog(LibraryComponent):
               <button
                 class="cui-dialog__close"
                 type="button"
-                c-aria-label="close_label"
+                c-aria-label="tr('citry-ui-dialog-close') if catalog_close_label else close_label"
+                c-$c-tr:citry-ui-dialog-close[aria-label]="True if catalog_close_label else None"
                 c-hidden="not dismissible"
                 data-citry-dialog-close
                 data-citry-dialog-built-in-close
@@ -276,6 +285,10 @@ class CDialog(LibraryComponent):
           const surface = dialog.querySelector(':scope > [data-citry-ui-part="surface"]');
           const title = surface.querySelector('[data-citry-ui-part="title"]');
           const closeButton = surface.querySelector('[data-citry-dialog-built-in-close]');
+          const controllerRuntime = globalThis[Symbol.for("citry-ui:dialog-controller-runtime")];
+          if (controllerRuntime?.generation !== 1) {
+            throw new Error("[citry-ui] CDialog controller runtime dependency did not load.");
+          }
           const allowedValues = {
             initialFocus: ["auto", "title"],
             size: ["sm", "md", "lg", "full"],
@@ -287,9 +300,6 @@ class CDialog(LibraryComponent):
           let appliedOpen = false;
           let suppressStaleControlledOpen = false;
           let pendingControlledReturnValue = "";
-          let expectedNativeClose = false;
-          let pointerStartedOutside = false;
-          let previousFocus = null;
           let onOpenChange = null;
           let configuration = {
             dismissible: data.dismissible,
@@ -298,6 +308,11 @@ class CDialog(LibraryComponent):
             initialFocus: data.initialFocus,
             size: data.size,
             scroll: data.scroll,
+          };
+          const syncRuntimeDialog = (open) => {
+            const index = runtime.dialogs.indexOf(dialog);
+            if (open && index < 0) runtime.dialogs.push(dialog);
+            if (!open && index >= 0) runtime.dialogs.splice(index, 1);
           };
 
           const ownedElements = (selector) => [...host.querySelectorAll(selector)]
@@ -355,143 +370,16 @@ class CDialog(LibraryComponent):
               activator.setAttribute("aria-expanded", open ? "true" : "false");
             }
           };
-          const lockScroll = () => {
-            if (runtime.dialogs.includes(dialog)) {
-              return;
-            }
-            if (runtime.dialogs.length === 0) {
-              const root = document.documentElement;
-              runtime.overflow = root.style.overflow;
-              runtime.paddingInlineEnd = root.style.paddingInlineEnd;
-              const scrollbarWidth = Math.max(0, window.innerWidth - root.clientWidth);
-              const currentPadding = Number.parseFloat(getComputedStyle(root).paddingInlineEnd) || 0;
-              root.style.overflow = "hidden";
-              if (scrollbarWidth > 0) {
-                root.style.paddingInlineEnd = `${currentPadding + scrollbarWidth}px`;
-              }
-            }
-            runtime.dialogs.push(dialog);
-          };
-          const unlockScroll = () => {
-            const index = runtime.dialogs.indexOf(dialog);
-            if (index === -1) {
-              return;
-            }
-            runtime.dialogs.splice(index, 1);
-            if (runtime.dialogs.length === 0) {
-              const root = document.documentElement;
-              root.style.overflow = runtime.overflow;
-              root.style.paddingInlineEnd = runtime.paddingInlineEnd;
-            }
-          };
-          const isFocusable = (element) => element instanceof HTMLElement
-            && !element.hidden
-            && !element.matches(":disabled,[inert]")
-            && !element.closest("[inert]")
-            && element.getClientRects().length > 0
-            && getComputedStyle(element).visibility !== "hidden";
-          const radioIsTabStop = (element) => {
-            if (!(element instanceof HTMLInputElement) || element.type !== "radio" || !element.name) {
-              return true;
-            }
-            const group = [...dialog.querySelectorAll('input[type="radio"]')]
-              .filter((radio) => radio.name === element.name
-                && radio.form === element.form
-                && radio.closest("dialog") === dialog
-                && isFocusable(radio));
-            const checked = group.find((radio) => radio.checked);
-            return checked ? element === checked : element === group[0];
-          };
-          const focusableElements = () => {
-            const elements = [...dialog.querySelectorAll(
-              'a[href], area[href], button:not(:disabled), input:not(:disabled):not([type="hidden"]), '
-                + 'select:not(:disabled), textarea:not(:disabled), iframe, object, embed, '
-                + 'audio[controls], video[controls], summary, [contenteditable]:not([contenteditable="false"]), '
-                + '[tabindex]:not([tabindex="-1"]):not([inert])',
-            )].filter((element) => isFocusable(element)
-              && element.closest("dialog") === dialog
-              && radioIsTabStop(element));
-            return elements
-              .map((element, index) => ({ element, index, tabIndex: element.tabIndex }))
-              .filter(({ tabIndex }) => tabIndex >= 0)
-              .sort((left, right) => {
-                if (left.tabIndex > 0 && right.tabIndex === 0) {
-                  return -1;
-                }
-                if (left.tabIndex === 0 && right.tabIndex > 0) {
-                  return 1;
-                }
-                if (left.tabIndex > 0 && right.tabIndex > 0 && left.tabIndex !== right.tabIndex) {
-                  return left.tabIndex - right.tabIndex;
-                }
-                return left.index - right.index;
-              })
-              .map(({ element }) => element);
-          };
-          const focusTitle = () => {
-            if (configuration.initialFocus === "title" && isFocusable(title)) {
-              title.focus({ preventScroll: true });
-            }
-          };
-          const ensureFocusRestored = () => {
-            // The HTML close algorithm owns the destination. WebKit does not
-            // consistently perform that restoration, so repeat the same target
-            // only when the browser did not restore it itself.
-            if (
-              previousFocus?.isConnected
-              && document.activeElement !== previousFocus
-              && isFocusable(previousFocus)
-            ) {
-              previousFocus.focus({ preventScroll: true });
-            }
-          };
-          const closeDescendants = () => {
-            // Native Dialog does not close a nested top-layer Dialog when its
-            // ancestor closes. Close deepest descendants first so no invisible
-            // modal can retain inertness or the shared scroll lock.
-            for (const candidate of [...runtime.dialogs].reverse()) {
-              if (candidate !== dialog && dialog.contains(candidate) && candidate.open) {
-                candidate.close();
-              }
-            }
-          };
+          let controller;
           const applyOpen = (nextOpen, source = null, returnValue = "") => {
-            if (!nextOpen) {
-              closeDescendants();
-            }
             if (nextOpen === appliedOpen && dialog.open === nextOpen) {
               return;
             }
-            if (nextOpen) {
-              previousFocus = source instanceof HTMLElement ? source : document.activeElement;
-              dialog.returnValue = "";
-              if (dialog.open) {
-                dialog.removeAttribute("open");
-              }
-              try {
-                dialog.showModal();
-              } catch (error) {
-                console.error("[citry-ui] CDialog could not enter modal state:", error, dialog);
-                appliedOpen = false;
-                updateActivators(false);
-                return;
-              }
-              appliedOpen = true;
-              dialog.setAttribute("data-open", "");
-              updateActivators(true);
-              lockScroll();
-              queueMicrotask(focusTitle);
-              return;
-            }
-            expectedNativeClose = dialog.open;
-            if (dialog.open) {
-              dialog.close(returnValue);
-            }
-            appliedOpen = false;
-            dialog.removeAttribute("data-open");
-            updateActivators(false);
-            unlockScroll();
-            queueMicrotask(ensureFocusRestored);
+            controller.setOpen(nextOpen, source, returnValue);
+            appliedOpen = controller.isOpen();
+            dialog.toggleAttribute("data-open", appliedOpen);
+            updateActivators(appliedOpen);
+            syncRuntimeDialog(appliedOpen);
           };
           const notify = (nextOpen, reason, source, returnValue = "") => {
             onOpenChange?.(nextOpen, {
@@ -525,16 +413,6 @@ class CDialog(LibraryComponent):
             applyOpen(nextOpen, source, returnValue);
             notify(nextOpen, reason, source, returnValue);
           };
-          const eventIsOutside = (event) => {
-            if (event.target !== dialog) {
-              return false;
-            }
-            const rect = surface.getBoundingClientRect();
-            return event.clientX < rect.left
-              || event.clientX > rect.right
-              || event.clientY < rect.top
-              || event.clientY > rect.bottom;
-          };
           const onHostClick = (event) => {
             const trigger = event.target.closest?.("[data-citry-dialog-trigger]");
             if (trigger && nearestHost(trigger) === host) {
@@ -552,115 +430,60 @@ class CDialog(LibraryComponent):
             const returnValue = close instanceof HTMLButtonElement ? close.value : "";
             requestOpen(false, builtIn ? "close-button" : "action", close, returnValue);
           };
-          const onCancel = (event) => {
-            event.preventDefault();
-            if (configuration.dismissible && configuration.closeOnEscape) {
-              requestOpen(false, "escape", dialog);
-            }
-          };
-          const onKeyDown = (event) => {
-            // Parent Dialogs receive bubbled key events from nested Dialogs. Only the
-            // nearest native Dialog may apply its focus loop.
-            if (event.key !== "Tab" || event.target.closest?.("dialog") !== dialog) {
-              return;
-            }
-            const focusable = focusableElements();
-            if (focusable.length === 0) {
-              event.preventDefault();
-              if (configuration.initialFocus === "title") {
-                title.focus({ preventScroll: true });
-              } else {
-                dialog.focus({ preventScroll: true });
-              }
-              return;
-            }
-            const first = focusable[0];
-            const last = focusable[focusable.length - 1];
-            if (
-              event.shiftKey
-              && (
-                document.activeElement === first
-                || document.activeElement === dialog
-                || document.activeElement === title
-              )
-            ) {
-              event.preventDefault();
-              last.focus({ preventScroll: true });
-            } else if (!event.shiftKey && document.activeElement === last) {
-              event.preventDefault();
-              first.focus({ preventScroll: true });
-            }
-          };
-          const onPointerDown = (event) => {
-            pointerStartedOutside = eventIsOutside(event);
-          };
-          const onPointerCancel = () => {
-            pointerStartedOutside = false;
-          };
-          const onDialogClick = (event) => {
-            const shouldClose = pointerStartedOutside && eventIsOutside(event);
-            pointerStartedOutside = false;
-            if (shouldClose && configuration.dismissible && configuration.closeOnOutside) {
-              requestOpen(false, "outside", dialog);
-            }
-          };
-          const onSubmit = (event) => {
-            const form = event.target;
-            if (
-              event.defaultPrevented
-              || !(form instanceof HTMLFormElement)
-              || form.closest("dialog") !== dialog
-              || !controlled
-            ) {
-              return;
-            }
-            const submitter = event.submitter;
-            const submitterOverridesMethod = (
-              submitter instanceof HTMLButtonElement
-              || submitter instanceof HTMLInputElement
-            ) && submitter.hasAttribute("formmethod");
-            const method = submitterOverridesMethod
-              ? submitter.formMethod
-              : form.method;
-            if (method.toLowerCase() !== "dialog") {
-              return;
-            }
+          controller = controllerRuntime.create({
+            host,
+            dialog,
+            surface,
+            title,
+            closeButton,
+            signature: `CDialog:${data.initialFocus}`,
+            policy: () => configuration,
+            initialFocus: () => configuration.initialFocus === "title" ? title : null,
+            containmentFallback: () => configuration.initialFocus === "title" ? title : dialog,
+            escapeBlocked: () => false,
+            interceptDialogSubmit: () => controlled,
+            requestClose: (reason, source, returnValue) => {
+              requestOpen(false, reason, source, returnValue);
+            },
+            nativeClosed: (reason, source, returnValue) => {
+              suppressStaleControlledOpen = controlled && props.open === true;
+              appliedOpen = false;
+              internalOpen = false;
+              dialog.removeAttribute("data-open");
+              updateActivators(false);
+              syncRuntimeDialog(false);
+              notify(false, reason, source, returnValue);
+            },
+            forceClose: (_reason, source) => {
+              suppressStaleControlledOpen = false;
+              appliedOpen = false;
+              internalOpen = false;
+              dialog.removeAttribute("data-open");
+              updateActivators(false);
+              syncRuntimeDialog(false);
+              notify(false, "native", source, "");
+            },
+            failed: () => {
+              appliedOpen = false;
+              updateActivators(false);
+              syncRuntimeDialog(false);
+              console.error("[citry-ui] CDialog could not enter modal state.");
+            },
+            handoffAborted: () => {
+              appliedOpen = false;
+              updateActivators(false);
+              syncRuntimeDialog(false);
+            },
+          });
 
-            // Native method=dialog closure cannot be undone. In controlled mode,
-            // intercept only that final close so the owner can accept or decline
-            // it like every other user-authored visibility request. Validation
-            // and the native submit event have already completed at this point.
-            event.preventDefault();
-            const returnValue = (
-              submitter instanceof HTMLButtonElement
-              || submitter instanceof HTMLInputElement
-            ) ? submitter.value : "";
-            requestOpen(false, "native", submitter ?? form, returnValue);
-          };
-          const onNativeClose = () => {
-            if (expectedNativeClose) {
-              expectedNativeClose = false;
-              return;
-            }
-            closeDescendants();
-            suppressStaleControlledOpen = controlled && props.open === true;
-            appliedOpen = false;
-            internalOpen = false;
-            dialog.removeAttribute("data-open");
-            updateActivators(false);
-            unlockScroll();
-            notify(false, "native", dialog, dialog.returnValue);
-            queueMicrotask(ensureFocusRestored);
-          };
+          if (controller.retained) {
+            appliedOpen = controller.isOpen();
+            dialog.toggleAttribute("data-open", appliedOpen);
+            updateActivators(appliedOpen);
+            syncRuntimeDialog(appliedOpen);
+          }
 
           host.addEventListener("click", onHostClick);
-          dialog.addEventListener("cancel", onCancel);
-          dialog.addEventListener("keydown", onKeyDown);
-          dialog.addEventListener("pointerdown", onPointerDown);
-          dialog.addEventListener("pointercancel", onPointerCancel);
-          dialog.addEventListener("click", onDialogClick);
-          dialog.addEventListener("submit", onSubmit);
-          dialog.addEventListener("close", onNativeClose);
           effect(() => {
             const suppliedOpen = props.open;
             let nextOpen = internalOpen;
@@ -721,24 +544,14 @@ class CDialog(LibraryComponent):
 
           return () => {
             host.removeEventListener("click", onHostClick);
-            dialog.removeEventListener("cancel", onCancel);
-            dialog.removeEventListener("keydown", onKeyDown);
-            dialog.removeEventListener("pointerdown", onPointerDown);
-            dialog.removeEventListener("pointercancel", onPointerCancel);
-            dialog.removeEventListener("click", onDialogClick);
-            dialog.removeEventListener("submit", onSubmit);
-            dialog.removeEventListener("close", onNativeClose);
-            closeDescendants();
-            expectedNativeClose = dialog.open;
-            if (dialog.open) {
-              dialog.close();
-            }
+            const handedOff = controller.cleanup({ handoff: true });
             appliedOpen = false;
             updateActivators(false);
-            unlockScroll();
-            queueMicrotask(ensureFocusRestored);
-            host.removeAttribute("data-citry-dialog-initialized");
-            host.removeAttribute("data-citry-alert-dialog-initialized");
+            syncRuntimeDialog(false);
+            if (!handedOff) {
+              host.removeAttribute("data-citry-dialog-initialized");
+              host.removeAttribute("data-citry-alert-dialog-initialized");
+            }
           };
         },
       });
@@ -914,6 +727,17 @@ class CDialog(LibraryComponent):
         }
       }
     """
+
+    messages = """
+      citry-ui-dialog-close = Close
+    """
+
+
+class _CDialogDependencies:
+    js: ClassVar = [ANCHORED_LAYER_RUNTIME_DEPENDENCY, DIALOG_CONTROLLER_RUNTIME_DEPENDENCY]
+
+
+CDialog.Dependencies = _CDialogDependencies
 
 
 __all__ = [

@@ -3,6 +3,7 @@
 from .ctoast import (
     CToastIntent,
     CToastMessage,
+    CToastMessages,
     CToastPlacement,
     CToastPriority,
     CToastRegion,
@@ -11,6 +12,7 @@ from .ctoast import (
 __all__ = [
     "CToastIntent",
     "CToastMessage",
+    "CToastMessages",
     "CToastPlacement",
     "CToastPriority",
     "CToastRegion",

@@ -1,7 +1,7 @@
 {
 	"name": "citry",
 	"displayName": "Citry",
-	"description": "Highlighting, diagnostics, editor intelligence, and formatting for Citry templates",
+	"description": "Highlighting, diagnostics, editor intelligence, and formatting for Citry components",
 	"version": "0.1.0",
 	"publisher": "citry-dev",
 	"license": "MIT",
@@ -15,6 +15,7 @@
 	"activationEvents": [
 		"onLanguage:python",
 		"onLanguage:citry-html",
+		"onLanguage:fluent",
 		"onLanguage:html",
 		"onLanguage:css",
 		"onCommand:citry.restartServer",
@@ -29,6 +30,8 @@
 		"citry",
 		"python",
 		"html",
+		"fluent",
+		"i18n",
 		"templates",
 		"components"
 	],
@@ -72,9 +75,26 @@
 					"citry-html"
 				],
 				"configuration": "./language-configuration.json"
+			},
+			{
+				"id": "fluent",
+				"aliases": [
+					"Fluent",
+					"fluent",
+					"ftl"
+				],
+				"extensions": [
+					".ftl"
+				],
+				"configuration": "./fluent-language-configuration.json"
 			}
 		],
 		"grammars": [
+			{
+				"language": "fluent",
+				"scopeName": "source.ftl",
+				"path": "./syntaxes/fluent.tmLanguage.json"
+			},
 			{
 				"language": "citry-html",
 				"scopeName": "text.html.citry",
@@ -120,12 +140,14 @@
 				"embeddedLanguages": {
 					"meta.embedded.block.citry-html": "citry-html",
 					"meta.embedded.block.javascript": "javascript",
-					"meta.embedded.block.css": "css"
+					"meta.embedded.block.css": "css",
+					"meta.embedded.block.fluent": "fluent"
 				},
 				"tokenTypes": {
 					"meta.embedded.block.citry-html": "other",
 					"meta.embedded.block.javascript": "other",
-					"meta.embedded.block.css": "other"
+					"meta.embedded.block.css": "other",
+					"meta.embedded.block.fluent": "other"
 				}
 			}
 		],

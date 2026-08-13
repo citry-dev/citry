@@ -609,3 +609,12 @@ collapsible and visually separate from the rendered fixture.
   tools remain companion packages.
 - Full manual assistive-technology, mobile, autofill, spellcheck, dictation,
   and visual sign-off blocks release, not implementation of the automated slice.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

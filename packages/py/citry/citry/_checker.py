@@ -29,6 +29,11 @@ from citry._diagnostic_catalog import (
     CHECK_TEMPLATE_LANGUAGE_UNSUPPORTED,
     CHECK_TEMPLATE_NAMESPACE_UNAVAILABLE,
     CHECK_TEMPLATE_VALUE_INVALID,
+    I18N_ARGUMENT_INVALID,
+    I18N_CATALOG_INVALID,
+    I18N_CLIENT_MESSAGE_INVALID,
+    I18N_CROSS_LANGUAGE_FALLBACK,
+    I18N_UNKNOWN_MESSAGE,
     JS_DATA_UNSUPPORTED_TYPE,
     PARSE_CONFIGURATION,
     TEMPLATE_UNKNOWN_COMPONENT,
@@ -52,11 +57,14 @@ from citry.analysis import (
     browser_component_scope_writes,
     browser_declarative_events,
     browser_expressions,
+    browser_i18n_binding_directives,
+    browser_i18n_profile_calls,
     browser_literal_calls,
     browser_literal_wire_type,
     discover_python_templates,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
+    lint_csp_compatibility,
     lint_unknown_alpine_variables,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
@@ -77,11 +85,18 @@ if TYPE_CHECKING:
 
 
 TRANSFORM_NOTE = "extension-transformed template validation is unavailable; checking authored Citry source"
-I18N_CATALOG_INVALID = "citry.i18n.catalog-invalid"
-I18N_UNKNOWN_MESSAGE = "citry.i18n.unknown-message"
-I18N_ARGUMENT_INVALID = "citry.i18n.argument-invalid"
-I18N_CROSS_LANGUAGE_FALLBACK = "citry.i18n.cross-language-fallback"
-I18N_CLIENT_MESSAGE_INVALID = "citry.i18n.client-message-invalid"
+
+_I18N_FORMAT_KINDS = (
+    "number",
+    "percent",
+    "currency",
+    "date",
+    "time",
+    "datetime",
+    "relative_time",
+    "list",
+    "unit",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,11 +190,13 @@ def _check_registry(
     sources: dict[tuple[object, ...], _TemplateSource] = {}
     browser_sources: dict[tuple[object, ...], _BrowserSource] = {}
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None
+    i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None
 
     i18n = engine.extensions._extensions_by_name.get("i18n")
-    if i18n is not None and getattr(i18n, "configured", False):
+    if i18n is not None and getattr(i18n, "available", False):
         try:
             i18n_extension = cast("I18nExtension", i18n)
+            i18n_profiles = _i18n_profile_inventory(i18n_extension)
             i18n_extension._load_project_sources()
             compiled_catalog = i18n_extension._compiled_catalog
             if compiled_catalog is None:
@@ -215,7 +232,7 @@ def _check_registry(
             continue
         if i18n_manifest is not None:
             findings.extend(_client_message_findings(comp_cls, i18n_manifest))
-            findings.extend(_i18n_python_findings(comp_cls, i18n_manifest))
+            findings.extend(_i18n_python_findings(comp_cls, i18n_manifest, i18n_profiles or {}))
         findings.extend(_check_js_data_types(engine, comp_cls))
         _collect_browser_source(engine, comp_cls, browser_sources)
         class_label = _class_label(comp_cls)
@@ -352,10 +369,11 @@ def _check_registry(
                 lint_consumers=lint_consumers,
                 alpine_lint_consumers=alpine_lint_consumers,
                 i18n_manifest=i18n_manifest,
+                i18n_profiles=i18n_profiles,
             )
         )
     for browser_source in browser_sources.values():
-        findings.extend(_check_browser_source(engine, browser_source))
+        findings.extend(_check_browser_source(engine, browser_source, i18n_profiles or {}))
     return findings
 
 
@@ -402,6 +420,7 @@ def _check_template(
     lint_consumers: tuple[TemplateLintConsumer, ...] = (),
     alpine_lint_consumers: tuple[AlpineLintConsumer, ...] = (),
     i18n_manifest: dict[str, dict[str, dict[str, Any]]] | None = None,
+    i18n_profiles: dict[str, dict[str, frozenset[str]]] | None = None,
 ) -> list[CheckFinding]:
     """Parse one source and, in registry mode, inspect component tag names."""
     try:
@@ -424,6 +443,19 @@ def _check_template(
             )
         ]
     findings = _unknown_component_findings(source.origin, template, known_names) if known_names is not None else []
+    nested_parser = lambda value: parse_template(  # noqa: E731 - parser hook is passed as a value
+        value,
+        user_rules=dict(rules) if rules is not None else None,
+    )
+    findings.extend(
+        _i18n_binding_findings(
+            source.origin,
+            source.content,
+            template,
+            i18n_manifest,
+            parse_nested=nested_parser,
+        )
+    )
     if i18n_manifest is not None:
         findings.extend(
             _i18n_template_findings(
@@ -432,6 +464,7 @@ def _check_template(
                 template,
                 i18n_manifest,
                 known_types=_known_template_types(engine, source.consumers),
+                profiles=i18n_profiles or {},
             )
         )
     findings.extend(
@@ -449,11 +482,9 @@ def _check_template(
         )
         for finding in lint_unknown_template_variables(template, lint_consumers)
     )
-    nested_parser = lambda value: parse_template(  # noqa: E731 - parser hook is passed as a value
-        value,
-        user_rules=dict(rules) if rules is not None else None,
-    )
     browser_hosts = browser_expressions(template, parse_nested=nested_parser)
+    for expression in browser_hosts:
+        findings.extend(_browser_i18n_profile_findings(source.origin, source.content, expression, i18n_profiles or {}))
     for finding in lint_unknown_alpine_variables(browser_hosts, alpine_lint_consumers):
         line, column = _byte_offset_coordinates(source.content, finding.start_index)
         end_line, end_column = _byte_offset_coordinates(source.content, finding.end_index)
@@ -465,6 +496,24 @@ def _check_template(
                 severity=finding.severity,
                 start_index=finding.start_index,
                 end_index=finding.end_index,
+                line=line,
+                column=column,
+                end_line=end_line,
+                end_column=end_column,
+            )
+        )
+    csp_mode = engine.settings.security_csp if engine is not None else None
+    for csp_finding in lint_csp_compatibility(browser_hosts, alpine_lint_consumers, csp_mode):
+        line, column = _byte_offset_coordinates(source.content, csp_finding.start_index)
+        end_line, end_column = _byte_offset_coordinates(source.content, csp_finding.end_index)
+        findings.append(
+            CheckFinding(
+                origin=source.origin,
+                message=csp_finding.message,
+                code=csp_finding.code,
+                severity=csp_finding.severity,
+                start_index=csp_finding.start_index,
+                end_index=csp_finding.end_index,
                 line=line,
                 column=column,
                 end_line=end_line,
@@ -559,6 +608,103 @@ def _known_template_types(engine: Citry | None, consumers: list[type[Component]]
                 if field.type_display is not None:
                     candidates.setdefault(field.name, set()).add(field.type_display)
     return {name: next(iter(types)) for name, types in candidates.items() if len(types) == 1}
+
+
+def _i18n_profile_inventory(extension: I18nExtension) -> dict[str, dict[str, frozenset[str]]]:
+    """Return the literal profile names valid for direct format and parse calls."""
+    formats = extension.config.formats
+    format_profiles = {kind: frozenset(getattr(formats, kind)) for kind in _I18N_FORMAT_KINDS}
+    parse_profiles = {
+        "number": format_profiles["number"],
+        "percent": format_profiles["percent"],
+        "date": frozenset(name for name, profile in formats.date.items() if profile.input is not None),
+        "time": frozenset(name for name, profile in formats.time.items() if profile.input is not None),
+        "datetime": frozenset(name for name, profile in formats.datetime.items() if profile.input is not None),
+    }
+    return {"format": format_profiles, "parse": parse_profiles}
+
+
+def _i18n_profile_target(function: ast.expr) -> tuple[str, str] | None:
+    """Recognize the direct formatter/parser spellings owned by the public API."""
+    if not isinstance(function, ast.Attribute):
+        return None
+    operation = function.attr
+    owner = function.value
+    if isinstance(owner, ast.Name) and owner.id == "fmt":
+        return "format", operation
+    if not isinstance(owner, ast.Attribute) or owner.attr not in {"format", "parse"}:
+        return None
+    i18n = owner.value
+    if (
+        not isinstance(i18n, ast.Attribute)
+        or i18n.attr != "i18n"
+        or not isinstance(i18n.value, ast.Name)
+        or i18n.value.id != "self"
+    ):
+        return None
+    return owner.attr, operation
+
+
+def _literal_i18n_profile_finding(
+    origin: str,
+    source: str,
+    expression: ast.Call,
+    profiles: dict[str, dict[str, frozenset[str]]],
+    start: int,
+    end: int,
+) -> CheckFinding | None:
+    target = _i18n_profile_target(expression.func)
+    if target is None:
+        return None
+    namespace, operation = target
+    known = profiles.get(namespace, {}).get(operation)
+    if known is None:
+        return None
+    keyword = next((item for item in expression.keywords if item.arg == "format"), None)
+    if keyword is None or not isinstance(keyword.value, ast.Constant) or type(keyword.value.value) is not str:
+        return None
+    profile = cast("str", keyword.value.value)
+    if profile in known:
+        return None
+    available = ", ".join(repr(item) for item in sorted(known)) or "none"
+    return _i18n_use_finding(
+        origin,
+        source,
+        f"Unknown i18n {namespace} profile {profile!r} for {operation}; configured profiles: {available}.",
+        I18N_ARGUMENT_INVALID,
+        start,
+        end,
+    )
+
+
+def _browser_i18n_profile_findings(
+    origin: str,
+    source: str,
+    expression: BrowserExpression,
+    profiles: dict[str, dict[str, frozenset[str]]],
+    *,
+    owners: frozenset[str] = frozenset({"$i18n"}),
+) -> list[CheckFinding]:
+    findings: list[CheckFinding] = []
+    operation_names = {"relativeTime": "relative_time"}
+    for call in browser_i18n_profile_calls(expression, owners):
+        operation = operation_names.get(call.operation, call.operation)
+        known = profiles.get(call.namespace, {}).get(operation)
+        if known is None or call.profile in known:
+            continue
+        available = ", ".join(repr(item) for item in sorted(known)) or "none"
+        findings.append(
+            _i18n_use_finding(
+                origin,
+                source,
+                f"Unknown i18n {call.namespace} profile {call.profile!r} for {operation}; "
+                f"configured profiles: {available}.",
+                I18N_ARGUMENT_INVALID,
+                call.start_index,
+                call.end_index,
+            )
+        )
+    return findings
 
 
 def _literal_tr_target(expression: ast.Call) -> tuple[str, str | None] | None:
@@ -664,6 +810,7 @@ def _literal_tr_call_findings(
 def _i18n_python_findings(
     component: type[Component],
     manifest: dict[str, dict[str, dict[str, Any]]],
+    profiles: dict[str, dict[str, frozenset[str]]],
 ) -> list[CheckFinding]:
     source_file = _loaded_python_file(component)
     qualname = _safe_class_text(component, "__qualname__")
@@ -681,20 +828,23 @@ def _i18n_python_findings(
     origin = f"{source_file} ({_class_label(component)})"
     findings: list[CheckFinding] = []
     for node in _component_i18n_calls(scope):
-        if not _is_self_i18n_tr(node.func):
-            continue
         start, end = _python_ast_byte_range(source, node)
-        findings.extend(
-            _literal_tr_call_findings(
-                origin,
-                source,
-                node,
-                manifest,
-                start,
-                end,
-                known_types={},
+        if _is_self_i18n_tr(node.func):
+            findings.extend(
+                _literal_tr_call_findings(
+                    origin,
+                    source,
+                    node,
+                    manifest,
+                    start,
+                    end,
+                    known_types={},
+                )
             )
-        )
+            continue
+        profile_finding = _literal_i18n_profile_finding(origin, source, node, profiles, start, end)
+        if profile_finding is not None:
+            findings.append(profile_finding)
     return findings
 
 
@@ -769,12 +919,13 @@ def _i18n_template_findings(
     manifest: dict[str, dict[str, dict[str, Any]]],
     *,
     known_types: dict[str, str],
+    profiles: dict[str, dict[str, frozenset[str]]],
 ) -> list[CheckFinding]:
     """Check literal i18n calls against compiled outputs and typed source interfaces."""
     findings: list[CheckFinding] = []
     seen: set[tuple[int, str]] = set()
     for use in template.used_variables:
-        if use.content != "tr":
+        if use.content not in {"tr", "fmt"}:
             continue
         call_source = _balanced_call_at(source, use.start_index)
         if call_source is None:
@@ -783,11 +934,20 @@ def _i18n_template_findings(
             expression = ast.parse(call_source, mode="eval").body
         except SyntaxError:
             continue
-        if (
-            not isinstance(expression, ast.Call)
-            or not isinstance(expression.func, ast.Name)
-            or expression.func.id != "tr"
-        ):
+        if not isinstance(expression, ast.Call):
+            continue
+        end = use.start_index + len(call_source.encode())
+        if not isinstance(expression.func, ast.Name) or expression.func.id != "tr":
+            profile_finding = _literal_i18n_profile_finding(
+                origin,
+                source,
+                expression,
+                profiles,
+                use.start_index,
+                end,
+            )
+            if profile_finding is not None:
+                findings.append(profile_finding)
             continue
         target = _literal_tr_target(expression)
         if target is None:
@@ -797,7 +957,6 @@ def _i18n_template_findings(
         if key in seen:
             continue
         seen.add(key)
-        end = use.start_index + len(call_source.encode())
         findings.extend(
             _literal_tr_call_findings(
                 origin,
@@ -829,6 +988,86 @@ def _i18n_template_findings(
             findings.extend(_trans_contract_findings(origin, source, node, attrs, token, entries[0][1], start, end))
             findings.extend(_cross_language_findings(origin, source, token, entries, start, end))
     return findings
+
+
+def _i18n_binding_findings(
+    origin: str,
+    source: str,
+    template: Template,
+    manifest: dict[str, dict[str, dict[str, Any]]] | None,
+    *,
+    parse_nested: Any,
+) -> list[CheckFinding]:
+    """Validate declarative binding syntax and statically known contracts."""
+    findings: list[CheckFinding] = []
+    for directive in browser_i18n_binding_directives(template, parse_nested=parse_nested):
+        if directive.error is not None:
+            start = (
+                directive.error_start_index if directive.error_start_index is not None else directive.name_start_index
+            )
+            end = directive.error_end_index if directive.error_end_index is not None else directive.name_end_index
+            findings.append(
+                _i18n_use_finding(origin, source, directive.error, I18N_ARGUMENT_INVALID, start, max(start, end))
+            )
+            continue
+        if manifest is None or directive.message is None:
+            continue
+        token = directive.message if directive.output is None else f"{directive.message}.{directive.output}"
+        entries = _i18n_entries(manifest, token)
+        start = directive.message_start_index or directive.name_start_index
+        end = directive.message_end_index or directive.name_end_index
+        if not entries:
+            findings.append(_i18n_message_finding(origin, source, token, start, end))
+            continue
+        if directive.server_dynamic:
+            continue
+        interface = cast("dict[str, dict[str, Any]]", entries[0][1]["interface"])
+        expected = {name for name, metadata in interface.items() if metadata["type_name"] != "Slot"}
+        supplied = {argument.name for argument in directive.arguments}
+        issues: list[str] = []
+        unknown = sorted(supplied - expected)
+        missing = (
+            sorted(expected - supplied)
+            if directive.has_values_expression and not directive.has_dynamic_arguments
+            else []
+        )
+        if unknown:
+            issues.append(f"unknown argument(s): {', '.join(unknown)}")
+        if missing:
+            issues.append(f"missing argument(s): {', '.join(missing)}")
+        for argument in directive.arguments:
+            metadata = interface.get(argument.name)
+            if metadata is None:
+                continue
+            actual = browser_literal_wire_type(argument.value_source)
+            if actual.kind != "unknown" and not _browser_i18n_type_accepts(metadata["type_name"], actual):
+                issues.append(f"argument {argument.name!r} must be {metadata['type_name']}, not {actual.javascript}")
+        if issues:
+            findings.append(
+                _i18n_use_finding(
+                    origin,
+                    source,
+                    f"$c-tr output {token!r} has {'; '.join(issues)}.",
+                    I18N_ARGUMENT_INVALID,
+                    start,
+                    end,
+                )
+            )
+    return findings
+
+
+def _browser_i18n_type_accepts(expected: str, actual: JsonWireType) -> bool:
+    """Match proven JavaScript value kinds to the browser formatter contract."""
+    if actual.kind == "union":
+        return all(_browser_i18n_type_accepts(expected, item) for item in actual.items)
+    allowed = {
+        "str": {"string"},
+        "int": {"number", "string"},
+        "Decimal": {"number", "string"},
+        "scalar": {"number", "string"},
+        "datetime": set(),
+    }.get(expected)
+    return True if allowed is None or actual.kind == "unknown" else actual.kind in allowed
 
 
 def _trans_nodes(template: Template) -> list[Any]:
@@ -1025,7 +1264,8 @@ def _balanced_call_at(source: str, byte_start: int) -> str | None:
     encoded = source.encode()
     tail = encoded[byte_start:].decode()
     open_index = tail.find("(")
-    if open_index < 0 or tail[:open_index].strip() != "tr":
+    call_name = tail[:open_index].strip() if open_index >= 0 else ""
+    if open_index < 0 or (call_name != "tr" and not call_name.startswith("fmt.")):
         return None
     depth = 0
     quote: str | None = None
@@ -1337,14 +1577,23 @@ def _checker_component_props(
     return browser_component_props(source)
 
 
-def _check_browser_source(engine: Citry, source: _BrowserSource) -> list[CheckFinding]:
+def _check_browser_source(
+    engine: Citry,
+    source: _BrowserSource,
+    profiles: dict[str, dict[str, frozenset[str]]],
+) -> list[CheckFinding]:
     """Check component initializer variables and literal server calls."""
     consumers: list[ComponentJsLintConsumer] = []
+    i18n = engine.extensions.get_extension("i18n")
+    i18n_configured = getattr(i18n, "configured", False) is True
     for component in source.consumers:
         lint = _component_lint_info(engine, component)
+        known_names = {variable.name for variable in lint.component_js_globals}
+        if i18n_configured:
+            known_names.add("i18n")
         consumers.append(
             ComponentJsLintConsumer(
-                known_names=frozenset(variable.name for variable in lint.component_js_globals),
+                known_names=frozenset(known_names),
                 rule_unknown_component_js_variable=lint.rule_unknown_component_js_variable,
             )
         )
@@ -1360,9 +1609,6 @@ def _check_browser_source(engine: Citry, source: _BrowserSource) -> list[CheckFi
         )
         for finding in lint_unknown_component_js_variables(source.content, consumers)
     ]
-    event_names = _shared_event_names(source.consumers)
-    if event_names is None:
-        return findings
     expression = BrowserExpression(
         source.content,
         0,
@@ -1370,6 +1616,18 @@ def _check_browser_source(engine: Citry, source: _BrowserSource) -> list[CheckFi
         "statement",
         "component-js",
     )
+    findings.extend(
+        _browser_i18n_profile_findings(
+            source.origin,
+            source.content,
+            expression,
+            profiles,
+            owners=frozenset({"i18n"}),
+        )
+    )
+    event_names = _shared_event_names(source.consumers)
+    if event_names is None:
+        return findings
     findings.extend(_unknown_event_findings(source.origin, source.content, expression, event_names))
     return findings
 

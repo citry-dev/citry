@@ -16,6 +16,7 @@ from citry_ui.components._attrs import (
     pop_html_attr,
 )
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
+from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -180,6 +181,9 @@ def _attrs(
 
 
 class CEditable(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         value: str = ""
@@ -219,10 +223,30 @@ class CEditable(LibraryComponent):
             return cast("dict[str, Any]", cached)
 
         value = _plain("CEditable", "value", kwargs.value, allow_empty=True)
-        placeholder = _plain("CEditable", "placeholder", kwargs.placeholder)
-        edit_label = _plain("CEditable", "edit_label", kwargs.edit_label)
-        submit_label = _plain("CEditable", "submit_label", kwargs.submit_label)
-        cancel_label = _plain("CEditable", "cancel_label", kwargs.cancel_label)
+        catalog_placeholder = uses_catalog_default(self, "placeholder")
+        catalog_edit_label = uses_catalog_default(self, "edit_label")
+        catalog_submit_label = uses_catalog_default(self, "submit_label")
+        catalog_cancel_label = uses_catalog_default(self, "cancel_label")
+        placeholder = _plain(
+            "CEditable",
+            "placeholder",
+            self.i18n.tr("citry-ui-editable-click-to-edit") if catalog_placeholder else kwargs.placeholder,
+        )
+        edit_label = _plain(
+            "CEditable",
+            "edit_label",
+            self.i18n.tr("citry-ui-editable-edit") if catalog_edit_label else kwargs.edit_label,
+        )
+        submit_label = _plain(
+            "CEditable",
+            "submit_label",
+            self.i18n.tr("citry-ui-editable-save") if catalog_submit_label else kwargs.submit_label,
+        )
+        cancel_label = _plain(
+            "CEditable",
+            "cancel_label",
+            self.i18n.tr("citry-ui-editable-cancel") if catalog_cancel_label else kwargs.cancel_label,
+        )
         if kwargs.name is not None:
             validate_non_empty_string("CEditable", "name", kwargs.name)
         if kwargs.form is not None:
@@ -319,6 +343,7 @@ class CEditable(LibraryComponent):
             "variant": kwargs.variant,
             "size": kwargs.size,
             "placeholder": placeholder,
+            "catalogPlaceholder": catalog_placeholder,
             "externalDescribedBy": external_described_by,
             "externalErrorMessage": external_error_message,
         }
@@ -333,6 +358,9 @@ class CEditable(LibraryComponent):
             "edit_label": edit_label,
             "submit_label": submit_label,
             "cancel_label": cancel_label,
+            "catalog_edit_label": catalog_edit_label,
+            "catalog_submit_label": catalog_submit_label,
+            "catalog_cancel_label": catalog_cancel_label,
             "display_value": value or placeholder,
             "empty": not value,
             "aria_invalid": "true" if invalid else None,
@@ -375,7 +403,8 @@ class CEditable(LibraryComponent):
           <button
             class="cui-editable__action cui-editable__edit"
             type="button"
-            c-aria-label="edit_label"
+            c-aria-label="tr('citry-ui-editable-edit') if catalog_edit_label else edit_label"
+            c-$c-tr:citry-ui-editable-edit[aria-label]="True if catalog_edit_label else None"
             c-disabled="disabled or readonly"
             data-citry-ui-part="edit-action"
           ><span aria-hidden="true">&#9998;</span></button>
@@ -393,7 +422,7 @@ class CEditable(LibraryComponent):
             c-maxlength="max_length"
             c-autocomplete="autocomplete"
             c-inputmode="inputmode"
-            c-placeholder="placeholder"
+            c-placeholder="tr('citry-ui-editable-click-to-edit') if catalogPlaceholder else placeholder"
             c-aria-invalid="aria_invalid"
             c-aria-describedby="aria_describedby"
             c-aria-errormessage="aria_errormessage"
@@ -406,14 +435,16 @@ class CEditable(LibraryComponent):
             <button
               class="cui-editable__action cui-editable__submit"
               type="button"
-              c-aria-label="submit_label"
+              c-aria-label="tr('citry-ui-editable-save') if catalog_submit_label else submit_label"
+              c-$c-tr:citry-ui-editable-save[aria-label]="True if catalog_submit_label else None"
               c-disabled="disabled or readonly"
               data-citry-ui-part="submit-action"
             ><span aria-hidden="true">&#10003;</span></button>
             <button
               class="cui-editable__action cui-editable__cancel"
               type="button"
-              c-aria-label="cancel_label"
+              c-aria-label="tr('citry-ui-editable-cancel') if catalog_cancel_label else cancel_label"
+              c-$c-tr:citry-ui-editable-cancel[aria-label]="True if catalog_cancel_label else None"
               c-disabled="disabled or readonly"
               data-citry-ui-part="cancel-action"
             ><span aria-hidden="true">&#10005;</span></button>
@@ -430,7 +461,7 @@ class CEditable(LibraryComponent):
           submitMode: {}, selectOnFocus: {}, actionPosition: {}, variant: {}, size: {},
           onValueChange: {}, onEditChange: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
+        init: ({ els, data, props, effect, inject, i18n }) => {
           const root = els[0];
           const preview = root.querySelector(':scope > [data-citry-ui-part="preview"]');
           const previewValue = preview?.querySelector('[data-citry-ui-part="preview-value"]');
@@ -833,6 +864,17 @@ class CEditable(LibraryComponent):
             sync();
           });
 
+          const placeholderBinding = i18n && data.catalogPlaceholder
+            ? i18n.bind({
+                message: "citry-ui-editable-click-to-edit",
+                onChange: (text) => {
+                  data.placeholder = text;
+                  input.placeholder = text;
+                  sync();
+                },
+              })
+            : null;
+
           root.setAttribute("data-citry-editable-initialized", "");
           input.value = draft;
           applyEditing(internalEditing, { focus: internalEditing });
@@ -849,6 +891,7 @@ class CEditable(LibraryComponent):
               internalEditing,
             };
             stop?.();
+            placeholderBinding?.dispose();
             fieldsetObservers.forEach((observer) => observer.disconnect());
             root.removeEventListener("click", onClick, true);
             root.removeEventListener("pointerdown", onPointerDown, true);
@@ -1037,6 +1080,13 @@ class CEditable(LibraryComponent):
           }
         }
       }
+    """
+
+    messages = """
+      citry-ui-editable-click-to-edit = Click to edit
+      citry-ui-editable-edit = Edit
+      citry-ui-editable-save = Save
+      citry-ui-editable-cancel = Cancel
     """
 
 

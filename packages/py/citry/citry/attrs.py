@@ -58,7 +58,7 @@ _ASCII_LOWER_TRANSLATION = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefgh
 def _html_attr_identity(name: str) -> str:
     """Return HTML identity without erasing case-sensitive Citry payloads."""
     folded = name.translate(_ASCII_LOWER_TRANSLATION)
-    if name.startswith(("@c-", ":c-", "#c-")) or folded in ("$c-props", "c-$c-props"):
+    if name.startswith(("@c-", ":c-", "#c-", "$c-", "c-$c-")):
         # These names carry a case-sensitive event/State/meta payload or must
         # survive intact for the directive validator to reject bad casing.
         return name

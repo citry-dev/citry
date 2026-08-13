@@ -132,6 +132,14 @@ def _reject_dynamic_events_compiler_attr(name: str, *, tag_name: str) -> None:
         raise RuntimeError(msg)
 
 
+def _reject_dynamic_translation_binding(name: Any, *, tag_name: str) -> None:
+    """Keep `$c-tr` on literal final plain HTML elements after spreads resolve."""
+    if isinstance(name, str) and name.lower().startswith("$c-tr:"):
+        raise RuntimeError(
+            f"{name!r} resolved on <{tag_name}>, but $c-tr is valid only on a literal final plain HTML element."
+        )
+
+
 # NOTE: Not abstract on purpose: the compiler builds the whole node tree up front
 # (including nodes inside branches that may never render), so a
 # not-yet-implemented node must still be instantiable. The default ``render``
@@ -1295,6 +1303,7 @@ class ComponentNode(Node):
                     else:
                         resolved_bound_key = bound_key
                     reject_component_state_binding(resolved_bound_key)
+                    _reject_dynamic_translation_binding(resolved_bound_key, tag_name=tag_name)
                     if apply_client_binding(
                         resolved_bound_key,
                         bound_value,
@@ -1317,6 +1326,7 @@ class ComponentNode(Node):
             value = attr.resolve(context)
             resolved_key = key.removeprefix("c-")
             reject_component_state_binding(resolved_key)
+            _reject_dynamic_translation_binding(resolved_key, tag_name=tag_name)
             client_binding_source = (
                 ComponentTagClientBindingSource.SERVER_DYNAMIC
                 if key.startswith("c-")
@@ -1880,6 +1890,7 @@ class SlotNode(Node):
                             f"got {type(spread_key).__name__} key {spread_key!r}."
                         )
                         raise TypeError(msg)
+                    _reject_dynamic_translation_binding(spread_key, tag_name="c-slot")
                     if spread_key == "name":
                         name = spread_value
                     elif spread_key == "required":
@@ -1996,6 +2007,7 @@ class FillNode(Node):
                             f"got {type(spread_key).__name__} key {spread_key!r}."
                         )
                         raise TypeError(msg)
+                    _reject_dynamic_translation_binding(spread_key, tag_name="c-fill")
                     if spread_key not in ("name", "data", "fallback"):
                         msg = (
                             f"'c-bind' on <c-fill> got an unsupported key {spread_key!r}. "

@@ -105,5 +105,5 @@ technology. Labelled lines are decorative while the label remains ordinary
 document content.
 
 Divider never owns focus, keyboard input, resize behavior, or external margin.
-Use layout gaps for spacing and a future Splitter component for adjustable
+Use layout gaps for spacing and `CSplitter` for adjustable
 panes.

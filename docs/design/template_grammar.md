@@ -32,6 +32,10 @@ Two rules cover the whole syntax:
 - An **attribute** whose name starts with `c-` is dynamic: its value is a Python
   expression, or a nested template. The rendered attribute drops the `c-`
   prefix, so `c-class="..."` becomes `class="..."`.
+- An extension-owned browser directive whose name starts with `$c-` remains a
+  structured attribute contribution until Citry's extension hooks have had a
+  chance to validate and consume it. It is not flattened into the surrounding
+  literal start-tag text by the shared compiler.
 
 On top of those, the template body may use:
 
@@ -258,6 +262,18 @@ the ordinary body.
 does not become a `bind="..."` attribute, and a tag may carry several `c-bind`
 attributes. The rendering-time details (how dynamic `class`/`style` merge with
 static ones) live in [`template_html_attrs.md`](template_html_attrs.md).
+
+Extension directives follow the same three definition forms as other flexible
+attributes on a final literal HTML element: direct `$c-name`, dynamic
+`c-$c-name="expression"`, or a `$c-name` key returned by `c-bind`. Direct
+`$c-*` names are deliberately retained in the compiler's structured
+`ElementAttrsNode` output even when every ordinary HTML attribute beside them
+is static. The owning extension then applies normal source-order contribution
+rules, validates its directive-specific syntax and placement, and removes the
+source directive before HTML is emitted. For example, i18n owns `$c-tr`; its
+exact grammar and destination rules live in [`i18n.md`](i18n.md). A component
+tag, dynamic tag, slot, or fill may still reject a particular extension
+directive even though the general attribute grammar accepts its spelling.
 
 Because a spread itself must evaluate to a mapping, `c-bind` is always an
 expression and never a nested-template value. It is valid on elements and

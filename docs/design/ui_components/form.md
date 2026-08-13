@@ -465,10 +465,19 @@ method sections render as `-`.
   validation coordinator require a separate extension design.
 - A reusable error-summary component requires its own research and focus/live-
   region contract.
-- Localization remains separate follow-up work after component-owned strings
-  and translation-key boundaries are understood.
+- The Citry UI i18n migration owns the shared component-string inventory and
+  translation-key boundaries. Form currently contributes no catalog keys.
 - Form-associated custom-element support belongs to the future control family
   that needs it; CForm already preserves the browser contract.
 - CForm intentionally exposes no aggregate validity callback or attribute. Any
   future form-management extension must state whether it covers the complete
   native Form or only registered Citry controls.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

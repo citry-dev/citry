@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import gzip
-
 import brotli
 
 import citry_ui
 from citry import Citry
-from citry_ui.quality.asset_report import _family_assets
+from citry_ui.quality.asset_report import _family_assets, asset_report
 
 
 def _assets(*, kind: str, names: set[str] | None = None) -> bytes:
@@ -18,13 +16,25 @@ def _assets(*, kind: str, names: set[str] | None = None) -> bytes:
 
 
 def test_complete_component_catalog_stays_inside_compressed_asset_budgets() -> None:
-    javascript = _assets(kind="js")
-    css = _assets(kind="css")
+    catalog = asset_report()["catalog"]
 
-    assert len(brotli.compress(javascript)) <= 80 * 1024
-    assert len(brotli.compress(css)) <= 30 * 1024
-    assert len(gzip.compress(javascript)) > 0
-    assert len(gzip.compress(css)) > 0
+    assert catalog["javascript"] == {
+        "sha256": "b094f8784feea6a46769c029c12fe0177e41b7490f306acec556a065ffb7c27d",
+        "raw": 860_594,
+        "gzip": 162_564,
+        "brotli": 116_820,
+    }
+    assert catalog["css"] == {
+        "sha256": "f2806359ebdf9751cbf33ccc0b3afcfa9180aabebdb879f70be117ec3ade527e",
+        "raw": 297_478,
+        "gzip": 35_877,
+        "brotli": 28_241,
+    }
+    assert catalog["limits"] == {
+        "javascript": {"raw": 960 * 1024, "gzip": 192 * 1024, "brotli": 128 * 1024},
+        "css": {"raw": 336 * 1024, "gzip": 40 * 1024, "brotli": 32 * 1024},
+    }
+    assert all(value > 0 for values in catalog["headroom"].values() for value in values.values())
 
 
 def test_basic_action_form_and_table_route_stays_inside_narrow_budget() -> None:

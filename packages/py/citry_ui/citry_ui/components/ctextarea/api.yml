@@ -123,3 +123,5 @@ interfaces:
       - {id: input-type-aliases-ctextarea-size, name: CTextareaSize, definition: 'Literal["sm", "md", "lg"]'}
       - {id: input-type-aliases-ctextarea-resize, name: CTextareaResize, definition: 'Literal["none", "vertical", "horizontal", "both"]'}
       - {id: input-type-aliases-ctextarea-wrap, name: CTextareaWrap, definition: 'Literal["soft", "hard"]'}
+
+translations: []

@@ -212,3 +212,5 @@ interfaces:
   - {id: cfield-label-slot-data, kind: record, name: CFieldLabelSlotData, entries: []}
   - {id: cfield-description-slot-data, kind: record, name: CFieldDescriptionSlotData, entries: []}
   - {id: cfield-error-slot-data, kind: record, name: CFieldErrorSlotData, entries: []}
+
+translations: []

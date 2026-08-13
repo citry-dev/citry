@@ -1,5 +1,7 @@
 """Finite native-link or client-owned Pagination navigation."""
 
+# ruff: noqa: E501 - Citry template expressions stay on their owning attribute lines.
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -8,6 +10,7 @@ from typing import Any, Literal, TypedDict
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CPaginationVariant = Literal["soft", "outline", "plain"]
@@ -115,6 +118,9 @@ def _attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
 
 
 class CPagination(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         pages: int
@@ -154,18 +160,27 @@ class CPagination(LibraryComponent):
         validate_boolean("CPagination", "disabled", kwargs.disabled)
         variant = _choice("variant", kwargs.variant, _VARIANTS)
         size = _choice("size", kwargs.size, _SIZES)
-        labels = {
-            name: _plain(name, value)
-            for name, value in (
-                ("label", kwargs.label),
-                ("page_label", kwargs.page_label),
-                ("previous_label", kwargs.previous_label),
-                ("next_label", kwargs.next_label),
-                ("first_label", kwargs.first_label),
-                ("last_label", kwargs.last_label),
-            )
+        message_specs = {
+            "label": "citry-ui-pagination-label",
+            "page_label": "citry-ui-pagination-page",
+            "previous_label": "citry-ui-pagination-previous",
+            "next_label": "citry-ui-pagination-next",
+            "first_label": "citry-ui-pagination-first",
+            "last_label": "citry-ui-pagination-last",
         }
-        if "{page}" not in str(labels["page_label"]):
+        catalog = {name: uses_catalog_default(self, name) for name in message_specs}
+        labels = {name: _plain(name, getattr(kwargs, name)) for name in message_specs}
+        if catalog["label"]:
+            labels["label"] = self.i18n.tr("citry-ui-pagination-label")
+        if catalog["previous_label"]:
+            labels["previous_label"] = self.i18n.tr("citry-ui-pagination-previous")
+        if catalog["next_label"]:
+            labels["next_label"] = self.i18n.tr("citry-ui-pagination-next")
+        if catalog["first_label"]:
+            labels["first_label"] = self.i18n.tr("citry-ui-pagination-first")
+        if catalog["last_label"]:
+            labels["last_label"] = self.i18n.tr("citry-ui-pagination-last")
+        if not catalog["page_label"] and "{page}" not in str(labels["page_label"]):
             raise ValueError("CPagination page_label must contain {page}.")
         items: list[dict[str, object]] = []
         if kwargs.show_edges:
@@ -186,6 +201,11 @@ class CPagination(LibraryComponent):
             if isinstance(range_item, str):
                 items.append({"kind": "ellipsis"})
             else:
+                formatted_page = (
+                    self.i18n.format.number(range_item, format="citry-ui-pagination-page")
+                    if self.i18n.configured
+                    else str(range_item)
+                )
                 items.append(
                     self._control(
                         "page",
@@ -193,8 +213,14 @@ class CPagination(LibraryComponent):
                         page,
                         pages,
                         href,
-                        str(labels["page_label"]).replace("{page}", str(range_item)),
+                        self.i18n.tr(
+                            "citry-ui-pagination-page",
+                            page=formatted_page,
+                        )
+                        if catalog["page_label"]
+                        else str(labels["page_label"]).replace("{page}", str(range_item)),
                         kwargs.disabled,
+                        formatted_page=formatted_page,
                     )
                 )
         if kwargs.show_controls:
@@ -223,6 +249,7 @@ class CPagination(LibraryComponent):
             "variant": variant,
             "size": size,
             **labels,
+            **{f"catalog_{name}": value for name, value in catalog.items()},
         }
         return {
             "items": items,
@@ -230,6 +257,7 @@ class CPagination(LibraryComponent):
             "variant": variant,
             "size": size,
             "label": labels["label"],
+            **{f"catalog_{name}": value for name, value in catalog.items()},
             "attrs": merge_root_attrs(_attrs(kwargs.attrs), kwargs.class_, kwargs.style),
         }
 
@@ -242,6 +270,8 @@ class CPagination(LibraryComponent):
         href: str | None,
         label: str,
         disabled: bool,
+        *,
+        formatted_page: str | None = None,
     ) -> dict[str, object]:
         unavailable = (
             disabled or (kind in ("first", "previous") and page == 1) or (kind in ("next", "last") and page == pages)
@@ -250,6 +280,12 @@ class CPagination(LibraryComponent):
         control: dict[str, object] = {
             "kind": kind,
             "page": target,
+            "formatted_page": formatted_page,
+            "values_expression": (
+                f'{{ page: $i18n.format.number({target}, {{ format: "citry-ui-pagination-page" }}) }}'
+                if kind == "page"
+                else None
+            ),
             "label": label,
             "text": str(target) if kind == "page" else texts[kind],
             "current": kind == "page" and target == page,
@@ -269,7 +305,8 @@ class CPagination(LibraryComponent):
         c-data-disabled="disabled"
         c-data-variant="variant"
         c-data-size="size"
-        c-aria-label="label"
+        c-aria-label="tr('citry-ui-pagination-label') if catalog_label else label"
+        c-$c-tr:citry-ui-pagination-label[aria-label]="True if catalog_label else None"
       >
         <ul data-citry-ui-part="list">
           <c-for each="item in items">
@@ -280,7 +317,12 @@ class CPagination(LibraryComponent):
               <c-elif cond="item['href'] is not None">
                 <a
                   c-href="item['href']"
-                  c-aria-label="item['label']"
+                  c-aria-label="tr('citry-ui-pagination-page', page=item['formatted_page']) if item['kind'] == 'page' and catalog_page_label else tr('citry-ui-pagination-previous') if item['kind'] == 'previous' and catalog_previous_label else tr('citry-ui-pagination-next') if item['kind'] == 'next' and catalog_next_label else tr('citry-ui-pagination-first') if item['kind'] == 'first' and catalog_first_label else tr('citry-ui-pagination-last') if item['kind'] == 'last' and catalog_last_label else item['label']"
+                  c-$c-tr:citry-ui-pagination-page[aria-label]="item['values_expression'] if item['kind'] == 'page' and catalog_page_label else None"
+                  c-$c-tr:citry-ui-pagination-previous[aria-label]="True if item['kind'] == 'previous' and catalog_previous_label else None"
+                  c-$c-tr:citry-ui-pagination-next[aria-label]="True if item['kind'] == 'next' and catalog_next_label else None"
+                  c-$c-tr:citry-ui-pagination-first[aria-label]="True if item['kind'] == 'first' and catalog_first_label else None"
+                  c-$c-tr:citry-ui-pagination-last[aria-label]="True if item['kind'] == 'last' and catalog_last_label else None"
                   c-aria-current="'page' if item['current'] else None"
                   c-data-page="item['page']"
                   c-data-kind="item['kind']"
@@ -291,7 +333,12 @@ class CPagination(LibraryComponent):
               <c-else>
                 <button
                   type="button"
-                  c-aria-label="item['label']"
+                  c-aria-label="tr('citry-ui-pagination-page', page=item['formatted_page']) if item['kind'] == 'page' and catalog_page_label else tr('citry-ui-pagination-previous') if item['kind'] == 'previous' and catalog_previous_label else tr('citry-ui-pagination-next') if item['kind'] == 'next' and catalog_next_label else tr('citry-ui-pagination-first') if item['kind'] == 'first' and catalog_first_label else tr('citry-ui-pagination-last') if item['kind'] == 'last' and catalog_last_label else item['label']"
+                  c-$c-tr:citry-ui-pagination-page[aria-label]="item['values_expression'] if item['kind'] == 'page' and catalog_page_label else None"
+                  c-$c-tr:citry-ui-pagination-previous[aria-label]="True if item['kind'] == 'previous' and catalog_previous_label else None"
+                  c-$c-tr:citry-ui-pagination-next[aria-label]="True if item['kind'] == 'next' and catalog_next_label else None"
+                  c-$c-tr:citry-ui-pagination-first[aria-label]="True if item['kind'] == 'first' and catalog_first_label else None"
+                  c-$c-tr:citry-ui-pagination-last[aria-label]="True if item['kind'] == 'last' and catalog_last_label else None"
                   c-aria-current="'page' if item['current'] else None"
                   c-data-page="item['page']"
                   c-data-kind="item['kind']"
@@ -309,7 +356,7 @@ class CPagination(LibraryComponent):
     js = r"""
       $component({
         props: {page: {}, disabled: {}, variant: {}, size: {}, onPageChange: {}},
-        init: ({els, data, props, effect}) => {
+        init: ({els, data, props, effect, i18n}) => {
           const root = els[0];
           const list = root.querySelector('[data-citry-ui-part="list"]');
           let current = data.page;
@@ -317,6 +364,7 @@ class CPagination(LibraryComponent):
           let effectiveDisabled = data.disabled;
           let effectiveVariant = data.variant;
           let effectiveSize = data.size;
+          let translationBindings = [];
           const invalid = new Set();
           const report = (name, value) => {
             if (invalid.has(name)) return;
@@ -359,7 +407,44 @@ class CPagination(LibraryComponent):
           const label = (kind, page) => kind === "page"
             ? data.page_label.replace("{page}", String(page))
             : data[`${kind}_label`];
+          const bindLabel = (kind, page, control) => {
+            if (!i18n) return;
+            let binding = null;
+            if (kind === "page" && data.catalog_page_label) {
+              binding = i18n.bind({
+                message: "citry-ui-pagination-page",
+                values: () => ({
+                  page: i18n.format.number(page, {format: "citry-ui-pagination-page"}),
+                }),
+                onChange: (text) => control.setAttribute("aria-label", text),
+              });
+            } else if (kind === "previous" && data.catalog_previous_label) {
+              binding = i18n.bind({
+                message: "citry-ui-pagination-previous",
+                onChange: (text) => control.setAttribute("aria-label", text),
+              });
+            } else if (kind === "next" && data.catalog_next_label) {
+              binding = i18n.bind({
+                message: "citry-ui-pagination-next",
+                onChange: (text) => control.setAttribute("aria-label", text),
+              });
+            } else if (kind === "first" && data.catalog_first_label) {
+              binding = i18n.bind({
+                message: "citry-ui-pagination-first",
+                onChange: (text) => control.setAttribute("aria-label", text),
+              });
+            } else if (kind === "last" && data.catalog_last_label) {
+              binding = i18n.bind({
+                message: "citry-ui-pagination-last",
+                onChange: (text) => control.setAttribute("aria-label", text),
+              });
+            }
+            if (binding) translationBindings.push(binding);
+          };
           const render = () => {
+            if (!i18n && data.catalog_page_label) return;
+            translationBindings.forEach((binding) => binding.dispose());
+            translationBindings = [];
             const items = [];
             if (data.showEdges) items.push(["first", 1]);
             if (data.showControls) items.push(["previous", Math.max(1, current - 1)]);
@@ -387,6 +472,7 @@ class CPagination(LibraryComponent):
               control.dataset.page = String(page);
               control.dataset.kind = kind;
               control.setAttribute("aria-label", label(kind, page));
+              bindLabel(kind, page, control);
               control.textContent = kind === "page" ? String(page)
                 : ({first: "«", previous: "\u2039", next: "\u203a", last: "»"})[kind];
               if (kind === "page" && page === current) {
@@ -428,6 +514,7 @@ class CPagination(LibraryComponent):
           root.setAttribute("data-citry-pagination-initialized", "");
           return () => {
             stop?.();
+            translationBindings.forEach((binding) => binding.dispose());
             root.removeEventListener("click", onClick);
             root.removeAttribute("data-citry-pagination-initialized");
           };
@@ -516,6 +603,16 @@ class CPagination(LibraryComponent):
           }
         }
       }
+    """
+
+    messages = """
+      citry-ui-pagination-label = Pagination
+      # @param {str} $page - Locale-formatted one-based page number.
+      citry-ui-pagination-page = Page { $page }
+      citry-ui-pagination-previous = Previous page
+      citry-ui-pagination-next = Next page
+      citry-ui-pagination-first = First page
+      citry-ui-pagination-last = Last page
     """
 
 

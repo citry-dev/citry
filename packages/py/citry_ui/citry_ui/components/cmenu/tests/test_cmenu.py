@@ -22,7 +22,11 @@ from citry_ui.components.cmenu import (
     CMenuSize,
     CMenuSubmenu,
 )
-from citry_ui.components.cmenu.cmenu import CInternalMenuCollection, CInternalMenuContent
+from citry_ui.components.cmenu.cmenu import (
+    CInternalMenuCollection,
+    CInternalMenuContent,
+    CInternalMenuSurface,
+)
 
 _MENU_COMPONENTS = (
     CMenu,
@@ -35,6 +39,7 @@ _MENU_COMPONENTS = (
     CMenuSubmenu,
     CInternalMenuCollection,
     CInternalMenuContent,
+    CInternalMenuSurface,
 )
 
 
@@ -171,6 +176,7 @@ def test_menu_renders_complete_native_anatomy_and_typed_activator_data():
     assert 'data-size="lg"' in surface.group(0)
     assert "--cui-menu-radius: 1rem" in surface.group(0)
     assert "--_cui-menu-anchor: --_cui-menu-anchor-ref-" in surface.group(0)
+    assert "position-anchor: --_cui-menu-anchor-ref-" in surface.group(0)
     assert html.count('role="menuitem"') == 3
     assert html.count('role="menuitemcheckbox"') == 1
     assert html.count('role="menuitemradio"') == 2

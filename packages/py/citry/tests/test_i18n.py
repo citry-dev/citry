@@ -11,12 +11,16 @@ import pytest
 from citry import (
     Citry,
     Component,
+    ComponentLibrary,
     Extension,
     I18nNotConfiguredError,
     I18nRuntimeUnavailableError,
+    I18nService,
     InMemoryCache,
+    LibraryComponent,
     LintSettings,
 )
+from citry.ext.i18n import make_context
 
 
 class RecordingCache(InMemoryCache):
@@ -160,11 +164,14 @@ class TestConfiguration:
             },
         )
         i18n = app.extensions.get_extension("i18n")
-        assert (i18n.render_cache_mode, i18n.render_cache_version) == ("stateless", 1)
+        assert (i18n.render_cache_mode, i18n.render_cache_version) == ("payload", 3)
 
         class Greeting(Component):
             citry = app
-            messages = "my-app-greeting = Hello"
+
+            messages = """
+                my-app-greeting = Hello
+            """
             template = '{{ tr("my-app-greeting") }}'
 
             class Cache:
@@ -183,6 +190,48 @@ class TestConfiguration:
         assert context.direction == "rtl"
         assert context.time_zone == "Asia/Riyadh"
         assert i18n.context.locale == "en-US"
+
+    def test_public_make_context_helper_uses_the_given_application(self):
+        app = configured_app(default_locale="cs-CZ")
+
+        context = make_context(
+            app,
+            locale="ar-EG",
+            time_zone="Asia/Riyadh",
+        )
+
+        assert context.locale == "ar-EG"
+        assert context.direction == "rtl"
+        assert context.time_zone == "Asia/Riyadh"
+        assert app.extensions.get_extension("i18n").context.locale == "cs-CZ"
+
+    def test_public_make_context_helper_preserves_configuration_errors(self):
+        with pytest.raises(I18nNotConfiguredError, match="not configured"):
+            make_context(Citry(), locale="en-US")
+
+    def test_for_context_binds_the_complete_direct_use_service(self):
+        app = configured_app()
+
+        class Greeting(Component):
+            citry = app
+
+            messages = """
+                my-app-greeting = Hello
+            """
+
+        i18n = app.extensions.get_extension("i18n")
+        context = i18n.make_context(locale="cs-CZ")
+        service = i18n.for_context(context)
+
+        assert isinstance(service, I18nService)
+        assert service.configured
+        assert service.context is context
+        assert service.tr("my-app-greeting") == "Hello"
+        assert service.resolve("my-app-greeting").locale == "en-US"
+        assert service.format is service.format
+        assert service.parse is service.parse
+        with pytest.raises(TypeError, match=r"for_context\(\).+LocaleContext"):
+            i18n.for_context(object())
 
 
 class TestExplicitContext:
@@ -252,6 +301,7 @@ class TestExplicitContext:
             context = i18n.make_context(locale=locale)
             return str(Reporter().render(provides={"citry_i18n": context})).strip()
 
+        app.initialize()
         with ThreadPoolExecutor(max_workers=3) as pool:
             rendered = list(pool.map(read, ("en-US", "cs-CZ", "ar-EG")))
         assert rendered == ["en-US", "cs-CZ", "ar-EG"]
@@ -319,7 +369,7 @@ class TestComponentSurface:
         assert str(Greeting()) == "True"
         assert Greeting.I18n.client_messages == ()
 
-    def test_component_config_accepts_only_client_messages(self):
+    def test_component_config_accepts_messages_locale_and_client_messages(self):
         app = configured_app()
 
         with pytest.raises(ValueError, match="unknown component I18n"):
@@ -337,6 +387,160 @@ class TestComponentSurface:
 
                 class I18n:
                     client_messages = ["my-app-message"]
+
+        with pytest.raises(ValueError, match="messages_locale"):
+
+            class BadLocale(Component):
+                citry = app
+
+                class I18n:
+                    messages_locale = "not_a_locale"
+
+
+class TestSourceModeAndRemainingComponentSurface:
+    def test_component_messages_activate_template_and_python_translation_without_settings(self):
+        app = Citry(autodiscover=False)
+
+        class SourceMessages(Component):
+            citry = app
+
+            class I18n:
+                messages_locale = "EN-us"
+
+            messages = "my-app-greeting = Hello"
+
+        class Consumer(Component):
+            citry = app
+            template = '{{ python_text }} / {{ tr("my-app-greeting") }}'
+
+            def template_data(self, kwargs, slots):
+                return {"python_text": self.i18n.tr("my-app-greeting")}
+
+        i18n = app.extensions.get_extension("i18n")
+        assert i18n.configured is False
+        assert i18n.available is True
+        assert i18n.context.locale == "en-US"
+        assert str(Consumer()) == "Hello / Hello"
+        assert SourceMessages._resolved_messages == "my-app-greeting = Hello"
+
+    def test_cross_component_source_lookup_tracks_the_complete_registered_inventory(self):
+        app = Citry(autodiscover=False)
+
+        class SourceMessages(Component):
+            citry = app
+
+            class I18n:
+                messages_locale = "en-US"
+
+            messages = "my-app-open = Open"
+
+        class Consumer(Component):
+            citry = app
+            template = '{{ tr("my-app-open") }}'
+
+        i18n = app.extensions.get_extension("i18n")
+        assert str(Consumer()) == "Open"
+        app.unregister(SourceMessages)
+        with pytest.raises(I18nNotConfiguredError, match="no component messages"):
+            i18n.tr("my-app-open")
+
+    def test_source_mode_requires_each_message_declaration_to_name_its_locale(self):
+        app = Citry(autodiscover=False)
+
+        class MissingLocale(Component):
+            citry = app
+            messages = "my-app-copy = Copy"
+
+        with pytest.raises(ValueError, match=r"I18n\.messages_locale"):
+            MissingLocale.get_messages()
+
+    def test_inherited_messages_keep_the_declaration_owners_locale(self):
+        app = Citry(autodiscover=False)
+
+        class Parent(Component):
+            citry = app
+
+            class I18n:
+                messages_locale = "en-US"
+
+            messages = "my-app-shared = Shared"
+
+        class Child(Parent):
+            class I18n:
+                messages_locale = "it-IT"
+
+            template = '{{ tr("my-app-shared") }}'
+
+        assert str(Child()) == "Shared"
+        assert app.extensions.get_extension("i18n").context.locale == "en-US"
+
+    def test_application_source_locale_selects_the_default_over_a_library_locale(self):
+        app = Citry(autodiscover=False)
+
+        class LibraryCopy(LibraryComponent):
+            class I18n:
+                messages_locale = "en-US"
+
+            messages = "demo-library-copy = Library copy"
+
+        app.register_library(ComponentLibrary("demo-source-mode", (LibraryCopy,)))
+
+        class ApplicationCopy(Component):
+            citry = app
+
+            class I18n:
+                messages_locale = "it-IT"
+
+            messages = "my-app-copy = Copia"
+
+        i18n = app.extensions.get_extension("i18n")
+        assert i18n.context.locale == "it-IT"
+        assert i18n.tr("my-app-copy") == "Copia"
+        library = i18n.resolve("demo-library-copy")
+        assert (library.text, library.locale, library.used_fallback) == ("Library copy", "en-US", True)
+
+    def test_multiple_application_source_locales_require_explicit_engine_settings(self):
+        app = Citry(autodiscover=False)
+
+        class English(Component):
+            citry = app
+
+            class I18n:
+                messages_locale = "en-US"
+
+            messages = "my-app-english = English"
+
+        class Italian(Component):
+            citry = app
+
+            class I18n:
+                messages_locale = "it-IT"
+
+            messages = "my-app-italian = Italiano"
+
+        with pytest.raises(ValueError, match="multiple locales"):
+            app.extensions.get_extension("i18n").make_context()
+
+    def test_multiple_library_source_locales_require_explicit_engine_settings(self):
+        app = Citry(autodiscover=False)
+
+        class EnglishLibraryCopy(LibraryComponent):
+            class I18n:
+                messages_locale = "en-US"
+
+            messages = "demo-english = English"
+
+        class ItalianLibraryCopy(LibraryComponent):
+            class I18n:
+                messages_locale = "it-IT"
+
+            messages = "demo-italian = Italiano"
+
+        app.register_library(ComponentLibrary("demo-english", (EnglishLibraryCopy,)))
+        app.register_library(ComponentLibrary("demo-italian", (ItalianLibraryCopy,)))
+
+        with pytest.raises(ValueError, match="library messages authored in multiple locales"):
+            app.extensions.get_extension("i18n").make_context()
 
     def test_text_only_tr_and_resolve_use_the_rust_fluent_runtime(self):
         app = configured_app()

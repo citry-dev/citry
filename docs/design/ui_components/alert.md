@@ -37,9 +37,9 @@ Common jobs and their shortest intended surfaces:
 | Mark a nonurgent update for announcement | `announce="polite"` | `announce="polite"` | direct API with bounded live-region semantics |
 | Mark an urgent update for announcement | `announce="assertive"` | `announce="assertive"` | direct API with bounded alert semantics |
 | Dismiss feedback | consumer-owned conditional rendering plus an action Button | same | application composition |
-| Guarantee queued announcements | future persistent announcer service | future extension | separate component or service |
-| Show transient notifications | future Toast or Notification family | future component | separate family |
-| Require an immediate decision | future AlertDialog or reviewed Dialog semantic mode | future component | unsupported by current Alert and Dialog APIs |
+| Guarantee queued announcements | `CToastRegion` | persistent queue and announcers | separate component |
+| Show transient notifications | `CToastRegion` | separate component |
+| Require an immediate decision | `CAlertDialog` | separate component |
 
 Production completeness includes server-only rendering, client presentation
 updates, ordinary links and controls in actions, public variables and
@@ -434,7 +434,7 @@ pagination, retry protocol, or loading owner. Applications may place retry or
 refresh controls in actions, but those controls own pending state and result
 ordering.
 
-Repeated Alerts are independent roots. A future Toast queue or announcer owns
+Repeated Alerts are independent roots. `CToastRegion` owns
 message identity, deduplication, ordering, lifetime, and supersession instead
 of extending generic Alert.
 
@@ -641,3 +641,12 @@ Deferred work:
   focus-restoration contract that application composition cannot express; and
 - alternate registered icon mappings at a library theme level after more
   component families prove the need.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

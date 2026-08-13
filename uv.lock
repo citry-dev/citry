@@ -771,6 +771,32 @@ wheels = [
 ]
 
 [[package]]
+name = "fluent-pygments"
+version = "1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fluent-syntax" },
+    { name = "pygments" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/ad/09487a3a5b4203077d7da16f5afb4bfa48af6dc5a94f5caf774e562c9479/fluent.pygments-1.0.tar.gz", hash = "sha256:b44758f74f87e1aa9d78d8f53363962639c5bf99d88cf3e407d046b5249ec27f", size = 2873, upload-time = "2020-05-20T19:00:36.68Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d3/b0/9e75d8999fe0b96196e64cbe5406f464d06165f7fc2cd5579f239e2f735a/fluent.pygments-1.0-py2.py3-none-any.whl", hash = "sha256:625c87a8a2362ef304146b161d359dcf652bed2a1ae4869b5607b8e06d117d97", size = 3649, upload-time = "2020-05-20T19:00:32.855Z" },
+]
+
+[[package]]
+name = "fluent-syntax"
+version = "0.19.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/51/52/de75f2faf499ed5a089acff2ab8bda5fc3b8db8a3f1615428ef9ccbf1917/fluent.syntax-0.19.0.tar.gz", hash = "sha256:920326d7f46864b9758f0044e9968e3112198bc826acee16ddd8f11d359004fd", size = 15039, upload-time = "2023-03-16T11:03:24.023Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/28/475734afb670bf7932caa1828183a4687cac51111950b9fb633c4f976afc/fluent.syntax-0.19.0-py2.py3-none-any.whl", hash = "sha256:b352b3475fac6c6ed5f06527921f432aac073d764445508ee5218aeccc7cc5c4", size = 16432, upload-time = "2023-03-16T11:03:21.934Z" },
+]
+
+[[package]]
 name = "greenlet"
 version = "3.5.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1651,6 +1677,7 @@ name = "pygments-citry"
 version = "0.1.2"
 source = { editable = "packages/py/pygments_citry" }
 dependencies = [
+    { name = "fluent-pygments" },
     { name = "pygments" },
 ]
 
@@ -1660,7 +1687,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pygments", specifier = ">=2.20" }]
+requires-dist = [
+    { name = "fluent-pygments", specifier = "==1.0" },
+    { name = "pygments", specifier = ">=2.20" },
+]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=9.1.1" }]
@@ -2162,6 +2192,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f2/1c/d7b67ab43f30013b47c12b42d1acd354c195351a3f7a1d67f59e54227ede/ruff-0.14.10-py3-none-win32.whl", hash = "sha256:104c49fc7ab73f3f3a758039adea978869a918f31b73280db175b43a2d9b51d6", size = 13196187, upload-time = "2025-12-18T19:29:19.006Z" },
     { url = "https://files.pythonhosted.org/packages/fb/9c/896c862e13886fae2af961bef3e6312db9ebc6adc2b156fe95e615dee8c1/ruff-0.14.10-py3-none-win_amd64.whl", hash = "sha256:466297bd73638c6bdf06485683e812db1c00c7ac96d4ddd0294a338c62fdc154", size = 14661283, upload-time = "2025-12-18T19:29:30.16Z" },
     { url = "https://files.pythonhosted.org/packages/74/31/b0e29d572670dca3674eeee78e418f20bdf97fa8aa9ea71380885e175ca0/ruff-0.14.10-py3-none-win_arm64.whl", hash = "sha256:e51d046cf6dda98a4633b8a8a771451107413b0f07183b2bef03f075599e44e6", size = 13729839, upload-time = "2025-12-18T19:28:48.636Z" },
+]
+
+[[package]]
+name = "six"
+version = "1.17.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
 ]
 
 [[package]]

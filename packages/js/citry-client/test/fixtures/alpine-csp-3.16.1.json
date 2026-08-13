@@ -1,0 +1,231 @@
+{
+  "alpineVersion": "3.16.1",
+  "cases": [
+    {
+      "id": "core-operators",
+      "source": "count > 1 && enabled ? count + 1 : 0",
+      "scope": { "count": 2, "enabled": true },
+      "outcome": "accepted",
+      "value": 3
+    },
+    {
+      "id": "containers",
+      "source": "{ rows: [1, 2], enabled: true, empty: null }",
+      "scope": {},
+      "outcome": "accepted",
+      "value": { "rows": [1, 2], "enabled": true, "empty": null }
+    },
+    {
+      "id": "computed-call",
+      "source": "save({ id: items[index].id })",
+      "scopeFixture": "computed-call",
+      "outcome": "accepted",
+      "value": 7
+    },
+    {
+      "id": "identifier-assignment",
+      "source": "count = 4",
+      "scope": { "count": 1 },
+      "outcome": "accepted",
+      "value": 4
+    },
+    {
+      "id": "member-assignment",
+      "source": "user.name = value",
+      "scope": { "user": { "name": "before" }, "value": "after" },
+      "outcome": "accepted",
+      "value": "after"
+    },
+    {
+      "id": "update-semicolon",
+      "source": "count++;",
+      "scope": { "count": 1 },
+      "outcome": "accepted",
+      "value": 1
+    },
+    {
+      "id": "raw-props",
+      "source": "{ count: count, id: item.id }",
+      "scope": { "count": 1, "item": { "id": 7 } },
+      "outcome": "accepted",
+      "value": { "count": 1, "id": 7 }
+    },
+    {
+      "id": "citry-args",
+      "source": "{ id: item.id }",
+      "transform": "citry-args",
+      "scope": { "item": { "id": 7 } },
+      "outcome": "accepted",
+      "value": { "id": 7 }
+    },
+    {
+      "id": "x-model-member",
+      "source": "user.name",
+      "transform": "x-model",
+      "scope": { "user": { "name": "before" } },
+      "placeholder": "after",
+      "outcome": "accepted",
+      "value": "after"
+    },
+    {
+      "id": "x-for-items",
+      "source": "(item, index) in items",
+      "transform": "x-for",
+      "scope": { "items": [1, 2] },
+      "outcome": "accepted",
+      "value": [1, 2]
+    },
+    {
+      "id": "optional-chain",
+      "source": "user?.name",
+      "scope": { "user": { "name": "Ada" } },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "arrow-function",
+      "source": "items.map(item => item.id)",
+      "scope": { "items": [] },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "compound-assignment",
+      "source": "count += 1",
+      "scope": { "count": 1 },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "multiple-statements",
+      "source": "count = 1; open = true",
+      "scope": { "count": 0, "open": false },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "await",
+      "source": "result = await save()",
+      "scopeFixture": "save",
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "object-spread",
+      "source": "{ ...props }",
+      "scope": { "props": {} },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "object-shorthand",
+      "source": "{ count }",
+      "scope": { "count": 1 },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "template-literal",
+      "source": "`hello ${name}`",
+      "scope": { "name": "Ada" },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "declaration",
+      "source": "let count = 1",
+      "scope": {},
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "typeof",
+      "source": "typeof value",
+      "scope": { "value": 1 },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "dangerous-property",
+      "source": "value.constructor",
+      "scope": { "value": {} },
+      "outcome": "rejected",
+      "failure": "evaluator"
+    },
+    {
+      "id": "browser-global",
+      "source": "Math.max(1, 2)",
+      "scopeFixture": "browser-global",
+      "outcome": "rejected",
+      "staticOutcome": "runtime-dependent",
+      "failure": "evaluator"
+    },
+    {
+      "id": "dom-assignment",
+      "source": "$el.value = next",
+      "scopeFixture": "dom-assignment",
+      "outcome": "rejected",
+      "failure": "evaluator"
+    },
+    {
+      "id": "x-model-invalid-setter",
+      "source": "count + 1",
+      "transform": "x-model",
+      "scope": { "count": 1 },
+      "placeholder": 2,
+      "outcome": "rejected",
+      "failure": "derived-expression"
+    },
+    {
+      "id": "x-for-invalid-items",
+      "source": "item in rows?.items",
+      "transform": "x-for",
+      "scope": { "rows": { "items": [] } },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "js-control-is-not-whitespace",
+      "source": "count\u001c+1",
+      "scope": { "count": 1 },
+      "outcome": "rejected",
+      "failure": "parser"
+    },
+    {
+      "id": "js-bom-whitespace",
+      "source": "count\ufeff+1",
+      "scope": { "count": 1 },
+      "outcome": "accepted",
+      "value": 2
+    },
+    {
+      "id": "x-for-bom-whitespace",
+      "source": "item\ufeffin\ufeffitems",
+      "transform": "x-for",
+      "scope": { "items": [1, 2] },
+      "outcome": "accepted",
+      "value": [1, 2]
+    },
+    {
+      "id": "grouped-assignment",
+      "source": "(count) = 2",
+      "scope": { "count": 1 },
+      "outcome": "accepted",
+      "value": 2
+    },
+    {
+      "id": "grouped-postfix-update",
+      "source": "(count)++",
+      "scope": { "count": 1 },
+      "outcome": "accepted",
+      "value": 1
+    },
+    {
+      "id": "grouped-prefix-update",
+      "source": "++(count)",
+      "scope": { "count": 1 },
+      "outcome": "accepted",
+      "value": 2
+    }
+  ]
+}

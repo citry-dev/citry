@@ -4,7 +4,7 @@ from citry import Component, citry
 citry.register_library(citry_ui)
 
 
-class SingleSelection(Component):
+class TreeSingleSelection(Component):
     template = """
       <section x-data="{ selected: ['mercury'] }">
         <c-CTree
@@ -21,5 +21,5 @@ class SingleSelection(Component):
     """
 
 
-preview = SingleSelection()
+preview = TreeSingleSelection()
 preview  # noqa: B018

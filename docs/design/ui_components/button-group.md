@@ -83,4 +83,13 @@ The guide must show related actions, attached versus spaced groups, orientation,
 
 ## 20. Open decisions and deferred work
 
-Shared Button presentation remains deferred until Citry can preserve explicit-child precedence and truthful child reflections. Overflow collapsing belongs to a future Toolbar or OverflowList. Selection belongs to `CToggleGroup`.
+Shared Button presentation remains deferred until Citry can preserve explicit-child precedence and truthful child reflections. `CToolbar` owns toolbar semantics; automatic overflow collapsing still needs a separate OverflowList design. Selection belongs to `CToggleGroup`.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

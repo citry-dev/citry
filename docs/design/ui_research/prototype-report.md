@@ -92,8 +92,13 @@ assembly delivers each class asset once.
 | CTabs | 17,739 / 3,550 / 3,082 B | 6,370 / 1,244 / 1,037 B |
 | Complete public catalog | 85,104 / 12,982 / 10,805 B | 40,963 / 5,152 / 4,458 B |
 
-The complete catalog is below the 45 KiB Brotli JavaScript and 30 KiB Brotli
-CSS limits. The Button, Field, Input, and Table route is 2,354 B Brotli
+This table is the historical eight-family production-slice measurement from
+2026-07-30, not the current whole public catalog. The current 101-definition
+catalog and its post-batch raw/gzip/Brotli decision are recorded in
+[architecture options section 12.1.1](architecture-options.md#1211-whole-catalog-reconciliation-after-the-seven-family-batch).
+
+That historical catalog is below the 45 KiB Brotli JavaScript and 30 KiB
+Brotli CSS limits. The Button, Field, Input, and Table route is 2,354 B Brotli
 JavaScript and 2,591 B Brotli CSS, below its 8 and 12 KiB limits. Automated
 tests freeze both gates.
 

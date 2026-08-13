@@ -1,0 +1,13 @@
+schema_version: 1
+previews:
+  - basic-command-palette
+  - python-command-records
+  - search-and-empty
+  - disabled-and-shortcuts
+  - command-adornments
+  - controlled-command-palette
+  - command-actions
+  - application-shortcut
+  - form-safe-palette
+  - palette-layers
+  - command-palette-environment

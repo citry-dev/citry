@@ -90,7 +90,7 @@ phrasing content such as an Icon or Avatar.
 
 Tag content must not contain links, Buttons, form controls, focusable content,
 or nested Tags. Use a native anchor outside TagGroup when the job is
-navigation. Free-form entry and editing belong to a future TagsInput family.
+navigation. Free-form entry and editing belong to `CTagsInput`.
 
 ## Keyboard behavior
 

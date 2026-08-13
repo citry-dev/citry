@@ -14,7 +14,7 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, get_args
+from typing import TYPE_CHECKING, Any, Literal, cast, get_args
 
 from citry_core.template_parser import analyze_browser_source
 
@@ -30,6 +30,42 @@ Mode = Literal["production", "development"]
 _ALLOWED_MODES: tuple[str, ...] = get_args(Mode)
 LintSeverity = Literal["ignore", "warning", "error"]
 _ALLOWED_LINT_SEVERITIES: tuple[str, ...] = get_args(LintSeverity)
+SecurityCspMode = Literal["off", "warn", "strict"]
+_ALLOWED_SECURITY_CSP_MODES: tuple[str, ...] = get_args(SecurityCspMode)
+SecurityJavascriptMode = Literal["allow", "warn", "omit", "forbid"]
+_ALLOWED_SECURITY_JAVASCRIPT_MODES: tuple[str, ...] = get_args(SecurityJavascriptMode)
+SecurityScriptIntegrityMode = Literal["off", "citry"]
+_ALLOWED_SECURITY_SCRIPT_INTEGRITY_MODES: tuple[str, ...] = get_args(SecurityScriptIntegrityMode)
+
+
+def _validate_security_mode(name: str, value: object, allowed: tuple[str, ...]) -> str:
+    """Validate one engine or per-serialization security mode."""
+    if type(value) is not str or value not in allowed:
+        msg = f"Citry {name} must be one of {allowed}, got {value!r}"
+        raise ValueError(msg)
+    return value
+
+
+def _validate_security_csp(value: object) -> SecurityCspMode:
+    return cast("SecurityCspMode", _validate_security_mode("security_csp", value, _ALLOWED_SECURITY_CSP_MODES))
+
+
+def _validate_security_javascript(value: object) -> SecurityJavascriptMode:
+    return cast(
+        "SecurityJavascriptMode",
+        _validate_security_mode("security_javascript", value, _ALLOWED_SECURITY_JAVASCRIPT_MODES),
+    )
+
+
+def _validate_security_script_integrity(value: object) -> SecurityScriptIntegrityMode:
+    return cast(
+        "SecurityScriptIntegrityMode",
+        _validate_security_mode(
+            "security_script_integrity",
+            value,
+            _ALLOWED_SECURITY_SCRIPT_INTEGRITY_MODES,
+        ),
+    )
 
 
 def _is_template_variable_name(name: object) -> bool:
@@ -231,6 +267,17 @@ class CitrySettings:
         lint: Template lint severities and analysis-only variables. Runtime
             globals are discovered from ``Citry.template_globals`` and do not
             need to be repeated here.
+        security_csp: CSP compatibility policy for Citry-managed output.
+            ``"off"`` preserves current behavior, ``"warn"`` reports
+            incompatibilities without changing output, and ``"strict"``
+            enforces Citry's strict-CSP contract.
+        security_javascript: JavaScript delivery policy. ``"allow"`` keeps
+            current behavior, ``"warn"`` inventories client requirements,
+            ``"omit"`` leaves Citry-managed JavaScript out, and ``"forbid"``
+            rejects rendered subtrees that require executable client behavior.
+        security_script_integrity: Script integrity policy. ``"off"`` does
+            not compute security digests; ``"citry"`` collects SHA-384
+            metadata for structured scripts whose bytes Citry can prove.
         id_generator: A function returning the per-render id stamped on each
             component instance (``component.id``, which drives the
             ``data-cid-<id>`` markers that scope a component's CSS and JS on the
@@ -269,6 +316,10 @@ class CitrySettings:
             formats. Codecs given here are tried before the built-in ones, in
             order.
 
+        Every security mode is enforced during serialization. The defaults
+        preserve established output; restrictive JavaScript modes inventory,
+        omit, or reject client behavior without changing render-cache data.
+
     """
 
     extensions: Sequence[type[Extension] | Extension | str] = ()
@@ -285,6 +336,9 @@ class CitrySettings:
     secret: str | list[str] | None = None
     event_result_resolvers: Sequence[Any] = ()
     event_payload_codecs: Sequence[Any] = ()
+    security_csp: SecurityCspMode = "off"
+    security_javascript: SecurityJavascriptMode = "allow"
+    security_script_integrity: SecurityScriptIntegrityMode = "off"
 
     def __post_init__(self) -> None:
         # Copy every input into its immutable stored shape, so a direct
@@ -299,6 +353,10 @@ class CitrySettings:
         if self.mode not in _ALLOWED_MODES:
             msg = f"Citry mode must be one of {_ALLOWED_MODES}, got {self.mode!r}"
             raise ValueError(msg)
+
+        _validate_security_csp(self.security_csp)
+        _validate_security_javascript(self.security_javascript)
+        _validate_security_script_integrity(self.security_script_integrity)
 
         # Extensions are copied into a tuple of their own.
         object.__setattr__(self, "extensions", tuple(self.extensions))

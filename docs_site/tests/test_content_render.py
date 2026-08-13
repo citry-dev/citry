@@ -101,6 +101,17 @@ def test_include_file_tag(tmp_path: Path) -> None:
     assert "<c-include-file" not in html  # the tag was expanded
 
 
+def test_include_file_infers_fluent_for_ftl(tmp_path: Path) -> None:
+    (tmp_path / "messages.ftl").write_text("hello = Welcome\n", encoding="utf-8")
+
+    html = render_page(
+        '<c-include-file path="messages.ftl" />',
+        config=DocsConfig(repo_root=tmp_path),
+    ).html
+
+    assert '<span class="no">hello</span>' in html
+
+
 def test_admonition_still_renders_through_pass1() -> None:
     # Pass 1 must preserve markdown's blank lines / indentation so block syntax
     # (here an admonition) still works.

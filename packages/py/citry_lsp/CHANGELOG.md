@@ -54,6 +54,30 @@ All notable changes to `citry-lsp` are documented here.
 
 ### Added
 
+- Treat registered component message assets as an available source catalog
+  even when the application has no explicit i18n settings, so source-mode
+  `tr()` calls retain diagnostics, hover, completion, and navigation.
+- Add live i18n diagnostics and navigation. Component `messages` blocks now
+  use the checked Rust Fluent analyzer for malformed or unsupported `@param`
+  declarations, including exact source ranges. Literal `tr()`, formatter,
+  parser, and `<c-trans>` calls report unknown keys and profiles, missing or
+  extra arguments, proven type mismatches, and fill/value contract mistakes.
+  Translation argument names hover with their compiler-checked `@param` type
+  and description and navigate to the exact declaration across component and
+  file owners. Template formatter methods now expose uniform signatures and
+  reject misspelled operations or profiles, including multiline calls.
+  Template `fmt` methods expose completion and signatures, browser `$i18n`
+  and component-context `i18n` expose their nested APIs, component input
+  completion includes static and `c-` spellings, and private Fluent term
+  references navigate within their own source unit.
+- Recognize checked `$c-tr` directive names and Alpine named-value objects.
+  Message and Fluent-attribute segments hover and navigate to the exact catalog
+  output, malformed owned spellings are errors, and statically proven keys and
+  JavaScript value types are checked against the message interface. Literal
+  `i18n.bind()` message and output fields share the same navigation.
+- Publish the same version-pinned Alpine CSP compatibility findings as
+  `citry check`, using the selected app's configured `security_csp` mode and
+  exact template ranges. Syntax-only projects do not infer a security policy.
 - Add a parser-backed, version-bound HTML-provider projection for nested
   templates and `<c-element>` attributes. Literal element targets preserve
   tag-specific assistance, dynamic targets preserve only global attributes,

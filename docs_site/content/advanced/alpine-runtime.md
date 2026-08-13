@@ -60,21 +60,64 @@ it, even when Citry renders it elsewhere. Test a plugin with nested
 components, slots, fragments, and server-rendered updates before relying on it
 across an application.
 
-## Plan for Content Security Policy
+## Use Content Security Policy
 
-The standard Alpine build evaluates Alpine expressions in the browser. Pages
-that use those expressions currently need `unsafe-eval` in `script-src`.
-Citry does not ship Alpine's CSP build.
+The standard Alpine build evaluates expression strings in the browser, so
+pages using `security_csp="off"` or `"warn"` need `unsafe-eval` in
+`script-src`. Set `security_csp="strict"` to select Citry's version-matched
+Alpine CSP runtime and reject unsupported expressions before HTML is returned:
+
+```python
+app = Citry(security_csp="strict")
+html = Page().render().serialize(csp_nonce=request_nonce)
+```
+
+The constrained evaluator supports ordinary property access, calls, arrays,
+objects, and the documented Alpine directive transformations. It does not
+support every JavaScript construct. In particular, move arrows, optional
+chaining, template literals, and multi-statement logic to `Component.js`, then
+call a scope method from the attribute. `citry check` and the Citry editor
+extension report the pinned compatibility rule at the authored source.
 
 Citry can also emit inline executable scripts for client-active output. There
-is currently no page-wide Citry setting that adds a CSP nonce to every such
-script. A nonce on one application script therefore does not, by itself,
-authorize every script Citry may emit.
+is now a request-scoped serialization input that adds one CSP nonce to every
+structured Citry script and inline style after dependency hooks have run:
 
-If your policy cannot allow `unsafe-eval` or the required inline execution,
-treat Alpine and other Citry browser behavior as unavailable on that page.
-This is separate from the server-side Python expression sandbox described in
+```python
+html = Page().render().serialize(csp_nonce=request_nonce)
+```
+
+The host still owns the matching response header and nonce generation. Raw
+script and style tags authored directly in template HTML are not automatically
+trusted. See [Security](/security/#apply-a-request-csp-nonce-centrally) for the
+complete boundary.
+
+A nonce authorizes specific tags, but it cannot remove the standard
+evaluator's `unsafe-eval` requirement. Strict mode changes the evaluator as
+well as validating final component output. Raw script and style elements,
+native `on*` handlers, and `javascript:` URLs are rejected in the Citry render.
+
+Strict fragments do not carry an executable preloader. Insert them only into a
+base document that already installed Citry's CSP manager with the same document
+nonce. The manager rejects runtime or nonce mismatches before adopting any
+dependency. Without that manager, the inert fragment stays inactive. This is
+separate from the server-side Python expression sandbox described in
 [Security](/security/).
+
+## Omit or forbid the browser runtime
+
+Use `security_javascript="omit"` for a deliberate static rendering. Citry
+keeps server HTML, authored Alpine attributes, and CSS, but emits no Alpine,
+Events, component JavaScript, dependency preloader, or runtime manifest. The
+attributes are inert, so test important content and controls for a useful
+native fallback. An omit fragment emits CSS directly and does not need an
+existing manager.
+
+Use `security_javascript="forbid"` when a client requirement should fail the
+serialization instead. The check applies above `deps_strategy`, so `simple`
+and `ignore` cannot conceal a reached binding or JavaScript declaration. See
+[Security](/security/#choose-how-much-javascript-citry-may-deliver) for the
+complete mode contract and its interaction with strict CSP.
 
 ## Preserve client-active HTML
 

@@ -34,8 +34,19 @@ class TestFormatAttrs:
         assert format_attrs(attrs) == 'CLASS="base active" STYLE="color: red; width: 1px;"'
 
     def test_citry_directive_payloads_remain_case_sensitive(self):
-        attrs = {"@c-Ready": "first", "@c-ready": "second", ":c-Value": True, ":c-value": True}
-        assert format_attrs(attrs) == '@c-Ready="first" @c-ready="second" :c-Value :c-value'
+        attrs = {
+            "@c-Ready": "first",
+            "@c-ready": "second",
+            ":c-Value": True,
+            ":c-value": True,
+            "$c-tr:Save[aria-label]": True,
+            "$c-tr:save[aria-label]": True,
+            "c-$c-tr:Title[title]": "binding",
+        }
+        assert format_attrs(attrs) == (
+            '@c-Ready="first" @c-ready="second" :c-Value :c-value '
+            '$c-tr:Save[aria-label] $c-tr:save[aria-label] c-$c-tr:Title[title]="binding"'
+        )
 
     def test_escapes_special_characters(self):
         assert format_attrs({"x-on:click": "bar", "@click": "'baz'"}) == 'x-on:click="bar" @click="&#39;baz&#39;"'

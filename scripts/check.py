@@ -157,6 +157,10 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
             ["pnpm", "--dir", "packages/js/citry-client", "run", "check"],
         ),
         (
+            "codemirror Fluent",
+            ["pnpm", "--dir", "packages/js/codemirror-lang-fluent", "run", "check"],
+        ),
+        (
             "protocol contracts",
             [
                 *uvr,

@@ -9,7 +9,7 @@
     "target": "es2020",
     "module": "esnext",
     "moduleResolution": "bundler",
-    "lib": ["es2020", "dom"],
+    "lib": ["es2020", "es2021.intl", "dom"],
 
     // esbuild compiles file-by-file, so every file must stand alone.
     "isolatedModules": true,

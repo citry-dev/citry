@@ -6,7 +6,7 @@ description: Reference for $component, Citry's Alpine magics, and the public Cit
 # Browser APIs
 
 Citry adds a small browser API around its component boundaries, Alpine
-runtime, and server events. This page covers the names Citry provides. For
+runtime, server events, and client-enabled i18n providers. This page covers the names Citry provides. For
 standard Alpine directives and magics, use the
 [Alpine documentation](https://alpinejs.dev/){: target="_blank" rel="noopener"}.
 
@@ -71,6 +71,7 @@ The initializer receives these values:
 | `props` | The stable, reactive, top-level read-only values declared by the configuration form. The callback form receives an empty object. |
 | `scope` | The stable reactive object available to Alpine expressions inside this component. Its top-level server-data keys are seeded before init. |
 | `state` | The component's reactive Events State, or `null` when the component declares no Events. |
+| `i18n` | The nearest client-enabled i18n service, or `null` outside such a provider. |
 | `effect(fn)` | Run a managed reactive effect. It returns an early-stop function and stops automatically before cleanup. |
 | `reactive(value)` | Turn an object or array into an Alpine reactive proxy. |
 | `provide(key, value)` | Provide a value to rendered descendants during synchronous initialization. |
@@ -106,12 +107,49 @@ component boundaries, client props, slot scope, and rootless components. The
 [Component JavaScript and CSS](/advanced/js-and-css-dependencies/) explains
 when component scripts load.
 
+<h3 class="doc-heading" id="component-i18n"><code>$component.i18n</code></h3>
+
+The `i18n` value in a `$component` initializer is the same service exposed as
+`$i18n` to Alpine expressions. It is `null` unless the component is below a
+client-enabled `<c-i18n>` provider. Use it for browser-created destinations or
+other imperative code; use the `$c-tr` template binding for stable text and
+HTML attributes.
+
 ## Alpine magics
 
 Citry adds the following magics to Alpine expressions inside an active Citry
 component. The event-related magics act on the component instance that owns
 the expression. The context magics follow Citry's rendered ownership path,
 including slots and teleports.
+
+<h3 class="doc-heading" id="i18n"><code>$i18n</code></h3>
+
+Read the nearest client-enabled i18n provider. Access outside one throws an
+error. The service has this public shape:
+
+| Member | Meaning |
+|---|---|
+| `context` | Readonly locale, fallback, direction, time-zone, and revision data. |
+| `status` | Readonly provider loading state. |
+| `tr(message, values?, options?)` | Return loaded message text. Use `{ attr: "name" }` for a Fluent attribute. |
+| `resolve(message, values?, options?)` | Return frozen `{ text, locale, direction, usedFallback }` metadata. |
+| `format` | Named number, percent, currency, date, time, datetime, relative-time, list, and unit formatters. |
+| `parse` | Strict number and percent parsers. Each returns `{ input, state, value, error, valid }`. |
+| `ensureMessages(messages)` | Load one public message ID or a list before a dynamic synchronous lookup. |
+| `switchLocale(locale)` | Atomically switch this provider subtree and return a committed or stale result. |
+| `subscribe(callback)` | Call back immediately and after context changes; returns an unsubscribe function. |
+| `bind(options)` | Keep a browser-created destination translated; returns `refresh()` and `dispose()`. |
+
+```citry-html
+<c-i18n tag="section" client>
+  <output x-text="$i18n.tr('my-app-status')"></output>
+  <button @click="$i18n.switchLocale('cs-CZ')">Čeština</button>
+</c-i18n>
+```
+
+Ordinary server `tr()` output is plain HTML and does not react to
+`switchLocale()`. See [Browser i18n](/i18n/browser/) for `$c-tr`, dynamic
+message loading, `bind()`, and the exact ownership rules.
 
 <h3 class="doc-heading" id="state"><code>$state</code></h3>
 

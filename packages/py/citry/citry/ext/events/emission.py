@@ -13,9 +13,10 @@ turns the collected entries into what the page needs:
   It is placed BEFORE the sibling ``data-citry`` manifest tag, so whenever
   the client can fire a component call, the events manifest is already
   parsed (the boot-order rule, design ``events.md`` 5.2);
-- the pinned Alpine/Events runtime ``<script src=".../ext/events/runtime.js">``
-  tag for every client-active ownership graph, including graphs with no Events
-  instances;
+- the pinned standard or CSP Alpine/Events runtime tag for every client-active
+  ownership graph, including graphs with no Events instances; strict CSP
+  serialization selects ``.../ext/events/runtime-csp.js`` while the other
+  modes select ``.../ext/events/runtime.js``;
 - an inline bootstrap script delivered the same way as other dependency
   scripts, so in a fragment it rides the ``data-citry`` manifest and runs
   synchronously while the manifest is processed (design ``events.md`` 5.2
@@ -31,9 +32,9 @@ from __future__ import annotations
 import json
 from dataclasses import fields
 from functools import cache
-from pathlib import Path
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
+from citry._owned_resource import _OwnedResource
 from citry._protocol.events import (
     build_component_instance,
     build_descriptor,
@@ -43,6 +44,7 @@ from citry._protocol.events import (
 from citry.constness import const_value
 from citry.ext.dependencies.types import Dependency, Script
 from citry.ext.events.handlers import event_options
+from citry.ext.events.routes import CSP_RUNTIME_PATH, EVENTS_CSP_RUNTIME_SRC, EVENTS_RUNTIME_SRC, RUNTIME_PATH
 from citry.ext.events.tokens import mint_state_token
 from citry.ownership import OwnershipState
 from citry.ownership_manifest import EXTRA_KEY as OWNERSHIP_MANIFEST_KEY
@@ -59,14 +61,27 @@ if TYPE_CHECKING:
 # ``CitryContext.extra`` (top-level keys there are namespaced by owner).
 EXTRA_KEY = "events"
 
-# Route path of the events client runtime, under the mounted prefix.
-RUNTIME_PATH = "ext/events/runtime.js"
+
+_RuntimeVariant = Literal["standard", "csp"]
 
 
 @cache
-def _client_runtime_js() -> str:
+def _client_runtime_js(variant: _RuntimeVariant = "standard") -> str:
     """The pinned Alpine/Events bundle used inline without a mounted route."""
-    return (Path(__file__).parent / "client" / "citry-events.js").read_text(encoding="utf8")
+    source = EVENTS_CSP_RUNTIME_SRC if variant == "csp" else EVENTS_RUNTIME_SRC
+    return source.read_text(encoding="utf8")
+
+
+def _runtime_resource(citry: Citry, variant: _RuntimeVariant = "standard") -> _OwnedResource:
+    """Return the shared source used by mounted emission and route serving."""
+    path = CSP_RUNTIME_PATH if variant == "csp" else RUNTIME_PATH
+    url = citry.build_url(path) if citry.mounted_prefix is not None else path
+    return _OwnedResource(
+        url=url,
+        content=_client_runtime_js(variant),
+        content_type="text/javascript",
+        headers=(("Cache-Control", "no-store"),),
+    )
 
 
 # The inline bootstrap script emitted alongside the runtime script tag
@@ -233,7 +248,7 @@ def emit_events_dependencies(extension: EventsExtension, ctx: OnDependenciesCont
     The "simple" strategy ships no client runtime at all, so it gets none of
     the three.
     """
-    if ctx.strategy not in ("document", "fragment"):
+    if ctx.strategy not in ("document", "fragment") or ctx._security_javascript in {"omit", "forbid"}:
         return
     entries: list[EventInstanceEntry] = list(ctx.context.extra.get(EXTRA_KEY, {}))
     if ctx.context.ownership is not None:
@@ -261,10 +276,14 @@ def emit_events_dependencies(extension: EventsExtension, ctx: OnDependenciesCont
     # graph, including graphs with no Events entries. Mounted pages use the
     # no-store route; zero-configuration documents receive the same bundle inline
     # so graph-linked callbacks never wait on an unavailable owner.
+    runtime_variant: _RuntimeVariant = "csp" if ctx._security_csp == "strict" else "standard"
     if ctx.citry.mounted_prefix is not None:
-        injected.append(Script(kind="core", url=ctx.citry.build_url(RUNTIME_PATH)))
+        resource = _runtime_resource(ctx.citry, runtime_variant)
+        runtime = Script(kind="core", url=resource.url)
+        runtime._owned_resource = resource
+        injected.append(runtime)
     else:
-        injected.append(Script(kind="core", content=_client_runtime_js(), wrap=False))
+        injected.append(Script(kind="core", content=_client_runtime_js(runtime_variant), wrap=False))
     ctx.scripts[:0] = injected
 
 

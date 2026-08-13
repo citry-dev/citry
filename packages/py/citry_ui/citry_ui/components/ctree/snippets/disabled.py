@@ -4,7 +4,7 @@ from citry import Component, citry
 citry.register_library(citry_ui)
 
 
-class DisabledItems(Component):
+class TreeDisabledItems(Component):
     template = """
       <c-CTree label="Deployment targets" c-expanded="['regions']">
         <c-CTreeItem value="regions" label="Regions">
@@ -16,5 +16,5 @@ class DisabledItems(Component):
     """
 
 
-preview = DisabledItems()
+preview = TreeDisabledItems()
 preview  # noqa: B018

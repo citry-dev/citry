@@ -28,7 +28,7 @@ is a horizontal layout grid. A descriptive group uses native list semantics.
 | Request removal | `<c-CTagGroup label="Topics" removable>...</c-CTagGroup>` | direct API; owner removes the item |
 | Run an item action | `<c-CTagGroup label="Genres" actionable>...</c-CTagGroup>` | direct API through `onAction` |
 | Show a leading icon or Avatar | `<c-fill name="start">...</c-fill>` on `CTag` | composition |
-| Enter or edit arbitrary tags | future TagsInput | separate form-control family |
+| Enter or edit arbitrary tags | `CTagsInput` | separate form-control family |
 | Navigate to a URL | native anchor styled by the application, or Button/Menu composition | deliberate omission from the grid contract |
 | Display static status | `CBadge` | separate component |
 
@@ -49,7 +49,7 @@ CTagGroup(
 
 Non-goals are free-form entry, editing, autocomplete, form submission,
 drag-and-drop ordering, virtualization, async collection loading, arbitrary
-links inside the composite, and a headless API. `CTagsInput` remains a future
+links inside the composite, and a headless API. `CTagsInput` is the separate
 form-control family rather than a mode of TagGroup.
 
 ## 2. Prior art and complaints
@@ -529,3 +529,11 @@ The following are explicit nonblocking deferrals:
   proves a repeated job that requires collection ownership.
 
 No unresolved decision blocks implementation.
+
+## 21. Internationalization
+
+The group-owned remove text uses the key and precedence recorded in the
+structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/ctag/api.yml).
+Server `tr()` supplies the initial hidden accessible text and `$c-tr` follows
+locale changes. An explicit group `remove_label` remains caller-owned. Visible
+tag labels are application content and are never translated by the family.

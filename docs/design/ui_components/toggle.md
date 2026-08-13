@@ -83,4 +83,13 @@ The guide must contrast Toggle with Switch and ButtonGroup, then show standalone
 
 ## 20. Open decisions and deferred work
 
-Roving focus remains deferred until real toolbar usage proves it preferable to ordinary Button navigation. A future Toolbar may layer arrow navigation on Toggles without changing pressed semantics. Browser-owned insertion/removal under a retained group, removal fallback, and semantic morph handoff require a separate collection lifecycle contract before becoming public behavior.
+Roving focus remains deferred for an ordinary ToggleGroup. `CToolbar` can own arrow navigation when Toggles participate in toolbar semantics without changing their pressed semantics. Browser-owned insertion/removal under a retained group, removal fallback, and semantic morph handoff require a separate collection lifecycle contract before becoming public behavior.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

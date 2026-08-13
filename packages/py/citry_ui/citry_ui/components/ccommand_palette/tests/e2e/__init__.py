@@ -1,0 +1,1 @@
+"""Command Palette browser tests."""

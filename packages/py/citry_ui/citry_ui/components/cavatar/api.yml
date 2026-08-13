@@ -90,3 +90,5 @@ interfaces:
       - {id: shape, name: CAvatarShape, definition: 'Literal["circle", "rounded", "square"]'}
       - {id: status, name: CAvatarStatus, definition: 'Literal["fallback", "loading", "loaded", "error"]'}
   - {id: default-slot-data, kind: record, name: CAvatarDefaultSlotData, entries: []}
+
+translations: []

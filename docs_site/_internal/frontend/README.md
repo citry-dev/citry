@@ -16,8 +16,12 @@ package and its build outputs.
 ```text
 playground.js
 ├── citry_editor.js
+├── browser_ide.js
 ├── preview_bridge.js
 └── worker_session.js
+
+analysis_worker.js
+└── loads portable_ide.py and analysis_adapter.py in a dedicated Pyodide runtime
 
 live_code.js
 └── loads live_code_runtime.js after Try live
@@ -47,6 +51,9 @@ tests.
 | [`src/live_code_runtime.js`](src/live_code_runtime.js) | Coordinates one activated inline editor, its Python session, preview, tabs, diagnostics, Reset, and disposal. |
 | [`src/landing_composer.js`](src/landing_composer.js) | Places pre-rendered Citry UI recipes into the landing page canvas through a lightweight drag-and-drop interaction. |
 | [`src/citry_editor.js`](src/citry_editor.js) | Configures CodeMirror for Python with nested HTML, JavaScript, CSS, and Citry-specific highlighting. |
+| [`src/browser_ide.js`](src/browser_ide.js) | Maps versioned parser, component-catalog, completion, and hover records between CodeMirror and the analysis Worker. |
+| [`src/citry_regions.js`](src/citry_regions.js) | Proves direct triple-quoted Citry asset ranges for mixed highlighting and the browser IDE. |
+| [`src/analysis_worker.js`](src/analysis_worker.js) | Loads the pinned parser and generated portable Citry rules in a separate Worker, then validates the private analysis and catalog protocol. |
 | [`src/worker_session.js`](src/worker_session.js) | Owns Worker generations, Python run IDs, timeouts, size limits, Stop, and pending Events and asset calls. |
 | [`src/preview_bridge.js`](src/preview_bridge.js) | Creates candidate result iframes, authenticates their `MessagePort`, commits acknowledged renders, and forwards diagnostics, Events, and Citry asset requests. |
 | [`scripts/build.mjs`](scripts/build.mjs) | Builds the four docs bundles and checks their committed output. |
@@ -67,9 +74,11 @@ The build writes these files under `docs_site/static/playground/`:
 
 | Output | Source | Build form |
 |---|---|---|
-| [`playground.js`](../../static/playground/playground.js) | `src/playground.js` and all three shared modules | Bundled and minified |
+| [`playground.js`](../../static/playground/playground.js) | `src/playground.js` and its imported modules | Bundled and minified |
+| [`analysis_worker.js`](../../static/playground/analysis_worker.js) | `src/analysis_worker.js` | Minified, not bundled |
+| [`portable_ide.py`](../../static/playground/portable_ide.py) | `packages/py/citry/citry/_portable_ide.py` | Copied with a generated-file header |
 | [`live_code.js`](../../static/playground/live_code.js) | `src/live_code.js` | Minified, not bundled |
-| [`live_code_runtime.js`](../../static/playground/live_code_runtime.js) | `src/live_code_runtime.js` and all three shared modules | Bundled and minified |
+| [`live_code_runtime.js`](../../static/playground/live_code_runtime.js) | `src/live_code_runtime.js` and its imported modules | Bundled and minified |
 | [`landing_composer.js`](../../static/playground/landing_composer.js) | `src/landing_composer.js` | Bundled and minified |
 
 `live_code.js` remains unbundled because its dynamic import must continue to

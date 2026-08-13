@@ -126,6 +126,12 @@ impl PyCatalogCompiler {
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
+    fn analyze_source(&self, py: Python<'_>, path: &str, source: &str) -> PyResult<String> {
+        self.compiler
+            .analyze_source(path, source)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
     fn clear(&self, py: Python<'_>) -> PyResult<()> {
         self.compiler
             .clear()
@@ -159,6 +165,23 @@ impl PyCompiledCatalog {
 
     fn artifact_json(&self) -> &str {
         &self.artifact_json
+    }
+
+    fn browser_artifact_json(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        request_json: &str,
+    ) -> PyResult<String> {
+        self.catalog
+            .browser_artifact_json(locale, request_json)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
+    fn browser_parser_artifact_json(&self, py: Python<'_>, locale: &str) -> PyResult<String> {
+        self.catalog
+            .browser_parser_artifact_json(locale)
+            .map_err(|error| i18n_error_to_py(py, error))
     }
 
     #[pyo3(signature = (locale, message_id, args_json="{}", attribute=None))]
@@ -228,6 +251,30 @@ impl PyCompiledCatalog {
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
+    fn format_percent(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        value: &str,
+    ) -> PyResult<String> {
+        self.catalog
+            .format_percent(locale, profile, value)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
+    fn parse_percent_json(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        input: &str,
+    ) -> PyResult<String> {
+        self.catalog
+            .parse_percent_json(locale, profile, input)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
     fn format_currency(
         &self,
         py: Python<'_>,
@@ -255,6 +302,32 @@ impl PyCompiledCatalog {
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
+    fn parse_date_json(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        input: &str,
+    ) -> PyResult<String> {
+        self.catalog
+            .parse_date_json(locale, profile, input)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
+    fn parse_date_segments_json(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        year: &str,
+        month: &str,
+        day: &str,
+    ) -> PyResult<String> {
+        self.catalog
+            .parse_date_segments_json(locale, profile, year, month, day)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
     fn format_time(
         &self,
         py: Python<'_>,
@@ -267,6 +340,34 @@ impl PyCompiledCatalog {
     ) -> PyResult<String> {
         self.catalog
             .format_time(locale, profile, hour, minute, second, nanosecond)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
+    fn parse_time_json(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        input: &str,
+    ) -> PyResult<String> {
+        self.catalog
+            .parse_time_json(locale, profile, input)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn parse_time_segments_json(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        hour: &str,
+        minute: &str,
+        second: Option<&str>,
+        day_period: Option<&str>,
+    ) -> PyResult<String> {
+        self.catalog
+            .parse_time_segments_json(locale, profile, hour, minute, second, day_period)
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
@@ -305,6 +406,39 @@ impl PyCompiledCatalog {
             .map_err(|error| i18n_error_to_py(py, error))
     }
 
+    fn parse_datetime_json(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        input: &str,
+    ) -> PyResult<String> {
+        self.catalog
+            .parse_datetime_json(locale, profile, input)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn parse_datetime_segments_json(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        year: &str,
+        month: &str,
+        day: &str,
+        hour: &str,
+        minute: &str,
+        second: Option<&str>,
+        day_period: Option<&str>,
+    ) -> PyResult<String> {
+        self.catalog
+            .parse_datetime_segments_json(
+                locale, profile, year, month, day, hour, minute, second, day_period,
+            )
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
     fn format_relative_time(
         &self,
         py: Python<'_>,
@@ -327,6 +461,19 @@ impl PyCompiledCatalog {
     ) -> PyResult<String> {
         self.catalog
             .format_list(locale, profile, &values)
+            .map_err(|error| i18n_error_to_py(py, error))
+    }
+
+    fn format_unit(
+        &self,
+        py: Python<'_>,
+        locale: &str,
+        profile: &str,
+        value: &str,
+        unit: &str,
+    ) -> PyResult<String> {
+        self.catalog
+            .format_unit(locale, profile, value, unit)
             .map_err(|error| i18n_error_to_py(py, error))
     }
 }

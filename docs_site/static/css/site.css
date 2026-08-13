@@ -794,8 +794,9 @@ body {
 /* ------------------------------------------------------------------ */
 .user-list {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
   padding-top: 1.5rem;
+  padding-bottom: 4rem;
   gap: 2.5em;
   flex-wrap: wrap;
   text-align: center;
@@ -1256,7 +1257,7 @@ body {
   font-family: var(--font-mono);
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: var(--c-fg-subtle);
+  color: var(--c-sidebar-label);
   margin-bottom: 0.5rem;
   padding: 0 0.75rem;
   font-weight: 600;
@@ -1410,7 +1411,7 @@ a.djc-sidebar__label:hover {
   text-transform: uppercase;
   letter-spacing: 0.1em;
   font-weight: 600;
-  color: var(--c-fg-subtle);
+  color: var(--c-sidebar-label);
 }
 
 .djc-sidebar__group--top > .djc-sidebar__group-label:hover {

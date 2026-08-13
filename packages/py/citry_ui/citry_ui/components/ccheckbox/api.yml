@@ -135,3 +135,5 @@ interfaces:
       - {id: checkbox-label-pos, name: CCheckboxLabelPos, definition: 'Literal["start", "end"]'}
   - {id: checkbox-default-slot-data, kind: record, name: CCheckboxDefaultSlotData, entries: []}
   - {id: checkbox-description-slot-data, kind: record, name: CCheckboxDescriptionSlotData, entries: []}
+
+translations: []

@@ -47,7 +47,7 @@ class ProductCard(Component):
           />
         </c-for>
         <c-empty>
-          <p>No tags yet.</p>
+          <p>{{ tr("product-card-no-tags") }}</p>
         </c-empty>
 
         <button type="button" @c-click="like">
@@ -75,6 +75,10 @@ class ProductCard(Component):
       .tag--active {
         color: var(--accent);
       }
+    """
+
+    messages = """
+      product-card-no-tags = No tags yet.
     """
 
     class Dependencies:

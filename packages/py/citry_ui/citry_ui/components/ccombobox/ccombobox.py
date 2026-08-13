@@ -1,15 +1,19 @@
 """Styled local and remote single-select Combobox component family."""
 
+# ruff: noqa: E501 - Citry text bindings require one exact expression body.
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
+from citry_ui.components._active_descendant import ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY
 from citry_ui.components._aria import merge_idrefs
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._context import FIELD_CONTEXT_KEY, FORM_CONTEXT_KEY
+from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -54,6 +58,9 @@ class CComboboxErrorSlotData:
 
 
 class CCombobox(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         options: Sequence[CComboboxOption] = ()
@@ -96,11 +103,42 @@ class CCombobox(LibraryComponent):
         empty: SlotInput[CComboboxEmptySlotData] | None = None
         error: SlotInput[CComboboxErrorSlotData] | None = None
 
+    def _localized_messages(self, kwargs: Kwargs) -> dict[str, object]:
+        specs = (
+            ("required_message", "citry-ui-combobox-required"),
+            ("clear_label", "citry-ui-combobox-clear"),
+            ("open_label", "citry-ui-combobox-open"),
+            ("close_label", "citry-ui-combobox-close"),
+            ("loading_label", "citry-ui-combobox-loading"),
+            ("empty_label", "citry-ui-combobox-empty"),
+            ("error_label", "citry-ui-combobox-error"),
+        )
+        result: dict[str, object] = {}
+        for field_name, _message_id in specs:
+            result[field_name] = getattr(kwargs, field_name)
+            result[f"catalog_{field_name}"] = uses_catalog_default(self, field_name)
+        if result["catalog_required_message"]:
+            result["required_message"] = self.i18n.tr("citry-ui-combobox-required")
+        if result["catalog_clear_label"]:
+            result["clear_label"] = self.i18n.tr("citry-ui-combobox-clear")
+        if result["catalog_open_label"]:
+            result["open_label"] = self.i18n.tr("citry-ui-combobox-open")
+        if result["catalog_close_label"]:
+            result["close_label"] = self.i18n.tr("citry-ui-combobox-close")
+        if result["catalog_loading_label"]:
+            result["loading_label"] = self.i18n.tr("citry-ui-combobox-loading")
+        if result["catalog_empty_label"]:
+            result["empty_label"] = self.i18n.tr("citry-ui-combobox-empty")
+        if result["catalog_error_label"]:
+            result["error_label"] = self.i18n.tr("citry-ui-combobox-error")
+        return result
+
     def template_data(
         self,
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, Any]:
+        messages = self._localized_messages(kwargs)
         if kwargs.name is not None:
             validate_non_empty_string("CCombobox", "name", kwargs.name)
         validate_html_id("CCombobox", kwargs.id)
@@ -134,7 +172,7 @@ class CCombobox(LibraryComponent):
             "empty_label",
             "error_label",
         ):
-            validate_non_empty_string("CCombobox", field_name, getattr(kwargs, field_name))
+            validate_non_empty_string("CCombobox", field_name, messages[field_name])
         validate_choice("CCombobox", "variant", kwargs.variant, ("outline", "filled", "plain"))
         validate_choice("CCombobox", "size", kwargs.size, ("sm", "md", "lg"))
         reject_owned_attrs(
@@ -293,14 +331,14 @@ class CCombobox(LibraryComponent):
             "placeholder": kwargs.placeholder,
             "autocomplete": kwargs.autocomplete,
             "inputmode": kwargs.inputmode,
-            "clear_label": kwargs.clear_label,
-            "open_label": kwargs.open_label,
-            "close_label": kwargs.close_label,
-            "trigger_label": kwargs.close_label if effective_open else kwargs.open_label,
+            "clear_label": messages["clear_label"],
+            "open_label": messages["open_label"],
+            "close_label": messages["close_label"],
+            "trigger_label": messages["close_label"] if effective_open else messages["open_label"],
             "trigger_disabled": disabled or readonly,
-            "loading_label": kwargs.loading_label,
-            "empty_label": kwargs.empty_label,
-            "error_label": kwargs.error_label,
+            "loading_label": messages["loading_label"],
+            "empty_label": messages["empty_label"],
+            "error_label": messages["error_label"],
             "variant": kwargs.variant,
             "size": kwargs.size,
             "options": resolved_options,
@@ -311,6 +349,7 @@ class CCombobox(LibraryComponent):
             "attrs": merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style),
             "input_attrs": caller_input_attrs,
             "field_control": field is not None,
+            **{key: value for key, value in messages.items() if key.startswith("catalog_")},
         }
 
     def js_data(
@@ -318,6 +357,7 @@ class CCombobox(LibraryComponent):
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, object]:
+        messages = self._localized_messages(kwargs)
         options = self._normalize_options(kwargs.options)
         field = self.inject(FIELD_CONTEXT_KEY, None)
         form = self.inject(FORM_CONTEXT_KEY, None)
@@ -371,9 +411,12 @@ class CCombobox(LibraryComponent):
             "filter": kwargs.filter,
             "minChars": kwargs.min_chars,
             "debounceMs": kwargs.debounce_ms,
-            "requiredMessage": kwargs.required_message,
-            "openLabel": kwargs.open_label,
-            "closeLabel": kwargs.close_label,
+            "requiredMessage": messages["required_message"],
+            "openLabel": messages["open_label"],
+            "closeLabel": messages["close_label"],
+            "catalogRequiredMessage": messages["catalog_required_message"],
+            "catalogOpenLabel": messages["catalog_open_label"],
+            "catalogCloseLabel": messages["catalog_close_label"],
             "variant": kwargs.variant,
             "size": kwargs.size,
             "listboxId": f"{input_id}-listbox",
@@ -473,7 +516,8 @@ class CCombobox(LibraryComponent):
           <button
             class="cui-combobox__clear"
             type="button"
-            c-aria-label="clear_label"
+            c-aria-label="tr('citry-ui-combobox-clear') if catalog_clear_label else clear_label"
+            c-$c-tr:citry-ui-combobox-clear[aria-label]="True if catalog_clear_label else None"
             c-hidden="not show_clear"
             tabindex="-1"
             data-citry-combobox-clear
@@ -486,7 +530,11 @@ class CCombobox(LibraryComponent):
           <button
             class="cui-combobox__trigger"
             type="button"
-            c-aria-label="trigger_label"
+            c-aria-label="(
+              tr('citry-ui-combobox-close') if catalog_close_label else close_label
+            ) if open else (
+              tr('citry-ui-combobox-open') if catalog_open_label else open_label
+            )"
             c-aria-controls="listbox_id"
             c-aria-expanded="aria_expanded"
             aria-haspopup="listbox"
@@ -545,7 +593,7 @@ class CCombobox(LibraryComponent):
               <c-slot name="loading" />
             </c-if>
             <c-else>
-              {{ loading_label }}
+              <span c-$c-tr:citry-ui-combobox-loading="True if catalog_loading_label else None">{{ tr('citry-ui-combobox-loading') if catalog_loading_label else loading_label }}</span>
             </c-else>
           </div>
           <div
@@ -558,7 +606,7 @@ class CCombobox(LibraryComponent):
               <c-slot name="empty" />
             </c-if>
             <c-else>
-              {{ empty_label }}
+              <span c-$c-tr:citry-ui-combobox-empty="True if catalog_empty_label else None">{{ tr('citry-ui-combobox-empty') if catalog_empty_label else empty_label }}</span>
             </c-else>
           </div>
           <div
@@ -570,7 +618,7 @@ class CCombobox(LibraryComponent):
               <c-slot name="error" />
             </c-if>
             <c-else>
-              {{ error_label }}
+              <span c-$c-tr:citry-ui-combobox-error="True if catalog_error_label else None">{{ tr('citry-ui-combobox-error') if catalog_error_label else error_label }}</span>
             </c-else>
           </div>
         </div>
@@ -603,7 +651,7 @@ class CCombobox(LibraryComponent):
           onOpenChange: {},
           onLoadError: {},
         },
-        init: ({ els, data, props, effect, inject }) => {
+        init: ({ els, data, props, effect, inject, i18n }) => {
           const root = els[0];
           const input = root.querySelector('[data-citry-ui-part="input"]');
           const hiddenInput = root.querySelector("[data-citry-combobox-form-value]");
@@ -616,17 +664,26 @@ class CCombobox(LibraryComponent):
           const field = inject(Symbol.for("citry-ui:field"), null);
           const form = inject(Symbol.for("citry-ui:form"), null);
           const nativeForm = hiddenInput.form;
+          const activeRuntime = globalThis[Symbol.for("citry-ui:active-descendant-runtime")];
+          if (activeRuntime?.generation !== 1) {
+            throw new Error(
+              "[citry-ui] CCombobox active-descendant runtime dependency did not load.",
+            );
+          }
+          const activeCollection = activeRuntime.create({
+            input,
+            listbox,
+            idPrefix: `${data.listboxId}-option`,
+          });
           const allowedValues = {
             filter: ["contains", "starts_with", "none"],
             variant: ["outline", "filled", "plain"],
             size: ["sm", "md", "lg"],
           };
           const invalidEpisodes = new Map();
-          const optionIds = new Map();
           const deferredTimers = new Set();
           const knownLabels = new Map();
           const maxKnownLabels = 1000;
-          let nextOptionId = 1;
           let items = data.items;
           let visibleItems = [];
           let selectedValue = data.value;
@@ -644,7 +701,6 @@ class CCombobox(LibraryComponent):
           let skipNextBlurHandling = false;
           let effectInitialized = false;
           let destroyed = false;
-          let lastScrolledHighlight = null;
           let internalLoading = false;
           let remoteError = false;
           let debounceTimer = null;
@@ -808,13 +864,7 @@ class CCombobox(LibraryComponent):
             }
           };
           rememberLabels(items);
-          const optionId = (value) => {
-            if (!optionIds.has(value)) {
-              optionIds.set(value, `${data.listboxId}-option-${nextOptionId}`);
-              nextOptionId += 1;
-            }
-            return optionIds.get(value);
-          };
+          const optionId = (value) => activeCollection.idFor(value);
           const queryLength = (value) => Array.from(value).length;
           const filterItems = () => {
             if (loader || configuration.filter === "none") {
@@ -837,42 +887,21 @@ class CCombobox(LibraryComponent):
             configuration.loading || internalLoading || remoteError
           );
           const updateOptionStates = () => {
-            listbox.querySelectorAll('[data-citry-ui-part="option"]').forEach((element) => {
-              const selected = element.dataset.value === selectedValue;
-              const highlighted = (
-                !optionsUnavailable() && element.dataset.value === highlightedValue
-              );
-              const ariaSelected = open && highlightedValue !== null ? highlighted : selected;
-              element.setAttribute("aria-selected", ariaSelected ? "true" : "false");
-              element.toggleAttribute("data-selected", selected);
-              element.toggleAttribute("data-highlighted", highlighted);
+            activeCollection.sync({
+              items: visibleItems,
+              activeValue: highlightedValue,
+              selectedValue,
+              open,
+              unavailable: optionsUnavailable(),
+              optionFor: (value) => Array.from(listbox.children)
+                .find((element) => element.dataset.value === value),
+              activeAttribute: "data-highlighted",
             });
-            const activeId = open && !optionsUnavailable() && highlightedValue !== null
-              ? optionIds.get(highlightedValue)
-              : null;
-            const activeElement = activeId
-              ? Array.from(listbox.children).find((element) => element.id === activeId)
-              : null;
-            if (activeElement) {
-              input.setAttribute("aria-activedescendant", activeId);
-              if (lastScrolledHighlight !== highlightedValue) {
-                activeElement.scrollIntoView({ block: "nearest" });
-                lastScrolledHighlight = highlightedValue;
-              }
-            } else {
-              input.removeAttribute("aria-activedescendant");
-              lastScrolledHighlight = null;
-            }
           };
           const renderItems = ({ autoHighlight = false, highlightDirection = 1 } = {}) => {
             filterItems();
             listbox.replaceChildren();
-            const currentValues = new Set(visibleItems.map((item) => item.value));
-            for (const value of optionIds.keys()) {
-              if (!currentValues.has(value)) {
-                optionIds.delete(value);
-              }
-            }
+            activeCollection.retain(visibleItems.map((item) => item.value));
             visibleItems.forEach((item) => {
               const option = document.createElement("li");
               const label = document.createElement("span");
@@ -1016,7 +1045,7 @@ class CCombobox(LibraryComponent):
             if (!nextOpen) {
               abortRequest();
               highlightedValue = null;
-              lastScrolledHighlight = null;
+              activeCollection.resetScroll();
             }
             updatePresentation();
             updateOptionStates();
@@ -1269,17 +1298,12 @@ class CCombobox(LibraryComponent):
               updateOptionStates();
               return;
             }
-            const enabled = visibleItems.filter((item) => !item.disabled);
-            if (enabled.length === 0) {
-              highlightedValue = null;
-              updateOptionStates();
-              return;
-            }
-            const current = enabled.findIndex((item) => item.value === highlightedValue);
-            const next = current === -1
-              ? (delta > 0 ? 0 : enabled.length - 1)
-              : (current + delta + enabled.length) % enabled.length;
-            highlightedValue = enabled[next].value;
+            highlightedValue = activeCollection.move(
+              visibleItems,
+              highlightedValue,
+              delta,
+              true,
+            );
             updateOptionStates();
           };
           const applyUserInput = (source) => {
@@ -1361,8 +1385,10 @@ class CCombobox(LibraryComponent):
               && (event.key === "Home" || event.key === "End")
             ) {
               event.preventDefault();
-              const enabled = visibleItems.filter((item) => !item.disabled);
-              highlightedValue = (event.key === "Home" ? enabled[0] : enabled[enabled.length - 1])?.value ?? null;
+              highlightedValue = activeCollection.edge(
+                visibleItems,
+                event.key === "Home" ? 1 : -1,
+              );
               updateOptionStates();
             }
           };
@@ -1694,6 +1720,34 @@ class CCombobox(LibraryComponent):
               });
             }
           });
+          const i18nBindings = [];
+          if (i18n && data.catalogRequiredMessage) {
+            i18nBindings.push(i18n.bind({
+              message: "citry-ui-combobox-required",
+              onChange: (text) => {
+                data.requiredMessage = text;
+                updateValidity();
+              },
+            }));
+          }
+          if (i18n && data.catalogOpenLabel) {
+            i18nBindings.push(i18n.bind({
+              message: "citry-ui-combobox-open",
+              onChange: (text) => {
+                data.openLabel = text;
+                updatePresentation();
+              },
+            }));
+          }
+          if (i18n && data.catalogCloseLabel) {
+            i18nBindings.push(i18n.bind({
+              message: "citry-ui-combobox-close",
+              onChange: (text) => {
+                data.closeLabel = text;
+                updatePresentation();
+              },
+            }));
+          }
           root.setAttribute("data-citry-combobox-initialized", "");
 
           return () => {
@@ -1717,6 +1771,8 @@ class CCombobox(LibraryComponent):
             }
             deferredTimers.clear();
             field?.setNativeInvalid(false);
+            activeCollection.cleanup();
+            i18nBindings.forEach((binding) => binding.dispose());
             listbox.replaceChildren();
             root.removeAttribute("data-citry-combobox-initialized");
           };
@@ -1940,6 +1996,23 @@ class CCombobox(LibraryComponent):
         }
       }
     """
+
+    messages = """
+      citry-ui-combobox-required = Select an option.
+      citry-ui-combobox-clear = Clear selection
+      citry-ui-combobox-open = Show options
+      citry-ui-combobox-close = Hide options
+      citry-ui-combobox-loading = Loading options...
+      citry-ui-combobox-empty = No options found.
+      citry-ui-combobox-error = Options could not be loaded.
+    """
+
+
+class _CComboboxDependencies:
+    js: ClassVar = [ACTIVE_DESCENDANT_RUNTIME_DEPENDENCY]
+
+
+CCombobox.Dependencies = _CComboboxDependencies
 
 
 __all__ = [

@@ -1,11 +1,12 @@
 /**
  * Citry's events client runtime (served at `ext/events/runtime.js`).
  *
- * This file is the source; the committed build output lives at
- * `packages/py/citry/citry/ext/events/client/citry-events.js` (esbuild iife
- * bundle, see this package's `build` script). The bundle embeds a pinned
- * AlpineJS 3.15.12 plus `@alpinejs/morph` 3.15.12 as the reactivity layer
- * (design: docs/design/events.md section 5, decision 14.1.10).
+ * This file is the shared source for two committed esbuild iife outputs:
+ * `citry-events.js` embeds standard AlpineJS 3.16.1 and
+ * `citry-events-csp.js` aliases Alpine's entry to the matching CSP build.
+ * Both embed `@alpinejs/morph` 3.16.1 as the reactivity layer (design:
+ * docs/design/events.md section 5, decision 14.1.10, and
+ * docs/design/security_csp.md phase 7).
  *
  * What this runtime does (the v1 "Alpine layer": scopes and magics):
  *
@@ -153,6 +154,8 @@ import {
   type EventsManifest,
   type EventsResultEnvelope as ResultEnvelope,
 } from "@citry/protocol-events-v1";
+
+declare const CITRY_ALPINE_RUNTIME_VARIANT: "standard" | "csp";
 
 // ----- the runtime's types (erased at build time; esbuild emits none of this) -----
 
@@ -716,6 +719,12 @@ interface CitryGlobal {
   /** citry.js's dependency manager; only the payload-decorator hook is used here. */
   manager?: {
     decorateContext?: (decorator: (ctx: ComponentPayload, control?: ComponentInvocationControl | null) => void) => void;
+    _prepareFrameworkManifests?(
+      elements: Element[],
+      options?: { acceptedOwners?: ReadonlySet<string> | null; candidateRoot?: ParentNode | null },
+    ): Promise<unknown>;
+    _commitFrameworkManifests?(prepared: unknown): void;
+    _rollbackFrameworkManifests?(prepared: unknown, error?: unknown): void;
     ownership?: {
       has(revision: string): boolean;
       whenReady(revision: string): Promise<unknown>;
@@ -764,13 +773,16 @@ interface CitryGlobal {
       _expectRetirement(renderIds: string[]): void;
       _claimTag(el: Element): void;
       _preflightDependency(manifest: unknown, revision: string): unknown;
-      _applyDependency(transaction: unknown, manifest: unknown, tag: Element): Promise<void>;
+      _prepareDependency(transaction: unknown, manifest: unknown): Promise<unknown>;
+      _applyDependency(transaction: unknown, manifest: unknown, tag: Element, prepared?: unknown): Promise<void>;
+      _rollbackDependency(prepared: unknown, error?: unknown): void;
     };
   };
   alpine?: {
     _install(
       alpine: import("alpinejs").AlpineGlobal,
       morph: (alpine: import("alpinejs").AlpineGlobal) => void,
+      variant: "standard" | "csp",
     ): boolean;
     _register(options: {
       root?: () => string;
@@ -866,7 +878,7 @@ declare global {
   var alpineRuntime = C.alpine;
   // Run this before the Events duplicate guard so a second bundled runtime is
   // diagnosed and cannot silently construct another observing Alpine copy.
-  if (!alpineRuntime._install(Alpine, morphPlugin)) return;
+  if (!alpineRuntime._install(Alpine, morphPlugin, CITRY_ALPINE_RUNTIME_VARIANT)) return;
   // Already installed (e.g. a document page and a fragment both loaded the
   // runtime). The bootstrap stub is not "installed": it marks itself with
   // `_stubQueue` and is replaced below, its queue drained.
@@ -1879,13 +1891,13 @@ declare global {
     var tag: HTMLScriptElement | null;
     var src =
       current && typeof (current as HTMLScriptElement).src === "string" ? (current as HTMLScriptElement).src : "";
-    if (!/\/runtime\.js([?#]|$)/.test(src)) {
+    if (!/\/runtime(?:-csp)?\.js([?#]|$)/.test(src)) {
       // Not evaluating from the served runtime tag (an inlined bundle or a
       // hand-written page): find the fixed runtime route.
-      tag = document.querySelector('script[src*="ext/events/runtime.js"]');
+      tag = document.querySelector('script[src*="ext/events/runtime.js"],script[src*="ext/events/runtime-csp.js"]');
       src = tag ? tag.src : "";
     }
-    var match = /^(.*\/)runtime\.js([?#].*)?$/.exec(src);
+    var match = /^(.*\/)runtime(?:-csp)?\.js([?#].*)?$/.exec(src);
     return match ? match[1] : null;
   };
   var detectedEventsBase = detectEventsBase();
@@ -4488,7 +4500,7 @@ declare global {
     }
   };
 
-  var applyRenderAction = function (action: ResultAction, run: ApplyRun) {
+  var applyRenderAction = async function (action: ResultAction, run: ApplyRun) {
     var targetSpec = typeof action.target === "string" ? action.target : "";
     var swap = typeof action.swap === "string" && action.swap ? action.swap : "morph";
     if (!targetSpec) {
@@ -4600,6 +4612,10 @@ declare global {
     var ownershipPlan: OwnershipAdoptionPlan | null = null;
     var adoptionRoot: { componentId: string; classId: string } | null = null;
     var dependencyManifest: unknown = null;
+    var dependencyPreparation: unknown = null;
+    var frameworkPreparation: unknown = null;
+    var fragmentMutated = false;
+    var fragmentPreparationFailed = false;
     var priorClasses: { classId: string; had: boolean; descriptor: ClassDescriptor | undefined }[] = [];
     var priorErrorBoxes: ErrorBoxSnapshot[] = [];
     var descriptorRevisionStaged = false;
@@ -4750,9 +4766,64 @@ declare global {
           return;
         }
         ownership._applyAdoptionPlan(ownershipPlan);
+        if (parsed.dependencyTag && dependencyManifest) {
+          try {
+            dependencyPreparation = await ownership._prepareDependency(ownershipTransaction, dependencyManifest);
+          } catch (err) {
+            fragmentPreparationFailed = true;
+            throw err;
+          }
+          if (selfRender && !epochAllowsApply(run, run.anchor as Anchor)) {
+            ownership._rollbackDependency(
+              dependencyPreparation,
+              new Error("the incoming render became stale while its framework manifests prepared"),
+            );
+            dependencyPreparation = null;
+            ownership._abortAdoption(
+              ownershipTransaction,
+              new Error("the incoming render became stale while its framework manifests prepared"),
+            );
+            dropStaleEpoch(run, "a self-render");
+            return;
+          }
+        }
+      }
+      const acceptedIncomingIds = ownershipPlan?.acceptedIncomingRenderIds ?? null;
+      const frameworkManager = globalThis.Citry?.manager;
+      if (parsed.tags.length && frameworkManager?._prepareFrameworkManifests) {
+        try {
+          frameworkPreparation = await frameworkManager._prepareFrameworkManifests(parsed.tags, {
+            acceptedOwners: acceptedIncomingIds,
+            candidateRoot: parsed.fragment,
+          });
+        } catch (err) {
+          fragmentPreparationFailed = true;
+          throw err;
+        }
+        if (selfRender && !epochAllowsApply(run, run.anchor as Anchor)) {
+          frameworkManager._rollbackFrameworkManifests?.(
+            frameworkPreparation,
+            new Error("the incoming render became stale while its framework manifests prepared"),
+          );
+          frameworkPreparation = null;
+          if (dependencyPreparation && ownership) {
+            ownership._rollbackDependency(
+              dependencyPreparation,
+              new Error("the incoming render became stale while its framework manifests prepared"),
+            );
+            dependencyPreparation = null;
+          }
+          if (ownershipTransaction && ownership) {
+            ownership._abortAdoption(
+              ownershipTransaction,
+              new Error("the incoming render became stale while its framework manifests prepared"),
+            );
+          }
+          dropStaleEpoch(run, "a self-render");
+          return;
+        }
       }
 
-      const acceptedIncomingIds = ownershipPlan?.acceptedIncomingRenderIds ?? null;
       if (fragmentEvents.staged) {
         const acceptedClassIds = new Set<string>();
         fragmentEvents.staged.instances.forEach(function (meta) {
@@ -4863,6 +4934,7 @@ declare global {
       }
       if (ownershipTransaction && ownership) ownership._activateAdoption(ownershipTransaction);
 
+      fragmentMutated = true;
       regions.forEach(function (regionEls, index) {
         var stripOuterCaps =
           parsed.graphRevision != null && isInstanceTarget && (swap === "morph" || swap === "replace");
@@ -4894,14 +4966,25 @@ declare global {
         applyFragmentToRegion(regionEls, parsed, swap, state, index === 0, placementIds[index], stripOuterCaps);
       });
 
+      if (frameworkPreparation) {
+        globalThis.Citry?.manager?._commitFrameworkManifests?.(frameworkPreparation);
+      }
+
       let adoptionReady: Promise<void> = Promise.resolve();
       if (ownershipTransaction && ownership) {
         ownership._commitAdoption(ownershipTransaction);
         consumedOwnershipRevisions.add(parsed.graphRevision as string);
         if (parsed.dependencyTag && dependencyManifest) {
-          adoptionReady = ownership._applyDependency(ownershipTransaction, dependencyManifest, parsed.dependencyTag);
+          adoptionReady = ownership._applyDependency(
+            ownershipTransaction,
+            dependencyManifest,
+            parsed.dependencyTag,
+            dependencyPreparation,
+          );
+          dependencyPreparation = null;
         }
       }
+      frameworkPreparation = null;
 
       // The post-swap half: retire the old index entries the patch no longer
       // needs, then the departed ids (synchronously: a later action in this
@@ -4937,6 +5020,10 @@ declare global {
       scheduleAnchorSweep();
       return adoptionReady;
     } catch (err) {
+      if (frameworkPreparation) {
+        globalThis.Citry?.manager?._rollbackFrameworkManifests?.(frameworkPreparation, err);
+      }
+      if (dependencyPreparation && ownership) ownership._rollbackDependency(dependencyPreparation, err);
       const restoredClassIds = new Set<string>();
       if (descriptorRevisionStaged && parsed.graphRevision != null) {
         restoreDescriptorRevision(parsed.graphRevision, hadDescriptorRevision, priorDescriptorRevision);
@@ -4963,10 +5050,12 @@ declare global {
           if (failedAnchor && failedAnchor !== run.anchor) retireAnchor(failedAnchor);
         });
       }
-      if (selfRender && run.anchor && run.anchor.componentId != null) retireAnchor(run.anchor);
-      targetEls.forEach(function (element) {
-        if (element.isConnected) element.remove();
-      });
+      if (fragmentMutated || !fragmentPreparationFailed) {
+        if (selfRender && run.anchor && run.anchor.componentId != null) retireAnchor(run.anchor);
+        targetEls.forEach(function (element) {
+          if (element.isConnected) element.remove();
+        });
+      }
       scheduleAnchorSweep();
       throw err;
     }

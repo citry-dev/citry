@@ -26,11 +26,14 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
 
 import {
   ALPINE_VERSION as EXPECTED_VERSION,
   citryClientBuildOptions,
+  citryCspClientBuildOptions,
+  citryI18nBuildOptions,
   instrumentAlpineDirectives,
   instrumentAlpineMorphPlanner,
 } from "../build-support.mjs";
@@ -48,6 +51,7 @@ globalThis.document = { createElement: () => ({}), addEventListener: () => {} };
 const require = createRequire(import.meta.url);
 const Alpine = require("alpinejs").default;
 const morphExports = require("@alpinejs/morph");
+const cspExports = require("@alpinejs/csp");
 
 test("the committed browser bundle exactly matches its TypeScript source", async () => {
   const output = await build(citryClientBuildOptions({ write: false, outfile: undefined }));
@@ -57,6 +61,64 @@ test("the committed browser bundle exactly matches its TypeScript source", async
   );
   assert.equal(output.outputFiles.length, 1);
   assert.equal(output.outputFiles[0].text, committed);
+});
+
+test("the committed CSP browser bundle exactly matches its TypeScript source", async () => {
+  const output = await build(citryCspClientBuildOptions({ write: false, outfile: undefined }));
+  const committed = readFileSync(
+    new URL("../../../py/citry/citry/ext/events/client/citry-events-csp.js", import.meta.url),
+    "utf8",
+  );
+  assert.equal(output.outputFiles.length, 1);
+  assert.equal(output.outputFiles[0].text, committed);
+});
+
+test("the CSP build alias cannot be replaced by a caller", () => {
+  assert.throws(() => citryCspClientBuildOptions({ alias: {} }), /owns its fixed Alpine entry alias/);
+  assert.throws(() => citryClientBuildOptions({ define: {} }), /owns its fixed Alpine runtime identity/);
+});
+
+test("the complete CSP bundle owns both evaluator paths without dynamic evaluation", async () => {
+  const standard = await build(citryClientBuildOptions({ write: false, outfile: undefined, metafile: true }));
+  const csp = await build(citryCspClientBuildOptions({ write: false, outfile: undefined, metafile: true }));
+  const standardSource = standard.outputFiles[0].text;
+  const cspSource = csp.outputFiles[0].text;
+  const standardInputs = Object.keys(standard.metafile.inputs);
+  const cspInputs = Object.keys(csp.metafile.inputs);
+
+  assert.ok(standardInputs.some((path) => /(?:^|\/)alpinejs\/src\/index\.js$/.test(path)));
+  assert.ok(!standardInputs.some((path) => path.includes("@alpinejs/csp/src/index.js")));
+  assert.ok(cspInputs.some((path) => path.includes("@alpinejs/csp/src/index.js")));
+  assert.ok(!cspInputs.some((path) => /(?:^|\/)alpinejs\/src\/index\.js$/.test(path)));
+
+  assert.ok(standardSource.includes("setEvaluator(normalEvaluator)"));
+  assert.ok(standardSource.includes("setRawEvaluator(normalRawEvaluator)"));
+  assert.ok(cspSource.includes("setEvaluator(cspEvaluator)"));
+  assert.ok(cspSource.includes("setRawEvaluator(cspRawEvaluator)"));
+  assert.ok(!cspSource.includes("setEvaluator(normalEvaluator)"));
+  assert.ok(!cspSource.includes("setRawEvaluator(normalRawEvaluator)"));
+  assert.ok(!cspSource.includes("AsyncFunction"));
+  assert.doesNotMatch(cspSource, /new Function\s*\(/);
+  assert.match(standardSource, /_install\([^\n]+, "standard"\)/);
+  assert.match(cspSource, /_install\([^\n]+, "csp"\)/);
+});
+
+test("the committed i18n bundle exactly matches its TypeScript source", async () => {
+  const output = await build(citryI18nBuildOptions({ write: false, outfile: undefined }));
+  const committed = readFileSync(
+    new URL("../../../py/citry/citry/ext/i18n/client/citry-i18n.js", import.meta.url),
+    "utf8",
+  );
+  assert.equal(output.outputFiles.length, 1);
+  assert.equal(output.outputFiles[0].text, committed);
+  assert.ok(
+    gzipSync(committed, { level: 9 }).byteLength <= 30 * 1024,
+    "the opt-in i18n runtime must stay within its 30 KiB gzip budget",
+  );
+});
+
+test("the Fluent browser runtime pin is exact", () => {
+  assert.equal(require("@fluent/bundle/package.json").version, "0.19.1");
 });
 
 test("the pinned Alpine directive handler is instrumented exactly", () => {
@@ -85,10 +147,13 @@ test("the pinned Alpine morph working sequence is instrumented exactly", () => {
   assert.notEqual(instrumented, source);
 });
 
-test("the Alpine and morph pins are exact", () => {
+test("the Alpine, morph, and CSP pins are exact", () => {
   assert.equal(Alpine.version, EXPECTED_VERSION);
   assert.equal(require("alpinejs/package.json").version, EXPECTED_VERSION);
   assert.equal(require("@alpinejs/morph/package.json").version, EXPECTED_VERSION);
+  assert.equal(require("@alpinejs/csp/package.json").version, EXPECTED_VERSION);
+  assert.equal(cspExports.default.version, EXPECTED_VERSION);
+  assert.equal(typeof cspExports.default.start, "function");
 });
 
 test("the private scope APIs the runtime calls exist", () => {

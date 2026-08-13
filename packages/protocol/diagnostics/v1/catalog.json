@@ -145,6 +145,28 @@
       "documentationPath": "/ide/diagnostics/#citry.alpine.unknown-variable"
     },
     {
+      "code": "citry.csp.incompatible-browser-code",
+      "constant": "CSP_INCOMPATIBLE_BROWSER_CODE",
+      "title": "Browser code is incompatible with strict CSP",
+      "summary": "An Alpine or Citry browser expression uses a host or source form unsupported by the pinned Alpine CSP evaluator.",
+      "when": "The selected Citry application configures CSP warning or strict mode and a source-classifiable browser expression is incompatible with Alpine CSP 3.16.1.",
+      "defaultSeverity": "error",
+      "configurableSeverity": true,
+      "surfaces": ["check", "lsp"],
+      "parameters": { "detail": "The unsupported directive, host, token, or operation." },
+      "messages": {
+        "default": "Alpine CSP 3.16.1 cannot evaluate {detail} here. Move complex logic to Component.js and call a scope method from the template."
+      },
+      "examples": [
+        {
+          "title": "Move an arrow function into Component.js",
+          "language": "citry-html",
+          "source": "<button @click=\"items.map(item => item.id)\">Save</button>"
+        }
+      ],
+      "documentationPath": "/ide/diagnostics/#citry.csp.incompatible-browser-code"
+    },
+    {
       "code": "citry.component-js.unknown-variable",
       "constant": "COMPONENT_JS_UNKNOWN_VARIABLE",
       "title": "Unknown component JavaScript variable",
@@ -369,6 +391,66 @@
       "parameters": { "detail": "Python source failure detail." },
       "messages": { "default": "Citry could not analyze this Python source: {detail}" },
       "documentationPath": "/ide/diagnostics/#citry.check.python-source-unreadable"
+    },
+    {
+      "code": "citry.i18n.catalog-invalid",
+      "constant": "I18N_CATALOG_INVALID",
+      "title": "Invalid Fluent catalog source",
+      "summary": "A Fluent source unit failed Citry's production parser or i18n contract checks.",
+      "when": "A messages block or catalog file contains invalid Fluent syntax, an unsupported parameter type, or another source-level i18n error.",
+      "defaultSeverity": "error",
+      "surfaces": ["check", "lsp"],
+      "parameters": { "detail": "Compiler-provided catalog error." },
+      "messages": { "default": "{detail}" },
+      "documentationPath": "/ide/diagnostics/#citry.i18n.catalog-invalid"
+    },
+    {
+      "code": "citry.i18n.unknown-message",
+      "constant": "I18N_UNKNOWN_MESSAGE",
+      "title": "Unknown i18n message",
+      "summary": "A literal translation key is absent from the checked project catalog.",
+      "when": "A direct tr() call, <c-trans> tag, $c-tr binding, or bounded browser bind() call names a message value or attribute that no component or configured catalog package defines.",
+      "defaultSeverity": "error",
+      "surfaces": ["check", "lsp"],
+      "parameters": { "detail": "Unknown-message explanation." },
+      "messages": { "default": "{detail}" },
+      "documentationPath": "/ide/diagnostics/#citry.i18n.unknown-message"
+    },
+    {
+      "code": "citry.i18n.argument-invalid",
+      "constant": "I18N_ARGUMENT_INVALID",
+      "title": "Invalid i18n argument",
+      "summary": "A translation binding, formatter, parser, or rich-message call does not match its checked contract.",
+      "when": "A literal i18n call or $c-tr binding is malformed, has missing, unknown, or mistyped message inputs, uses an unknown named profile, or supplies the wrong <c-trans> values or fills.",
+      "defaultSeverity": "error",
+      "surfaces": ["check", "lsp"],
+      "parameters": { "detail": "Argument-contract explanation." },
+      "messages": { "default": "{detail}" },
+      "documentationPath": "/ide/diagnostics/#citry.i18n.argument-invalid"
+    },
+    {
+      "code": "citry.i18n.cross-language-fallback",
+      "constant": "I18N_CROSS_LANGUAGE_FALLBACK",
+      "title": "Cross-language i18n fallback",
+      "summary": "A plain translated string falls back to a different language without a place to carry that language metadata.",
+      "when": "A text-only translation can select a source or fallback locale whose canonical language tag differs from the requested locale.",
+      "defaultSeverity": "error",
+      "surfaces": ["check"],
+      "parameters": { "detail": "Fallback coverage explanation." },
+      "messages": { "default": "{detail}" },
+      "documentationPath": "/ide/diagnostics/#citry.i18n.cross-language-fallback"
+    },
+    {
+      "code": "citry.i18n.client-message-invalid",
+      "constant": "I18N_CLIENT_MESSAGE_INVALID",
+      "title": "Invalid client i18n message",
+      "summary": "A message declared for browser use is missing or lacks complete locale coverage.",
+      "when": "Component.I18n.client_messages names an unknown output or an output that would fall back across languages in a client-enabled subtree.",
+      "defaultSeverity": "error",
+      "surfaces": ["check"],
+      "parameters": { "detail": "Client-message contract explanation." },
+      "messages": { "default": "{detail}" },
+      "documentationPath": "/ide/diagnostics/#citry.i18n.client-message-invalid"
     },
     {
       "code": "citry.format.syntax",

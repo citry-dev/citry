@@ -33,6 +33,7 @@ from citry_lsp.engine import (
     expression_shadows,
     hover,
     html_projection,
+    i18n_diagnostics,
     references,
     render_template_variable_hover,
     semantic_dependencies,
@@ -217,6 +218,637 @@ def _position(source: str, marker: str, offset: int = 0) -> types.Position:
     index = source.index(marker) + offset
     before = source[:index]
     return types.Position(before.count("\n"), len(before.rsplit("\n", 1)[-1].encode("utf-16-le")) // 2)
+
+
+def _i18n_project(tmp_path: Path) -> tuple[ProjectState, Path, str]:
+    app_file = tmp_path / "i18n_app.py"
+    source = '''\
+from datetime import date
+
+from citry import Citry, Component
+from citry.ext.i18n import CurrencyFormat, DateFormat, DateInput, FormatRegistry, NumberFormat, PercentFormat
+
+engine = Citry(
+    autodiscover=False,
+    extensions_defaults={
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US",),
+            "formats": FormatRegistry(
+                number={"measurement": NumberFormat()},
+                percent={"progress": PercentFormat()},
+                currency={"money": CurrencyFormat()},
+                date={"editable-date": DateFormat(input=DateInput(mode="segments"))},
+            ),
+        }
+    },
+)
+
+
+def translate_outside_component(i18n, context):
+    return i18n.for_context(context).tr("account-greeting", name="Outside")
+
+
+class Page(Component):
+    citry = engine
+
+    class Kwargs:
+        joined_on: date = date(2025, 1, 2)
+        wrong_name: int = 1
+
+    def js_data(self, kwargs, slots):
+        parsed = self.i18n.parse.number("1", format="measurement")
+        label = self.i18n.tr("account-greeting", name="Ada")
+        return {"label": label, "parsedState": parsed.state}
+
+    template = """
+    <c-i18n tag="main" c-client="True">
+      <h1>{{ tr("account-greeting", name="Ada") }}</h1>
+      <p>{{ tr("account-count", count=1) }}</p>
+      <p c-aria-label="tr('account-greeting', attr='aria-label', name='Ada')">Account</p>
+      <output>{{ fmt.number(12, format="measurement") }}</output>
+      <output>{{ fmt.date(joined_on, format="editable-date") }}</output>
+      <output>{{
+        fmt.currency(
+          12,
+          "USD",
+          format="money",
+        )
+      }}</output>
+      <output>{{
+        fmt.percent(
+          0.5,
+          format="progress",
+        )
+      }}</output>
+      <span x-text="$i18n.tr('account-greeting', { name: 'Ada' })"></span>
+      <c-trans message="account-rich" c-values="{'name': 'Ada'}">
+        <c-fill name="terms_link"><a href="/terms">terms</a></c-fill>
+      </c-trans>
+    </c-i18n>
+    """
+
+    js = """
+    $component(({ i18n }) => ({
+      render(value) {
+        return i18n.tr("account-greeting", { name: "Ada" })
+          + i18n.format.number(value, { format: "measurement" });
+      },
+    }));
+    """
+
+    messages = """
+    # @param {str} $name - User name.
+    account-greeting = Welcome, { $name }.
+        .aria-label = Account summary for { $name }
+    account-wrapper = { account-greeting }
+    # @param {int} $count - Number of accounts.
+    account-count = { $count ->
+        [one] One account
+       *[other] Many accounts
+    }
+    # @param {str} $name - User named in the legal copy.
+    # @param {Slot} $terms_link - Link to the terms.
+    account-rich = { $name }, read { $terms_link }.
+    """
+'''
+    app_file.write_text(source, encoding="utf-8")
+    return load_project(tmp_path, "i18n_app:engine"), app_file, source
+
+
+def test_i18n_completion_hover_and_definition_use_the_compiler_index(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    call = source.index('tr("account-greeting"') + len('tr("account-')
+    position = _position(source, 'tr("account-greeting"', len('tr("account-'))
+
+    completed = completion_result(document, position, project, {document.uri: document})
+    hovered = hover(document, position, project, {document.uri: document})
+    target = definition(document, position, project, {document.uri: document})
+
+    assert call > 0
+    assert {item.label for item in completed.items} == {
+        "account-count",
+        "account-greeting",
+        "account-rich",
+        "account-wrapper",
+    }
+    assert hovered is not None
+    assert isinstance(hovered.contents, types.MarkupContent)
+    assert "`$name`: `str`" in hovered.contents.value
+    assert "User name." in hovered.contents.value
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+    definition_text = source.splitlines()[target.range.start.line]
+    assert definition_text[target.range.start.character : target.range.end.character] == "account-greeting"
+
+
+def test_c_tr_navigation_targets_exact_fluent_output_and_checks_values(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    authored = source.replace(
+        "<span x-text=\"$i18n.tr('account-greeting', { name: 'Ada' })\"></span>",
+        "<span c-aria-label=\"tr('account-greeting', attr='aria-label', name='Ada')\" "
+        '$c-tr:account-greeting.aria-label[aria-label]="{ name: 1 }"></span>',
+    )
+    document = DocumentState(app_file.as_uri(), "python", authored, 2)
+    document.update(authored, 2, project)
+    documents = {document.uri: document}
+
+    target = definition(
+        document,
+        _position(authored, "$c-tr:account-greeting", len("$c-tr:account-")),
+        project,
+        documents,
+    )
+    output_target = definition(
+        document,
+        _position(authored, ".aria-label[", 3),
+        project,
+        documents,
+    )
+    findings = browser_diagnostics(document, project, documents)
+
+    assert isinstance(target, types.Location)
+    assert isinstance(output_target, types.Location)
+    assert target.range == output_target.range
+    target_line = source.splitlines()[target.range.start.line]
+    assert target_line[target.range.start.character : target.range.end.character] == "aria-label"
+    assert any(
+        item.code == "citry.i18n.argument-invalid" and "must be str, not number" in item.message for item in findings
+    )
+
+
+def test_c_tr_malformed_owned_names_are_lsp_errors(tmp_path):
+    project, _app_file, _source = _i18n_project(tmp_path)
+    source = "<div $c-tr: $c-tr[] $c-tr:known[] $c-tr:known.></div>"
+    document = _document(source, project)
+
+    findings = browser_diagnostics(document, project)
+
+    invalid = [item for item in findings if item.code == "citry.i18n.argument-invalid"]
+    assert len(invalid) == 4
+    assert any("non-empty message ID" in item.message for item in invalid)
+    assert any("requires ':'" in item.message for item in invalid)
+    assert any("non-empty HTML attribute" in item.message for item in invalid)
+    assert any("non-empty Fluent attribute" in item.message for item in invalid)
+
+
+def test_i18n_bind_literal_message_and_output_navigate_to_fluent_definition(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    authored = source.replace(
+        'return i18n.tr("account-greeting", { name: "Ada" })',
+        'return i18n.bind({ message: "account-greeting", output: "aria-label", '
+        "onChange(text) { this.label = text } })",
+    )
+    document = DocumentState(app_file.as_uri(), "python", authored, 2)
+    document.update(authored, 2, project)
+    documents = {document.uri: document}
+
+    message_target = definition(
+        document,
+        _position(authored, 'message: "account-greeting"', len('message: "account-')),
+        project,
+        documents,
+    )
+    output_target = definition(
+        document,
+        _position(authored, 'output: "aria-label"', len('output: "aria-')),
+        project,
+        documents,
+    )
+
+    assert isinstance(message_target, types.Location)
+    assert isinstance(output_target, types.Location)
+    assert message_target.range == output_target.range
+    assert (
+        source.splitlines()[message_target.range.start.line][
+            message_target.range.start.character : message_target.range.end.character
+        ]
+        == "aria-label"
+    )
+
+
+def test_i18n_semantics_cover_trans_browser_calls_profiles_and_fluent_references(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    for marker, offset in (
+        ("account-greeting', { name", 3),
+        ('message="account-rich"', len('message="account-')),
+    ):
+        position = _position(source, marker, offset)
+        hovered = hover(document, position, project, {document.uri: document})
+        assert hovered is not None
+
+    for marker in ('format="measurement"', '{ format: "measurement" }'):
+        position = _position(source, marker, marker.index("measurement") + 3)
+        completed = completion_result(document, position, project, {document.uri: document})
+        assert [item.label for item in completed.items] == ["measurement"]
+
+    reference = source.rindex("account-greeting }") + 3
+    reference_position = _position(source, "account-greeting }", 3)
+    target = definition(document, reference_position, project, {document.uri: document})
+    assert reference > 0
+    assert isinstance(target, types.Location)
+    assert target.uri == app_file.as_uri()
+
+
+def test_i18n_argument_hover_and_definition_reach_param_comments_from_every_call_layer(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    documents = {document.uri: document}
+    cases = (
+        (
+            'i18n.for_context(context).tr("account-greeting", name="Outside")',
+            "name=",
+            "str",
+            "User name.",
+        ),
+        ('label = self.i18n.tr("account-greeting", name="Ada")', "name=", "str", "User name."),
+        ('tr("account-count", count=1)', "count=", "int", "Number of accounts."),
+        ("$i18n.tr('account-greeting', { name: 'Ada' })", "name:", "str", "User name."),
+        ('i18n.tr("account-greeting", { name: "Ada" })', "name:", "str", "User name."),
+        ("c-values=\"{'name': 'Ada'}\"", "name", "str", "User named in the legal copy."),
+        ('<c-fill name="terms_link">', "terms_link", "Slot", "Link to the terms."),
+    )
+
+    for marker, argument, type_name, description in cases:
+        position = _position(source, marker, marker.index(argument) + 1)
+        hovered = hover(document, position, project, documents)
+        target = definition(document, position, project, documents)
+
+        assert hovered is not None
+        assert isinstance(hovered.contents, types.MarkupContent)
+        assert f"`{type_name}`" in hovered.contents.value
+        assert description in hovered.contents.value
+        assert isinstance(target, types.Location)
+        assert target.uri == app_file.as_uri()
+        assert "@param" in source.splitlines()[target.range.start.line]
+
+
+def test_i18n_formatter_methods_and_multiline_profiles_are_checked_uniformly(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+
+    for operation, signature in (
+        ("fmt.number", "number(value: object, *, format: str) -> str"),
+        ("fmt.currency", "currency(value: object, currency: str, *, format: str) -> str"),
+        ("fmt.percent", "percent(value: object, *, format: str) -> str"),
+        ("fmt.date", "date(value: object, *, format: str) -> str"),
+    ):
+        hovered = hover(
+            document,
+            _position(source, operation, len("fmt.") + 1),
+            project,
+            {document.uri: document},
+        )
+        assert hovered is not None
+        assert isinstance(hovered.contents, types.MarkupContent)
+        assert signature in hovered.contents.value
+
+    multiline = source.replace(
+        '<output>{{ fmt.number(12, format="measurement") }}</output>',
+        """\
+      <output>{{
+        fmt.number(
+          12,
+          format="missing-profile",
+        )
+      }}</output>""",
+    )
+    document.update(multiline, 2, project)
+    findings = i18n_diagnostics(document, project, {document.uri: document})
+    assert any("missing-profile" in finding.message for finding in findings)
+
+    misspelled = multiline.replace("fmt.number(", "fmt.num1ber(")
+    document.update(misspelled, 3, project)
+    findings = i18n_diagnostics(document, project, {document.uri: document})
+    assert any("Unknown i18n format operation 'num1ber'" in finding.message for finding in findings)
+
+    for version, (operation, profile) in enumerate(
+        (("currency", "money"), ("percent", "progress"), ("date", "editable-date")),
+        start=4,
+    ):
+        invalid_profile = source.replace(f'format="{profile}"', 'format="missing-profile"', 1)
+        document.update(invalid_profile, version, project)
+        findings = i18n_diagnostics(document, project, {document.uri: document})
+        assert any(f"profile 'missing-profile' for {operation}" in finding.message for finding in findings)
+
+        invalid_operation = source.replace(f"fmt.{operation}(", f"fmt.{operation}1(", 1)
+        document.update(invalid_operation, version + 10, project)
+        findings = i18n_diagnostics(document, project, {document.uri: document})
+        assert any(f"Unknown i18n format operation '{operation}1'" in finding.message for finding in findings)
+
+
+def test_i18n_message_navigation_crosses_component_and_python_file_owners(tmp_path):
+    other_file = tmp_path / "other_messages.py"
+    other_source = '''\
+from citry import ComponentLibrary, LibraryComponent
+
+class OtherMessages(LibraryComponent):
+    template = """
+    <template></template>
+    """
+    messages = """
+    other-file-message = Defined in another file
+    """
+
+library = ComponentLibrary("other-messages", (OtherMessages,), required_extensions=("i18n",))
+'''
+    other_file.write_text(other_source, encoding="utf-8")
+    app_file = tmp_path / "app.py"
+    source = '''\
+from citry import Citry, Component
+from other_messages import library
+
+engine = Citry(
+    autodiscover=False,
+    extensions_defaults={"i18n": {"source_locale": "en-US", "locales": ("en-US",)}},
+)
+engine.register_library(library)
+
+class SameFileMessages(Component):
+    citry = engine
+    template = """
+    <template></template>
+    """
+    messages = """
+    same-file-message = Defined in another component
+    """
+
+class Page(Component):
+    citry = engine
+    template = """
+    {{ tr("same-file-message") }}
+    {{ tr("other-file-message") }}
+    """
+'''
+    app_file.write_text(source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    documents = {document.uri: document}
+
+    same_file = definition(
+        document,
+        _position(source, 'tr("same-file-message")', len('tr("same-')),
+        project,
+        documents,
+    )
+    other_file_definition = definition(
+        document,
+        _position(source, 'tr("other-file-message")', len('tr("other-')),
+        project,
+        documents,
+    )
+
+    assert isinstance(same_file, types.Location)
+    assert same_file.uri == app_file.as_uri()
+    assert "same-file-message" in source.splitlines()[same_file.range.start.line]
+    assert isinstance(other_file_definition, types.Location)
+    assert other_file_definition.uri == other_file.as_uri()
+    assert "other-file-message" in other_source.splitlines()[other_file_definition.range.start.line]
+
+
+def test_i18n_magic_is_semantic_only_inside_a_client_provider(tmp_path):
+    project, _app_file, _source = _i18n_project(tmp_path)
+    inside = '<c-i18n tag="main" c-client="True"><span x-text="$i18n.tr(\'account-wrapper\')"></span></c-i18n>'
+    outside = "<span x-text=\"$i18n.tr('account-wrapper')\"></span>"
+    inside_document = _document(inside, project)
+    outside_document = _document(outside, project)
+
+    inside_hover = hover(inside_document, _position(inside, "$i18n", 2), project)
+    outside_hover = hover(outside_document, _position(outside, "$i18n", 2), project)
+
+    assert inside_hover is not None
+    assert outside_hover is None
+
+
+def test_i18n_diagnostics_validate_live_fluent_and_literal_calls(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    invalid = source.replace("{str} $name", "{Slot1} $name")
+    document = DocumentState(app_file.as_uri(), "python", invalid, 2)
+    document.update(invalid, 2, project)
+
+    findings = i18n_diagnostics(document, project)
+
+    assert [(item.code, item.message) for item in findings] == [
+        ("citry.i18n.catalog-invalid", 'unsupported @param type "Slot1"'),
+    ]
+    assert findings[0].range.start == _position(invalid, "@param")
+
+    invalid = source.replace(
+        'tr("account-greeting", name="Ada")',
+        'tr("account-typo", name1="Ada")',
+    ).replace('format="measurement"', 'format="missing-profile"', 1)
+    document.update(invalid, 3, project)
+    findings = i18n_diagnostics(document, project)
+    assert {item.code for item in findings} == {
+        "citry.i18n.argument-invalid",
+        "citry.i18n.unknown-message",
+    }
+    assert any("account-typo" in item.message for item in findings)
+    assert any("missing-profile" in item.message for item in findings)
+
+    unrelated = (
+        source
+        + '''\
+
+class NotAComponent:
+    messages = """
+    # @param {Slot1} $value
+    unrelated = { $value }
+    """
+'''
+    )
+    document.update(unrelated, 4, project)
+    assert not any(item.code == "citry.i18n.catalog-invalid" for item in i18n_diagnostics(document, project))
+
+
+def test_i18n_diagnostics_validate_missing_and_unknown_message_arguments(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    invalid = source.replace(
+        'tr("account-greeting", name="Ada")',
+        'tr("account-greeting", name1="Ada")',
+    )
+    document = DocumentState(app_file.as_uri(), "python", invalid, 2)
+    document.update(invalid, 2, project)
+
+    findings = i18n_diagnostics(document, project)
+
+    argument = next(item for item in findings if item.code == "citry.i18n.argument-invalid")
+    assert "unknown argument(s): name1" in argument.message
+    assert "missing argument(s): name" in argument.message
+
+    invalid_attribute = source.replace(
+        "attr='aria-label', name='Ada'",
+        "attr='aria-label', name1='Ada'",
+    )
+    document.update(invalid_attribute, 3, project)
+    findings = i18n_diagnostics(document, project)
+    argument = next(item for item in findings if item.code == "citry.i18n.argument-invalid")
+    assert "account-greeting.aria-label" in argument.message
+    assert "unknown argument(s): name1" in argument.message
+    assert "missing argument(s): name" in argument.message
+
+    invalid_type = source.replace(
+        'tr("account-greeting", name="Ada")',
+        'tr("account-greeting", name=wrong_name)',
+    )
+    document.update(invalid_type, 4, project)
+    findings = i18n_diagnostics(document, project)
+    argument = next(item for item in findings if item.code == "citry.i18n.argument-invalid")
+    assert "argument 'name' must be str, not int" in argument.message
+
+
+def test_i18n_diagnostics_validate_trans_values_and_fills(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    invalid = source.replace(
+        '<c-trans message="account-rich" c-values="{\'name\': \'Ada\'}">\n        <c-fill name="terms_link">',
+        '<c-trans message="account-rich" c-values="{\'name1\': 1}">\n        <c-fill name="terms_typo">',
+    )
+    document = DocumentState(app_file.as_uri(), "python", invalid, 2)
+    document.update(invalid, 2, project)
+
+    findings = i18n_diagnostics(document, project)
+
+    argument = next(item for item in findings if item.code == "citry.i18n.argument-invalid")
+    assert "unknown values: name1" in argument.message
+    assert "unknown fills: terms_typo" in argument.message
+    assert "missing fills: terms_link" in argument.message
+
+    invalid_value_type = source.replace(
+        "<c-trans message=\"account-rich\" c-values=\"{'name': 'Ada'}\">",
+        '<c-trans message="account-greeting" c-values="{\'name\': wrong_name}">',
+    )
+    document.update(invalid_value_type, 3, project)
+    findings = i18n_diagnostics(document, project)
+    argument = next(item for item in findings if item.code == "citry.i18n.argument-invalid")
+    assert "value 'name' must be str, not int" in argument.message
+
+
+def test_i18n_diagnostics_validate_python_and_browser_profile_names(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    invalid_python = source.replace(
+        'self.i18n.parse.number("1", format="measurement")',
+        'self.i18n.parse.number("1", format="missing-parser")',
+    )
+    python_document = DocumentState(app_file.as_uri(), "python", invalid_python, 2)
+    python_document.update(invalid_python, 2, project)
+    python_findings = i18n_diagnostics(python_document, project)
+    assert any("missing-parser" in item.message for item in python_findings)
+
+    valid_segment_profile = source.replace(
+        'self.i18n.parse.number("1", format="measurement")',
+        'self.i18n.parse.date_segments({}, format="editable-date")',
+    )
+    python_document.update(valid_segment_profile, 3, project)
+    assert not any("editable-date" in item.message for item in i18n_diagnostics(python_document, project))
+
+    invalid_browser = source.replace(
+        '{ format: "measurement" }',
+        '{ format: "missing-browser-format" }',
+    )
+    browser_document = DocumentState(app_file.as_uri(), "python", invalid_browser, 4)
+    browser_document.update(invalid_browser, 4, project)
+    browser_findings = browser_diagnostics(
+        browser_document,
+        project,
+        {browser_document.uri: browser_document},
+    )
+    assert any("missing-browser-format" in item.message for item in browser_findings)
+
+    invalid_browser_message = source.replace(
+        "$i18n.tr('account-greeting', { name: 'Ada' })",
+        "$i18n.tr('account-typo', { name: 'Ada' })",
+    )
+    browser_document.update(invalid_browser_message, 5, project)
+    browser_findings = browser_diagnostics(
+        browser_document,
+        project,
+        {browser_document.uri: browser_document},
+    )
+    assert any(
+        item.code == "citry.i18n.unknown-message" and "account-typo" in item.message for item in browser_findings
+    )
+
+
+def test_private_fluent_term_definition_uses_the_live_source_unit(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    edited = source.replace(
+        "account-wrapper = { account-greeting }",
+        "-product-name = Citry\n    account-wrapper = { -product-name }",
+    )
+    document = DocumentState(app_file.as_uri(), "python", edited, 2)
+    document.update(edited, 2, project)
+    position = _position(edited, "-product-name }", 3)
+
+    target = definition(document, position, project, {document.uri: document})
+
+    assert isinstance(target, types.Location)
+    line = edited.splitlines()[target.range.start.line]
+    assert line[target.range.start.character : target.range.end.character] == "product-name"
+
+
+def test_i18n_browser_projection_exposes_nested_service_types(tmp_path):
+    project, app_file, source = _i18n_project(tmp_path)
+    source = source.replace(
+        "<span x-text=\"$i18n.tr('account-greeting', { name: 'Ada' })\"></span>",
+        "<input @input=\"result = $i18n.parse.number('1', { format: 'measurement' }).state\" />",
+    )
+    document = DocumentState(app_file.as_uri(), "python", source, 2)
+    document.update(source, 2, project)
+
+    projection = browser_projection(
+        document,
+        _position(source, "$i18n.parse.number", len("$i18n.parse.") + 2),
+        project,
+    )
+
+    assert projection is not None
+    assert "CitryI18nNumericParseResult" in projection.source
+    assert 'format: "measurement"' in projection.source
+    assert "/** @type {CitryI18nService} */\nvar $i18n;" in projection.source
+    assert "@property {CitryI18nService | null} i18n" in projection.source
+
+    js_projection = browser_projection(
+        document,
+        _position(source, "i18n.format.number", len("i18n.format.")),
+        project,
+    )
+    assert js_projection is not None
+    assert "@property {CitryI18nService | null} i18n" in js_projection.source
+    assert "@typedef {Object} CitryI18nFormatter" in js_projection.source
+
+
+def test_component_input_completion_includes_static_and_dynamic_spellings(tmp_path):
+    project, _app_file, _source = _i18n_project(tmp_path)
+    source = "<c-i18n c-c"
+    document = _document(source, project)
+
+    result = completion_result(document, _position(source, "c-c", len("c-c")), project)
+    by_label = {item.label: item for item in result.items}
+
+    assert "client" in by_label
+    assert "c-client" in by_label
+    assert by_label["client"].text_edit.new_text == "client"
+    assert by_label["c-client"].text_edit.new_text == 'c-client="$1"'
+
+
+def test_plain_html_attribute_completion_includes_translation_binding_forms(tmp_path):
+    project, _app_file, _source = _i18n_project(tmp_path)
+    source = "<button $c"
+    document = _document(source, project)
+
+    result = completion_result(document, _position(source, "$c", 2), project)
+    by_label = {item.label: item for item in result.items}
+
+    assert {"$c-tr:", "c-$c-tr:"} <= set(by_label)
+    assert by_label["$c-tr:"].insert_text == '\\$c-tr:${1:message}="${2:{}}"'
 
 
 def test_html_projection_extracts_parser_proven_nested_templates_with_exact_ranges():
@@ -805,6 +1437,77 @@ def test_static_component_props_report_contract_errors_and_navigate_to_child_js(
     prop_hover = hover(template, key_position, project, documents)
     assert prop_hover is not None
     assert "(property) title: string" in prop_hover.contents.value
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_severity"),
+    [
+        ("off", None),
+        ("warn", types.DiagnosticSeverity.Warning),
+        ("strict", types.DiagnosticSeverity.Error),
+    ],
+)
+def test_browser_diagnostics_apply_the_project_csp_mode(tmp_path, mode, expected_severity):
+    template_source = '<button @click="items.map(item => item.id)"></button>'
+    template_file = tmp_path / "card.html"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        f"engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, security_csp={mode!r})\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n"
+        "    class JsData:\n"
+        "        items: list[dict[str, int]]\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    findings = [
+        item
+        for item in browser_diagnostics(document, project, {document.uri: document})
+        if item.code == "citry.csp.incompatible-browser-code"
+    ]
+
+    if expected_severity is None:
+        assert findings == []
+    else:
+        assert len(findings) == 1
+        assert findings[0].severity == expected_severity
+        assert findings[0].code_description == types.CodeDescription(
+            "https://citry.dev/ide/diagnostics/#citry.csp.incompatible-browser-code"
+        )
+        assert findings[0].range == types.Range(types.Position(0, 31), types.Position(0, 33))
+
+
+def test_browser_diagnostics_report_malformed_csp_expression_without_crashing(tmp_path):
+    template_source = '<span x-text="\'unterminated"></span>'
+    template_file = tmp_path / "card.html"
+    template_file.write_text(template_source, encoding="utf-8")
+    (tmp_path / "app.py").write_text(
+        "from pathlib import Path\n"
+        "from citry import Citry, Component\n"
+        "engine = Citry(dirs=[Path(__file__).parent], autodiscover=False, security_csp='strict')\n"
+        "class Card(Component):\n"
+        "    citry = engine\n"
+        "    template_file = 'card.html'\n",
+        encoding="utf-8",
+    )
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(template_file.as_uri(), "citry-html", template_source, 1)
+    document.update(template_source, 1, project)
+
+    findings = [
+        item
+        for item in browser_diagnostics(document, project, {document.uri: document})
+        if item.code == "citry.csp.incompatible-browser-code"
+    ]
+
+    assert len(findings) == 1
+    assert "unterminated string" in findings[0].message
 
 
 def test_component_js_unknown_variables_use_lint_globals_and_default_to_error(tmp_path):
@@ -1631,6 +2334,8 @@ def test_schema_free_directive_completion_uses_host_specific_snippets():
         "c-bind",
         "#c-key",
         "#c-ignore",
+        "$c-tr:",
+        "c-$c-tr:",
     }
     assert plain_by_label["c-for"].insert_text == 'c-for="${1:item} in ${2:items}"'
     assert plain_by_label["#c-key"].insert_text == '#c-key="${1:key}"'

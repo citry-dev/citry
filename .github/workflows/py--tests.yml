@@ -18,6 +18,9 @@ on:
       - "packages/py/**"
       - "packages/js/citry-client/**"
       - "packages/protocol/**"
+      - "benchmarks/i18n.py"
+      - "scripts/verify_citry_distribution.py"
+      - "scripts/verify_wheel_size.py"
       - "crates/**"
       - "third_party/**"
       - "package.json"
@@ -29,6 +32,9 @@ on:
       - "packages/py/**"
       - "packages/js/citry-client/**"
       - "packages/protocol/**"
+      - "benchmarks/i18n.py"
+      - "scripts/verify_citry_distribution.py"
+      - "scripts/verify_wheel_size.py"
       - "crates/**"
       - "third_party/**"
       - "package.json"
@@ -38,6 +44,55 @@ on:
   workflow_dispatch:
 
 jobs:
+  i18n-release-qualification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install the workspace
+        run: uv sync --locked --all-packages
+
+      - name: Build the release i18n runtime
+        working-directory: packages/py/citry_core
+        run: uv run --no-sync maturin develop --release
+
+      - name: Run server and large-catalog qualification
+        run: uv run --no-sync python benchmarks/i18n.py --json > i18n-qualification.json
+
+      - name: Check browser payload budgets
+        run: >-
+          uv run --no-sync pytest
+          packages/py/citry/tests/test_client_performance_payload.py::test_i18n_runtime_bundle_budget
+          packages/py/citry/tests/test_i18n_client.py::test_large_catalog_browser_payload_contains_only_the_requested_roots
+          packages/py/citry/tests/test_i18n_client.py::test_one_hundred_message_partition_stays_within_the_release_budget
+
+      - name: Upload i18n qualification evidence
+        uses: actions/upload-artifact@v7
+        with:
+          name: i18n-release-qualification
+          path: i18n-qualification.json
+          if-no-files-found: error
+
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -265,19 +320,32 @@ jobs:
         with:
           python-version: "3.14"
 
-      - name: Build the Citry UI wheel once
-        run: uv build --package citry-ui --wheel --out-dir dist
+      - name: Build the Citry UI wheel and source distribution
+        run: uv build --package citry-ui --out-dir dist
 
       - name: Check the exact wheel inventory
         run: >-
           python packages/py/citry_ui/citry_ui/quality/qualify_wheel.py
           dist/citry_ui-*.whl
 
+      - name: Rebuild and check the wheel from the source distribution
+        shell: bash
+        run: |
+          uv build dist/citry_ui-*.tar.gz \
+            --wheel \
+            --out-dir dist-from-sdist \
+            --no-config \
+            --no-build-logs
+          python packages/py/citry_ui/citry_ui/quality/qualify_wheel.py \
+            dist-from-sdist/citry_ui-*.whl
+
       - name: Upload the exact Citry UI wheel
         uses: actions/upload-artifact@v7
         with:
           name: citry-ui-wheel
-          path: dist/citry_ui-*.whl
+          path: |
+            dist/citry_ui-*.whl
+            dist/citry_ui-*.tar.gz
           if-no-files-found: error
 
   citry-ui-wheel-install:
@@ -320,11 +388,23 @@ jobs:
           cd "$RUNNER_TEMP"
           "$test_dir/bin/python" - <<'PY'
           import importlib.util
+          import json
 
           import citry_ui
           from citry import Citry, Component
+          from citry.ext.i18n import make_context
 
-          app = Citry(autodiscover=False)
+          app = Citry(
+              mode="production",
+              autodiscover=False,
+              extensions_defaults={
+                  "i18n": {
+                      "source_locale": "en-US",
+                      "locales": ("en-US",),
+                      "catalogs": ("citry_ui_i18n",),
+                  }
+              },
+          )
           app.register_library(citry_ui)
 
           class Page(Component):
@@ -333,10 +413,17 @@ jobs:
                 <c-CButton>
                   Installed wheel
                 </c-CButton>
+                <c-CPagination c-pages="2" c-page="1" />
               """
 
-          html = str(Page())
+          context = make_context(app, locale="en-US")
+          html = str(Page().render(provides={"citry_i18n": context}))
           assert "Installed wheel" in html
+          assert "Pagination" in html
+          i18n = app.extensions.get_extension("i18n")
+          assert i18n.for_context(context).tr("citry-ui-pagination-label") == "Pagination"
+          artifact = json.loads(i18n._compiled_catalog.artifact_json())
+          assert artifact["stats"]["parsed_catalogs"] == 0
           assert importlib.util.find_spec("citry_ui.quality") is None
           assert importlib.util.find_spec("citry_ui.components.ctabs.tests") is None
           PY
@@ -461,8 +548,9 @@ jobs:
       - name: Install the ${{ matrix.browser }} browser
         run: uv run --no-sync playwright install --with-deps ${{ matrix.browser }}
 
-      - name: Run compact Alpine conformance on ${{ matrix.browser }}
+      - name: Run compact Alpine and i18n qualification on ${{ matrix.browser }}
         run: >-
           uv run --no-sync pytest
           packages/py/citry/tests/e2e/test_alpine_conformance_e2e.py
+          packages/py/citry/tests/e2e/test_i18n_client_e2e.py::test_one_hundred_message_switch_stays_atomic_and_within_the_commit_budget
           --browser ${{ matrix.browser }}

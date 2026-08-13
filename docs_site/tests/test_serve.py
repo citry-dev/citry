@@ -83,7 +83,8 @@ def test_serve_renders_ui_library_source_directly_from_catalog(tmp_path: Path) -
         "attributes: []\n"
         "selectors: []\n"
         "css: []\n"
-        "interfaces: []\n",
+        "interfaces: []\n"
+        "translations: []\n",
         encoding="utf-8",
     )
     snippet = tmp_path / "packages/py/citry_ui/citry_ui/components/button/snippets/serve_preview.py"

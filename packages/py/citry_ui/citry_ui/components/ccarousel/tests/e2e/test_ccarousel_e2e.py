@@ -133,6 +133,43 @@ def test_native_scroll_orientation_and_drag_state(page: Any) -> None:
     assert errors == []
 
 
+def test_shared_geometry_keeps_rtl_picker_and_native_position_correlated(page: Any) -> None:
+    errors = _load(page)
+    root = page.locator("#stories")
+    viewport = root.locator('[data-citry-ui-part="viewport"]')
+    root.evaluate("element => { element.dir='rtl'; element.querySelector('[data-citry-carousel-next]').click(); }")
+    page.wait_for_function(
+        """() => {
+          const root=document.querySelector('#stories');
+          const viewport=root.querySelector('[data-citry-ui-part="viewport"]');
+          const track=viewport.firstElementChild;
+          const geometry=globalThis[Symbol.for('citry-ui:scroll-geometry')];
+          const maximum=geometry.maximum(viewport.scrollWidth,viewport.clientWidth);
+          const position=geometry.horizontalFromRaw(viewport.scrollLeft,maximum,true);
+          const target=Math.abs(track.children[1].offsetLeft-track.offsetLeft);
+          return root.dataset.index==='1' && Math.abs(position-target)<=1;
+        }"""
+    )
+    root.evaluate("element => element.querySelector('[data-citry-carousel-next]').click()")
+    page.wait_for_function(
+        """() => {
+          const root=document.querySelector('#stories');
+          const viewport=root.querySelector('[data-citry-ui-part="viewport"]');
+          const geometry=globalThis[Symbol.for('citry-ui:scroll-geometry')];
+          const maximum=geometry.maximum(viewport.scrollWidth,viewport.clientWidth);
+          return root.dataset.index==='2'
+            && Math.abs(geometry.horizontalFromRaw(viewport.scrollLeft,maximum,true)-maximum)<=1;
+        }"""
+    )
+    maximum = viewport.evaluate("element => element.scrollWidth - element.clientWidth")
+    position = viewport.evaluate(
+        """element => globalThis[Symbol.for('citry-ui:scroll-geometry')]
+          .horizontalFromRaw(element.scrollLeft,element.scrollWidth-element.clientWidth,true)"""
+    )
+    assert position == pytest.approx(maximum, abs=1)
+    assert errors == []
+
+
 def test_reactive_presentation_disabled_reduced_forced_print_and_axe(page: Any) -> None:
     errors = _load(page)
     page.evaluate(

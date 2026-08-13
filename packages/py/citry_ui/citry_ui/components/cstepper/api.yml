@@ -143,3 +143,5 @@ interfaces:
       - {id: controlled, name: controlled, type: bool, meaning: Whether a client active value currently controls state.}
       - {id: step, name: step, type: HTMLElement, meaning: Activated Step list item.}
       - {id: source-event, name: sourceEvent, type: Event, meaning: Native click event.}
+
+translations: []

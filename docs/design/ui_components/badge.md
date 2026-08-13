@@ -21,7 +21,7 @@ Common jobs:
 | Add an icon | `start` or `end` fill with `CIcon` | slot composition |
 | Fit a brand | public variables, selector, `class_`, or `style` | CSS contract |
 | Attach a badge to a control corner | ordinary relative/absolute consumer layout | composition; no positioning ownership |
-| Make it clickable, selectable, or removable | Button, link, future Chip/Tag | unsupported by Badge |
+| Make it clickable, selectable, or removable | Button, link, or `CTag` | unsupported by Badge |
 
 Production completeness means concise repeated call sites, useful variants and
 sizes, readable light/dark and forced-color output, text-based status meaning,
@@ -302,3 +302,12 @@ Falsifier for the inline-only boundary: if representative applications show
 that the dominant Badge job is attached overlay positioning and every call site
 repeats the same safe owner geometry, research a separate overlay composition
 or extend Badge after proving it does not compromise inline semantics.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

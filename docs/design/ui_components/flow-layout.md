@@ -25,15 +25,16 @@ Common jobs:
 | Reverse visual order | `<c-CStack c-reverse="True">...</c-CStack>` | `CStack(reverse=True, ...)` | direct API; DOM and reading order stay unchanged |
 | Use list or navigation semantics | `<c-CGroup tag="nav">...</c-CGroup>` | `CGroup(tag="nav", ...)` | direct API; caller owns required content semantics and naming |
 | Use an arbitrary gap | `style="--cui-stack-gap: 2.25rem"` | structured `style` | public CSS variable |
-| Change direction responsively | class or public selector CSS | same | consumer CSS; no library breakpoint API yet |
-| Build a two-dimensional layout | separate future Grid | same | unsupported by Flow |
+| Change direction responsively | class or public selector CSS | same | consumer CSS; Flow has no breakpoint inputs |
+| Build a two-dimensional layout | `CGrid` and `CGridItem` | same | separate component family |
 
 Production completeness means valid static HTML, zero component JavaScript,
 concise frequent inputs, logical LTR/RTL behavior, long-content and narrow
 layout safety, semantic-root choice, public gap overrides, and predictable
 nested Flow components.
 
-Non-goals: Grid, Container, masonry, overlap, absolute positioning, responsive
+Non-goals: absorbing the separate Grid and Container contracts, masonry,
+overlap, absolute positioning, responsive
 prop objects, breakpoint names, child cloning, equal-width children,
 separators, ordering individual children, animation, observation, or a
 headless API.
@@ -48,7 +49,7 @@ Current source record:
 | Vuetify | 4.0.7 reviewed 2026-08-08 | [`VRow` source](https://github.com/vuetifyjs/vuetify/blob/v4.0.7/packages/vuetify/src/components/VGrid/VRow.ts), Grid CSS, flex and spacing utilities | Treat utility CSS as a valid capability path. Adopt short alignment and gap values, but do not import Grid columns, density, or breakpoints into one-dimensional Flow. |
 | Mantine | 9.2.2 reviewed 2026-08-08 | [Stack](https://mantine.dev/core/stack/) and [Group](https://mantine.dev/core/group/) guides and source links | Adopt distinct vertical and horizontal names, direct flex gap, Group wrapping, and concise align/justify inputs. Reject child-count-dependent grow behavior. |
 | Material UI | 9.0.1 reviewed 2026-08-08 | [Stack guide](https://mui.com/material-ui/react-stack/) and [Stack API](https://mui.com/material-ui/api/stack/) | Confirm one root, direction, gap, alignment, and direct-child long-content pressure. Use native flex gap, not child margins or cloning. |
-| Chakra UI | 3.35 reviewed 2026-08-08 | [Stack guide](https://chakra-ui.com/docs/components/stack) | Confirm Stack/HStack vocabulary and separator demand. Defer separators to composition or a future Divider because Flow must not clone or reinterpret children. |
+| Chakra UI | 3.35 reviewed 2026-08-08 | [Stack guide](https://chakra-ui.com/docs/components/stack) | Confirm Stack/HStack vocabulary and separator demand. Keep separators in composition or `CDivider` because Flow must not clone or reinterpret children. |
 | Web Awesome | 3.2.1 reviewed 2026-08-08 | [layout utilities](https://webawesome.com/docs/layout) | Confirm Stack, cluster/group, gap, alignment, and wrapping can remain CSS-only with no custom-element runtime. |
 | Shopify App Home UI | reviewed 2026-08-08 | [Stack](https://shopify.dev/docs/api/app-home-ui-extension/latest/web-components/layout-and-structure/stack) | Confirm a framework-neutral stack can support horizontal and vertical layout while leaving semantics to the root. |
 | CSS Flexible Box Layout | reviewed 2026-08-08 | [Flexbox Level 1](https://www.w3.org/TR/css-flexbox-1/) and [Box Alignment Level 3](https://www.w3.org/TR/css-align-3/) | Use native flex layout, `gap`, logical start/end alignment, DOM-order semantics, and direct-item sizing behavior. |
@@ -59,7 +60,7 @@ Material limitations disposition:
 |---|---|---|
 | MUI Stack historically used child margins and documents margin conflicts | current guide retains the limitation for its non-gap path | Citry always uses native `gap`; it never rewrites child margins. |
 | MUI documents `min-width: auto` overflow with no-wrap descendants | current documented limitation | Flow roots and direct element children receive `min-inline-size: 0`; content can still deliberately overflow through its own CSS. |
-| Mantine Group grow depends on countable React element children and warns about strings/fragments | current documented limitation | No `grow` input. Callers use child classes, Grid, or ordinary CSS. |
+| Mantine Group grow depends on countable React element children and warns about strings/fragments | current documented limitation | No `grow` input. Callers use child classes, `CGrid`, or ordinary CSS. |
 | Vuetify 4 deprecates direct Row alignment props in favor of utility classes | current source | Flow keeps only the frequent one-dimensional inputs; specialized responsive alignment stays in consumer CSS. |
 
 Vuetify disposition:
@@ -71,7 +72,7 @@ Vuetify disposition:
 | align and justify | direct API | `align`, `justify` | Keep concise logical values; responsive variants stay CSS. |
 | align-content | CSS | `class_`, `style`, selector | Omit until multi-line alignment is a repeated job. |
 | density, gutters, column count | separate Grid | none | Omit from Flow. |
-| breakpoints | future responsive vocabulary | consumer media/container-query CSS | Do not freeze names here. |
+| breakpoints | consumer media/container-query CSS, or separate `CGrid` | no Flow breakpoint inputs | Keep Flow one-dimensional; `CGrid` owns the suite's fixed responsive grid vocabulary. |
 | tag | direct API | constrained `tag` | Adopt common neutral and semantic roots. |
 | class and style | direct API | `class_`, `style` | Adopt. |
 | flex and spacing utilities | CSS | ordinary consumer CSS | Document as the escape path for specialized layout. |
@@ -371,3 +372,12 @@ show that one class plus a direction input is materially clearer and no more
 verbose across the common horizontal wrapping jobs, remove `CGroup` before
 release. Current Mantine, Chakra, MUI, Web Awesome, and local composition
 evidence supports retaining the two concise names.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

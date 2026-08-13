@@ -9,6 +9,11 @@ serializers, caches, HTTP routes, and browser runtimes. Local fixes are not a
 substitute for reviewing those boundaries as one security model. This document
 holds the scope and evidence requirements for that later hardening pass.
 
+Focused browser-security contracts live in
+[`security_csp.md`](security_csp.md) and
+[`security_csrf.md`](security_csrf.md). Their focused design and implementation
+work does not replace this project-wide audit.
+
 The first finding that prompted this placeholder was CSS-data stylesheet
 injection. That class is fixed and regression-tested, but similar contextual
 serialization mistakes must be searched for across the entire project.

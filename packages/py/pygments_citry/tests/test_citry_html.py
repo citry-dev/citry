@@ -113,6 +113,16 @@ def test_server_dynamic_client_props_value_is_python():
     assert not any(token is Error for token, _ in toks)
 
 
+def test_client_translation_binding_uses_javascript_and_dynamic_form_uses_python():
+    direct = lex_template('<button $c-tr:notice[aria-label]="{ title: toast.title }"></button>')
+    dynamic = lex_template('<button c-$c-tr:notice[aria-label]="binding_for(toast)"></button>')
+
+    assert (Name.Attribute, "$c-tr:notice[aria-label]") in direct
+    assert (Name.Other, "toast") in direct
+    assert (Name.Attribute, "c-$c-tr:notice[aria-label]") in dynamic
+    assert (Name, "binding_for") in dynamic
+
+
 def test_only_exact_client_props_name_gets_special_highlighting():
     toks = lex_html('<div $other="true" $c-props-extra="true"></div>')
     assert (Name.Attribute, "$other") in toks

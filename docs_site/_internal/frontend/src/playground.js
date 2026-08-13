@@ -1,3 +1,4 @@
+import { BrowserIdeSession } from "./browser_ide.js";
 import { createCitryEditor } from "./citry_editor.js";
 import { PreviewBridge } from "./preview_bridge.js";
 import { CitryBrowserSession } from "./worker_session.js";
@@ -162,16 +163,25 @@ function setSource(source, focus = true) {
 }
 
 // Keep the textarea operational when CodeMirror is unavailable.
+let browserIde = null;
+try {
+  browserIde = new BrowserIdeSession();
+} catch (error) {
+  // Worker restrictions should remove IDE extras, not the editor or runner.
+  console.warn(`Citry browser IDE could not start: ${String(error?.message || error)}`);
+}
 try {
   editor = createCitryEditor({
     parent: elements.editor,
     initialSource: elements.fallback.value,
+    ide: browserIde,
     onChange: sourceChanged,
     onRun: () => requestRun({ explicit: true }),
   });
   elements.editor.hidden = false;
   elements.fallback.hidden = true;
 } catch (error) {
+  browserIde?.destroy();
   elements.fallback.addEventListener("input", sourceChanged);
   showDiagnostic("python", "The rich editor could not start. Plain-text editing is active.", String(error));
 }
@@ -214,6 +224,7 @@ async function handleResult(runId, result, durationMs) {
   if (!activeRun || activeRun.id !== runId) return;
   const finished = activeRun;
   if (!result.ok) {
+    browserIde?.publishCatalog(finished.analysisVersion, null);
     const problem = result.diagnostic || {};
     if (problem.kind === "execution_stopped") autoRunPaused = true;
     const location = problem.line ? `Line ${problem.line}${problem.column !== null ? `:${problem.column + 1}` : ""}\n` : "";
@@ -242,6 +253,7 @@ async function handleResult(runId, result, durationMs) {
   }
 
   const isCurrentSource = finished.revision === sourceRevision;
+  browserIde?.publishCatalog(finished.analysisVersion, result.catalog ?? null);
   setStale(lastSuccessfulHtml !== null);
   setStatus("Updating rendered result");
   hideDiagnostic("preview");
@@ -267,6 +279,7 @@ function handleFailure(runId, message, details) {
   if (activeRun && runId !== 0 && activeRun.id !== runId) return;
   if (!activeRun && runId !== 0) return;
   const failed = activeRun;
+  if (failed) browserIde?.publishCatalog(failed.analysisVersion, null);
   autoRunPaused = true;
   queuedAutoRun = false;
   clearTimeout(autoRunTimer);
@@ -295,6 +308,7 @@ const session = new CitryBrowserSession({
   onStopped(runId, message) {
     if (!activeRun || activeRun.id !== runId) return;
     const stopped = activeRun;
+    browserIde?.publishCatalog(stopped.analysisVersion, null);
     autoRunPaused = true;
     queuedAutoRun = false;
     setStale(lastSuccessfulHtml !== null);
@@ -314,7 +328,14 @@ function requestRun({ explicit }) {
   hideDiagnostic("python");
   nextRunId += 1;
   const source = getSource();
-  activeRun = { id: nextRunId, revision: sourceRevision, source, explicit, generation: uiGeneration };
+  activeRun = {
+    id: nextRunId,
+    revision: sourceRevision,
+    analysisVersion: browserIde?.versionForSource(source) ?? null,
+    source,
+    explicit,
+    generation: uiGeneration,
+  };
   preview.disableDisplayedEvents(
     "This result is inactive while newer code runs. Run the module successfully to enable events again.",
   );
@@ -502,6 +523,7 @@ elements.fallback.addEventListener("keydown", (event) => {
 });
 
 window.addEventListener("beforeunload", () => {
+  editor?.destroy();
   session.dispose();
   preview.dispose();
 });
@@ -512,6 +534,7 @@ window.citryPlayground = {
   getSource,
   run: () => requestRun({ explicit: true }),
   setActivePanel,
+  setCursor: (position) => editor?.setCursor(position) || false,
   setDivider,
   setSource,
   stop: stopRun,

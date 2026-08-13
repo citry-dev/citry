@@ -17,24 +17,50 @@ if TYPE_CHECKING:
     from typing import Literal
 
     from .context import LocaleContext, LocalizedText
-    from .extension import I18nExtension, _FormatFacade, _ParseFacade
+    from .extension import I18nExtension, I18nFormatter, I18nParser
     from .formats import FormatRegistry
 
 _ENGINE_FIELDS = frozenset({"source_locale", "default_locale", "locales", "fallbacks", "catalogs", "formats"})
-_COMPONENT_FIELDS = frozenset({"client_messages"})
+_COMPONENT_FIELDS = frozenset({"client_messages", "messages_locale"})
 
 
 class I18n(ExtensionConfig):
-    """Per-component i18n settings and access to the provided locale context."""
+    """
+    Per-component i18n settings and access to the provided locale context.
 
+    Set `Component.I18n.messages_locale` to the locale in which that
+    component's `messages` / `messages_file` source is authored. Declaring a
+    message asset activates server translations even when the engine has no
+    i18n settings. Declare `client_messages` only for finite dynamic message
+    IDs that static browser analysis cannot see. Instances expose the nearest
+    explicit context, translation, formatting, and parsing through `self.i18n`.
+    """
+
+    messages_locale: str | None = None
     client_messages: tuple[str, ...] = ()
+
+    def __init__(self, component: Any) -> None:
+        from .bindings import I18nBindingCollector  # noqa: PLC0415
+        from .usage import I18nUsageCollector  # noqa: PLC0415
+
+        super().__init__(component)
+        self._usage = I18nUsageCollector()
+        self._bindings = I18nBindingCollector(component)
+        self._translation_capture: Any = None
 
     @property
     def configured(self) -> bool:
+        """Return whether this component's engine has explicit i18n settings."""
         return self._extension.configured
 
     @property
+    def available(self) -> bool:
+        """Return whether server translation is available from settings or component messages."""
+        return self._extension.available
+
+    @property
     def context(self) -> LocaleContext:
+        """Return the explicit locale context provided to this component tree."""
         return self._extension.context_for_component(self.component)
 
     @property
@@ -42,28 +68,37 @@ class I18n(ExtensionConfig):
         return cast("I18nExtension", self.component.citry.extensions.get_extension("i18n"))
 
     def tr(self, message_id: str, *, attr: str | None = None, **values: object) -> str:
-        return self._extension.tr(
-            message_id,
-            attr=attr,
-            context=self._extension.context_for_component(self.component),
-            **values,
-        )
+        """Resolve one message or attribute to plain text."""
+        resolved = self.resolve(message_id, attr=attr, **values)
+        capture = self._translation_capture
+        if capture is None:
+            return resolved.text
+        from .bindings import CapturedTranslationText  # noqa: PLC0415
+
+        text = CapturedTranslationText(resolved.text)
+        capture(message_id, attr, dict(values), text)
+        return text
 
     def resolve(self, message_id: str, *, attr: str | None = None, **values: object) -> LocalizedText:
-        return self._extension.resolve(
+        """Resolve text and keep the selected locale and fallback metadata."""
+        resolved = self._extension.resolve(
             message_id,
             attr=attr,
             context=self._extension.context_for_component(self.component),
             **values,
         )
+        self._usage.record_message(message_id, attr)
+        return resolved
 
     @property
-    def format(self) -> _FormatFacade:
-        return self._extension.format_for_component(self.component)
+    def format(self) -> I18nFormatter:
+        """Return named formatter operations bound to this component context."""
+        return self._extension.format_for_component(self.component, usage=self._usage)
 
     @property
-    def parse(self) -> _ParseFacade:
-        return self._extension.parse_for_component(self.component)
+    def parse(self) -> I18nParser:
+        """Return strict parser operations bound to this component context."""
+        return self._extension.parse_for_component(self.component, usage=self._usage)
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +124,13 @@ def validate_component_fields(fields: Mapping[str, Any]) -> None:
     unknown = set(fields) - _COMPONENT_FIELDS
     if unknown:
         names = ", ".join(repr(name) for name in sorted(unknown, key=repr))
-        raise ValueError(f"unknown component I18n field(s): {names}; the only field is 'client_messages'.")
+        raise ValueError(
+            f"unknown component I18n field(s): {names}; valid fields are {', '.join(sorted(_COMPONENT_FIELDS))}."
+        )
+    if "messages_locale" in fields:
+        value = fields["messages_locale"]
+        if value is not None:
+            _canonical_locale(value, source="Component.I18n.messages_locale")
     if "client_messages" in fields:
         _validate_message_ids(fields["client_messages"], source="Component.I18n.client_messages")
 
@@ -105,6 +146,7 @@ def build_engine_config(fields: Mapping[str, Any]) -> I18nEngineConfig:
         )
 
     if not fields:
+        formats = FormatRegistry()
         return I18nEngineConfig(
             configured=False,
             source_locale=None,
@@ -112,9 +154,9 @@ def build_engine_config(fields: Mapping[str, Any]) -> I18nEngineConfig:
             locales=(),
             fallbacks=MappingProxyType({}),
             catalogs=(),
-            formats=FormatRegistry(),
+            formats=formats,
             catalog_revision="none",
-            formats_revision="none",
+            formats_revision=formats.revision,
         )
 
     if "source_locale" not in fields or "locales" not in fields:

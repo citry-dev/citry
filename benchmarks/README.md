@@ -24,6 +24,19 @@ are informational. The exact workload, interpretation rules, and budgets are
 recorded in
 [`docs/design/alpinejs/a10_performance.md`](../docs/design/alpinejs/a10_performance.md).
 
+The final i18n server gate has its own short bounded runner:
+
+```bash
+uv run --no-sync python benchmarks/i18n.py --json
+```
+
+It compares an equivalent literal tree with 100 warm message resolutions and
+20 named ICU4X format calls. It also compiles 10,000 messages in each of three
+locales and checks compile time, raw and compressed artifact size, and peak
+memory. Five warmups and 30 render samples enforce the release limits in
+`docs/design/i18n.md` section 14.3. Build `citry-core` in release mode first; a
+debug native extension invalidates the timing result.
+
 ## How it works
 
 The benchmarked code lives in `packages/py/citry/tests/` as self-contained

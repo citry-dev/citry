@@ -26,12 +26,14 @@ from functools import cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
+from citry._owned_resource import _OwnedResource
 from citry.assets import HasHtml
-from citry.ext.dependencies.routes import runtime_url, script_url
+from citry.ext.dependencies.routes import RUNTIME_PATH, runtime_url, script_url
 from citry.ext.dependencies.scripts import (
     cache_asset,
     cache_component_css,
     cache_component_js,
+    gen_asset_cache_key,
     get_component_script,
     get_script,
     has_component_asset,
@@ -43,11 +45,14 @@ from citry.ownership_manifest import OwnershipManifestArtifact
 from citry.util.html import Markup
 
 if TYPE_CHECKING:
+    from citry._javascript_policy import _JavascriptPolicy
+    from citry._serialization_security import _ScriptSecurityMaterializer
     from citry.citry import Citry
     from citry.citry_context import CitryContext
     from citry.component import Component
     from citry.ext.dependencies.types import DependencyRecord
     from citry.extension import OnSerializeContext
+    from citry.settings import SecurityCspMode, SecurityJavascriptMode
 
 # One per-instance client call: initialize `$component` after seeding, or only
 # seed the instance's Alpine scope. The explicit mode keeps script arrival
@@ -97,6 +102,10 @@ class OnDependenciesContext:
     extension's own manifest tag. Only the strategies that emit the page
     manifest render these (``"document"`` and ``"fragment"``); under
     ``"simple"`` they are not emitted."""
+    _security_csp: SecurityCspMode = "off"
+    """The effective call-local CSP mode used by built-in dependency producers."""
+    _security_javascript: SecurityJavascriptMode = "allow"
+    """The effective call-local JavaScript delivery mode."""
 
 
 @dataclass(eq=False)
@@ -110,7 +119,16 @@ class _PrerenderedTag(Dependency):
         return Markup(self.content or "")  # noqa: S704 - __html__ declared this entry trusted
 
 
-def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
+def emit_dependencies(
+    citry: Citry,
+    ctx: OnSerializeContext,
+    *,
+    script_security: _ScriptSecurityMaterializer | None = None,
+    security_csp: SecurityCspMode = "off",
+    javascript_policy: _JavascriptPolicy | None = None,
+    security_javascript: SecurityJavascriptMode = "allow",
+    ownership_artifact: OwnershipManifestArtifact | None = None,
+) -> str:
     """
     The extension's ``on_serialize`` implementation: place the collected
     JS/CSS into ``ctx.html`` per the strategy and position (module docstring).
@@ -122,19 +140,50 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
     css_placeholders = _locate_placeholders(ctx.html, ctx.placeholders, CSS_PLACEHOLDER_KEY)
     all_placeholder_texts = [text for _, text in js_placeholders] + [text for _, text in css_placeholders]
 
-    # "ignore": no tags inserted; the internal placeholders are still removed,
-    # they are render artifacts, not user content.
-    if ctx.deps_strategy == "ignore":
-        return _blank(ctx.html, all_placeholder_texts)
-
     # Collected as an insertion-ordered set (a dict) so the bubble-up merge
     # dedupes on insert instead of accumulating one copy per ancestor.
     records: list[DependencyRecord] = list(ctx.context.extra.get(EXTRA_KEY, {}))
+    ownership = ownership_artifact or ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
+    scope_seed_instances = ownership.scope_seed_instances if isinstance(ownership, OwnershipManifestArtifact) else ()
+
+    # "ignore": no tags inserted and no dependency hooks invoked. The policy
+    # still inventories reached declarations because ignore cannot hide a
+    # JavaScript requirement from forbid.
+    if ctx.deps_strategy == "ignore":
+        if javascript_policy is not None:
+            _inspect_ignored_records(citry, records, scope_seed_instances, javascript_policy)
+        return _blank(ctx.html, all_placeholder_texts)
+
+    if security_javascript in {"omit", "forbid"}:
+        if javascript_policy is None:
+            raise RuntimeError("A restrictive JavaScript mode has no call-local policy authority.")
+        return _emit_without_javascript(
+            citry,
+            ctx,
+            records,
+            all_placeholder_texts,
+            js_placeholders,
+            css_placeholders,
+            scope_seed_instances=scope_seed_instances,
+            script_security=script_security,
+            security_csp=security_csp,
+            javascript_policy=javascript_policy,
+            security_javascript=security_javascript,
+        )
 
     # "fragment": nothing is inlined; the output carries a pre-loader plus a
     # manifest of URLs for the client-side manager to fetch (section 8).
     if ctx.deps_strategy == "fragment":
-        return _emit_fragment(citry, ctx, records, all_placeholder_texts)
+        return _emit_fragment(
+            citry,
+            ctx,
+            records,
+            all_placeholder_texts,
+            script_security=script_security,
+            security_csp=security_csp,
+            javascript_policy=javascript_policy,
+            security_javascript=security_javascript,
+        )
 
     # "document" includes the client-side manager and everything that needs
     # it (the JS-variables scripts, the per-instance component calls, the
@@ -143,12 +192,11 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
     # CSS variables are pure CSS (a stylesheet plus a root-element marker)
     # and work under both.
     with_client_js = ctx.deps_strategy == "document"
-    ownership = ctx.context.extra.get(OWNERSHIP_MANIFEST_KEY)
-    scope_seed_instances = ownership.scope_seed_instances if isinstance(ownership, OwnershipManifestArtifact) else ()
     resolved = _resolve_records(
         citry,
         records,
         with_client_js=with_client_js,
+        script_security=script_security,
         scope_seed_instances=scope_seed_instances,
     )
     scripts, styles, calls = resolved.scripts, resolved.styles, resolved.calls
@@ -165,9 +213,12 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
         context=ctx.context,
         strategy=ctx.deps_strategy,
         before_manifest=[],
+        _security_csp=security_csp,
+        _security_javascript=security_javascript,
     )
     citry.extensions.emit("on_dependencies", hook_ctx)
     scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
+    _validate_hook_nonces(script_security, scripts, styles, before_manifest)
     graph_revision: str | None = None
     if isinstance(ownership, OwnershipManifestArtifact):
         graph_revision = ownership.revision
@@ -203,19 +254,175 @@ def emit_dependencies(citry: Citry, ctx: OnSerializeContext) -> str:
             calls=calls,
             css_instances=resolved.css_instances,
             graph_revision=graph_revision,
+            alpine_runtime="csp" if security_csp == "strict" else "standard",
         )
-        core_scripts = [_runtime_script(citry), *before_manifest, manifest]
+        core_scripts = [
+            _runtime_script(citry, alpine_runtime="csp" if security_csp == "strict" else "standard"),
+            *before_manifest,
+            manifest,
+        ]
 
-    js_html = "".join(str(script.render()) for script in [*core_scripts, *scripts])
-    css_html = "".join(str(style.render()) for style in styles)
+    if javascript_policy is not None:
+        core_scripts = javascript_policy.process_dependencies(core_scripts, position="managed runtime")
+        scripts = javascript_policy.process_dependencies(scripts, position="page")
+        styles = javascript_policy.process_dependencies(styles, position="stylesheet")
 
+    js_html = "".join(
+        str(script.render()) if script_security is None else script_security.render(script)
+        for script in [*core_scripts, *scripts]
+    )
+    css_html = "".join(
+        str(style.render()) if script_security is None else script_security.render_style(style) for style in styles
+    )
+
+    return _place_dependency_html(
+        ctx,
+        js_placeholders,
+        css_placeholders,
+        all_placeholder_texts,
+        js_html=js_html,
+        css_html=css_html,
+    )
+
+
+def _inspect_ignored_records(
+    citry: Citry,
+    records: list[DependencyRecord],
+    scope_seed_instances: tuple[tuple[str, str], ...],
+    javascript_policy: _JavascriptPolicy,
+) -> None:
+    """Inventory reached declarations without invoking ignored dependency hooks."""
+    scope_seed_ids = {render_id for _class_id, render_id in scope_seed_instances}
+    seen_classes: set[type[Component]] = set()
+    for record in dict.fromkeys(records):
+        comp_cls = record.component_class or citry.get_component_by_class_id(record.class_id)
+        if comp_cls not in seen_classes:
+            seen_classes.add(comp_cls)
+            if has_component_asset("js", comp_cls):
+                javascript_policy.add_requirement(
+                    "Component.js is declared on a reached component",
+                    component=comp_cls.__name__,
+                    key=("component-js", comp_cls.class_id),
+                )
+            if comp_cls.get_dependencies().js:
+                javascript_policy.add_requirement(
+                    "JavaScript Dependencies are declared on a reached component",
+                    component=comp_cls.__name__,
+                    key=("dependencies-js", comp_cls.class_id),
+                )
+            _inspect_ignored_css(comp_cls, javascript_policy)
+        if record.js_vars_hash is not None and (uses_component(comp_cls) or record.component_id in scope_seed_ids):
+            javascript_policy.add_requirement(
+                "active js_data() scope seeding requires the Citry browser manager",
+                component=comp_cls.__name__,
+                key=("js-data", record.component_id, record.js_vars_hash),
+            )
+
+
+def _inspect_ignored_css(comp_cls: type[Component], javascript_policy: _JavascriptPolicy) -> None:
+    """Inspect CSS declarations without rendering files or invoking dependency hooks."""
+    structured: list[Dependency] = []
+    for media_type, entries in comp_cls.get_dependencies().css.items():
+        media_attrs: dict[str, str | bool] = {} if media_type == "all" else {"media": media_type}
+        for entry in entries:
+            if isinstance(entry, Dependency):
+                structured.append(entry)
+            elif isinstance(entry, Path):
+                continue
+            elif isinstance(entry, str) and not isinstance(entry, HasHtml):
+                structured.append(Style(url=entry, attrs=media_attrs, kind="extra", origin_class_id=comp_cls.class_id))
+            else:
+                javascript_policy.add_requirement(
+                    "an opaque Dependencies.css entry cannot be proven JavaScript-free while dependencies are ignored",
+                    component=comp_cls.__name__,
+                    rule="opaque-dependency",
+                    key=("dependencies-css-opaque", comp_cls.class_id, id(entry)),
+                )
+    javascript_policy.process_dependencies(structured, position="ignored CSS")
+
+
+def _emit_without_javascript(
+    citry: Citry,
+    ctx: OnSerializeContext,
+    records: list[DependencyRecord],
+    placeholder_texts: list[str],
+    js_placeholders: list[tuple[int, str]],
+    css_placeholders: list[tuple[int, str]],
+    *,
+    scope_seed_instances: tuple[tuple[str, str], ...],
+    script_security: _ScriptSecurityMaterializer | None,
+    security_csp: SecurityCspMode,
+    javascript_policy: _JavascriptPolicy,
+    security_javascript: SecurityJavascriptMode,
+) -> str:
+    """Emit server HTML, CSS, and safe inert data scripts without a manager."""
+    resolved = _resolve_records(
+        citry,
+        records,
+        with_client_js=True,
+        as_urls=False,
+        script_security=script_security,
+        scope_seed_instances=scope_seed_instances,
+    )
+    hook_ctx = OnDependenciesContext(
+        citry=citry,
+        scripts=resolved.scripts,
+        styles=resolved.styles,
+        context=ctx.context,
+        strategy=ctx.deps_strategy,
+        before_manifest=[],
+        _security_csp=security_csp,
+        _security_javascript=security_javascript,
+    )
+    citry.extensions.emit("on_dependencies", hook_ctx)
+    _validate_hook_nonces(script_security, hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest)
+    scripts = javascript_policy.process_dependencies(hook_ctx.scripts, position="page")
+    before_manifest = javascript_policy.process_dependencies(
+        hook_ctx.before_manifest,
+        position="before-manifest",
+    )
+    styles = javascript_policy.process_dependencies(hook_ctx.styles, position="stylesheet")
+
+    retained = [*before_manifest, *scripts]
+    js_html = "".join(_render_dependency(dep, script_security) for dep in retained)
+    css_html = "".join(_render_dependency(dep, script_security) for dep in styles)
+    return _place_dependency_html(
+        ctx,
+        js_placeholders,
+        css_placeholders,
+        placeholder_texts,
+        js_html=js_html,
+        css_html=css_html,
+    )
+
+
+def _render_dependency(
+    dependency: Dependency,
+    script_security: _ScriptSecurityMaterializer | None,
+) -> str:
+    if script_security is None:
+        return str(dependency.render())
+    if isinstance(dependency, Style):
+        return script_security.render_style(dependency)
+    return script_security.render(dependency)
+
+
+def _place_dependency_html(
+    ctx: OnSerializeContext,
+    js_placeholders: list[tuple[int, str]],
+    css_placeholders: list[tuple[int, str]],
+    all_placeholder_texts: list[str],
+    *,
+    js_html: str,
+    css_html: str,
+) -> str:
+    """Place already-rendered dependency tags using the established strategy."""
     if ctx.deps_position in ("prepend", "append"):
         html = _blank(ctx.html, all_placeholder_texts)
         if ctx.deps_position == "prepend":
             return js_html + css_html + html
         return html + js_html + css_html
 
-    # "smart": placeholders first, default locations as the fallback.
     html = ctx.html
     html = _fill_placeholders(html, css_placeholders, css_html)
     html = _fill_placeholders(html, js_placeholders, js_html)
@@ -261,6 +468,8 @@ def _resolve_records(
     *,
     with_client_js: bool,
     as_urls: bool = False,
+    attach_owned_resources: bool = False,
+    script_security: _ScriptSecurityMaterializer | None = None,
     scope_seed_instances: tuple[tuple[str, str], ...] = (),
 ) -> _Resolved:
     """
@@ -283,7 +492,9 @@ def _resolve_records(
     With ``as_urls`` on (the "fragment" strategy), component and variables
     scripts become url-based entries pointing at the cache endpoints instead
     of carrying their content, so the client-side manager fetches each once
-    per page no matter how many fragments use it.
+    per page no matter how many fragments use it. ``attach_owned_resources``
+    also binds each JavaScript URL to the exact currently cached response bytes
+    for integrity-mode serialization.
     """
     mounted = citry.mounted_prefix is not None
 
@@ -354,9 +565,20 @@ def _resolve_records(
             if as_urls:
                 if has_component_asset("js", comp_cls):
                     cache_component_js(comp_cls)
-                    scripts.append(
-                        Script(url=script_url(comp_cls, "js"), kind="component", origin_class_id=comp_cls.class_id)
-                    )
+                    if attach_owned_resources:
+                        resource = _cached_js_resource(comp_cls)
+                        if resource is None:
+                            msg = f"Cannot prove the response bytes for Component.js of {comp_cls.class_id!r}."
+                            raise RuntimeError(msg)
+                        scripts.append(_owned_script(resource, kind="component", origin_class_id=comp_cls.class_id))
+                    else:
+                        scripts.append(
+                            Script(
+                                url=script_url(comp_cls, "js"),
+                                kind="component",
+                                origin_class_id=comp_cls.class_id,
+                            )
+                        )
                 if has_component_asset("css", comp_cls):
                     cache_component_css(comp_cls)
                     styles.append(
@@ -409,17 +631,30 @@ def _resolve_records(
 
         # The variables scripts generated for this instance's data hashes.
         # Unlike class scripts these cannot be rebuilt on a cache miss (the
-        # data existed only during the render), so a missing entry is
-        # skipped; a shared cache backend prevents this across processes.
+        # data existed only during the render). Legacy fragment output retains
+        # its URL on a miss; integrity mode fails because it cannot prove bytes.
+        # A shared cache backend prevents the miss across processes.
         if call_mode is not None and record.js_vars_hash is not None:
             if as_urls:
-                instance_scripts.append(
-                    Script(
-                        url=script_url(comp_cls, "js", record.js_vars_hash),
-                        kind="variables",
-                        origin_class_id=comp_cls.class_id,
+                if attach_owned_resources:
+                    resource = _cached_js_resource(comp_cls, record.js_vars_hash)
+                    if resource is None:
+                        msg = (
+                            f"Cannot prove the response bytes for JavaScript data {record.js_vars_hash!r} "
+                            f"of {comp_cls.class_id!r}."
+                        )
+                        raise RuntimeError(msg)
+                    instance_scripts.append(
+                        _owned_script(resource, kind="variables", origin_class_id=comp_cls.class_id)
                     )
-                )
+                else:
+                    instance_scripts.append(
+                        Script(
+                            url=script_url(comp_cls, "js", record.js_vars_hash),
+                            kind="variables",
+                            origin_class_id=comp_cls.class_id,
+                        )
+                    )
             else:
                 vars_js = get_script("js", comp_cls, record.js_vars_hash)
                 if vars_js is not None:
@@ -455,9 +690,13 @@ def _resolve_records(
             instance_scripts, instance_styles = result
 
         for script in instance_scripts:
+            if script_security is not None:
+                script_security.validate_declared_nonce(script)
             _bucket(script, core_js, extra_js, component_js)
             script_owner_groups.setdefault(script, set()).add(record.component_id)
         for style in instance_styles:
+            if script_security is not None:
+                script_security.validate_declared_nonce(style)
             _bucket(style, core_css, extra_css, component_css)
             style_owner_groups.setdefault(style, set()).add(record.component_id)
 
@@ -496,30 +735,79 @@ def _runtime_js() -> str:
     return (Path(__file__).parent / "client" / "citry.js").read_text(encoding="utf8")
 
 
-def _runtime_script(citry: Citry) -> Script:
+def _runtime_resource(citry: Citry) -> _OwnedResource:
+    url = runtime_url(citry) if citry.mounted_prefix is not None else RUNTIME_PATH
+    return _OwnedResource(url=url, content=_runtime_js(), content_type="text/javascript")
+
+
+def _owned_script(
+    resource: _OwnedResource,
+    *,
+    kind: Literal["core", "component", "variables", "extra"],
+    origin_class_id: str | None = None,
+    attrs: dict[str, str | bool] | None = None,
+) -> Script:
+    script = Script(
+        kind=kind,
+        url=resource.url,
+        attrs={} if attrs is None else attrs,
+        origin_class_id=origin_class_id,
+    )
+    script._owned_resource = resource
+    return script
+
+
+def _cached_js_resource(comp_cls: type[Component], variables_hash: str | None = None) -> _OwnedResource | None:
+    dependency = (
+        get_component_script("js", comp_cls) if variables_hash is None else get_script("js", comp_cls, variables_hash)
+    )
+    if dependency is None:
+        return None
+    if not isinstance(dependency, Script) or dependency.content is None:
+        msg = f"Cached JavaScript for component {comp_cls.class_id!r} is not an inline Script."
+        raise TypeError(msg)
+    return _OwnedResource(
+        url=script_url(comp_cls, "js", variables_hash),
+        content=dependency.content,
+        content_type="text/javascript",
+    )
+
+
+def _runtime_script(citry: Citry, *, alpine_runtime: Literal["standard", "csp"] = "standard") -> Script:
     # A mounted web integration serves the runtime at a URL (cacheable by the
     # browser); without one, the runtime is inlined so the zero-configuration
     # document flow still works end to end. wrap=False: the runtime is
     # already a self-contained immediately-invoked function.
+    attrs: dict[str, str | bool] | None = {"data-citry-alpine-runtime": "csp"} if alpine_runtime == "csp" else None
     if citry.mounted_prefix is not None:
-        return Script(kind="core", url=runtime_url(citry))
-    return Script(kind="core", content=_runtime_js(), wrap=False)
+        return _owned_script(_runtime_resource(citry), kind="core", attrs=attrs)
+    return Script(kind="core", content=_runtime_js(), wrap=False, attrs={} if attrs is None else attrs)
 
 
-def _preloader_script(citry: Citry) -> Script:
+def _preloader_script(
+    citry: Citry,
+    script_security: _ScriptSecurityMaterializer | None = None,
+) -> Script:
     """
     The fragment pre-loader: loads the client runtime if the page does not
     have it yet, so fragments work even on pages that were not rendered with
     the "document" strategy. Removes its own tag afterward.
     """
-    url = runtime_url(citry)
-    if '"' in url:
-        msg = f"The runtime URL cannot contain quotes, got {url!r}"
-        raise ValueError(msg)
+    resource = _runtime_resource(citry)
+    url_literal = json.dumps(resource.url).replace("<", "\\u003c")
+    integrity_line = ""
+    if script_security is not None and script_security.integrity_enabled:
+        integrity = script_security.owned_integrity(resource)
+        integrity_line = f"  s.integrity = {json.dumps(integrity)};\n"
+    nonce_line = ""
+    if script_security is not None and script_security.csp_nonce is not None:
+        nonce_line = f"  s.nonce = {json.dumps(script_security.csp_nonce)};\n"
     content = (
         "if (!globalThis.Citry || !globalThis.Citry.manager) {\n"
         '  var s = document.createElement("script");\n'
-        f'  s.src = "{url}";\n'
+        f"  s.src = {url_literal};\n"
+        f"{integrity_line}"
+        f"{nonce_line}"
         "  document.head.appendChild(s);\n"
         "}\n"
         "if (document.currentScript) document.currentScript.remove();"
@@ -544,6 +832,8 @@ def _build_manifest(
     fetch_css_owners: dict[int, set[str]] | None = None,
     before_manifest: list[Dependency] | None = None,
     transactional: bool = False,
+    script_security: _ScriptSecurityMaterializer | None = None,
+    alpine_runtime: Literal["standard", "csp"] = "standard",
 ) -> Script:
     """
     The page manifest: a ``<script type="application/json" data-citry>`` tag
@@ -558,10 +848,13 @@ def _build_manifest(
     """
 
     def encode_fetch(
-        dependencies: list[Dependency], owners_by_identity: dict[int, set[str]] | None
+        dependencies: list[Dependency],
+        owners_by_identity: dict[int, set[str]] | None,
+        *,
+        kind: Literal["js", "css"],
     ) -> list[str] | list[list[str | list[str] | None]]:
         if not transactional:
-            return [_b64(json.dumps(dep.render_json())) for dep in dependencies]
+            return [_b64(json.dumps(_dependency_descriptor(dep, script_security, kind=kind))) for dep in dependencies]
 
         # A global hook can append an object equal to a component dependency.
         # Keep the first descriptor position, union component owners, and let
@@ -580,7 +873,8 @@ def _build_manifest(
         encoded: list[list[str | list[str] | None]] = []
         for dependency, owners, global_dependency in grouped.values():
             encoded_owners = None if global_dependency else [_b64(owner) for owner in sorted(owners)]
-            encoded.append([_b64(json.dumps(dependency.render_json())), encoded_owners])
+            descriptor = _dependency_descriptor(dependency, script_security, kind=kind)
+            encoded.append([_b64(json.dumps(descriptor)), encoded_owners])
         return encoded
 
     manifest = {
@@ -589,8 +883,8 @@ def _build_manifest(
             "css": [_b64(url) for url in dict.fromkeys(mark_css)],
         },
         "fetch": {
-            "js": encode_fetch(fetch_js, fetch_js_owners),
-            "css": encode_fetch(fetch_css, fetch_css_owners),
+            "js": encode_fetch(fetch_js, fetch_js_owners, kind="js"),
+            "css": encode_fetch(fetch_css, fetch_css_owners, kind="css"),
         },
         "calls": [
             [_b64(class_id), _b64(component_id), None if vars_hash is None else _b64(vars_hash), mode]
@@ -598,10 +892,12 @@ def _build_manifest(
         ],
         "cssInstances": [[_b64(class_id), _b64(component_id)] for class_id, component_id in css_instances],
         "graph": graph_revision,
+        "alpineRuntime": alpine_runtime,
     }
     if transactional:
         manifest["beforeManifest"] = [
-            _b64(json.dumps(dependency.render_json())) for dependency in before_manifest or []
+            _b64(json.dumps(_dependency_descriptor(dependency, script_security, kind="before")))
+            for dependency in before_manifest or []
         ]
     return Script(kind="core", content=json.dumps(manifest), attrs={"type": "application/json", "data-citry": True})
 
@@ -611,6 +907,11 @@ def _emit_fragment(
     ctx: OnSerializeContext,
     records: list[DependencyRecord],
     placeholder_texts: list[str],
+    *,
+    script_security: _ScriptSecurityMaterializer | None,
+    security_csp: SecurityCspMode,
+    javascript_policy: _JavascriptPolicy | None,
+    security_javascript: SecurityJavascriptMode,
 ) -> str:
     """
     The "fragment" strategy: content followed by the pre-loader and a
@@ -639,6 +940,8 @@ def _emit_fragment(
             records,
             with_client_js=True,
             as_urls=True,
+            attach_owned_resources=script_security is not None and script_security.integrity_enabled,
+            script_security=script_security,
             scope_seed_instances=scope_seed_instances,
         )
     else:
@@ -661,9 +964,12 @@ def _emit_fragment(
         context=ctx.context,
         strategy="fragment",
         before_manifest=[],
+        _security_csp=security_csp,
+        _security_javascript=security_javascript,
     )
     citry.extensions.emit("on_dependencies", hook_ctx)
     scripts, styles, before_manifest = hook_ctx.scripts, hook_ctx.styles, hook_ctx.before_manifest
+    _validate_hook_nonces(script_security, scripts, styles, before_manifest)
     graph_revision: str | None = None
     ownership_tag: Dependency | None = None
     if isinstance(ownership, OwnershipManifestArtifact):
@@ -681,7 +987,7 @@ def _emit_fragment(
             graph_revision is not None
             and isinstance(dependency, Script)
             and dependency.attrs.get("type") == "application/json"
-            and dependency.attrs.get("data-citry-events") is True
+            and (dependency.attrs.get("data-citry-events") is True or dependency.attrs.get("data-citry-i18n") is True)
         ):
             framework_manifests.append(dependency)
         elif graph_revision is not None:
@@ -691,6 +997,18 @@ def _emit_fragment(
     if ownership_tag is not None:
         framework_manifests.insert(0, ownership_tag)
 
+    if javascript_policy is not None:
+        scripts = javascript_policy.process_dependencies(scripts, position="fragment fetch")
+        styles = javascript_policy.process_dependencies(styles, position="fragment stylesheet")
+        framework_manifests = javascript_policy.process_dependencies(
+            framework_manifests,
+            position="fragment framework",
+        )
+        staged_before_manifest = javascript_policy.process_dependencies(
+            staged_before_manifest,
+            position="fragment before-manifest",
+        )
+
     # A fragment that carries nothing at all has nothing to load, so it needs
     # no pre-loader or manifest (and no mounted integration).
     if not scripts and not styles and not resolved.calls and not resolved.css_instances and not before_manifest:
@@ -698,6 +1016,44 @@ def _emit_fragment(
     if citry.mounted_prefix is None:
         raise RuntimeError(fragment_needs_mount_msg)
 
+    html = _blank(ctx.html, placeholder_texts)
+    # Ownership and Events manifests stay inert top-level JSON. Every other
+    # graph-backed hook entry is a descriptor inside the dependency manifest,
+    # so an ignored incoming branch cannot execute it during fragment parsing.
+    if script_security is None:
+        manifest = _build_manifest(
+            mark_js=[],
+            mark_css=[],
+            fetch_js=scripts,
+            fetch_css=styles,
+            calls=resolved.calls,
+            css_instances=resolved.css_instances,
+            graph_revision=graph_revision,
+            fetch_js_owners=resolved.script_owners,
+            fetch_css_owners=resolved.style_owners,
+            before_manifest=staged_before_manifest,
+            transactional=graph_revision is not None,
+            alpine_runtime="standard",
+        )
+        before_html = "".join(str(dep.render()) for dep in framework_manifests)
+        return html + str(_preloader_script(citry, None).render()) + before_html + str(manifest.render())
+    if security_csp == "strict":
+        preloader_html = ""
+    else:
+        runtime_resource = _runtime_resource(citry)
+        preloader = _preloader_script(citry, script_security)
+        if javascript_policy is not None:
+            retained_preloader = javascript_policy.process_dependencies(
+                [preloader],
+                position="fragment preloader",
+            )
+            if not retained_preloader or not isinstance(retained_preloader[0], Script):
+                raise RuntimeError("The JavaScript inventory unexpectedly removed the warning-mode preloader.")
+            preloader = retained_preloader[0]
+        preloader_html = script_security.render(preloader)
+        if script_security.integrity_enabled:
+            script_security.record_owned_dynamic(runtime_resource)
+    before_html = "".join(script_security.render(dep) for dep in framework_manifests)
     manifest = _build_manifest(
         mark_js=[],
         mark_css=[],
@@ -710,13 +1066,57 @@ def _emit_fragment(
         fetch_css_owners=resolved.style_owners,
         before_manifest=staged_before_manifest,
         transactional=graph_revision is not None,
+        script_security=script_security,
+        alpine_runtime="csp" if security_csp == "strict" else "standard",
     )
-    html = _blank(ctx.html, placeholder_texts)
-    # Ownership and Events manifests stay inert top-level JSON. Every other
-    # graph-backed hook entry is a descriptor inside the dependency manifest,
-    # so an ignored incoming branch cannot execute it during fragment parsing.
-    before_html = "".join(str(dep.render()) for dep in framework_manifests)
-    return html + str(_preloader_script(citry).render()) + before_html + str(manifest.render())
+    if javascript_policy is not None:
+        retained_manifest = javascript_policy.process_dependencies(
+            [manifest],
+            position="fragment manifest",
+        )
+        if not retained_manifest:
+            return html + preloader_html + before_html
+        if not isinstance(retained_manifest[0], Script):
+            raise RuntimeError("The JavaScript inventory changed the structured fragment manifest type.")
+        manifest = retained_manifest[0]
+    return html + preloader_html + before_html + script_security.render(manifest)
+
+
+def _dependency_descriptor(
+    dependency: Dependency,
+    script_security: _ScriptSecurityMaterializer | None,
+    *,
+    kind: Literal["js", "css", "before"],
+) -> dict[str, str | dict[str, str | bool]]:
+    if script_security is not None and kind == "js":
+        return script_security.descriptor(dependency)
+    if script_security is not None and kind == "css":
+        return script_security.style_descriptor(dependency)
+    if script_security is not None and isinstance(dependency, Script):
+        return script_security.descriptor(dependency)
+    if script_security is not None and isinstance(dependency, Style):
+        return script_security.style_descriptor(dependency)
+    descriptor = dependency.render_json()
+    rejects_opaque = descriptor.get("tag") == "script" or (
+        descriptor.get("tag") == "style" and script_security is not None and script_security.csp_nonce is not None
+    )
+    if script_security is not None and rejects_opaque:
+        msg = "Executable before-manifest dependency descriptors must use structured Script or Style objects."
+        raise TypeError(msg)
+    return descriptor
+
+
+def _validate_hook_nonces(
+    script_security: _ScriptSecurityMaterializer | None,
+    scripts: list[Dependency],
+    styles: list[Dependency],
+    before_manifest: list[Dependency],
+) -> None:
+    """Check every global-hook contribution before later equality deduplication."""
+    if script_security is None or script_security.csp_nonce is None:
+        return
+    for dependency in [*scripts, *styles, *before_manifest]:
+        script_security.validate_declared_nonce(dependency)
 
 
 def _bucket(dep: Dependency, core: list[Dependency], extra: list[Dependency], component: list[Dependency]) -> None:
@@ -757,9 +1157,9 @@ def _entry_to_script(entry: Any, comp_cls: type[Component], *, fragment: bool = 
     if isinstance(entry, Dependency):
         return entry
     if isinstance(entry, Path):
-        url = _maybe_serve_local_file(entry, comp_cls)
-        if url is not None:
-            return Script(url=url, kind="extra", origin_class_id=comp_cls.class_id)
+        resource = _maybe_serve_local_file(entry, comp_cls)
+        if resource is not None:
+            return _owned_script(resource, kind="extra", origin_class_id=comp_cls.class_id)
         return Script(content=_read_asset(entry), wrap=False, kind="extra", origin_class_id=comp_cls.class_id)
     if isinstance(entry, HasHtml) and not isinstance(entry, str):
         return _prerendered(entry, comp_cls, fragment=fragment)
@@ -789,9 +1189,9 @@ def _entry_to_style(entry: Any, media_type: str, comp_cls: type[Component], *, f
     if isinstance(entry, Dependency):
         return entry
     if isinstance(entry, Path):
-        url = _maybe_serve_local_file(entry, comp_cls)
-        if url is not None:
-            return Style(url=url, attrs=media_attrs, kind="extra", origin_class_id=comp_cls.class_id)
+        resource = _maybe_serve_local_file(entry, comp_cls)
+        if resource is not None:
+            return Style(url=resource.url, attrs=media_attrs, kind="extra", origin_class_id=comp_cls.class_id)
         return Style(content=_read_asset(entry), attrs=media_attrs, kind="extra", origin_class_id=comp_cls.class_id)
     if isinstance(entry, HasHtml) and not isinstance(entry, str):
         return _prerendered(entry, comp_cls, fragment=fragment)
@@ -809,7 +1209,7 @@ def _read_asset(path: Path) -> str:
     return path.read_text(encoding="utf8")
 
 
-def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> str | None:
+def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> _OwnedResource | None:
     """
     The URL a local-file entry is served at, or ``None`` to inline it.
 
@@ -829,8 +1229,21 @@ def _maybe_serve_local_file(path: Path, comp_cls: type[Component]) -> str | None
     citry = comp_cls.citry
     if citry.mounted_prefix is None:
         return None
-    file_name = cache_asset(citry, _read_asset(path), path.suffix.lstrip("."))
-    return citry.build_url(f"asset/{file_name}")
+    content = _read_asset(path)
+    extension = path.suffix.lstrip(".")
+    file_name = cache_asset(citry, content, extension)
+    served_content = citry.cache.get(gen_asset_cache_key(file_name))
+    if not isinstance(served_content, (str, bytes)):
+        msg = f"Cached dependency asset {file_name!r} has no text or byte content."
+        raise TypeError(msg)
+    content_type = (
+        "text/javascript" if extension == "js" else "text/css" if extension == "css" else "application/octet-stream"
+    )
+    return _OwnedResource(
+        url=citry.build_url(f"asset/{file_name}"),
+        content=served_content,
+        content_type=content_type,
+    )
 
 
 # ----- Placement -----

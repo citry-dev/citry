@@ -219,3 +219,12 @@ Falsifier for the compact boundary: if real application use repeatedly needs a
 second animation family that cannot be expressed through public variables,
 research a small `variant` vocabulary rather than adding arbitrary child
 rendering to Spinner.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

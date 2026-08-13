@@ -703,6 +703,68 @@ keeping semantic Table completely script-free. Conditional per-instance asset
 delivery remains a future compiler or runtime optimization, not a hidden
 requirement on component authors.
 
+#### 12.1.1 Whole-catalog reconciliation after the seven-family batch
+
+The eight-probe and basic-route budgets above remain route gates. They do not
+double as a complete-catalog ceiling. The later 80 KiB Brotli JavaScript and
+30 KiB Brotli CSS whole-catalog checks were set against the 2026-08-11
+promoted snapshot, before the approved Disclosure, SplitButton, TagsInput,
+ScrollArea, ContextMenu, Image, and CommandPalette batch completed. The final
+batch falsifies only that aggregate ceiling, not any family-specific,
+attributed, standalone, or narrow-route limit.
+
+The immutable pre-batch snapshot without Disclosure contained 93 public
+component definitions and 48 unique JavaScript / 54 unique CSS frames:
+
+| Asset | SHA-256 | Raw | gzip | Brotli |
+|---|---|---:|---:|---:|
+| JavaScript | `b63e9837b956e858cfc96ce9fa5d345ab08adf39fe1b6eee746daa5de2f24980` | 631,952 | 111,715 | 77,389 |
+| CSS | `31d68dfe59ff9ce13990a0e12da514ad0518bf6c450f45c33e9946192f04dd68` | 261,668 | 31,676 | 25,072 |
+
+Shared Dialog, collection, anchored-layer, geometry, form, and lifecycle
+foundations continued to evolve while the batch was implemented. Rebuilding
+the current catalog with all seven new public roots excluded measures that
+foundation change separately as +73,521 / +13,680 / +11,869 JavaScript and
++4,454 / +603 / +456 CSS bytes. Adding the final public roots in the approved
+order produces these positive whole-catalog marginals. Compression is
+recomputed over the complete ordered unique frame set after each addition;
+the numbers are therefore catalog marginals, not sums of independently
+compressed frames.
+
+| Family | JavaScript raw/gzip/Brotli | CSS raw/gzip/Brotli |
+|---|---:|---:|
+| Disclosure | +26,797 / +5,483 / +3,586 | +8,060 / +575 / +391 |
+| SplitButton | +11,340 / +2,146 / +1,403 | +2,108 / +343 / +136 |
+| TagsInput | +10,546 / +3,616 / +3,245 | +4,464 / +682 / +545 |
+| ScrollArea | +6,648 / +2,585 / +2,215 | +3,929 / +435 / +351 |
+| ContextMenu | +27,160 / +8,709 / +7,182 | +440 / +57 / +48 |
+| Image | +27,668 / +5,691 / +4,410 | +2,640 / +340 / +293 |
+| CommandPalette | +38,166 / +7,522 / +4,378 | +9,715 / +1,166 / +949 |
+
+The final 101-definition catalog contains 62 unique JavaScript and 62 unique
+CSS frames. Newline-framed canonical measurements are:
+
+| Asset | SHA-256 | Raw | gzip | Brotli |
+|---|---|---:|---:|---:|
+| JavaScript | `65ca8587e1d6e54bbb8d0d414fe8a72673bce85b0ebaab02a7ad4108b9ef28b8` | 853,798 | 161,147 | 115,677 |
+| CSS | `f2806359ebdf9751cbf33ccc0b3afcfa9180aabebdb879f70be117ec3ade527e` | 297,478 | 35,877 | 28,241 |
+
+The reconciled whole-catalog limits are less than 960 KiB raw / 192 KiB gzip
+/ 128 KiB Brotli JavaScript and less than 336 KiB raw / 40 KiB gzip / 32 KiB
+Brotli CSS. They leave 129,242 / 35,461 / 15,395 JavaScript bytes and 46,586
+/ 5,083 / 4,527 CSS bytes of headroom. The smallest margin is 11.75% of its
+round ceiling for JavaScript and 12.41% for CSS. Every dimension is frozen so
+a favorable aggregate compression change cannot hide raw or alternate-codec
+growth.
+
+This is a secondary worst-case catalog guard. A family change must still pass
+its own attributed or incremental ceiling, complete standalone ceiling where
+specified, exact frame/provenance assertions, deduplication checks, and the
+basic action/form/table route budget. Aggregate shrink in another family never
+offsets those gates. A future legitimate catalog overage requires another
+recorded reconciliation with exact current frames, intervening family deltas,
+and independent asset review rather than an unreviewed constant increase.
+
 ### 12.2 Customization and visual coverage
 
 | Measure | Phase 7 budget |

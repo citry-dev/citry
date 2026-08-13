@@ -239,3 +239,12 @@ and runs serious/critical Axe scans.
 
 Changing draft/commit ownership, form truth, focus restoration, or the default
 inside action anatomy requires another design review.
+
+## 21. Internationalization
+
+The previously deferred localization pass is complete. Placeholder, edit,
+save, and cancel keys and overrides are recorded in the structured
+[Translation keys table](../../../packages/py/citry_ui/citry_ui/components/ceditable/api.yml).
+Stable action labels use `$c-tr`; the placeholder uses `i18n.bind()` because
+the runtime writes it to both the editor and empty preview as state changes.
+Each explicitly supplied label remains caller-owned.

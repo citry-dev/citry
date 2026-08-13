@@ -87,3 +87,9 @@ interfaces:
     name: CBreadcrumbsSeparatorSlotData
     entries:
       - {id: index, name: index, type: int, meaning: Zero-based preceding item index.}
+
+translations:
+  - id: cbreadcrumbs-translations
+    component: CBreadcrumbs
+    entries:
+      - {id: label, key: citry-ui-breadcrumbs-label, purpose: Names the navigation landmark., variables: None, override: '`label` input', updates: '$c-tr updates `aria-label`.'}

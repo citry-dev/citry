@@ -97,3 +97,14 @@ interfaces:
       - {id: previous-page, name: previousPage, type: number, meaning: Current page before activation.}
       - {id: kind, name: kind, type: '"page" | "previous" | "next" | "first" | "last"', meaning: Activated control job.}
       - {id: source-event, name: sourceEvent, type: Event, meaning: Native click event; prevent it to stop a link.}
+
+translations:
+  - id: cpagination-translations
+    component: CPagination
+    entries:
+      - {id: label, key: citry-ui-pagination-label, purpose: Names the pagination navigation landmark., variables: None, override: '`label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: page, key: citry-ui-pagination-page, purpose: Names each numbered page control., variables: 'page: str', override: '`page_label` input', updates: '$c-tr handles server controls; `i18n.bind()` handles recreated controls.'}
+      - {id: previous, key: citry-ui-pagination-previous, purpose: Names the previous-page control., variables: None, override: '`previous_label` input', updates: '$c-tr or `i18n.bind()` updates `aria-label`.'}
+      - {id: next, key: citry-ui-pagination-next, purpose: Names the next-page control., variables: None, override: '`next_label` input', updates: '$c-tr or `i18n.bind()` updates `aria-label`.'}
+      - {id: first, key: citry-ui-pagination-first, purpose: Names the first-page control., variables: None, override: '`first_label` input', updates: '$c-tr or `i18n.bind()` updates `aria-label`.'}
+      - {id: last, key: citry-ui-pagination-last, purpose: Names the last-page control., variables: None, override: '`last_label` input', updates: '$c-tr or `i18n.bind()` updates `aria-label`.'}

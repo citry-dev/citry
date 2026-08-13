@@ -71,3 +71,5 @@ interfaces:
       - id: input-type-aliases-cicon-name
         name: CIconName
         definition: 'Literal["arrow-down", "arrow-left", "arrow-right", "arrow-up", "calendar", "check", "chevron-down", "chevron-left", "chevron-right", "chevron-up", "circle-check", "circle-help", "circle-info", "circle-x", "clock", "copy", "download", "edit", "external-link", "eye", "eye-off", "file", "folder", "heart", "home", "leaf", "link", "lock", "mail", "menu", "minus", "more-horizontal", "more-vertical", "plus", "refresh-cw", "search", "settings", "star", "trash", "triangle-alert", "unlock", "upload", "user", "x", "back", "forward", "prev", "next", "close", "clear", "success", "info", "warn", "danger", "expand", "collapse", "dropdown"]'
+
+translations: []

@@ -95,11 +95,18 @@ rendering implementation. Use this order inside a component class:
 2. event handlers, when present;
 3. data methods such as `template_data()`, `js_data()`, and `css_data()`; and
 4. `template`, `js`, and `css`; and
-5. `messages`, which normally comes after the other primary assets.
+5. `messages` or `messages_file`, as the final member of the component class.
+
+When a component owns that final message asset, declare the language of its
+defining source with `class I18n: messages_locale = "..."` near the nested
+schemas. The asset activates engine-wide server source mode, so other
+registered components may call its public keys without rendering the owner.
+Do not add a parallel Python table of source strings.
 
 Keep a helper or lifecycle method near the behavior it supports, but preserve
 that overall direction. In particular, do not place a data method below the
-template that reads its values.
+template that reads its values, and do not place any member after the
+component's source-message declaration.
 
 ## Declare inline assets directly
 
@@ -170,7 +177,11 @@ Every direct `render()` call starts a new component tree. Pass the values that
 tree may inject through the call itself:
 
 ```python
-context = app.extensions.get_extension("i18n").make_context(
+from citry.ext.i18n import make_context
+
+
+context = make_context(
+    app,
     locale="cs-CZ",
 )
 html = Page().render(

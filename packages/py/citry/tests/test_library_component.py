@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import gc
 import inspect
 import threading
@@ -13,6 +14,7 @@ from weakref import ref
 
 import pytest
 
+import citry.library_component as library_component_module
 from citry import (
     AlreadyRegistered,
     Citry,
@@ -739,3 +741,23 @@ def test_library_root_cannot_be_called_or_published():
         LibraryComponent()
     with pytest.raises(TypeError, match="definition classes"):
         ComponentLibrary("invalid", (LibraryComponent,))
+
+
+def test_checker_only_authoring_base_declares_every_public_component_field():
+    # The base exists only to static checkers, so compare its source annotations
+    # with the live Component annotations rather than importing the nested class.
+    source = Path(library_component_module.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    authoring_base = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.ClassDef) and node.name == "_LibraryComponentAuthoringBase"
+    )
+    authoring_fields = {
+        node.target.id
+        for node in authoring_base.body
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and not node.target.id.startswith("_")
+    }
+    component_fields = {name for name in Component.__annotations__ if not name.startswith("_")}
+
+    assert authoring_fields == component_fields

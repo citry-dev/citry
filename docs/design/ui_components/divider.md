@@ -25,7 +25,7 @@ Common jobs:
 | Choose emphasis | `variant="dashed" size="md"` | direct API |
 | Align with nested content | `inset="start"` or `--cui-divider-inset` | direct API and CSS |
 | Control exact length, color, or opacity | `style` or public variables | CSS contract |
-| Let a user resize adjacent panes | future Splitter family | unsupported by Divider |
+| Let a user resize adjacent panes | `CSplitter` | separate component |
 
 Python composition follows the same shape:
 
@@ -344,3 +344,12 @@ Falsifier for the labelled design: if assistive-technology and application
 evidence shows a named nonadjustable separator is materially clearer than
 ordinary visible label content plus decorative line segments, research an
 explicit labelled semantic mode without changing the default composition.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

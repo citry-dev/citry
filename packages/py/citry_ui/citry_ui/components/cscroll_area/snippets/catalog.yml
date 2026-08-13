@@ -1,0 +1,12 @@
+schema_version: 1
+previews:
+  - at-a-glance
+  - activity-and-focus
+  - wide-table
+  - configuration
+  - rtl-and-direction
+  - nested-areas
+  - native-callback
+  - customization
+  - overlay-boundary
+  - lifecycle

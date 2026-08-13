@@ -1,8 +1,9 @@
 # Citry UI component inventory
 
-**Status (2026-08-09): provisional Phase 8 inventory with three completed
-source-development batches plus completed responsive-layout and overlay-family
-passes.**
+**Status (2026-08-12): provisional Phase 8 inventory for the current
+source-development catalog. The worktree contains 55 component-family
+directories and documentation entries and 101 registered definitions,
+including compound-family declarations and private renderers.**
 This document orders component work while publication waits for compatible
 `citry` and `citry_core` releases. It does not freeze the v1 public contract,
 package compatibility range, exact class names, or release contents.
@@ -10,8 +11,10 @@ package compatibility range, exact class names, or release contents.
 The dated ecosystem census remains in the
 [Phase 5 component taxonomy](ui_research/component-taxonomy.md). The
 [Citry UI plan](ui_library_plan.md) owns the current product decisions. This
-inventory combines both with evidence from the thirty-four implemented production
-families.
+inventory combines both with live source, registration, documentation, and
+component-contract evidence. The original thirty-four-family baseline remains
+visible below as the dated first set; the subsequent-pass table brings the
+active inventory to the current source catalog.
 
 ## 1. What this inventory decides
 
@@ -59,7 +62,7 @@ counts establish demand for the grouped job, not identical coverage for every
 candidate component. Component-specific research must disaggregate that
 evidence before the candidate earns a batch slot.
 
-## 3. Current production baseline
+## 3. Current source-development baseline
 
 | Family | Public boundary | Current state | Remaining release work |
 |---|---|---|---|
@@ -102,6 +105,39 @@ The framework foundations already proven by this baseline include explicit
 library registration, atomic rollback, engine-neutral Python composition,
 typed slot data, client and server context, asset ownership, live docs
 previews, and structured API reference generation.
+
+### 3.1 Subsequent source-development passes
+
+The following 21 families have since joined the source-development baseline.
+Each has live runtime source, a component specification, family-owned public
+documentation and structured reference, docs-catalog projection, and contract
+coverage. Family-specific human, assistive-technology, device, browser, and
+release evidence remains governed by its specification rather than by presence
+in this table.
+
+| Family | Public boundary |
+|---|---|
+| AlertDialog | `CAlertDialog` |
+| Carousel | `CCarousel`, `CCarouselSlide` |
+| CommandPalette | `CCommandPalette` and its command/group records |
+| ContextMenu | `CContextMenu` over the Menu declaration family |
+| Disclosure | `CDisclosure` |
+| Editable | `CEditable` |
+| FileInput | `CFileInput`, `CDropTarget` |
+| HoverCard | `CHoverCard` |
+| Image | `CImage` |
+| Listbox | `CListbox`, `CListboxOption`, `CListboxGroup` |
+| MultiSelect | `CMultiSelect` and option/group records |
+| NavigationMenu | `CNavigationMenu`, `CNavigationMenuItem`, `CNavigationMenuLink` |
+| ScrollArea | `CScrollArea` |
+| Select | `CSelect` and option/group records |
+| SplitButton | `CSplitButton` |
+| Splitter | `CSplitter`, `CSplitterPanel` |
+| Stepper | `CStepper`, `CStep` |
+| Tag | `CTagGroup`, `CTag` |
+| TagsInput | `CTagsInput`, `CTagsInputMessages` |
+| Toolbar | `CToolbar` |
+| Tree | `CTree`, `CTreeItem` |
 
 ## 4. Completed source-development batch
 
@@ -330,9 +366,11 @@ its native-Dialog implementation, ten public previews, and focused
 three-engine evidence. Toast has completed its persistent declarative queue,
 stable announcers, timer/focus/modal behavior, ten public previews, and
 focused three-engine evidence. Human visual, assistive-technology, real-device,
-and released-artifact review remain. Localization-sensitive
-numeric/date/time/range controls remain gated on the foundation proposal in
-[`i18n.md`](i18n.md).
+and released-artifact review remain. Locale-sensitive numeric, date, time, and
+range families may now enter their own research and design passes against the
+implemented core contracts in [`i18n.md`](i18n.md). Each still owns its
+component-specific stepping, browser editing, direction, calendar/time-zone,
+and server/browser agreement decisions.
 
 ### 6.2 Substitutes
 
@@ -342,14 +380,15 @@ raw markup. `CVisuallyHidden` should advance only when research proves a public
 component job; otherwise `CDescriptionList` and `CStatistic` remain the first
 substitutes after the blocked-group review.
 
-### 6.3 Approved non-localized interaction batch
+### 6.3 Completed interaction batch
 
-The 2026-08-11 follow-up keeps locale-sensitive number, date, time, Rating,
-PinInput, Slider, and Range work behind the `i18n.md` gate. It instead advances
-seven families whose values and behavior do not require localized parsing or
-formatting. Each family still completes the full research, design,
-implementation, documentation, evidence, and review pipeline before runtime
-work starts on the next family.
+The seven families selected on 2026-08-11 have completed their
+source-development passes and are included in section 3.1. The original
+selection rationale remains below as the record of that decision. Calling the
+batch "non-localized" meant that it did not require localized value parsing or
+formatting before implementation; TagsInput and CommandPalette still own
+translation, announcement, matching, and direction work in the Citry UI i18n
+migration.
 
 | Order | Selected family | Initial public boundary | Main reason to advance |
 |---:|---|---|---|
@@ -365,10 +404,11 @@ work starts on the next family.
 that busy semantics, interaction blocking, and focus recovery add a durable
 contract beyond Spinner plus ordinary composition.
 
-If localization-sensitive controls remain blocked after this batch, the next
-review group is DataGrid, virtualized collections, Tour, and
-Transfer/PickList. That is a research and boundary pass, not automatic approval
-to place all four specialist systems in the core package.
+The next specialist review group is DataGrid, virtualized collections, Tour,
+and Transfer/PickList. That is a research and boundary pass, not automatic
+approval to place all four specialist systems in the core package. Date, time,
+calendar, and date-range families proceed through their own research; generic
+browser temporal parsing is not a gate for that work.
 
 ## 7. Remaining core candidates
 
@@ -377,24 +417,24 @@ depends on lessons from the completed batch and final Phase 8 scope.
 
 | Area | Families or foundations | Evidence signal | Dependency or open decision |
 |---|---|---:|---|
-| Foundations | Reset and cascade layers; typography and native content styles; global semantic tokens, component defaults, density, motion, and responsive vocabulary | Theme/tokens 9/12; typography/native content 6/12 | Card and the existing production families supply the current surface, elevation, shape, spacing, and responsive evidence. Global aliases and reset/layer policy remain foundation work unless an application/component earns a public job. |
-| Actions | SplitButton | Group/toggle 10/12 | ButtonGroup and Toggle are selected for batch three. SplitButton depends on Menu. |
+| Foundations | Reset and cascade layers; typography and native content styles; global semantic tokens, component defaults, density, motion, and responsive vocabulary | Theme/tokens 9/12; typography/native content 6/12 | Card and the existing families supply the current surface, elevation, shape, spacing, and responsive evidence. Global aliases and reset/layer policy remain foundation work unless an application/component earns a public job. |
+| Actions | Application command composition beyond the current Button, SplitButton, Menu, and CommandPalette boundaries | Group/toggle 10/12 | Advance only when an application job is not served by the implemented command families. |
 | Forms | NumberInput, Slider/Range, Rating, PinInput | NumberInput 10/12; Slider/Rating 11/12 | Numeric and pointer controls need parsing, stepping, locale boundaries, keyboard, touch, and controlled-state research. |
 | Navigation | NavList/NavLink, Menu, application navigation | Menu 11/12; app navigation 7/12 | Pagination and Menu are implemented. Route awareness stays with applications or host integrations. |
-| Feedback | interactive Tag/Chip, Toast/Notification | Badge 9/12; Toast 10/12 | Skeleton and Toast are implemented. Interactive or removable Chips need their own behavior contract. |
-| Overlays | AlertDialog, Drawer/Sheet, Popover, Tooltip, Menu popup, HoverCard | 10 to 11/12 for the main families | The platform-first private foundation plus Popover, Tooltip, Menu, and modal Drawer/Sheet passes are complete. AlertDialog and HoverCard remain separate jobs; persistent navigation remains a layout job. |
-| Layout and shell | AppShell, Header/AppBar, Main, Footer, Sidebar, responsive navigation | 7/12 plus strong local application demand | Build on the selected layout vocabulary. Responsive navigation may also depend on Drawer. |
-| Overflow and resizing | ScrollArea, Splitter, and overflow helpers | Grouped row 10/12 | Native overflow remains the baseline. Advance a component only for a concrete focus, scrollbar, resize, persistence, or responsive job that CSS does not solve clearly. |
-| Data display | DescriptionList/DataList, Timeline, Statistic | Avatar/List 9/12; Timeline/Statistic 6/12 | Avatar and semantic List are selected for batch three. Establish collection identity only where items are stateful. |
-| Collections | MultiSelect/TagsInput, richer Combobox presentations, Tree, Carousel | MultiSelect inherits 9/12 Combobox evidence; Tree 8/12; Carousel 7/12 | Rich option content, multiple native form values, selection identity, drag, virtualization, and async ownership require separate proofs. |
+| Feedback | Further notification services beyond Tag, Toast, Alert, and Progress | Badge 9/12; Toast 10/12 | The visible and declarative feedback families are implemented. An imperative global service or richer queue must earn a separate lifecycle contract. |
+| Overlays | Additional overlay jobs beyond AlertDialog, Dialog, Drawer, Popover, Tooltip, Menu, ContextMenu, CommandPalette, and HoverCard | 10 to 11/12 for the main families | The platform-first private foundation and current overlay families are implemented. Persistent navigation remains a layout job. |
+| Layout and shell | AppShell, Header/AppBar, Main, Footer, Sidebar, responsive navigation | 7/12 plus strong local application demand | Build on the implemented layout vocabulary. Responsive navigation may compose with Drawer. |
+| Overflow and resizing | Additional overflow helpers beyond ScrollArea and Splitter | Grouped row 10/12 | Native overflow remains the baseline. Advance another component only for a concrete focus, scrollbar, resize, persistence, or responsive job that CSS does not solve clearly. |
+| Data display | DescriptionList/DataList, Timeline, Statistic | Avatar/List 9/12; Timeline/Statistic 6/12 | Avatar and semantic List are implemented. Advance DescriptionList/DataList, Timeline, or Statistic only when repeated application jobs prove a distinct data-display contract. |
+| Collections | Richer Combobox presentations, drag/reorder, virtualization, and async collection products beyond the current Select, MultiSelect, TagsInput, Tree, and Carousel families | MultiSelect inherits 9/12 Combobox evidence; Tree 8/12; Carousel 7/12 | Each additional product needs separate identity, focus, drag, virtualization, and async ownership proofs. |
 | Utilities | VisuallyHidden, focus-visible policy, focus scope/restoration, portal, presence, dismissal, responsive visibility | 7 to 8/12 | Prefer internal foundations until user-authored composition demonstrates a stable public job. |
 
 ## 8. Gated and companion work
 
 | Work | Stage | Gate or boundary |
 |---|---|---|
-| Date, time, calendar, date range, and locale-sensitive number controls | Later general-suite work | [`i18n.md`](i18n.md) must ratify parsing, formatting, time zones, locale resolution, direction, and server/browser agreement. |
-| FileInput and DropTarget | Later | Native file selection may advance after focused research. Upload transport, storage, previews, cancellation, retry, and server validation form a larger security and lifecycle product. |
+| Date, time, calendar, date range, and locale-sensitive number controls | Next general-suite research and implementation | Use the implemented core server formatting/parsing, locale, calendar, direction, and time-zone contracts. Each family must ratify its browser editing and server/browser agreement, but generic browser temporal parsing is not an entry gate. |
+| Upload transport and storage around FileInput and DropTarget | Companion work | Native file selection and drop are implemented. Upload transport, storage, previews, cancellation, retry, and server validation form a larger security and lifecycle product. |
 | Sortable and editable collections, virtual windows, and infinite loading | Later | Identity, focus, drag, async, and server replacement behavior need a dedicated collection contract. |
 | Stateful DataTable or DataGrid | Companion candidate | Spreadsheet navigation, column models, editing, grouping, aggregation, pinning, virtualization, export, and server query protocols exceed semantic Table. |
 | Charts, rich-text editing, maps, schedulers, diagramming, and media editors | Companion packages | Each adds a specialist engine, payload, security model, accessibility contract, or domain model. |

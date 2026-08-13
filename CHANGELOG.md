@@ -4,6 +4,57 @@
 
 ### Added
 
+- Declared the configuration attributes owned by every always-installed
+  extension on the base `Component` API. Type checkers and generated reference
+  docs now expose `Component.Cache`, `Component.Dependencies`,
+  `Component.Events`, and `Component.I18n`, plus the matching instance values
+  `cache`, `dependencies`, `events`, and `i18n`.
+- Added the CSP security-configuration and serialization-result foundation.
+  `Citry` now stores typed CSP, JavaScript-delivery, and script-integrity
+  policies, and each render can return immutable HTML/security metadata through
+  `serialize_result()`. Existing `serialize()`, `str()`, and `bytes()` output is
+  unchanged by default. `security_script_integrity="citry"` now hashes exact
+  structured inline bytes, adds verified SHA-384 SRI to Citry-owned external
+  scripts and fragment dependencies, preserves declared third-party SRI as
+  unverified metadata, and rejects later string edits to trusted tags.
+  Request-scoped `csp_nonce` serialization now nonces every structured script
+  and inline style after dependency hooks, rejects explicit conflicts, and is
+  inherited by browser-created fragment dependencies without mutating reusable
+  dependency objects.
+  A version-pinned Alpine CSP 3.16.1 compatibility checker now reports
+  unsupported directives, hosts, expression grammar, derived `x-model` and
+  `x-for` code, and source-proven evaluator restrictions through `citry check`.
+  The configured `security_csp="warn"` or `"strict"` mode controls finding
+  severity; static checking without an app does not guess a policy. A
+  committed CSP Events artifact is now built from the same TypeScript source
+  and Alpine pin as the standard artifact, with dual-runtime browser canaries
+  and checks that the normal evaluator, `AsyncFunction`, and Alpine's `new
+  Function` path are absent from the CSP bundle. Warning serialization now
+  reports reached-tree and final-output incompatibilities while preserving the
+  standard-runtime HTML. Strict serialization selects the CSP runtime and
+  rejects incompatible expressions, raw scripts and styles, native event
+  handlers, and JavaScript URLs after all render hooks. Strict fragments omit
+  the bootstrap preloader and require an existing matching CSP manager, which
+  rejects runtime-variant and nonce conflicts before dependency adoption.
+  JavaScript-delivery modes are now enforced across every dependency strategy.
+  Warning mode inventories reached client behavior without changing bytes;
+  omit mode removes Citry-managed executable scripts, runtimes, preloaders,
+  and manifests while preserving server HTML and CSS; forbid mode rejects
+  component bindings, executable dependencies, Alpine and Events attributes,
+  raw scripts, native handlers, and JavaScript URLs. Static fragments in omit
+  mode emit CSS directly and do not require a mounted browser manager.
+  Citry UI's public and registered internal production component definitions
+  are now checked in CI against the pinned Alpine CSP expression subset.
+  Documentation snippets remain free to teach broader Alpine syntax instead
+  of acting as a product-compatibility allowlist. The landing page now presents
+  the warning-to-strict CSP progression while keeping nonce generation and the
+  complete response header with the host.
+- Added browser-native Citry analysis to the docs playground. A dedicated
+  Worker now reports parser diagnostics and structural completion and hover,
+  while exact-version successful runs publish bounded component catalogs for
+  registered-component hover and unknown-component checks. Portable component
+  name matching and nested-template tag discovery are shared through
+  `citry.analysis` instead of being copied into the browser frontend.
 - Added the production server foundation for Citry i18n. Components can define
   inline or file-backed Fluent messages, use typed `tr()` and `fmt` helpers,
   inherit locale context through `<c-i18n>`, and place application-owned fills
@@ -11,13 +62,53 @@
   standalone-package catalogs with locale-major fallback, exposes checked
   ICU4X number, currency, date, relative-time, and list profiles, and provides
   extract, check, compile, and inspect commands. Localized caches vary through
-  ordinary `Cache.vary()` values. Browser-side locale switching remains a
-  separate stage and `client=True` fails clearly until it ships. Locale contexts
-  enter a component tree explicitly through root `render(provides=...)` data or
-  a subtree `<c-i18n>` provider.
+  ordinary `Cache.vary()` values. Locale contexts enter a component tree
+  explicitly through root `render(provides=...)` data or a subtree `<c-i18n>`
+  provider.
   Compiled interfaces retain parameter descriptions and source spans, and
   `citry check` validates literal attributes, typed arguments, rich values and
   fills, client-message outputs, and cross-language plain-text fallback.
+- Added client-enabled `<c-i18n>` boundaries and the reactive `$i18n` Alpine
+  service. Browser code can load exact message partitions, translate and format
+  on demand, parse localized numbers and percentages, and switch one provider
+  subtree atomically. Server-rendered `tr()` and `<c-trans>` output stays fixed
+  until the server renders it again. Stable server-rendered text and safe HTML
+  attributes can now opt into checked browser updates with `$c-tr`, while
+  browser-created and custom destinations can use `i18n.bind()` with reactive
+  values, `refresh()`, and `dispose()`. Late fragments prepare the logical
+  provider's current locale before component activation, and failed preparation
+  preserves the existing live region. Runtime compilation, `citry check`, and
+  the language server share strict `$c-tr` name validation; the editor also
+  checks literal named values and navigates messages and Fluent attributes to
+  their exact definitions.
+- Added semantic Fluent tooling across component messages, standalone catalogs,
+  Python, Citry templates, Alpine, and component JavaScript. The project index
+  powers literal message and named-profile completion, typed hover, and
+  go-to-definition. Pygments, VS Code, and the docs playground now highlight
+  Fluent source, with the playground using the reusable
+  `@citry/codemirror-lang-fluent` package.
+- Added zero-configuration i18n source mode. A registered component
+  `messages` or `messages_file` asset, paired with
+  `Component.I18n.messages_locale`, now activates the complete engine-wide
+  source catalog for template `tr()` and `self.i18n.tr()` without requiring
+  application settings. Source-locale selection is deterministic across
+  application and library owners, and `citry ext run i18n coverage` reports
+  exact translations and source fallbacks in human or JSON form with an
+  optional CI failure threshold.
+- Added checked server formatting for percent ratios and explicit CLDR units,
+  plus strict localized parsing for percent, number, date, time, and local
+  datetime edits. Number profiles may opt into scientific notation. Date input
+  supports localized month names, explicit two-digit-year windows, and checked
+  calendar shapes in either one text field or named segments. Time input keeps
+  wall-clock fields zone-free. Datetime input uses the explicitly provided IANA
+  zone, rejects DST gaps, and reports both instants in an unresolved fold.
+  Parse results preserve the submitted input and distinguish valid,
+  incomplete, invalid, and, where applicable, ambiguous state.
+- Added `citry.ext.i18n.make_context(app, ...)` for creating an explicit
+  locale context without a manual extension lookup. Use
+  `i18n.for_context(context)` for translations, resolved message metadata,
+  formatting, and parsing outside a component. Inside components the matching
+  service remains `self.i18n`.
 - Added explicit root provide values through `CitryElement.render(provides=...)`
   and `LibraryComponentInvocation.render(provides=...)`. Components may pass an
   existing value unchanged with `provide(key, value)`, while the keyword-field
@@ -73,6 +164,15 @@
 - Added direct `class_` and `style` root inputs to every public Citry UI
   component. Structured values merge with class and style contributions in
   `attrs`.
+- Added Citry UI's first-party `citry_ui_i18n` catalog to the existing
+  `citry-ui` wheel. Breadcrumbs, Carousel, Combobox, Command Palette, Dialog,
+  Drawer, Editable, Pagination, Progress, Table, Tag, Tags Input, and Toast now
+  translate their library-owned defaults while preserving explicit caller
+  labels. Family-owned source keys live in each component's `messages` block;
+  the build combines them with standalone shared FTL into the package catalog
+  and exact dormant source-message constants. Their generated API references
+  end with a structured list of the translation keys each family uses, and the
+  catalog owns namespaced number format profiles for these components.
 - Added native link rendering to Citry UI's `CButton`. Supplying `href`
   renders an anchor with ordinary browser navigation behavior, while disabled
   and loading links remain unavailable without relying on JavaScript.
@@ -236,6 +336,9 @@
 
 ### Fixed
 
+- `LibraryComponent` authoring now exposes the complete public `Component`
+  type surface in editors and static checkers, including extension declarations
+  and materialized `cache`, `dependencies`, `events`, and `i18n` instances.
 - `citry format` now releases its secured JavaScript and CSS provider
   executables before removing their private directories, so Windows runs do
   not leave locked `.citry-biome-*` cache directories behind.

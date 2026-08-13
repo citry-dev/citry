@@ -1,0 +1,11 @@
+schema_version: 1
+previews:
+  - basic-tags
+  - controlled-axes
+  - paste-and-ime
+  - forms-and-reset
+  - field-states
+  - keyboard-and-focus
+  - variants-and-sizes
+  - customization
+  - morph-and-cleanup

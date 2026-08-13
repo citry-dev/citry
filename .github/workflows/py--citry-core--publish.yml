@@ -258,11 +258,17 @@ jobs:
       # Create the GitHub Release
       contents: write
     steps:
+      - uses: actions/checkout@v7
       # Collect every wheel and the sdist into a single dist/ directory.
       - uses: actions/download-artifact@v8
         with:
           path: dist
           merge-multiple: true
+      - name: Check release wheel sizes
+        run: >-
+          python scripts/verify_wheel_size.py
+          --max-bytes 10485760
+          dist/*.whl
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v4
         with:

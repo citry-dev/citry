@@ -66,4 +66,20 @@ mod tests {
             assert_eq!(first, again);
         }
     }
+
+    #[test]
+    fn test_direct_translation_binding_stays_structured_on_html() {
+        assert_compile(
+            r#"<button $c-tr:save[aria-label]>Save</button>"#,
+            r#"["""<button""", ElementAttrsNode(source, (0, 31,), (StaticHtmlAttr(source, (8, 30,), """$c-tr:save[aria-label]""", True, ()),), ()), """>Save</button>""",]"#,
+        );
+    }
+
+    #[test]
+    fn test_direct_translation_binding_keeps_source_order_with_dynamic_forms() {
+        assert_compile(
+            r#"<button $c-tr:first c-$c-tr:second="binding" c-bind="spread">Save</button>"#,
+            r#"["""<button""", ElementAttrsNode(source, (0, 61,), (StaticHtmlAttr(source, (8, 19,), """$c-tr:first""", True, ()), ExprHtmlAttr(source, (20, 44,), """c-$c-tr:second""", """binding""", ("binding",)), ExprHtmlAttr(source, (45, 60,), """c-bind""", """spread""", ("spread",)),), ("binding", "spread",)), """>Save</button>""",]"#,
+        );
+    }
 }

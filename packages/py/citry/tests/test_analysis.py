@@ -20,11 +20,14 @@ from citry import (
     lint_unknown_template_variables,
 )
 from citry.analysis import (
+    component_name_match,
     css_data_completion_at,
     css_data_reference_at,
     css_data_references,
     python_application_lint_variable_range,
     python_component_lint_variable_range,
+    template_tag_uses,
+    unknown_component_uses,
 )
 from citry_core.template_parser import parse_template
 
@@ -79,6 +82,35 @@ def test_css_data_completion_covers_empty_partial_unicode_and_declines_escapes()
     escaped = "a { color: var(--\\63 olor) }"
     assert css_data_references(escaped) == ()
     assert css_data_completion_at(escaped, len(b"a { color: var(--")) is None
+
+
+def test_portable_component_names_match_desktop_spelling_rules():
+    exact = component_name_match("c-card", "c-card", is_class_name=False, variant_index=0)
+    compact = component_name_match("c-CardHe", "c-Card-Header", is_class_name=True, variant_index=1)
+
+    assert exact is not None
+    assert exact.filter_text == "c-card"
+    assert compact is not None
+    assert compact.filter_text == "c-CardHeader"
+    assert compact.sort_text > exact.sort_text
+
+
+def test_portable_unknown_component_uses_include_nested_templates():
+    source = '<c-known c-body="<><c-missing /></>"><c-other /></c-known>'
+    template = parse_template(source)
+
+    uses = unknown_component_uses(template, {"known", "other"})
+
+    assert [(use.tag, source.encode()[use.start_index : use.end_index].decode()) for use in uses] == [
+        ("c-missing", "c-missing")
+    ]
+    tags = template_tag_uses(template)
+    assert [(use.tag, use.closing) for use in tags] == [
+        ("c-known", False),
+        ("c-missing", False),
+        ("c-other", False),
+        ("c-known", True),
+    ]
 
 
 class TestTemplateAnalysis:

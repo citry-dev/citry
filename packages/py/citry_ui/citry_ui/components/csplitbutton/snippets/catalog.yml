@@ -1,0 +1,12 @@
+schema_version: 1
+previews:
+  - at-a-glance
+  - basic-actions
+  - forms
+  - controlled-menu
+  - variants-and-sizes
+  - disabled-and-loading
+  - menu-composition
+  - focus-and-keyboard
+  - layers-and-dialog
+  - customization

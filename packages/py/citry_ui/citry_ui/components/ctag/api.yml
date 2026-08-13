@@ -146,3 +146,9 @@ interfaces:
   - {id: group-description-slot, kind: record, name: CTagGroupDescriptionSlotData, entries: []}
   - {id: tag-default-slot, kind: record, name: CTagDefaultSlotData, entries: []}
   - {id: tag-start-slot, kind: record, name: CTagStartSlotData, entries: []}
+
+translations:
+  - id: ctag-group-translations
+    component: CTagGroup
+    entries:
+      - {id: remove, key: citry-ui-tag-remove, purpose: Supplies hidden accessible text for every remove control., variables: None, override: '`remove_label` input', updates: '$c-tr updates text content.'}

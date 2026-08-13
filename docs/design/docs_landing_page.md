@@ -988,8 +988,8 @@ Its heading is:
 
 It contains:
 
-- a named maintainer card with a short first-person reason for building Citry;
-- one signed "Why Citry exists" note or recent blog entry;
+- a compact maintainer identity with an opt-in portrait, name, and role;
+- a link to recent build notes that keeps ongoing decisions visible;
 - the accurate lineage statement, "Citry grows from django-components and the
   work of its contributors";
 - a small, consented acknowledgment of real contributors without a vanity
@@ -1008,11 +1008,17 @@ The accompanying line can say:
 
 > Every cell is a component. Every improvement starts with a person.
 
-Do not ship fabricated testimonials, company logos, usage counters, a world map
-of implied users, stock community photography, live avatar feeds, or empty
-ambassador titles. A signed postcard-sized note from the maintainer is more
-credible than simulated scale. Photographs and quotations are opt-in, retain
-their context, have withdrawal paths, and are never a condition of recognition.
+Do not ship fabricated testimonials, unverified customer logos, usage counters,
+a world map of implied users, stock community photography, live avatar feeds,
+or empty ambassador titles. A compact named portrait is more credible than
+simulated scale. Photographs and quotations are opt-in, retain their context,
+have withdrawal paths, and are never a condition of recognition.
+
+Sponsor recognition and product adoption are different evidence. A sponsor
+logo appears only under an explicit sponsorship label and with permission. A
+separate **Used by** group requires confirmed Citry use and permission to make
+that relationship public. Sponsorship proves that an organization will fund
+the work; it does not by itself prove production adoption.
 
 ### Community sequence
 
@@ -1225,11 +1231,12 @@ fit every job."
 
 ### 8. People: built in public
 
-Show the named maintainer, one signed reason for building Citry, accurate
+Show the named maintainer with a compact portrait and role, accurate
 django-components lineage, a small contributor acknowledgment, and verified
-ways to participate. Link to People and invite a talk or workshop. Add an event
-only when it has a real date, timezone, agenda, conduct policy, registration
-path, and host.
+ways to participate. Keep the full People page as the primary route for
+learning who is involved. Link to People and invite a talk or workshop. Add an
+event only when it has a real date, timezone, agenda, conduct policy,
+registration path, and host.
 
 Reader outcome: "I know who is responsible, why they care, and how I can reach
 or help the project."
@@ -1245,8 +1252,9 @@ Show only verified facts:
 - security reporting and limitations;
 - support, governance, and security paths.
 
-Logos and testimonials wait for permission and real adoption evidence.
-Download counts, company use, and performance figures need a visible source and
+Customer logos and testimonials require permission and real adoption evidence.
+Sponsor logos require permission and an explicit sponsorship label. Download
+counts, company use, and performance figures need a visible source and
 measurement date.
 
 ### 10. Final CTA
@@ -1365,12 +1373,11 @@ matches the example.
   scoped style; end on the finished interface. Two to three minutes, no
   interface tour, no roadmap, and the code must be readable at the recorded
   size.
-- **A social-trust band** above the video. This one only becomes honest when
-  there is something true to put in it. Until real adopters exist, the
-  defensible version shows provenance rather than logos: the django-components
-  lineage, the maintainer, and the public repository. Company logos, download
-  counters, and testimonials wait for permission and evidence, per the trust
-  rules above.
+- **A social-trust band** above the video. Its first iteration recognizes
+  sponsors under a visible sponsorship label. A distinct **Used by** group is
+  added when adopters confirm their Citry use and approve the public claim.
+  Download counters and testimonials require evidence and permission, per the
+  trust rules above.
 
 ## Example showcase backlog
 
@@ -1845,11 +1852,9 @@ selects the first implementation.
 1. Which exact beta or release facts will be true when the page is published?
 2. Which real showcase examples are strong enough to add without padding the
    page with ordinary component cards?
-3. Is the maintainer note approved as written, and should a portrait accompany
-   it later?
-4. When are the talk and workshop invitation details concrete enough to add a
+3. When are the talk and workshop invitation details concrete enough to add a
    staffed landing-page action?
-5. Does the page need a landing-specific social card before publication?
+4. Does the page need a landing-specific social card before publication?
 
 ## Implemented direction
 
@@ -1881,13 +1886,26 @@ The architecture gives the hypothesis real substance, especially once the
 linter exists, but the landing page should earn the superlative through a
 public comparative benchmark.
 
-Make the first page human at the scale the project really has: name the
-maintainer, explain why Citry exists, credit its django-components lineage,
-recognize real work, and offer only staffed participation routes. Begin with a
-monthly online open studio and a short talk inside an existing Pyvo community.
-Add a partnered hands-on lab after the tutorial is stable. Do not create a
-Citry-only meetup or bootcamp until repeat participants, a second organizer,
-tested curriculum, conduct capacity, and follow-up support exist.
+Make the first page human at the scale the project really has: show the
+maintainer's opt-in portrait, name, and role; credit its django-components
+lineage; recognize real work; keep the full People link; and offer only staffed
+participation routes. Begin with a monthly online open studio and a short talk
+inside an existing Pyvo community. Add a partnered hands-on lab after the
+tutorial is stable. Do not create a Citry-only meetup or bootcamp until repeat
+participants, a second organizer, tested curriculum, conduct capacity, and
+follow-up support exist.
+
+## Security depth entries (2026-08-12)
+
+The security design has moved to focused documents:
+
+- [`security_csrf.md`](security_csrf.md) documents the shipped host-owned CSRF
+  contract and is suitable for a "Grow without a rewrite" entry.
+- [`security_csp.md`](security_csp.md) documents shipped strict CSP,
+  JavaScript-delivery controls, nonce propagation, and Citry-owned SRI. The
+  UI and executable-example catalog is ratified, so the landing page now
+  promotes the warning-to-strict progression while keeping header and nonce
+  ownership with the host.
 
 ## Source index
 

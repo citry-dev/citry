@@ -105,6 +105,16 @@ interfaces:
         name: active
         type: bool
         meaning: Whether the widget is active.
+translations:
+  - id: cwidget-translations
+    component: CWidget
+    entries:
+      - id: label
+        key: citry-ui-widget-label
+        purpose: Names the widget.
+        variables: None
+        override: label input
+        updates: $c-tr updates aria-label.
 """
 
 
@@ -139,6 +149,7 @@ def test_structured_reference_renders_the_fixed_api_shape(tmp_path: Path) -> Non
         "### Attributes",
         "### Selectors",
         "### Interfaces",
+        "### Translation keys",
     )
     assert "The reference below lists" not in rendered
     assert "#### CWidget server inputs" in rendered
@@ -155,6 +166,8 @@ def test_structured_reference_renders_the_fixed_api_shape(tmp_path: Path) -> Non
     assert '<span id="widget-input-cwidget-server-tone"></span>`tone`' in rendered
     assert "[`CWidgetTone`](#widget-interface-cwidget-tone)" in rendered
     assert '<span id="widget-interface-cwidget-default-slot-data"></span>' in rendered
+    assert '<span id="widget-translation-cwidget-translations-label"></span>' in rendered
+    assert "| Key | Purpose | Variables | Override | Browser updates |" in rendered
     assert rendered.count("### Methods\n\n-\n") == 1
 
 

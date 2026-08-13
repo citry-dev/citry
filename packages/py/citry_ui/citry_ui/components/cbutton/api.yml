@@ -214,3 +214,5 @@ interfaces:
   - {id: cbutton-start-slot-data, kind: record, name: CButtonStartSlotData, entries: []}
   - {id: cbutton-end-slot-data, kind: record, name: CButtonEndSlotData, entries: []}
   - {id: cbutton-loading-slot-data, kind: record, name: CButtonLoadingSlotData, entries: []}
+
+translations: []

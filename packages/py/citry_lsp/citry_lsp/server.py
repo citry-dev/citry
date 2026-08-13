@@ -27,6 +27,7 @@ from citry_lsp.engine import (
     document_symbols,
     hover,
     html_projection,
+    i18n_diagnostics,
     references,
     semantic_dependencies,
     template_lint_diagnostics,
@@ -208,6 +209,7 @@ class CitryLanguageServer(LanguageServer):
         )
         lint_findings = template_lint_diagnostics(document, self.project, self.documents)
         browser_findings = browser_diagnostics(document, self.project, self.documents)
+        i18n_findings = i18n_diagnostics(document, self.project, self.documents)
         current = self.documents.get(uri)
         if current is not document or current.version != version or self.analysis_generation != generation:
             return
@@ -215,7 +217,7 @@ class CitryLanguageServer(LanguageServer):
         self.text_document_publish_diagnostics(
             types.PublishDiagnosticsParams(
                 uri,
-                (*document.diagnostics, *lint_findings, *browser_findings, *findings),
+                (*document.diagnostics, *lint_findings, *browser_findings, *i18n_findings, *findings),
                 version=version,
             )
         )

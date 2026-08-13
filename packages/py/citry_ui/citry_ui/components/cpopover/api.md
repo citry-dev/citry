@@ -167,7 +167,7 @@ feels compact or locally related.
 Popover is a named, non-modal dialog with rich interactive content.
 
 - Use `CDialog` when a task blocks the page or needs contained focus.
-- Use the future `CMenu` for command/choice collection semantics and menu
+- Use `CMenu` for command/choice collection semantics and menu
   keyboard behavior.
 - Use `CTooltip` for brief noninteractive text shown by hover and
   focus.

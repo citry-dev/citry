@@ -15,7 +15,8 @@
     "css",
     "attributes",
     "selectors",
-    "interfaces"
+    "interfaces",
+    "translations"
   ],
   "properties": {
     "schema_version": {
@@ -92,6 +93,12 @@
             "$ref": "#/$defs/recordTable"
           }
         ]
+      }
+    },
+    "translations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/translationTable"
       }
     }
   },
@@ -786,6 +793,66 @@
           "$ref": "#/$defs/nonEmptyString"
         },
         "meaning": {
+          "$ref": "#/$defs/nonEmptyString"
+        }
+      }
+    },
+    "translationTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "component",
+        "entries"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "component": {
+          "$ref": "#/$defs/componentName"
+        },
+        "column_widths": {
+          "$ref": "#/$defs/fiveColumnWidths"
+        },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/translationEntry"
+          }
+        }
+      }
+    },
+    "translationEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "key",
+        "purpose",
+        "variables",
+        "override",
+        "updates"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "purpose": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "variables": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "override": {
+          "$ref": "#/$defs/nonEmptyString"
+        },
+        "updates": {
           "$ref": "#/$defs/nonEmptyString"
         }
       }

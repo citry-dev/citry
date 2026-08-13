@@ -145,3 +145,12 @@ interfaces:
       - {id: controlled, name: controlled, type: bool, meaning: Whether client editing owns the channel.}
       - {id: forced, name: forced, type: bool, meaning: Whether safety made closure nonrejectable.}
       - {id: source, name: source, type: 'EventTarget | None', meaning: Native source or safety owner.}
+
+translations:
+  - id: ceditable-translations
+    component: CEditable
+    entries:
+      - {id: click-to-edit, key: citry-ui-editable-click-to-edit, purpose: Supplies empty preview text and the editor placeholder., variables: None, override: '`placeholder` input', updates: '`i18n.bind()` updates every stateful destination.'}
+      - {id: edit, key: citry-ui-editable-edit, purpose: Names the edit control., variables: None, override: '`edit_label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: save, key: citry-ui-editable-save, purpose: Names the save control., variables: None, override: '`submit_label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: cancel, key: citry-ui-editable-cancel, purpose: Names the cancel control., variables: None, override: '`cancel_label` input', updates: '$c-tr updates `aria-label`.'}

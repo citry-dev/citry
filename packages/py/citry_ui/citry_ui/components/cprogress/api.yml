@@ -73,3 +73,9 @@ interfaces:
       - {id: input-type-aliases-cprogress-intent, name: CProgressIntent, definition: 'Literal["neutral", "primary", "success", "warn", "danger"]'}
       - {id: input-type-aliases-cprogress-size, name: CProgressSize, definition: 'Literal["sm", "md", "lg"]'}
       - {id: input-type-aliases-cprogress-shape, name: CProgressShape, definition: 'Literal["square", "rounded", "pill"]'}
+
+translations:
+  - id: cprogress-translations
+    component: CProgress
+    entries:
+      - {id: value-text, key: citry-ui-progress-value-text, purpose: Provides readable fallback text for determinate progress., variables: 'label: str; value: str; max: str', override: None, updates: '`i18n.bind()` tracks locale and reactive value changes.'}

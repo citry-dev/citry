@@ -10,6 +10,7 @@ from docs_site._internal.components.ui_demo import UiDemo
 from docs_site._internal.project import load_docs_project
 from docs_site._internal.ui_library_projection import UiLibraryCatalog, UiLibraryProjection
 from docs_site._internal.ui_previews import (
+    UiPreview,
     UiPreviewError,
     discover_ui_previews,
     load_ui_preview_controls,
@@ -62,7 +63,9 @@ def test_discovery_ignores_documented_directives_and_derives_private_route(
     [preview] = discover_ui_previews(_catalog(), repo_root=tmp_path)
 
     assert preview.family == "button"
-    assert preview.name == "primary-action"
+    assert preview.name == "primary_action"
+    assert preview.slug == "primary-action"
+    assert preview.name == preview.source.stem
     assert preview.title == "Primary action"
     assert preview.source_open is True
     assert preview.public_path == "/ui-library/components/button/_previews/primary-action/"
@@ -82,19 +85,31 @@ def test_discovery_ignores_inline_raw_text_tags_before_a_preview(tmp_path: Path)
 
     [preview] = discover_ui_previews(_catalog(), repo_root=tmp_path)
 
-    assert preview.name == "primary-action"
+    assert preview.name == "primary_action"
+    assert preview.slug == "primary-action"
+
+
+def test_preview_rejects_a_name_that_does_not_match_its_source_file() -> None:
+    with pytest.raises(UiPreviewError, match="must match source filename stem 'controlled_open'"):
+        UiPreview(
+            family="popover",
+            name="controlled-open",
+            title="Controlled open",
+            source=PurePosixPath("cpopover/snippets/controlled_open.py"),
+            public_path="/ui-library/components/popover/_previews/controlled-open/",
+        )
 
 
 def test_textarea_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "textarea"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "compose-textarea",
         "rows-and-resize",
@@ -109,16 +124,26 @@ def test_textarea_catalog_discovers_every_component_owned_preview() -> None:
     ]
 
 
+def test_published_preview_names_match_their_source_filename_stems() -> None:
+    project = load_docs_project()
+    previews = discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
+
+    for preview in previews:
+        assert preview.name == preview.source.stem
+        assert preview.source.name == f"{preview.name}.py"
+        assert preview.slug == preview.name.replace("_", "-")
+
+
 def test_native_select_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "native-select"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "compose-select",
         "options-and-groups",
@@ -135,13 +160,13 @@ def test_native_select_catalog_discovers_every_component_owned_preview() -> None
 def test_checkbox_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "checkbox"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "compose-checkbox",
         "configuration",
@@ -158,13 +183,13 @@ def test_checkbox_catalog_discovers_every_component_owned_preview() -> None:
 def test_alert_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "alert"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic-alert",
         "intents",
@@ -181,13 +206,13 @@ def test_alert_catalog_discovers_every_component_owned_preview() -> None:
 def test_accordion_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "accordion"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic-accordion",
         "controlled-value",
@@ -203,13 +228,13 @@ def test_accordion_catalog_discovers_every_component_owned_preview() -> None:
 def test_disclosure_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "disclosure"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic-disclosure",
         "controlled-open",
@@ -225,13 +250,13 @@ def test_disclosure_catalog_discovers_every_component_owned_preview() -> None:
 def test_flow_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "flow-layout"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "stack-spacing",
         "group-alignment",
@@ -246,13 +271,13 @@ def test_flow_catalog_discovers_every_component_owned_preview() -> None:
 def test_grid_container_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "grid-container"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "responsive-columns",
         "asymmetric-layout",
@@ -267,13 +292,13 @@ def test_grid_container_catalog_discovers_every_component_owned_preview() -> Non
 def test_badge_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "badge"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic-badges",
         "intents",
@@ -289,13 +314,13 @@ def test_badge_catalog_discovers_every_component_owned_preview() -> None:
 def test_divider_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "divider"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic-dividers",
         "semantic-and-decorative",
@@ -310,13 +335,13 @@ def test_divider_catalog_discovers_every_component_owned_preview() -> None:
 def test_avatar_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "avatar"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "images-and-fallbacks",
         "accessible-names",
@@ -331,13 +356,13 @@ def test_avatar_catalog_discovers_every_component_owned_preview() -> None:
 def test_skeleton_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "skeleton"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "primitives",
         "text-lines",
@@ -351,13 +376,13 @@ def test_skeleton_catalog_discovers_every_component_owned_preview() -> None:
 def test_toolbar_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "toolbar"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "commands",
         "composition",
@@ -371,13 +396,13 @@ def test_toolbar_catalog_discovers_every_component_owned_preview() -> None:
 def test_file_input_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "file-input"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "field",
         "drop-target",
@@ -391,13 +416,13 @@ def test_file_input_catalog_discovers_every_component_owned_preview() -> None:
 def test_stepper_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "stepper"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "interactive",
         "nonlinear",
@@ -411,13 +436,13 @@ def test_stepper_catalog_discovers_every_component_owned_preview() -> None:
 def test_splitter_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "splitter"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "multiple",
         "vertical-nested",
@@ -431,13 +456,13 @@ def test_splitter_catalog_discovers_every_component_owned_preview() -> None:
 def test_tree_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "tree"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "controlled-expansion",
         "single-selection",
@@ -451,13 +476,13 @@ def test_tree_catalog_discovers_every_component_owned_preview() -> None:
 def test_popover_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "popover"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "moon-inspector",
         "interactive-form",
@@ -473,13 +498,13 @@ def test_popover_catalog_discovers_every_component_owned_preview() -> None:
 def test_menu_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "menu"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "commands-and-links",
         "item-content",
@@ -499,13 +524,13 @@ def test_menu_catalog_discovers_every_component_owned_preview() -> None:
 def test_drawer_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "drawer"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "edit-field-note",
         "bottom-sheet",
@@ -522,13 +547,13 @@ def test_drawer_catalog_discovers_every_component_owned_preview() -> None:
 def test_toast_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "toast"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "reactive-queue",
         "replacement",
@@ -545,13 +570,13 @@ def test_toast_catalog_discovers_every_component_owned_preview() -> None:
 def test_progress_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "progress"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "determinate",
         "indeterminate",
@@ -567,13 +592,13 @@ def test_progress_catalog_discovers_every_component_owned_preview() -> None:
 def test_tooltip_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "tooltip"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "moon-labels",
         "formatted-description",
@@ -590,13 +615,13 @@ def test_tooltip_catalog_discovers_every_component_owned_preview() -> None:
 def test_spinner_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "spinner"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic",
         "intents",
@@ -612,13 +637,13 @@ def test_spinner_catalog_discovers_every_component_owned_preview() -> None:
 def test_radio_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "radio"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic",
         "descriptions",
@@ -634,13 +659,13 @@ def test_radio_catalog_discovers_every_component_owned_preview() -> None:
 def test_switch_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "switch"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic",
         "descriptions",
@@ -656,13 +681,13 @@ def test_switch_catalog_discovers_every_component_owned_preview() -> None:
 def test_breadcrumbs_catalog_discovers_every_component_owned_preview() -> None:
     project = load_docs_project()
 
-    names = [
-        preview.name
+    slugs = [
+        preview.slug
         for preview in discover_ui_previews(project.ui_library, repo_root=project.runtime.repo_root)
         if preview.family == "breadcrumbs"
     ]
 
-    assert names == [
+    assert slugs == [
         "at-a-glance",
         "basic",
         "current-link",
@@ -683,6 +708,32 @@ def test_preview_module_requires_an_explicit_final_preview_expression(
 
     with pytest.raises(UiPreviewError, match="end with the expression `preview`"):
         render_ui_preview_document(preview, repo_root=tmp_path)
+
+
+def test_preview_document_owns_its_script_under_strict_csp(tmp_path: Path) -> None:
+    _write_sources(
+        tmp_path,
+        snippet="""
+from citry import Component
+
+class StrictPreviewDocumentSmoke(Component):
+    template = "<p>Strict preview</p>"
+
+preview = StrictPreviewDocumentSmoke()
+preview
+""".lstrip(),
+    )
+    [preview] = discover_ui_previews(_catalog(), repo_root=tmp_path)
+
+    html = render_ui_preview_document(
+        preview,
+        repo_root=tmp_path,
+        security_csp="strict",
+        csp_nonce="DocsPreviewNonce",
+    )
+
+    assert "citry-ui-preview-height" in html
+    assert 'nonce="DocsPreviewNonce"' in html
 
 
 def test_preview_cannot_reach_into_another_component_family(tmp_path: Path) -> None:

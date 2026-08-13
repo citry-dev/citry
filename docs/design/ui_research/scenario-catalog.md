@@ -485,11 +485,13 @@ bridge allowlist.
 
 ## 14. Initial catalog and readiness coverage
 
-Button, Field/Input, Form, Tabs, Dialog, Combobox, and semantic Table now have
-Phase 7 production specifications, direct styled implementations, and focused
-browser evidence. Tabs also has a docs live example. The repeatable contact
-workflow and the public-site form plus dashboard compositions close the
-required cross-family implementation probes. Their remaining per-state
+The original Phase 7 readiness slice covered Button, Field/Input, Form, Tabs,
+Dialog, Combobox, and semantic Table with production specifications, direct
+styled implementations, and focused browser evidence. Tabs also had a docs
+live example. The active component inventory and contract tests own current
+family coverage; this section retains the initial scenario rationale. The
+repeatable contact workflow and the public-site form plus dashboard
+compositions close the required cross-family implementation probes. Their remaining per-state
 accessibility, visual-profile, manual assistive-technology, complete-page,
 coexistence, and released-host scenarios still belong in the shared catalog.
 

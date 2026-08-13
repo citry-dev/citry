@@ -1082,3 +1082,12 @@ virtualization, search/forms/arbitrary content, public highlighted identity,
 public submenu control, raw collision middleware, imperative methods, and a
 headless family. Add one only after a concrete application job and its focus,
 touch, morph, and accessibility contract exist.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

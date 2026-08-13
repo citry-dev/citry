@@ -24,7 +24,12 @@ def test_index_has_symbols_and_members() -> None:
     assert index["citry.Component"] == "/reference/component/#citry-component"
     assert index["Component"] == index["citry.Component"]  # short-name alias
     assert index["citry.Component.State"] == ("/reference/component/#citry-component-state")
+    assert index["citry.Component.Cache"] == ("/reference/component/#citry-component-cache")
+    assert index["citry.Component.Dependencies"] == ("/reference/component/#citry-component-dependencies")
     assert index["citry.Component.Events"] == ("/reference/component/#citry-component-events")
+    assert index["citry.Component.I18n"] == ("/reference/component/#citry-component-i18n")
+    assert index["citry.Component.cache"] == ("/reference/component/#citry-component-cache-2")
+    assert index["citry.Component.i18n"] == ("/reference/component/#citry-component-i18n-2")
     assert index["Component.template_data"] == "/reference/component/#citry-component-template-data"
     assert index["citry.Component.template_data"] == index["Component.template_data"]
     assert index["citry.Markup"] == "/reference/rendering/#citry-markup"

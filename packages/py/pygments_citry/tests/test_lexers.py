@@ -1,7 +1,7 @@
 """Token-stream tests for the top-level ``citry`` lexer (Python plus the embeds)."""
 
 from pygments.lexers import get_lexer_by_name
-from pygments.token import Keyword, Name, String
+from pygments.token import Comment, Keyword, Name, String
 
 
 def lex(src):
@@ -40,6 +40,36 @@ def test_css_opener_embeds_css():
     assert (Keyword.Constant, "red") in toks
 
 
+def test_messages_opener_embeds_fluent():
+    toks = lex(
+        'class C(Component):\n    messages = """# @param {str} $name - User name.\nhello = Welcome, { $name }."""\n'
+    )
+    assert (Name.Variable, "messages") in toks
+    assert (Comment.Multiline, "# @param {str} $name - User name.") in toks
+    assert (Name.Constant, "hello") in toks
+    assert (Name.Variable, "$name") in toks
+
+
+def test_indented_messages_keep_exact_python_offsets():
+    lexer = get_lexer_by_name("citry")
+    source = (
+        'class C(Component):\n    messages = """\n'
+        "      # @param {str} $name - User name.\n"
+        "      hello = Welcome, { $name }.\n"
+        '    """\n'
+    )
+    stream = list(lexer.get_tokens_unprocessed(source))
+
+    assert any(
+        offset == source.index("hello") and token is Name.Constant and value == "hello"
+        for offset, token, value in stream
+    )
+    assert any(
+        offset == source.index("$name", source.index("hello")) and token is Name.Variable and value == "$name"
+        for offset, token, value in stream
+    )
+
+
 def test_typed_opener_keeps_annotation_and_embeds_html():
     toks = lex("class C(Component):\n    template: types.html = '''<br/>'''\n")
     assert (Name.Variable, "template") in toks
@@ -53,17 +83,20 @@ def test_triple_single_quote_body():
     assert (Name.Tag, "a") in toks
 
 
-def test_full_component_highlights_all_three_and_stays_python():
+def test_full_component_highlights_all_assets_and_stays_python():
     src = (
         "class Card(Component):\n"
         '    template = """<c-slot></c-slot>{{ title }}"""\n'
         '    js = """const n = 1;"""\n'
         '    css = """.card { color: red; }"""\n'
+        '    messages = """card-title = Account"""\n'
     )
     toks = lex(src)
     assert (Name.Variable, "template") in toks
     assert (Name.Variable, "js") in toks
     assert (Name.Variable, "css") in toks
+    assert (Name.Variable, "messages") in toks
+    assert (Name.Constant, "card-title") in toks
     # the class itself is still ordinary Python
     assert (Name.Class, "Card") in toks
 
@@ -76,6 +109,8 @@ def test_embeds_close_only_with_their_opening_quote_family():
         ("js", "'''", '"""', 'const before = 1; /* """ */ const after = 2;', (Name.Other, "after")),
         ("css", '"""', "'''", "a { /* ''' */ border-color: red; }", (Keyword, "border-color")),
         ("css", "'''", '"""', 'a { /* """ */ border-color: red; }', (Keyword, "border-color")),
+        ("messages", '"""', "'''", "hello = ''' { $after }", (Name.Variable, "$after")),
+        ("messages", "'''", '"""', 'hello = """ { $after }', (Name.Variable, "$after")),
     )
 
     for attribute, opener, other, body, expected in cases:

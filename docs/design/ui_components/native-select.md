@@ -95,8 +95,8 @@ Vuetify disposition:
 |---|---|---|---|
 | `items`, `item-title`, `item-value`, `item-disabled`, `item-children` | direct API | typed option/group records | adopt a smaller explicit schema |
 | `model-value`, `default-value` | direct/client API | `value` and client `value` | adopt native single value |
-| `multiple`, `chips`, `closable-chips` | separate component | future custom Select/Listbox | defer |
-| `menu`, `menu-props`, `open-on-clear` | separate component | future custom Select | omit from native family |
+| `multiple`, `chips`, `closable-chips` | separate component | `CMultiSelect`, `CTagsInput`, or `CListbox` | omit from native family |
+| `menu`, `menu-props`, `open-on-clear` | separate component | `CSelect` or `CMultiSelect` | omit from native family |
 | `clearable`, clear icon and clear event | native empty option or separate action | `placeholder`; consumer native events | no internal clear button |
 | `loading` and progress | composition | Field description or separate progress | omit |
 | `disabled`, `readonly` | direct/native or unsupported | `disabled`; no `readonly` | adopt native disabled, reject simulated read-only |
@@ -217,8 +217,8 @@ same render.
 Native `multiple`, native `size`, and the unsupported no-op `readonly`
 attribute are reserved and rejected in `attrs`, including their dynamic and
 property-binding aliases. This family always renders a drop-down single
-Select. `size` is visual, as it is for `CInput`; a future listbox surface gets
-a separate contract.
+Select. `size` is visual, as it is for `CInput`; `CListbox` has a separate
+contract.
 
 Option and group `label` values and option `value` values must be nonempty
 strings. The synthesized placeholder exclusively owns the empty option value.
@@ -323,8 +323,8 @@ composition.
 
 Raw `<option>` children would create a second ownership path that cannot be
 validated against `value`, so they are deliberately unsupported. Rich labels,
-icons, descriptions, arbitrary content, and dynamic item slots belong to a
-future custom Select.
+icons, descriptions, arbitrary content, and dynamic item slots belong to
+`CSelect`, `CMultiSelect`, or `CListbox`.
 
 ## 7. Callbacks, native events, and methods
 
@@ -460,7 +460,9 @@ the documented global layer order.
   printable output.
 
 Library-authored visible strings: none. `placeholder`, option labels, and
-group labels are caller content. Localization remains follow-up work.
+group labels are caller content. The Citry UI i18n migration therefore needs
+no NativeSelect catalog keys, while locale-sensitive option content remains
+application-owned.
 
 ## 12. Overlay and layering behavior
 
@@ -470,7 +472,7 @@ screen-reader presentation. Citry UI cannot theme or inspect that picker
 reliably and does not promise its DOM.
 
 A need for portal ownership, rich rows, custom placement, persistent open
-state, or popup callbacks selects the future custom Select instead.
+state, or popup callbacks selects `CSelect` or `CMultiSelect` instead.
 
 ## 13. Collections, async data, and identity
 
@@ -674,14 +676,19 @@ Resolved for this pass:
 - option/group records stay data types rather than public rendered
   components.
 
-Deferred to a custom Select or separate follow-up:
+Owned by the later custom families:
 
-- rich item content, search, async data, custom popup ownership, multiple
-  selection, chips, clear actions, virtualized collections, and dynamic item
-  slots;
+- rich item content, search, custom popup ownership, multiple selection,
+  chips, clear actions, and dynamic item slots are covered by `CSelect`,
+  `CMultiSelect`, `CListbox`, and `CTagsInput` as appropriate.
+
+Still deferred:
+
+- generic async-data and virtualized-collection ownership;
 - capabilities beyond the private reactive Field required/read-only
   registration introduced by this family; and
-- localization infrastructure and real-device platform qualification.
+- real-device platform qualification. Localization follows the shared Citry
+  UI migration contract; NativeSelect contributes no catalog keys.
 
 Definition of done for this family:
 
@@ -702,3 +709,12 @@ Native Select is complete when:
 Human visual, keyboard, assistive-technology, mobile-picker, autofill, and
 real-device polish remains named release evidence rather than an automated
 claim.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

@@ -145,3 +145,5 @@ interfaces:
       - {id: variant, name: CFileInputVariant, definition: 'Literal["outline", "soft", "plain"]'}
       - {id: size, name: CFileInputSize, definition: 'Literal["sm", "md", "lg"]'}
   - {id: drop-target-default-slot-data, kind: record, name: CDropTargetDefaultSlotData, entries: []}
+
+translations: []

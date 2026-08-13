@@ -36,7 +36,7 @@ Common jobs and their shortest supported paths:
 | Keep panel controls in native forms | default always-mounted panel content | built-in behavior |
 | Put one Accordion inside a panel | nested `CAccordion` in the parent item's default slot | composition |
 | Adapt color, spacing, and borders | public variables, selectors, `class_`, `style`, and attrs | CSS or native HTML |
-| Show one unrelated disclosure | future `CDisclosure` | separate component |
+| Show one unrelated disclosure | `CDisclosure` | separate component |
 | Build navigation, a tree, or a stepper | dedicated component | separate component |
 
 Smallest template:
@@ -502,8 +502,9 @@ expanded so hidden reference content is not lost on paper; trigger buttons
 remain identifiable headings but do not imply interactive printed behavior.
 
 There are no library-authored visible strings. All title, panel, and action
-content belongs to the application. Locale and translation remain separate
-follow-up work.
+content belongs to the application. The Citry UI i18n migration therefore
+needs no Accordion catalog keys, but still verifies direction and caller-owned
+content behavior.
 
 ## 12. Overlay and layering behavior
 
@@ -750,3 +751,12 @@ Deferred work:
 - automatic native-validation expansion only after controlled-state timing and
   focus behavior are proven across Citry Events; and
 - headless disclosure behavior after representative application pages exist.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

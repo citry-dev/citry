@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 pytest.importorskip("pytest_playwright")
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import expect
 
 pytestmark = pytest.mark.e2e
@@ -79,6 +80,79 @@ def _delay_preview_render(route: Any) -> None:
           ready();
         </script></body>""",
     )
+
+
+def test_playground_browser_ide_reports_completes_and_hovers(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    browser_messages: list[str] = []
+    page.on("console", lambda message: browser_messages.append(f"{message.type}: {message.text}"))
+    page.on("pageerror", lambda error: browser_messages.append(f"pageerror: {error}"))
+    page.goto(docs_site_url + "/playground/", wait_until="domcontentloaded")
+    page.wait_for_function("window.citryPlayground !== undefined")
+    page.locator("#citry-playground-auto-run").uncheck()
+    invalid = '''from citry import Component
+
+
+class Card(Component):
+    template = """
+      <c-if>
+    """
+
+
+Card()
+'''
+    _set_source(page, invalid)
+    try:
+        page.wait_for_function("document.querySelectorAll('.cm-lintRange-error').length > 0", timeout=120_000)
+    except PlaywrightTimeoutError:
+        pytest.fail("Citry browser analysis did not report a diagnostic:\n" + "\n".join(browser_messages))
+
+    incomplete = invalid.replace("<c-if>", "<c-i")
+    _set_source(page, incomplete)
+    cursor = incomplete.index("<c-i") + len("<c-i")
+    assert page.evaluate("position => window.citryPlayground.setCursor(position)", cursor)
+    page.keyboard.press("Control+Space")
+    completion = page.locator(".cm-tooltip-autocomplete li", has_text="c-if")
+    expect(completion).to_be_visible(timeout=120_000)
+    page.keyboard.press("Escape")
+
+    valid = invalid.replace("<c-if>", '<c-if cond="True"></c-if>')
+    _set_source(page, valid)
+    expect(page.locator(".cm-lintRange-error")).to_have_count(0, timeout=120_000)
+    page.locator(".cm-citry-name", has_text="c-if").first.hover()
+    expect(page.locator(".cm-citry-ide-hover")).to_contain_text("Conditional branch", timeout=120_000)
+
+    registered = '''from citry import Component
+
+
+class ProfileCard(Component):
+    """Show one member profile."""
+
+    class Kwargs:
+        title: str
+
+    template = "<p>{{ title }}</p>"
+
+
+class Page(Component):
+    template = """
+      <main><c-ProfileCard title="Ada" /></main>
+    """
+
+
+Page()
+'''
+    _set_source(page, registered)
+    _run_and_wait(page)
+    page.locator(".cm-citry-name", has_text="c-ProfileCard").hover()
+    component_hover = page.locator(".cm-citry-ide-hover")
+    try:
+        expect(component_hover).to_contain_text("ProfileCard", timeout=20_000)
+    except AssertionError:
+        pytest.fail("Registered component hover did not appear:\n" + "\n".join(browser_messages))
+    expect(component_hover).to_contain_text("Inputs: title.")
 
 
 def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_site_url: str) -> None:

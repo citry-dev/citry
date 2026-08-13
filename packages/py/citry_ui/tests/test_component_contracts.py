@@ -34,6 +34,7 @@ SPEC_HEADINGS = (
     "## 18. Compatibility classification",
     "## 19. Public documentation contract",
     "## 20. Open decisions and deferred work",
+    "## 21. Internationalization",
 )
 
 
@@ -43,6 +44,8 @@ class FamilyContract:
     module: str
     spec: str
     reflected_attributes: frozenset[str]
+    shared_parts: frozenset[str] = frozenset()
+    theme_variables: frozenset[str] = frozenset()
 
 
 FAMILIES = (
@@ -167,6 +170,24 @@ FAMILIES = (
         ),
     ),
     FamilyContract(
+        "cscroll_area",
+        "cscroll_area.py",
+        "scroll-area.md",
+        frozenset(
+            {
+                "aria-label",
+                "aria-labelledby",
+                "data-axis",
+                "data-overscroll",
+                "data-scrollbar-gutter",
+                "data-scrollbar-width",
+                "id",
+                "role",
+                "tabindex",
+            }
+        ),
+    ),
+    FamilyContract(
         "cfile_input",
         "cfile_input.py",
         "file-input.md",
@@ -268,6 +289,7 @@ FAMILIES = (
                 "data-loading-position",
             }
         ),
+        frozenset({"split-button-primary-end", "split-button-primary-start"}),
     ),
     FamilyContract(
         "cfield",
@@ -360,6 +382,44 @@ FAMILIES = (
         ),
     ),
     FamilyContract(
+        "cimage",
+        "cimage.py",
+        "image.md",
+        frozenset(
+            {
+                "alt",
+                "aria-hidden",
+                "crossorigin",
+                "data-citry-image-initialized",
+                "data-fit",
+                "data-has-fallback",
+                "data-has-placeholder",
+                "data-status",
+                "decoding",
+                "draggable",
+                "fetchpriority",
+                "height",
+                "hidden",
+                "inert",
+                "loading",
+                "media",
+                "referrerpolicy",
+                "sizes",
+                "src",
+                "srcset",
+                "type",
+                "width",
+            }
+        ),
+        theme_variables=frozenset(
+            {
+                "--cui-color-muted-bg",
+                "--cui-color-muted-fg",
+                "--cui-radius-md",
+            }
+        ),
+    ),
+    FamilyContract(
         "cskeleton",
         "cskeleton.py",
         "skeleton.md",
@@ -402,6 +462,33 @@ FAMILIES = (
                 "data-value",
                 "data-selected",
                 "data-highlighted",
+            }
+        ),
+    ),
+    FamilyContract(
+        "ccommand_palette",
+        "ccommand_palette.py",
+        "command-palette.md",
+        frozenset(
+            {
+                "aria-activedescendant",
+                "aria-autocomplete",
+                "aria-controls",
+                "aria-disabled",
+                "aria-expanded",
+                "aria-labelledby",
+                "aria-selected",
+                "data-active",
+                "data-disabled",
+                "data-empty",
+                "data-intent",
+                "data-open",
+                "data-size",
+                "disabled",
+                "id",
+                "open",
+                "role",
+                "type",
             }
         ),
     ),
@@ -740,6 +827,43 @@ FAMILIES = (
         ),
     ),
     FamilyContract(
+        "ctags_input",
+        "ctags_input.py",
+        "tags-input.md",
+        frozenset(
+            {
+                "aria-atomic",
+                "aria-describedby",
+                "aria-hidden",
+                "aria-invalid",
+                "aria-label",
+                "aria-labelledby",
+                "aria-live",
+                "aria-required",
+                "data-at-max",
+                "data-disabled",
+                "data-empty",
+                "data-focused",
+                "data-highlighted",
+                "data-invalid",
+                "data-readonly",
+                "data-required",
+                "data-size",
+                "data-variant",
+                "disabled",
+                "form",
+                "id",
+                "multiple",
+                "name",
+                "readonly",
+                "required",
+                "role",
+                "tabindex",
+                "type",
+            }
+        ),
+    ),
+    FamilyContract(
         "ceditable",
         "ceditable.py",
         "editable.md",
@@ -914,6 +1038,343 @@ def test_checkbox_reference_preserves_the_native_on_token_as_a_string():
     assert type(value_input["default"]["value"]) is str
 
 
+def test_tags_input_reference_preserves_exact_structured_detail_fields():
+    path = COMPONENT_ROOT / "ctags_input" / "api.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    records = {
+        table["name"]: tuple(entry["name"] for entry in table["entries"])
+        for table in data["interfaces"]
+        if table["kind"] == "record"
+    }
+
+    assert data["components"] == ["CTagsInput"]
+    assert data["slots"] == []
+    assert data["methods"] == []
+    assert records == {
+        "CTagsInputMessages": (
+            "remove_label",
+            "added_message",
+            "removed_message",
+            "selected_message",
+            "duplicate_message",
+            "maximum_message",
+            "empty_message",
+            "invalid_message",
+            "uncommitted_message",
+        ),
+        "CTagsInputValueChangeDetail": (
+            "source",
+            "added",
+            "removed",
+            "candidates",
+            "previousValue",
+            "nextInputValue",
+            "controlled",
+        ),
+        "CTagsInputInputValueChangeDetail": (
+            "source",
+            "previousValue",
+            "nextValue",
+            "controlled",
+            "composing",
+        ),
+        "CTagsInputInvalidDetail": (
+            "source",
+            "candidate",
+            "candidates",
+            "value",
+            "inputValue",
+            "maxTags",
+            "controlled",
+        ),
+    }
+
+
+def test_scroll_area_reference_preserves_the_exact_structured_contract():
+    path = COMPONENT_ROOT / "cscroll_area" / "api.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    inputs = {table["channel"]: tuple(entry["name"] for entry in table["entries"]) for table in data["inputs"]}
+    aliases = tuple(
+        entry["name"] for table in data["interfaces"] if table["kind"] == "aliases" for entry in table["entries"]
+    )
+    records = {
+        table["name"]: tuple(entry["name"] for entry in table["entries"])
+        for table in data["interfaces"]
+        if table["kind"] == "record"
+    }
+
+    assert data["components"] == ["CScrollArea"]
+    assert inputs == {
+        "server": (
+            "id",
+            "aria_label",
+            "aria_labelledby",
+            "axis",
+            "scrollbar_width",
+            "scrollbar_gutter",
+            "overscroll",
+            "class_",
+            "style",
+            "attrs",
+        ),
+        "client": (
+            "axis",
+            "scrollbarWidth",
+            "scrollbarGutter",
+            "overscroll",
+            "onScrollChange",
+        ),
+    }
+    assert [entry["name"] for table in data["slots"] for entry in table["entries"]] == ["default"]
+    assert [entry["name"] for table in data["events"] for entry in table["entries"]] == ["onScrollChange"]
+    assert data["methods"] == []
+    assert [entry["name"] for table in data["css"] for entry in table["entries"]] == [
+        "--cui-scroll-area-max-block-size",
+        "--cui-scroll-area-background",
+        "--cui-scroll-area-foreground",
+        "--cui-scroll-area-border-color",
+        "--cui-scroll-area-border-width",
+        "--cui-scroll-area-radius",
+        "--cui-scroll-area-padding",
+        "--cui-scroll-area-scrollbar-color",
+        "--cui-scroll-area-focus-color",
+        "--cui-scroll-area-scroll-padding",
+    ]
+    assert [entry["name"] for table in data["attributes"] for entry in table["entries"]] == [
+        "id",
+        "tabindex",
+        "role",
+        "aria-label",
+        "aria-labelledby",
+        "data-axis",
+        "data-scrollbar-width",
+        "data-scrollbar-gutter",
+        "data-overscroll",
+    ]
+    assert [entry["selector"] for table in data["selectors"] for entry in table["entries"]] == [
+        '[data-citry-ui-part="scroll-area"]'
+    ]
+    assert aliases == (
+        "CClassValue",
+        "CStyleValue",
+        "CScrollAreaAxis",
+        "CScrollAreaScrollbarWidth",
+        "CScrollAreaScrollbarGutter",
+        "CScrollAreaOverscroll",
+    )
+    assert records == {
+        "CScrollAreaScrollDetail": (
+            "inlineOffset",
+            "blockOffset",
+            "source",
+        ),
+    }
+
+
+def test_image_reference_preserves_the_exact_structured_contract():
+    path = COMPONENT_ROOT / "cimage" / "api.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    inputs = {table["channel"]: tuple(entry["name"] for entry in table["entries"]) for table in data["inputs"]}
+    aliases = tuple(
+        entry["name"] for table in data["interfaces"] if table["kind"] == "aliases" for entry in table["entries"]
+    )
+    records = {
+        table["name"]: tuple(entry["name"] for entry in table["entries"])
+        for table in data["interfaces"]
+        if table["kind"] == "record"
+    }
+
+    assert data["components"] == ["CImage"]
+    assert inputs == {
+        "server": (
+            "src",
+            "alt",
+            "width",
+            "height",
+            "srcset",
+            "sizes",
+            "sources",
+            "loading",
+            "decoding",
+            "fetch_priority",
+            "cross_origin",
+            "referrer_policy",
+            "fit",
+            "position",
+            "draggable",
+            "onStatusChange",
+            "class_",
+            "style",
+            "attrs",
+            "img_attrs",
+        ),
+        "client": (
+            "src",
+            "alt",
+            "width",
+            "height",
+            "srcset",
+            "sizes",
+            "loading",
+            "decoding",
+            "fetchPriority",
+            "crossOrigin",
+            "referrerPolicy",
+            "fit",
+            "position",
+            "draggable",
+            "onStatusChange",
+        ),
+    }
+    assert [entry["name"] for table in data["slots"] for entry in table["entries"]] == [
+        "placeholder",
+        "fallback",
+    ]
+    assert [entry["name"] for table in data["events"] for entry in table["entries"]] == ["onStatusChange"]
+    assert data["methods"] == []
+    assert [entry["name"] for table in data["css"] for entry in table["entries"]] == [
+        "--cui-image-aspect-ratio",
+        "--cui-image-fit",
+        "--cui-image-position",
+        "--cui-image-radius",
+        "--cui-image-background",
+        "--cui-image-fallback-color",
+        "--cui-image-fallback-background",
+    ]
+    assert [entry["selector"] for table in data["selectors"] for entry in table["entries"]] == [
+        '[data-citry-ui-part="image-root"]',
+        '[data-citry-ui-part="picture"]',
+        '[data-citry-ui-part="image"]',
+        '[data-citry-ui-part="placeholder"]',
+        '[data-citry-ui-part="fallback"]',
+    ]
+    assert aliases == (
+        "CClassValue",
+        "CStyleValue",
+        "CImageFit",
+        "CImageLoading",
+        "CImageDecoding",
+        "CImageFetchPriority",
+        "CImageCrossOrigin",
+        "CImageReferrerPolicy",
+        "CImageStatus",
+    )
+    assert records == {
+        "CImageSource": (
+            "srcset",
+            "media",
+            "type",
+            "sizes",
+            "width",
+            "height",
+        ),
+        "CImageStatusChangeDetail": (
+            "status",
+            "src",
+            "current_src",
+            "natural_width",
+            "natural_height",
+        ),
+    }
+
+
+def test_command_palette_reference_preserves_the_exact_structured_contract():
+    path = COMPONENT_ROOT / "ccommand_palette" / "api.yml"
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    inputs = {table["channel"]: tuple(entry["name"] for entry in table["entries"]) for table in data["inputs"]}
+    aliases = tuple(
+        entry["name"] for table in data["interfaces"] if table["kind"] == "aliases" for entry in table["entries"]
+    )
+    records = {
+        table["name"]: tuple(entry["name"] for entry in table["entries"])
+        for table in data["interfaces"]
+        if table["kind"] == "record"
+    }
+
+    assert data["components"] == ["CCommandPalette"]
+    assert inputs == {
+        "server": (
+            "entries",
+            "label",
+            "id",
+            "open",
+            "query",
+            "disabled",
+            "loop",
+            "close_on_action",
+            "size",
+            "placeholder",
+            "search_label",
+            "empty_label",
+            "close_label",
+            "class_",
+            "style",
+            "attrs",
+            "input_attrs",
+        ),
+        "client": (
+            "open",
+            "query",
+            "disabled",
+            "loop",
+            "closeOnAction",
+            "size",
+            "onOpenChange",
+            "onQueryChange",
+            "onAction",
+        ),
+    }
+    assert [entry["name"] for table in data["slots"] for entry in table["entries"]] == [
+        "activator",
+        "item_start",
+        "item_end",
+        "empty",
+    ]
+    assert [entry["name"] for table in data["events"] for entry in table["entries"]] == [
+        "onOpenChange",
+        "onQueryChange",
+        "onAction",
+    ]
+    assert data["methods"] == []
+    assert aliases == (
+        "CClassValue",
+        "CStyleValue",
+        "CCommandPaletteEntry",
+        "CCommandPaletteIntent",
+        "CCommandPaletteSize",
+        "CCommandPaletteActionSource",
+        "CCommandPaletteOpenReason",
+        "CCommandPaletteQueryReason",
+    )
+    assert records == {
+        "CCommandPaletteCommand": (
+            "value",
+            "label",
+            "description",
+            "keywords",
+            "shortcut",
+            "disabled",
+            "close_on_action",
+            "intent",
+        ),
+        "CCommandPaletteGroup": ("label", "commands"),
+        "CCommandPaletteSeparator": (),
+        "CCommandPaletteItemSlotData": (
+            "value",
+            "label",
+            "description",
+            "keywords",
+            "shortcut",
+            "disabled",
+            "close_on_action",
+            "intent",
+        ),
+        "CCommandPaletteOpenChangeDetail": ("reason", "controlled", "source"),
+        "CCommandPaletteQueryChangeDetail": ("reason", "closeReason", "controlled", "source"),
+        "CCommandPaletteActionDetail": ("query", "source", "item", "event", "closeOnAction"),
+    }
+
+
 @pytest.mark.parametrize("family", FAMILIES, ids=lambda family: family.package)
 def test_production_spec_uses_the_complete_authoring_template(family: FamilyContract):
     _, _, spec = _family_sources(family)
@@ -931,10 +1392,12 @@ def test_runtime_public_css_contract_is_documented_in_spec_and_api(family: Famil
 
     assert parts
     assert variables
-    assert documented_parts == parts
-    assert documented_variables == variables
+    assert documented_parts.isdisjoint(family.shared_parts)
+    assert documented_variables.isdisjoint(family.theme_variables)
+    assert documented_parts | family.shared_parts == parts
+    assert documented_variables | family.theme_variables == variables
     assert documented_attributes == family.reflected_attributes
-    for public_name in (*sorted(parts), *sorted(variables), *sorted(family.reflected_attributes)):
+    for public_name in (*sorted(documented_parts), *sorted(variables), *sorted(family.reflected_attributes)):
         assert public_name in spec, f"{family.spec} omits {public_name}"
 
 
@@ -943,7 +1406,7 @@ def test_public_variables_resolve_through_private_effective_variables(family: Fa
     source, _, _ = _family_sources(family)
     variables = frozenset(re.findall(r"(?<!_)--cui-[a-z0-9-]+", source))
 
-    for public_name in variables:
+    for public_name in variables - family.theme_variables:
         private_name = public_name.replace("--cui-", "--_cui-", 1)
         resolution = re.compile(
             rf"{re.escape(private_name)}\s*:\s*var\(\s*{re.escape(public_name)}\s*,",
@@ -961,3 +1424,183 @@ def test_owned_part_marker_follows_consumer_attribute_spread(family: FamilyContr
     assert bound_parts
     for tag in bound_parts:
         assert tag.index("c-bind=") < tag.index("data-citry-ui-part=")
+
+
+def test_split_button_public_contract_composes_shared_button_and_menu_assets():
+    split_source = (COMPONENT_ROOT / "csplitbutton/csplitbutton.py").read_text(encoding="utf-8")
+    button_source = (COMPONENT_ROOT / "cbutton/cbutton.py").read_text(encoding="utf-8")
+    menu_source = (COMPONENT_ROOT / "cmenu/cmenu.py").read_text(encoding="utf-8")
+    spec = (SPEC_ROOT / "split-button.md").read_text(encoding="utf-8")
+    headings = tuple(line for line in spec.splitlines() if line.startswith("## "))
+    reference = yaml.safe_load((COMPONENT_ROOT / "csplitbutton/api.yml").read_text(encoding="utf-8"))
+
+    documented_variables = frozenset(entry["name"] for table in reference["css"] for entry in table["entries"])
+    documented_attributes = frozenset(entry["name"] for table in reference["attributes"] for entry in table["entries"])
+    documented_parts = frozenset(
+        match.group(1)
+        for table in reference["selectors"]
+        for entry in table["entries"]
+        if (match := re.fullmatch(r'\[data-citry-ui-part="([a-z0-9-]+)"\]', entry["selector"])) is not None
+    )
+    split_parts = frozenset(re.findall(r'data-citry-ui-part=["\']([a-z0-9-]+)', split_source))
+    menu_parts = frozenset(re.findall(r'data-citry-ui-part=["\']([a-z0-9-]+)', menu_source))
+    effective_source = f"{split_source}\n{button_source}\n{menu_source}"
+    effective_variables = frozenset(re.findall(r"(?<!_)--cui-[a-z0-9-]+", effective_source))
+
+    assert headings == SPEC_HEADINGS
+    assert documented_parts == split_parts | menu_parts
+    assert documented_variables == effective_variables
+    assert documented_attributes == {
+        "aria-busy",
+        "aria-checked",
+        "aria-controls",
+        "aria-describedby",
+        "aria-disabled",
+        "aria-expanded",
+        "aria-haspopup",
+        "aria-label",
+        "aria-labelledby",
+        "data-block",
+        "data-checked",
+        "data-disabled",
+        "data-intent",
+        "data-loading",
+        "data-loading-position",
+        "data-match-width",
+        "data-menu-disabled",
+        "data-open",
+        "data-placement",
+        "data-primary-disabled",
+        "data-size",
+        "data-variant",
+        "disabled",
+        "id",
+        "popover",
+        "role",
+        "type",
+    }
+    assert "build_shared_component_assets" not in split_source
+    for public_name in documented_variables:
+        private_name = public_name.replace("--cui-", "--_cui-", 1)
+        resolution = re.compile(
+            rf"{re.escape(private_name)}\s*:\s*var\(\s*{re.escape(public_name)}\s*,",
+            re.MULTILINE,
+        )
+        assert resolution.search(effective_source), f"{public_name} is not resolved by {private_name}"
+    for public_name in (*sorted(documented_parts), *sorted(documented_variables), *sorted(documented_attributes)):
+        assert public_name in spec, f"split-button.md omits {public_name}"
+
+
+def test_context_menu_public_contract_reuses_the_existing_menu_surface():
+    context_source = (COMPONENT_ROOT / "ccontext_menu/ccontext_menu.py").read_text(encoding="utf-8")
+    menu_source = (COMPONENT_ROOT / "cmenu/cmenu.py").read_text(encoding="utf-8")
+    spec = (SPEC_ROOT / "context-menu.md").read_text(encoding="utf-8")
+    reference = yaml.safe_load((COMPONENT_ROOT / "ccontext_menu/api.yml").read_text(encoding="utf-8"))
+    headings = tuple(line for line in spec.splitlines() if line.startswith("## "))
+    inputs = {table["channel"]: tuple(entry["name"] for entry in table["entries"]) for table in reference["inputs"]}
+    records = {
+        table["name"]: tuple(entry["name"] for entry in table["entries"])
+        for table in reference["interfaces"]
+        if table["kind"] == "record"
+    }
+    documented_variables = frozenset(entry["name"] for table in reference["css"] for entry in table["entries"])
+    documented_attributes = frozenset(entry["name"] for table in reference["attributes"] for entry in table["entries"])
+    documented_parts = frozenset(
+        match.group(1)
+        for table in reference["selectors"]
+        for entry in table["entries"]
+        if (match := re.fullmatch(r'\[data-citry-ui-part="([a-z0-9-]+)"\]', entry["selector"])) is not None
+    )
+    context_parts = frozenset(re.findall(r'data-citry-ui-part=["\']([a-z0-9-]+)', context_source))
+    menu_parts = frozenset(re.findall(r'data-citry-ui-part=["\']([a-z0-9-]+)', menu_source))
+    menu_variables = frozenset(re.findall(r"(?<!_)--cui-menu-[a-z0-9-]+", menu_source))
+
+    assert headings == SPEC_HEADINGS
+    assert reference["components"] == ["CContextMenu"]
+    assert inputs == {
+        "server": (
+            "id",
+            "aria_label",
+            "open",
+            "disabled",
+            "loop",
+            "close_on_select",
+            "size",
+            "class_",
+            "style",
+            "attrs",
+            "target_attrs",
+        ),
+        "client": (
+            "open",
+            "disabled",
+            "loop",
+            "closeOnSelect",
+            "size",
+            "onOpenChange",
+            "onAction",
+        ),
+    }
+    assert [entry["name"] for table in reference["slots"] for entry in table["entries"]] == [
+        "target",
+        "menu",
+    ]
+    assert [entry["name"] for table in reference["events"] for entry in table["entries"]] == [
+        "onOpenChange",
+        "onAction",
+    ]
+    assert reference["methods"] == []
+    assert documented_variables == menu_variables
+    assert documented_parts == context_parts | menu_parts
+    assert documented_attributes == {
+        "aria-checked",
+        "aria-controls",
+        "aria-describedby",
+        "aria-disabled",
+        "aria-expanded",
+        "aria-haspopup",
+        "aria-label",
+        "aria-labelledby",
+        "data-checked",
+        "data-citry-context-menu-native",
+        "data-disabled",
+        "data-intent",
+        "data-invocation",
+        "data-open",
+        "data-placement",
+        "data-size",
+        "id",
+        "popover",
+        "role",
+    }
+    assert records == {
+        "CContextMenuTargetSlotData": ("target_attrs",),
+        "CContextMenuMenuSlotData": (),
+        "CContextMenuOpenChangeDetail": (
+            "reason",
+            "controlled",
+            "forced",
+            "source",
+            "clientX",
+            "clientY",
+        ),
+        "CMenuActionDetail": ("kind", "item", "event", "path"),
+    }
+    assert "<c-CInternalMenuSurface" in context_source
+    assert "<c-CMenu" not in context_source
+    for public_name in documented_variables:
+        private_name = public_name.replace("--cui-", "--_cui-", 1)
+        resolution = re.compile(
+            rf"{re.escape(private_name)}\s*:\s*var\(\s*{re.escape(public_name)}\s*,",
+            re.MULTILINE,
+        )
+        assert resolution.search(menu_source), f"{public_name} is not resolved by {private_name}"
+    # ContextMenu inherits Menu's already-guarded public parts, variables, and
+    # item attributes by reference. Only its own additions must be repeated in
+    # this family spec.
+    for public_name in (
+        *sorted(context_parts),
+        "data-citry-context-menu-native",
+        "data-invocation",
+    ):
+        assert public_name in spec, f"context-menu.md omits {public_name}"

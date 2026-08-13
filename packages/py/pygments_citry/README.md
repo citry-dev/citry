@@ -2,13 +2,15 @@
 
 A [Pygments](https://pygments.org/) lexer for [Citry](https://citry.dev)
 components. It highlights a component the way an editor would: the Python class,
-plus the HTML, JavaScript, and CSS embedded in its `template`, `js`, and `css`
-string attributes, each in its own language.
+plus the HTML, JavaScript, CSS, and Fluent embedded in its `template`, `js`,
+`css`, and `messages` string attributes, each in its own language.
 
 Without it, a Citry component in a ` ```python ` block renders the template,
 JS script, and CSS stylesheet as flat string literals. With it, a ` ```citry `
 block colours the `<c-*>` tags, the `{{ ... }}` interpolation, the embedded
 stylesheet, and the embedded script.
+It also highlights message IDs, variables, selectors, and comments in a
+component's Fluent `messages` block.
 
 ## Install
 
@@ -53,6 +55,10 @@ class Welcome(Component):
         <p c-if="count">You have {{ count }} new messages.</p>
       </div>
     """
+
+    messages = """
+      welcome-title = Welcome
+    """
 ```
 ````
 
@@ -62,8 +68,8 @@ No superfences `custom_fences` entry is needed: once the package is installed,
 ## What it highlights
 
 A `citry` block is highlighted as Python, and the following Citry constructs
-inside the `template` / `js` / `css` attributes are highlighted in their own
-language:
+inside the `template`, `js`, `css`, and `messages` attributes are highlighted
+in their own language:
 
 - The HTML in `template`, including the `<c-*>` component and control-flow tags
   (the built-ins `c-if`, `c-for`, `c-slot`, `<c-raw>`, and so on).
@@ -79,6 +85,11 @@ language:
 - `{{ ... }}` interpolation, whose body is a Python expression.
 - `{# ... #}` template comments.
 - The JavaScript in `js` and the CSS in `css`.
+- The Fluent messages, terms, variables, attributes, selectors, and comments
+  in `messages`.
+
+Standalone Fluent fences also work through the `fluent` and `ftl` aliases
+registered by the package's Fluent lexer dependency.
 
 The `<c-raw>...</c-raw>` element is treated as verbatim text, matching the
 engine: `{{ }}` and tags inside it are not interpreted.

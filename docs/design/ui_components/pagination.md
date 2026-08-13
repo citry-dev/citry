@@ -84,3 +84,13 @@ The guide must lead with native URL pagination, then Button-controlled paginatio
 ## 20. Open decisions and deferred work
 
 A later compound API may expose Items/Previous/Next/Label if projects need custom anatomy. Cursor-based pagination belongs to a separate component because it has no finite page count.
+
+## 21. Internationalization
+
+Landmark, page, previous, next, first, and last labels use the stable keys and
+override inputs recorded in the structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/cpagination/api.yml).
+The server formats page numbers with the package-owned
+`citry-ui-pagination-page` profile. `$c-tr` owns server-created controls;
+`i18n.bind()` owns controls recreated by client range changes. When client i18n
+is absent, configured server translations remain fixed rather than being
+reconstructed from English.

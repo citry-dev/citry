@@ -341,3 +341,11 @@ responsive navigation drawers, AppShell space reservation, non-modal mode,
 swipe/drag, snap points, browser-history integration, physical left/right
 aliases, portals, lazy mounting, public imperative methods, and a generic
 Overlay/Sheet export. A concrete product job must justify each addition.
+
+## 21. Internationalization
+
+The generated close control uses the key and precedence recorded in the
+structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/cdrawer/api.yml).
+Server `tr()` supplies the initial accessible name and `$c-tr` follows locale
+changes. An explicit `close_label` or `close` slot owns the result and prevents
+registration of the default catalog binding.

@@ -14,6 +14,185 @@ The sandbox is on by default. Event routes also apply a same-origin floor by
 default, but only your application can decide whether the current user may act
 on a particular record.
 
+## Choose a CSP compatibility mode
+
+Citry can validate its rendered component subtree against the expression
+language in its pinned Alpine CSP runtime:
+
+```citry
+from secrets import token_urlsafe
+
+app = Citry(security_csp="strict")
+
+nonce = token_urlsafe(16)
+html = Page().render().serialize(csp_nonce=nonce)
+```
+
+The modes have distinct rollout purposes:
+
+- `"off"` keeps the standard Alpine runtime and existing output.
+- `"warn"` keeps that same runtime and HTML, but emits one `RuntimeWarning`
+  containing incompatible reached expressions or rendered markup. Findings
+  stay separate per rendered instance when a late string hook prevents Citry
+  from proving that two occurrences came from one authored source site.
+- `"strict"` selects Citry's version-matched Alpine CSP runtime and rejects
+  incompatible output before returning HTML.
+
+Strict validation covers component-boundary expressions that may disappear
+during rendering and the final HTML after extension hooks. It rejects Alpine
+syntax the pinned CSP evaluator cannot interpret, raw `<script>` and `<style>`
+elements, any ASCII-case-insensitive `on*` attribute, and `javascript:` URLs.
+Put complex browser logic in `Component.js` and call a scope method from the
+template. Put trusted
+scripts and styles in `Component.js`, `Component.css`, or structured
+[`Dependencies`][citry.ext.dependencies.Dependencies].
+
+Citry UI's production component definitions are checked in CI against the
+pinned Alpine CSP expression subset. That guarantee covers the public library
+components and its registered internal renderers. Documentation snippets are
+teaching material and are not a compatibility allowlist; run `citry check`
+before copying an example's browser expressions into a strict application.
+
+Run `citry check` or use the Citry editor extension to get the same pinned
+expression findings at source locations. Per-render mode overrides are
+enforced during serialization; project tooling reports the configured engine
+default.
+
+Citry owns runtime selection and its rendered subtree. Your application still
+owns the response header, nonce generation, layouts, third-party resources,
+and directives other than the documented Citry boundary.
+
+## Choose how much JavaScript Citry may deliver
+
+JavaScript delivery is separate from CSP. Set `security_javascript` on the
+engine, or override it for one serialization:
+
+```citry
+app = Citry(security_javascript="forbid")
+
+email_html = Page().render().serialize(
+    security_javascript="omit",
+)
+```
+
+The four modes answer different questions:
+
+- `"allow"` preserves normal interactive output.
+- `"warn"` preserves those exact bytes and emits one `RuntimeWarning` that
+  inventories reached browser behavior.
+- `"omit"` removes Citry-managed executable scripts, Alpine and Events
+  runtimes, preloaders, and browser manifests. Server-rendered HTML and CSS
+  remain. Authored Alpine attributes remain inert.
+- `"forbid"` rejects a rendered subtree that needs executable client
+  behavior, even when `deps_strategy="simple"` or `"ignore"` would otherwise
+  hide the corresponding runtime or dependency tag.
+
+The inventory covers active component-boundary bindings, final structured
+dependencies after hooks, and settled HTML after string-level extensions. It
+recognizes Alpine and Events attributes, executable script types, native
+`on*` handlers, `javascript:` URLs, and executable HTML embedded through
+`iframe srcdoc` or HTML data documents. A declared but unused Events method
+is not by itself an active requirement.
+
+`"omit"` is a static-export tool, not an HTML sanitizer. Raw executable
+scripts, native handlers, and JavaScript URLs are left unchanged and reported;
+use `"forbid"` when they must make serialization fail. Omit also warns about
+high-confidence fallback hazards such as `x-cloak`, structural Alpine
+templates, and handler-only controls. Check the resulting page without
+JavaScript and provide native links or forms for essential actions.
+
+CSS remains allowed in every mode. An omit fragment emits its CSS directly,
+without a preloader, manifest, mounted route, or existing browser manager.
+`deps_strategy="ignore"` keeps its existing meaning and suppresses collected
+CSS too. When an exact structured stylesheet or inert data script carries an
+executable attribute, omit removes that attribute while retaining the CSS or
+data. Opaque dependency renderers are removed because Citry cannot prove what
+tag they create.
+
+With `security_csp="strict"`, omit and forbid do not validate inert Alpine
+expressions because no Alpine runtime is emitted. Strict CSP still validates
+raw executable markup and applies the response nonce to retained structured
+inline styles.
+
+## Pin Citry-managed scripts with SRI
+
+Set `security_script_integrity="citry"` when you want Citry to bind its
+structured script output to exact bytes:
+
+```citry
+app = Citry(security_script_integrity="citry")
+
+serialized = Page().render().serialize_result()
+html = serialized.html
+script_sources = " ".join(serialized.security.csp_script_hashes)
+```
+
+Citry computes SHA-384 after inline script wrapping, adds `integrity` to
+external scripts whose response bytes it owns, and carries the attribute into
+fragment dependency descriptors. The result includes immutable per-script
+records and quoted hash sources suitable for adding to the host's
+`script-src`. Citry does not construct the complete CSP header because the host
+also owns layouts, analytics, and every resource outside the component render.
+
+For a third-party URL, provide its published `integrity` value on a
+[`Script`][citry.ext.dependencies.Script]. Citry validates and preserves the
+value but reports it as unverified; it never downloads third-party code during
+serialization. Configure CORS and `crossorigin` as required by that resource.
+
+This option provides byte identity and hash metadata. It composes with
+`security_csp="strict"`, but does not enable that expression policy by itself.
+
+## Apply a request CSP nonce centrally
+
+Generate a fresh unpredictable nonce for each response, place its matching
+source in the host-owned CSP header, and pass the raw value at final
+serialization:
+
+```citry
+from secrets import token_urlsafe
+
+nonce = token_urlsafe(16)  # 128 random bits before URL-safe base64 encoding
+serialized = Page().render().serialize_result(csp_nonce=nonce)
+
+policy = (
+    "default-src 'self'; "
+    f"script-src 'self' 'nonce-{nonce}'; "
+    f"style-src 'self' 'nonce-{nonce}'"
+)
+```
+
+Your web framework still sends `serialized.html` with `policy` as the
+`Content-Security-Policy` response header. Citry validates the nonce's CSP
+base64 syntax, but the host owns its entropy, freshness, response header, and
+every resource outside the Citry render. The
+[CSP specification](https://www.w3.org/TR/CSP/#security-nonces) recommends at
+least 128 random bits before encoding.
+
+Citry adds the value after dependency hooks have run. Every structured
+[`Script`][citry.ext.dependencies.Script], including external scripts and inert
+JSON manifests, receives it. Every structured inline
+[`Style`][citry.ext.dependencies.Style] receives it; external stylesheet links
+do not. A matching explicit nonce is accepted, while a different or malformed
+one is an error. The original dependency objects are not mutated, so one render
+can be serialized for separate responses with separate nonces.
+
+Raw `<script>` and `<style>` elements written directly in template HTML are not
+automatically trusted or nonced. Move trusted code to `Component.js`,
+`Component.css`, or a structured dependency. Strict mode rejects those raw
+elements after all render hooks have run.
+
+The browser manager records the nonce that authorized its own script tag. When
+a later fragment creates a structured script or inline style, the manager adds
+that document nonce if the descriptor omits it and rejects a different value
+before inserting the dependency batch. Off and warning fragments may load the
+standard manager through their preloader. Strict fragments contain only inert
+markup and manifests and require a strict Citry base document with an existing
+CSP manager. A present manager rejects nonce or runtime-variant mismatches
+before adoption; without one, the fragment remains inert.
+
+Do not cache nonce-bearing HTML separately from its response header. If a full
+response is cached, its HTML and CSP header must remain one artifact.
+
 ## Treat State as client input
 
 With the default signed storage, every State value is visible in the page
@@ -54,15 +233,44 @@ change the client-input rule: authorize every use of the restored values.
 
 ## Protect event posts from CSRF
 
-Every non-GET Events request passes Citry's always-on same-origin checks. JSON
-calls must carry the `X-Citry-Events` header, and browser-supplied `Origin` and
-`Sec-Fetch-Site` headers must identify the same origin. These checks remain in
-place even when a handler sets `csrf=False`.
+Every non-GET Events request passes Citry's always-on cross-site request
+floor. JSON calls must carry the `X-Citry-Events` header. When the browser
+supplies `Origin`, its authority must match the request's `Host`; when it
+supplies `Sec-Fetch-Site`, the value must be `same-origin` or `none`. These
+checks remain in place even when a handler sets `csrf=False`.
 
 Django's `CsrfViewMiddleware` applies to Citry routes normally. Citry does not
 exempt them. The client runtime reads Django's `csrftoken` cookie and sends it
-as `X-CSRFToken` by default, so keep the middleware enabled. A native form post
-also follows Django's normal token rules.
+as `X-CSRFToken` by default, so keep the middleware enabled. Django still owns
+token creation, rotation, cookie or session storage, and validation. Citry
+only carries the token on requests made by its browser runtime.
+
+If Django stores the token in the session or makes the CSRF cookie `HttpOnly`,
+JavaScript cannot read that cookie. Render Django's masked token into the DOM,
+then configure a token function instead:
+
+```citry-html
+<input
+  type="hidden"
+  name="csrfmiddlewaretoken"
+  c-value="csrf_token"
+>
+```
+
+```javascript
+Citry.events.configure({
+  csrf: {
+    token: () => document.querySelector(
+      '[name="csrfmiddlewaretoken"]',
+    ).value,
+  },
+});
+```
+
+Citry templates do not interpret Django's `{% csrf_token %}` tag. Pass the
+masked token returned by Django's `get_token(request)` as the component's
+`csrf_token` input. The same hidden input is what a native form post needs, so
+native forms continue to follow the host's normal token rules.
 
 FastAPI, Starlette, Flask, and bare ASGI or WSGI do not provide one standard
 host token scheme. If your application requires an additional token, configure
@@ -105,9 +313,10 @@ Citry.events.configure({
 });
 ```
 
-The `csrf=False` override disables Citry's configurable token layer, whether
-it was automatic or callable. The always-on same-origin/header checks and
-independently configured host middleware still apply.
+The `csrf=False` override disables only Citry's configurable callable token
+check. The always-on cross-site request floor and independently configured
+host middleware still apply. It does not exempt a Django route from
+`CsrfViewMiddleware`.
 
 GET event handlers are exempt from CSRF protection because GET must be safe and
 read-only. Citry enforces the declared HTTP method, but it cannot prove that the
@@ -289,13 +498,13 @@ you are comfortable exposing to template authors.
 ### Browser CSP and Alpine expressions
 
 The Python sandbox described above does not govern browser expressions. Citry
-currently ships Alpine's standard build, whose expression evaluator requires
-`unsafe-eval` in `script-src`. A nonce can authorize inline Citry scripts, but
-it cannot replace that evaluator permission.
+ships both Alpine's standard evaluator and a version-matched CSP evaluator.
+The standard `security_csp="off"` and `"warn"` modes require `unsafe-eval` when
+they evaluate Alpine attributes. `security_csp="strict"` selects the CSP
+runtime and enforces its smaller expression language before serialization.
 
-Citry does not currently support Alpine's CSP build. See
-[Alpine runtime](/advanced/alpine-runtime/#plan-for-content-security-policy) for the
-client-side loading and policy contract.
+See [Alpine runtime](/advanced/alpine-runtime/#use-content-security-policy) for
+the client-side loading and fragment contract.
 
 ### Turning the sandbox off
 

@@ -2,7 +2,7 @@
 
 Working notes mined from: GitHub (django-components/django-components +
 JuroOravec repos), the local upstream clone (`~/repos/django-components`,
-incl. CHANGELOG), the Citry repo (docs/design, project status), and
+incl. CHANGELOG), the Citry repo (design docs and cited source files), and
 642 archived Cursor chats. Every number below has a cited source.
 
 ---

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import ast
 import io
+import json
 import re
 import tokenize
 import unicodedata
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from lsprotocol import types
@@ -18,11 +20,15 @@ from citry._diagnostic_catalog import (
     BROWSER_MISSING_COMPONENT_PROP,
     BROWSER_UNKNOWN_COMPONENT_PROP,
     BROWSER_UNKNOWN_SERVER_EVENT,
+    I18N_ARGUMENT_INVALID,
+    I18N_CATALOG_INVALID,
+    I18N_UNKNOWN_MESSAGE,
     JS_DATA_UNSUPPORTED_TYPE,
     PARSE_CONFIGURATION,
     TEMPLATE_UNKNOWN_COMPONENT,
 )
 from citry._diagnostics import diagnostic_documentation_url, render_diagnostic
+from citry._i18n_directives import looks_like_i18n_binding
 from citry.analysis import (
     SERVER_EVENT_CALL_NAMES,
     AlpineLintConsumer,
@@ -50,6 +56,10 @@ from citry.analysis import (
     browser_declarative_events,
     browser_expression_at,
     browser_expressions,
+    browser_i18n_bind_calls,
+    browser_i18n_binding_directives,
+    browser_i18n_message_calls,
+    browser_i18n_profile_calls,
     browser_identifier_at,
     browser_identifiers,
     browser_literal_calls,
@@ -57,11 +67,13 @@ from citry.analysis import (
     browser_member_at,
     build_inferred_template_shadow,
     build_schema_template_shadow,
+    component_name_match,
     css_data_completion_at,
     css_data_reference_at,
     css_data_references,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
+    lint_csp_compatibility,
     lint_unknown_alpine_variables,
     lint_unknown_component_js_variables,
     lint_unknown_template_variables,
@@ -74,7 +86,9 @@ from citry.analysis import (
     python_event_handler_range,
     template_python_queries,
     template_python_query_at,
+    unknown_component_uses,
 )
+from citry_core.i18n import CatalogCompiler, I18nCompileError
 from citry_core.template_parser import (
     CITRY_DIRECTIVE_NAMES,
     HTML_VOID_ELEMENTS,
@@ -88,15 +102,18 @@ from citry_core.template_parser import (
 from citry_lsp.regions import (
     CssRegion,
     JsRegion,
+    MessagesRegion,
     TemplateRegion,
     css_region_at_position,
     discover_python_css_regions,
     discover_python_js_regions,
+    discover_python_messages_regions,
     discover_python_regions,
     document_offset_at,
     document_range_for_offsets,
     js_region_at_position,
     parser_char_index,
+    python_messages_source_map,
     region_at_position,
     standalone_css_region,
     standalone_js_region,
@@ -106,12 +123,70 @@ from citry_lsp.uri import file_uri_path
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from pathlib import Path
 
     from citry._linting import TemplateVariableInfo
     from citry._template_data_source import TemplateDataSourceShape
     from citry_lsp.catalog import CatalogIndex, ComponentRecord, FieldRecord, SchemaRecord
-    from citry_lsp.project import ProjectState, SourceEventRecord, SourceLintRecord, SourceStateFieldRecord
+    from citry_lsp.project import (
+        I18nOutputRecord,
+        I18nParameterDeclarationRecord,
+        ProjectState,
+        SourceEventRecord,
+        SourceLintRecord,
+        SourceStateFieldRecord,
+    )
+
+
+_I18N_SOURCE_COMPILER = CatalogCompiler()
+
+_I18N_CALL_SIGNATURES: dict[
+    tuple[str, str],
+    tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]],
+] = {
+    ("format", "number"): (("value",), ("format",), ()),
+    ("format", "percent"): (("value",), ("format",), ()),
+    ("format", "currency"): (("value", "currency"), ("format",), ()),
+    ("format", "date"): (("value",), ("format",), ()),
+    ("format", "time"): (("value",), ("format",), ()),
+    ("format", "datetime"): (("value",), ("format",), ()),
+    ("format", "relative_time"): (("value",), ("unit", "format"), ()),
+    ("format", "list"): (("values",), ("format",), ()),
+    ("format", "unit"): (("value", "unit"), ("format",), ()),
+    ("parse", "number"): (("input",), ("format",), ()),
+    ("parse", "percent"): (("input",), ("format",), ()),
+    ("parse", "date"): (("input",), ("format",), ()),
+    ("parse", "date_segments"): (("input",), ("format",), ()),
+    ("parse", "time"): (("input",), ("format",), ()),
+    ("parse", "time_segments"): (("input",), ("format",), ()),
+    ("parse", "datetime"): (("input",), ("format",), ("fold",)),
+    ("parse", "datetime_segments"): (("input",), ("format",), ("fold",)),
+}
+_I18N_PROFILE_OPERATION_NAMES = {
+    "date_segments": "date",
+    "time_segments": "time",
+    "datetime_segments": "datetime",
+}
+_I18N_OPERATION_SIGNATURES = {
+    ("format", "number"): "number(value: object, *, format: str) -> str",
+    ("format", "percent"): "percent(value: object, *, format: str) -> str",
+    ("format", "currency"): "currency(value: object, currency: str, *, format: str) -> str",
+    ("format", "date"): "date(value: object, *, format: str) -> str",
+    ("format", "time"): "time(value: object, *, format: str) -> str",
+    ("format", "datetime"): "datetime(value: object, *, format: str) -> str",
+    ("format", "relative_time"): "relative_time(value: object, *, unit: str, format: str) -> str",
+    ("format", "list"): "list(values: object, *, format: str) -> str",
+    ("format", "unit"): "unit(value: object, unit: str, *, format: str) -> str",
+    ("parse", "number"): "number(input: str, *, format: str) -> NumericParseResult",
+    ("parse", "percent"): "percent(input: str, *, format: str) -> NumericParseResult",
+    ("parse", "date"): "date(input: str, *, format: str) -> DateParseResult",
+    ("parse", "date_segments"): "date_segments(input: object, *, format: str) -> DateParseResult",
+    ("parse", "time"): "time(input: str, *, format: str) -> TimeParseResult",
+    ("parse", "time_segments"): "time_segments(input: object, *, format: str) -> TimeParseResult",
+    ("parse", "datetime"): "datetime(input: str, *, format: str, fold: int | None = None) -> DatetimeParseResult",
+    ("parse", "datetime_segments"): (
+        "datetime_segments(input: object, *, format: str, fold: int | None = None) -> DatetimeParseResult"
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,6 +203,21 @@ class CompletionResult:
 
     items: tuple[types.CompletionItem, ...]
     is_incomplete: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class _I18nUse:
+    """One exact message key or named profile under the cursor."""
+
+    kind: Literal["message", "operation", "parameter", "profile", "term"]
+    value: str
+    range: types.Range
+    attribute: str | None = None
+    namespace: Literal["format", "parse"] | None = None
+    operation: str | None = None
+    completable: bool = True
+    source_unit: str | None = None
+    message: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -294,6 +384,7 @@ class _ExpressionShadowConsumer:
     source_qualname: str
     kwargs_type: tuple[str, str] | None
     roots: tuple[TemplatePythonRoot, ...]
+    analysis_preamble: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,6 +458,7 @@ class DocumentState:
     regions: tuple[TemplateRegion, ...] = ()
     css_regions: tuple[CssRegion, ...] = ()
     js_regions: tuple[JsRegion, ...] = ()
+    messages_regions: tuple[MessagesRegion, ...] = ()
     parsed: dict[str, ParsedRegion] = field(default_factory=dict)
     last_good: dict[str, ParsedRegion] = field(default_factory=dict)
     diagnostics: tuple[types.Diagnostic, ...] = ()
@@ -419,6 +511,7 @@ class DocumentState:
             self.js_regions = discover_python_js_regions(source)
         else:
             self.js_regions = ()
+        self.messages_regions = discover_python_messages_regions(source) if self.language_id == "python" else ()
         self.regions = discovery
         diagnostics: list[types.Diagnostic] = []
         parsed: dict[str, ParsedRegion] = {}
@@ -515,6 +608,466 @@ def template_lint_diagnostics(
     return tuple(diagnostics)
 
 
+def i18n_diagnostics(
+    document: DocumentState,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None = None,
+) -> tuple[types.Diagnostic, ...]:
+    """Report current Fluent-source and literal i18n API mistakes."""
+    index = project.i18n
+    if index is None or not index.available:
+        return ()
+    diagnostics: list[types.Diagnostic] = []
+    for messages_region in document.messages_regions:
+        if not _registered_messages_region(document, messages_region, project):
+            continue
+        try:
+            _I18N_SOURCE_COMPILER.analyze_source(
+                f"{file_uri_path(document.uri) or document.uri}::{messages_region.component_name}.messages",
+                messages_region.source_map.template_source,
+            )
+        except I18nCompileError as error:
+            diagnostic = _i18n_compile_diagnostic(error)
+            if diagnostic is None:
+                continue
+            start, end, message = diagnostic
+            try:
+                mapped = messages_region.source_map.map_range(start, end)
+            except ValueError:
+                continue
+            diagnostics.append(
+                _i18n_diagnostic(
+                    _range(mapped),
+                    message,
+                    I18N_CATALOG_INVALID,
+                )
+            )
+
+    if document.language_id == "python":
+        diagnostics.extend(_python_i18n_diagnostics(document.source, index))
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    for template_region in document.regions:
+        parsed = document.parsed.get(template_region.key)
+        if parsed is None:
+            continue
+        known_types = _i18n_template_known_types(document, template_region, project, open_documents)
+        for query in template_python_queries(parsed.template, parse_nested=parser):
+            for start, end, message, code in _i18n_call_findings(
+                query.source,
+                index,
+                template=True,
+                known_types=known_types,
+            ):
+                try:
+                    mapped = template_region.source_map.map_range(query.start_index + start, query.start_index + end)
+                except ValueError:
+                    continue
+                diagnostics.append(_i18n_diagnostic(_range(mapped), message, code))
+        diagnostics.extend(_trans_i18n_diagnostics(parsed.template, template_region, index, known_types))
+    return tuple(diagnostics)
+
+
+def _registered_messages_region(
+    document: DocumentState,
+    region: MessagesRegion,
+    project: ProjectState,
+) -> bool:
+    """Require runtime-backed ownership before treating a string as Fluent."""
+    document_path = file_uri_path(document.uri)
+    if document_path is None or project.catalog is None:
+        return False
+    try:
+        expected = document_path.resolve()
+    except OSError:
+        return False
+    return any(
+        component.python_file is not None
+        and component.python_file.resolve() == expected
+        and component.class_name == region.component_name
+        for component in project.catalog.components
+    )
+
+
+def _i18n_template_known_types(
+    document: DocumentState,
+    region: TemplateRegion,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> dict[str, str]:
+    """Join only exact template-root types proven for every asset consumer."""
+    consumers = _template_consumers(document, region, project, open_documents)
+    if not consumers:
+        return {}
+    resolved: list[dict[str, str]] = []
+    for component in consumers:
+        context = _component_template_context(component, project, document, open_documents)
+        if context is None:
+            return {}
+        current: dict[str, str] = {}
+        for root in context.roots:
+            candidates = tuple(
+                dict.fromkeys(
+                    value
+                    for value in (
+                        root.type_field.type_display if root.type_field is not None else None,
+                        root.shadow_type_display,
+                        *(root.fallback_types or ()),
+                    )
+                    if value is not None
+                )
+            )
+            if len(candidates) == 1:
+                current[root.name] = candidates[0]
+        resolved.append(current)
+    common = resolved[0]
+    for candidate in resolved[1:]:
+        common = {name: value for name, value in common.items() if candidate.get(name) == value}
+    return common
+
+
+def _i18n_compile_diagnostic(error: I18nCompileError) -> tuple[int, int, str] | None:
+    try:
+        payload = json.loads(error.diagnostic_json)
+    except (AttributeError, TypeError, ValueError):
+        return None
+    start = payload.get("start")
+    end = payload.get("end")
+    message = payload.get("message")
+    if type(start) is not int or type(end) is not int or end <= start or type(message) is not str:
+        return None
+    return start, end, message
+
+
+def _python_i18n_diagnostics(source: str, index: Any) -> list[types.Diagnostic]:
+    diagnostics: list[types.Diagnostic] = []
+    for start, end, message, code in _i18n_call_findings(source, index, template=False):
+        try:
+            start_char = parser_char_index(source, start)
+            end_char = parser_char_index(source, end)
+        except ValueError:
+            continue
+        diagnostics.append(
+            _i18n_diagnostic(
+                _range(document_range_for_offsets(source, start_char, end_char)),
+                message,
+                code,
+            )
+        )
+    return diagnostics
+
+
+def _i18n_call_findings(
+    source: str,
+    index: Any,
+    *,
+    template: bool,
+    known_types: Mapping[str, str] | None = None,
+) -> list[tuple[int, int, str, str]]:
+    # Multiline interpolation queries retain the indentation before their
+    # closing delimiter. It is outside the expression and must not make an
+    # otherwise valid formatter call fail Python parsing.
+    parsed_source = source.rstrip() if template else source
+    try:
+        tree = ast.parse(parsed_source, mode="eval" if template else "exec")
+    except (SyntaxError, TypeError, ValueError):
+        return []
+    findings: list[tuple[int, int, str, str]] = []
+    for call in (node for node in ast.walk(tree) if isinstance(node, ast.Call)):
+        start, end = _python_ast_byte_range(source, call)
+        if _python_message_call(call.func, template=template):
+            findings.extend(_literal_message_call_findings(call, index, start, end, known_types=known_types))
+            continue
+        target = _python_profile_call(call.func, template=template)
+        if target is None:
+            continue
+        namespace, operation = target
+        signature_issue = _i18n_profile_signature_issue(call, namespace, operation)
+        if signature_issue is not None:
+            findings.append((start, end, signature_issue, I18N_ARGUMENT_INVALID))
+        if (namespace, operation) not in _I18N_CALL_SIGNATURES:
+            continue
+        profile = next((keyword.value for keyword in call.keywords if keyword.arg == "format"), None)
+        if not isinstance(profile, ast.Constant) or type(profile.value) is not str:
+            continue
+        profile_operation = _I18N_PROFILE_OPERATION_NAMES.get(operation, operation)
+        known = index.profile_names(namespace, profile_operation)
+        if cast("str", profile.value) not in known:
+            available = ", ".join(repr(item) for item in known) or "none"
+            findings.append(
+                (
+                    start,
+                    end,
+                    f"Unknown i18n {namespace} profile {profile.value!r} for {operation}; "
+                    f"configured profiles: {available}.",
+                    I18N_ARGUMENT_INVALID,
+                )
+            )
+    return findings
+
+
+def _i18n_profile_signature_issue(call: ast.Call, namespace: str, operation: str) -> str | None:
+    """Validate the closed Python/template formatter and parser call shape."""
+    signature = _I18N_CALL_SIGNATURES.get((namespace, operation))
+    if signature is None:
+        return f"Unknown i18n {namespace} operation {operation!r}."
+    positional_names, required_keywords, optional_keywords = signature
+    spread_positionals = any(isinstance(argument, ast.Starred) for argument in call.args)
+    concrete_positionals = [argument for argument in call.args if not isinstance(argument, ast.Starred)]
+    spread_keywords = any(keyword.arg is None for keyword in call.keywords)
+    keyword_names = [keyword.arg for keyword in call.keywords if keyword.arg is not None]
+    valid_keywords = {*positional_names, *required_keywords, *optional_keywords}
+    issues: list[str] = []
+    if not spread_positionals and len(concrete_positionals) > len(positional_names):
+        issues.append(
+            f"expected at most {len(positional_names)} positional argument(s), got {len(concrete_positionals)}"
+        )
+    unknown = sorted(set(keyword_names) - valid_keywords)
+    if unknown:
+        issues.append(f"unknown argument(s): {', '.join(unknown)}")
+    bound_positionals = set(positional_names[: len(concrete_positionals)])
+    duplicates = sorted(bound_positionals & set(keyword_names))
+    if duplicates:
+        issues.append(f"argument(s) passed twice: {', '.join(duplicates)}")
+    if not spread_positionals and not spread_keywords:
+        supplied = bound_positionals | set(keyword_names)
+        missing = [name for name in (*positional_names, *required_keywords) if name not in supplied]
+        if missing:
+            issues.append(f"missing argument(s): {', '.join(missing)}")
+    return f"i18n {namespace}.{operation}() has {'; '.join(issues)}." if issues else None
+
+
+def _python_ast_byte_range(source: str, node: ast.expr) -> tuple[int, int]:
+    end_line = node.end_lineno if node.end_lineno is not None else node.lineno
+    end_column = node.end_col_offset if node.end_col_offset is not None else node.col_offset
+    return (
+        _python_ast_byte_offset(source, node.lineno, node.col_offset),
+        _python_ast_byte_offset(source, end_line, end_column),
+    )
+
+
+def _literal_message_call_findings(
+    call: ast.Call,
+    index: Any,
+    start: int,
+    end: int,
+    *,
+    known_types: Mapping[str, str] | None = None,
+) -> list[tuple[int, int, str, str]]:
+    if not call.args or not isinstance(call.args[0], ast.Constant) or type(call.args[0].value) is not str:
+        return []
+    message = cast("str", call.args[0].value)
+    attribute_expression = next((keyword.value for keyword in call.keywords if keyword.arg == "attr"), None)
+    attribute = None
+    if attribute_expression is not None:
+        if not isinstance(attribute_expression, ast.Constant):
+            return []
+        if attribute_expression.value is not None and type(attribute_expression.value) is not str:
+            return []
+        attribute = cast("str | None", attribute_expression.value)
+    output = index.output(message, attribute)
+    token = message if attribute is None else f"{message}.{attribute}"
+    if output is None:
+        return [
+            (
+                start,
+                end,
+                f"Unknown i18n message ID {token!r}; no component or configured catalog package defines it.",
+                I18N_UNKNOWN_MESSAGE,
+            )
+        ]
+    expected = {parameter.name: parameter.type_name for parameter in output.parameters}
+    explicit = {
+        keyword.arg: keyword.value for keyword in call.keywords if keyword.arg is not None and keyword.arg != "attr"
+    }
+    has_spread = any(keyword.arg is None for keyword in call.keywords)
+    issues: list[str] = []
+    if len(call.args) != 1:
+        issues.append("tr() accepts only the message ID as a positional argument")
+    unknown = sorted(set(explicit) - set(expected))
+    missing = sorted(set(expected) - set(explicit)) if not has_spread else []
+    if unknown:
+        issues.append(f"unknown argument(s): {', '.join(unknown)}")
+    if missing:
+        issues.append(f"missing argument(s): {', '.join(missing)}")
+    for name in sorted(set(explicit) & set(expected)):
+        mismatch = _literal_i18n_expression_mismatch(expected[name], explicit[name], known_types=known_types)
+        if mismatch is not None:
+            issues.append(f"argument {name!r} {mismatch}")
+    return [(start, end, f"i18n output {token!r} has {'; '.join(issues)}.", I18N_ARGUMENT_INVALID)] if issues else []
+
+
+def _literal_i18n_expression_mismatch(
+    expected: str,
+    expression: ast.expr,
+    *,
+    known_types: Mapping[str, str] | None = None,
+) -> str | None:
+    if expected == "Slot":
+        return "is structural and must be supplied through <c-trans>"
+    if isinstance(expression, ast.Name) and known_types is not None:
+        actual = known_types.get(expression.id)
+        if actual is not None and not _i18n_type_accepts(expected, actual):
+            return f"must be {expected}, not {actual}"
+        return None
+    if not isinstance(expression, ast.Constant):
+        return None
+    value = expression.value
+    if expected == "str" and type(value) is not str:
+        return f"must be str, not {type(value).__name__}"
+    if expected == "scalar" and type(value) not in {str, int}:
+        return f"must be str, int, or Decimal, not {type(value).__name__}"
+    if expected == "int" and type(value) is not int:
+        return f"must be int, not {type(value).__name__}"
+    if expected in {"Decimal", "datetime"}:
+        return f"must be an explicit {expected} value, not a literal {type(value).__name__}"
+    return None
+
+
+def _i18n_type_accepts(expected: str, actual: str) -> bool:
+    short = actual.rsplit(".", maxsplit=1)[-1]
+    if expected == "scalar":
+        return short in {"str", "int", "Decimal"}
+    return short == expected
+
+
+def _trans_i18n_diagnostics(
+    template: Any,
+    region: TemplateRegion,
+    index: Any,
+    known_types: Mapping[str, str],
+) -> list[types.Diagnostic]:
+    diagnostics: list[types.Diagnostic] = []
+    for node in _trans_nodes(template):
+        attrs = {attr.key.content: attr for attr in node.start_tag.attrs}
+        message_attr = attrs.get("message")
+        if message_attr is None or message_attr.inner_value is None:
+            continue
+        message = message_attr.inner_value.content
+        attribute_attr = attrs.get("attr")
+        attribute = (
+            attribute_attr.inner_value.content
+            if attribute_attr is not None and attribute_attr.inner_value is not None
+            else None
+        )
+        token = message if attribute is None else f"{message}.{attribute}"
+        output = index.output(message, attribute)
+        mapped = _range(
+            region.source_map.map_range(
+                message_attr.inner_value.start_index,
+                message_attr.inner_value.end_index,
+            )
+        )
+        if output is None:
+            diagnostics.append(
+                _i18n_diagnostic(
+                    mapped,
+                    f"Unknown i18n message ID {token!r}; no component or configured catalog package defines it.",
+                    I18N_UNKNOWN_MESSAGE,
+                )
+            )
+            continue
+        interface = {parameter.name: parameter.type_name for parameter in output.parameters}
+        scalar_names = {name for name, type_name in interface.items() if type_name != "Slot"}
+        slot_names = {name for name, type_name in interface.items() if type_name == "Slot"}
+        values = _literal_trans_values(attrs.get("c-values"))
+        fills = _trans_fill_names(node)
+        issues: list[str] = []
+        if values is not None:
+            unknown_values = sorted(set(values) - scalar_names)
+            missing_values = sorted(scalar_names - set(values))
+            if unknown_values:
+                issues.append(f"unknown values: {', '.join(unknown_values)}")
+            if missing_values:
+                issues.append(f"missing values: {', '.join(missing_values)}")
+            for name in sorted(set(values) & scalar_names):
+                mismatch = _literal_i18n_expression_mismatch(
+                    interface[name],
+                    values[name],
+                    known_types=known_types,
+                )
+                if mismatch is not None:
+                    issues.append(f"value {name!r} {mismatch}")
+        unknown_fills = sorted(fills - slot_names)
+        missing_fills = sorted(slot_names - fills)
+        if unknown_fills:
+            issues.append(f"unknown fills: {', '.join(unknown_fills)}")
+        if missing_fills:
+            issues.append(f"missing fills: {', '.join(missing_fills)}")
+        if values is not None:
+            collisions = sorted(fills & set(values))
+            if collisions:
+                issues.append(f"names used by both values and fills: {', '.join(collisions)}")
+        if issues:
+            diagnostics.append(
+                _i18n_diagnostic(
+                    mapped,
+                    f"<c-trans> output {token!r} has {'; '.join(issues)}.",
+                    I18N_ARGUMENT_INVALID,
+                )
+            )
+    return diagnostics
+
+
+def _trans_nodes(template: Any) -> list[Any]:
+    nodes: list[Any] = []
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node = element._0
+        if node.start_tag.name.content.lower() == "c-trans":
+            nodes.append(node)
+        body = getattr(node, "body", None)
+        if body is not None:
+            nodes.extend(_trans_nodes(body))
+    return nodes
+
+
+def _literal_trans_values(attribute: Any | None) -> dict[str, ast.expr] | None:
+    if attribute is None or attribute.inner_value is None:
+        return {}
+    try:
+        expression = ast.parse(attribute.inner_value.content, mode="eval").body
+    except SyntaxError:
+        return None
+    if not isinstance(expression, ast.Dict) or not all(
+        key is not None and isinstance(key, ast.Constant) and type(key.value) is str for key in expression.keys
+    ):
+        return None
+    return {
+        cast("str", key.value): value
+        for key, value in zip(expression.keys, expression.values, strict=True)
+        if isinstance(key, ast.Constant) and type(key.value) is str
+    }
+
+
+def _trans_fill_names(node: Any) -> set[str]:
+    fills: set[str] = set()
+    body = getattr(node, "body", None)
+    if body is None:
+        return fills
+    for element in body.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        fill = element._0
+        if fill.start_tag.name.content.lower() != "c-fill":
+            continue
+        name = next((attr for attr in fill.start_tag.attrs if attr.key.content == "name"), None)
+        if name is not None and name.inner_value is not None:
+            fills.add(name.inner_value.content)
+    return fills
+
+
+def _i18n_diagnostic(range_: types.Range, message: str, code: str) -> types.Diagnostic:
+    return types.Diagnostic(
+        range=range_,
+        message=message,
+        severity=types.DiagnosticSeverity.Error,
+        code=code,
+        code_description=types.CodeDescription(diagnostic_documentation_url(code)),
+        source="citry",
+    )
+
+
 def browser_diagnostics(
     document: DocumentState,
     project: ProjectState,
@@ -522,9 +1075,27 @@ def browser_diagnostics(
 ) -> tuple[types.Diagnostic, ...]:
     """Report Citry-owned JsData and literal server-event problems."""
     diagnostics = list(_js_data_type_diagnostics(document, project, open_documents))
+    parser = project.analysis.parse_template if project.analysis is not None else parse_template
+    for region in document.regions:
+        parsed = document.parsed.get(region.key)
+        if parsed is None:
+            continue
+        for directive in browser_i18n_binding_directives(parsed.template, parse_nested=parser):
+            if directive.error is None:
+                continue
+            start = directive.error_start_index or directive.name_start_index
+            end = directive.error_end_index or directive.name_end_index
+            diagnostics.append(
+                _browser_diagnostic(
+                    region,
+                    start,
+                    max(start, end),
+                    I18N_ARGUMENT_INVALID,
+                    detail=directive.error,
+                )
+            )
     if project.catalog is None or project.source_analysis is None:
         return tuple(diagnostics)
-    parser = project.analysis.parse_template if project.analysis is not None else parse_template
     for region in document.regions:
         parsed = document.parsed.get(region.key)
         if parsed is None:
@@ -533,6 +1104,26 @@ def browser_diagnostics(
         if not consumers:
             continue
         expressions = browser_expressions(parsed.template, parse_nested=parser)
+        roots = _template_js_data_roots(document, region, project, open_documents)
+        diagnostics.extend(
+            _i18n_binding_diagnostics(
+                region,
+                parsed.template,
+                project,
+                roots,
+                expressions,
+                parser=parser,
+            )
+        )
+        for expression in expressions:
+            diagnostics.extend(
+                _browser_i18n_profile_diagnostics(
+                    expression,
+                    region,
+                    project,
+                    owners=frozenset({"$i18n"}),
+                )
+            )
         alpine_consumers = _alpine_lint_consumers(
             consumers,
             document,
@@ -555,6 +1146,25 @@ def browser_diagnostics(
                         source="citry",
                     )
                 )
+        for csp_finding in lint_csp_compatibility(
+            expressions,
+            alpine_consumers or (),
+            project.security_csp,
+        ):
+            diagnostics.append(
+                types.Diagnostic(
+                    range=_range(region.source_map.map_range(csp_finding.start_index, csp_finding.end_index)),
+                    message=csp_finding.message,
+                    severity=(
+                        types.DiagnosticSeverity.Error
+                        if csp_finding.severity == "error"
+                        else types.DiagnosticSeverity.Warning
+                    ),
+                    code=csp_finding.code,
+                    code_description=types.CodeDescription(diagnostic_documentation_url(csp_finding.code)),
+                    source="citry",
+                )
+            )
         event_contract = _event_contract(consumers, document, project, open_documents)
         if event_contract is not None:
             for expression in expressions:
@@ -584,7 +1194,6 @@ def browser_diagnostics(
                         event.end_index,
                     )
                 )
-        roots = _template_js_data_roots(document, region, project, open_documents)
         for props_use in browser_component_prop_uses(parsed.template, parse_nested=parser):
             child = project.catalog.get_tag(props_use.tag_name)
             if child is None:
@@ -629,9 +1238,19 @@ def browser_diagnostics(
                     )
                 )
         js_event_contract = _event_contract(js_consumers, document, project, open_documents)
-        if not js_consumers or js_event_contract is None:
+        if not js_consumers:
             continue
         js_expression = _component_js_expression(js_region)
+        diagnostics.extend(
+            _browser_i18n_profile_diagnostics(
+                js_expression,
+                js_region,
+                project,
+                owners=frozenset({"i18n"}),
+            )
+        )
+        if js_event_contract is None:
+            continue
         for call in browser_literal_calls(js_expression, SERVER_EVENT_CALL_NAMES):
             if call.value in js_event_contract:
                 continue
@@ -648,6 +1267,169 @@ def browser_diagnostics(
     return tuple(diagnostics)
 
 
+def _browser_i18n_profile_diagnostics(
+    expression: BrowserExpression,
+    region: TemplateRegion | JsRegion,
+    project: ProjectState,
+    *,
+    owners: frozenset[str],
+) -> list[types.Diagnostic]:
+    index = project.i18n
+    if index is None or not index.configured:
+        return []
+    if "$i18n" in owners and "$i18n" not in expression.bindings:
+        return []
+    operation_names = {"relativeTime": "relative_time"}
+    diagnostics: list[types.Diagnostic] = []
+    for call in browser_i18n_message_calls(expression, owners):
+        if call.has_dynamic_attribute:
+            continue
+        output = index.output(call.message, call.attribute)
+        token = call.message if call.attribute is None else f"{call.message}.{call.attribute}"
+        try:
+            call_range = _range(region.source_map.map_range(call.message_start_index, call.message_end_index))
+        except ValueError:
+            continue
+        if output is None:
+            diagnostics.append(
+                _i18n_diagnostic(
+                    call_range,
+                    f"Unknown i18n message ID {token!r}; no component or configured catalog package defines it.",
+                    I18N_UNKNOWN_MESSAGE,
+                )
+            )
+            continue
+        expected = {parameter.name for parameter in output.parameters}
+        supplied = {argument.name for argument in call.arguments}
+        unknown = sorted(supplied - expected)
+        missing = sorted(expected - supplied) if not call.has_dynamic_arguments else []
+        if not unknown and not missing:
+            continue
+        details: list[str] = []
+        if unknown:
+            details.append(f"unknown argument(s): {', '.join(unknown)}")
+        if missing:
+            details.append(f"missing argument(s): {', '.join(missing)}")
+        diagnostics.append(
+            _i18n_diagnostic(
+                call_range,
+                f"i18n output {token!r} has {'; '.join(details)}.",
+                I18N_ARGUMENT_INVALID,
+            )
+        )
+    for bind_call in browser_i18n_bind_calls(expression, owners):
+        if bind_call.has_dynamic_output:
+            continue
+        output = index.output(bind_call.message, bind_call.output)
+        if output is not None:
+            continue
+        token = bind_call.message if bind_call.output is None else f"{bind_call.message}.{bind_call.output}"
+        diagnostics.append(
+            _i18n_diagnostic(
+                _range(
+                    region.source_map.map_range(
+                        bind_call.message_start_index,
+                        bind_call.message_end_index,
+                    )
+                ),
+                f"Unknown i18n message ID {token!r}; no component or configured catalog package defines it.",
+                I18N_UNKNOWN_MESSAGE,
+            )
+        )
+    for profile_call in browser_i18n_profile_calls(expression, owners):
+        operation = operation_names.get(profile_call.operation, profile_call.operation)
+        known = index.profile_names(profile_call.namespace, operation)
+        if profile_call.profile in known:
+            continue
+        available = ", ".join(repr(item) for item in known) or "none"
+        diagnostics.append(
+            _i18n_diagnostic(
+                _range(region.source_map.map_range(profile_call.start_index, profile_call.end_index)),
+                f"Unknown i18n {profile_call.namespace} profile {profile_call.profile!r} for {operation}; "
+                f"configured profiles: {available}.",
+                I18N_ARGUMENT_INVALID,
+            )
+        )
+    return diagnostics
+
+
+def _i18n_binding_diagnostics(
+    region: TemplateRegion,
+    template: Any,
+    project: ProjectState,
+    roots: tuple[_JsDataRoot, ...],
+    expressions: tuple[BrowserExpression, ...],
+    *,
+    parser: Any,
+) -> list[types.Diagnostic]:
+    """Check static `$c-tr` outputs and named JavaScript values."""
+    index = project.i18n
+    if index is None or not index.available:
+        return []
+    diagnostics: list[types.Diagnostic] = []
+    for directive in browser_i18n_binding_directives(template, parse_nested=parser):
+        if directive.error is not None or directive.message is None:
+            continue
+        token = directive.message if directive.output is None else f"{directive.message}.{directive.output}"
+        output = index.output(directive.message, directive.output)
+        start = directive.message_start_index or directive.name_start_index
+        end = directive.message_end_index or directive.name_end_index
+        if output is None:
+            diagnostics.append(
+                _i18n_diagnostic(
+                    _range(region.source_map.map_range(start, end)),
+                    f"Unknown i18n message ID {token!r}; no component or configured catalog package defines it.",
+                    I18N_UNKNOWN_MESSAGE,
+                )
+            )
+            continue
+        if directive.server_dynamic:
+            continue
+        expected = {parameter.name: parameter for parameter in output.parameters if parameter.type_name != "Slot"}
+        supplied = {argument.name for argument in directive.arguments}
+        issues: list[str] = []
+        unknown = sorted(supplied - set(expected))
+        missing = (
+            sorted(set(expected) - supplied)
+            if directive.has_values_expression and not directive.has_dynamic_arguments
+            else []
+        )
+        if unknown:
+            issues.append(f"unknown argument(s): {', '.join(unknown)}")
+        if missing:
+            issues.append(f"missing argument(s): {', '.join(missing)}")
+        for argument in directive.arguments:
+            parameter = expected.get(argument.name)
+            if parameter is None:
+                continue
+            actual = _browser_prop_value_type(argument, roots, expressions)
+            if actual.kind != "unknown" and not _browser_i18n_type_accepts(parameter.type_name, actual):
+                issues.append(f"argument {argument.name!r} must be {parameter.type_name}, not {actual.javascript}")
+        if issues:
+            diagnostics.append(
+                _i18n_diagnostic(
+                    _range(region.source_map.map_range(start, end)),
+                    f"$c-tr output {token!r} has {'; '.join(issues)}.",
+                    I18N_ARGUMENT_INVALID,
+                )
+            )
+    return diagnostics
+
+
+def _browser_i18n_type_accepts(expected: str, actual: JsonWireType) -> bool:
+    """Match a proven JavaScript value with the browser i18n argument ABI."""
+    if actual.kind == "union":
+        return all(_browser_i18n_type_accepts(expected, item) for item in actual.items)
+    allowed = {
+        "str": {"string"},
+        "int": {"number", "string"},
+        "Decimal": {"number", "string"},
+        "scalar": {"number", "string"},
+        "datetime": set(),
+    }.get(expected)
+    return True if allowed is None or actual.kind == "unknown" else actual.kind in allowed
+
+
 def _component_js_lint_consumers(
     consumers: tuple[ComponentRecord, ...],
     project: ProjectState,
@@ -656,13 +1438,17 @@ def _component_js_lint_consumers(
     if project.analysis is None or not consumers:
         return None
     resolved: list[ComponentJsLintConsumer] = []
+    i18n_configured = project.i18n is not None and project.i18n.configured
     for component in consumers:
         lint = project.analysis.component_lint.get(component.definition_id)
         if lint is None:
             return None
+        known_names = {variable.name for variable in lint.component_js_globals}
+        if i18n_configured:
+            known_names.add("i18n")
         resolved.append(
             ComponentJsLintConsumer(
-                known_names=frozenset(variable.name for variable in lint.component_js_globals),
+                known_names=frozenset(known_names),
                 rule_unknown_component_js_variable=lint.rule_unknown_component_js_variable,
             )
         )
@@ -776,6 +1562,7 @@ def browser_projection(
             tuple(events),
             state_roots,
             binding_types=binding_types,
+            i18n=project.i18n,
         )
         if expression.mode == "statement":
             prefix = f"{preamble}\n(function () {{\n"
@@ -853,6 +1640,7 @@ def browser_projection(
         scope_roots=scope_roots,
         include_root_variables=False,
         component_js=True,
+        i18n=project.i18n,
     )
     prefix = f"{preamble}\n"
     authored = js_region.source_map.template_source
@@ -1112,8 +1900,10 @@ def _browser_projection_owns_position(
 ) -> bool:
     """Prefer Citry's Python-backed hover and navigation at exact owned names."""
     identifier = browser_identifier_at(expression, parser_index)
-    if identifier is not None and not component_js and identifier.root and identifier.name in _ALPINE_API_SPECS:
-        return True
+    if identifier is not None and not component_js and identifier.name in _ALPINE_API_SPECS:
+        if identifier.name == "$i18n":
+            return "$i18n" in expression.bindings
+        return identifier.root
     if identifier is not None and component_js:
         if identifier.root and identifier.name == "$component":
             return True
@@ -1140,6 +1930,828 @@ def _browser_projection_owns_position(
     return component_js and member.owner in {"data", "scope"} and member.name in {root.name for root in roots}
 
 
+def _i18n_use_at(
+    document: DocumentState,
+    position: types.Position,
+    project: ProjectState,
+) -> _I18nUse | None:
+    """Return one parser-backed i18n key or profile under the cursor."""
+    if project.i18n is None or not project.i18n.available:
+        return None
+    uses: list[_I18nUse] = _catalog_i18n_uses(document, project)
+    region = document.region_at(position)
+    if region is not None:
+        parser_index = region.source_map.parser_index_at(_citry_position(position))
+        parsed = document.parsed.get(region.key)
+        if parser_index is not None and parsed is not None:
+            nested_parser = project.analysis.parse_template if project.analysis is not None else parse_template
+            uses.extend(_mapped_i18n_binding_uses(parsed.template, region, nested_parser))
+            query = template_python_query_at(
+                parsed.template,
+                parser_index,
+                parse_nested=nested_parser,
+            )
+            if query is not None:
+                uses.extend(_mapped_python_i18n_uses(query.source, query.start_index, region, template=True))
+            expression = browser_expression_at(
+                parsed.template,
+                parser_index,
+                parse_nested=nested_parser,
+            )
+            if expression is not None:
+                uses.extend(_mapped_browser_i18n_uses(expression, region, owners=frozenset({"$i18n"})))
+            uses.extend(_trans_i18n_uses(parsed.template, region))
+    js_region = document.js_region_at(position)
+    if js_region is not None:
+        expression = BrowserExpression(
+            js_region.source_map.template_source,
+            0,
+            len(js_region.source_map.template_source.encode("utf-8")),
+            "statement",
+            "component-js",
+        )
+        uses.extend(_mapped_browser_i18n_uses(expression, js_region, owners=frozenset({"i18n"})))
+    if document.language_id == "python":
+        uses.extend(_host_python_i18n_uses(document.source))
+    matches = [use for use in uses if _position_in_range(position, use.range)]
+    return min(matches, key=lambda item: _range_width(item.range)) if matches else None
+
+
+def _catalog_i18n_uses(document: DocumentState, project: ProjectState) -> list[_I18nUse]:
+    index = project.i18n
+    if index is None:
+        return []
+    uses: list[_I18nUse] = []
+    for output in index.outputs.values():
+        range_ = _catalog_source_range(
+            document,
+            output.definition.path,
+            output.definition.start,
+            output.definition.end,
+        )
+        if range_ is not None:
+            uses.append(_I18nUse("message", output.message, range_, output.attribute, completable=False))
+    for reference in index.references:
+        range_ = _catalog_source_range(document, reference.path, reference.start, reference.end)
+        if range_ is None:
+            continue
+        message, separator, attribute = reference.token.partition(".")
+        uses.append(_I18nUse("message", message, range_, attribute if separator else None))
+    for region in document.messages_regions:
+        if not _registered_messages_region(document, region, project):
+            continue
+        analysis = _analyze_messages_source(region)
+        if analysis is None:
+            continue
+        for symbol in analysis.get("definitions", []):
+            if symbol.get("kind") != "term":
+                continue
+            mapped = _messages_symbol_range(region, symbol)
+            token = symbol.get("token")
+            if mapped is not None and type(token) is str:
+                uses.append(_I18nUse("term", token, mapped, completable=False, source_unit=region.key))
+        for symbol in analysis.get("references", []):
+            if symbol.get("kind") != "term":
+                continue
+            mapped = _messages_symbol_range(region, symbol)
+            token = symbol.get("token")
+            if mapped is not None and type(token) is str:
+                uses.append(_I18nUse("term", token, mapped, completable=False, source_unit=region.key))
+    return uses
+
+
+def _analyze_messages_source(region: MessagesRegion) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(
+            _I18N_SOURCE_COMPILER.analyze_source(
+                region.key,
+                region.source_map.template_source,
+            )
+        )
+    except (I18nCompileError, TypeError, ValueError):
+        return None
+    return cast("dict[str, Any]", payload) if type(payload) is dict else None
+
+
+def _messages_symbol_range(region: MessagesRegion, symbol: object) -> types.Range | None:
+    if type(symbol) is not dict:
+        return None
+    start = symbol.get("start")
+    end = symbol.get("end")
+    if type(start) is not int or type(end) is not int or end <= start:
+        return None
+    try:
+        return _range(region.source_map.map_range(start, end))
+    except ValueError:
+        return None
+
+
+def _catalog_source_range(
+    document: DocumentState,
+    origin: str,
+    start: int,
+    end: int,
+) -> types.Range | None:
+    document_path = file_uri_path(document.uri)
+    if document_path is None:
+        return None
+    path_text, separator, inline = origin.rpartition("::")
+    source_path = Path(path_text if separator else origin)
+    try:
+        if document_path.resolve() != source_path.resolve():
+            return None
+    except OSError:
+        return None
+    if separator and inline.endswith(".messages"):
+        source_map = python_messages_source_map(document.source, inline.removesuffix(".messages"))
+        if source_map is None:
+            return None
+        try:
+            return _range(source_map.map_range(start, end))
+        except ValueError:
+            return None
+    try:
+        start_char = parser_char_index(document.source, start)
+        end_char = parser_char_index(document.source, end)
+        return _range(document_range_for_offsets(document.source, start_char, end_char))
+    except ValueError:
+        return None
+
+
+def _mapped_python_i18n_uses(
+    source: str,
+    base_index: int,
+    region: TemplateRegion,
+    *,
+    template: bool,
+) -> list[_I18nUse]:
+    uses: list[_I18nUse] = []
+    for kind, value, attribute, namespace, operation, message, start, end in _python_i18n_uses(
+        source,
+        template=template,
+    ):
+        try:
+            mapped = region.source_map.map_range(base_index + start, base_index + end)
+        except ValueError:
+            continue
+        uses.append(
+            _I18nUse(
+                cast("Literal['message', 'operation', 'parameter', 'profile']", kind),
+                value,
+                _range(mapped),
+                attribute=attribute,
+                namespace=cast("Literal['format', 'parse'] | None", namespace),
+                operation=operation,
+                message=message,
+            )
+        )
+    return uses
+
+
+def _host_python_i18n_uses(source: str) -> list[_I18nUse]:
+    uses: list[_I18nUse] = []
+    for kind, value, attribute, namespace, operation, message, start, end in _python_i18n_uses(
+        source,
+        template=False,
+    ):
+        try:
+            start_char = parser_char_index(source, start)
+            end_char = parser_char_index(source, end)
+        except ValueError:
+            continue
+        uses.append(
+            _I18nUse(
+                cast("Literal['message', 'operation', 'parameter', 'profile']", kind),
+                value,
+                _range(document_range_for_offsets(source, start_char, end_char)),
+                attribute=attribute,
+                namespace=cast("Literal['format', 'parse'] | None", namespace),
+                operation=operation,
+                message=message,
+            )
+        )
+    return uses
+
+
+def _python_i18n_uses(
+    source: str,
+    *,
+    template: bool,
+) -> list[tuple[str, str, str | None, str | None, str | None, str | None, int, int]]:
+    """Extract direct Python/template calls with exact string-token spans."""
+    # The removed suffix is only template indentation after the expression,
+    # so every retained AST byte offset still maps to the authored source.
+    parsed_source = source.rstrip() if template else source
+    try:
+        tree = ast.parse(parsed_source, mode="eval" if template else "exec")
+    except (SyntaxError, TypeError, ValueError):
+        return []
+    uses: list[tuple[str, str, str | None, str | None, str | None, str | None, int, int]] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        message_call = _python_message_call(node.func, template=template)
+        if message_call and node.args and isinstance(node.args[0], ast.Constant) and type(node.args[0].value) is str:
+            message = cast("str", node.args[0].value)
+            attribute = _literal_python_keyword(node, "attr")
+            span = _ast_string_content_span(source, node.args[0])
+            if span is not None:
+                uses.append(("message", message, attribute, None, None, None, *span))
+            for keyword in node.keywords:
+                if keyword.arg is None or keyword.arg == "attr":
+                    continue
+                keyword_span = _python_keyword_name_span(source, keyword)
+                if keyword_span is not None:
+                    uses.append(
+                        (
+                            "parameter",
+                            keyword.arg,
+                            attribute,
+                            None,
+                            None,
+                            message,
+                            *keyword_span,
+                        )
+                    )
+            continue
+        target = _python_profile_call(node.func, template=template)
+        if target is None:
+            continue
+        operation_span = _python_attribute_name_span(source, node.func)
+        if operation_span is not None:
+            uses.append(("operation", target[1], None, target[0], target[1], None, *operation_span))
+        profile = next((keyword.value for keyword in node.keywords if keyword.arg == "format"), None)
+        if not isinstance(profile, ast.Constant) or type(profile.value) is not str:
+            continue
+        span = _ast_string_content_span(source, profile)
+        if span is not None:
+            operation = _I18N_PROFILE_OPERATION_NAMES.get(target[1], target[1])
+            uses.append(("profile", cast("str", profile.value), None, target[0], operation, None, *span))
+    if not template:
+        uses.extend(_client_messages_i18n_uses(source, tree))
+    return uses
+
+
+def _python_message_call(function: ast.expr, *, template: bool) -> bool:
+    if template and isinstance(function, ast.Name) and function.id == "tr":
+        return True
+    return isinstance(function, ast.Attribute) and function.attr == "tr" and _python_i18n_service(function.value)
+
+
+def _python_profile_call(function: ast.expr, *, template: bool) -> tuple[str, str] | None:
+    if not isinstance(function, ast.Attribute):
+        return None
+    operation = function.attr
+    owner = function.value
+    if template and isinstance(owner, ast.Name) and owner.id == "fmt":
+        return "format", operation
+    if not isinstance(owner, ast.Attribute) or owner.attr not in {"format", "parse"}:
+        return None
+    if _python_i18n_service(owner.value):
+        return owner.attr, operation
+    return None
+
+
+def _python_i18n_service(expression: ast.expr) -> bool:
+    """Recognize the two explicit public ways to obtain an i18n service."""
+    if (
+        isinstance(expression, ast.Attribute)
+        and expression.attr == "i18n"
+        and isinstance(expression.value, ast.Name)
+        and expression.value.id == "self"
+    ):
+        return True
+    return (
+        isinstance(expression, ast.Call)
+        and isinstance(expression.func, ast.Attribute)
+        and expression.func.attr == "for_context"
+        and isinstance(expression.func.value, ast.Name)
+        and expression.func.value.id == "i18n"
+    )
+
+
+def _literal_python_keyword(call: ast.Call, name: str) -> str | None:
+    value = next((keyword.value for keyword in call.keywords if keyword.arg == name), None)
+    return cast("str", value.value) if isinstance(value, ast.Constant) and type(value.value) is str else None
+
+
+def _client_messages_i18n_uses(
+    source: str,
+    tree: ast.AST,
+) -> list[tuple[str, str, str | None, str | None, str | None, str | None, int, int]]:
+    uses: list[tuple[str, str, str | None, str | None, str | None, str | None, int, int]] = []
+    for component in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
+        for nested in (item for item in component.body if isinstance(item, ast.ClassDef) and item.name == "I18n"):
+            for statement in nested.body:
+                value: ast.expr | None = None
+                if (
+                    isinstance(statement, ast.Assign)
+                    and any(
+                        isinstance(target, ast.Name) and target.id == "client_messages" for target in statement.targets
+                    )
+                ) or (
+                    isinstance(statement, ast.AnnAssign)
+                    and isinstance(statement.target, ast.Name)
+                    and statement.target.id == "client_messages"
+                ):
+                    value = statement.value
+                if not isinstance(value, (ast.Tuple, ast.List, ast.Set)):
+                    continue
+                for item in value.elts:
+                    if not isinstance(item, ast.Constant) or type(item.value) is not str:
+                        continue
+                    span = _ast_string_content_span(source, item)
+                    if span is not None:
+                        uses.append(("message", cast("str", item.value), None, None, None, None, *span))
+    return uses
+
+
+def _python_keyword_name_span(source: str, keyword: ast.keyword) -> tuple[int, int] | None:
+    """Return the exact keyword name without including its value."""
+    if keyword.arg is None or keyword.lineno is None or keyword.col_offset is None:
+        return None
+    start = _python_ast_byte_offset(source, keyword.lineno, keyword.col_offset)
+    return start, start + len(keyword.arg.encode("utf-8"))
+
+
+def _python_attribute_name_span(source: str, expression: ast.expr) -> tuple[int, int] | None:
+    """Return the final member name in one direct attribute expression."""
+    if not isinstance(expression, ast.Attribute) or expression.end_lineno is None or expression.end_col_offset is None:
+        return None
+    end = _python_ast_byte_offset(source, expression.end_lineno, expression.end_col_offset)
+    return end - len(expression.attr.encode("utf-8")), end
+
+
+def _ast_string_content_span(source: str, node: ast.Constant) -> tuple[int, int] | None:
+    if any(value is None for value in (node.end_lineno, node.end_col_offset)):
+        return None
+    start = _python_ast_byte_offset(source, node.lineno, node.col_offset)
+    end = _python_ast_byte_offset(source, cast("int", node.end_lineno), cast("int", node.end_col_offset))
+    encoded = source.encode("utf-8")
+    try:
+        raw = encoded[start:end].decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    match = re.fullmatch(r"(?is)(?:[rub]*)('''|\"\"\"|'|\")(.*)\1", raw)
+    if match is None:
+        return None
+    prefix = raw[: match.start(2)]
+    suffix = raw[match.end(2) :]
+    return start + len(prefix.encode("utf-8")), end - len(suffix.encode("utf-8"))
+
+
+def _python_ast_byte_offset(source: str, line: int, column: int) -> int:
+    lines = source.splitlines(keepends=True)
+    return sum(len(item.encode("utf-8")) for item in lines[: line - 1]) + column
+
+
+def _mapped_browser_i18n_uses(
+    expression: BrowserExpression,
+    region: TemplateRegion | JsRegion,
+    *,
+    owners: frozenset[str],
+) -> list[_I18nUse]:
+    if "$i18n" in owners and "$i18n" not in expression.bindings:
+        return []
+    uses: list[_I18nUse] = []
+    for call in browser_i18n_message_calls(expression, owners):
+        try:
+            mapped = region.source_map.map_range(call.message_start_index, call.message_end_index)
+        except ValueError:
+            continue
+        uses.append(_I18nUse("message", call.message, _range(mapped), call.attribute))
+        if call.has_dynamic_attribute:
+            continue
+        for argument in call.arguments:
+            try:
+                argument_range = region.source_map.map_range(argument.start_index, argument.end_index)
+            except ValueError:
+                continue
+            uses.append(
+                _I18nUse(
+                    "parameter",
+                    argument.name,
+                    _range(argument_range),
+                    attribute=call.attribute,
+                    message=call.message,
+                )
+            )
+    for bind_call in browser_i18n_bind_calls(expression, owners):
+        try:
+            message_range = region.source_map.map_range(
+                bind_call.message_start_index,
+                bind_call.message_end_index,
+            )
+        except ValueError:
+            continue
+        uses.append(
+            _I18nUse(
+                "message",
+                bind_call.message,
+                _range(message_range),
+                bind_call.output,
+            )
+        )
+        if bind_call.output is None or bind_call.output_start_index is None or bind_call.output_end_index is None:
+            continue
+        try:
+            output_range = region.source_map.map_range(
+                bind_call.output_start_index,
+                bind_call.output_end_index,
+            )
+        except ValueError:
+            continue
+        uses.append(
+            _I18nUse(
+                "message",
+                bind_call.message,
+                _range(output_range),
+                bind_call.output,
+            )
+        )
+    operation_names = {"relativeTime": "relative_time"}
+    for profile_call in browser_i18n_profile_calls(expression, owners):
+        try:
+            mapped = region.source_map.map_range(profile_call.start_index, profile_call.end_index)
+        except ValueError:
+            continue
+        uses.append(
+            _I18nUse(
+                "profile",
+                profile_call.profile,
+                _range(mapped),
+                namespace=profile_call.namespace,
+                operation=operation_names.get(profile_call.operation, profile_call.operation),
+            )
+        )
+    return uses
+
+
+def _mapped_i18n_binding_uses(template: Any, region: TemplateRegion, parser: Any) -> list[_I18nUse]:
+    """Map `$c-tr` message and Fluent-attribute names to catalog uses."""
+    uses: list[_I18nUse] = []
+    for directive in browser_i18n_binding_directives(template, parse_nested=parser):
+        if directive.message is None:
+            if directive.error is not None and "message ID after ':'" in directive.error:
+                start = directive.error_start_index or directive.name_end_index
+                end = directive.error_end_index or start
+                try:
+                    mapped = region.source_map.map_range(start, end)
+                except ValueError:
+                    continue
+                uses.append(_I18nUse("message", "", _range(mapped)))
+            continue
+        if directive.message_start_index is None or directive.message_end_index is None:
+            continue
+        try:
+            message_range = region.source_map.map_range(
+                directive.message_start_index,
+                directive.message_end_index,
+            )
+        except ValueError:
+            continue
+        uses.append(_I18nUse("message", directive.message, _range(message_range), directive.output))
+        if (
+            directive.output is not None
+            and directive.output_start_index is not None
+            and directive.output_end_index is not None
+        ):
+            try:
+                output_range = region.source_map.map_range(
+                    directive.output_start_index,
+                    directive.output_end_index,
+                )
+            except ValueError:
+                pass
+            else:
+                uses.append(_I18nUse("message", directive.message, _range(output_range), directive.output))
+        for argument in directive.arguments:
+            try:
+                argument_range = region.source_map.map_range(argument.start_index, argument.end_index)
+            except ValueError:
+                continue
+            uses.append(
+                _I18nUse(
+                    "parameter",
+                    argument.name,
+                    _range(argument_range),
+                    attribute=directive.output,
+                    message=directive.message,
+                )
+            )
+    return uses
+
+
+def _trans_i18n_uses(template: Any, region: TemplateRegion) -> list[_I18nUse]:
+    uses: list[_I18nUse] = []
+    for element in template.elements:
+        if not isinstance(element, TemplateElement.Node):
+            continue
+        node: Any = element._0
+        if node.start_tag.name.content.lower() == "c-trans":
+            attrs = {attr.key.content: attr for attr in node.start_tag.attrs}
+            message = attrs.get("message")
+            if message is not None and message.inner_value is not None:
+                attribute = attrs.get("attr")
+                attribute_name = (
+                    attribute.inner_value.content
+                    if attribute is not None and attribute.inner_value is not None
+                    else None
+                )
+                mapped = region.source_map.map_range(
+                    message.inner_value.start_index,
+                    message.inner_value.end_index,
+                )
+                uses.append(_I18nUse("message", message.inner_value.content, _range(mapped), attribute_name))
+                values = attrs.get("c-values")
+                if values is not None and values.inner_value is not None:
+                    for parameter, start, end in _literal_trans_value_spans(values.inner_value.content):
+                        mapped_parameter = region.source_map.map_range(
+                            values.inner_value.start_index + start,
+                            values.inner_value.start_index + end,
+                        )
+                        uses.append(
+                            _I18nUse(
+                                "parameter",
+                                parameter,
+                                _range(mapped_parameter),
+                                attribute=attribute_name,
+                                message=message.inner_value.content,
+                            )
+                        )
+                body = getattr(node, "body", None)
+                if body is not None:
+                    for child in body.elements:
+                        if not isinstance(child, TemplateElement.Node):
+                            continue
+                        fill = child._0
+                        if fill.start_tag.name.content.lower() != "c-fill":
+                            continue
+                        name = next(
+                            (attr for attr in fill.start_tag.attrs if attr.key.content == "name"),
+                            None,
+                        )
+                        if name is None or name.inner_value is None:
+                            continue
+                        mapped_parameter = region.source_map.map_range(
+                            name.inner_value.start_index,
+                            name.inner_value.end_index,
+                        )
+                        uses.append(
+                            _I18nUse(
+                                "parameter",
+                                name.inner_value.content,
+                                _range(mapped_parameter),
+                                attribute=attribute_name,
+                                message=message.inner_value.content,
+                            )
+                        )
+        body = getattr(node, "body", None)
+        if body is not None:
+            uses.extend(_trans_i18n_uses(body, region))
+    return uses
+
+
+def _literal_trans_value_spans(source: str) -> tuple[tuple[str, int, int], ...]:
+    """Return literal mapping keys from one ``c-values`` expression."""
+    try:
+        expression = ast.parse(source, mode="eval").body
+    except (SyntaxError, TypeError, ValueError):
+        return ()
+    if not isinstance(expression, ast.Dict):
+        return ()
+    found: list[tuple[str, int, int]] = []
+    for key in expression.keys:
+        if not isinstance(key, ast.Constant) or type(key.value) is not str:
+            continue
+        span = _ast_string_content_span(source, key)
+        if span is not None:
+            found.append((cast("str", key.value), *span))
+    return tuple(found)
+
+
+def _position_in_range(position: types.Position, range_: types.Range) -> bool:
+    point = (position.line, position.character)
+    return (range_.start.line, range_.start.character) <= point <= (range_.end.line, range_.end.character)
+
+
+def _range_width(range_: types.Range) -> tuple[int, int]:
+    return (range_.end.line - range_.start.line, range_.end.character - range_.start.character)
+
+
+def _i18n_completion_result(use: _I18nUse, project: ProjectState) -> CompletionResult:
+    index = project.i18n
+    if index is None or not use.completable:
+        return CompletionResult(())
+    if use.kind not in {"message", "profile"}:
+        return CompletionResult(())
+    if use.kind == "message":
+        names = index.message_ids()
+        kind = types.CompletionItemKind.Value
+        detail = "Fluent message"
+    else:
+        if use.namespace is None or use.operation is None:
+            return CompletionResult(())
+        names = index.profile_names(use.namespace, use.operation)
+        kind = types.CompletionItemKind.EnumMember
+        detail = f"i18n {use.namespace} profile for {use.operation}"
+    return CompletionResult(
+        tuple(
+            types.CompletionItem(
+                label=name,
+                kind=kind,
+                detail=detail,
+                text_edit=types.TextEdit(use.range, name),
+                filter_text=name,
+            )
+            for name in names
+        ),
+        is_incomplete=False,
+    )
+
+
+def _i18n_hover(use: _I18nUse, project: ProjectState) -> types.Hover | None:
+    index = project.i18n
+    if index is None:
+        return None
+    if use.kind == "term":
+        return types.Hover(
+            types.MarkupContent(
+                types.MarkupKind.Markdown,
+                f"`{use.value}`\n\nPrivate Fluent term in this component message source.",
+            ),
+            range=use.range,
+        )
+    if use.kind == "operation":
+        if use.namespace is None or use.operation is None:
+            return None
+        signature = _I18N_OPERATION_SIGNATURES.get((use.namespace, use.operation))
+        if signature is None:
+            return None
+        return types.Hover(
+            types.MarkupContent(
+                types.MarkupKind.Markdown,
+                f"```python\n{signature}\n```\n\nLocale-aware i18n {use.namespace} operation.",
+            ),
+            range=use.range,
+        )
+    if use.kind == "profile":
+        if use.namespace is None or use.operation is None:
+            return None
+        if use.value not in index.profile_names(use.namespace, use.operation):
+            return None
+        return types.Hover(
+            types.MarkupContent(
+                types.MarkupKind.Markdown,
+                f"`{use.value}`\n\nNamed i18n {use.namespace} profile for `{use.operation}()`.",
+            ),
+            range=use.range,
+        )
+    if use.kind == "parameter":
+        output = _i18n_parameter_output(use, index)
+        if output is None:
+            return None
+        parameter = next((item for item in output.parameters if item.name == use.value), None)
+        if parameter is None:
+            return None
+        description = f"\n\n{parameter.descriptions[0]}" if parameter.descriptions else ""
+        inherited = "\n\nRequired through a referenced message or term." if not parameter.direct else ""
+        return types.Hover(
+            types.MarkupContent(
+                types.MarkupKind.Markdown,
+                f"`${parameter.name}`: `{parameter.type_name}`{description}{inherited}\n\nInput for `{output.token}`.",
+            ),
+            range=use.range,
+        )
+    output = index.output(use.value, use.attribute)
+    if output is None and use.attribute is None:
+        output = next((item for item in index.outputs.values() if item.message == use.value), None)
+    if output is None:
+        return None
+    lines = [f"`{output.token}`", "", f"Defined by catalog owner `{output.owner}`."]
+    if output.parameters:
+        lines.extend(("", "Inputs:"))
+        for parameter in output.parameters:
+            description = f" - {parameter.descriptions[0]}" if parameter.descriptions else ""
+            inherited = " (through a referenced message or term)" if not parameter.direct else ""
+            lines.append(f"- `${parameter.name}`: `{parameter.type_name}`{inherited}{description}")
+    attributes = sorted(
+        candidate.attribute
+        for candidate in index.outputs.values()
+        if candidate.message == output.message and candidate.attribute is not None
+    )
+    if attributes and use.attribute is None:
+        lines.extend(("", f"Attributes: {', '.join(f'`.{name}`' for name in attributes)}"))
+    return types.Hover(types.MarkupContent(types.MarkupKind.Markdown, "\n".join(lines)), range=use.range)
+
+
+def _i18n_definition(
+    use: _I18nUse,
+    project: ProjectState,
+    open_documents: Mapping[str, DocumentState] | None,
+    document: DocumentState,
+) -> types.Location | list[types.Location] | None:
+    if use.kind == "term":
+        for region in document.messages_regions:
+            if region.key != use.source_unit:
+                continue
+            analysis = _analyze_messages_source(region)
+            if analysis is None:
+                return None
+            for symbol in analysis.get("definitions", []):
+                if type(symbol) is dict and symbol.get("kind") == "term" and symbol.get("token") == use.value:
+                    range_ = _messages_symbol_range(region, symbol)
+                    return types.Location(document.uri, range_) if range_ is not None else None
+        return None
+    if use.kind == "parameter" and project.i18n is not None:
+        output = _i18n_parameter_output(use, project.i18n)
+        if output is None:
+            return None
+        parameter = next((item for item in output.parameters if item.name == use.value), None)
+        if parameter is None:
+            return None
+        locations = tuple(
+            location
+            for declaration in parameter.declarations
+            if (location := _i18n_parameter_declaration_location(declaration, open_documents)) is not None
+        )
+        if not locations:
+            return None
+        return locations[0] if len(locations) == 1 else list(locations)
+    if use.kind != "message" or project.i18n is None:
+        return None
+    output = project.i18n.output(use.value, use.attribute)
+    if output is None and use.attribute is None:
+        output = next((item for item in project.i18n.outputs.values() if item.message == use.value), None)
+    return _i18n_definition_location(output, open_documents) if output is not None else None
+
+
+def _i18n_parameter_output(use: _I18nUse, index: Any) -> I18nOutputRecord | None:
+    """Resolve the output whose argument name is under the cursor."""
+    if use.message is None:
+        return None
+    return index.output(use.message, use.attribute)
+
+
+def _i18n_parameter_declaration_location(
+    declaration: I18nParameterDeclarationRecord,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> types.Location | None:
+    """Map one compiler-proven @param comment back to its authored file."""
+    return _i18n_source_location(
+        declaration.path,
+        declaration.start,
+        declaration.end,
+        open_documents,
+    )
+
+
+def _i18n_definition_location(
+    output: I18nOutputRecord,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> types.Location | None:
+    definition = output.definition
+    return _i18n_source_location(definition.path, definition.start, definition.end, open_documents)
+
+
+def _i18n_source_location(
+    authored_path: str,
+    start_index: int,
+    end_index: int,
+    open_documents: Mapping[str, DocumentState] | None,
+) -> types.Location | None:
+    """Map one catalog byte range through an inline messages declaration."""
+    path_text, separator, inline = authored_path.rpartition("::")
+    path = Path(path_text if separator else authored_path).resolve()
+    if not path.is_file():
+        return None
+    uri = path.as_uri()
+    source = _open_document_source(path, open_documents) if open_documents is not None else None
+    if source is None:
+        try:
+            with tokenize.open(path) as stream:
+                source = stream.read()
+        except (OSError, SyntaxError, UnicodeError):
+            return None
+    if separator and inline.endswith(".messages"):
+        component_name = inline.removesuffix(".messages")
+        source_map = python_messages_source_map(source, component_name)
+        if source_map is None:
+            return None
+        try:
+            mapped = source_map.map_range(start_index, end_index)
+        except ValueError:
+            return None
+        return types.Location(uri, _range(mapped))
+    try:
+        start = parser_char_index(source, start_index)
+        end = parser_char_index(source, end_index)
+        range_ = _range(document_range_for_offsets(source, start, end))
+    except ValueError:
+        return None
+    return types.Location(uri, range_)
+
+
 def completion_items(
     document: DocumentState,
     position: types.Position,
@@ -1157,6 +2769,9 @@ def completion_result(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> CompletionResult:
     """Return schema-free and optional registry-backed completions."""
+    i18n_use = _i18n_use_at(document, position, project)
+    if i18n_use is not None:
+        return _i18n_completion_result(i18n_use, project)
     catalog = project.catalog
     event_result = _browser_event_completion_result(document, position, project, open_documents)
     if event_result is not None:
@@ -1321,23 +2936,33 @@ def completion_result(
     for schema_field in component.kwargs:
         if schema_field.name in existing:
             continue
-        new_text = schema_field.name if attribute_context.preserve_value else f'{schema_field.name}="$1"'
-        items.append(
-            types.CompletionItem(
-                label=schema_field.name,
-                kind=types.CompletionItemKind.Field,
-                detail=_field_detail(schema_field),
-                documentation=_markdown(schema_field.description),
-                insert_text=new_text,
-                insert_text_format=types.InsertTextFormat.Snippet,
-                filter_text=schema_field.name,
-                text_edit=types.InsertReplaceEdit(
-                    new_text=new_text,
-                    insert=attribute_context.edit_range,
-                    replace=attribute_context.edit_range,
-                ),
-            )
+        static_text = (
+            schema_field.name
+            if attribute_context.preserve_value or schema_field.type_display == "bool"
+            else f'{schema_field.name}="$1"'
         )
+        dynamic_name = f"c-{schema_field.name}"
+        dynamic_text = dynamic_name if attribute_context.preserve_value else f'{dynamic_name}="$1"'
+        for label, new_text, detail in (
+            (schema_field.name, static_text, _field_detail(schema_field)),
+            (dynamic_name, dynamic_text, f"Dynamic Python expression · {_field_detail(schema_field)}"),
+        ):
+            items.append(
+                types.CompletionItem(
+                    label=label,
+                    kind=types.CompletionItemKind.Field,
+                    detail=detail,
+                    documentation=_markdown(schema_field.description),
+                    insert_text=new_text,
+                    insert_text_format=types.InsertTextFormat.Snippet,
+                    filter_text=label,
+                    text_edit=types.InsertReplaceEdit(
+                        new_text=new_text,
+                        insert=attribute_context.edit_range,
+                        replace=attribute_context.edit_range,
+                    ),
+                )
+            )
     return CompletionResult(tuple(items), is_incomplete=True)
 
 
@@ -1348,6 +2973,11 @@ def hover(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> types.Hover | None:
     """Return Citry syntax, lexical, or catalog documentation under cursor."""
+    i18n_use = _i18n_use_at(document, position, project)
+    if i18n_use is not None:
+        i18n_hover = _i18n_hover(i18n_use, project)
+        if i18n_hover is not None:
+            return i18n_hover
     browser_api_hover = _browser_api_hover(document, position, project)
     if browser_api_hover is not None:
         return browser_api_hover
@@ -1672,6 +3302,11 @@ def definition(
     open_documents: Mapping[str, DocumentState] | None = None,
 ) -> types.Location | list[types.Location] | None:
     """Navigate to an exact catalog or lexical declaration when provable."""
+    i18n_use = _i18n_use_at(document, position, project)
+    if i18n_use is not None:
+        i18n_location = _i18n_definition(i18n_use, project, open_documents, document)
+        if i18n_location is not None:
+            return i18n_location
     component_prop_location = _browser_component_prop_origin(document, position, project, open_documents)
     if component_prop_location is not None:
         return component_prop_location
@@ -1834,6 +3469,18 @@ def _expression_shadow_consumers(
             or context.source_qualname is None
         ):
             return None
+        roots = tuple(
+            TemplatePythonRoot(
+                root.name,
+                root.presence,
+                root.access,
+                root.type_field.source_module if root.type_field is not None else None,
+                root.type_field.source_qualname if root.type_field is not None else None,
+                root.shadow_type_display,
+            )
+            for root in context.roots
+        )
+        roots, analysis_preamble = _i18n_template_analysis_contract(context.source, roots)
         consumers.append(
             _ExpressionShadowConsumer(
                 identity=owner.definition_id,
@@ -1843,20 +3490,61 @@ def _expression_shadow_consumers(
                 source_module=context.source_module,
                 source_qualname=context.source_qualname,
                 kwargs_type=context.kwargs_type,
-                roots=tuple(
-                    TemplatePythonRoot(
-                        root.name,
-                        root.presence,
-                        root.access,
-                        root.type_field.source_module if root.type_field is not None else None,
-                        root.type_field.source_qualname if root.type_field is not None else None,
-                        root.shadow_type_display,
-                    )
-                    for root in context.roots
-                ),
+                roots=roots,
+                analysis_preamble=analysis_preamble,
             )
         )
     return tuple(consumers)
+
+
+def _i18n_template_analysis_contract(
+    source: str,
+    roots: tuple[TemplatePythonRoot, ...],
+) -> tuple[tuple[TemplatePythonRoot, ...], str]:
+    """Provide local i18n types when an editable install is opaque to ty."""
+    if not any(root.name in {"fmt", "tr"} for root in roots):
+        return roots, ""
+
+    formatter_type = "__citry_lsp_i18n_formatter_type"
+    while formatter_type in source:
+        formatter_type += "_"
+    rewritten = tuple(
+        replace(root, type_display=formatter_type)
+        if root.name == "fmt"
+        else replace(root, type_display="typing.Callable[..., str]")
+        if root.name == "tr"
+        else root
+        for root in roots
+    )
+    preamble = f"""\
+class {formatter_type}:
+    def number(self, value: object, *, format: str) -> str:
+        return ""
+    def percent(self, value: object, *, format: str) -> str:
+        return ""
+    def currency(self, value: object, currency: str, *, format: str) -> str:
+        return ""
+    def date(self, value: object, *, format: str) -> str:
+        return ""
+    def time(self, value: object, *, format: str) -> str:
+        return ""
+    def datetime(self, value: object, *, format: str) -> str:
+        return ""
+    def relative_time(self, value: object, *, unit: str, format: str) -> str:
+        return ""
+    def list(self, values: object, *, format: str) -> str:
+        return ""
+    def unit(self, value: object, unit: str, *, format: str) -> str:
+        return ""
+"""
+    return rewritten, preamble
+
+
+def _append_shadow_preamble(document: ShadowPythonDocument, preamble: str) -> ShadowPythonDocument:
+    """Append analysis-only declarations without moving authored source maps."""
+    if not preamble:
+        return document
+    return replace(document, source=f"{document.source.rstrip()}\n\n{preamble.rstrip()}\n")
 
 
 def _build_expression_shadows(
@@ -1888,6 +3576,7 @@ def _build_expression_shadows(
             )
         if shadow is None:
             return ()
+        shadow = _append_shadow_preamble(shadow, consumer.analysis_preamble)
         shadows.append(
             ExpressionShadow(
                 identity=consumer.identity,
@@ -1903,7 +3592,8 @@ def _build_expression_shadows(
 
 def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:
     """Return whether one complete Python host mutates the render context."""
-    framed = f"[\nNone for {query.source}\n]" if query.host_kind == "loop" else query.source
+    source = query.source.rstrip()
+    framed = f"[\nNone for {source}\n]" if query.host_kind == "loop" else source
     try:
         tree = ast.parse(framed, mode="eval")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
@@ -1913,7 +3603,8 @@ def _query_contains_named_expression(query: TemplatePythonQuery) -> bool:
 
 def _query_contains_lambda_named_expression(query: TemplatePythonQuery) -> bool:
     """Detect Citry's context-leaking lambda assignment special case."""
-    framed = f"[\nNone for {query.source}\n]" if query.host_kind == "loop" else query.source
+    source = query.source.rstrip()
+    framed = f"[\nNone for {source}\n]" if query.host_kind == "loop" else source
     try:
         tree = ast.parse(framed, mode="eval")
     except (SyntaxError, ValueError, TypeError, MemoryError, RecursionError):
@@ -2232,55 +3923,23 @@ def _unknown_component_diagnostics(
     template: Any,
     region: TemplateRegion,
     known_names: frozenset[str],
-    *,
-    base_index: int = 0,
 ) -> list[types.Diagnostic]:
-    findings: list[types.Diagnostic] = []
-    for element in template.elements:
-        if not isinstance(element, TemplateElement.Node):
-            continue
-        node: Any = element._0
-        tag = node.start_tag.name
-        normalized = f"c-{tag.content[2:].lower()}" if tag.content.startswith("c-") else None
-        if normalized is not None and normalized not in RESERVED_TAG_NAMES:
-            name = normalized.removeprefix("c-")
-            if name not in known_names:
-                findings.append(
-                    types.Diagnostic(
-                        _range(
-                            region.source_map.map_range(
-                                base_index + tag.start_index,
-                                base_index + tag.end_index,
-                            )
-                        ),
-                        render_diagnostic(TEMPLATE_UNKNOWN_COMPONENT, tag=tag.content),
-                        severity=types.DiagnosticSeverity.Error,
-                        code=TEMPLATE_UNKNOWN_COMPONENT,
-                        code_description=types.CodeDescription(
-                            diagnostic_documentation_url(TEMPLATE_UNKNOWN_COMPONENT)
-                        ),
-                        source="citry",
-                    )
+    return [
+        types.Diagnostic(
+            _range(
+                region.source_map.map_range(
+                    finding.start_index,
+                    finding.end_index,
                 )
-        body = getattr(node, "body", None)
-        if body is not None:
-            findings.extend(_unknown_component_diagnostics(body, region, known_names, base_index=base_index))
-        for attr in node.start_tag.attrs:
-            if attr.kind != HtmlAttrKind.Template or attr.inner_value is None:
-                continue
-            parsed_nested = _parse_nested_template(attr.inner_value.content)
-            if parsed_nested is None:
-                continue
-            nested, nested_start = parsed_nested
-            findings.extend(
-                _unknown_component_diagnostics(
-                    nested,
-                    region,
-                    known_names,
-                    base_index=base_index + attr.inner_value.start_index + nested_start,
-                )
-            )
-    return findings
+            ),
+            render_diagnostic(TEMPLATE_UNKNOWN_COMPONENT, tag=finding.tag),
+            severity=types.DiagnosticSeverity.Error,
+            code=TEMPLATE_UNKNOWN_COMPONENT,
+            code_description=types.CodeDescription(diagnostic_documentation_url(TEMPLATE_UNKNOWN_COMPONENT)),
+            source="citry",
+        )
+        for finding in unknown_component_uses(template, known_names)
+    ]
 
 
 def _lexical_definition(
@@ -2663,6 +4322,7 @@ _DYNAMIC_ATTRIBUTES_URL = "https://citry.dev/syntax/dynamic-attributes/"
 _SLOTS_URL = "https://citry.dev/concepts/slots/"
 _CLIENT_INTERACTIVITY_URL = "https://citry.dev/concepts/client-interactivity/"
 _DYNAMIC_COMPONENTS_URL = "https://citry.dev/advanced/dynamic-components/"
+_BROWSER_I18N_URL = "https://citry.dev/i18n/browser/"
 
 # Keeping the authored spellings and their prose together makes a new parser
 # feature visibly incomplete until both completion and hover can describe it.
@@ -2976,6 +4636,28 @@ def _syntax_specs(*, kind: str, context: str | None = None) -> tuple[_SyntaxSpec
 _STRUCTURAL_TAG_SPECS = {spec.label: spec for spec in _syntax_specs(kind="tag")}
 _GENERAL_DIRECTIVES = _syntax_specs(kind="attribute", context="general")
 _CLIENT_PROP_DIRECTIVES = _syntax_specs(kind="attribute", context="component")
+_I18N_BINDING_DIRECTIVES = (
+    _SyntaxSpec(
+        "$c-tr:",
+        "attribute",
+        "Bind a translated DOM value",
+        "Keep server-rendered text or an allowlisted HTML attribute current in the browser.",
+        _BROWSER_I18N_URL,
+        context="i18n-binding",
+        insert_text='\\$c-tr:${1:message}="${2:{}}"',
+        repeatable=True,
+    ),
+    _SyntaxSpec(
+        "c-$c-tr:",
+        "attribute",
+        "Compute a translation values expression in Python",
+        "Evaluate Python to produce the Alpine named-values expression for a browser translation binding.",
+        _BROWSER_I18N_URL,
+        context="i18n-binding",
+        insert_text='c-\\$c-tr:${1:message}="${2:expression}"',
+        repeatable=True,
+    ),
+)
 _STRUCTURAL_ATTRIBUTES: dict[str, tuple[_SyntaxSpec, ...]] = {
     name: _syntax_specs(kind="attribute", context=name) for name in RESERVED_TAG_NAMES
 }
@@ -3090,6 +4772,12 @@ def _syntax_attribute_spec(tag_name: str, attr_name: str) -> _SyntaxSpec | None:
             (spec for spec in _STRUCTURAL_ATTRIBUTES[normalized_tag] if spec.label == attr_name),
             None,
         )
+    translated_name = attr_name.removeprefix("c-")
+    if looks_like_i18n_binding(translated_name):
+        if normalized_tag.startswith("c-"):
+            return None
+        label = "c-$c-tr:" if attr_name.startswith("c-") else "$c-tr:"
+        return next(spec for spec in _I18N_BINDING_DIRECTIVES if spec.label == label)
     contexts: list[str | None] = []
     if normalized_tag in {"c-component", "c-element"}:
         contexts.append("dynamic-target")
@@ -3288,7 +4976,8 @@ def _directive_attribute_completions(
         specs = (*_DYNAMIC_TARGET_ATTRIBUTES, *_GENERAL_DIRECTIVES)
     else:
         is_component = registered_component or (tag_name.startswith("c-") and normalized_tag not in RESERVED_TAG_NAMES)
-        specs = (*_GENERAL_DIRECTIVES, *(_CLIENT_PROP_DIRECTIVES if is_component else ()))
+        i18n_specs = () if is_component or normalized_tag.startswith("c-") else _I18N_BINDING_DIRECTIVES
+        specs = (*_GENERAL_DIRECTIVES, *(_CLIENT_PROP_DIRECTIVES if is_component else ()), *i18n_specs)
 
     control_if_present = bool(authored_attrs & {"c-if", "c-elif", "c-else"})
     control_for_present = bool(authored_attrs & {"c-for", "c-empty"})
@@ -4918,6 +6607,16 @@ def _browser_prop_value_type(
 ) -> JsonWireType:
     """Infer direct literals, proven roots, and active Alpine loop bindings."""
     source = property_.value_source.strip()
+    member_match = re.fullmatch(r"([A-Za-z_$][\w$]*)\??\.([A-Za-z_$][\w$]*)", source)
+    if member_match is not None:
+        owner, member = member_match.groups()
+        root = next((candidate for candidate in roots if candidate.name == owner), None)
+        if root is not None and root.wire_type.kind == "object":
+            field = next((candidate for candidate in root.wire_type.fields if candidate.name == member), None)
+            if field is not None:
+                return field.value
+            if root.wire_type.additional is not None:
+                return root.wire_type.additional
     if re.fullmatch(r"[A-Za-z_$][\w$]*", source):
         root = next((candidate for candidate in roots if candidate.name == source), None)
         if root is not None:
@@ -5360,6 +7059,12 @@ class _BrowserApiSpec:
 
 _BROWSER_APIS_URL = "https://citry.dev/reference/browser-apis/"
 _ALPINE_API_SPECS = {
+    "$i18n": _BrowserApiSpec(
+        "magic",
+        "CitryI18nService",
+        "Translate, format, parse, or switch locale inside the nearest client-enabled i18n subtree.",
+        "https://citry.dev/i18n/browser/",
+    ),
     "$state": _BrowserApiSpec(
         "magic",
         "CitryEventsState",
@@ -5418,6 +7123,12 @@ _COMPONENT_API_SPECS = {
     ),
 }
 _COMPONENT_CONTEXT_SPECS = {
+    "i18n": _BrowserApiSpec(
+        "parameter",
+        "CitryI18nService | null",
+        "The nearest browser i18n service, or null outside a client-enabled i18n subtree.",
+        "https://citry.dev/i18n/browser/",
+    ),
     "id": _BrowserApiSpec("parameter", "string", "The current server render ID.", f"{_BROWSER_APIS_URL}#component"),
     "els": _BrowserApiSpec(
         "parameter",
@@ -5550,7 +7261,12 @@ def _browser_api_at(
     if template_context is not None:
         region, expression, parser_index = template_context
         identifier = browser_identifier_at(expression, parser_index)
-        if identifier is None or not identifier.root:
+        if identifier is None:
+            return None
+        if identifier.name == "$i18n":
+            if "$i18n" not in expression.bindings:
+                return None
+        elif not identifier.root:
             return None
         spec = _ALPINE_API_SPECS.get(identifier.name)
         if spec is None:
@@ -5577,6 +7293,8 @@ def _browser_api_at(
         spec = _COMPONENT_CONTEXT_SPECS.get(binding.name)
         if spec is None:
             continue
+        if binding.name == "i18n" and (project.i18n is None or not project.i18n.configured):
+            continue
         for start, end in ((binding.start_index, binding.end_index), *binding.references):
             if start <= js_parser_index <= end:
                 return js_region, binding.local_name, spec, start, end
@@ -5594,9 +7312,11 @@ def _browser_preamble(
     scope_roots: tuple[_JsDataRoot, ...] | None = None,
     include_root_variables: bool = True,
     component_js: bool = False,
+    i18n: Any | None = None,
 ) -> str:
     """Render collision-tolerant JSDoc facts for VS Code's JS provider."""
     lines = ["// Generated Citry browser-analysis declarations."]
+    lines.extend(_i18n_browser_typedefs(i18n))
     names: set[str] = set()
     if include_root_variables:
         for root in roots:
@@ -5608,8 +7328,13 @@ def _browser_preamble(
         if binding in names:
             continue
         names.add(binding)
-        wire_type = (binding_types or {}).get(binding, JsonWireType("unknown"))
-        lines.extend((f"/** @type {{{wire_type.javascript}}} */", f"var {binding};"))
+        if binding == "$i18n" and i18n is not None and i18n.configured:
+            binding_type = "CitryI18nService"
+        elif binding == "i18n" and i18n is not None and i18n.configured:
+            binding_type = "CitryI18nService | null"
+        else:
+            binding_type = (binding_types or {}).get(binding, JsonWireType("unknown")).javascript
+        lines.extend((f"/** @type {{{binding_type}}} */", f"var {binding};"))
     data_shape = _js_object_shape(tuple((root.name, root.wire_type.javascript, True) for root in roots))
     effective_scope_roots = roots if scope_roots is None else scope_roots
     scope_shape = _js_object_shape(
@@ -5647,6 +7372,7 @@ def _browser_preamble(
             f" * @property {{{scope_shape} & Record<string, unknown>}} scope",
             " * @property {Readonly<CitryClientProps>} props",
             " * @property {CitryEventsState | null} state",
+            " * @property {CitryI18nService | null} i18n",
             " * @property {unknown} [graph]",
             " * @property {(key: string | symbol, value: unknown) => void} provide",
             " * @property {(key: string | symbol, fallback?: unknown) => unknown} inject",
@@ -5708,6 +7434,101 @@ def _browser_preamble(
             )
         )
     return "\n".join(lines)
+
+
+def _i18n_browser_typedefs(index: Any) -> tuple[str, ...]:
+    """Render the checked browser i18n service shape for the JS provider."""
+
+    def profiles(namespace: str, operation: str) -> str:
+        if index is None or not index.configured:
+            return "string"
+        names = index.profile_names(namespace, operation)
+        return " | ".join(_js_string_literal(name) for name in names) or "string"
+
+    number = profiles("format", "number")
+    percent = profiles("format", "percent")
+    currency = profiles("format", "currency")
+    date = profiles("format", "date")
+    time = profiles("format", "time")
+    datetime = profiles("format", "datetime")
+    relative_time = profiles("format", "relative_time")
+    list_ = profiles("format", "list")
+    unit = profiles("format", "unit")
+    parse_number = profiles("parse", "number")
+    parse_percent = profiles("parse", "percent")
+    return (
+        "/** @typedef {'ltr' | 'rtl'} CitryI18nDirection */",
+        "/** @typedef {Object} CitryI18nContext",
+        " * @property {string} locale",
+        " * @property {CitryI18nDirection} direction",
+        " * @property {readonly string[]} fallback_locales",
+        " * @property {string | null} time_zone",
+        " * @property {string} catalog_revision",
+        " * @property {string} formats_revision",
+        " * @property {string} tzdb_revision",
+        " */",
+        "/** @typedef {Object} CitryI18nNumericParseResult",
+        " * @property {'valid' | 'incomplete' | 'invalid'} state",
+        " * @property {boolean} valid",
+        " * @property {string | null} value",
+        " * @property {string | null} error",
+        " * @property {string} input",
+        " */",
+        "/** @typedef {Object} CitryI18nResolvedMessage",
+        " * @property {CitryI18nDirection} direction",
+        " * @property {string} locale",
+        " * @property {string} text",
+        " * @property {boolean} usedFallback",
+        " */",
+        "/** @typedef {Object} CitryI18nBinding",
+        " * @property {() => void} dispose",
+        " * @property {() => void} refresh",
+        " */",
+        "/** @typedef {Object} CitryI18nFormatter",
+        f" * @property {{(value: unknown, options: {{format: {number}}}) => string}} number",
+        f" * @property {{(value: unknown, options: {{format: {percent}}}) => string}} percent",
+        f" * @property {{(value: unknown, currency: string, options: {{format: {currency}}}) => string}} currency",
+        " * @property {"
+        f"(value: {{year: number, month: number, day: number}}, options: {{format: {date}}}) => string"
+        "} date",
+        " * @property {"
+        f"(value: {{hour: number, minute: number, second?: number, millisecond?: number}}, "
+        f"options: {{format: {time}}}) => string"
+        "} time",
+        f" * @property {{(value: Date, options: {{format: {datetime}}}) => string}} datetime",
+        " * @property {"
+        f"(value: unknown, options: {{format: {relative_time}, unit: string}}) => string"
+        "} relativeTime",
+        f" * @property {{(values: readonly string[], options: {{format: {list_}}}) => string}} list",
+        f" * @property {{(value: unknown, unit: string, options: {{format: {unit}}}) => string}} unit",
+        " */",
+        "/** @typedef {Object} CitryI18nParser",
+        f" * @property {{(input: string, options: {{format: {parse_number}}}) => CitryI18nNumericParseResult}} number",
+        " * @property {"
+        f"(input: string, options: {{format: {parse_percent}}}) => CitryI18nNumericParseResult"
+        "} percent",
+        " */",
+        "/** @typedef {Object} CitryI18nService",
+        " * @property {Readonly<CitryI18nContext>} context",
+        " * @property {CitryI18nFormatter} format",
+        " * @property {CitryI18nParser} parse",
+        " * @property {"
+        "(message: string, values?: Readonly<Record<string, unknown>>, options?: {attr?: string}) => string"
+        "} tr",
+        " * @property {"
+        "(message: string, values?: Readonly<Record<string, unknown>>, options?: {attr?: string}) => "
+        "Readonly<CitryI18nResolvedMessage>"
+        "} resolve",
+        " * @property {"
+        "(options: {message: string, output?: string, values?: () => Readonly<Record<string, unknown>>, "
+        "onChange: (text: string, resolved: Readonly<CitryI18nResolvedMessage>) => void}) => CitryI18nBinding"
+        "} bind",
+        " * @property {(messages: string | readonly string[]) => Promise<void>} ensureMessages",
+        " * @property {"
+        "(locale: string) => Promise<Readonly<{status: 'committed' | 'stale', context?: CitryI18nContext}>>"
+        "} switchLocale",
+        " */",
+    )
 
 
 def _js_object_shape(fields: tuple[tuple[str, str, bool], ...]) -> str:
@@ -7325,7 +9146,7 @@ def _component_completions(
             if label in seen:
                 continue
             seen.add(label)
-            match = _component_completion_match(
+            match = component_name_match(
                 prefix,
                 label,
                 is_class_name=is_class_name,
@@ -7333,7 +9154,6 @@ def _component_completions(
             )
             if match is None:
                 continue
-            sort_text, filter_text = match
             items.append(
                 types.CompletionItem(
                     label=label,
@@ -7341,8 +9161,8 @@ def _component_completions(
                     detail=_component_detail(component),
                     documentation=_markdown(component.description),
                     insert_text=label,
-                    filter_text=filter_text,
-                    sort_text=sort_text,
+                    filter_text=match.filter_text,
+                    sort_text=match.sort_text,
                     text_edit=types.InsertReplaceEdit(
                         new_text=label,
                         insert=edit_range,
@@ -7351,87 +9171,6 @@ def _component_completions(
                 )
             )
     return items
-
-
-def _component_completion_match(
-    prefix: str,
-    label: str,
-    *,
-    is_class_name: bool,
-    variant_index: int,
-) -> tuple[str, str] | None:
-    """Match one component spelling while preserving the user's typed shape."""
-    query = prefix.removeprefix("c-")
-    suffix = label.removeprefix("c-")
-    surfaces = [(suffix, False)]
-    if is_class_name and len(suffix) > 1 and suffix[0] == "C" and suffix[1].isupper():
-        surfaces.append((suffix[1:], True))
-
-    matches: list[tuple[tuple[int, int, int, int], str]] = []
-    for surface, elided in surfaces:
-        result = _component_surface_match(query, surface, is_class_name=is_class_name)
-        if result is None:
-            continue
-        tier, matched_surface, consumed_query = result
-        comparison_query = query if consumed_query == len(query) else _compact_component_name(query)
-        case_mismatches = sum(
-            left != right
-            for left, right in zip(comparison_query, matched_surface, strict=False)
-            if left.casefold() == right.casefold()
-        )
-        score = (
-            tier + (2 if elided else 0),
-            variant_index,
-            case_mismatches,
-            len(matched_surface) - consumed_query,
-        )
-        filter_text = prefix + matched_surface[consumed_query:]
-        matches.append((score, filter_text))
-    if not matches:
-        return None
-    score, filter_text = min(matches)
-    tier, variant, case_mismatches, remaining = score
-    return (
-        f"1:{tier:03}:{variant:03}:{case_mismatches:03}:{remaining:04}:{label.casefold()}:{label}",
-        filter_text,
-    )
-
-
-def _component_surface_match(
-    query: str,
-    surface: str,
-    *,
-    is_class_name: bool,
-) -> tuple[int, str, int] | None:
-    """Return a match tier and the surface used for client-side filtering."""
-    if query == surface:
-        return 0, surface, len(query)
-    if not query:
-        return 20, surface, 0
-    compact_query = _compact_component_name(query)
-    compact_surface = _compact_component_name(surface)
-    if (
-        is_class_name
-        and len(compact_query) >= 2
-        and query == compact_query
-        and len(compact_query) < len(compact_surface)
-        and compact_surface.casefold().startswith(compact_query.casefold())
-    ):
-        return 10, compact_surface, len(compact_query)
-    if surface.startswith(query):
-        return 20, surface, len(query)
-    if surface.casefold().startswith(query.casefold()):
-        return 30, surface, len(query)
-    if compact_surface.startswith(compact_query):
-        return 40, compact_surface, len(compact_query)
-    if compact_surface.casefold().startswith(compact_query.casefold()):
-        return 50, compact_surface, len(compact_query)
-    return None
-
-
-def _compact_component_name(value: str) -> str:
-    """Remove separators that distinguish equivalent component spellings."""
-    return re.sub(r"[-_.]", "", value)
 
 
 def _component_detail(component: ComponentRecord) -> str:
@@ -8034,6 +9773,7 @@ __all__ = [
     "expression_shadows",
     "hover",
     "html_projection",
+    "i18n_diagnostics",
     "map_expression_shadow_range",
     "references",
     "render_template_variable_hover",

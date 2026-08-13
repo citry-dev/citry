@@ -31,6 +31,8 @@ each entry to one paragraph and link to longer docs rather than copying them.
 | Python package surface (`citry_core` on PyPI) | [`packages/py/citry_core/AGENTS.md`](../../packages/py/citry_core/AGENTS.md) |
 | Monorepo dev / build / release conventions | [`docs/codebase.md`](../codebase.md) |
 | Alpine, browser ownership graph, props, boundary handlers, slots, and morph lifecycle | [`docs/design/alpinejs.md`](../design/alpinejs.md) |
+| Browser CSP, nonces, Alpine's CSP build, and JavaScript-free delivery | [`docs/design/security_csp.md`](../design/security_csp.md) |
+| CSRF ownership, Events token wiring, and native forms | [`docs/design/security_csrf.md`](../design/security_csrf.md) |
 | ComponentRange identity, physical placements, matching, and range-level morph policy | [`docs/design/component_ranges.md`](../design/component_ranges.md) |
 | Internationalization: locale context, messages, formatting, direction, tooling, and Citry UI | [`docs/design/i18n.md`](../design/i18n.md) |
 

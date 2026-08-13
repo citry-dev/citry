@@ -166,3 +166,9 @@ interfaces:
       - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client `open` value currently owns state.}
       - {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the request.}
       - {id: return-value, name: returnValue, type: string, meaning: Explicit action value or native Dialog Form return value; empty for other requests.}
+
+translations:
+  - id: cdialog-translations
+    component: CDialog
+    entries:
+      - {id: close, key: citry-ui-dialog-close, purpose: Names the generated close control., variables: None, override: '`close_label` input or `close` slot', updates: '$c-tr updates `aria-label`.'}

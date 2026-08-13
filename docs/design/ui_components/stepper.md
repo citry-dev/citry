@@ -226,3 +226,12 @@ Next/Back Buttons outside Stepper so the ownership boundary is visible.
 Built-in panels, validation, completion stores, a compact mobile progress
 variant, async workflow orchestration, and locale-aware fallback numbering are
 deferred. They require separate evidence and are not implied by this family.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

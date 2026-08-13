@@ -46,6 +46,44 @@ class TestCitryInstance:
         with pytest.raises(ValueError, match="mode must be one of"):
             CitrySettings(mode="prod")
 
+    def test_security_settings_have_compatibility_defaults(self):
+        assert Citry().settings.security_csp == "off"
+        assert Citry().settings.security_javascript == "allow"
+        assert Citry().settings.security_script_integrity == "off"
+        assert CitrySettings().security_csp == "off"
+        assert CitrySettings().security_javascript == "allow"
+        assert CitrySettings().security_script_integrity == "off"
+
+    @pytest.mark.parametrize(
+        ("name", "values"),
+        [
+            ("security_csp", ("off", "warn", "strict")),
+            ("security_javascript", ("allow", "warn", "omit", "forbid")),
+            ("security_script_integrity", ("off", "citry")),
+        ],
+    )
+    def test_security_settings_store_every_valid_mode(self, name, values):
+        for value in values:
+            assert getattr(Citry(**{name: value}).settings, name) == value
+            assert getattr(CitrySettings(**{name: value}), name) == value
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("security_csp", "warning"),
+            ("security_javascript", "off"),
+            ("security_script_integrity", "strict"),
+            ("security_csp", True),
+            ("security_javascript", None),
+            ("security_script_integrity", 1),
+        ],
+    )
+    def test_invalid_security_settings_are_rejected(self, name, value):
+        with pytest.raises(ValueError, match=name):
+            Citry(**{name: value})
+        with pytest.raises(ValueError, match=name):
+            CitrySettings(**{name: value})
+
     def test_lint_settings_are_typed_copied_and_stored(self):
         variables = {"request": Annotated[str, "Current request."]}
         alpine_variables = {"$featureFlags": Annotated[dict[str, bool], "Feature flags."]}

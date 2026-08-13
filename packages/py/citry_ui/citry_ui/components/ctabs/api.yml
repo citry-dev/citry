@@ -558,3 +558,5 @@ interfaces:
         name: is_selected
         type: bool
         meaning: Whether this Panel is selected in the server render.
+
+translations: []

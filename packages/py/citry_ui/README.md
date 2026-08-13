@@ -1,10 +1,10 @@
 # citry-ui experimental component library
 
 This distribution is becoming Citry's first-party styled component library.
-Button, Field/Input, Form, Tabs, Dialog, Combobox, and Table now have direct
-styled Phase 7 implementations targeting Vuetify-level configuration and
-browser behavior through native Citry APIs. The package remains pre-release
-while its repository and human qualification records are completed.
+Its current experimental catalog is defined by the package's ordered
+`COMPONENTS` manifest and the public documentation catalog rather than a
+partial list in this README. The package remains pre-release while its
+repository and human qualification records are completed.
 
 The package develops against the `citry>=0.3.2,<0.4.0` source line and
 `citry_core 1.5.0`. Those releases contain the framework contracts used by the
@@ -33,6 +33,35 @@ class Page(Component):
       </main>
     """
 ```
+
+Citry UI's component-owned English messages automatically activate Citry's
+server source mode. No i18n settings are required to render the library's
+default labels: the components use the same checked `tr()` calls they use in a
+localized application. To add selectable translations, named Citry UI format
+profiles, or browser-side locale switching, configure the catalog package that
+ships in this same wheel:
+
+```python
+app = Citry(
+    autodiscover=False,
+    extensions_defaults={
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US", "cs-CZ"),
+            "catalogs": ("citry_ui_i18n", "my_app_i18n"),
+        }
+    },
+)
+app.register_library(citry_ui)
+```
+
+Place an application catalog after `citry_ui_i18n` to override selected public
+keys. Components render their initial strings on the server. Under a
+client-enabled `<c-i18n>` provider, stable Citry UI text and attributes follow
+locale changes through `$c-tr`, while values created by component JavaScript
+use the same provider through `i18n.bind()`. Explicit component label inputs or
+slots always win for that instance and are not replaced after a locale switch.
+Each component reference ends with a structured **Translation keys** table.
 
 For editor completion and diagnostics without a host application, point the
 Citry VS Code setting directly at the same manifest:

@@ -56,12 +56,16 @@ from citry.util.misc import snake_to_pascal
 if TYPE_CHECKING:
     from collections.abc import Iterator, Sequence
 
+    from citry._javascript_policy import _JavascriptPolicy
+    from citry._serialization_security import _ScriptSecurityMaterializer
     from citry.citry import Citry
     from citry.citry_context import CitryContext
     from citry.citry_render import CitryRender, RenderPart
     from citry.command import CommandArg, CommandArgGroup, CommandHandler, CommandSubcommand
     from citry.component import Component
     from citry.nodes import BodyItem, SlotNode
+    from citry.ownership_manifest import OwnershipManifestArtifact
+    from citry.settings import SecurityCspMode, SecurityJavascriptMode
     from citry.slots import Slot
     from citry.util.routing import URLRoute
 
@@ -317,6 +321,7 @@ class StagedRenderCacheContribution:
     extra_items: tuple[tuple[str, object], ...] = ()
     cache_writes: tuple[RenderCacheWrite, ...] = ()
     frame_markers: tuple[tuple[int, tuple[str, ...]], ...] = ()
+    text_replacements: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -815,6 +820,18 @@ class Extension:
         ``<c-js>``/``<c-css>`` positions.
         """
 
+    def _on_serialize_internal(
+        self,
+        ctx: OnSerializeContext,
+        _script_security: _ScriptSecurityMaterializer | None,
+        _security_csp: SecurityCspMode,
+        _javascript_policy: _JavascriptPolicy | None,
+        _security_javascript: SecurityJavascriptMode,
+        _ownership_artifact: OwnershipManifestArtifact | None,
+    ) -> str | None:
+        """Internal dispatch carrying call-local structured-script authority."""
+        return self.on_serialize(ctx)
+
     # ----- Template -----
 
     def on_template_loaded(self, ctx: OnTemplateLoadedContext) -> str | None:
@@ -930,7 +947,12 @@ _MISSING_EXTENSION_OWNER = object()
 # Public nested Component declarations owned by built-in extensions. They are
 # real base-class API slots, so the owning extension may use its class name;
 # every other collision remains an error.
-_COMPONENT_CONFIG_API_OWNERS = {"Events": "events"}
+_COMPONENT_CONFIG_API_OWNERS = {
+    "Cache": "cache",
+    "Dependencies": "dependencies",
+    "Events": "events",
+    "I18n": "i18n",
+}
 
 
 class ExtensionManager:
@@ -1247,6 +1269,9 @@ class ExtensionManager:
                     raise CacheArtifactError(f"Extension {extension.name!r} staged invalid frame markers.")
                 if any(type(marker) is not str or not marker for marker in markers):
                     raise CacheArtifactError(f"Extension {extension.name!r} staged invalid frame markers.")
+            for old, new in contribution.text_replacements:
+                if type(old) is not str or not old or type(new) is not str or not new:
+                    raise CacheArtifactError(f"Extension {extension.name!r} staged invalid text replacements.")
             staged.append(contribution)
         return tuple(staged)
 
@@ -1673,20 +1698,33 @@ class ExtensionManager:
         placeholders: dict[str, str],
         deps_strategy: str,
         deps_position: str,
+        *,
+        _script_security: _ScriptSecurityMaterializer | None = None,
+        _security_csp: SecurityCspMode = "off",
+        _javascript_policy: _JavascriptPolicy | None = None,
+        _security_javascript: SecurityJavascriptMode = "allow",
+        _ownership_artifact: OwnershipManifestArtifact | None = None,
     ) -> str:
-        return self.emit(
-            "on_serialize",
-            OnSerializeContext(
-                citry=self.citry,
-                context=context,
-                html=html,
-                placeholders=placeholders,
-                deps_strategy=deps_strategy,
-                deps_position=deps_position,
-            ),
-            result="map",
-            field="html",
+        ctx = OnSerializeContext(
+            citry=self.citry,
+            context=context,
+            html=html,
+            placeholders=placeholders,
+            deps_strategy=deps_strategy,
+            deps_position=deps_position,
         )
+        for extension in self._extensions_with_hook("on_serialize"):
+            out = extension._on_serialize_internal(
+                ctx,
+                _script_security,
+                _security_csp,
+                _javascript_policy,
+                _security_javascript,
+                _ownership_artifact,
+            )
+            if out is not None:
+                ctx = replace(ctx, html=out)
+        return ctx.html
 
     def on_component_rendered(
         self,

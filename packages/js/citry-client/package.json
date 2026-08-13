@@ -2,7 +2,7 @@
   "name": "citry-client",
   "version": "0.0.0",
   "private": true,
-  "description": "Source of citry's events client runtime (citry-events.js): the pinned Alpine + morph bundle, scopes, magics, the actions applier, and the wire transport. The build output is committed at packages/py/citry/citry/ext/events/client/citry-events.js so Python packaging and serving never run node.",
+  "description": "Source of Citry's committed Events and i18n browser runtimes.",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
@@ -12,10 +12,12 @@
     "check": "pnpm run typecheck && pnpm run lint && pnpm run test"
   },
   "dependencies": {
+    "@alpinejs/csp": "3.16.1",
+    "@alpinejs/morph": "3.16.1",
     "@citry/protocol-client-graph-v1": "workspace:*",
     "@citry/protocol-events-v1": "workspace:*",
-    "@alpinejs/morph": "3.15.12",
-    "alpinejs": "3.15.12"
+    "@fluent/bundle": "0.19.1",
+    "alpinejs": "3.16.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.7",

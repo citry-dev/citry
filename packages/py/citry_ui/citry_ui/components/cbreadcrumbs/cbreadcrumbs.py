@@ -8,6 +8,7 @@ from typing import Any, Literal
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CBreadcrumbsSize = Literal["sm", "md", "lg"]
@@ -111,6 +112,9 @@ def _plain_choice(input_name: str, value: object, allowed: tuple[str, ...]) -> s
 
 
 class CBreadcrumbs(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         items: Sequence[CBreadcrumbItem]
@@ -134,7 +138,11 @@ class CBreadcrumbs(LibraryComponent):
         snapshot = tuple(kwargs.items)
         if not snapshot:
             raise ValueError("CBreadcrumbs requires at least one item.")
-        label = _plain_nonempty("label", kwargs.label)
+        catalog_label = uses_catalog_default(self, "label")
+        label = _plain_nonempty(
+            "label",
+            self.i18n.tr("citry-ui-breadcrumbs-label") if catalog_label else kwargs.label,
+        )
         separator = _plain_string("separator", kwargs.separator)
         size = _plain_choice("size", kwargs.size, _SIZES)
         validate_boolean("CBreadcrumbs", "wrap", kwargs.wrap)
@@ -170,6 +178,7 @@ class CBreadcrumbs(LibraryComponent):
         return {
             "items": tuple(resolved),
             "label": label,
+            "catalog_label": catalog_label,
             "separator": separator,
             "size": size,
             "wrap": kwargs.wrap,
@@ -180,7 +189,8 @@ class CBreadcrumbs(LibraryComponent):
     template = """
       <nav
         class="cui-breadcrumbs"
-        c-aria-label="label"
+        c-aria-label="tr('citry-ui-breadcrumbs-label') if catalog_label else label"
+        c-$c-tr:citry-ui-breadcrumbs-label[aria-label]="True if catalog_label else None"
         c-data-size="size"
         c-data-wrap="wrap"
         c-bind="attrs"
@@ -352,6 +362,10 @@ class CBreadcrumbs(LibraryComponent):
           }
         }
       }
+    """
+
+    messages = """
+      citry-ui-breadcrumbs-label = Breadcrumbs
     """
 
 

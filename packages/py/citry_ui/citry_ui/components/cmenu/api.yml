@@ -395,3 +395,5 @@ interfaces:
       - {id: item, name: item, type: 'Element | null', meaning: Activated item or null for structural removal.}
       - {id: event, name: event, type: 'Event | null', meaning: Native activation event or null for removal.}
       - {id: path, name: path, type: 'list[str]', meaning: Canonical ancestor-submenu path.}
+
+translations: []

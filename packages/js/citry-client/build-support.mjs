@@ -1,9 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
-export const ALPINE_VERSION = "3.15.12";
+export const ALPINE_VERSION = "3.16.1";
 export const GENERATED_BANNER =
-  "/* Citry events client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles AlpineJS 3.15.12 + @alpinejs/morph 3.15.12 (MIT). */";
+  "/* Citry events client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles AlpineJS 3.16.1 + @alpinejs/morph 3.16.1 (MIT). */";
+export const CSP_GENERATED_BANNER =
+  "/* Citry events CSP client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles @alpinejs/csp 3.16.1 + @alpinejs/morph 3.16.1 (MIT). */";
+export const I18N_GENERATED_BANNER =
+  "/* Citry i18n client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-i18n.ts (pnpm run build there). Bundles @fluent/bundle 0.19.1 (Apache-2.0). */";
 
 const DIRECTIVES_IMPORTS = `import { onAttributeRemoved, onElRemoved } from './mutation'
 import { evaluate, evaluateLater } from './evaluator'
@@ -228,7 +232,10 @@ export const alpineMorphPlannerInstrumentation = {
   },
 };
 
-export const citryClientBuildOptions = function (overrides = {}) {
+const clientBuildOptions = function (variant, overrides = {}) {
+  if (Object.hasOwn(overrides, "define")) {
+    throw new Error("The Citry client build owns its fixed Alpine runtime identity.");
+  }
   return {
     entryPoints: [fileURLToPath(new URL("src/citry-events.ts", import.meta.url))],
     bundle: true,
@@ -236,10 +243,43 @@ export const citryClientBuildOptions = function (overrides = {}) {
     platform: "browser",
     target: "es2020",
     tsconfigRaw: {},
-    define: { ALPINE_VERSION: JSON.stringify(ALPINE_VERSION) },
+    define: {
+      ALPINE_VERSION: JSON.stringify(ALPINE_VERSION),
+      CITRY_ALPINE_RUNTIME_VARIANT: JSON.stringify(variant),
+    },
     banner: { js: GENERATED_BANNER },
     outfile: fileURLToPath(new URL("../../py/citry/citry/ext/events/client/citry-events.js", import.meta.url)),
     plugins: [alpineDirectiveInstrumentation, alpineMorphPlannerInstrumentation],
+    ...overrides,
+  };
+};
+
+export const citryClientBuildOptions = function (overrides = {}) {
+  return clientBuildOptions("standard", overrides);
+};
+
+export const citryCspClientBuildOptions = function (overrides = {}) {
+  if (Object.hasOwn(overrides, "alias")) {
+    throw new Error("The Citry CSP client build owns its fixed Alpine entry alias.");
+  }
+  return clientBuildOptions("csp", {
+    alias: { "alpinejs/src/index": "@alpinejs/csp/src/index" },
+    banner: { js: CSP_GENERATED_BANNER },
+    outfile: fileURLToPath(new URL("../../py/citry/citry/ext/events/client/citry-events-csp.js", import.meta.url)),
+    ...overrides,
+  });
+};
+
+export const citryI18nBuildOptions = function (overrides = {}) {
+  return {
+    entryPoints: [fileURLToPath(new URL("src/citry-i18n.ts", import.meta.url))],
+    bundle: true,
+    format: "iife",
+    platform: "browser",
+    target: "es2020",
+    tsconfigRaw: {},
+    banner: { js: I18N_GENERATED_BANNER },
+    outfile: fileURLToPath(new URL("../../py/citry/citry/ext/i18n/client/citry-i18n.js", import.meta.url)),
     ...overrides,
   };
 };

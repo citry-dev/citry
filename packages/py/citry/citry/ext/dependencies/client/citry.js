@@ -68,9 +68,22 @@
   var OWNERSHIP_COMMENT_PREFIX="citry:g1",OWNERSHIP_COMMENT_RE=/^citry:g1:([0-9a-f]{64}):([0-9]+):([ir]):([0-9]+):([se])$/,matchOwnershipComment=t=>OWNERSHIP_COMMENT_RE.exec(t.trim()),parseOwnershipComment=t=>{const e=matchOwnershipComment(t);if(e===null)return null;const[,i,c,n,s,o]=e;return{revision:i,graphId:c,kind:n,recordId:s,side:o,key:`${OWNERSHIP_COMMENT_PREFIX}:${i}:${c}:${n}:${s}`}},ProtocolValueError=class extends TypeError{constructor(t){super(t.message),this.name="ProtocolValueError",this.issue=t}},hasOwn=(t,e)=>Object.prototype.hasOwnProperty.call(t,e),pointer=(t,e)=>{const i=String(e).replace(/~/g,"~0").replace(/\//g,"~1");return t?`${t}/${i}`:`/${i}`},isPlainObject=t=>{if(t===null||typeof t!="object"||Array.isArray(t))return!1;const e=Object.getPrototypeOf(t);return e===Object.prototype||e===null},firstUnknown=(t,e)=>Object.keys(t).filter(i=>!e.has(i)).sort()[0]??null,containerIssue=(t,e)=>{if(Object.getOwnPropertySymbols(t).length)return{path:e,category:"strict_json",message:"The value contains a symbol-keyed property."};for(const i of Object.getOwnPropertyNames(t)){if(Array.isArray(t)&&i==="length")continue;const c=Object.getOwnPropertyDescriptor(t,i);if(!c?.enumerable||!("value"in c))return{path:pointer(e,i),category:"strict_json",message:"A JSON property must be an enumerable data property."}}return null},validateStrictJson=(t,e="")=>{const i=[{value:t,path:e,leaving:!1}],c=new Set;for(;i.length;){const n=i.pop(),s=n.value;if(n.leaving){c.delete(s);continue}if(s===null||typeof s=="string"||typeof s=="boolean")continue;if(typeof s=="number"){if(!Number.isFinite(s))return{path:n.path,category:"strict_json",message:"The value contains a non-finite number."};continue}if(typeof s!="object")return{path:n.path,category:"strict_json",message:"The value contains a non-JSON value."};if(!Array.isArray(s)&&!isPlainObject(s))return{path:n.path,category:"strict_json",message:"The value contains a non-JSON object."};const o=containerIssue(s,n.path);if(o)return o;if(c.has(s))return{path:n.path,category:"strict_json",message:"The value contains a cycle."};if(c.add(s),i.push({value:s,path:n.path,leaving:!0}),Array.isArray(s)){const l=Object.keys(s);if(l.length!==s.length||l.some((I,y)=>I!==String(y)))return{path:n.path,category:"strict_json",message:"A JSON array must be dense and carry no named properties."};for(let I=s.length-1;I>=0;I-=1)i.push({value:s[I],path:pointer(n.path,I),leaving:!1});continue}for(const l of Object.keys(s).sort().reverse())i.push({value:s[l],path:pointer(n.path,l),leaving:!1})}return null},PROTOCOL="citry-client-graph/1",MAX_SAFE_INTEGER=Number.MAX_SAFE_INTEGER,canonicalValue=t=>{if(t===null||typeof t=="string"||typeof t=="boolean")return JSON.stringify(t);if(typeof t=="number"){if(!Number.isSafeInteger(t)||t<0)throw new TypeError("client-graph numbers must be non-negative safe integers");return String(t)}if(Array.isArray(t))return`[${t.map(canonicalValue).join(",")}]`;if(isPlainObject(t))return`{${Object.keys(t).sort().map(e=>`${JSON.stringify(e)}:${canonicalValue(t[e])}`).join(",")}}`;throw new TypeError("unsupported client-graph JSON value")},sha256=t=>{const e=new TextEncoder().encode(t),i=Math.ceil((e.length+9)/64)*64,c=new Uint8Array(i);c.set(e),c[e.length]=128;const n=new DataView(c.buffer);n.setUint32(i-8,Math.floor(e.length/536870912),!1),n.setUint32(i-4,e.length<<3>>>0,!1);const s=new Uint32Array([1116352408,1899447441,3049323471,3921009573,961987163,1508970993,2453635748,2870763221,3624381080,310598401,607225278,1426881987,1925078388,2162078206,2614888103,3248222580,3835390401,4022224774,264347078,604807628,770255983,1249150122,1555081692,1996064986,2554220882,2821834349,2952996808,3210313671,3336571891,3584528711,113926993,338241895,666307205,773529912,1294757372,1396182291,1695183700,1986661051,2177026350,2456956037,2730485921,2820302411,3259730800,3345764771,3516065817,3600352804,4094571909,275423344,430227734,506948616,659060556,883997877,958139571,1322822218,1537002063,1747873779,1955562222,2024104815,2227730452,2361852424,2428436474,2756734187,3204031479,3329325298]),o=new Uint32Array([1779033703,3144134277,1013904242,2773480762,1359893119,2600822924,528734635,1541459225]),l=new Uint32Array(64),I=(y,p)=>y>>>p|y<<32-p;for(let y=0;y<i;y+=64){for(let m=0;m<16;m+=1)l[m]=n.getUint32(y+m*4,!1);for(let m=16;m<64;m+=1){const $=l[m-15],k=l[m-2],O=I($,7)^I($,18)^$>>>3,a=I(k,17)^I(k,19)^k>>>10;l[m]=l[m-16]+O+l[m-7]+a>>>0}let p=o[0],g=o[1],R=o[2],C=o[3],v=o[4],L=o[5],w=o[6],b=o[7];for(let m=0;m<64;m+=1){const $=I(v,6)^I(v,11)^I(v,25),k=v&L^~v&w,O=b+$+k+s[m]+l[m]>>>0,a=I(p,2)^I(p,13)^I(p,22),r=p&g^p&R^g&R,d=a+r>>>0;b=w,w=L,L=v,v=C+O>>>0,C=R,R=g,g=p,p=O+d>>>0}o[0]=o[0]+p>>>0,o[1]=o[1]+g>>>0,o[2]=o[2]+R>>>0,o[3]=o[3]+C>>>0,o[4]=o[4]+v>>>0,o[5]=o[5]+L>>>0,o[6]=o[6]+w>>>0,o[7]=o[7]+b>>>0}return Array.from(o).map(y=>y.toString(16).padStart(8,"0")).join("")},revisionFor=t=>sha256(canonicalValue(t)),revisionForManifest=t=>{const e={};for(const i of Object.keys(t))i!=="revision"&&(e[i]=t[i]);return revisionFor(e)},RENDER_ID=/^[a-z0-9_-]+$/,LOCATION_KINDS=new Set(["component-call","component-tag-client-binding","implicit-fill","named-fill","fallback-fill","slot-outlet"]),BINDING_SOURCES=new Set(["direct","server-dynamic","spread"]),FILL_KINDS=new Set(["implicit","named","fallback","python","typed-default"]),SOURCE_POLICIES=new Set(["template","python-detached","typed-default-detached"]),MORPH_MODES=new Set(["ignore"]),COMPONENT_CLASS_FIELDS=["classId","className"],COMPONENT_INSTANCE_FIELDS=["instanceId","renderId","classId","invocationId","parentRenderId","transparent"],SOURCE_LOCATION_FIELDS=["locationId","kind","ownerRenderId","ownerClassId","carrierInstanceId","origin","sourceOffset","sourcePos","mappingKey","mappingIndex"],EXPRESSION_PAYLOAD_FIELDS=["type","expression"],DOM_PAYLOAD_FIELDS=["type","classId","event","handler","args","prevent","stop","self","once","key","debounce","throttle"],POLL_PAYLOAD_FIELDS=["type","classId","handler","args","interval"],CLIENT_BINDING_FIELDS=["key","source","locationId","payload"],NESTED_COMPONENT_FIELDS=["invocationId","sourceRenderId","sourceClassId","locationId","tagName","targetClassId","morphKey","morphMode","targetRenderId","parentRegionId","clientBindings"],EXECUTION_CONSTRAINT_FIELDS=["invocationId","parentRenderId","childRenderId"],FILL_FIELDS=["fillId","kind","slotName","policy","ownerRenderId","ownerClassId","locationId","sourceInvocationId","receiverRenderId","receiverClassId","fallbackLocationId"],SLOT_REGION_FIELDS=["regionId","fillId","receiverRenderId","slotLocationId","ownerRenderId","sourceLocationId","parentRegionId","transitionFromRenderId","resultOwnerRenderId"],GRAPH_FIELDS=["graphId","componentClasses","componentInstances","sourceLocations","nestedComponents","componentExecutionOrderConstraints","fills","slotRegions"],recordIssue=(t,e,i,c,n)=>{if(n){const o=validateStrictJson(t,e);if(o)return o}if(!isPlainObject(t))return{path:e,category:"type",message:`${c} must be an object.`};for(const o of i)if(!hasOwn(t,o))return{path:pointer(e,o),category:"required",message:`${c} requires '${o}'.`};const s=firstUnknown(t,new Set(i));return s===null?null:{path:pointer(e,s),category:"unknown_field",message:`${c} has an unknown field.`}},stringIssue=(t,e,i)=>typeof t=="string"?null:{path:e,category:"type",message:`${i} must be a string.`},nullableStringIssue=(t,e,i)=>t===null||typeof t=="string"?null:{path:e,category:"type",message:`${i} must be a string or null.`},integerIssue=(t,e,i,c)=>typeof t!="number"||!Number.isInteger(t)?{path:e,category:typeof t=="number"&&!Number.isFinite(t)?"strict_json":"type",message:`${i} must be an integer.`}:!Number.isSafeInteger(t)||t<c?{path:e,category:"range",message:`${i} is outside the client-graph range.`}:null,nullableIntegerIssue=(t,e,i,c)=>t===null?null:integerIssue(t,e,i,c),enumIssue=(t,e,i,c)=>typeof t!="string"?{path:e,category:"type",message:`${c} must be a string.`}:i.has(t)?null:{path:e,category:"enum",message:`${c} is not a client-graph v1 value.`},nullableEnumIssue=(t,e,i,c)=>t===null?null:enumIssue(t,e,i,c),validateComponentClass=(t,e="",i=!0)=>{const c=recordIssue(t,e,COMPONENT_CLASS_FIELDS,"A component-class record",i);if(c)return c;const n=t;for(const s of COMPONENT_CLASS_FIELDS){const o=stringIssue(n[s],pointer(e,s),`The component ${s}`);if(o)return o}return null},validateComponentInstance=(t,e="",i=!0)=>{const c=recordIssue(t,e,COMPONENT_INSTANCE_FIELDS,"A component-instance record",i);if(c)return c;const n=t,s=[integerIssue(n.instanceId,pointer(e,"instanceId"),"The instance ID",1),stringIssue(n.renderId,pointer(e,"renderId"),"The render ID"),stringIssue(n.classId,pointer(e,"classId"),"The class ID"),nullableIntegerIssue(n.invocationId,pointer(e,"invocationId"),"The invocation ID",1),nullableStringIssue(n.parentRenderId,pointer(e,"parentRenderId"),"The parent render ID")];for(const o of s)if(o)return o;return RENDER_ID.test(n.renderId)?typeof n.transparent=="boolean"?null:{path:pointer(e,"transparent"),category:"type",message:"The transparent flag must be a boolean."}:{path:pointer(e,"renderId"),category:"pattern",message:"The component renderId is not safe for an HTML attribute name."}},validateSourceLocation=(t,e="",i=!0)=>{const c=recordIssue(t,e,SOURCE_LOCATION_FIELDS,"A source-location record",i);if(c)return c;const n=t,s=[integerIssue(n.locationId,pointer(e,"locationId"),"The location ID",1),enumIssue(n.kind,pointer(e,"kind"),LOCATION_KINDS,"The location kind"),stringIssue(n.ownerRenderId,pointer(e,"ownerRenderId"),"The location owner render ID"),stringIssue(n.ownerClassId,pointer(e,"ownerClassId"),"The location owner class ID"),integerIssue(n.carrierInstanceId,pointer(e,"carrierInstanceId"),"The carrier instance ID",1),nullableStringIssue(n.origin,pointer(e,"origin"),"The source origin")];for(const g of s)if(g)return g;const o=pointer(e,"sourceOffset");let l=recordIssue(n.sourceOffset,o,["start","end"],"A source-offset record",!1);if(l)return l;const I=n.sourceOffset;for(const g of["start","end"])if(l=integerIssue(I[g],pointer(o,g),`The source-offset ${g}`,0),l)return l;const y=pointer(e,"sourcePos");if(l=recordIssue(n.sourcePos,y,["line","column"],"A source-position record",!1),l)return l;const p=n.sourcePos;for(const g of["line","column"])if(l=integerIssue(p[g],pointer(y,g),`The source-position ${g}`,1),l)return l;return l=nullableStringIssue(n.mappingKey,pointer(e,"mappingKey"),"The mapping key"),l||nullableIntegerIssue(n.mappingIndex,pointer(e,"mappingIndex"),"The mapping index",0)},validateClientBindingPayload=(t,e="",i=!0)=>{if(i){const o=validateStrictJson(t,e);if(o)return o}if(!isPlainObject(t))return{path:e,category:"type",message:"A client-binding payload must be an object."};if(!hasOwn(t,"type"))return{path:pointer(e,"type"),category:"required",message:"A client-binding payload requires 'type'."};if(typeof t.type!="string")return{path:pointer(e,"type"),category:"type",message:"The client-binding payload type must be a string."};const c=t.type==="props"||t.type==="alpine-handler"?EXPRESSION_PAYLOAD_FIELDS:t.type==="citry-dom-event"?DOM_PAYLOAD_FIELDS:t.type==="citry-poll"?POLL_PAYLOAD_FIELDS:null;if(c===null)return{path:pointer(e,"type"),category:"enum",message:"The client-binding payload type is not a v1 value."};const n=recordIssue(t,e,c,"A client-binding payload",!1);if(n)return n;if(t.type==="props"||t.type==="alpine-handler")return stringIssue(t.expression,pointer(e,"expression"),"The Alpine expression");if(t.type==="citry-poll"){for(const l of["classId","handler"]){const I=stringIssue(t[l],pointer(e,l),`The poll ${l}`);if(I)return I}return nullableStringIssue(t.args,pointer(e,"args"),"The poll arguments")??integerIssue(t.interval,pointer(e,"interval"),"The poll interval",1)}for(const o of["classId","event","handler"]){const l=stringIssue(t[o],pointer(e,o),`The DOM-event ${o}`);if(l)return l}let s=nullableStringIssue(t.args,pointer(e,"args"),"The DOM-event args");if(s)return s;for(const o of["prevent","stop","self","once"])if(typeof t[o]!="boolean")return{path:pointer(e,o),category:"type",message:`The DOM-event ${o} flag must be a boolean.`};if(s=nullableStringIssue(t.key,pointer(e,"key"),"The DOM-event key"),s)return s;for(const o of["debounce","throttle"])if(s=nullableIntegerIssue(t[o],pointer(e,o),`The DOM-event ${o} delay`,0),s)return s;return null},validateClientBinding=(t,e="",i=!0)=>{const c=recordIssue(t,e,CLIENT_BINDING_FIELDS,"A component-tag client-binding record",i);if(c)return c;const n=t,s=[stringIssue(n.key,pointer(e,"key"),"The client-binding key"),enumIssue(n.source,pointer(e,"source"),BINDING_SOURCES,"The client-binding source"),nullableIntegerIssue(n.locationId,pointer(e,"locationId"),"The client-binding location ID",1)];for(const o of s)if(o)return o;return validateClientBindingPayload(n.payload,pointer(e,"payload"),!1)},validateNestedComponent=(t,e="",i=!0)=>{const c=recordIssue(t,e,NESTED_COMPONENT_FIELDS,"A nested-component record",i);if(c)return c;const n=t,s=[integerIssue(n.invocationId,pointer(e,"invocationId"),"The invocation ID",1),stringIssue(n.sourceRenderId,pointer(e,"sourceRenderId"),"The source render ID"),stringIssue(n.sourceClassId,pointer(e,"sourceClassId"),"The source class ID"),nullableIntegerIssue(n.locationId,pointer(e,"locationId"),"The location ID",1),stringIssue(n.tagName,pointer(e,"tagName"),"The nested-component tag name"),stringIssue(n.targetClassId,pointer(e,"targetClassId"),"The target class ID"),nullableStringIssue(n.morphKey,pointer(e,"morphKey"),"The component morph key"),nullableEnumIssue(n.morphMode,pointer(e,"morphMode"),MORPH_MODES,"The component morph mode"),stringIssue(n.targetRenderId,pointer(e,"targetRenderId"),"The target render ID"),nullableIntegerIssue(n.parentRegionId,pointer(e,"parentRegionId"),"The parent slot-region ID",1)];for(const o of s)if(o)return o;if(!Array.isArray(n.clientBindings))return{path:pointer(e,"clientBindings"),category:"type",message:"Client bindings must be an array."};for(let o=0;o<n.clientBindings.length;o+=1){const l=validateClientBinding(n.clientBindings[o],pointer(pointer(e,"clientBindings"),o),!1);if(l)return l}return null},validateExecutionConstraint=(t,e="",i=!0)=>{const c=recordIssue(t,e,EXECUTION_CONSTRAINT_FIELDS,"An execution-order constraint",i);if(c)return c;const n=t;return integerIssue(n.invocationId,pointer(e,"invocationId"),"The invocation ID",1)??stringIssue(n.parentRenderId,pointer(e,"parentRenderId"),"The parent render ID")??stringIssue(n.childRenderId,pointer(e,"childRenderId"),"The child render ID")},validateFill=(t,e="",i=!0)=>{const c=recordIssue(t,e,FILL_FIELDS,"A fill record",i);if(c)return c;const n=t;return[integerIssue(n.fillId,pointer(e,"fillId"),"The fill ID",1),enumIssue(n.kind,pointer(e,"kind"),FILL_KINDS,"The fill kind"),stringIssue(n.slotName,pointer(e,"slotName"),"The fill slot name"),enumIssue(n.policy,pointer(e,"policy"),SOURCE_POLICIES,"The fill source policy"),nullableStringIssue(n.ownerRenderId,pointer(e,"ownerRenderId"),"The fill owner render ID"),nullableStringIssue(n.ownerClassId,pointer(e,"ownerClassId"),"The fill owner class ID"),nullableIntegerIssue(n.locationId,pointer(e,"locationId"),"The fill location ID",1),nullableIntegerIssue(n.sourceInvocationId,pointer(e,"sourceInvocationId"),"The source invocation ID",1),nullableStringIssue(n.receiverRenderId,pointer(e,"receiverRenderId"),"The fill receiver render ID"),nullableStringIssue(n.receiverClassId,pointer(e,"receiverClassId"),"The fill receiver class ID"),nullableIntegerIssue(n.fallbackLocationId,pointer(e,"fallbackLocationId"),"The fallback location ID",1)].find(o=>o!==null)??null},validateSlotRegion=(t,e="",i=!0)=>{const c=recordIssue(t,e,SLOT_REGION_FIELDS,"A slot-region record",i);if(c)return c;const n=t;return[integerIssue(n.regionId,pointer(e,"regionId"),"The slot-region ID",1),integerIssue(n.fillId,pointer(e,"fillId"),"The fill ID",1),nullableStringIssue(n.receiverRenderId,pointer(e,"receiverRenderId"),"The receiver render ID"),nullableIntegerIssue(n.slotLocationId,pointer(e,"slotLocationId"),"The slot location ID",1),nullableStringIssue(n.ownerRenderId,pointer(e,"ownerRenderId"),"The owner render ID"),nullableIntegerIssue(n.sourceLocationId,pointer(e,"sourceLocationId"),"The source location ID",1),nullableIntegerIssue(n.parentRegionId,pointer(e,"parentRegionId"),"The parent slot-region ID",1),nullableStringIssue(n.transitionFromRenderId,pointer(e,"transitionFromRenderId"),"The transition source render ID"),nullableStringIssue(n.resultOwnerRenderId,pointer(e,"resultOwnerRenderId"),"The result owner render ID")].find(o=>o!==null)??null},validateGraph=(t,e="",i=!0)=>{const c=recordIssue(t,e,GRAPH_FIELDS,"A graph record",i);if(c)return c;const n=t,s=integerIssue(n.graphId,pointer(e,"graphId"),"The graph ID",0);if(s)return s;const o=[["componentClasses",validateComponentClass],["componentInstances",validateComponentInstance],["sourceLocations",validateSourceLocation],["nestedComponents",validateNestedComponent],["componentExecutionOrderConstraints",validateExecutionConstraint],["fills",validateFill],["slotRegions",validateSlotRegion]];for(const[l,I]of o){const y=n[l],p=pointer(e,l);if(!Array.isArray(y))return{path:p,category:"type",message:`The graph's ${l} must be an array.`};for(let g=0;g<y.length;g+=1){const R=I(y[g],pointer(p,g),!1);if(R)return R}}return null},cycle=t=>{const e=new Set,i=new Set;for(const c of t.keys()){let n=c;const s=[];for(;n!=null&&t.has(n)&&!i.has(n);){if(e.has(n))return!0;e.add(n),s.push(n);const o=t.get(n);if(o===void 0)break;n=o}for(const o of s)e.delete(o),i.add(o)}return!1},executionCycle=t=>{const e=new Set,i=new Set,c=Array.from(t.keys()).reverse().map(n=>[n,!1]);for(;c.length;){const[n,s]=c.pop();if(s){e.delete(n),i.add(n);continue}if(e.has(n))return!0;if(!i.has(n)){e.add(n),c.push([n,!0]);for(const o of[...t.get(n)??[]].reverse())c.push([o,!1])}}return!1},semantic=(t,e)=>({path:t,category:"semantic",message:e}),bindingKeyIssue=(t,e,i)=>{if(t.type==="props"&&e!=="$c-props")return semantic(i,"A props client binding must use the $c-props key.");if(t.type==="alpine-handler"&&!(e.startsWith("@")&&!e.startsWith("@c-")||e.startsWith("x-on:")))return semantic(i,"An Alpine-handler client binding has a non-Alpine key.");if(t.type==="citry-dom-event"){if(!e.startsWith("@c-")||e.slice(3).split(".")[0]==="poll")return semantic(i,"A Citry DOM-event client binding has a non-event key.");if(e.slice(3).split(".")[0]!==t.event)return semantic(i,"A Citry DOM-event client binding disagrees with its key.")}return t.type==="citry-poll"&&!e.startsWith("@c-poll.")?semantic(i,"A Citry poll client binding must use an @c-poll key."):null},validateRelationships=(t,e="")=>{const i=t.mode==="development",c=new Set;for(let n=0;n<t.graphs.length;n+=1){const s=t.graphs[n],o=pointer(pointer(e,"graphs"),n);if(s.graphId!==n)return semantic(pointer(o,"graphId"),`graphs[${n}].graphId is not dense and ordered.`);const l=[["componentInstances","instanceId"],["sourceLocations","locationId"],["nestedComponents","invocationId"],["fills","fillId"],["slotRegions","regionId"]],I=new Map;for(const[a,r]of l){const f=s[a].map(h=>h[r]),u=new Set(f);if(I.set(a,u),f.length!==u.size)return semantic(pointer(o,a),`graphs[${n}].${a} has duplicate ids.`)}if(!i){if(s.sourceLocations.length)return semantic(pointer(o,"sourceLocations"),`graphs[${n}] production manifest has sourceLocations.`);for(let a=0;a<s.nestedComponents.length;a+=1){const r=s.nestedComponents[a],d=pointer(pointer(o,"nestedComponents"),a);if(r.locationId!==null)return semantic(pointer(d,"locationId"),`graphs[${n}] production invocation has a location reference.`);for(let f=0;f<r.clientBindings.length;f+=1)if(r.clientBindings[f].locationId!==null){const u=pointer(pointer(d,"clientBindings"),f);return semantic(pointer(u,"locationId"),`graphs[${n}] production client binding has a location reference.`)}}for(let a=0;a<s.fills.length;a+=1){const r=s.fills[a];for(const d of["locationId","fallbackLocationId"])if(r[d]!==null)return semantic(pointer(pointer(pointer(o,"fills"),a),d),`graphs[${n}] production fill has a location reference.`)}for(let a=0;a<s.slotRegions.length;a+=1){const r=s.slotRegions[a];for(const d of["slotLocationId","sourceLocationId"])if(r[d]!==null)return semantic(pointer(pointer(pointer(o,"slotRegions"),a),d),`graphs[${n}] production slot region has a location reference.`)}}const y=new Set;for(let a=0;a<s.componentClasses.length;a+=1){const r=s.componentClasses[a].classId;if(y.has(r))return semantic(pointer(pointer(pointer(o,"componentClasses"),a),"classId"),`graphs[${n}] has duplicate class ids.`);y.add(r)}const p=new Set,g=new Map,R=new Map,C=new Map,v=[],L=new Map;for(let a=0;a<s.componentInstances.length;a+=1){const r=s.componentInstances[a],d=pointer(pointer(o,"componentInstances"),a);if(!y.has(r.classId))return semantic(pointer(d,"classId"),`graphs[${n}] component instance classId is unknown.`);if(p.has(r.renderId))return semantic(pointer(d,"renderId"),`graphs[${n}] has duplicate render ids.`);if(c.has(r.renderId))return semantic(pointer(d,"renderId"),`render id '${r.renderId}' appears in more than one graph.`);p.add(r.renderId),c.add(r.renderId),g.set(r.renderId,r.classId),R.set(r.instanceId,r.renderId),L.set(r.renderId,r.parentRenderId);const f=[r.renderId,r.parentRenderId,r.invocationId];if(v.push(f),r.invocationId!==null){const u=C.get(r.invocationId)??[];u.push(f),C.set(r.invocationId,u)}}for(let a=0;a<s.componentInstances.length;a+=1){const r=s.componentInstances[a].parentRenderId;if(r!==null&&!p.has(r))return semantic(pointer(pointer(pointer(o,"componentInstances"),a),"parentRenderId"),`graphs[${n}] component instance parentRenderId is unknown.`)}const w=new Map,b=new Map;if(i)for(let a=0;a<s.sourceLocations.length;a+=1){const r=s.sourceLocations[a],d=pointer(pointer(o,"sourceLocations"),a);if(!I.get("componentInstances").has(r.carrierInstanceId))return semantic(pointer(d,"carrierInstanceId"),`graphs[${n}] location has an unknown carrier.`);if(r.sourceOffset.start>r.sourceOffset.end)return semantic(pointer(d,"sourceOffset"),`graphs[${n}] location has a reversed byte range.`);if(!p.has(r.ownerRenderId)||g.get(r.ownerRenderId)!==r.ownerClassId)return semantic(pointer(d,"ownerRenderId"),`graphs[${n}] location owner is unknown or mismatched.`);if(R.get(r.carrierInstanceId)!==r.ownerRenderId)return semantic(pointer(d,"carrierInstanceId"),`graphs[${n}] location carrier is mismatched.`);w.set(r.locationId,[r.ownerRenderId,r.ownerClassId]),b.set(r.locationId,r.kind)}const m=new Map;for(let a=0;a<s.nestedComponents.length;a+=1){const r=s.nestedComponents[a],d=pointer(pointer(o,"nestedComponents"),a);if(!p.has(r.sourceRenderId)||g.get(r.sourceRenderId)!==r.sourceClassId)return semantic(pointer(d,"sourceRenderId"),`graphs[${n}] invocation source is unknown or mismatched.`);if(!p.has(r.targetRenderId)||g.get(r.targetRenderId)!==r.targetClassId)return semantic(pointer(d,"targetRenderId"),`graphs[${n}] invocation target is unknown or mismatched.`);if(i){if(!I.get("sourceLocations").has(r.locationId))return semantic(pointer(d,"locationId"),`graphs[${n}] invocation has an unknown location.`);const f=w.get(r.locationId);if(!f||f[0]!==r.sourceRenderId||f[1]!==r.sourceClassId)return semantic(pointer(d,"locationId"),`graphs[${n}] invocation location owner is mismatched.`);if(b.get(r.locationId)!=="component-call")return semantic(pointer(d,"locationId"),`graphs[${n}] invocation location kind is mismatched.`)}if(r.parentRegionId!==null&&!I.get("slotRegions").has(r.parentRegionId))return semantic(pointer(d,"parentRegionId"),`graphs[${n}] nested component parentRegionId references an unknown slot region.`);m.set(r.invocationId,[r.sourceRenderId,r.targetRenderId]);for(let f=0;f<r.clientBindings.length;f+=1){const u=r.clientBindings[f],h=pointer(pointer(d,"clientBindings"),f);if(i){if(!I.get("sourceLocations").has(u.locationId))return semantic(pointer(h,"locationId"),`graphs[${n}] client binding has an unknown location.`);const S=w.get(u.locationId);if(!S||S[0]!==r.sourceRenderId||S[1]!==r.sourceClassId)return semantic(pointer(h,"locationId"),`graphs[${n}] client-binding location owner is mismatched.`);if(b.get(u.locationId)!=="component-tag-client-binding")return semantic(pointer(h,"locationId"),`graphs[${n}] client-binding location kind is mismatched.`)}if((u.payload.type==="citry-dom-event"||u.payload.type==="citry-poll")&&u.payload.classId!==r.sourceClassId)return semantic(pointer(pointer(h,"payload"),"classId"),`graphs[${n}] Citry client-binding class is not its source parent.`);const T=bindingKeyIssue(u.payload,u.key,pointer(h,"key"));if(T)return T}}for(let a=0;a<s.componentInstances.length;a+=1){const r=s.componentInstances[a].invocationId;if(r!==null&&!I.get("nestedComponents").has(r))return semantic(pointer(pointer(pointer(o,"componentInstances"),a),"invocationId"),`graphs[${n}] instance has an unknown invocation.`)}for(let a=0;a<v.length;a+=1){const[r,d,f]=v[a],u=pointer(pointer(o,"componentInstances"),a);if(f===null){if(d!==null)return semantic(pointer(u,"parentRenderId"),`graphs[${n}] uninvoked instance has a parent.`);continue}const h=m.get(f);if(!h||h[0]!==d||h[1]!==r)return semantic(pointer(u,"invocationId"),`graphs[${n}] instance endpoints do not match their invocation.`)}for(let a=0;a<s.nestedComponents.length;a+=1){const r=s.nestedComponents[a].invocationId;if((C.get(r)??[]).length!==1)return semantic(pointer(pointer(pointer(o,"nestedComponents"),a),"invocationId"),`graphs[${n}] invocation does not bind exactly one target instance.`)}const $=new Map;for(let a=0;a<s.fills.length;a+=1){const r=s.fills[a],d=pointer(pointer(o,"fills"),a);if(r.ownerRenderId===null!=(r.ownerClassId===null)||r.ownerRenderId!==null&&g.get(r.ownerRenderId)!==r.ownerClassId)return semantic(pointer(d,"ownerRenderId"),`graphs[${n}] fill owner and class are mismatched.`);if(r.receiverRenderId===null!=(r.receiverClassId===null)||r.receiverRenderId!==null&&g.get(r.receiverRenderId)!==r.receiverClassId)return semantic(pointer(d,"receiverRenderId"),`graphs[${n}] fill receiver and class are mismatched.`);if(r.sourceInvocationId!==null&&!I.get("nestedComponents").has(r.sourceInvocationId))return semantic(pointer(d,"sourceInvocationId"),`graphs[${n}] fill has an unknown sourceInvocation.`);const f=r.locationId===null?void 0:b.get(r.locationId),u=r.fallbackLocationId===null?void 0:b.get(r.fallbackLocationId);if(r.policy==="template"){if(r.ownerRenderId===null||r.receiverRenderId===null||!new Set(["implicit","named","fallback"]).has(r.kind))return semantic(pointer(d,"policy"),`graphs[${n}] template fill ownership is inconsistent.`)}else if(r.policy==="python-detached"){if(r.kind!=="python"||r.ownerRenderId!==null||r.receiverRenderId===null||r.sourceInvocationId!==null||r.fallbackLocationId!==null)return semantic(pointer(d,"policy"),`graphs[${n}] detached Python fill ownership is inconsistent.`)}else if(r.kind!=="typed-default"||r.ownerRenderId!==null||r.receiverRenderId===null||r.sourceInvocationId!==null||r.fallbackLocationId!==null)return semantic(pointer(d,"policy"),`graphs[${n}] detached typed-default fill ownership is inconsistent.`);if(i){for(const[S,D]of[["locationId",r.locationId],["fallbackLocationId",r.fallbackLocationId]])if(D!==null&&!I.get("sourceLocations").has(D))return semantic(pointer(d,S),`graphs[${n}] fill has an unknown ${S}.`);const h=r.locationId===null?void 0:w.get(r.locationId),T=r.fallbackLocationId===null?void 0:w.get(r.fallbackLocationId);if(r.ownerRenderId===null!=(h===void 0))return semantic(pointer(d,"locationId"),`graphs[${n}] fill owner and source location are inconsistent.`);if(h&&(h[0]!==r.ownerRenderId||h[1]!==r.ownerClassId))return semantic(pointer(d,"locationId"),`graphs[${n}] fill source location owner is mismatched.`);if(T&&(T[0]!==r.receiverRenderId||T[1]!==r.receiverClassId))return semantic(pointer(d,"fallbackLocationId"),`graphs[${n}] fill fallback location receiver is mismatched.`)}if(r.policy==="template"){if(i){const h={implicit:"implicit-fill",named:"named-fill",fallback:"fallback-fill"}[r.kind];if(f!==h)return semantic(pointer(d,"locationId"),`graphs[${n}] template fill source location kind is mismatched.`);if(r.kind==="fallback"&&(r.fallbackLocationId===null||u!=="slot-outlet"))return semantic(pointer(d,"fallbackLocationId"),`graphs[${n}] fallback location kind is mismatched.`);if(r.kind!=="fallback"&&r.fallbackLocationId!==null)return semantic(pointer(d,"fallbackLocationId"),`graphs[${n}] supplied fill carrier is inconsistent.`)}if(r.kind==="fallback"){if(r.sourceInvocationId!==null)return semantic(pointer(d,"sourceInvocationId"),`graphs[${n}] fallback fill carrier is inconsistent.`)}else{if(r.sourceInvocationId===null)return semantic(pointer(d,"sourceInvocationId"),`graphs[${n}] supplied fill carrier is inconsistent.`);if(m.get(r.sourceInvocationId)?.[0]!==r.ownerRenderId)return semantic(pointer(d,"sourceInvocationId"),`graphs[${n}] supplied fill source invocation owner is mismatched.`)}}$.set(r.fillId,[r.ownerRenderId,r.receiverRenderId,r.locationId])}const k=new Map;for(let a=0;a<s.slotRegions.length;a+=1){const r=s.slotRegions[a],d=pointer(pointer(o,"slotRegions"),a);if(!I.get("fills").has(r.fillId))return semantic(pointer(d,"fillId"),`graphs[${n}] slot region has an unknown fill.`);if(r.parentRegionId!==null&&!I.get("slotRegions").has(r.parentRegionId))return semantic(pointer(d,"parentRegionId"),`graphs[${n}] slot region has an unknown parent.`);for(const[u,h]of Object.entries({receiverRenderId:r.receiverRenderId,ownerRenderId:r.ownerRenderId,transitionFromRenderId:r.transitionFromRenderId,resultOwnerRenderId:r.resultOwnerRenderId}))if(h!==null&&!p.has(h))return semantic(pointer(d,u),`graphs[${n}] slot region.${u} is unknown.`);if(i){for(const[h,T]of[["slotLocationId",r.slotLocationId],["sourceLocationId",r.sourceLocationId]])if(T!==null&&!I.get("sourceLocations").has(T))return semantic(pointer(d,h),`graphs[${n}] slot region has an unknown ${h}.`);const u=r.slotLocationId===null?void 0:w.get(r.slotLocationId);if(u&&u[0]!==r.receiverRenderId)return semantic(pointer(d,"slotLocationId"),`graphs[${n}] slot region slot location receiver is mismatched.`);if(r.slotLocationId!==null&&b.get(r.slotLocationId)!=="slot-outlet")return semantic(pointer(d,"slotLocationId"),`graphs[${n}] slot region slot location kind is mismatched.`)}const f=$.get(r.fillId);if(!f||f[0]!==r.ownerRenderId||f[1]!==r.receiverRenderId||f[2]!==r.sourceLocationId)return semantic(pointer(d,"fillId"),`graphs[${n}] slot region ownership does not match its fill.`);k.set(r.regionId,[r.ownerRenderId,r.receiverRenderId,r.parentRegionId,r.transitionFromRenderId])}if(cycle(new Map(Array.from(k,([a,r])=>[a,r[2]]))))return semantic(pointer(o,"slotRegions"),`graphs[${n}] slot region ancestry contains a cycle.`);for(let a=0;a<s.slotRegions.length;a+=1){const r=s.slotRegions[a],d=r.parentRegionId===null?r.receiverRenderId:k.get(r.parentRegionId)?.[0]??null;if(r.transitionFromRenderId!==d)return semantic(pointer(pointer(pointer(o,"slotRegions"),a),"transitionFromRenderId"),`graphs[${n}] slot region scope transition does not match its ancestry.`)}const O=new Map;for(let a=0;a<s.componentExecutionOrderConstraints.length;a+=1){const r=s.componentExecutionOrderConstraints[a],d=pointer(pointer(o,"componentExecutionOrderConstraints"),a),f=m.get(r.invocationId);if(!f||f[0]!==r.parentRenderId||f[1]!==r.childRenderId)return semantic(pointer(d,"invocationId"),`graphs[${n}] component execution order constraint does not match its invocation.`);const u=O.get(r.parentRenderId)??[];u.push(r.childRenderId),O.set(r.parentRenderId,u)}if(executionCycle(O))return semantic(pointer(o,"componentExecutionOrderConstraints"),`graphs[${n}] component execution order contains a cycle.`);if(cycle(L))return semantic(pointer(o,"componentInstances"),`graphs[${n}] logical instance ancestry contains a cycle.`)}return null},REVISION=/^[0-9a-f]{64}$/,MANIFEST_FIELDS=new Set(["protocol","revision","mode","graphs","delimiters"]),REQUIRED_MANIFEST_FIELDS=["protocol","revision","mode","graphs","delimiters"],DELIMITER_FIELDS=new Set(["format"]),validateManifestShape=(t,e)=>{const i=validateStrictJson(t,e);if(i)return i;if(!isPlainObject(t))return{path:e,category:"type",message:"The client-graph manifest must be an object."};for(const o of REQUIRED_MANIFEST_FIELDS)if(!hasOwn(t,o))return{path:pointer(e,o),category:"required",message:`The manifest requires '${o}'.`};const c=firstUnknown(t,MANIFEST_FIELDS);if(c!==null)return{path:pointer(e,c),category:"unknown_field",message:"The manifest has an unknown field."};if(t.protocol!==PROTOCOL)return{path:pointer(e,"protocol"),category:typeof t.protocol=="string"?"enum":"type",message:`The manifest protocol must be ${PROTOCOL}.`};if(typeof t.revision!="string")return{path:pointer(e,"revision"),category:"type",message:"The manifest revision must be a string."};if(!REVISION.test(t.revision))return{path:pointer(e,"revision"),category:"pattern",message:"The manifest revision must be lowercase SHA-256."};if(typeof t.mode!="string")return{path:pointer(e,"mode"),category:"type",message:"The manifest mode must be a string."};if(t.mode!=="production"&&t.mode!=="development")return{path:pointer(e,"mode"),category:"enum",message:"The manifest mode must be production or development."};if(!Array.isArray(t.graphs))return{path:pointer(e,"graphs"),category:"type",message:"The manifest graphs must be an array."};for(let o=0;o<t.graphs.length;o+=1){const l=validateGraph(t.graphs[o],pointer(pointer(e,"graphs"),o),!1);if(l)return l}const n=pointer(e,"delimiters");if(!isPlainObject(t.delimiters))return{path:n,category:"type",message:"The manifest delimiters must be an object."};if(!hasOwn(t.delimiters,"format"))return{path:pointer(n,"format"),category:"required",message:"The manifest delimiters require 'format'."};const s=firstUnknown(t.delimiters,DELIMITER_FIELDS);return s!==null?{path:pointer(n,s),category:"unknown_field",message:"The manifest delimiters have an unknown field."}:t.delimiters.format!==OWNERSHIP_COMMENT_PREFIX?{path:pointer(n,"format"),category:typeof t.delimiters.format=="string"?"enum":"type",message:`The ownership-comment prefix must be ${OWNERSHIP_COMMENT_PREFIX}.`}:null},validateRevision=(t,e="")=>!isPlainObject(t)||typeof t.revision!="string"||!REVISION.test(t.revision)||revisionForManifest(t)===t.revision?null:{path:pointer(e,"revision"),category:"correlation",message:"The revision does not match the canonical unsigned manifest."},validateManifest=(t,e="")=>{const i=validateManifestShape(t,e);if(i)return i;const c=validateRevision(t,e);return c||validateRelationships(t,e)},assertValidManifest=t=>{const e=validateManifest(t);if(e)throw new ProtocolValueError(e);return t},CitryClientGraphProtocol={OWNERSHIP_COMMENT_PREFIX,parseOwnershipComment,ProtocolValueError,assertValidManifest};
   /*</citry-client-graph-v1>*/
 
+  var requestedAlpineRuntime = document.currentScript &&
+    document.currentScript.getAttribute("data-citry-alpine-runtime") || "standard";
+
   if (globalThis.Citry && globalThis.Citry.manager) {
+    if (typeof globalThis.Citry.manager._requireAlpineRuntime === "function") {
+      globalThis.Citry.manager._requireAlpineRuntime(requestedAlpineRuntime);
+    } else if (requestedAlpineRuntime !== "standard") {
+      throw new Error("[Citry] Alpine: the loaded manager cannot accept a strict-CSP runtime.");
+    }
     return; // already loaded (e.g. both a document page and a fragment included it)
   }
+
+  // A CSP nonce belongs to the loaded document. Keep the nonce that
+  // authorized this manager so dependency elements created for later
+  // fragments inherit the same authority.
+  var documentNonce = document.currentScript && document.currentScript.nonce || null;
 
   // ----- state -----
 
@@ -104,6 +117,10 @@
   var pendingCalls = [];
   // Callback-payload decorators (see decorateContext), in registration order.
   var decorators = [];
+  // Extension-owned inert framework manifests may need asynchronous
+  // preparation before a fragment's component scripts activate. Handlers are
+  // keyed so one extension cannot replace another's lifecycle.
+  var frameworkManifestHandlers = new Map();
   // "classId:componentId" -> cleanup functions the instance's callback
   // returned on its last run, to call before the callback runs again.
   var cleanups = new Map();
@@ -156,6 +173,7 @@
   // cannot unregister are installed exactly once and dispatch through these
   // replaceable provider maps.
   var alpineOwner = null;
+  var alpineRuntimeVariant = null;
   var alpineReady = false;
   var alpineStarted = false;
   var alpineStarting = false;
@@ -171,6 +189,7 @@
   var alpineMutationProviders = new Map();
   var alpineStartProviders = new Map();
   var reservedAlpineMagics = new Set(["provide", "inject", "unprovide"]);
+  var extensionAlpineMagics = new Set();
   var alpineProviderCounter = 0;
   var alpineHookCounts = { installs: 0, roots: 0, init: 0, morph: 0, starts: 0 };
   var alpineLastForeign = null;
@@ -355,7 +374,22 @@
     }
   };
 
-  var installAlpine = function (alpine, morphPlugin) {
+  var requireAlpineRuntime = function (variant) {
+    if (variant !== "standard" && variant !== "csp") {
+      throw pointedAlpineError("an unknown Alpine runtime variant was requested.");
+    }
+    if (variant !== requestedAlpineRuntime) {
+      throw pointedAlpineError(
+        "the page requires the '" + requestedAlpineRuntime + "' runtime but received '" + variant + "'."
+      );
+    }
+    if (alpineRuntimeVariant && alpineRuntimeVariant !== variant) {
+      throw pointedAlpineError("a different Alpine runtime variant is already installed on this page.");
+    }
+  };
+
+  var installAlpine = function (alpine, morphPlugin, variant) {
+    requireAlpineRuntime(variant);
     if (!alpine || typeof alpine.start !== "function") {
       throw pointedAlpineError("the bundled runtime tried to install an invalid Alpine object.");
     }
@@ -377,6 +411,7 @@
     }
     warnForeignAlpine(globalThis.Alpine);
     alpineOwner = alpine;
+    alpineRuntimeVariant = variant;
     globalThis.Alpine = alpine;
     var cloneNode = alpine.cloneNode;
     alpine.cloneNode = function (from, to) {
@@ -387,7 +422,7 @@
     var registerOwnedMagic = alpine.magic.bind(alpine);
     if (installAmbientContext) installAmbientContext(alpine, registerOwnedMagic);
     alpine.magic = function (name, callback) {
-      if (reservedAlpineMagics.has(name)) {
+      if (reservedAlpineMagics.has(name) || extensionAlpineMagics.has(name)) {
         throw pointedAlpineError("$" + name + " is reserved by Citry and cannot be overwritten.");
       }
       return registerOwnedMagic(name, callback);
@@ -496,6 +531,7 @@
         var current = active[active.length - 1];
         return current ? current(el) : undefined;
       });
+      extensionAlpineMagics.add(name);
     }
     alpineProviderCounter += 1;
     var token = alpineProviderCounter;
@@ -6223,13 +6259,39 @@
 
   // ----- element creation from {tag, attrs, content} descriptors -----
 
+  var descriptorNonce = function (descriptor) {
+    var attrs = descriptor.attrs || {};
+    var aliases = Object.keys(attrs).filter(function (name) { return name.toLowerCase() === "nonce"; });
+    if (aliases.length > 1) {
+      throw new TypeError("[Citry] dependency descriptor repeats the nonce attribute with different casing.");
+    }
+    return {
+      present: aliases.length === 1,
+      value: aliases.length ? attrs[aliases[0]] : null,
+    };
+  };
+
+  var validateDescriptorNonce = function (descriptor) {
+    if (!documentNonce) return;
+    var tag = descriptor.tag.toLowerCase();
+    if (tag !== "script" && tag !== "style") return;
+    var declared = descriptorNonce(descriptor);
+    if (declared.present && (typeof declared.value !== "string" || declared.value !== documentNonce)) {
+      throw new TypeError("[Citry] dependency descriptor nonce differs from the loaded document nonce.");
+    }
+  };
+
   var createElement = function (descriptor) {
+    validateDescriptorNonce(descriptor);
     var el = document.createElement(descriptor.tag);
     Object.keys(descriptor.attrs || {}).forEach(function (name) {
       var value = descriptor.attrs[name];
       if (value === true) el.setAttribute(name, "");
       else if (value !== false && value != null) el.setAttribute(name, String(value));
     });
+    if (documentNonce && (descriptor.tag.toLowerCase() === "script" || descriptor.tag.toLowerCase() === "style")) {
+      el.setAttribute("nonce", documentNonce);
+    }
     if (descriptor.content) el.textContent = descriptor.content;
     return el;
   };
@@ -6242,6 +6304,34 @@
       if (value === true) element.setAttribute(name, "");
       else if (value !== false && value != null) element.setAttribute(name, String(value));
     });
+    validateDescriptorNonce(descriptor);
+  };
+
+  var decodeDependencyDescriptor = function (encoded, label, kind) {
+    if (typeof encoded !== "string") {
+      throw new TypeError("[Citry] dependency manifest field '" + label + "' must contain base64 strings.");
+    }
+    var descriptor = JSON.parse(fromBase64(encoded));
+    if (
+      !descriptor || typeof descriptor !== "object" || Array.isArray(descriptor) ||
+      typeof descriptor.tag !== "string" ||
+      (descriptor.attrs != null && (typeof descriptor.attrs !== "object" || Array.isArray(descriptor.attrs))) ||
+      (descriptor.content != null && typeof descriptor.content !== "string")
+    ) {
+      throw new TypeError("[Citry] dependency asset descriptor is invalid.");
+    }
+    var tag = descriptor.tag.toLowerCase();
+    if (kind === "js" && tag !== "script") {
+      throw new TypeError("[Citry] JavaScript dependency descriptors must create script elements.");
+    }
+    if (kind === "css" && tag !== "style" && tag !== "link") {
+      throw new TypeError("[Citry] CSS dependency descriptors must create style or link elements.");
+    }
+    // Prove tag and attribute names in a non-HTML namespace. An HTML
+    // custom-element constructor can run at document.createElement time,
+    // before ownership adoption has committed, even while detached.
+    validateDescriptorStructure(descriptor);
+    return descriptor;
   };
 
   // Append a <script> descriptor to <body>; resolves once it has loaded.
@@ -7391,7 +7481,32 @@
     if (reason) console.error("[Citry] component-call branch was cancelled because an asset failed:", reason);
   };
 
-  var prepareComponentAssets = function (manifest) {
+  var validateManifestRuntime = function (manifest) {
+    var variant = manifest.alpineRuntime == null ? "standard" : manifest.alpineRuntime;
+    if (variant !== "standard" && variant !== "csp") {
+      throw new TypeError("[Citry] dependency manifest carries an unknown Alpine runtime variant.");
+    }
+    requireAlpineRuntime(variant);
+    if (variant === "csp" && !documentNonce) {
+      throw new TypeError("[Citry] a strict-CSP fragment requires a Citry-managed document with a nonce.");
+    }
+  };
+
+  var preflightComponentAssets = function (manifest) {
+    validateManifestRuntime(manifest);
+    var fetch = manifest.fetch || {};
+    var styleDescriptors = (fetch.css || []).map(function (encoded) {
+      return decodeDependencyDescriptor(encoded, "fetch.css", "css");
+    });
+    var scriptDescriptors = (fetch.js || []).map(function (encoded) {
+      return decodeDependencyDescriptor(encoded, "fetch.js", "js");
+    });
+    return { styles: styleDescriptors, scripts: scriptDescriptors };
+  };
+
+  var prepareComponentAssets = function (manifest, preflight) {
+    preflight = preflight || preflightComponentAssets(manifest);
+
     var markLoaded = manifest.markLoaded || {};
     (markLoaded.js || []).forEach(function (url) {
       markScriptLoaded("js", fromBase64(url));
@@ -7400,15 +7515,12 @@
       markScriptLoaded("css", fromBase64(url));
     });
 
-    var fetch = manifest.fetch || {};
     var hasAsyncAssets = false;
-    var styles = (fetch.css || []).map(function (encoded) {
-      var descriptor = JSON.parse(fromBase64(encoded));
+    var styles = preflight.styles.map(function (descriptor) {
       if (descriptor.attrs && descriptor.attrs.href) hasAsyncAssets = true;
       return loadCss(descriptor);
     });
-    var scripts = (fetch.js || []).map(function (encoded) {
-      var descriptor = JSON.parse(fromBase64(encoded));
+    var scripts = preflight.scripts.map(function (descriptor) {
       if (descriptor.attrs && descriptor.attrs.src) hasAsyncAssets = true;
       return descriptor;
     });
@@ -7440,8 +7552,9 @@
   };
 
   var applyComponentScripts = function (manifest) {
+    var preflight = preflightComponentAssets(manifest);
     var calls = stageManifestCalls(manifest, null);
-    var assets = prepareComponentAssets(manifest);
+    var assets = prepareComponentAssets(manifest, preflight);
     // Preserve the graph-independent inline-manifest contract: inline styles
     // and scripts execute, and their callbacks flush, before this private
     // manager call returns. URL assets necessarily use the asynchronous path.
@@ -7492,6 +7605,7 @@
     if (!manifest || typeof manifest !== "object" || Array.isArray(manifest) || manifest.graph !== revision) {
       throw new TypeError("[Citry] dependency manifest does not match its prepared ownership revision.");
     }
+    validateManifestRuntime(manifest);
     var requireArray = function (value, label) {
       if (value == null) return [];
       if (!Array.isArray(value)) throw new TypeError("[Citry] dependency manifest field '" + label + "' must be an array.");
@@ -7509,22 +7623,6 @@
         throw new TypeError("[Citry] dependency manifest field '" + label + "' must contain base64 strings.");
       }
       return fromBase64(value);
-    };
-    var decodeDescriptor = function (encoded, label) {
-      var descriptor = JSON.parse(decode(encoded, label));
-      if (
-        !descriptor || typeof descriptor !== "object" || Array.isArray(descriptor) ||
-        typeof descriptor.tag !== "string" ||
-        (descriptor.attrs != null && (typeof descriptor.attrs !== "object" || Array.isArray(descriptor.attrs))) ||
-        (descriptor.content != null && typeof descriptor.content !== "string")
-      ) {
-        throw new TypeError("[Citry] dependency asset descriptor is invalid.");
-      }
-      // Prove tag and attribute names in a non-HTML namespace. An HTML
-      // custom-element constructor can run at document.createElement time,
-      // before ownership adoption has committed, even while detached.
-      validateDescriptorStructure(descriptor);
-      return descriptor;
     };
     var state = ownershipStates.get(revision);
     if (!state) throw new TypeError("[Citry] dependency manifest refers to an unknown prepared graph.");
@@ -7570,7 +7668,7 @@
           throw new TypeError("[Citry] graph-linked dependency fetch must be a two-item tuple.");
         }
         var encoded = entry[0];
-        var descriptor = decodeDescriptor(encoded, "fetch." + kind);
+        var descriptor = decodeDependencyDescriptor(encoded, "fetch." + kind, kind);
         var owners = entry[1];
         var decodedOwners = null;
         if (owners !== null) {
@@ -7596,10 +7694,11 @@
       throw new TypeError("[Citry] graph-linked dependency field 'beforeManifest' must be an array.");
     }
     var preparedBeforeManifest = manifest.beforeManifest.map(function (encoded) {
-      return decodeDescriptor(encoded, "beforeManifest");
+      return decodeDependencyDescriptor(encoded, "beforeManifest", null);
     });
     return {
       graph: revision,
+      alpineRuntime: manifest.alpineRuntime == null ? "standard" : manifest.alpineRuntime,
       markLoaded: manifest.markLoaded,
       fetch: preparedFetch,
       calls: manifest.calls,
@@ -7621,6 +7720,7 @@
     };
     return {
       graph: prepared.graph,
+      alpineRuntime: prepared.alpineRuntime,
       markLoaded: hasAccepted ? prepared.markLoaded : { js: [], css: [] },
       fetch: {
         js: prepared.fetch.js.filter(keepOwned).map(function (entry) { return entry.encoded; }),
@@ -7632,15 +7732,127 @@
     };
   };
 
-  var activateBeforeManifest = function (descriptors, tag) {
-    descriptors.forEach(function (descriptor) {
-      var element = createElement(descriptor);
-      if (tag && tag.parentNode) tag.parentNode.insertBefore(element, tag);
-      else document.body.appendChild(element);
+  var prepareFrameworkManifestElements = function (elements, options) {
+    var entries = elements.map(function (element) {
+      var handlers = [];
+      frameworkManifestHandlers.forEach(function (handler) {
+        if (handler.match(element)) handlers.push(handler);
+      });
+      return { element: element, handlers: handlers, prepared: [] };
+    });
+    var preparedEntries = [];
+    var prepare = Promise.resolve();
+    entries.forEach(function (entry) {
+      entry.handlers.forEach(function (handler) {
+        prepare = prepare.then(function () {
+          return Promise.resolve(handler.prepare(entry.element, options || null)).then(function (token) {
+            entry.prepared.push({ handler: handler, token: token });
+            preparedEntries.push({ entry: entry, handler: handler, token: token });
+          });
+        });
+      });
+    });
+    return prepare.then(function () {
+      return { entries: entries, preparedEntries: preparedEntries, status: "prepared" };
+    }).catch(function (error) {
+      preparedEntries.reverse().forEach(function (prepared) {
+        try {
+          prepared.handler.rollback(prepared.token, prepared.entry.element, error);
+        } catch (rollbackError) {
+          console.error("[Citry] framework-manifest rollback failed:", rollbackError);
+        }
+      });
+      entries.forEach(function (entry) {
+        if (entry.element.parentNode) entry.element.remove();
+      });
+      throw error;
     });
   };
 
-  var applyAdoptionDependency = function (transaction, manifest, tag) {
+  var prepareBeforeManifest = function (descriptors) {
+    return prepareFrameworkManifestElements(descriptors.map(createElement));
+  };
+
+  var rollbackBeforeManifest = function (transaction, error) {
+    if (!transaction || (transaction.status !== "prepared" && transaction.status !== "committed")) return;
+    transaction.preparedEntries.slice().reverse().forEach(function (prepared) {
+      try {
+        prepared.handler.rollback(prepared.token, prepared.entry.element, error);
+      } catch (rollbackError) {
+        console.error("[Citry] framework-manifest rollback failed:", rollbackError);
+      }
+    });
+    transaction.entries.forEach(function (entry) {
+      if (entry.element.parentNode) entry.element.remove();
+    });
+    transaction.status = "rolled-back";
+  };
+
+  var commitBeforeManifest = function (transaction, tag) {
+    if (!transaction || transaction.status !== "prepared") {
+      throw new TypeError("[Citry] framework-manifest transaction is not prepared.");
+    }
+    try {
+      transaction.entries.forEach(function (entry) {
+        if (tag && tag.parentNode) tag.parentNode.insertBefore(entry.element, tag);
+        else document.body.appendChild(entry.element);
+        entry.prepared.forEach(function (prepared) {
+          prepared.handler.commit(prepared.token, entry.element);
+        });
+      });
+      transaction.status = "committed";
+    } catch (error) {
+      rollbackBeforeManifest(transaction, error);
+      throw error;
+    }
+  };
+
+  var commitFrameworkManifestElements = function (transaction) {
+    if (!transaction || transaction.status !== "prepared") {
+      throw new TypeError("[Citry] framework-manifest transaction is not prepared.");
+    }
+    try {
+      transaction.entries.forEach(function (entry) {
+        entry.prepared.forEach(function (prepared) {
+          prepared.handler.commit(prepared.token, entry.element);
+        });
+      });
+      transaction.status = "committed";
+    } catch (error) {
+      rollbackBeforeManifest(transaction, error);
+      throw error;
+    }
+  };
+
+  var prepareAndActivateBeforeManifest = function (descriptors, tag) {
+    return prepareBeforeManifest(descriptors).then(function (transaction) {
+      commitBeforeManifest(transaction, tag);
+    });
+  };
+
+  var prepareAdoptionDependency = function (transaction, manifest) {
+    if (!transaction || transaction.status !== "prepared" || manifest.graph !== transaction.revision) {
+      return Promise.reject(new TypeError("[Citry] dependency preparation requires a prepared matching graph."));
+    }
+    var acceptedManifest = acceptedDependencyManifest(transaction, manifest);
+    return prepareBeforeManifest(acceptedManifest.beforeManifest).then(function (framework) {
+      return {
+        acceptedManifest: acceptedManifest,
+        framework: framework,
+        manifest: manifest,
+        revision: transaction.revision,
+        status: "prepared",
+      };
+    });
+  };
+
+  var rollbackAdoptionDependency = function (prepared, error) {
+    if (!prepared || prepared.status !== "prepared") return;
+    rollbackBeforeManifest(prepared.framework, error);
+    prepared.status = "rolled-back";
+  };
+
+  var applyAdoptionDependency = function (transaction, manifest, tag, prepared) {
     if (!transaction || transaction.status !== "committed" || manifest.graph !== transaction.revision) {
       return Promise.reject(new TypeError("[Citry] dependency adoption requires a committed matching graph."));
     }
@@ -7652,10 +7864,33 @@
       tag.dataset.citryProcessed = "";
     }
     consumedGraphDependencies.add(transaction.revision);
-    var acceptedManifest = acceptedDependencyManifest(transaction, manifest);
+    var acceptedManifest;
+    if (prepared != null) {
+      if (
+        prepared.status !== "prepared" ||
+        prepared.revision !== transaction.revision ||
+        prepared.manifest !== manifest
+      ) {
+        return Promise.reject(new TypeError("[Citry] dependency adoption received a stale preparation."));
+      }
+      acceptedManifest = prepared.acceptedManifest;
+      try {
+        commitBeforeManifest(prepared.framework, tag);
+        prepared.status = "committed";
+      } catch (error) {
+        prepared.status = "rolled-back";
+        return Promise.reject(error);
+      }
+    } else {
+      acceptedManifest = acceptedDependencyManifest(transaction, manifest);
+    }
     var calls = stageManifestCalls(acceptedManifest, transaction.revision);
-    activateBeforeManifest(acceptedManifest.beforeManifest, tag);
-    return applyGraphComponentScripts(acceptedManifest, calls);
+    var frameworkReady = prepared == null
+      ? prepareAndActivateBeforeManifest(acceptedManifest.beforeManifest, tag)
+      : Promise.resolve();
+    return frameworkReady.then(function () {
+      return applyGraphComponentScripts(acceptedManifest, calls);
+    });
   };
 
   var beginGraphEvents = function (revision) {
@@ -7738,7 +7973,6 @@
       var calls;
       try {
         calls = stageManifestCalls(acceptedManifest, manifest.graph);
-        if (isTransactionalDependency) activateBeforeManifest(acceptedManifest.beforeManifest, null);
       } catch (err) {
         console.error("[Citry] discarded graph-linked dependency manifest:", err);
         return;
@@ -7749,7 +7983,10 @@
       // script injection out of the insertion microtask also lets the host's
       // fragment-insertion promise settle normally.
       setTimeout(function () {
-        Promise.resolve().then(function () {
+        var frameworkReady = isTransactionalDependency
+          ? prepareAndActivateBeforeManifest(acceptedManifest.beforeManifest, null)
+          : Promise.resolve();
+        frameworkReady.then(function () {
           return applyGraphComponentScripts(acceptedManifest, calls);
         }).then(
           function () {},
@@ -7866,10 +8103,32 @@
   globalThis.Citry = globalThis.Citry || {};
   globalThis.Citry.alpine = alpineApi;
   globalThis.Citry.manager = {
+    _requireAlpineRuntime: requireAlpineRuntime,
     registerComponent: registerComponent,
     registerComponentData: registerComponentData,
     callComponent: callComponent,
     decorateContext: decorateContext,
+    _prepareFrameworkManifests: prepareFrameworkManifestElements,
+    _commitFrameworkManifests: commitFrameworkManifestElements,
+    _rollbackFrameworkManifests: rollbackBeforeManifest,
+    registerFrameworkManifest: function (name, handler) {
+      if (typeof name !== "string" || !name || !handler || typeof handler !== "object") {
+        throw new TypeError("[Citry] a framework-manifest handler needs a name and lifecycle object.");
+      }
+      if (
+        typeof handler.match !== "function" ||
+        typeof handler.prepare !== "function" ||
+        typeof handler.commit !== "function" ||
+        typeof handler.rollback !== "function"
+      ) {
+        throw new TypeError("[Citry] a framework-manifest handler has an incomplete lifecycle.");
+      }
+      if (frameworkManifestHandlers.has(name)) {
+        throw new TypeError("[Citry] framework-manifest handler '" + name + "' is already registered.");
+      }
+      frameworkManifestHandlers.set(name, handler);
+      return function () { frameworkManifestHandlers.delete(name); };
+    },
     loadJs: loadJs,
     loadCss: loadCss,
     markScriptLoaded: markScriptLoaded,
@@ -8027,7 +8286,9 @@
         if (el.matches(manifestSelector)) processedDependencyTags.add(el);
       },
       _preflightDependency: preflightAdoptionDependency,
+      _prepareDependency: prepareAdoptionDependency,
       _applyDependency: applyAdoptionDependency,
+      _rollbackDependency: rollbackAdoptionDependency,
       _preflightEvents: preflightEventsBridge,
       _attachEvents: attachEventsBridge,
       _detachEvents: detachEventsBridge,

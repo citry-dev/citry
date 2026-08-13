@@ -166,11 +166,11 @@ ranges. State remains under `$state`; it is not flattened into user `x-data`.
 | Automatic unchanged-HTML 304 | Host code | Shipped | - | - | Explicit no-action acknowledgement | **Dropped** |
 | Automatic dirty-tree deduplication | Host code | Partial logic | Self render | Ancestor dirty-set dedup | Explicit action order is authoritative | **Dropped** |
 
-Setting `csrf=False` disables Citry's configurable token layer, whether it was
-automatic or callable. It does not disable the always-on same-origin/header
-floor or independently configured host middleware. State signatures also do
-not replace authorization: reload and authorize every record named by State or
-event data.
+Setting `csrf=False` disables only Citry's configurable callable token check.
+It does not disable the always-on cross-site request floor or independently
+configured host middleware, and it does not change which token the browser
+runtime sends. State signatures also do not replace authorization: reload and
+authorize every record named by State or event data.
 
 ## Events v1 acceptance checklist
 

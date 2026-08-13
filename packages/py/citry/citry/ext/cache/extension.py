@@ -19,8 +19,8 @@ from citry.util.misc import to_dict
 
 from ._introspection import inspect_cache
 from .config import (
+    CacheConfig,
     _build_engine_defaults,
-    _CacheComponentConfig,
     _effective_scope,
     _validate_component_fields,
     _validate_engine_fields,
@@ -110,7 +110,7 @@ class CacheExtension(Extension):
     introspection_version = 1
     render_cache_mode = "stateless"
     render_cache_version = 1
-    Config = _CacheComponentConfig
+    Config = CacheConfig
 
     def __init__(self) -> None:
         self._revision = 0
@@ -224,7 +224,7 @@ class CacheExtension(Extension):
         """Build the effective component key and fetch one replay candidate."""
         if self._is_fragment_boundary(component):
             return self._lookup_fragment(component)
-        config = cast("_CacheComponentConfig", getattr(component, self.name))
+        config = cast("CacheConfig", getattr(component, self.name))
         if not config.enabled:
             return None
 

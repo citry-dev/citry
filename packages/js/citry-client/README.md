@@ -1,19 +1,28 @@
 # citry-client
 
-Source of citry's events client runtime, `citry-events.js`: the pinned
-AlpineJS + `@alpinejs/morph` bundle, the component scopes, the magics
+Source of Citry's Events and i18n browser runtimes.
+
+`citry-events.js` and `citry-events-csp.js` contain the same Events client
+code with the pinned standard or CSP Alpine evaluator plus
+`@alpinejs/morph`,
+the component scopes, the magics
 (`$state`, `$loading`, `$error`, `$sendEvent`, `$onEvent`, `$provide`,
 `$inject`, and `$unprovide`), the actions applier (`applyActions`), and the
-wire transport (envelope, fetch, CSRF, timeout). Designs:
+wire transport (envelope, fetch, CSRF, timeout). `citry-i18n.js` contains the
+opt-in `$i18n` service and pinned Fluent browser runtime. It loads only for a
+client-enabled `<c-i18n>` boundary. Designs:
 [`docs/design/events.md`](../../../docs/design/events.md) section 5 and
 [`docs/design/component_provide.md`](../../../docs/design/component_provide.md)
-section 10.
+section 10, plus [`docs/design/i18n.md`](../../../docs/design/i18n.md) section
+6.8.
 
-This package is private and never published. The runtime is written in
-TypeScript (`src/citry-events.ts`); its build output is committed at
+This package is private and never published. The runtimes are written in
+TypeScript. Their build outputs are committed at
 [`packages/py/citry/citry/ext/events/client/citry-events.js`](../../py/citry/citry/ext/events/client/citry-events.js),
-which the `ext/events/runtime.js` route serves, so Python packaging and
-serving never run node.
+[`packages/py/citry/citry/ext/events/client/citry-events-csp.js`](../../py/citry/citry/ext/events/client/citry-events-csp.js),
+and
+[`packages/py/citry/citry/ext/i18n/client/citry-i18n.js`](../../py/citry/citry/ext/i18n/client/citry-i18n.js).
+Python packaging and serving never run Node.
 
 Fixed `citry-events/1` records are not redefined here. The private
 [`@citry/protocol-events-v1`](../../protocol/events/v1/js/) workspace package
@@ -32,15 +41,17 @@ pnpm install
 Then, from this directory:
 
 ```sh
-pnpm run build      # rebuild the committed bundle from src/citry-events.ts
+pnpm run build      # rebuild the three committed bundles from their TypeScript sources
 pnpm run typecheck  # tsc --noEmit (strict; esbuild stays the only emitter)
 pnpm run lint       # biome check (lint + format)
 pnpm test           # the pinned-version canary over the Alpine private APIs
 pnpm run check      # all three in one go; the repo gate's citry-client phase
 ```
 
-Commit the rebuilt bundle together with the source change; the two files are
-one change. The repo-wide gate (`python scripts/check.py`) runs `pnpm run
+Commit each rebuilt bundle together with its source change. The standard and
+CSP Events outputs intentionally share one source and differ only in Alpine's
+aliased entry point. The repo-wide gate
+(`python scripts/check.py`) runs `pnpm run
 check` here as its `citry-client` phase, so a stale type error or lint issue
 fails the same command CI runs.
 
@@ -64,7 +75,12 @@ evaluator, attribute-removal, scope, and lifecycle APIs described below).
 
 ## Version pins
 
-`alpinejs` and `@alpinejs/morph` are pinned exactly (no range). The runtime
+`alpinejs`, `@alpinejs/morph`, `@alpinejs/csp`, and `@fluent/bundle` are pinned
+exactly, with no version range. The CSP package is built from the same Events
+source by aliasing only `alpinejs/src/index` to `@alpinejs/csp/src/index`.
+Off and warning serialization select `citry-events.js`; strict CSP
+serialization selects `citry-events-csp.js`. A fragment manifest records that
+variant and an existing manager rejects a mismatch before adoption. The Events runtime
 uses Alpine internals for scope isolation, held-fragment release, and exact
 client-context directive cleanup (`addScopeToNode`, `_x_dataStack`,
 `_x_ignore`, `initTree`, and per-directive `utilities.cleanup`), narrowly
@@ -72,6 +88,7 @@ instruments the pinned `getDirectiveHandler` execution path at build time,
 and rides morph's Alpine bridge (`Alpine.cloneNode`). These are version-coupled; the
 pins and the reasoning are recorded in
 [`docs/design/alpinejs/spike-morph-alpine.md`](../../../docs/design/alpinejs/spike-morph-alpine.md).
-When bumping either pin: run `pnpm test` (the canary trips on any drift in
-those internals), rebuild, and run the browser e2e suite in
+When bumping an Alpine-family pin: update all three together, run `pnpm test`
+(the canary trips on any drift in those internals), rebuild, and run the browser e2e suite in
 [`packages/py/citry/tests/e2e/`](../../py/citry/tests/e2e/).
+When bumping Fluent, rebuild and run the i18n browser tests in that same suite.

@@ -260,3 +260,12 @@ supplying invalid state.
 Complex forms, more than two decisions, full-screen surfaces, wizard steps,
 prompt text inputs, automatic timeout, and browser-like promise APIs remain
 CDialog/application work. No unresolved decision blocks implementation.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

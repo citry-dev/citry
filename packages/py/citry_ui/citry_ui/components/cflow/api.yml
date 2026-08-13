@@ -96,3 +96,5 @@ interfaces:
       - {id: input-type-aliases-cflow-justify, name: CFlowJustify, definition: 'Literal["start", "center", "end", "between", "around", "evenly"]'}
   - {id: cstack-default-slot-data, kind: record, name: CStackDefaultSlotData, entries: []}
   - {id: cgroup-default-slot-data, kind: record, name: CGroupDefaultSlotData, entries: []}
+
+translations: []

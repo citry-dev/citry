@@ -1,32 +1,18 @@
 # Plan: the Citry UI component library
 
-**Status (2026-08-09): thirty-one production families are complete in code and
-public documentation.**
-Phases 0 through 6 are complete. Citry's
-generic publishing contracts, slot contracts, client ambient context, and
-docs live-component host are implemented. Phase 7 began on the released
-`citry 0.3.1` and `citry_core 1.4.0` floor. Current source development targets
-`citry 0.3.2` and `citry_core 1.5.0`; publication waits for those artifacts.
-Phase 7 has direct styled implementations for Button, Field/Input, Form, Tabs,
-Dialog, Combobox, semantic Table, Icon, Card, Textarea, Native Select,
-Checkbox, Alert, and Accordion, plus repeatable-form and representative branded
-compositions. Flow layout adds server-only Stack and Group, Badge adds a
-static inline status/metadata primitive, Progress adds native determinate and
-indeterminate task feedback, Spinner adds compact unknown-duration activity
-feedback, and Radio adds native single-choice groups integrated with
-Field and Form, while Switch adds immediate native on/off settings with a
-distinct semantic and visual contract. Breadcrumbs adds zero-JavaScript,
-semantic hierarchical navigation. Divider, Avatar, Skeleton, ButtonGroup,
-Toggle, Pagination, and semantic List complete the third source-development
-batch with separation, identity, loading-placeholder, grouped-action,
-pressed-choice, finite-navigation, and collection surfaces. Every family has repeated the research,
-specification, example-planning, implementation, focused-test, and
-documentation pipeline established by Tabs. The family-specific human release
-matrix remains for all thirty-one families. Container and Grid have now
-completed the first post-batch unblocking pass with a fixed flat responsive
-vocabulary, intrinsic auto-fit mode, asymmetric spans, and no utility-framework
-expansion. Popover and Tooltip complete the first two overlay-family passes on
-the ratified private anchored-layer foundation.
+**Status (2026-08-12): the source-development catalog contains 55 documented
+component families and 101 registered definitions, including compound-family
+declarations and private renderers. Every family remains pre-release until its
+acceptance and release evidence is complete.**
+
+Phases 0 through 6 are complete. Citry's generic publishing contracts, slot
+contracts, client ambient context, and docs live-component host are
+implemented. Phase 7 began on the released `citry 0.3.1` and `citry_core
+1.4.0` floor. Current source development targets `citry 0.3.2` and
+`citry_core 1.5.0`; publication waits for those artifacts. The
+[active component inventory](ui_component_inventory.md) owns current family
+status. Counts and family lists inside the chronological phase records below
+describe those dated slices rather than the current catalog.
 
 This plan defines the research and decision process for Citry's
 official component library. The ratified product
@@ -338,7 +324,8 @@ activation, preview replacement, and contributor workflow. Adapter selection
 and broader interactive coverage do not gate Citry UI specifications,
 implementation, documentation, or publication.
 
-The implementation slice now contains thirty-one production families.
+At this point in the chronological Phase 7.5 record, the implementation slice
+contained thirty-one production families.
 Direct cross-browser suites cover native actions and forms, compound Tabs,
 native modal Dialog, remote Combobox request ordering, keyed semantic Table,
 browser-owned dynamic Form membership, and the repeatable business workflow. Tabs includes
@@ -1040,7 +1027,7 @@ Repository implementation status through 2026-08-09:
   schema-validated `api.yml` data generates the categorical Inputs, Slots,
   Events, Methods, CSS, Attributes, Selectors, and Interfaces reference. The
   renderer derives stable entry anchors and the docs guard enforces the direct
-  source-to-route contract. All thirty-one production families have complete
+  source-to-route contract. All thirty-one families in this dated slice have complete
   feature-by-feature preview catalogs;
 - the Field/Input pass retains a separate relationship owner and native Input,
   makes Field authoritative for composed state, makes Form-disabled state
@@ -1058,7 +1045,7 @@ Repository implementation status through 2026-08-09:
   examples covering configuration, native validation, reset, submitting,
   multiple submitters, external ownership, server errors, dynamic controls,
   and theming;
-- the machine-readable catalog has thirty-four ready routes: all thirty-one
+- the machine-readable catalog in this dated slice had thirty-four ready routes: all thirty-one
   component families, the repeatable contact workflow, and the Orbit and Ledger
   compositions. Embedded and complete-document renders are checked for the
   same normalized component markup;
@@ -1140,9 +1127,12 @@ commitment.
 - playground integration after publication: pin the compatible `citry-ui`
   wheel, register it after each playground registry reset, allow `citry_ui`
   imports, and resolve direct library-component final expressions;
-- the research-backed [`i18n.md`](i18n.md) follow-up for component text,
-  locale selection, formatting, direction, extraction, delivery, and
-  locale-sensitive controls;
+- the research-backed [`i18n.md`](i18n.md) migration contract for component
+  text, locale selection, formatting, direction, extraction, delivery, and
+  locale-sensitive controls. Its Phase 3 plan freezes the shared compiler
+  contract, hardens locale transactions, adds checked `$c-tr` records and the
+  `i18n.bind()` browser manager, then gates fragment activation on current-locale
+  preparation before Citry UI migrates reactive component strings;
 - release, compatibility, and maintenance policy.
 
 **Gate:** independent adversarial review of the prototype-backed decision
@@ -1178,14 +1168,16 @@ runtime/exports, structured API, ten public previews, focused server and
 Chromium/Firefox/WebKit evidence, retained-rerender coverage, quality/scaling
 wiring, docs projection, and exact wheel qualification. Its human
 visual/assistive-technology, hosted Nu, and independent review remain release
-evidence. Menu has now completed its production pass and independent
-implementation review: the eight-class runtime/export family, structured API,
-thirteen public previews, focused three-engine evidence, correlated-rerender
-coverage, quality/scaling wiring, docs projection, and exact wheel
-qualification are checked in. Modal Drawer/Sheet and Toast follow as separate
-passes. Number, date, time, and advanced range controls remain gated on the
-formatter, parser, time-zone, direction, and server/browser contracts proposed
-in [`i18n.md`](i18n.md) before a later batch is selected.
+evidence. Menu completed its production pass and independent implementation
+review: the eight-class runtime/export family, structured API, thirteen public
+previews, focused three-engine evidence, correlated-rerender coverage,
+quality/scaling wiring, docs projection, and exact wheel qualification are
+checked in. Modal Drawer/Sheet and Toast subsequently completed their
+source-development passes, as recorded in the active inventory. Number, date,
+time, and advanced range controls may now enter family research against the
+implemented core i18n contracts. Each family still ratifies its own browser
+editing, stepping, calendar/time-zone, direction, and server/browser agreement;
+a generic browser temporal parser is not an entry gate.
 
 ## 5. Evaluation rubric
 

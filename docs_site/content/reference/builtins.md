@@ -17,6 +17,8 @@ register or import them.
 - **Data and resilience:** [`<c-provide>`](#c-provide),
   [`<c-cache>`](#c-cache), and
   [`<c-error-fallback>`](#c-error-fallback)
+- **Internationalization:** [`<c-i18n>`](#c-i18n) and
+  [`<c-trans>`](#c-trans)
 - **Page assets:** [`<c-css>`](#c-css) and [`<c-js>`](#c-js)
 - **Literal template text:** [`<c-raw>`](#c-raw)
 
@@ -131,6 +133,21 @@ and the difference between component names and HTML tag names.
 <c-builtin tag="cache" c-level="3" />
 
 <c-builtin tag="error-fallback" c-level="3" />
+
+## Internationalization
+
+<c-builtin tag="i18n" c-level="3" />
+
+Use it to provide a locale to one subtree. Add a real `tag` when the subtree
+needs `lang` and `dir`, or enable its browser service with the bare `client`
+attribute.
+See [Locales and context](/i18n/locale-context/) and
+[Browser i18n](/i18n/browser/).
+
+<c-builtin tag="trans" c-level="3" />
+
+Use it when a translator needs to position an application-owned link or
+inline component. See [Rich messages](/i18n/rich-messages/).
 
 ## Page assets
 

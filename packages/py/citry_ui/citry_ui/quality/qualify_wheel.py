@@ -17,14 +17,22 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/py.typed",
     "citry_ui/components/__init__.py",
     "citry_ui/components/_anchored_layer.py",
+    "citry_ui/components/_active_descendant.py",
     "citry_ui/components/_aria.py",
     "citry_ui/components/_attrs.py",
     "citry_ui/components/_context.py",
+    "citry_ui/components/_dialog_controller.py",
+    "citry_ui/components/_form_control_runtime.py",
+    "citry_ui/components/_i18n.py",
+    "citry_ui/components/_scroll_geometry.py",
+    "citry_ui/components/_shared_component_assets.py",
     "citry_ui/components/_validation.py",
     "citry_ui/components/caccordion/__init__.py",
     "citry_ui/components/caccordion/caccordion.py",
     "citry_ui/components/calert/__init__.py",
     "citry_ui/components/calert/calert.py",
+    "citry_ui/components/calert_dialog/__init__.py",
+    "citry_ui/components/calert_dialog/calert_dialog.py",
     "citry_ui/components/cavatar/__init__.py",
     "citry_ui/components/cavatar/cavatar.py",
     "citry_ui/components/cbadge/__init__.py",
@@ -37,33 +45,55 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/components/cbutton_group/cbutton_group.py",
     "citry_ui/components/ccard/__init__.py",
     "citry_ui/components/ccard/ccard.py",
+    "citry_ui/components/ccarousel/__init__.py",
+    "citry_ui/components/ccarousel/ccarousel.py",
     "citry_ui/components/ccheckbox/__init__.py",
     "citry_ui/components/ccheckbox/ccheckbox.py",
     "citry_ui/components/ccombobox/__init__.py",
     "citry_ui/components/ccombobox/ccombobox.py",
+    "citry_ui/components/ccommand_palette/__init__.py",
+    "citry_ui/components/ccommand_palette/ccommand_palette.py",
+    "citry_ui/components/ccontext_menu/__init__.py",
+    "citry_ui/components/ccontext_menu/ccontext_menu.py",
     "citry_ui/components/cdialog/__init__.py",
     "citry_ui/components/cdialog/cdialog.py",
+    "citry_ui/components/cdisclosure/__init__.py",
+    "citry_ui/components/cdisclosure/cdisclosure.py",
     "citry_ui/components/cdrawer/__init__.py",
     "citry_ui/components/cdrawer/cdrawer.py",
     "citry_ui/components/cdivider/__init__.py",
     "citry_ui/components/cdivider/cdivider.py",
+    "citry_ui/components/ceditable/__init__.py",
+    "citry_ui/components/ceditable/ceditable.py",
     "citry_ui/components/cfield/__init__.py",
     "citry_ui/components/cfield/cfield.py",
+    "citry_ui/components/cfile_input/__init__.py",
+    "citry_ui/components/cfile_input/cfile_input.py",
     "citry_ui/components/cflow/__init__.py",
     "citry_ui/components/cflow/cflow.py",
     "citry_ui/components/cgrid/__init__.py",
     "citry_ui/components/cgrid/cgrid.py",
     "citry_ui/components/cform/__init__.py",
     "citry_ui/components/cform/cform.py",
+    "citry_ui/components/chover_card/__init__.py",
+    "citry_ui/components/chover_card/chover_card.py",
     "citry_ui/components/cicon/__init__.py",
     "citry_ui/components/cicon/_catalog.py",
     "citry_ui/components/cicon/cicon.py",
+    "citry_ui/components/cimage/__init__.py",
+    "citry_ui/components/cimage/cimage.py",
     "citry_ui/components/clist/__init__.py",
     "citry_ui/components/clist/clist.py",
+    "citry_ui/components/clistbox/__init__.py",
+    "citry_ui/components/clistbox/clistbox.py",
     "citry_ui/components/cmenu/__init__.py",
     "citry_ui/components/cmenu/cmenu.py",
+    "citry_ui/components/cmulti_select/__init__.py",
+    "citry_ui/components/cmulti_select/cmulti_select.py",
     "citry_ui/components/cnative_select/__init__.py",
     "citry_ui/components/cnative_select/cnative_select.py",
+    "citry_ui/components/cnavigation_menu/__init__.py",
+    "citry_ui/components/cnavigation_menu/cnavigation_menu.py",
     "citry_ui/components/cpagination/__init__.py",
     "citry_ui/components/cpagination/cpagination.py",
     "citry_ui/components/cpopover/__init__.py",
@@ -74,25 +104,57 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/components/cprogress/cprogress.py",
     "citry_ui/components/cradio/__init__.py",
     "citry_ui/components/cradio/cradio.py",
+    "citry_ui/components/cscroll_area/__init__.py",
+    "citry_ui/components/cscroll_area/cscroll_area.py",
+    "citry_ui/components/cselect/__init__.py",
+    "citry_ui/components/cselect/cselect.py",
     "citry_ui/components/cspinner/__init__.py",
     "citry_ui/components/cspinner/cspinner.py",
     "citry_ui/components/cskeleton/__init__.py",
     "citry_ui/components/cskeleton/cskeleton.py",
+    "citry_ui/components/csplitbutton/__init__.py",
+    "citry_ui/components/csplitbutton/_submit_registry.py",
+    "citry_ui/components/csplitbutton/csplitbutton.py",
+    "citry_ui/components/csplitter/__init__.py",
+    "citry_ui/components/csplitter/csplitter.py",
+    "citry_ui/components/cstepper/__init__.py",
+    "citry_ui/components/cstepper/cstepper.py",
     "citry_ui/components/cswitch/__init__.py",
     "citry_ui/components/cswitch/cswitch.py",
     "citry_ui/components/ctable/__init__.py",
     "citry_ui/components/ctable/ctable.py",
     "citry_ui/components/ctabs/__init__.py",
     "citry_ui/components/ctabs/ctabs.py",
+    "citry_ui/components/ctag/__init__.py",
+    "citry_ui/components/ctag/ctag.py",
+    "citry_ui/components/ctags_input/__init__.py",
+    "citry_ui/components/ctags_input/ctags_input.py",
     "citry_ui/components/ctextarea/__init__.py",
     "citry_ui/components/ctextarea/ctextarea.py",
     "citry_ui/components/ctoggle/__init__.py",
     "citry_ui/components/ctoggle/ctoggle.py",
     "citry_ui/components/ctoast/__init__.py",
     "citry_ui/components/ctoast/ctoast.py",
+    "citry_ui/components/ctoolbar/__init__.py",
+    "citry_ui/components/ctoolbar/ctoolbar.py",
+    "citry_ui/components/ctree/__init__.py",
+    "citry_ui/components/ctree/ctree.py",
+}
+EXPECTED_I18N_FILES = {
+    "citry_ui_i18n/__init__.py",
+    "citry_ui_i18n/_generate_catalog.py",
+    "citry_ui_i18n/citry-i18n.toml",
+    "citry_ui_i18n/formats.json",
+    "citry_ui_i18n/_compiled/__init__.py",
+    "citry_ui_i18n/_compiled/link.json",
+    "citry_ui_i18n/_compiled/manifest.json",
+    "citry_ui_i18n/_compiled/server.json",
+    "citry_ui_i18n/locales/en-US/citry-ui.ftl",
 }
 _FORBIDDEN_SUFFIXES = {".html", ".json", ".md", ".png", ".svg"}
 _THIRD_PARTY_NOTICE_SHA256 = "0f1b152923fc9ff1181a9e6c87aa5877e258efe6d7dbc4c3198ab25e9dd3e8ad"
+MAX_WHEEL_BYTES = 700 * 1024
+MAX_I18N_COMPRESSED_BYTES = 20 * 1024
 
 
 class WheelQualificationError(ValueError):
@@ -108,6 +170,8 @@ class WheelReport:
     runtime_files: int
     distribution: str
     pure_python: bool
+    wheel_bytes: int
+    i18n_compressed_bytes: int
 
 
 def qualify_wheel(path: Path) -> WheelReport:
@@ -119,6 +183,7 @@ def qualify_wheel(path: Path) -> WheelReport:
         with ZipFile(path) as archive:
             names = archive.namelist()
             contents = {name: archive.read(name) for name in names}
+            compressed_sizes = {entry.filename: entry.compress_size for entry in archive.infolist()}
     except BadZipFile as error:
         msg = f"Wheel is not a readable ZIP archive: {path}."
         raise WheelQualificationError(msg) from error
@@ -128,9 +193,20 @@ def qualify_wheel(path: Path) -> WheelReport:
         msg = f"Wheel contains duplicate paths: {', '.join(duplicates)}."
         raise WheelQualificationError(msg)
 
+    wheel_bytes = path.stat().st_size
+    if wheel_bytes > MAX_WHEEL_BYTES:
+        raise WheelQualificationError(f"Wheel is {wheel_bytes} bytes; the release cap is {MAX_WHEEL_BYTES} bytes.")
+    i18n_compressed_bytes = sum(size for name, size in compressed_sizes.items() if name.startswith("citry_ui_i18n/"))
+    if i18n_compressed_bytes > MAX_I18N_COMPRESSED_BYTES:
+        raise WheelQualificationError(
+            "Compressed Citry UI i18n package is "
+            f"{i18n_compressed_bytes} bytes; the release cap is {MAX_I18N_COMPRESSED_BYTES} bytes."
+        )
+
     name_set = set(names)
-    runtime_names = {name for name in names if name.startswith("citry_ui/")}
-    missing = sorted(EXPECTED_RUNTIME_FILES - runtime_names)
+    runtime_names = {name for name in names if name.startswith(("citry_ui/", "citry_ui_i18n/"))}
+    expected_runtime = EXPECTED_RUNTIME_FILES | EXPECTED_I18N_FILES
+    missing = sorted(expected_runtime - runtime_names)
     if missing:
         msg = f"Wheel is missing required runtime files: {', '.join(missing)}."
         raise WheelQualificationError(msg)
@@ -141,16 +217,18 @@ def qualify_wheel(path: Path) -> WheelReport:
         raise WheelQualificationError(msg)
     dist_info = dist_info_roots[0]
 
-    foreign = sorted(
-        name for name in names if not name.startswith("citry_ui/") and not name.startswith(f"{dist_info}/")
-    )
+    foreign = sorted(name for name in names if not name.startswith(("citry_ui/", "citry_ui_i18n/", f"{dist_info}/")))
     if foreign:
-        msg = f"Wheel contains files outside citry_ui and its metadata: {', '.join(foreign)}."
+        msg = f"Wheel contains files outside Citry UI runtime packages and metadata: {', '.join(foreign)}."
         raise WheelQualificationError(msg)
 
     forbidden = sorted(
-        (runtime_names - EXPECTED_RUNTIME_FILES)
-        | {name for name in runtime_names if Path(name).suffix.lower() in _FORBIDDEN_SUFFIXES}
+        (runtime_names - expected_runtime)
+        | {
+            name
+            for name in runtime_names
+            if name.startswith("citry_ui/") and Path(name).suffix.lower() in _FORBIDDEN_SUFFIXES
+        }
     )
     if forbidden:
         msg = f"Wheel contains repository-only or stale runtime files: {', '.join(forbidden)}."
@@ -208,6 +286,8 @@ def qualify_wheel(path: Path) -> WheelReport:
         runtime_files=runtime_files,
         distribution=dist_info.removesuffix(".dist-info"),
         pure_python=pure_python,
+        wheel_bytes=wheel_bytes,
+        i18n_compressed_bytes=i18n_compressed_bytes,
     )
 
 

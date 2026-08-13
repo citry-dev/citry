@@ -237,3 +237,12 @@ native `progress` element cannot uphold the documented styling or dynamic
 indeterminate contract without inaccessible replacement markup, stop and
 design a standards-compliant ARIA root rather than shipping browser-divergent
 semantics.
+
+## 21. Internationalization
+
+Determinate fallback prose uses the key and typed variables recorded in the
+structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/cprogress/api.yml).
+The `citry-ui-progress-value` package profile formats current and maximum
+values. `i18n.bind()` follows both locale changes and reactive label/value
+changes because browser behavior rewrites the native fallback text. The
+separate `value_text` input remains the caller-owned `aria-valuetext` surface.

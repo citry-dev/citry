@@ -1,6 +1,6 @@
 /**
- * Narrow, local type declarations for the pinned AlpineJS 3.15.12 and
- * `@alpinejs/morph` 3.15.12. Neither package ships its own types, so these
+ * Narrow, local type declarations for the pinned AlpineJS 3.16.1 and
+ * `@alpinejs/morph` 3.16.1. Neither package ships its own types, so these
  * declare exactly the surface the runtime calls and nothing more; the point
  * is an honest type-check without pretending to type all of Alpine.
  *

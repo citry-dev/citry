@@ -26,17 +26,52 @@ from citry.util.misc import get_import_path
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+    from citry.citry_render import OnRenderGenerator, RenderReplacement
     from citry.component import Component
+    from citry.ext.cache import CacheConfig
+    from citry.ext.dependencies import DependenciesConfig, Dependency
+    from citry.ext.events.config import Events as EventsConfig
+    from citry.ext.i18n import I18n as I18nConfig
+    from citry.slots import Slot
 
     class _LibraryComponentAuthoringBase:
         """Checker-only instance surface available after materialization."""
 
+        class_id: ClassVar[str]
+        definition_id: ClassVar[str]
         citry: ClassVar[Citry]
+        transparent: ClassVar[bool]
+        name: ClassVar[str | None]
+        template: ClassVar[str | None]
+        template_file: ClassVar[str | None]
+        messages: ClassVar[str | None]
+        messages_file: ClassVar[str | None]
+        js: ClassVar[str | None]
+        js_file: ClassVar[str | None]
+        css: ClassVar[str | None]
+        css_file: ClassVar[str | None]
+
+        Cache: ClassVar[type | None]
+        Dependencies: ClassVar[type | None]
+        I18n: ClassVar[type | None]
+        Kwargs: ClassVar[type | None]
+        Slots: ClassVar[type | None]
+        State: ClassVar[type | None]
+        Events: ClassVar[type | None]
+        Lint: ClassVar[type | None]
+        TemplateData: ClassVar[type | None]
+        JsData: ClassVar[type | None]
+        CssData: ClassVar[type | None]
+
         id: str
         kwargs: Any
-        slots: Any
         raw_kwargs: dict[str, Any]
-        raw_slots: dict[str, Any]
+        slots: Any
+        raw_slots: dict[str, Slot]
+        cache: CacheConfig
+        dependencies: DependenciesConfig
+        events: EventsConfig[Any]
+        i18n: I18nConfig
         parent: Component | None
         root: Component
 
@@ -49,11 +84,11 @@ if TYPE_CHECKING:
         @classmethod
         def on_dependencies(
             cls,
-            scripts: list[Any],
-            styles: list[Any],
-        ) -> tuple[list[Any], list[Any]] | None: ...
+            scripts: list[Dependency],
+            styles: list[Dependency],
+        ) -> tuple[list[Dependency], list[Dependency]] | None: ...
 
-        def on_render(self) -> Any: ...
+        def on_render(self) -> RenderReplacement | OnRenderGenerator | None: ...
 
         def provide(self, key: str, value: Any = ..., /, **data: Any) -> None: ...
 

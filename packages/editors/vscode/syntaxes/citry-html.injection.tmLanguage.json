@@ -53,6 +53,7 @@
 			"patterns": [
 				{ "include": "#python-comment-before-interpolation-end" },
 				{ "include": "#python-curly" },
+				{ "include": "#python-callable" },
 				{ "include": "source.python" }
 			]
 		},
@@ -64,7 +65,29 @@
 			"patterns": [
 				{ "include": "#python-comment-before-interpolation-end" },
 				{ "include": "#python-curly" },
+				{ "include": "#python-callable" },
 				{ "include": "source.python" }
+			]
+		},
+		"python-callable": {
+			"patterns": [
+				{
+					"captures": {
+						"1": { "name": "punctuation.separator.period.python" },
+						"3": {
+							"name": "entity.name.function.member.python entity.name.function.python"
+						}
+					},
+					"match": "(\\.)(\\s*)((?!(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\\b)[A-Za-z_]\\w*)(?=\\s*\\()",
+					"name": "meta.function-call.member.python"
+				},
+				{
+					"captures": {
+						"1": { "name": "entity.name.function.python" }
+					},
+					"match": "(?<![.\\w])((?!(?:False|None|True|and|as|assert|async|await|break|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|raise|return|try|while|with|yield)\\b)[A-Za-z_]\\w*)(?=\\s*\\()",
+					"name": "meta.function-call.python"
+				}
 			]
 		},
 		"condition-tag": {
@@ -117,7 +140,11 @@
 			"end": "\"",
 			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
 			"contentName": "meta.embedded.inline.python.citry",
-			"patterns": [{ "include": "#python-comment-before-double-quote" }, { "include": "source.python" }]
+			"patterns": [
+				{ "include": "#python-comment-before-double-quote" },
+				{ "include": "#python-callable" },
+				{ "include": "source.python" }
+			]
 		},
 		"condition-single": {
 			"begin": "(cond)(\\s*)(=)(\\s*)(')",
@@ -129,13 +156,20 @@
 			"end": "'",
 			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
 			"contentName": "meta.embedded.inline.python.citry",
-			"patterns": [{ "include": "#python-comment-before-single-quote" }, { "include": "source.python" }]
+			"patterns": [
+				{ "include": "#python-comment-before-single-quote" },
+				{ "include": "#python-callable" },
+				{ "include": "source.python" }
+			]
 		},
 		"condition-unquoted": {
 			"captures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
-				"5": { "name": "meta.embedded.inline.python.citry" }
+				"5": {
+					"name": "meta.embedded.inline.python.citry",
+					"patterns": [{ "include": "#python-callable" }, { "include": "source.python" }]
+				}
 			},
 			"match": "(cond)(\\s*)(=)(\\s*)([^\\s>]+)"
 		},
@@ -152,7 +186,11 @@
 			"end": "\"",
 			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
 			"contentName": "meta.embedded.inline.python.citry",
-			"patterns": [{ "include": "#python-comment-before-double-quote" }, { "include": "source.python" }]
+			"patterns": [
+				{ "include": "#python-comment-before-double-quote" },
+				{ "include": "#python-callable" },
+				{ "include": "source.python" }
+			]
 		},
 		"each-single": {
 			"begin": "(each)(\\s*)(=)(\\s*)(')",
@@ -164,13 +202,20 @@
 			"end": "'",
 			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
 			"contentName": "meta.embedded.inline.python.citry",
-			"patterns": [{ "include": "#python-comment-before-single-quote" }, { "include": "source.python" }]
+			"patterns": [
+				{ "include": "#python-comment-before-single-quote" },
+				{ "include": "#python-callable" },
+				{ "include": "source.python" }
+			]
 		},
 		"each-unquoted": {
 			"captures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
-				"5": { "name": "meta.embedded.inline.python.citry" }
+				"5": {
+					"name": "meta.embedded.inline.python.citry",
+					"patterns": [{ "include": "#python-callable" }, { "include": "source.python" }]
+				}
 			},
 			"match": "(each)(\\s*)(=)(\\s*)([^\\s>]+)"
 		},
@@ -230,7 +275,11 @@
 			"end": "\"",
 			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
 			"contentName": "meta.embedded.inline.python.citry",
-			"patterns": [{ "include": "#python-comment-before-double-quote" }, { "include": "source.python" }]
+			"patterns": [
+				{ "include": "#python-comment-before-double-quote" },
+				{ "include": "#python-callable" },
+				{ "include": "source.python" }
+			]
 		},
 		"python-attribute-single": {
 			"begin": "((?:c-[^\\s=/>]+|#c-key))(\\s*)(=)(\\s*)(')",
@@ -242,13 +291,20 @@
 			"end": "'",
 			"endCaptures": { "0": { "name": "punctuation.definition.string.end.citry" } },
 			"contentName": "meta.embedded.inline.python.citry",
-			"patterns": [{ "include": "#python-comment-before-single-quote" }, { "include": "source.python" }]
+			"patterns": [
+				{ "include": "#python-comment-before-single-quote" },
+				{ "include": "#python-callable" },
+				{ "include": "source.python" }
+			]
 		},
 		"python-attribute-unquoted": {
 			"captures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
-				"5": { "name": "meta.embedded.inline.python.citry" }
+				"5": {
+					"name": "meta.embedded.inline.python.citry",
+					"patterns": [{ "include": "#python-callable" }, { "include": "source.python" }]
+				}
 			},
 			"match": "((?:c-[^\\s=/>]+|#c-key))(\\s*)(=)(\\s*)([^\\s>]+)"
 		},
@@ -361,7 +417,7 @@
 			]
 		},
 		"javascript-attribute-double": {
-			"begin": "((?:\\$c-props|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)(\")",
+			"begin": "((?:\\$c-props|\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)(\")",
 			"beginCaptures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
@@ -373,7 +429,7 @@
 			"patterns": [{ "include": "#javascript-comment-before-double-quote" }, { "include": "source.js" }]
 		},
 		"javascript-attribute-single": {
-			"begin": "((?:\\$c-props|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)(')",
+			"begin": "((?:\\$c-props|\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)(')",
 			"beginCaptures": {
 				"1": { "name": "entity.other.attribute-name.citry" },
 				"3": { "name": "punctuation.separator.key-value.citry" },
@@ -390,7 +446,7 @@
 				"3": { "name": "punctuation.separator.key-value.citry" },
 				"5": { "name": "meta.embedded.inline.javascript.citry" }
 			},
-			"match": "((?:\\$c-props|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)([^\\s>]+)"
+			"match": "((?:\\$c-props|\\$c-tr(?=[:.\\[])[^\\s=/>]*|@(?!c-)[^\\s=/>]+|:(?!c-)[^\\s=/>]+|x-[^\\s=/>]+))(\\s*)(=)(\\s*)([^\\s>]+)"
 		},
 		"python-comment-before-interpolation-end": {
 			"begin": "#",

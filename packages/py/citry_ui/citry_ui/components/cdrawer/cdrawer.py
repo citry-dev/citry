@@ -13,6 +13,7 @@ from citry_ui.components._attrs import (
     merge_root_attrs,
     reject_html_attr_bindings,
 )
+from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -52,6 +53,9 @@ class CDrawerCloseSlotData:
 
 
 class CDrawer(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         id: str | None = None
@@ -95,7 +99,8 @@ class CDrawer(LibraryComponent):
         )
         validate_choice("CDrawer", "size", kwargs.size, ("sm", "md", "lg", "full"))
         validate_choice("CDrawer", "scroll", kwargs.scroll, ("body", "drawer"))
-        validate_non_empty_string("CDrawer", "close_label", kwargs.close_label)
+        close_label = kwargs.close_label if "close_label" in self.raw_kwargs else self.i18n.tr("citry-ui-drawer-close")
+        validate_non_empty_string("CDrawer", "close_label", close_label)
         reject_owned_attrs(
             kwargs.attrs,
             {
@@ -174,7 +179,8 @@ class CDrawer(LibraryComponent):
             "placement": kwargs.placement,
             "size": kwargs.size,
             "scroll": kwargs.scroll,
-            "close_label": kwargs.close_label,
+            "close_label": close_label,
+            "catalog_close_label": uses_catalog_default(self, "close_label"),
             "has_activator": "activator" in self.raw_slots,
             "has_description": has_description,
             "has_actions": "actions" in self.raw_slots,
@@ -234,7 +240,8 @@ class CDrawer(LibraryComponent):
               <button
                 class="cui-drawer__close"
                 type="button"
-                c-aria-label="close_label"
+                c-aria-label="tr('citry-ui-drawer-close') if catalog_close_label else close_label"
+                c-$c-tr:citry-ui-drawer-close[aria-label]="True if catalog_close_label else None"
                 c-hidden="not dismissible"
                 data-citry-drawer-close
                 data-citry-drawer-built-in-close
@@ -1005,6 +1012,10 @@ class CDrawer(LibraryComponent):
           :where(.cui-drawer:not([open])) { display: none; }
         }
       }
+    """
+
+    messages = """
+      citry-ui-drawer-close = Close
     """
 
 

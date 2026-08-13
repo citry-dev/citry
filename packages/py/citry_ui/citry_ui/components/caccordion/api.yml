@@ -204,3 +204,5 @@ interfaces:
   - {id: accordion-item-title-slot-data, kind: record, name: CAccordionItemTitleSlotData, entries: []}
   - {id: accordion-item-default-slot-data, kind: record, name: CAccordionItemDefaultSlotData, entries: []}
   - {id: accordion-item-actions-slot-data, kind: record, name: CAccordionItemActionsSlotData, entries: []}
+
+translations: []

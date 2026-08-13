@@ -300,3 +300,12 @@ Deferred: `srcset`/`sizes`, loading delay/cross-fade, name-derived initials and
 colors, upload/edit affordances, AvatarGroup/overflow count, remote image
 proxying, and badge placement. Revisit only with application evidence. Human
 visual and assistive-technology review remains release work.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

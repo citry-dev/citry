@@ -1,9 +1,10 @@
 # Design: JS/CSS dependency rendering, fragments, and host integration
 
-**Status (2026-06-13): built.** Phases 1-5 (section 16) are implemented; the
-two remaining loose ends are the `packages/js/citry-client` TypeScript +
-minification build (the runtime ships as plain JS package data) and the
-user-facing docs, both tracked in phase 5's entry. This document designs the
+**Status (updated 2026-08-13): built and under integration hardening.** Phases
+1-5 (section 16), the `packages/js/citry-client` TypeScript/minification build,
+and the user-facing dependency documentation are implemented. The core
+dependency manager remains readable package-data JavaScript because other
+extension runtimes register against it. This document designs the
 emission half of the dependency story: how a component's JS and CSS (primary
 `js`/`css` pairs, secondary `Dependencies` entries, and per-render JS/CSS
 variables) get collected during a render and placed into the final HTML; the
@@ -438,6 +439,13 @@ render.serialize(
 - **`deps_position`**: `smart` uses placeholders/default locations (7.3);
   `prepend`/`append` put the tags before/after the whole output.
 
+The call-local `security_javascript` policy is a ceiling over these strategies.
+`warn` keeps their exact output, `omit` removes executable dependencies and
+manager manifests while retaining HTML and CSS, and `forbid` rejects reached
+client requirements even when `simple` or `ignore` would not emit the manager.
+An omit fragment takes a dedicated CSS-only path: styles are emitted directly,
+so it needs neither a preloader nor a mounted integration.
+
 `str(render)` keeps using the defaults. Strategy lives at serialize, per the
 decision already recorded in [`component_rendering.md`](component_rendering.md) section 5.1.
 
@@ -538,9 +546,12 @@ to be inserted into an already-loaded page (HTMX swap, Unpoly, Turbo,
 `fetch` + `innerHTML`, jQuery `.load()`). Its dependencies cannot go into
 `<head>`, so the output carries, after the HTML:
 
-1. A **pre-loader** script: if `globalThis.Citry` is missing, inject a
-   `<script src>` for the runtime, then remove itself. So fragments work
-   even on pages that were not rendered with the `document` strategy.
+1. In the default and CSP warning modes, a **pre-loader** script: if
+   `globalThis.Citry` is missing, inject a `<script src>` for the standard
+   runtime, then remove itself. So those fragments work even on pages that
+   were not rendered with the `document` strategy. Strict CSP fragments omit
+   this executable bootstrap and require a matching CSP manager in the base
+   document; without one, their inert manifest remains inactive.
 2. An **exec manifest**: `<script type="application/json" data-citry>`
    containing (base64-armored, as in DJC, so content cannot break out of the
    script tag): the script/style tag descriptors to fetch, and the component
@@ -549,8 +560,21 @@ to be inserted into an already-loaded page (HTMX swap, Unpoly, Turbo,
    it up even from `innerHTML` insertions, where ordinary scripts would not
    execute.
 
+A component fragment may also carry inert ownership, Events, i18n, or other
+framework manifests beside the exec manifest. Events parses this complete
+package once. The ownership/morph planner first produces an unpublished set of
+accepted incoming render IDs. Registered framework-manifest handlers then run
+asynchronous `prepare` hooks against that owner filter; only after every prepare
+succeeds does Events insert the fragment, commit the handlers, and release
+component activation. Rollback runs in reverse order and leaves the old live
+region unchanged when preparation fails. A handler therefore may load and
+validate data before incoming Alpine directives or `$component` callbacks can
+observe the fragment.
+
 A page rendered with `document` strategy emits a mark-as-loaded manifest, so
-a later fragment referencing the same component fetches nothing.
+a later fragment referencing the same component fetches nothing. Each manifest
+also records `alpineRuntime` as `"standard"` or `"csp"`. The manager rejects a
+different variant before adopting any fragment dependencies.
 
 ### 8.2 The client runtime
 
@@ -589,6 +613,13 @@ manager, renamed (`globalThis.Citry`, `data-citry`, `citry.min.js`):
   fans batches out to extension providers. The same core owns
   `Citry.alpine`, whose permanent selector, init, magic, morph, and startup
   hooks dispatch through replaceable providers.
+- `registerFrameworkManifest(name, handler)` registers an inert-manifest
+  lifecycle with exact `match`, asynchronous `prepare`, synchronous `commit`,
+  and reverse-order `rollback` hooks. Events uses the core private
+  prepare/commit bridge for parsed fragments; ordinary streaming/document
+  insertion still goes through the permanent observer. The i18n extension is
+  the first consumer and uses the accepted-owner set to filter requirements
+  during partial morph adoption.
 - Planned, not yet in the runtime: a console warning for a stuck call (one
   whose component script or data never arrives). Today such a call just
   stays queued, silently.
@@ -1005,10 +1036,10 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    against; `document` vs `simple` now genuinely differ: `simple` is
    the no-JS-runtime mode, so JS variables and component calls are
    document-only while CSS variables (pure CSS) work under both; the runtime
-   ships as readable plain JS package data
-   (`citry/extensions/dependencies/client/citry.js`) for now, with the
-   `packages/js/citry-client` TypeScript + minification build deferred to
-   the packaging work (8.2).
+   core manager ships as readable plain JS package data
+   (`citry/extensions/dependencies/client/citry.js`); the pinned Alpine,
+   Events, CSP, and i18n runtimes are built and checked from
+   `packages/js/citry-client` TypeScript sources.
 4. **URLs + fragments - built.** `URLRoute` port + `Extension.urls` +
    `Citry.urls`; endpoint logic with lazy repopulation; ASGI/WSGI apps +
    FastAPI adapter (used by the tests) + mount contract; `fragment` strategy
@@ -1036,8 +1067,5 @@ logic, the client runtime contract) lives in the `dependencies` extension.
    `local_files` setting on the `Dependencies` config (per component or via
    `extensions_defaults`), emitting fingerprinted content-hash URLs on the
    new `asset/{file_name}` endpoint, falling back to inline when unmounted.
-   **Remaining:** the `packages/js/citry-client` TS + minification build
-   (needs a JS toolchain in the repo) and the user-facing docs (fragments
-   guide, production guidance from 8.3), which should wait for the
-   maintainer's pass over the whole feature. Named component event URLs now
-   ship through Events (9.5).
+   The TypeScript/minification build and user-facing fragment/production docs
+   now ship. Named component event URLs ship through Events (9.5).

@@ -188,3 +188,11 @@ zero console/page errors, and runs serious/critical Axe scans.
 
 Changing autoplay, hidden-slide semantics, or multi-Slide paging requires a
 new design review.
+
+## 21. Internationalization
+
+Previous, next, picker, carousel-role, and slide-role text use separate stable
+keys recorded in the structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/ccarousel/api.yml).
+Server `tr()` supplies initial accessible attributes and `$c-tr` updates them
+in place. Explicit label inputs win; `role_description=None` deliberately omits
+the related `aria-roledescription` and registers no binding.

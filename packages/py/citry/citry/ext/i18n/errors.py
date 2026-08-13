@@ -6,8 +6,8 @@ class I18nError(Exception):
 
 
 class I18nNotConfiguredError(I18nError):
-    """Raised when configured i18n behavior is used on a dormant engine."""
+    """Raised when an i18n operation needs settings or messages that are absent."""
 
 
 class I18nRuntimeUnavailableError(I18nError):
-    """Raised for an API whose production runtime has not been installed yet."""
+    """Raised when the requested i18n operation cannot run in the current context."""

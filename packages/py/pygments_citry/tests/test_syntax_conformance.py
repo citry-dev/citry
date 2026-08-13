@@ -39,6 +39,10 @@ def _has_role(token: Token, role: str) -> bool:
         return token in Name.Function
     if role == "css":
         return token in Keyword.Constant
+    if role == "message-id":
+        return token in Name.Constant
+    if role == "message-variable":
+        return token in Name.Variable
     if role == "comment":
         return token in Comment
     if role == "text":

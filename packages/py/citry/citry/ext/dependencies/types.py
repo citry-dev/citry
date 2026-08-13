@@ -29,6 +29,7 @@ from citry.attrs import format_attrs
 from citry.util.html import Markup
 
 if TYPE_CHECKING:
+    from citry._owned_resource import _OwnedResource
     from citry.component import Component
 
 ScriptType: TypeAlias = Literal["css", "js"]
@@ -230,6 +231,8 @@ class Script(Dependency):
     Only applies to classic scripts (no ``type`` attribute or a JS MIME
     type); ``module``/``importmap``/other types are never wrapped.
     """
+
+    _owned_resource: _OwnedResource | None = field(default=None, init=False, repr=False, compare=False)
 
     def to_json(self) -> dict[str, Any]:
         """Serialize for cache storage; the inverse of :meth:`from_json`."""

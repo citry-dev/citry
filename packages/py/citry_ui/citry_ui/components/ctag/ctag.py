@@ -9,6 +9,7 @@ from typing import Any, Literal, TypedDict
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
+from citry_ui.components._i18n import uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CTagSelectionMode = Literal["none", "single", "multiple"]
@@ -209,6 +210,7 @@ class _TagContext:
     actionable: bool
     removable: bool
     remove_label: str
+    catalog_remove_label: bool
     variant: str
     size: str
     entries: list[_TagEntry] = field(default_factory=list)
@@ -216,6 +218,9 @@ class _TagContext:
 
 
 class CTagGroup(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         label: str
@@ -253,7 +258,11 @@ class CTagGroup(LibraryComponent):
             validate_boolean("CTagGroup", name, getattr(kwargs, name))
         if kwargs.mandatory and mode == "none":
             raise ValueError("CTagGroup mandatory requires a selectable mode.")
-        remove_label = _plain("CTagGroup remove_label", kwargs.remove_label)
+        catalog_remove_label = uses_catalog_default(self, "remove_label")
+        remove_label = _plain(
+            "CTagGroup remove_label",
+            self.i18n.tr("citry-ui-tag-remove") if catalog_remove_label else kwargs.remove_label,
+        )
         value = _normalize_server_value(kwargs.value, mode)
         selected = set(value if isinstance(value, tuple) else (() if value is None else (value,)))
         if kwargs.mandatory and not selected:
@@ -268,6 +277,7 @@ class CTagGroup(LibraryComponent):
             actionable=bool(kwargs.actionable),
             removable=bool(kwargs.removable),
             remove_label=str(remove_label),
+            catalog_remove_label=catalog_remove_label,
             variant=variant,
             size=size,
         )
@@ -758,6 +768,10 @@ class CTagGroup(LibraryComponent):
       })
     """
 
+    messages = """
+      citry-ui-tag-remove = Remove
+    """
+
 
 class CTag(LibraryComponent):
     @dataclass(slots=True)
@@ -806,6 +820,7 @@ class CTag(LibraryComponent):
             "tabindex": 0 if roving else -1 if interactive else None,
             "removable": context.removable,
             "remove_label": context.remove_label,
+            "catalog_remove_label": context.catalog_remove_label,
             "label_id": label_id,
             "remove_text_id": remove_text_id,
             "variant": context.variant,
@@ -859,7 +874,11 @@ class CTag(LibraryComponent):
               c-disabled="disabled"
               c-aria-labelledby="remove_text_id + ' ' + label_id"
             >
-              <span class="cui-tag__remove-text" c-id="remove_text_id">{{ remove_label }}</span>
+              <span
+                class="cui-tag__remove-text"
+                c-id="remove_text_id"
+                c-$c-tr:citry-ui-tag-remove="True if catalog_remove_label else None"
+              >{{ tr('citry-ui-tag-remove') if catalog_remove_label else remove_label }}</span>
               <span aria-hidden="true">&#215;</span>
             </button>
           </c-if>

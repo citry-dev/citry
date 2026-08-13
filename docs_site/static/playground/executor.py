@@ -20,7 +20,7 @@ import traceback
 from types import ModuleType
 from typing import Any
 
-from citry import CitryElement, CitryRender, citry
+from citry import Citry, CitryElement, CitryRender, Component, citry
 from citry.ext.events import EventRequest, EventsDispatcher, TransportContext
 from citry.util.routing import RouteHeaders, RouteRequest, RouteResponse, match_route
 
@@ -33,6 +33,7 @@ MAX_ASSET_PATHS = 32
 MAX_ASSET_PATH_BYTES = 512
 MAX_ASSET_BYTES = 1024 * 1024
 MAX_ASSET_BATCH_BYTES = 4 * 1024 * 1024
+MAX_CATALOG_BYTES = 256 * 1024
 PLAYGROUND_EVENT_PATH = "/playground/events"
 PLAYGROUND_ASSET_PREFIX = "/__citry_playground__"
 SUPPORTED_EVENT_ACTIONS = frozenset({"data", "event", "render", "state"})
@@ -282,6 +283,61 @@ def _fresh_module(source: str, extra: dict[str, Any]) -> ModuleType:
     return module
 
 
+def _catalog_field(field: object) -> dict[str, object]:
+    """Copy the small field contract used by browser completion and hover."""
+    return {
+        "name": field.name,
+        "required": field.required,
+        "typeDisplay": field.type_display,
+        "description": field.description,
+    }
+
+
+def _catalog_component(component: object) -> dict[str, object]:
+    """Project one stable component record without exposing runtime objects."""
+    return {
+        "definitionId": component.definition_id,
+        "name": component.name,
+        "aliases": list(component.aliases),
+        "className": component.class_name,
+        "importPath": component.import_path,
+        "description": component.description,
+        "builtin": component.builtin,
+        "kwargs": [_catalog_field(field) for field in component.schemas.kwargs.fields],
+        "slots": [_catalog_field(field) for field in component.schemas.slots.fields],
+    }
+
+
+def _catalog_snapshot(namespace: dict[str, Any]) -> dict[str, object] | None:
+    """Copy every registry reachable from the successful playground module."""
+    engines: dict[int, Citry] = {id(citry): citry}
+    try:
+        for value in namespace.values():
+            if isinstance(value, Citry):
+                engines[id(value)] = value
+            elif isinstance(value, type) and issubclass(value, Component):
+                owner = value.citry
+                if isinstance(owner, Citry):
+                    engines[id(owner)] = owner
+        registries = []
+        for engine in engines.values():
+            catalog = engine.inspect_components(include_builtins=True)
+            registries.append(
+                {
+                    "engineId": catalog.engine_id,
+                    "components": [_catalog_component(component) for component in catalog.components],
+                }
+            )
+        snapshot: dict[str, object] = {"schemaVersion": 1, "registries": registries}
+        if len(json.dumps(snapshot, ensure_ascii=False, allow_nan=False).encode()) > MAX_CATALOG_BYTES:
+            return None
+        return snapshot
+    except Exception:
+        # Introspection enriches the editor but must never turn a successful
+        # render into a failed playground run.
+        return None
+
+
 def _unsupported_event_result(envelope: object, message: str) -> dict[str, object]:
     if not isinstance(envelope, dict):
         request_id = None
@@ -498,11 +554,13 @@ def run_source_json(source: str, run_id: int = 1) -> str:
                 column=0,
             )
         html = namespace[result_name]
+        catalog = _catalog_snapshot(namespace)
         _runtime_state.namespace = namespace
         _runtime_state.run_id = run_id
         diagnostic = None
     except BaseException as error:
         html = None
+        catalog = None
         diagnostic = _diagnostic(error)
         if module is not None and sys.modules.get(PLAYGROUND_MODULE_NAME) is module:
             del sys.modules[PLAYGROUND_MODULE_NAME]
@@ -517,6 +575,7 @@ def run_source_json(source: str, run_id: int = 1) -> str:
             "stdout": stdout_text,
             "stderr": stderr_text,
             "diagnostic": diagnostic,
+            "catalog": catalog,
             "truncated": stdout_truncated or stderr_truncated,
         }
     )

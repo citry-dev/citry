@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, cast
 import pytest
 from lsprotocol import types
 
-from citry_lsp.engine import DocumentState, expression_shadows, template_variable_hover
+from citry_lsp.engine import DocumentState, expression_shadows, i18n_diagnostics, template_variable_hover
 from citry_lsp.project import load_project
 from citry_lsp.semantic import (
     semantic_completions,
@@ -905,6 +905,67 @@ async def test_inferred_return_types_support_hover_and_user_member_definition(tm
     assert signatures is not None
     assert any(
         "prefix: str" in signature.label and "count: int" in signature.label for signature in signatures.signatures
+    )
+
+
+@pytest.mark.asyncio
+async def test_i18n_formatter_template_global_exposes_members_and_signatures(tmp_path: Path) -> None:
+    app_file = tmp_path / "app.py"
+    source = '''\
+from citry import Citry, Component, CurrencyFormat, FormatRegistry
+
+engine = Citry(
+    autodiscover=False,
+    extensions_defaults={
+        "i18n": {
+            "source_locale": "en-US",
+            "locales": ("en-US",),
+            "formats": FormatRegistry(currency={"money": CurrencyFormat()}),
+        }
+    },
+)
+
+class Page(Component):
+    citry = engine
+    template = """
+    <p>{{ fmt.cur }}</p>
+    <p>{{ fmt.currency(12, "USD", format="money") }}</p>
+    <p>{{ fmt.currency(12, format="money") }}</p>
+    """
+    messages = """
+    hello = Hello
+    """
+'''
+    app_file.write_text(source, encoding="utf-8")
+    project = load_project(tmp_path, "app:engine")
+    document = DocumentState(app_file.as_uri(), "python", source, 1)
+    document.update(source, 1, project)
+    documents = {document.uri: document}
+    analyzer = TyAnalyzer(tmp_path)
+    try:
+        items = await semantic_completions(
+            analyzer,
+            document,
+            _position(source, "fmt.cur", len("fmt.cur")),
+            project,
+            documents,
+        )
+        signatures = await semantic_signature_help(
+            analyzer,
+            document,
+            _position(source, "fmt.currency(", len("fmt.currency(")),
+            project,
+            documents,
+        )
+        diagnostics = i18n_diagnostics(document, project)
+    finally:
+        await analyzer.close()
+
+    assert "currency" in {item.label for item in items}
+    assert signatures is not None
+    assert any("currency" in signature.label and "format" in signature.label for signature in signatures.signatures)
+    assert any(
+        finding.code == "citry.i18n.argument-invalid" and "currency" in finding.message for finding in diagnostics
     )
 
 

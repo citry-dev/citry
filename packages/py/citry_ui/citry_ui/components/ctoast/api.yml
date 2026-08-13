@@ -13,6 +13,7 @@ inputs:
       - {id: items, name: items, type: 'Sequence[CToastMessage]', default: {kind: literal, value: '()'}, effect: Ordered initial queue copied and validated once per render.}
       - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets exact Region identity and generated message relationships.}
       - {id: label, name: label, type: non-empty str, default: {kind: literal, value: Notifications}, effect: Names the Region.}
+      - {id: messages, name: messages, type: {display: 'CToastMessages | None', interfaces: [CToastMessages]}, default: {kind: literal, value: null}, effect: Overrides catalog-backed dismiss and action-announcement patterns per field.}
       - id: placement
         name: placement
         type: {display: '"block-start-start" | "block-start-end" | "block-end-start" | "block-end-end"', interfaces: [CToastPlacement]}
@@ -126,6 +127,12 @@ interfaces:
       - {id: action-label, name: action_label, type: 'str | None', meaning: Optional one-action Button label.}
       - {id: close-on-action, name: close_on_action, type: bool, meaning: Whether action completion dismisses the message.}
       - {id: dismissible, name: dismissible, type: bool, meaning: Whether explicit dismissal is available.}
+  - id: toast-messages
+    kind: record
+    name: CToastMessages
+    entries:
+      - {id: dismiss-label, name: dismiss_label, type: 'str | None', default: None, meaning: 'Overrides the catalog-backed dismiss pattern and must contain `{title}`.'}
+      - {id: action-announcement, name: action_announcement, type: 'str | None', default: None, meaning: 'Overrides the catalog-backed action announcement and must contain `{action_label}`.'}
   - id: toast-client-message
     kind: record
     name: CToastClientMessage
@@ -152,3 +159,11 @@ interfaces:
     entries:
       - {id: source, name: source, type: HTMLButtonElement, meaning: Activated action Button.}
       - {id: message, name: message, type: CToastClientMessage, meaning: Canonical public message snapshot.}
+
+translations:
+  - id: ctoast-region-translations
+    component: CToastRegion
+    entries:
+      - {id: region, key: citry-ui-toast-region, purpose: Names the notification region., variables: None, override: '`label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: dismiss, key: citry-ui-toast-dismiss, purpose: Names each toast dismiss control., variables: 'title: str', override: '`messages.dismiss_label`', updates: '$c-tr handles initial items; `i18n.bind()` handles browser-created items.'}
+      - {id: action-available, key: citry-ui-toast-action-available, purpose: Announces that the toast exposes an action., variables: 'action_label: str', override: '`messages.action_announcement`', updates: 'One-shot `i18n.tr()` when the toast is added.'}

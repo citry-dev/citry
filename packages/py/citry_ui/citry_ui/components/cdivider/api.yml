@@ -76,3 +76,5 @@ interfaces:
       - {id: input-type-aliases-cdivider-inset, name: CDividerInset, definition: 'Literal["none", "start", "end", "both"]'}
       - {id: input-type-aliases-cdivider-label-pos, name: CDividerLabelPos, definition: 'Literal["start", "center", "end"]'}
   - {id: cdivider-default-slot-data, kind: record, name: CDividerDefaultSlotData, entries: []}
+
+translations: []

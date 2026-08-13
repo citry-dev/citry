@@ -78,6 +78,7 @@ def test_project_worker_captures_output_and_returns_copied_registry(tmp_path):
         "print('project says hello')\n"
         "engine = Citry(\n"
         "    autodiscover=False,\n"
+        "    security_csp='warn',\n"
         "    lint=LintSettings(template_variables={'request': str}),\n"
         ")\n"
         "class Card(Component):\n"
@@ -97,6 +98,7 @@ def test_project_worker_captures_output_and_returns_copied_registry(tmp_path):
 
     assert state.status.mode == "registry"
     assert state.status.registry_ready is True
+    assert state.security_csp == "warn"
     assert state.status.message is not None
     assert "project says hello" in state.status.message
     assert state.analysis is not None
@@ -128,6 +130,128 @@ def test_project_worker_captures_output_and_returns_copied_registry(tmp_path):
         "Card.Lint",
         tmp_path / "app.py",
     )
+
+
+def test_syntax_only_project_does_not_guess_a_csp_mode(tmp_path):
+    state = load_project(tmp_path, None)
+
+    assert state.status.mode == "syntax-only"
+    assert state.security_csp is None
+
+
+@pytest.mark.parametrize(
+    "engine_settings",
+    [
+        None,
+        {"version": 2, "security_csp": "strict"},
+        {"version": 1, "security_csp": "future"},
+        {"version": 1, "security_csp": "strict", "extra": True},
+    ],
+)
+def test_engine_settings_worker_envelope_fails_closed(tmp_path, monkeypatch, engine_settings):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "settings_app.py").write_text(
+        "from citry import Citry\nengine = Citry(autodiscover=False)\n",
+        encoding="utf-8",
+    )
+    payload = app_worker._run("settings_app:engine", tmp_path)
+    if engine_settings is None:
+        payload.pop("engine_settings")
+    else:
+        payload["engine_settings"] = engine_settings
+
+    state = project_module._project_from_worker_output(
+        tmp_path,
+        "settings_app:engine",
+        0,
+        json.dumps(payload),
+        "",
+    )
+
+    assert state.status.mode == "syntax-only"
+    assert "engine" in (state.status.message or "")
+
+
+def test_project_worker_copies_the_checked_i18n_index(tmp_path):
+    app_file = tmp_path / "app.py"
+    app_file.write_text(
+        dedent(
+            '''
+            from citry import Citry, Component
+            from citry.ext.i18n import FormatRegistry, NumberFormat
+
+            engine = Citry(
+                autodiscover=False,
+                extensions_defaults={
+                    "i18n": {
+                        "source_locale": "en-US",
+                        "locales": ("en-US",),
+                        "formats": FormatRegistry(number={"measurement": NumberFormat()}),
+                    }
+                },
+            )
+
+            class Page(Component):
+                citry = engine
+                template = '{{ tr("account-greeting", name="Ada") }}'
+                messages = """
+                # @param {str} $name - User name.
+                account-greeting = Welcome, { $name }.
+                account-wrapper = { account-greeting }
+                """
+            ''',
+        ),
+        encoding="utf-8",
+    )
+
+    state = load_project(tmp_path, "app:engine")
+
+    assert state.i18n is not None
+    assert state.i18n.configured
+    assert state.i18n.message_ids() == ("account-greeting", "account-wrapper")
+    greeting = state.i18n.output("account-greeting")
+    assert greeting is not None
+    assert greeting.definition.path == f"{app_file}::Page.messages"
+    assert [(item.name, item.type_name, item.descriptions) for item in greeting.parameters] == [
+        ("name", "str", ("User name.",))
+    ]
+    assert state.i18n.profile_names("format", "number") == ("measurement",)
+    assert state.i18n.references[0].token == "account-greeting"  # noqa: S105 - Fluent key, not a secret
+
+
+def test_project_worker_indexes_component_messages_in_zero_configuration_source_mode(tmp_path):
+    app_file = tmp_path / "app.py"
+    app_file.write_text(
+        dedent(
+            """
+            from citry import Citry, Component
+
+            engine = Citry(autodiscover=False)
+
+            class Messages(Component):
+                citry = engine
+
+                class I18n:
+                    messages_locale = "en-US"
+
+                messages = "account-title = Account"
+
+            class Page(Component):
+                citry = engine
+                template = '{{ tr("account-title") }}'
+            """,
+        ),
+        encoding="utf-8",
+    )
+
+    state = load_project(tmp_path, "app:engine")
+
+    assert state.i18n is not None
+    assert state.i18n.available
+    assert not state.i18n.configured
+    title = state.i18n.output("account-title")
+    assert title is not None
+    assert title.definition.path == f"{app_file}::Messages.messages"
 
 
 def test_worker_memoizes_class_fingerprints_across_data_and_asset_channels(tmp_path, monkeypatch):

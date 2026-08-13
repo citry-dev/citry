@@ -41,6 +41,18 @@
 - Reuse VS Code's HTML, CSS, and JavaScript providers for completion, hover,
   and definitions inside exact Citry asset strings and standalone Citry
   templates, with no app configuration required.
+- Highlight Fluent in direct component `messages` blocks and standalone `.ftl`
+  files with one bundled grammar. Citry's formatting commands leave Fluent
+  source unchanged.
+- Give every syntactic Python call target in a Citry template the standard
+  function or method TextMate scope, including direct calls and member calls in
+  interpolations, conditions, loops, and Python-valued component attributes.
+- Complete, hover, and navigate literal i18n message keys and named formatter
+  or parser profiles across Fluent, Python, Citry templates, Alpine expressions,
+  and component JavaScript through the checked project index.
+- Highlight direct `$c-tr` values as JavaScript while keeping `c-$c-tr` values
+  in Python, with language-server navigation and diagnostics for the directive's
+  checked message, output, target, and named values.
 - Add PascalCase component suggestions, precise component-class navigation,
   and typed slot-data completion and hover through `citry-lsp`.
 - Add syntax-only structural-tag and Citry directive snippets, lexical

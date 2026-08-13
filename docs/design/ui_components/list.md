@@ -84,3 +84,12 @@ The guide must show semantic content, ordered markers, navigation links/current 
 ## 20. Open decisions and deferred work
 
 Real projects will determine whether a dedicated Subheader, ListGroup, or selection model is warranted. Those features must not accrete onto `CListItem` without a fresh interaction contract.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

@@ -202,3 +202,12 @@ Deferred: type mini-language, automatic child measurement, content-switching
 wrapper, table/date-picker presets, shimmer direction customization, and a
 dedicated SkeletonGroup. Revisit only when repeated application markup proves
 a concise helper can remain transparent.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

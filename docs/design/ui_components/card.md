@@ -486,3 +486,12 @@ Deferred work:
   semantic job; and
 - horizontal layout remains public-CSS composition unless repeated call sites
   show that one responsive orientation contract is materially clearer.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

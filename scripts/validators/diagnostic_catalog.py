@@ -14,7 +14,7 @@ CATALOG_PATH = ROOT / "packages/protocol/diagnostics/v1/catalog.json"
 GENERATOR_PATH = ROOT / "scripts/generate_diagnostic_catalog.py"
 CODE_RE = re.compile(
     r"(?P<quote>['\"])(?P<code>citry\."
-    r"(?:parse|template|component|check|format|python)\."
+    r"(?:parse|template|component|csp|check|format|i18n|python)\."
     r"[a-z0-9][a-z0-9.-]*)(?P=quote)"
 )
 CODE_RE_FULL = re.compile(r"citry\.[a-z0-9]+(?:[.-][a-z0-9]+)*\Z")

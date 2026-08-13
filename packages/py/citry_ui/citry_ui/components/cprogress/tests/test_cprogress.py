@@ -88,7 +88,7 @@ def test_determinate_custom_range_value_text_and_root_styling():
     assert 'data-intent="success"' in root.group(0)
     assert 'data-size="lg"' in root.group(0)
     assert 'data-shape="pill"' in root.group(0)
-    assert "Scanning samples: 6 of 10</progress>" in html
+    assert "\u2068Scanning samples\u2069: \u20686\u2069 of \u206810\u2069</progress>" in html
 
 
 @pytest.mark.parametrize(

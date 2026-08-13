@@ -208,3 +208,12 @@ and public customization.
 Collapsible panels, collapse callbacks, imperative reset/store APIs, CSS-unit
 sizes, responsive orientation shortcuts, automatic persistence, and grid-like
 two-axis resizing are deferred for separate design evidence.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

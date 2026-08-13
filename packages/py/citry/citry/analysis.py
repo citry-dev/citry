@@ -15,6 +15,7 @@ from itertools import pairwise
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal
 
+from citry._alpine_csp import classify_alpine_csp
 from citry._browser_expressions import (
     SERVER_EVENT_CALL_NAMES,
     BrowserBinding,
@@ -26,9 +27,13 @@ from citry._browser_expressions import (
     BrowserExpression,
     BrowserExpressionMode,
     BrowserFreeReference,
+    BrowserI18nBindingDirective,
+    BrowserI18nMessageCall,
+    BrowserI18nProfileCall,
     BrowserIdentifier,
     BrowserLiteralCall,
     BrowserMember,
+    BrowserMemberLiteralCall,
     BrowserObjectProperty,
     BrowserProp,
     BrowserScopeWrite,
@@ -44,11 +49,16 @@ from citry._browser_expressions import (
     browser_declarative_events,
     browser_expression_at,
     browser_expressions,
+    browser_i18n_bind_calls,
+    browser_i18n_binding_directives,
+    browser_i18n_message_calls,
+    browser_i18n_profile_calls,
     browser_identifier_at,
     browser_identifiers,
     browser_literal_calls,
     browser_literal_wire_type,
     browser_member_at,
+    browser_member_literal_calls,
 )
 from citry._browser_expressions import (
     python_event_handler_coordinates as _python_event_handler_coordinates,
@@ -56,6 +66,7 @@ from citry._browser_expressions import (
 from citry._diagnostic_catalog import (
     ALPINE_UNKNOWN_VARIABLE,
     COMPONENT_JS_UNKNOWN_VARIABLE,
+    CSP_INCOMPATIBLE_BROWSER_CODE,
     FORMAT_EMBEDDED_INTERPOLATION_UNSUPPORTED,
     FORMAT_EMBEDDED_LANGUAGE_UNSUPPORTED,
     FORMAT_HOST_SYNTAX,
@@ -71,6 +82,14 @@ from citry._json_wire import JsonWireField, JsonWireKind, JsonWireType, merge_js
 from citry._json_wire import json_wire_type_from_annotation as _json_wire_type_from_annotation
 from citry._json_wire import json_wire_type_from_expression as _json_wire_type_from_expression
 from citry._linting import TemplateLintInfo
+from citry._portable_ide import (
+    ComponentNameMatch,
+    TemplateTagUse,
+    UnknownComponentUse,
+    component_name_match,
+    template_tag_uses,
+    unknown_component_uses,
+)
 from citry._template_python import ShadowPythonCopy as _ShadowPythonCopy
 from citry._template_python import ShadowPythonDocument as _ShadowPythonDocument
 from citry._template_python import ShadowPythonSourceCopy as _ShadowPythonSourceCopy
@@ -222,6 +241,17 @@ class AlpineLintFinding:
     """Report one OXC-proven free root missing from a browser namespace."""
 
     name: str
+    message: str
+    code: str
+    severity: Literal["warning", "error"]
+    start_index: int
+    end_index: int
+
+
+@dataclass(frozen=True, slots=True)
+class CspCompatibilityFinding:
+    """Report one browser host incompatible with the selected Alpine CSP build."""
+
     message: str
     code: str
     severity: Literal["warning", "error"]
@@ -502,6 +532,82 @@ def lint_unknown_alpine_variables(
                 )
             )
     return tuple(findings)
+
+
+def lint_csp_compatibility(
+    expressions: Sequence[BrowserExpression],
+    consumers: Sequence[AlpineLintConsumer],
+    mode: Literal["off", "warn", "strict"] | None,
+) -> tuple[CspCompatibilityFinding, ...]:
+    """Diagnose source-proven incompatibilities with Alpine CSP 3.16.1."""
+    if mode in {None, "off"}:
+        return ()
+    if mode not in {"warn", "strict"}:
+        msg = f"Unknown CSP compatibility mode: {mode!r}"
+        raise ValueError(msg)
+    severity: Literal["warning", "error"] = "warning" if mode == "warn" else "error"
+    findings: list[CspCompatibilityFinding] = []
+    seen: set[tuple[int, int, str]] = set()
+    for expression in expressions:
+        classification = classify_alpine_csp(expression)
+        if classification.outcome == "incompatible":
+            detail = classification.detail or "this browser expression"
+            _append_csp_finding(
+                findings,
+                seen,
+                detail,
+                severity,
+                classification.start_index,
+                classification.end_index,
+            )
+            continue
+        if not consumers:
+            continue
+        analysis = analyze_browser_expression(expression)
+        if not analysis.valid:
+            continue
+        lexical = frozenset(expression.bindings)
+        for reference in analysis.references:
+            if (
+                reference.name == "undefined"
+                or reference.name in lexical
+                or reference.name not in COMPONENT_JS_AMBIENT_NAMES
+            ):
+                continue
+            if any(reference.name not in consumer.known_names for consumer in consumers):
+                _append_csp_finding(
+                    findings,
+                    seen,
+                    f"the unprovided JavaScript global {reference.name!r}",
+                    severity,
+                    reference.start_index,
+                    reference.end_index,
+                )
+                break
+    return tuple(findings)
+
+
+def _append_csp_finding(
+    findings: list[CspCompatibilityFinding],
+    seen: set[tuple[int, int, str]],
+    detail: str,
+    severity: Literal["warning", "error"],
+    start_index: int,
+    end_index: int,
+) -> None:
+    key = (start_index, end_index, CSP_INCOMPATIBLE_BROWSER_CODE)
+    if key in seen:
+        return
+    seen.add(key)
+    findings.append(
+        CspCompatibilityFinding(
+            message=render_diagnostic(CSP_INCOMPATIBLE_BROWSER_CODE, detail=detail),
+            code=CSP_INCOMPATIBLE_BROWSER_CODE,
+            severity=severity,
+            start_index=start_index,
+            end_index=end_index,
+        )
+    )
 
 
 def lint_unknown_component_js_variables(
@@ -3679,15 +3785,21 @@ __all__ = [
     "BrowserExpression",
     "BrowserExpressionMode",
     "BrowserFreeReference",
+    "BrowserI18nBindingDirective",
+    "BrowserI18nMessageCall",
+    "BrowserI18nProfileCall",
     "BrowserIdentifier",
     "BrowserLiteralCall",
     "BrowserMember",
+    "BrowserMemberLiteralCall",
     "BrowserObjectProperty",
     "BrowserProp",
     "BrowserScopeWrite",
     "BrowserSourceAnalysis",
     "ComponentJsLintConsumer",
     "ComponentJsLintFinding",
+    "ComponentNameMatch",
+    "CspCompatibilityFinding",
     "CssDataCompletion",
     "CssDataReference",
     "JsonWireField",
@@ -3718,6 +3830,8 @@ __all__ = [
     "TemplatePythonControl",
     "TemplatePythonQuery",
     "TemplatePythonRoot",
+    "TemplateTagUse",
+    "UnknownComponentUse",
     "analyze_browser_component_source",
     "analyze_browser_expression",
     "analyze_css_data_source",
@@ -3732,13 +3846,19 @@ __all__ = [
     "browser_declarative_events",
     "browser_expression_at",
     "browser_expressions",
+    "browser_i18n_bind_calls",
+    "browser_i18n_binding_directives",
+    "browser_i18n_message_calls",
+    "browser_i18n_profile_calls",
     "browser_identifier_at",
     "browser_identifiers",
     "browser_literal_calls",
     "browser_literal_wire_type",
     "browser_member_at",
+    "browser_member_literal_calls",
     "build_inferred_template_shadow",
     "build_schema_template_shadow",
+    "component_name_match",
     "css_data_completion_at",
     "css_data_reference_at",
     "css_data_references",
@@ -3749,6 +3869,7 @@ __all__ = [
     "format_python_templates",
     "json_wire_type_from_annotation",
     "json_wire_type_from_expression",
+    "lint_csp_compatibility",
     "lint_unknown_alpine_variables",
     "lint_unknown_component_js_variables",
     "lint_unknown_template_variables",
@@ -3762,4 +3883,6 @@ __all__ = [
     "python_event_handler_range",
     "template_python_queries",
     "template_python_query_at",
+    "template_tag_uses",
+    "unknown_component_uses",
 ]

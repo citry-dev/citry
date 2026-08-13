@@ -6,16 +6,20 @@ from dataclasses import field
 
 import pytest
 
-from citry import Citry as _Citry
 from citry import (
+    CacheConfig,
     CitryRender,
     Component,
+    DependenciesConfig,
+    Events,
     Extension,
     ExtensionCommand,
+    I18n,
     LintSettings,
     Slot,
     TemplateNamespaceContribution,
 )
+from citry import Citry as _Citry
 from citry.ext.events.openapi import OpenApiCommand
 from citry.ext.i18n.commands import I18N_COMMANDS
 
@@ -260,8 +264,37 @@ class TestManagerConstruction:
         class Card(Component):
             citry = app
 
+        assert Component.Cache is None
+        assert Component.Dependencies is None
         assert Component.Events is None
+        assert Component.I18n is None
+        assert issubclass(Card.Cache, CacheConfig)
+        assert issubclass(Card.Dependencies, DependenciesConfig)
         assert Card.Events.component_class is Card
+        assert issubclass(Card.Events, Events)
+        assert issubclass(Card.I18n, I18n)
+
+    def test_builtin_extension_instance_configs_are_declared_component_api(self):
+        captured = {}
+
+        class Capture(Extension):
+            name = "capture"
+
+            def on_component_data(self, ctx):
+                captured["component"] = ctx.component
+
+        app = _Citry(extensions=[Capture])
+
+        class Card(Component):
+            citry = app
+            template = "<p>hello</p>"
+
+        str(Card())
+        component = captured["component"]
+        assert isinstance(component.cache, CacheConfig)
+        assert isinstance(component.dependencies, DependenciesConfig)
+        assert isinstance(component.events, Events)
+        assert isinstance(component.i18n, I18n)
 
 
 class TestClassAndRegistrationHooks:
@@ -721,7 +754,7 @@ class TestSmartDispatch:
         mgr = app.extensions
         inst = mgr.get_extension("partial")
         assert mgr._extensions_with_hook("on_component_input") == (inst,)
-        assert mgr._extensions_with_hook("on_component_rendered") == ()
+        assert mgr._extensions_with_hook("on_component_rendered") == (mgr.get_extension("i18n"),)
 
     def test_hook_extension_list_is_cached(self):
         class E(Extension):

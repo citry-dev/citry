@@ -16,6 +16,10 @@ groups:
         slug: button-group
         source: packages/py/citry_ui/citry_ui/components/cbutton_group/api.md
         nav_title: Button Group
+      - family: split-button
+        slug: split-button
+        source: packages/py/citry_ui/citry_ui/components/csplitbutton/api.md
+        nav_title: Split Button
       - family: toggle
         slug: toggle
         source: packages/py/citry_ui/citry_ui/components/ctoggle/api.md
@@ -59,6 +63,10 @@ groups:
         slug: multi-select
         source: packages/py/citry_ui/citry_ui/components/cmulti_select/api.md
         nav_title: MultiSelect
+      - family: tags-input
+        slug: tags-input
+        source: packages/py/citry_ui/citry_ui/components/ctags_input/api.md
+        nav_title: TagsInput
       - family: editable
         slug: editable
         source: packages/py/citry_ui/citry_ui/components/ceditable/api.md
@@ -81,6 +89,10 @@ groups:
         slug: container-grid
         source: packages/py/citry_ui/citry_ui/components/cgrid/api.md
         nav_title: Container and Grid
+      - family: scroll-area
+        slug: scroll-area
+        source: packages/py/citry_ui/citry_ui/components/cscroll_area/api.md
+        nav_title: ScrollArea
       - family: divider
         slug: divider
         source: packages/py/citry_ui/citry_ui/components/cdivider/api.md
@@ -94,6 +106,9 @@ groups:
       - family: avatar
         slug: avatar
         source: packages/py/citry_ui/citry_ui/components/cavatar/api.md
+      - family: image
+        slug: image
+        source: packages/py/citry_ui/citry_ui/components/cimage/api.md
       - family: badge
         slug: badge
         source: packages/py/citry_ui/citry_ui/components/cbadge/api.md
@@ -181,6 +196,14 @@ groups:
       - family: menu
         slug: menu
         source: packages/py/citry_ui/citry_ui/components/cmenu/api.md
+      - family: context-menu
+        slug: context-menu
+        source: packages/py/citry_ui/citry_ui/components/ccontext_menu/api.md
+        nav_title: ContextMenu
+      - family: command-palette
+        slug: command-palette
+        source: packages/py/citry_ui/citry_ui/components/ccommand_palette/api.md
+        nav_title: CommandPalette
       - family: popover
         slug: popover
         source: packages/py/citry_ui/citry_ui/components/cpopover/api.md

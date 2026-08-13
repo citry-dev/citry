@@ -75,6 +75,22 @@ areas:
           - { title: Cache rendered output, path: /advanced/caching/, needs_review: true }
           - { title: Cache backends, path: /advanced/cache-backends/, needs_review: true }
 
+      - label: I18n
+        collapsible: true
+        section_style: true
+        items:
+          - { title: I18n overview, path: /i18n/ }
+          - { title: Locales and context, path: /i18n/locale-context/ }
+          - { title: Write messages, path: /i18n/messages/ }
+          - { title: Organize catalogs, path: /i18n/catalogs/ }
+          - { title: Rich messages, path: /i18n/rich-messages/ }
+          - { title: Format values, path: /i18n/formatting/ }
+          - { title: Parse localized input, path: /i18n/parsing/ }
+          - { title: Browser i18n, path: /i18n/browser/ }
+          - { title: Language direction and accessibility, path: /i18n/direction-and-bidi/ }
+          - { title: Translation workflow and tooling, path: /i18n/workflow/ }
+          - { title: Production and deployment, path: /i18n/production/ }
+
       - label: Advanced
         collapsible: true
         section_style: true

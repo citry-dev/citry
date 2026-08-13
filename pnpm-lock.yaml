@@ -32,6 +32,9 @@ importers:
 
   docs_site/_internal/frontend:
     devDependencies:
+      '@citry/codemirror-lang-fluent':
+        specifier: workspace:*
+        version: link:../../../packages/js/codemirror-lang-fluent
       '@codemirror/autocomplete':
         specifier: 6.20.3
         version: 6.20.3
@@ -53,6 +56,9 @@ importers:
       '@codemirror/language':
         specifier: 6.12.4
         version: 6.12.4
+      '@codemirror/lint':
+        specifier: 6.9.7
+        version: 6.9.7
       '@codemirror/search':
         specifier: 6.7.1
         version: 6.7.1
@@ -108,18 +114,24 @@ importers:
 
   packages/js/citry-client:
     dependencies:
+      '@alpinejs/csp':
+        specifier: 3.16.1
+        version: 3.16.1
       '@alpinejs/morph':
-        specifier: 3.15.12
-        version: 3.15.12
+        specifier: 3.16.1
+        version: 3.16.1
       '@citry/protocol-client-graph-v1':
         specifier: workspace:*
         version: link:../../protocol/client_graph/v1/js
       '@citry/protocol-events-v1':
         specifier: workspace:*
         version: link:../../protocol/events/v1/js
+      '@fluent/bundle':
+        specifier: 0.19.1
+        version: 0.19.1
       alpinejs:
-        specifier: 3.15.12
-        version: 3.15.12
+        specifier: 3.16.1
+        version: 3.16.1
     devDependencies:
       '@biomejs/biome':
         specifier: 2.5.7
@@ -130,6 +142,19 @@ importers:
       typescript:
         specifier: 7.0.2
         version: 7.0.2
+
+  packages/js/codemirror-lang-fluent:
+    dependencies:
+      '@codemirror/language':
+        specifier: 6.12.4
+        version: 6.12.4
+      '@lezer/highlight':
+        specifier: 1.2.3
+        version: 1.2.3
+    devDependencies:
+      '@biomejs/biome':
+        specifier: 2.5.7
+        version: 2.5.7
 
   packages/protocol/client_graph/v1/js:
     devDependencies:
@@ -184,8 +209,11 @@ packages:
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
 
-  '@alpinejs/morph@3.15.12':
-    resolution: {integrity: sha512-x/QZUsbE3uMAVVzsEjSZf2xbjgzIqUZ+HW9GUtePheyIrOgHlqZETXBq1DpXg6H8kA0099SyAI9YWnKFDS31cg==}
+  '@alpinejs/csp@3.16.1':
+    resolution: {integrity: sha512-G5GZt26s2+TgQ8PetwTQ1S4YDHoKIFJ8THe3sOyMBYyHmMUb26TmC06xU+LzqLV4rxsLKFBsfNolveM9EnV6BA==}
+
+  '@alpinejs/morph@3.16.1':
+    resolution: {integrity: sha512-HoTa8sqgNx6Ezmy8x0IwdF48Xmllttb7SHSmN0NhjGc6PNDqnrSShd3qyAcoxkqftliUf81qwEPwCRXodgWEWg==}
 
   '@azu/format-text@1.0.2':
     resolution: {integrity: sha512-Swi4N7Edy1Eqq82GxgEECXSSLyn6GOb5htRFPzBDdUkECGXtlf12ynO5oJSpWKPwCaUssOu7NfhDcCWpIC6Ywg==}
@@ -512,6 +540,10 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fluent/bundle@0.19.1':
+    resolution: {integrity: sha512-SWJLZrPamDPsJlFFOW1nkgN0j0rbPbmSdmK0XAoXlyqKieLtMVl4vzng3aR5pwKoUx0scug8+YY2oct3fdfy9A==}
+    engines: {node: '>=18.0.0', npm: '>=7.0.0'}
 
   '@formatjs/ecma402-abstract@2.3.6':
     resolution: {integrity: sha512-HJnTFeRM2kVFVr5gr5kH1XP6K0JcJtE7Lzvtr3FS/so5f1kpsqqqxy5JF+FRaO6H2qmcMfAUIox7AJteieRtVw==}
@@ -1801,8 +1833,8 @@ packages:
   ajv@8.20.0:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
 
-  alpinejs@3.15.12:
-    resolution: {integrity: sha512-nJvPAQVNPdZZ0NrExJ/kzQco3ijR8LwvCOadQecllESiqT4NyZ/57sN9V2XyvhlBGAbmlKYgeWZvYdKq99ij/Q==}
+  alpinejs@3.16.1:
+    resolution: {integrity: sha512-QXcW8MK9JoG8GZ7vCt2cXJlcEPIA7Xk/7IQ1+L2iLp7sXcIxct0PrgidmHzK97gD9QlfUjHXPxujdZ1mC2PYVg==}
 
   ansi-colors@4.1.3:
     resolution: {integrity: sha512-/6w/C21Pm1A7aZitlI5Ni/2J6FFQN8i1Cvz3kHABAAbw93v/NlvKdVOqz7CCWz/3iv/JplRSEEZ83XION15ovw==}
@@ -4506,7 +4538,11 @@ snapshots:
 
   '@adobe/css-tools@4.5.0': {}
 
-  '@alpinejs/morph@3.15.12': {}
+  '@alpinejs/csp@3.16.1':
+    dependencies:
+      '@vue/reactivity': 3.1.5
+
+  '@alpinejs/morph@3.16.1': {}
 
   '@azu/format-text@1.0.2': {}
 
@@ -4834,6 +4870,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.1':
     optional: true
+
+  '@fluent/bundle@0.19.1': {}
 
   '@formatjs/ecma402-abstract@2.3.6':
     dependencies:
@@ -6053,7 +6091,7 @@ snapshots:
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
-  alpinejs@3.15.12:
+  alpinejs@3.16.1:
     dependencies:
       '@vue/reactivity': 3.1.5
 

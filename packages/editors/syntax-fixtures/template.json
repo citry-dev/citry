@@ -30,12 +30,14 @@
     {
       "name": "server and client directive channels",
       "language": "citry-html",
-      "source": "<c-Card\n  $c-props=\"{ open: true, count: localCount }\"\n  c-$c-props=\"props_for(card)\"\n  c-@click=\"handler_expr\"\n  c-class=\"'active' if selected else ''\"\n  #c-key=\"card.id\"\n/>\n<div #c-ignore></div>",
+      "source": "<c-Card\n  $c-props=\"{ open: true, count: localCount }\"\n  c-$c-props=\"props_for(card)\"\n  c-@click=\"handler_expr\"\n  c-class=\"'active' if selected else ''\"\n  #c-key=\"card.id\"\n/>\n<div $c-tr:notice[aria-label]=\"{ title: toast.title }\" #c-ignore></div>",
       "allow_errors": false,
       "assertions": [
         {"text": "$c-props", "role": "attribute"},
         {"text": "localCount", "role": "javascript"},
         {"text": "c-$c-props", "role": "attribute"},
+        {"text": "$c-tr:notice[aria-label]", "role": "attribute"},
+        {"text": "toast", "role": "javascript"},
         {"text": "props_for", "role": "python"},
         {"text": "c-@click", "role": "attribute"},
         {"text": "handler_expr", "role": "python"},
@@ -120,13 +122,15 @@
     {
       "name": "complete component embeds",
       "language": "citry",
-      "source": "class Card(Component):\n    template = \"\"\"\n      <article>{{ title }}</article>\n    \"\"\"\n    js = \"\"\"\n      const ready = true;\n    \"\"\"\n    css = \"\"\"\n      article { border-color: rebeccapurple; }\n    \"\"\"\n",
+      "source": "class Card(Component):\n    template = \"\"\"\n      <article>{{ title }}</article>\n    \"\"\"\n    js = \"\"\"\n      const ready = true;\n    \"\"\"\n    css = \"\"\"\n      article { border-color: rebeccapurple; }\n    \"\"\"\n    messages = \"\"\"\n      # @param {str} $name - Account name.\n      account-title = Welcome, { $name }.\n    \"\"\"\n",
       "allow_errors": false,
       "assertions": [
         {"text": "article", "role": "tag"},
         {"text": "title", "role": "python"},
         {"text": "true", "role": "javascript"},
-        {"text": "rebeccapurple", "role": "css"}
+        {"text": "rebeccapurple", "role": "css"},
+        {"text": "account-title", "role": "message-id"},
+        {"text": "$name", "occurrence": 2, "role": "message-variable"}
       ]
     },
     {

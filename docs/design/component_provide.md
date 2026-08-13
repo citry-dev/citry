@@ -511,7 +511,7 @@ Citry should not copy the old storage or traversal:
 - the old plugin has no `unprovide`, graph-revision ownership, morph
   transaction, or tests.
 
-Alpine 3.15.12 does make the magic surface feasible. `Alpine.magic()` receives
+Alpine 3.16.1 makes the magic surface feasible. `Alpine.magic()` receives
 the expression element, and its current implementation supplies memoized
 element-bound utilities with cleanup tied to removal. Alpine's teleport
 implementation also preserves a backlink to the authored template scope.
@@ -524,10 +524,10 @@ already required by [`alpinejs.md`](alpinejs.md#62-private-apis).
 The primary upstream references are:
 
 - [Alpine extension and magic documentation](https://alpinejs.dev/advanced/extending);
-- [Alpine 3.15.12 magic source](https://github.com/alpinejs/alpine/blob/v3.15.12/packages/alpinejs/src/magics.js);
-- [Alpine 3.15.12 scope source](https://github.com/alpinejs/alpine/blob/v3.15.12/packages/alpinejs/src/scope.js);
+- [Alpine 3.16.1 magic source](https://github.com/alpinejs/alpine/blob/v3.16.1/packages/alpinejs/src/magics.js);
+- [Alpine 3.16.1 scope source](https://github.com/alpinejs/alpine/blob/v3.16.1/packages/alpinejs/src/scope.js);
 - [Alpine teleport documentation](https://alpinejs.dev/directives/teleport);
-- [Alpine 3.15.12 teleport source](https://github.com/alpinejs/alpine/blob/v3.15.12/packages/alpinejs/src/directives/x-teleport.js);
+- [Alpine 3.16.1 teleport source](https://github.com/alpinejs/alpine/blob/v3.16.1/packages/alpinejs/src/directives/x-teleport.js);
 - [Vue provide/inject documentation](https://vuejs.org/guide/components/provide-inject);
 - [Vue runtime provide/inject source](https://github.com/vuejs/core/blob/v3.5.18/packages/runtime-core/src/apiInject.ts).
 
@@ -1019,7 +1019,7 @@ first browser coverage have landed. Cases not yet named in
   partial installation;
 - exact value identity and reactive-object updates without automatic
   provider-value wrapping;
-- Chromium, Firefox, and WebKit behavior plus an Alpine 3.15.12 canary that
+- Chromium, Firefox, and WebKit behavior plus an Alpine 3.16.1 canary that
   fails when directive-invocation cleanup, magic utilities, or teleport
   ancestry changes.
 

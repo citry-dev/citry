@@ -550,54 +550,57 @@ _EDITOR_MARKS: tuple[dict[str, Any], ...] = (
 _EDITOR_NOTES: tuple[dict[str, str], ...] = (
     {
         "id": "typed-data",
-        "label": "01 / Data is inferred",
-        "title": "Returned dictionaries become typed editor data.",
-        "text": "Citry follows template_data() and js_data() keys into template and Alpine expressions, without a duplicate schema.",
+        "title": "Data from Python functions is recognized in template variables.",
+        "text": '`template_data()` returned `"title"`, which gives the `title` template variable its type.',
         "mark": "title-use",
     },
     {
-        "id": "python-navigation",
-        "label": "02 / Python stays connected",
-        "title": "Types and fields navigate across the source.",
-        "text": "Type Definition and Go to Definition follow TypedDicts, Kwargs fields, returned keys, and event payloads.",
-        "mark": "member-type-use",
-    },
-    {
-        "id": "child-contract",
-        "label": "03 / Child contracts are joined",
-        "title": "One component call connects three declarations.",
-        "text": "The tag opens the Python class, c-name opens Kwargs, and $c-props opens the child's JavaScript prop.",
-        "mark": "member-chip-use",
-    },
-    {
         "id": "nested-templates",
-        "label": "04 / HTML enters attributes",
         "title": "Nested templates keep full editor intelligence.",
-        "text": "Inside c-status, native HTML attributes retain documentation while template roots stay typed and navigable.",
+        "text": "Citry treats the inside of `c-status` as a nested template. A naive HTML linter would see just a string.",
         "mark": "nested-html-attribute",
     },
     {
         "id": "event-navigation",
-        "label": "05 / Events cross languages",
-        "title": "Browser event names open Python handlers.",
-        "text": "$sendEvent is typed from the handler signature, while literal event names validate and navigate to Python.",
+        "title": "Alpine expressions respect Python declarations.",
+        "text": "`$sendEvent`'s input is typed from the Python event handler.",
         "mark": "event-name",
     },
     {
         "id": "scope-seeding",
-        "label": "06 / Setup feeds Alpine",
-        "title": "Direct scope writes become typed variables.",
-        "text": "email and visibleMembers navigate from template expressions to the exact assignments inside $component.",
+        "title": "Alpine variables defined in $component are recognized.",
+        "text": "`email` and `visibleMembers` were defined in `$component`. The linter knows these are not unknown variables.",
         "mark": "email-use",
     },
     {
         "id": "diagnostics",
-        "label": "07 / Mistakes explain themselves",
-        "title": "Unknown names and event typos fail in place.",
-        "text": "Red squiggles carry the same diagnostic code, message, and documentation link shown by the extension.",
+        "title": "Unknown names and event typos are reported as errors.",
+        "text": "Focus or select an error to see its exact message.",
         "mark": "unknown-alpine-variable",
     },
 )
+
+
+def _inline_code_markup(text: str) -> Markup:
+    """Render paired backticks as inline code while escaping every authored character."""
+    parts = text.split("`")
+    if len(parts) % 2 == 0:
+        message = "Editor note inline code needs a closing backtick."
+        raise ValueError(message)
+
+    rendered: list[Markup] = []
+    for index, part in enumerate(parts):
+        if index % 2 == 0:
+            rendered.append(escape(part))
+            continue
+        # Empty spans are usually an authoring typo, so fail the docs build
+        # where the note is defined instead of shipping an invisible element.
+        if not part:
+            message = "Editor note inline code cannot be empty."
+            raise ValueError(message)
+        rendered.append(Markup("<code>{}</code>").format(part))
+    return Markup("").join(rendered)
+
 
 # A stop's ``text`` is markup, not plain prose: naming an attribute or a method
 # reads better as code than in quotes, and the note is rendered as HTML.
@@ -691,7 +694,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "control",
         "label": "Control flow",
-        "lines": (42, 51),
+        "lines": (42, 49),
         "anchor": "c-for",
         "title": "A loop, a child, and the empty case",
         "text": (
@@ -701,6 +704,17 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
             "<code>label</code> as Python value, and <code>highlight</code> "
             "as Alpine (browser) value through <code>$c-props</code>. "
             "You can listen to children's Alpine events with regular <code>@click</code>."
+        ),
+    },
+    {
+        "id": "translated-text",
+        "label": "Translated text",
+        "lines": (50, 50),
+        "anchor": 'tr("product-card-no-tags")',
+        "title": "First-class support for i18n and l10n",
+        "text": (
+            "<code>tr()</code> translates text to this render's locale. Translation "
+            "keys are defined as Fluent syntax in this same component file. "
         ),
     },
     {
@@ -750,9 +764,20 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
         ),
     },
     {
+        "id": "messages",
+        "label": "Messages",
+        "lines": (80, 82),
+        "anchor": "messages =",
+        "title": "Write translation keys as Fluent syntax",
+        "text": (
+            'With <a href="https://github.com/projectfluent/fluent" rel="noreferrer noopener" target="_blank">Fluent</a> by Mozilla, you can define translation keys that can easily handle genders, counts, composition, or even formatting. '
+            "Export the messages to translate the catalog to other locales."
+        ),
+    },
+    {
         "id": "deps",
         "label": "Assets",
-        "lines": (80, 82),
+        "lines": (84, 86),
         "anchor": "class Dependencies",
         "title": "Third-party scripts and styles",
         "text": (
@@ -763,7 +788,7 @@ _TOUR_STOPS: tuple[dict[str, Any], ...] = (
     {
         "id": "render",
         "label": "Render",
-        "lines": (85, 88),
+        "lines": (89, 92),
         "anchor": "str(ProductCard",
         "title": "Rendering is a function call",
         "text": (
@@ -874,11 +899,11 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
     {
         "id": "cache",
         "label": "Caching",
-        "blurb": "The same subtree, rebuilt on every request",
+        "blurb": "",
         "note": Markup(
             '<div class="landing-picker__note">'
-            "<p>Two scopes, one backend. <code>Component.Cache</code> caches every call to a component class, while <code>&lt;c-cache&gt;</code> caches one named region inside a template, adding no wrapper element of its own.</p>"
-            "<p>A miss always renders normally. Cache hit behaves the same in both the browser and server. <code>version</code> retires old entries on deploy.</p>"
+            "<p>Use cache in two ways: Either cache single Component class, or cache a region in the template.</p>"
+            "<p>Connect any backend. Use <code>version</code> to retire old entries on deploy.</p>"
             "</div>",
         ),
         "file": "product_card.py",
@@ -908,36 +933,19 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
         ),
     },
     {
-        "id": "const",
-        "label": "Const optimization",
-        "blurb": "Don't re-render markup that never varies",
-        "note": Markup(
-            '<div class="landing-picker__note">'
-            "<p>Most of a template does not change between renders. <code>Const</code> marks an input as fixed, so the markup that depends on it is rendered once and reused.</p>"
-            "<p>A <code>Const</code> value works like the value it wraps in ordinary template expressions. Marking one is a promise that it will not change between renders.</p>"
-            "</div>",
-        ),
-        "file": "dashboard.py",
-        "doc": "advanced/const-optimization.md",
-        "code": (
-            "from citry import Const\n\n# The parts that never vary are rendered once and reused\nCard(cols=Const(3))"
-        ),
-    },
-    {
         "id": "extensions",
         "label": "Extensions",
-        "blurb": "Verify, modify, or extend all components at once",
+        "blurb": "",
         "note": Markup(
             '<div class="landing-picker__note">'
-            "<p>An extension installs on a <code>Citry</code> instance and sees every component through it, so a rule holds without editing each component or remembering to call anything.</p>"
-            "<p>Hooks cover the render lifecycle, components' JS and CSS scripts, and more. An extension can also carry per-component config, store state for the duration of a render, and add its own URL endpoints and CLI commands.</p>"
+            "<p>Extend all components at once with extensions that hook into Citry's machinery.</p>"
+            "<p>Hooks cover the render lifecycle, components' JS and CSS scripts, and more. Extensions can be configured globally or per-component. Extensions can also add their own URL endpoints and CLI commands.</p>"
             "</div>",
         ),
         "file": "timing.py",
         "doc": "advanced/extensions.md",
         "code": (
             "from citry import Citry, Extension\n"
-            "\n"
             "\n"
             "class TimingExtension(Extension):\n"
             '    name = "timing"\n'
@@ -946,14 +954,111 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
             "        record(type(ctx.component).__name__)\n"
             "        return None  # keep the original render\n"
             "\n"
-            "\n"
             "app = Citry(extensions=[TimingExtension])"
+        ),
+    },
+    {
+        "id": "i18n",
+        "label": "Internationalization",
+        "blurb": "",
+        "note": Markup(
+            '<div class="landing-picker__note">'
+            "<p>Citry has first-class support for internationalisation (i18n) and localisation (l10n). Use "
+            '<a href="https://github.com/projectfluent/fluent" rel="noreferrer noopener" target="_blank">Fluent</a>'
+            " messages beside components to define translatable text and its inputs. Put translations in locale catalogs, or install catalogs from third-party packages.</p>"
+            "<p>Also handles locale-aware formatting and parsing of numbers, dates, currencies, direction, and more.</p>"
+            "</div>",
+        ),
+        "file": "account_card.py",
+        "doc": "i18n/index.md",
+        "code": (
+            "from citry import Component\n"
+            "from citry.ext.i18n import make_context\n"
+            "\n"
+            "class AccountCard(Component):\n"
+            "    class Kwargs:\n"
+            "        name: str\n"
+            "\n"
+            '    template = """\n'
+            '      <h2>{{ tr("account-greeting", name=name) }}</h2>\n'
+            '    """\n'
+            "\n"
+            '    messages = """\n'
+            "      # @param {str} $name - User name.\n"
+            "      account-greeting = Welcome, { $name }.\n"
+            '    """\n'
+            "\n"
+            "context = make_context(app, locale=request.locale)\n"
+            "AccountCard(name=user.name).render(\n"
+            '    provides={"citry_i18n": context},\n'
+            ")"
+        ),
+    },
+    {
+        "id": "csrf",
+        "label": "CSRF protection",
+        "blurb": "",
+        "note": Markup(
+            '<div class="landing-picker__note">'
+            "<p>The web framework of your choice generates and validates the CSRF token:</p>"
+            "<ul>"
+            "<li>Django's middleware protects Citry routes unchanged</li>"
+            "<li>Other hosts can plug in their own token check and browser token source.</li>"
+            "</ul>"
+            "</div>",
+        ),
+        "file": "security.py",
+        "doc": "security.md",
+        "code": (
+            "class Profile(Component):\n"
+            "    class Events:\n"
+            "        # Optional for hosts with a custom token scheme.\n"
+            "        # Django's CsrfViewMiddleware needs no Citry setup.\n"
+            "        _csrf = check_csrf\n"
+            "\n"
+            "        def save(self, data: ProfileIn):\n"
+            "            update_profile(data)"
+        ),
+    },
+    {
+        "id": "csp",
+        "label": "Strict CSP",
+        "blurb": "",
+        "note": Markup(
+            '<div class="landing-picker__note">'
+            "<p>Citry can automatically pass the CSP nonce to all scripts and styles.</p>"
+            "<p>Citry has 2 CSP modes:</p>"
+            "<ul>"
+            "<li>Strict - Uses Alpine CSP build, raises error on incompatible syntax. Use for production.</li>"
+            "<li>Warning - Uses regular Alpine, prints all incompatibilities, but doesn't block you. Use for development.</li>"
+            "</ul>"
+            "<br/>"
+            "<p>Optionally add verified SHA-384 integrity to the scripts.</p>"
+            "</div>",
+        ),
+        "file": "csp.py",
+        "doc": "security.md",
+        "code": (
+            "app = Citry(\n"
+            '    security_csp="strict",\n'
+            '    security_script_integrity="citry",\n'
+            ")\n"
+            "\n"
+            "# Generate a new value for every response.\n"
+            "nonce = new_response_nonce()\n"
+            "result = Page().render().serialize_result(csp_nonce=nonce)\n"
+            "\n"
+            "response = HTMLResponse(result.html)\n"
+            'response.headers["Content-Security-Policy"] = (\n'
+            "    f\"script-src 'self' 'nonce-{nonce}'; \"\n"
+            "    f\"style-src 'self' 'nonce-{nonce}'\"\n"
+            ")"
         ),
     },
     {
         "id": "fragments",
         "label": "HTML fragments",
-        "blurb": "Partial page updates. Works with HTMX.",
+        "blurb": "",
         "note": Markup(
             '<div class="landing-picker__note">'
             "<p>Easily integrate with HTMX. Instead of rendering a full page, render only small HTML to update one region.</p>"
@@ -972,10 +1077,10 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
     {
         "id": "libraries",
         "label": "Component libraries",
-        "blurb": "Share and publish components across projects",
+        "blurb": "",
         "note": Markup(
             '<div class="landing-picker__note">'
-            "<p>Share components across different projects as component libraries with <code>LibraryComponent</code>. An application installs the package's manifest into the <code>Citry</code> instance that should have it.</p>"
+            "<p>Share and publish components across projects as component libraries. Install a library with <code>Citry.register_library()</code></p>"
             "<p>Ideal for design systems or publishing to registries.</p>"
             "</div>",
         ),
@@ -1006,6 +1111,22 @@ _DEPTH_CASES: tuple[dict[str, Any], ...] = (
             "\n"
             "# Register library with Citry\n"
             "citry.register_library(acme_library)"
+        ),
+    },
+    {
+        "id": "const",
+        "label": "Perf optimization",
+        "blurb": "",
+        "note": Markup(
+            '<div class="landing-picker__note">'
+            "<p>Stop re-rendering what doesn't change. Mark constants and literals with <code>Const</code>. Citry will recognize it and optimize the template graph.</p>"
+            "<p>Marking a value in <code>Const</code> is a promise that the value will not change between renders.</p>"
+            "</div>",
+        ),
+        "file": "dashboard.py",
+        "doc": "advanced/const-optimization.md",
+        "code": (
+            "from citry import Const\n\n# The parts that never vary are rendered once and reused\nCard(cols=Const(3))"
         ),
     },
 )
@@ -1455,12 +1576,15 @@ class LandingEditorDemoMarkup(Component):
         return {
             "file_name": _EDITOR_PATH.rsplit("/", 1)[-1],
             "code": Markup(_editor_code(source, _EDITOR_MARKS)),  # noqa: S704 - escaped Pygments output
-            "notes": list(_EDITOR_NOTES),
+            # Backticks offer readable source data while the helper keeps every
+            # character outside the generated code tags escaped.
+            "notes": [{**note, "text": _inline_code_markup(note["text"])} for note in _EDITOR_NOTES],
         }
 
     template = """
       <p style="font-size: 0.85rem; margin-top: 3rem;">
-        Hover or focus any dotted symbol below. <b>Ctrl-click</b> / <b>⌘-click</b>
+        Hover or focus any dotted symbol below.
+        <b>Ctrl-click</b> / <b>⌘-click</b>
         on a symbol to go to its definition.
       </p>
       <div class="landing-editor" data-editor-showcase>
@@ -1503,7 +1627,10 @@ class LandingEditorDemoMarkup(Component):
             </div>
           </div>
           {{ code }}
-          <p class="landing-editor__status" data-editor-status aria-live="polite"></p>
+          <p
+            class="landing-editor__status"
+            data-editor-status aria-live="polite"
+          ></p>
         </div>
 
         <div class="landing-editor__notes">
@@ -1513,7 +1640,6 @@ class LandingEditorDemoMarkup(Component):
             type="button"
             c-data-editor-note="note['mark']"
           >
-            <span>{{ note['label'] }}</span>
             <strong>{{ note['title'] }}</strong>
             <small>{{ note['text'] }}</small>
           </button>
@@ -1903,6 +2029,11 @@ class LandingPage(Component):
           radial-gradient(circle at 86% 28%, rgb(0 169 166 / 9%), transparent 34rem),
           var(--landing-bg);
         color: var(--landing-ink);
+
+        /* The shell is wider than the content. Interacting with editor notes
+          can trigger scrollIntoView(), shifting the whole page sideways.
+          This prevents it. */
+        overflow-x: clip;
       }
 
       [data-theme="dark"] .landing-shell {
@@ -2276,25 +2407,54 @@ class LandingPage(Component):
         color: var(--landing-ink);
       }
 
-      .landing-sponsors {
+      .landing-sponsor-belt {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 0.75rem 1.5rem;
-        margin: 1.5rem 0 0;
+        justify-content: center;
+        gap: 0.8rem 2rem;
+        width: min(76rem, calc(100% - 3rem));
+        margin-inline: auto;
+        padding: 1.25rem 0;
+        border-block: 1px solid var(--landing-line);
+      }
+
+      .landing-sponsor-belt h2 {
+        margin: 0;
+        color: var(--landing-muted);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        font-weight: 650;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .landing-sponsor-belt ul {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: center;
+        gap: 1.5rem;
+        margin: 0;
         padding: 0;
         list-style: none;
       }
 
-      .landing-sponsors a {
-        color: var(--landing-ink);
-        font-size: 1.05rem;
-        font-weight: 640;
-        text-decoration: none;
+      .landing-sponsor-belt a {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 0.35rem;
       }
 
-      .landing-sponsors a:hover {
-        color: var(--landing-blue);
+      .landing-sponsor-belt a:focus-visible {
+        outline: 2px solid var(--landing-blue);
+        outline-offset: 0.3rem;
+      }
+
+      .landing-sponsor-belt img {
+        display: block;
+        width: auto;
+        height: 3.5rem;
       }
 
       .landing-section {
@@ -2384,6 +2544,10 @@ class LandingPage(Component):
         margin-top: 3rem;
       }
 
+      .landing-human-grid {
+        margin-top: 2.5rem !important;
+      }
+
       .landing-proof-grid > *,
       .landing-error-grid > *,
       .landing-human-grid > *,
@@ -2441,6 +2605,10 @@ class LandingPage(Component):
       .landing-error-list {
         display: grid;
         gap: 0.6rem;
+      }
+
+      section[id="depth"] .landing-picker__row {
+        padding: 0.7rem 0.85rem;
       }
 
       /* The caret only means something where a row opens its own panel, so it
@@ -2501,7 +2669,7 @@ class LandingPage(Component):
         position: sticky;
         top: 5.5rem;
         display: grid;
-        gap: 0.7rem;
+        gap: 0.3rem;
         min-width: 0;
       }
 
@@ -2984,7 +3152,8 @@ class LandingPage(Component):
         background: var(--landing-panel);
       }
 
-      .landing-picker__note p {
+      .landing-picker__note p,
+      .landing-picker__note ul {
         margin: 0;
         color: var(--landing-muted);
         font-size: 0.9rem;
@@ -3593,7 +3762,6 @@ class LandingPage(Component):
         }
       }
 
-      .landing-human-note,
       .landing-trust-card {
         height: 100%;
         padding: 1.4rem;
@@ -3618,25 +3786,10 @@ class LandingPage(Component):
         line-height: 1.55;
       }
 
-      .landing-human-note blockquote {
-        margin: 0;
-        color: var(--landing-ink);
-        font-size: clamp(1.25rem, 2.5vw, 1.8rem);
-        line-height: 1.4;
-        letter-spacing: -0.025em;
-      }
-
-      .landing-human-note footer {
-        margin-top: 1.4rem;
-        color: var(--landing-muted);
-        font-size: 0.84rem;
-      }
-
       /* The acknowledgment grid reads as one texture of faces, so the portraits
          are much smaller here than on the People page and sit close together. */
       .landing-shell .user-list {
         gap: 0.55rem;
-        margin-top: 1.5rem;
       }
 
       .landing-shell .user .avatar-wrapper {
@@ -3646,6 +3799,51 @@ class LandingPage(Component):
 
       .landing-shell .user .avatar-wrapper img {
         filter: saturate(0.85);
+      }
+
+      .landing-maintainer {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 1rem;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid var(--landing-line);
+      }
+
+      .landing-maintainer__portrait .user-list {
+        justify-content: flex-start;
+        gap: 0;
+        margin: 0;
+        padding: 0;
+      }
+
+      .landing-maintainer__portrait .user .avatar-wrapper {
+        width: 4.75rem;
+        height: 4.75rem;
+      }
+
+      .landing-maintainer__name,
+      .landing-maintainer__role {
+        margin: 0;
+      }
+
+      .landing-maintainer__name a {
+        color: var(--landing-ink);
+        font-size: 1.05rem;
+        font-weight: 680;
+        text-decoration: none;
+      }
+
+      .landing-maintainer__name a:hover {
+        color: var(--landing-blue);
+      }
+
+      .landing-maintainer__role {
+        margin-top: 0.25rem;
+        color: var(--landing-muted);
+        font-size: 0.9rem;
+        line-height: 1.45;
       }
 
       .landing-human-links {
@@ -3665,6 +3863,7 @@ class LandingPage(Component):
       .landing-content .landing-final h2 {
         max-width: 13ch;
         margin-inline: auto;
+        padding-bottom: 3rem;
       }
 
       .landing-final p {

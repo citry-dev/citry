@@ -1,0 +1,43 @@
+schema_version: 1
+collection: Northstar Observatory Archive
+purpose: Local Citry UI Image documentation and quality fixtures
+license: CC0-1.0
+reviewed: 2026-08-12
+provenance:
+  generator: OpenAI built-in image generation tool
+  source_kind: original generated imagery
+  restrictions: No remote source material, logos, labels, or watermarks were requested.
+  processing: ImageMagick resize, crop, metadata strip, JPEG or AVIF encoding
+files:
+  - path: horsehead-nebula-1280.jpg
+    dimensions: 1280x720
+    bytes: 73341
+    sha256: 6f49a33f96723249b363db479a7962e00a038ba038169c0bbd07a013856bf7c2
+  - path: horsehead-nebula-640.jpg
+    dimensions: 640x360
+    bytes: 16614
+    sha256: f84e9011adabd2c6283bbe9dba9c34c1bffa36a3615aa327621b1ec5907d18f1
+  - path: lunar-terminator-1280.jpg
+    dimensions: 1280x640
+    bytes: 152605
+    sha256: 40fdacf4a5c29e7acb7cae408507a8c5b428f9436a203421b4167301b626954b
+  - path: observatory-portrait-640.jpg
+    dimensions: 640x960
+    bytes: 86452
+    sha256: 6fbfd3a1058d9fa5954e41748fa3ffc6fa11f0d02079e1adcc8d0390b4a4dd7c
+  - path: observatory-wide-1280.avif
+    dimensions: 1280x720
+    bytes: 51181
+    sha256: d2dfc122ec037595adbc1f672f3791e4636a168e7cf0a0c6779fabe381d9db2d
+  - path: observatory-wide-1280.jpg
+    dimensions: 1280x720
+    bytes: 140528
+    sha256: 0aa8e0da9d21a4e9894eadb6c2d2c633d59bc5e059a25d13eebf18cd7b03c8e6
+  - path: orion-nebula-1280.jpg
+    dimensions: 1280x720
+    bytes: 85095
+    sha256: 60ad28d63f824378021fe5c4e7a4b22145ac39e2bc0a52c941895ff552b0b210
+  - path: orion-nebula-640.jpg
+    dimensions: 640x360
+    bytes: 20139
+    sha256: 1bd10f478c1152deecf95fc6e243d42f9e18211b82d03b366c0fc509ef102dcd

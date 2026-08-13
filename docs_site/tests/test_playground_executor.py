@@ -163,6 +163,48 @@ def test_executor_accepts_html_markup_element_render_and_starter() -> None:
     assert "Welcome, <strong>Ada Lovelace</strong>" in starter["html"]
 
 
+def test_successful_run_publishes_a_bounded_component_catalog() -> None:
+    [result] = _run_sources(
+        '''from citry import Citry, Component
+
+app = Citry(autodiscover=False)
+
+class ProfileCard(Component):
+    citry = app
+
+    class Kwargs:
+        title: str
+
+    template = """
+    <p>{{ title }}</p>
+    """
+
+ProfileCard(title="Ada")
+'''
+    )
+
+    assert result["ok"] is True
+    snapshot = result["catalog"]
+    assert snapshot["schemaVersion"] == 1
+    components = [
+        component
+        for registry in snapshot["registries"]
+        for component in registry["components"]
+        if component["className"] == "ProfileCard"
+    ]
+    assert len(components) == 1
+    assert components[0]["name"] == "profile-card"
+    assert components[0]["aliases"] == ["profilecard"]
+    assert components[0]["kwargs"] == [
+        {
+            "name": "title",
+            "required": True,
+            "typeDisplay": "str",
+            "description": None,
+        }
+    ]
+
+
 def test_every_authored_live_snippet_renders_without_console_output() -> None:
     paths = sorted(_SNIPPETS.glob("*.py"))
     results = _run_sources(*(path.read_text(encoding="utf-8") for path in paths))

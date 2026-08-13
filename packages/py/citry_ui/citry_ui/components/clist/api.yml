@@ -110,3 +110,5 @@ interfaces:
   - {id: clist-item-start-slot-data, kind: record, name: CListItemStartSlotData, entries: []}
   - {id: clist-item-description-slot-data, kind: record, name: CListItemDescriptionSlotData, entries: []}
   - {id: clist-item-end-slot-data, kind: record, name: CListItemEndSlotData, entries: []}
+
+translations: []

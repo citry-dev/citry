@@ -25,6 +25,7 @@ _EXT_TO_LANGUAGE = {
     ".yaml": "yaml",
     ".json": "json",
     ".rs": "rust",
+    ".ftl": "fluent",
 }
 
 

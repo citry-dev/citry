@@ -20,7 +20,11 @@ from citry_ui.components.cmenu import (
     CMenuSeparator,
     CMenuSubmenu,
 )
-from citry_ui.components.cmenu.cmenu import CInternalMenuCollection, CInternalMenuContent
+from citry_ui.components.cmenu.cmenu import (
+    CInternalMenuCollection,
+    CInternalMenuContent,
+    CInternalMenuSurface,
+)
 
 pytestmark = pytest.mark.e2e
 
@@ -35,6 +39,7 @@ _MENU_COMPONENTS = (
     CMenuSubmenu,
     CInternalMenuCollection,
     CInternalMenuContent,
+    CInternalMenuSurface,
 )
 
 

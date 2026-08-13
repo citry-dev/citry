@@ -64,7 +64,13 @@ from citry.component_registry import (
 from citry.constness import ConstBodyCache
 from citry.extension import ExtensionManager
 from citry.introspection import _new_engine_id
-from citry.settings import CitrySettings, LintSettings
+from citry.settings import (
+    CitrySettings,
+    LintSettings,
+    SecurityCspMode,
+    SecurityJavascriptMode,
+    SecurityScriptIntegrityMode,
+)
 from citry.tag_rules import build_tag_rules
 
 if TYPE_CHECKING:
@@ -151,6 +157,10 @@ class Citry:
         secret: str | list[str] | None = None,
         event_result_resolvers: Sequence[Any] = (),
         event_payload_codecs: Sequence[Any] = (),
+        *,
+        security_csp: SecurityCspMode = "off",
+        security_javascript: SecurityJavascriptMode = "allow",
+        security_script_integrity: SecurityScriptIntegrityMode = "off",
     ) -> None:
         self._engine_id = _new_engine_id()
         # CitrySettings.__post_init__ copies every field into its immutable
@@ -172,6 +182,9 @@ class Citry:
             id_generator=id_generator,
             template_globals=template_globals if template_globals is not None else {},
             lint=lint if lint is not None else LintSettings(),
+            security_csp=security_csp,
+            security_javascript=security_javascript,
+            security_script_integrity=security_script_integrity,
             secret=secret,
             event_result_resolvers=event_result_resolvers,
             event_payload_codecs=event_payload_codecs,

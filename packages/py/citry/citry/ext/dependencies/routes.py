@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from citry._owned_resource import _OwnedResource
 from citry.ext.dependencies.scripts import (
     component_script_hash,
     gen_asset_cache_key,
@@ -101,22 +102,26 @@ def dependency_routes(citry: Citry) -> list[URLRoute]:
                     script = get_script(script_type, comp_cls, vars_hash)  # type: ignore[arg-type]
         if script is None or script.content is None:
             return RouteResponse(status=404)
-        return RouteResponse(content=script.content, content_type=content_type)
+        return _OwnedResource(url="", content=script.content, content_type=content_type).response()
 
     def serve_asset(request: Any, *, file_name: str) -> RouteResponse:  # noqa: ARG001 - unused, see above
         content = citry.cache.get(gen_asset_cache_key(file_name))
         if content is None:
             return RouteResponse(status=404)
         extension = file_name.rpartition(".")[2]
-        return RouteResponse(content=content, content_type=_CONTENT_TYPES.get(extension, "application/octet-stream"))
+        return _OwnedResource(
+            url="",
+            content=content,
+            content_type=_CONTENT_TYPES.get(extension, "application/octet-stream"),
+        ).response()
 
     def serve_runtime(request: Any) -> RouteResponse:  # noqa: ARG001 - unused, see above
         # Imported here, not at module load: emission imports this module's
         # sibling helpers, so a top-level import back into it would be
         # circular.
-        from citry.ext.dependencies.emission import _runtime_js  # noqa: PLC0415
+        from citry.ext.dependencies.emission import _runtime_resource  # noqa: PLC0415
 
-        return RouteResponse(content=_runtime_js(), content_type=_CONTENT_TYPES["js"])
+        return _runtime_resource(citry).response()
 
     return [
         # Content-addressed Component.js/css and variables from

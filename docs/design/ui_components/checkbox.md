@@ -464,8 +464,9 @@ description, border, and disabled distinction without relying on background
 color alone.
 
 Visible library-authored strings: none. Labels, descriptions, accessible
-names, and application errors are caller content. Localization remains a
-separate follow-up.
+names, and application errors are caller content. The Citry UI i18n migration
+therefore needs no Checkbox catalog keys, but still verifies language,
+direction, and caller-owned text behavior.
 
 ## 12. Overlay and layering behavior
 
@@ -699,3 +700,12 @@ Deferred work:
 - Locale and translation integration remains the library-wide follow-up.
 - Publication and released-artifact compatibility wait for the next Citry and
   Citry Core releases.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

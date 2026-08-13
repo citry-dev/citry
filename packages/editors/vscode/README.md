@@ -6,10 +6,10 @@
 # Citry for Visual Studio Code
 
 This extension highlights Citry components where they are normally written:
-inside the `template`, `js`, and `css` multiline string attributes of a Python
-component. It also provides a `Citry Template` language mode for standalone
-templates and formats those authored sections without replacing the selected
-Python formatter.
+inside the `template`, `js`, `css`, and `messages` multiline string attributes
+of a Python component. It also provides language modes for standalone Citry
+templates and Fluent `.ftl` files. Citry formatting remains limited to the
+template, JavaScript, and CSS assets described below.
 
 The extension understands Citry component tags, dynamic attributes, template
 expressions and comments, raw blocks, browser props, Events bindings, and
@@ -160,6 +160,21 @@ that JavaScript declaration. Dynamic component targets and `c-$c-props`
 values remain unproven. Unsupported strict-JSON `JsData` fields receive a
 warning and use `unknown` for JavaScript tooling.
 
+## Navigate i18n messages and profiles
+
+A configured i18n project contributes one checked catalog index to the
+language server. Literal message IDs complete, hover with their typed direct
+and transitive parameters, and navigate to their Fluent definition from
+template `tr()`, `<c-trans message="...">`, Python `self.i18n.tr()`,
+`Component.I18n.client_messages`, Alpine `$i18n.tr()`, component JavaScript's
+injected `i18n` service, and public Fluent references.
+
+Named formatter and parser profiles complete in the matching Python, template,
+Alpine, and component-JavaScript operations. `$i18n` is semantic only inside a
+statically known client-enabled provider, and a server-only nested provider
+blocks that scope. Syntax-only mode still colors Fluent but cannot supply
+project message names, interfaces, or profile names.
+
 ## Keep template strings from becoming f-strings
 
 Pylance can add an `f` prefix when `{` is typed in a Python string. Its
@@ -176,7 +191,7 @@ This setting applies to every Python file in the VS Code window. Pylance does
 not provide a per-literal exception. Citry leaves typed and automated edits
 alone, so a deliberate f-string is never silently reverted.
 
-## Embedded HTML, CSS, and JavaScript
+## Embedded HTML, CSS, JavaScript, and Fluent
 
 The extension reuses VS Code's built-in web-language providers inside exact
 `template`, `js`, and `css` triple-string assignments. Standard HTML tags and
@@ -185,6 +200,12 @@ hover, and go-to-definition behavior without `citry.app` and without a
 separate web extension. The `Citry Template` language receives the same HTML
 requests, and its HTML results are combined with Citry component results when
 the language server is available.
+
+The extension also highlights Fluent inside exact `messages` triple-string
+assignments. It uses the same bundled Fluent grammar for standalone `.ftl`
+files, so message IDs, terms, variables, attributes, selectors, functions, and
+comments keep their language coloring without another extension. This is
+syntax highlighting, not a Fluent formatter or a second Fluent parser.
 
 On a direct ordinary HTML start tag, dynamic native attributes keep the same
 hover documentation as their static spelling. For example, hovering `c-class`
@@ -238,6 +259,10 @@ outside a format region and produces an explicit refusal without edits. The
 commands never follow a declaration into another file; open that target and
 use its document formatter, or use `citry format` for statically resolved file
 assets.
+
+`messages` blocks and standalone `.ftl` files are not changed by Citry's
+formatting commands. Syntax highlighting does not imply a safe formatting
+contract, and the current formatter does not rewrite Fluent source.
 
 A standalone Citry Template document is one authored template, so either
 command formats the whole document, including eligible `<script>` and
@@ -348,11 +373,11 @@ deliberately leaves Python analysis to Pylance or Pyright. The VS Code client,
 not the Citry server, delegates embedded HTML, CSS, and JavaScript requests to
 the providers already installed in VS Code.
 
-The Python injection keys on the exact `template`, `js`, and `css` assignment
-names. A TextMate grammar cannot prove that the surrounding class inherits
-from `Component`, so an unrelated multiline assignment with one of those names
-receives the same highlighting. Other assignment names remain ordinary Python
-strings.
+The Python injection keys on the exact `template`, `js`, `css`, and `messages`
+assignment names. A TextMate grammar cannot prove that the surrounding class
+inherits from `Component`, so an unrelated multiline assignment with one of
+those names receives the same highlighting. Other assignment names remain
+ordinary Python strings.
 
 ## Development
 

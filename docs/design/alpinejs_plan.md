@@ -58,7 +58,7 @@ separate decisions.
 
 Do not rebuild these landed capabilities:
 
-- exact Alpine 3.15.12 and `@alpinejs/morph` 3.15.12 bundle pins;
+- exact Alpine 3.16.1 and `@alpinejs/morph` 3.16.1 bundle pins;
 - classic IIFE loading, duplicate-Alpine warning, pre-start registration, and
   one owned `Alpine.start()`;
 - Events manifests, stable Events anchors, fresh render-ID mapping, epochs,

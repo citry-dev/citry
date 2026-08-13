@@ -13,7 +13,18 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from citry import Citry, CitryContext, CitryElement, CitryRender, Component, Extension, RenderFrame
+from citry import (
+    Citry,
+    CitryContext,
+    CitryElement,
+    CitryRender,
+    Component,
+    Extension,
+    RenderFrame,
+    SerializedRender,
+    SerializedScriptSecurity,
+    SerializedSecurity,
+)
 from citry.citry_render import Placeholder
 
 
@@ -79,6 +90,153 @@ class TestRenderReturnsCitryRender:
 class TestSerialize:
     def test_serialize_joins_static_template(self):
         assert _card("<p>hi</p>").render().serialize() == '<p data-cid-c1="">hi</p>'
+
+    def test_serialize_result_is_the_structured_canonical_result(self):
+        rendered = _card("<p>hi</p>").render()
+
+        result = rendered.serialize_result()
+
+        assert result == SerializedRender(
+            html='<p data-cid-c1="">hi</p>',
+            security=SerializedSecurity(),
+        )
+        assert rendered.serialize() == result.html
+        assert result.security.scripts == ()
+        assert result.security.csp_script_hashes == ()
+
+    def test_serialization_result_records_are_immutable(self):
+        script = SerializedScriptSecurity(
+            location="inline",
+            url=None,
+            digests=("sha384-example",),
+            provenance="citry-computed",
+            origin_class_id="example.Card",
+        )
+        result = SerializedRender(html="<p>x</p>", security=SerializedSecurity(scripts=(script,)))
+
+        with pytest.raises(FrozenInstanceError):
+            result.html = "changed"
+        with pytest.raises(FrozenInstanceError):
+            result.security.scripts = ()
+
+    def test_serialize_result_preserves_extension_html_threading(self):
+        class Suffix(Extension):
+            name = "suffix"
+
+            def on_serialize(self, ctx):
+                assert not hasattr(ctx, "_serialization_session")
+                return ctx.html + "!"
+
+        c = Citry(extensions=[Suffix])
+
+        class Card(Component):
+            citry = c
+            template = "<p>hi</p>"
+
+        result = Card().render().serialize_result()
+        assert result.html == '<p data-cid-c1="">hi</p>!'
+        assert result.security == SerializedSecurity()
+
+    def test_serialize_result_matches_html_wrapper_with_runtime_dependencies(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<p>hi</p>"
+            js = "globalThis.citryPhaseThree = true;"
+
+        rendered = Card().render()
+        result = rendered.serialize_result()
+
+        assert "<script>" in result.html
+        assert "globalThis.citryPhaseThree = true;" in result.html
+        assert rendered.serialize() == result.html
+        assert result.security == SerializedSecurity()
+
+    def test_each_serialization_uses_fresh_call_local_security_state(self):
+        c = Citry()
+
+        class Card(Component):
+            citry = c
+            template = "<p>hi</p>"
+
+        rendered = Card().render()
+        first = rendered.serialize_result()
+        second = rendered.serialize_result()
+
+        assert first == second
+        assert first is not second
+        assert first.security is not second.security
+        assert all(
+            not value.__class__.__name__.endswith("SerializationSession") for value in rendered.context.extra.values()
+        )
+
+    def test_existing_positional_dependency_arguments_remain_supported(self):
+        rendered = _card("<p>hi</p>").render()
+        assert rendered.serialize("ignore", "append") == '<p data-cid-c1="">hi</p>'
+        assert rendered.serialize_result("ignore", "append").html == '<p data-cid-c1="">hi</p>'
+
+    def test_serialization_overrides_take_precedence_over_engine_settings(self):
+        c = Citry(
+            security_csp="strict",
+            security_javascript="omit",
+            security_script_integrity="citry",
+        )
+
+        class Card(Component):
+            citry = c
+            template = "<p>hi</p>"
+
+        result = (
+            Card()
+            .render()
+            .serialize_result(
+                security_csp="off",
+                security_javascript="allow",
+                security_script_integrity="off",
+            )
+        )
+        assert result.html == '<p data-cid-c1="">hi</p>'
+        assert result.security == SerializedSecurity()
+
+    @pytest.mark.parametrize(
+        ("name", "value"),
+        [
+            ("security_csp", "warning"),
+            ("security_javascript", "off"),
+            ("security_script_integrity", "strict"),
+            ("security_csp", False),
+            ("security_javascript", 1),
+        ],
+    )
+    def test_invalid_serialization_security_override_is_rejected(self, name, value):
+        with pytest.raises(ValueError, match=name):
+            _card().render().serialize_result(**{name: value})
+
+    @pytest.mark.parametrize("value", ["warn", "omit", "forbid"])
+    def test_javascript_delivery_modes_accept_static_html(self, value):
+        c = Citry(security_javascript=value)
+
+        class Card(Component):
+            citry = c
+            template = "<p>hi</p>"
+
+        assert "<p" in Card().render().serialize_result().html
+
+    def test_integrity_mode_is_implemented(self):
+        c = Citry(security_script_integrity="citry")
+
+        class Card(Component):
+            citry = c
+            template = "<p>hi</p>"
+
+        assert Card().render().serialize_result().security == SerializedSecurity()
+
+    def test_componentless_render_uses_compatibility_security_defaults(self):
+        rendered = CitryRender(parts=["plain"], context=CitryContext())
+        assert rendered.serialize_result() == SerializedRender(html="plain", security=SerializedSecurity())
+        assert rendered.serialize_result(security_csp="warn").html == "plain"
+        assert rendered.serialize_result(security_csp="strict").html == "plain"
 
     def test_repeated_serialization_preserves_live_render_id(self):
         element = _card("<p>hi</p>")

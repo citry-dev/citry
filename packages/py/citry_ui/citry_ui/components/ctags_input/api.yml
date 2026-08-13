@@ -1,0 +1,238 @@
+schema_version: 1
+family: tags-input
+
+components:
+  - CTagsInput
+
+inputs:
+  - id: ctags-input-server-inputs
+    component: CTagsInput
+    channel: server
+    column_widths: [fit, 15rem, 9rem, auto]
+    entries:
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the repeated native Form field name; omission makes values nonparticipating.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native proxy and readonly transports with a Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the public control ID exchanged between the native fallback and initialized editor.}
+      - {id: value, name: value, type: 'Sequence[str]', default: {kind: derived, display: '()'}, effect: Sets the initial ordered canonical unique tags and repeated Form values.}
+      - {id: input-value, name: input_value, type: str, default: {kind: literal, value: ''}, effect: Sets the initial raw unfinished editor draft.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables native required validity outside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Disables interaction and removes all successful controls outside Field.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks editing while repeated hidden controls preserve submission outside Field.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Adds owner-supplied invalid presentation outside Field.}
+      - {id: placeholder, name: placeholder, type: 'str | None', default: {kind: literal, value: null}, effect: Sets editor placeholder text.}
+      - {id: delimiters, name: delimiters, type: 'Sequence[str]', default: {kind: derived, display: '(",",)'}, effect: Sets unique server-only single-code-point token separators.}
+      - {id: max-tags, name: max_tags, type: 'int | None', default: {kind: literal, value: null}, effect: Limits later additions to a positive maximum without removing existing tags.}
+      - {id: autocomplete, name: autocomplete, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the editor autocomplete hint.}
+      - {id: inputmode, name: inputmode, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the editor virtual-keyboard hint.}
+      - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CTagsInputVariant]}, default: {kind: literal, value: outline}, effect: Selects the control treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CTagsInputSize]}, default: {kind: literal, value: md}, effect: 'Selects editor, tag, and control geometry.'}
+      - {id: messages, name: messages, type: {display: 'CTagsInputMessages | None', interfaces: [CTagsInputMessages]}, default: {kind: literal, value: null}, effect: 'Overrides catalog-backed removal, status, rejection, and unfinished-draft text per field.'}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles and merges them with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed attributes to the root.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed naming, descriptive, hint, style, and native-listener attributes to the editor.'}
+
+  - id: ctags-input-client-inputs
+    component: CTagsInput
+    channel: client
+    column_widths: [fit, 16rem, 16rem, auto]
+    entries:
+      - {id: value, name: value, type: 'string[] | null', omitted: Releases to the latest committed uncontrolled baseline; null has the same effect., effect: Controls ordered committed tags while supplied as a valid array.}
+      - {id: input-value, name: inputValue, type: 'string | null', omitted: Releases to the latest committed uncontrolled draft baseline; null has the same effect., effect: Controls the raw editor draft while supplied as a valid string.}
+      - {id: placeholder, name: placeholder, type: 'string | null', omitted: Uses the server value., effect: Controls editor placeholder text; null releases and an empty string removes the attribute.}
+      - {id: autocomplete, name: autocomplete, type: 'string | null', omitted: Uses the server value., effect: Controls the editor autocomplete hint; null releases and an empty string removes the attribute.}
+      - {id: inputmode, name: inputmode, type: 'string | null', omitted: Uses the server value., effect: Controls the editor inputmode hint; null releases and an empty string removes the attribute.}
+      - {id: required, name: required, type: boolean, omitted: Uses the server or Field fallback., effect: Controls native required validity and the editor accessibility mirror outside Field.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server or Field fallback., effect: Controls interaction and Form participation outside Field.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses the server or Field fallback., effect: Controls read-only interaction and repeated hidden transport outside Field.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses the server or Field fallback., effect: Controls owner-supplied invalid presentation outside Field.}
+      - {id: max-tags, name: maxTags, type: 'positive integer | null', omitted: Uses the server value., effect: Controls the addition limit; null removes the maximum.}
+      - {id: variant, name: variant, type: {display: '"outline" | "filled" | "plain"', interfaces: [CTagsInputVariant]}, omitted: Uses the server value., effect: Controls presentation treatment.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CTagsInputSize]}, omitted: Uses the server value., effect: 'Controls editor, tag, and control geometry.'}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: Omission or null selects no value callback., effect: 'Receives valid add, removal, and controlled reset requests.'}
+      - {id: on-input-value-change, name: onInputValueChange, type: function, omitted: Omission or null selects no draft callback., effect: Receives direct draft edits and acceptance-gated draft transitions.}
+      - {id: on-value-invalid, name: onValueInvalid, type: function, omitted: Omission or null selects no rejection callback., effect: Receives one structured notice for each rejected user transaction.}
+
+slots: []
+
+events:
+  - id: ctags-input-events
+    component: CTagsInput
+    entries:
+      - id: value-change
+        name: onValueChange
+        signature: {display: '(nextValue: string[], detail: CTagsInputValueChangeDetail) => void', interfaces: [CTagsInputValueChangeDetail]}
+        trigger: A valid enabled add or removal is requested, or a controlled value axis receives an uncanceled reset request.
+        detail: {display: '{source, added, removed, candidates, previousValue, nextInputValue, controlled}', interfaces: [CTagsInputValueChangeDetail]}
+        behavior: Runs after full batch validation. Uncontrolled values commit first; controlled values remain unchanged until an exact later acceptance edge.
+      - id: input-value-change
+        name: onInputValueChange
+        signature: {display: '(nextDraft: string, detail: CTagsInputInputValueChangeDetail) => void', interfaces: [CTagsInputInputValueChangeDetail]}
+        trigger: A direct editor input or accepted commit changes the draft, or a controlled draft receives an uncanceled reset request.
+        detail: {display: '{source, previousValue, nextValue, controlled, composing}', interfaces: [CTagsInputInputValueChangeDetail]}
+        behavior: Direct input is synchronous. Commit-related clear or trailing draft waits for the related value acceptance and matching draft generation.
+      - id: value-invalid
+        name: onValueInvalid
+        signature: {display: '(reason: CTagsInputInvalidReason, detail: CTagsInputInvalidDetail) => void', interfaces: [CTagsInputInvalidReason, CTagsInputInvalidDetail]}
+        trigger: An enabled editable Enter, delimiter, or paste transaction fails an empty, duplicate, maximum, delimiter, or invalid-value guard.
+        detail: {display: '{source, candidate, candidates, value, inputValue, maxTags, controlled}', interfaces: [CTagsInputInvalidDetail]}
+        behavior: Fires once for the atomic transaction without changing tags, proxy values, draft, or selection.
+
+methods: []
+
+css:
+  - id: ctags-input-css-variables
+    component: CTagsInput
+    entries:
+      - {id: background, name: --cui-tags-input-background, type: color, purpose: Control background., default: Canvas}
+      - {id: foreground, name: --cui-tags-input-foreground, type: color, purpose: Editor and tag text., default: CanvasText}
+      - {id: border-color, name: --cui-tags-input-border-color, type: color, purpose: Resting control border., default: 'color-mix(in srgb, CanvasText 28%, transparent)'}
+      - {id: hover-border-color, name: --cui-tags-input-hover-border-color, type: color, purpose: Enabled hover border., default: 'color-mix(in srgb, CanvasText 55%, transparent)'}
+      - {id: focus-color, name: --cui-tags-input-focus-color, type: color, purpose: Focus-visible outline., default: Highlight}
+      - {id: invalid-border-color, name: --cui-tags-input-invalid-border-color, type: color, purpose: Revealed or owner-supplied invalid border., default: 'light-dark(#b42318, #fda29b)'}
+      - {id: disabled-background, name: --cui-tags-input-disabled-background, type: color, purpose: Disabled control background., default: 'color-mix(in srgb, CanvasText 6%, Canvas)'}
+      - {id: tag-background, name: --cui-tags-input-tag-background, type: color, purpose: Tag background., default: 'color-mix(in srgb, CanvasText 8%, Canvas)'}
+      - {id: tag-foreground, name: --cui-tags-input-tag-foreground, type: color, purpose: Tag text and removal foreground., default: CanvasText}
+      - {id: tag-border-color, name: --cui-tags-input-tag-border-color, type: color, purpose: Tag boundary., default: 'color-mix(in srgb, CanvasText 18%, transparent)'}
+      - {id: tag-highlighted-background, name: --cui-tags-input-tag-highlighted-background, type: color, purpose: Keyboard-active tag background., default: 'light-dark(#dbeafe, #19376d)'}
+      - {id: tag-highlighted-border-color, name: --cui-tags-input-tag-highlighted-border-color, type: color, purpose: Keyboard-active tag border., default: Highlight}
+      - {id: radius, name: --cui-tags-input-radius, type: length, purpose: Control and tag rounding., default: 0.5rem}
+      - {id: min-height, name: --cui-tags-input-min-height, type: length, purpose: Minimum control height., default: 2.5rem}
+      - {id: padding, name: --cui-tags-input-padding, type: length, purpose: Control internal inset., default: '0.375rem 0.5rem'}
+      - {id: gap, name: --cui-tags-input-gap, type: length, purpose: Space between tags and editor., default: 0.375rem}
+      - {id: tag-gap, name: --cui-tags-input-tag-gap, type: length, purpose: Space between each tag label and remove Button., default: 0.25rem}
+      - {id: font-size, name: --cui-tags-input-font-size, type: length, purpose: Editor and tag text size., default: 1rem}
+
+attributes:
+  - id: ctags-input-root-attributes
+    component: CTagsInput
+    entries:
+      - {id: data-empty, name: data-empty, element: Root div, type: present | absent, meaning: Present when no effective tags exist.}
+      - {id: data-required, name: data-required, element: Root div, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Root div, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Root div, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Root div, type: present | absent, meaning: Mirrors owner invalidity or a revealed native-invalid episode.}
+      - {id: data-focused, name: data-focused, element: Root div, type: present | absent, meaning: Present while the editor has focus-visible context.}
+      - {id: data-at-max, name: data-at-max, element: Root div, type: present | absent, meaning: Present when the effective count is at or above maxTags.}
+      - {id: data-variant, name: data-variant, element: Root div, type: {display: '"outline" | "filled" | "plain"', interfaces: [CTagsInputVariant]}, meaning: Mirrors effective treatment.}
+      - {id: data-size, name: data-size, element: Root div, type: {display: '"sm" | "md" | "lg"', interfaces: [CTagsInputSize]}, meaning: Mirrors effective geometry.}
+  - id: ctags-input-proxy-attributes
+    component: CTagsInput
+    entries:
+      - {id: proxy-id, name: id, element: Native multiple Select, type: public ID or derived native ID, meaning: Owns the public ID in fallback mode and the derived ID after initialization.}
+      - {id: proxy-multiple, name: multiple, element: Native multiple Select, type: present, meaning: Produces one repeated Form entry per selected Option.}
+      - {id: proxy-name, name: name, element: Native multiple Select, type: string | absent, meaning: Supplies the repeated Form field name while editable.}
+      - {id: proxy-form, name: form, element: Native multiple Select, type: Form ID | absent, meaning: Associates an external Form owner.}
+      - {id: proxy-required, name: required, element: Native multiple Select, type: present | absent, meaning: Owns native required validity.}
+      - {id: proxy-disabled, name: disabled, element: Native multiple Select, type: present | absent, meaning: Bars validation and submission for readonly or disabled transport modes.}
+      - {id: proxy-aria-hidden, name: aria-hidden, element: Native multiple Select, type: '"true" | absent', meaning: Hides the proxy from accessibility APIs only after successful initialization.}
+      - {id: proxy-tabindex, name: tabindex, element: Native multiple Select, type: '"-1" | absent', meaning: Removes the initialized proxy from sequential focus.}
+      - {id: proxy-aria-invalid, name: aria-invalid, element: Native multiple Select, type: '"true" | absent', meaning: Mirrors effective visible invalidity.}
+  - id: ctags-input-editor-attributes
+    component: CTagsInput
+    entries:
+      - {id: editor-id, name: id, element: Editor input, type: public ID or derived editor ID, meaning: Owns the public ID after initialization and the derived ID in fallback mode.}
+      - {id: editor-type, name: type, element: Editor input, type: '"text"', meaning: Provides ordinary text editing and IME behavior.}
+      - {id: editor-readonly, name: readonly, element: Editor input, type: present | absent, meaning: Blocks edits while retaining focusability.}
+      - {id: editor-disabled, name: disabled, element: Editor input, type: present | absent, meaning: Removes editor interaction and focus.}
+      - {id: editor-aria-label, name: aria-label, element: Editor and proxy, type: non-whitespace string | absent, meaning: Supplies the required standalone static accessible name.}
+      - {id: editor-aria-labelledby, name: aria-labelledby, element: Editor and proxy, type: Field label IDREF | absent, meaning: Mirrors Field-owned generated naming.}
+      - {id: editor-aria-describedby, name: aria-describedby, element: Editor and proxy, type: description and error IDREFs | absent, meaning: Mirrors Field or allowed standalone descriptions.}
+      - {id: editor-aria-required, name: aria-required, element: Editor input, type: '"true" | absent', meaning: Mirrors native proxy requiredness on the visible control.}
+      - {id: editor-aria-invalid, name: aria-invalid, element: Editor input, type: '"true" | absent', meaning: Mirrors owner invalidity or a revealed native-invalid episode.}
+  - id: ctags-input-tag-attributes
+    component: CTagsInput
+    entries:
+      - {id: data-highlighted, name: data-highlighted, element: Tag span, type: present | absent, meaning: Marks the visually active tag while DOM focus remains in the editor.}
+      - {id: remove-type, name: type, element: Remove Button, type: '"button"', meaning: Prevents accidental Form submission.}
+      - {id: remove-tabindex, name: tabindex, element: Remove Button, type: '"-1"', meaning: Keeps the editor as the sole sequential Tab stop.}
+      - {id: remove-aria-label, name: aria-label, element: Remove Button, type: localized string, meaning: Names removal with the exact tag value.}
+      - {id: remove-disabled, name: disabled, element: Remove Button, type: present | absent, meaning: Blocks removal while readonly or disabled.}
+  - id: ctags-input-status-attributes
+    component: CTagsInput
+    entries:
+      - {id: status-role, name: role, element: Status span, type: '"status"', meaning: 'Exposes nonurgent accepted, rejected, and navigation updates.'}
+      - {id: status-aria-live, name: aria-live, element: Status span, type: '"polite"', meaning: Queues updates without interrupting current speech.}
+      - {id: status-aria-atomic, name: aria-atomic, element: Status span, type: '"true"', meaning: Announces each complete status sentence.}
+
+selectors:
+  - id: ctags-input-selectors
+    component: CTagsInput
+    entries:
+      - {id: tags-input, selector: '[data-citry-ui-part="tags-input"]', element: Root div, purpose: 'State reflections and class, style, and attrs destination.'}
+      - {id: control, selector: '[data-citry-ui-part="control"]', element: Visible control div, purpose: Wraps committed tags and the editor.}
+      - {id: tag-list, selector: '[data-citry-ui-part="tag-list"]', element: Tag-list span, purpose: Wraps zero or more component-owned tag visuals before the editor.}
+      - {id: tag, selector: '[data-citry-ui-part="tag"]', element: Tag span, purpose: Displays one effective canonical value and highlighted state.}
+      - {id: tag-label, selector: '[data-citry-ui-part="tag-label"]', element: Tag label span, purpose: Displays the exact effective string.}
+      - {id: remove, selector: '[data-citry-ui-part="remove"]', element: Native Button, purpose: 'Removes its named tag by pointer, touch, or programmatic activation.'}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Native text input, purpose: Sole custom editor and initialized focus owner.}
+      - {id: status, selector: '[data-citry-ui-part="status"]', element: Visually hidden span, purpose: 'Persistent polite accepted, rejected, and navigation announcements.'}
+
+interfaces:
+  - id: ctags-input-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+      - {id: variant, name: CTagsInputVariant, definition: 'Literal["outline", "filled", "plain"]'}
+      - {id: size, name: CTagsInputSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: change-source, name: CTagsInputChangeSource, definition: 'Literal["input", "enter", "delimiter", "paste", "backspace", "delete", "remove", "reset"]'}
+      - {id: invalid-reason, name: CTagsInputInvalidReason, definition: 'Literal["empty", "duplicate", "maximum", "delimiter", "invalid-value"]'}
+  - id: ctags-input-messages
+    kind: record
+    name: CTagsInputMessages
+    entries:
+      - {id: remove-label, name: remove_label, type: 'str | None', default: None, meaning: 'Overrides the catalog-backed remove label and requires `{value}`.'}
+      - {id: added-message, name: added_message, type: 'str | None', default: None, meaning: 'Overrides the accepted-addition announcement and requires `{value}`.'}
+      - {id: removed-message, name: removed_message, type: 'str | None', default: None, meaning: 'Overrides the accepted-removal announcement and requires `{value}`.'}
+      - {id: selected-message, name: selected_message, type: 'str | None', default: None, meaning: 'Overrides the active-tag announcement and requires `{value}`.'}
+      - {id: duplicate-message, name: duplicate_message, type: 'str | None', default: None, meaning: 'Overrides duplicate rejection and requires `{value}`.'}
+      - {id: maximum-message, name: maximum_message, type: 'str | None', default: None, meaning: 'Overrides maximum rejection and requires `{max}`.'}
+      - {id: empty-message, name: empty_message, type: 'str | None', default: None, meaning: Overrides the empty-candidate announcement.}
+      - {id: invalid-message, name: invalid_message, type: 'str | None', default: None, meaning: Overrides the noncanonical-candidate announcement.}
+      - {id: uncommitted-message, name: uncommitted_message, type: 'str | None', default: None, meaning: Overrides native custom validity for an editable unfinished draft.}
+  - id: ctags-input-value-change-detail
+    kind: record
+    name: CTagsInputValueChangeDetail
+    entries:
+      - {id: source, name: source, type: CTagsInputChangeSource, meaning: Identifies the interaction or reset request.}
+      - {id: added, name: added, type: 'string[]', meaning: Contains accepted or requested additions in order.}
+      - {id: removed, name: removed, type: 'string[]', meaning: Contains accepted or requested removals in order.}
+      - {id: candidates, name: candidates, type: 'string[]', meaning: Contains the complete atomic candidate batch.}
+      - {id: previous-value, name: previousValue, type: 'string[]', meaning: Copies the effective collection before the request.}
+      - {id: next-input-value, name: nextInputValue, type: string, meaning: Supplies the draft requested only after exact value acceptance.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Reports whether client value owns the collection.}
+  - id: ctags-input-input-value-change-detail
+    kind: record
+    name: CTagsInputInputValueChangeDetail
+    entries:
+      - {id: source, name: source, type: CTagsInputChangeSource, meaning: 'Identifies direct input, accepted tokenization, or reset.'}
+      - {id: previous-value, name: previousValue, type: string, meaning: Copies the effective draft before the request.}
+      - {id: next-value, name: nextValue, type: string, meaning: Copies the requested next draft.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Reports whether client inputValue owns the draft.}
+      - {id: composing, name: composing, type: boolean, meaning: Reports whether an input callback occurred during active composition.}
+  - id: ctags-input-invalid-detail
+    kind: record
+    name: CTagsInputInvalidDetail
+    entries:
+      - {id: source, name: source, type: CTagsInputChangeSource, meaning: 'Identifies Enter, delimiter, or paste as the rejected source.'}
+      - {id: candidate, name: candidate, type: 'string | null', meaning: Identifies the first offending candidate when one exists.}
+      - {id: candidates, name: candidates, type: 'string[]', meaning: Copies the complete attempted atomic batch.}
+      - {id: value, name: value, type: 'string[]', meaning: Copies the unchanged effective tags.}
+      - {id: input-value, name: inputValue, type: string, meaning: Copies the unchanged effective draft.}
+      - {id: max-tags, name: maxTags, type: 'number | null', meaning: Reports the effective maximum.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Reports whether client value owns the collection.}
+
+translations:
+  - id: ctags-input-translations
+    component: CTagsInput
+    entries:
+      - {id: remove, key: citry-ui-tags-input-remove, purpose: Names each tag remove control., variables: 'value: str', override: '`messages.remove_label`', updates: '$c-tr handles initial controls; `i18n.bind()` handles recreated controls.'}
+      - {id: added, key: citry-ui-tags-input-added, purpose: Announces accepted additions., variables: 'value: str', override: '`messages.added_message`', updates: 'One-shot `i18n.tr()` when the interaction occurs.'}
+      - {id: removed, key: citry-ui-tags-input-removed, purpose: Announces accepted removals., variables: 'value: str', override: '`messages.removed_message`', updates: 'One-shot `i18n.tr()` when the interaction occurs.'}
+      - {id: selected, key: citry-ui-tags-input-selected, purpose: Announces keyboard-active tags., variables: 'value: str', override: '`messages.selected_message`', updates: 'One-shot `i18n.tr()` when the interaction occurs.'}
+      - {id: duplicate, key: citry-ui-tags-input-duplicate, purpose: Announces duplicate rejection., variables: 'value: str', override: '`messages.duplicate_message`', updates: 'One-shot `i18n.tr()` when the interaction occurs.'}
+      - {id: maximum, key: citry-ui-tags-input-maximum, purpose: Announces the maximum-tag limit., variables: 'max: str', override: '`messages.maximum_message`', updates: 'One-shot `i18n.tr()` with locale-formatted `max`.'}
+      - {id: required, key: citry-ui-tags-input-required, purpose: Announces an empty candidate., variables: None, override: '`messages.empty_message`', updates: 'One-shot `i18n.tr()` when the interaction occurs.'}
+      - {id: invalid, key: citry-ui-tags-input-invalid, purpose: Announces a noncanonical candidate., variables: None, override: '`messages.invalid_message`', updates: 'One-shot `i18n.tr()` when the interaction occurs.'}
+      - {id: unfinished, key: citry-ui-tags-input-unfinished, purpose: Supplies native validity text for an unfinished draft., variables: None, override: '`messages.uncommitted_message`', updates: 'One-shot `i18n.tr()` when validity is evaluated.'}

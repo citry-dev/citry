@@ -139,14 +139,59 @@ def test_i18n_provider_is_transparent_when_tag_is_omitted() -> None:
     assert without_component_ids(str(Page())) == "<p>before</p>cs-CZ<p>after</p>"
 
 
-def test_i18n_client_mode_fails_plainly_until_browser_switching_exists() -> None:
+def test_i18n_client_mode_requires_a_real_wrapper() -> None:
     app = configured_app()
 
     class Page(Component):
         citry = app
         template = '<c-i18n c-client="True">text</c-i18n>'
 
-    with pytest.raises(ValueError, match="browser locale-switching stage"):
+    with pytest.raises(ValueError, match="client provider requires a real 'tag' wrapper"):
+        Page().render()
+
+
+def test_i18n_client_mode_uses_the_existing_browser_provide_contract() -> None:
+    app = configured_app()
+
+    class Page(Component):
+        citry = app
+        template = '<c-i18n c-client="True" tag="section">text</c-i18n>'
+
+    rendered = without_component_ids(Page().render().serialize(deps_strategy="ignore"))
+    assert rendered == (
+        '<section lang="en-US" dir="ltr" '
+        'x-init="$provide(&#39;citry_i18n&#39;, Citry.i18n.provider('
+        '$el, $inject(&#39;citry_i18n&#39;, null)))">text</section>'
+    )
+
+
+def test_nested_server_provider_is_an_explicit_client_barrier() -> None:
+    app = configured_app()
+
+    class Page(Component):
+        citry = app
+        template = """
+            <c-i18n c-client="True" tag="main">
+                <c-i18n tag="section">server-only subtree</c-i18n>
+            </c-i18n>
+        """
+
+    rendered = without_component_ids(Page().render().serialize(deps_strategy="ignore"))
+    assert 'x-init="$unprovide(&#39;citry_i18n&#39;)"' in rendered
+
+
+def test_nested_server_provider_barrier_requires_a_real_wrapper() -> None:
+    app = configured_app()
+
+    class Page(Component):
+        citry = app
+        template = """
+            <c-i18n c-client="True" tag="main">
+                <c-i18n>server-only subtree</c-i18n>
+            </c-i18n>
+        """
+
+    with pytest.raises(ValueError, match="client barrier requires a real 'tag' wrapper"):
         Page().render()
 
 

@@ -146,3 +146,5 @@ interfaces:
       - {id: controlled, name: controlled, type: bool, meaning: Whether client sizes currently controls state.}
       - {id: source, name: source, type: {display: '"pointer" | "keyboard"', interfaces: [CSplitterResizeSource]}, meaning: Interaction source.}
       - {id: source-event, name: sourceEvent, type: Event, meaning: Native PointerEvent or KeyboardEvent.}
+
+translations: []

@@ -2,18 +2,19 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from hashlib import sha256
 from html.parser import HTMLParser
 from typing import Any, ClassVar, Literal, TypedDict, cast
 
-from citry import CitryRender, LibraryComponent, SlotInput, const_value
+from citry import CitryElement, CitryRender, ComponentLike, LibraryComponent, SlotInput, const_value
 from citry_ui.components._anchored_layer import (
     ANCHORED_LAYER_RUNTIME_DEPENDENCY,
     ANCHORED_LAYER_RUNTIME_JS,
 )
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -32,6 +33,9 @@ CMenuPlacement = Literal[
 CMenuSize = Literal["sm", "md", "lg"]
 CMenuIntent = Literal["default", "danger"]
 CMenuChecked = bool | Literal["mixed"]
+
+_CMENU_ROOT_RUNTIME_KEY = "citry-ui:menu-root-runtime"
+_CMENU_ROOT_RUNTIME_GENERATION = 1
 
 
 class CMenuOpenChangeDetail(TypedDict):
@@ -305,6 +309,25 @@ class _MenuServerContext:
     menu_id: str
     level_path: tuple[str, ...]
     selected_value: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _MenuSurfaceRecord:
+    menu_id: str
+    aria_label: str | None
+    aria_labelledby: str | None
+    open: bool
+    placement: str
+    match_width: bool
+    size: str
+    attrs: dict[str, object]
+    registry: _MenuRegistry
+    declarations: tuple[object, ...] | None
+
+    def __post_init__(self) -> None:
+        if (self.aria_label is None) == (self.aria_labelledby is None):
+            msg = "Menu surface requires exactly one accessible-name source."
+            raise ValueError(msg)
 
 
 def _plain_optional_string(
@@ -732,10 +755,103 @@ def _item_snapshot(
     return snapshot
 
 
-class CMenu(LibraryComponent):
-    class Dependencies:
-        js: ClassVar = [ANCHORED_LAYER_RUNTIME_DEPENDENCY]
+def _build_menu_root_snapshot(
+    component: Any,
+    kwargs: Any,
+    *,
+    declaration_slot: str = "default",
+    surface_aria_label: str | None = None,
+    surface_aria_labelledby: str | None = None,
+    allow_nested_owner: bool = False,
+) -> dict[str, object]:
+    """Build the root Menu surface and collection record for public facades."""
+    cached = getattr(component, "_cui_menu_snapshot", None)
+    if cached is not None:
+        return cast("dict[str, object]", cached)
 
+    if component.inject(_MENU_CONTEXT_KEY, None) is not None:
+        if not allow_nested_owner:
+            msg = "CMenu cannot be rendered as a Menu declaration."
+            raise ValueError(msg)
+        component.unprovide(_MENU_CONTEXT_KEY)
+    menu_id = _plain_html_id(kwargs.id) or f"cui-menu-{component.id}"
+    validate_boolean("CMenu", "open", kwargs.open)
+    validate_boolean("CMenu", "disabled", kwargs.disabled)
+    validate_boolean("CMenu", "loop", kwargs.loop)
+    validate_boolean("CMenu", "match_width", kwargs.match_width)
+    validate_boolean("CMenu", "close_on_select", kwargs.close_on_select)
+    placement = _plain_choice("CMenu", "placement", kwargs.placement, _PLACEMENTS)
+    size = _plain_choice("CMenu", "size", kwargs.size, _SIZES)
+    attrs = _copy_attrs("CMenu", "attrs", kwargs.attrs)
+    _validate_attrs("CMenu attrs", attrs, _SURFACE_OWNED_ATTRS)
+    anchor_name = f"--_cui-menu-anchor-ref-{component.id}"
+    generated_anchor_style = {
+        "--_cui-menu-anchor": anchor_name,
+        "position-anchor": anchor_name,
+    }
+    surface_style: CStyleValue = (
+        generated_anchor_style if kwargs.style is None else (kwargs.style, generated_anchor_style)
+    )
+    registry = _MenuRegistry(kind="menu")
+    declaration_fill = component.raw_slots.get(declaration_slot)
+    declaration_contents = declaration_fill.contents if declaration_fill is not None else None
+    declarations = None
+    if (
+        isinstance(declaration_contents, Sequence)
+        and not isinstance(declaration_contents, (str, bytes, bytearray))
+        and all(isinstance(item, (CitryElement, ComponentLike)) for item in declaration_contents)
+    ):
+        declarations = tuple(declaration_contents)
+    component.provide(
+        _MENU_CONTEXT_KEY,
+        context=_MenuServerContext(
+            registry=registry,
+            menu_id=menu_id,
+            level_path=(),
+        ),
+    )
+    if surface_aria_label is None and surface_aria_labelledby is None:
+        surface_aria_labelledby = f"{menu_id}-trigger"
+    menu_surface = _MenuSurfaceRecord(
+        menu_id=menu_id,
+        aria_label=surface_aria_label,
+        aria_labelledby=surface_aria_labelledby,
+        open=bool(kwargs.open) and not bool(kwargs.disabled),
+        placement=placement,
+        match_width=bool(kwargs.match_width),
+        size=size,
+        attrs=merge_root_attrs(attrs, kwargs.class_, surface_style),
+        registry=registry,
+        declarations=declarations,
+    )
+    snapshot = {
+        "menu_id": menu_id,
+        "open": bool(kwargs.open),
+        "disabled": bool(kwargs.disabled),
+        "loop": bool(kwargs.loop),
+        "placement": placement,
+        "match_width": bool(kwargs.match_width),
+        "close_on_select": bool(kwargs.close_on_select),
+        "size": size,
+        "registry": registry,
+        "declarations": declarations,
+        "activator_attrs": {
+            "id": f"{menu_id}-trigger",
+            "aria-haspopup": "menu",
+            "aria-controls": menu_id,
+            "aria-expanded": "true" if kwargs.open and not kwargs.disabled else "false",
+            "data-citry-menu-trigger": "",
+            "style": {"anchor-name": anchor_name},
+        },
+        "activator_disabled": bool(kwargs.disabled),
+        "attrs": menu_surface.attrs,
+        "menu_surface": menu_surface,
+    }
+    component._cui_menu_snapshot = snapshot
+    return snapshot
+
+
+class CMenu(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
         id: str | None = None
@@ -756,60 +872,7 @@ class CMenu(LibraryComponent):
         default: SlotInput[CMenuDefaultSlotData]
 
     def _snapshot(self, kwargs: Kwargs) -> dict[str, object]:
-        cached = getattr(self, "_cui_menu_snapshot", None)
-        if cached is not None:
-            return cached
-
-        if self.inject(_MENU_CONTEXT_KEY, None) is not None:
-            msg = "CMenu cannot be rendered as a Menu declaration."
-            raise ValueError(msg)
-        menu_id = _plain_html_id(kwargs.id) or f"cui-menu-{self.id}"
-        validate_boolean("CMenu", "open", kwargs.open)
-        validate_boolean("CMenu", "disabled", kwargs.disabled)
-        validate_boolean("CMenu", "loop", kwargs.loop)
-        validate_boolean("CMenu", "match_width", kwargs.match_width)
-        validate_boolean("CMenu", "close_on_select", kwargs.close_on_select)
-        placement = _plain_choice("CMenu", "placement", kwargs.placement, _PLACEMENTS)
-        size = _plain_choice("CMenu", "size", kwargs.size, _SIZES)
-        attrs = _copy_attrs("CMenu", "attrs", kwargs.attrs)
-        _validate_attrs("CMenu attrs", attrs, _SURFACE_OWNED_ATTRS)
-        anchor_name = f"--_cui-menu-anchor-ref-{self.id}"
-        generated_anchor_style = {"--_cui-menu-anchor": anchor_name}
-        surface_style: CStyleValue = (
-            generated_anchor_style if kwargs.style is None else (kwargs.style, generated_anchor_style)
-        )
-        registry = _MenuRegistry(kind="menu")
-        self.provide(
-            _MENU_CONTEXT_KEY,
-            context=_MenuServerContext(
-                registry=registry,
-                menu_id=menu_id,
-                level_path=(),
-            ),
-        )
-        snapshot = {
-            "menu_id": menu_id,
-            "open": bool(kwargs.open),
-            "disabled": bool(kwargs.disabled),
-            "loop": bool(kwargs.loop),
-            "placement": placement,
-            "match_width": bool(kwargs.match_width),
-            "close_on_select": bool(kwargs.close_on_select),
-            "size": size,
-            "registry": registry,
-            "activator_attrs": {
-                "id": f"{menu_id}-trigger",
-                "aria-haspopup": "menu",
-                "aria-controls": menu_id,
-                "aria-expanded": "true" if kwargs.open and not kwargs.disabled else "false",
-                "data-citry-menu-trigger": "",
-                "style": {"anchor-name": anchor_name},
-            },
-            "activator_disabled": bool(kwargs.disabled),
-            "attrs": merge_root_attrs(attrs, kwargs.class_, surface_style),
-        }
-        self._cui_menu_snapshot = snapshot
-        return snapshot
+        return _build_menu_root_snapshot(self, kwargs)
 
     def template_data(
         self,
@@ -847,32 +910,178 @@ class CMenu(LibraryComponent):
             required
           />
         </c-CInternalMenuContent>
-        <div
-          class="cui-menu"
-          c-id="menu_id"
-          c-aria-labelledby="menu_id + '-trigger'"
-          c-inert="not open or disabled"
-          c-data-open="open and not disabled"
-          c-data-placement="placement"
-          c-data-match-width="match_width"
-          c-data-size="size"
-          c-bind="attrs"
-          popover="manual"
-          role="menu"
-          data-citry-menu-root
-          data-citry-ui-part="menu"
-        >
-          <c-CInternalMenuCollection c-registry="registry">
-            <c-slot required />
-          </c-CInternalMenuCollection>
-        </div>
+        <c-CInternalMenuSurface c-surface="menu_surface">
+          <c-slot required />
+        </c-CInternalMenuSurface>
       </div>
     """
 
-    js = (
+    _runtime_source = (
         ANCHORED_LAYER_RUNTIME_JS
         + r"""
+      const hideNativePopover = (element) => {
+        if (!element?.matches?.(":popover-open")) return;
+        try {
+          HTMLElement.prototype.hidePopover.call(element);
+        } catch {
+          element.removeAttribute("popover");
+        }
+      };
+      const createCompoundAnatomy = (root, data, changed) => {
+        const children = [...root.children];
+        const primary = children[0];
+        const trigger = children[1];
+        const surface = children[2];
+        if (
+          children.length !== 3
+          || !(primary instanceof HTMLButtonElement)
+          || !(trigger instanceof HTMLButtonElement)
+          || !(surface instanceof HTMLDivElement)
+          || primary.dataset.citryUiPart !== "split-button-primary"
+          || trigger.dataset.citryUiPart !== "split-button-menu-trigger"
+          || surface.dataset.citryUiPart !== "menu"
+        ) {
+          throw new Error(
+            "[citry-ui] CSplitButton requires two immediate native Buttons "
+              + "followed by its Menu surface.",
+          );
+        }
+        const part = (name) => root.querySelector(`[data-citry-ui-part="${name}"]`);
+        const indicator = part("split-button-primary-loading-indicator");
+        const content = part("split-button-primary-content");
+        const menuIndicator = part("split-button-menu-indicator");
+        if (!indicator || !content || !menuIndicator) {
+          throw new Error("[citry-ui] CSplitButton could not resolve primary Button content.");
+        }
+        const start = part("split-button-primary-start");
+        const end = part("split-button-primary-end");
+        let valid = true;
+        let timer = null;
+        const attr = (element, name, value) => {
+          if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+        };
+        const classes = (element, ...names) => {
+          for (const name of names) element.classList.add(name);
+        };
+        const repair = () => {
+          for (const [element, values, names] of [
+            [
+              root,
+              {
+                id: data.rootId,
+                role: "group",
+                "aria-label": data.label,
+                "data-citry-ui-part": "split-button",
+                "data-citry-menu-host": "",
+              },
+              ["cui-split-button"],
+            ],
+            [
+              primary,
+              {id: data.primaryId, "data-citry-ui-part": "split-button-primary"},
+              ["cui-button", "cui-split-button__primary"],
+            ],
+            [
+              trigger,
+              {
+                id: data.triggerId,
+                "data-citry-ui-part": "split-button-menu-trigger",
+                "data-citry-menu-trigger": "",
+              },
+              ["cui-button", "cui-split-button__menu-trigger"],
+            ],
+            [surface, {id: data.surfaceId, "data-citry-ui-part": "menu", "data-citry-menu-root": ""}, ["cui-menu"]],
+          ]) {
+            for (const [name, value] of Object.entries(values)) attr(element, name, value);
+            classes(element, ...names);
+          }
+          for (const [element, name] of [
+            [content, "split-button-primary-content"],
+            [indicator, "split-button-primary-loading-indicator"],
+            [start, "split-button-primary-start"],
+            [end, "split-button-primary-end"],
+            [menuIndicator, "split-button-menu-indicator"],
+          ]) {
+            if (element) attr(element, "data-citry-ui-part", name);
+          }
+          if (primary.type !== data.primaryType) primary.type = data.primaryType;
+          if (trigger.type !== "button") trigger.type = "button";
+          for (const [element, values] of [
+            [trigger, {"aria-label": data.menuLabel, "aria-haspopup": "menu", "aria-controls": data.surfaceId}],
+            [surface, {"aria-labelledby": data.triggerId, popover: "manual", role: "menu"}],
+          ]) {
+            for (const [name, value] of Object.entries(values)) attr(element, name, value);
+          }
+          root.style.setProperty("anchor-name", data.anchorName);
+          surface.style.setProperty("--_cui-menu-anchor", data.anchorName);
+          surface.style.setProperty("position-anchor", data.anchorName);
+        };
+        const validate = () => {
+          const forbidden = primary.querySelector(
+            "a[href],button,input,select,textarea,details,summary,dialog,audio,video,object,embed,iframe,"
+              + "[contenteditable]:not([contenteditable='false']),[tabindex]:not([tabindex='-1'])",
+          );
+          const custom = [...primary.querySelectorAll("*")].some((element) => (
+            element.localName.includes("-") || element.hasAttribute("is") || element.shadowRoot
+          ));
+          const named = content.textContent?.trim()
+            || primary.getAttribute("aria-label")?.trim()
+            || primary.getAttribute("aria-labelledby")?.trim();
+          const next = !forbidden && !custom && Boolean(named);
+          if (!next && valid) {
+            console.error(
+              "[citry-ui] CSplitButton primary content must remain noninteractive "
+                + "and provide an accessible name.",
+              primary,
+            );
+          }
+          valid = next;
+          return valid;
+        };
+        const refresh = () => {
+          repair();
+          return validate();
+        };
+        const schedule = () => {
+          if (timer !== null) return;
+          timer = setTimeout(() => {
+            timer = null;
+            refresh();
+            changed();
+          }, 0);
+        };
+        const observer = new MutationObserver(schedule);
+        observer.observe(root, {
+          subtree: true,
+          childList: true,
+          characterData: true,
+          attributes: true,
+          attributeFilter: [
+            "aria-label", "aria-labelledby", "aria-controls", "aria-expanded", "aria-haspopup",
+            "contenteditable", "class", "data-citry-menu-host", "data-citry-menu-root",
+            "data-citry-menu-trigger", "data-citry-ui-part", "data-block", "data-disabled",
+            "data-intent", "data-loading", "data-loading-position", "data-match-width",
+            "data-menu-disabled", "data-open", "data-placement", "data-primary-disabled",
+            "data-size", "data-variant", "disabled", "id", "inert", "is", "popover",
+            "role", "style", "tabindex", "type",
+          ],
+        });
+        refresh();
+        return {
+          primary,
+          trigger,
+          surface,
+          indicator,
+          refresh,
+          valid: () => valid,
+          cleanup() {
+            observer.disconnect();
+            if (timer !== null) clearTimeout(timer);
+          },
+        };
+      };
       $component({
+        helpers: { createCompoundAnatomy, externalActivationVersion: 1, hideNativePopover },
         props: {
           open: {},
           disabled: {},
@@ -884,20 +1093,33 @@ class CMenu(LibraryComponent):
           onOpenChange: {},
           onAction: {},
         },
-        init: ({ els, data, props, effect, provide }) => {
-          const host = els[0];
+        init: ({ els, data, props, effect, provide }, controllerOptions = {}) => {
+          const host = controllerOptions.host ?? els[0];
+          const componentName = controllerOptions.componentName ?? "CMenu";
+          const externalActivation = controllerOptions.activationMode === "external";
           const hostSelector = "[data-citry-menu-host]";
           const nearestHost = (element) => element?.closest?.(hostSelector) ?? null;
-          const surface = [...host.querySelectorAll("[data-citry-menu-root]")]
-            .find((candidate) => nearestHost(candidate) === host);
-          const triggers = [...host.querySelectorAll("[data-citry-menu-trigger]")]
-            .filter((candidate) => nearestHost(candidate) === host);
-          if (!surface || triggers.length !== 1 || !(triggers[0] instanceof HTMLButtonElement)) {
+          const surface = controllerOptions.surface
+            ?? [...host.querySelectorAll("[data-citry-menu-root]")]
+              .find((candidate) => nearestHost(candidate) === host);
+          const triggers = controllerOptions.trigger
+            ? [controllerOptions.trigger]
+            : [...host.querySelectorAll("[data-citry-menu-trigger]")]
+              .filter((candidate) => nearestHost(candidate) === host);
+          if (
+            !surface
+            || triggers.length !== 1
+            || !(triggers[0] instanceof Element)
+            || (!externalActivation && !(triggers[0] instanceof HTMLButtonElement))
+          ) {
             throw new Error(
-              "[citry-ui] CMenu activator must spread activator_attrs onto exactly one native Button.",
+              externalActivation
+                ? `[citry-ui] ${componentName} requires exactly one external Menu anchor.`
+                : `[citry-ui] ${componentName} requires exactly one native Menu Button.`,
             );
           }
           const trigger = triggers[0];
+          const anchor = controllerOptions.anchor ?? trigger;
           // Server HTML may advertise an initially open Menu. Until the
           // settled declaration tree and activator are validated, expose no
           // interactive surface to assistive technology or pointer input.
@@ -905,29 +1127,34 @@ class CMenu(LibraryComponent):
           surface.removeAttribute("data-open");
           surface.removeAttribute("data-citry-menu-exiting");
           surface.removeAttribute("data-citry-menu-initialized");
-          trigger.setAttribute("aria-expanded", "false");
-          const unsafeInitialTriggerType = trigger.type !== "button";
+          controllerOptions.readyChanged?.(false);
+          if (!externalActivation) {
+            trigger.setAttribute("aria-expanded", "false");
+          }
+          const unsafeInitialTriggerType = !externalActivation && trigger.type !== "button";
           if (unsafeInitialTriggerType) {
             // Normalize before reporting so a malformed native activator can
             // never submit an enclosing Form while initialization fails.
             trigger.type = "button";
             console.error(
-              "[citry-ui] CMenu activator must be a native Button with type=\"button\".",
+              `[citry-ui] ${componentName} Menu Button must use type="button".`,
               trigger,
             );
           }
-          if (!trigger.id) {
-            trigger.id = `${surface.id}-trigger`;
+          if (!externalActivation) {
+            if (!trigger.id) {
+              trigger.id = `${surface.id}-trigger`;
+            }
+            surface.setAttribute("aria-labelledby", trigger.id);
           }
-          surface.setAttribute("aria-labelledby", trigger.id);
           const layerCoordinator = anchoredLayerRuntime.coordinatorFor(surface);
           const anchorName = getComputedStyle(surface)
             .getPropertyValue("--_cui-menu-anchor")
             .trim();
           if (!anchorName.startsWith("--")) {
-            throw new Error("[citry-ui] CMenu could not resolve its CSS anchor name.");
+            throw new Error(`[citry-ui] ${componentName} could not resolve its CSS anchor name.`);
           }
-          trigger.style.setProperty("anchor-name", anchorName);
+          anchor.style.setProperty("anchor-name", anchorName);
           surface.style.setProperty("position-anchor", anchorName);
 
           const allowed = {
@@ -966,9 +1193,18 @@ class CMenu(LibraryComponent):
           let deferredFocusOutside = null;
           let exitAnimation = null;
           let generation = 0;
+          let openInputRevision = 0;
+          let previousOpenInput = props.open;
+          let acceptedPrimaryClick = null;
+          const primaryTransactions = new Set();
           let refreshNativeDisabledObserver = () => {};
-          let authorDirectDisabled = trigger.disabled && !data.disabled;
-          let committedEffectiveDisabled = trigger.matches(":disabled");
+          const disabledElement = controllerOptions.disabledElement ?? trigger;
+          let authorDirectDisabled = externalActivation || controllerOptions.ownsTriggerDisabled
+            ? false
+            : trigger.disabled && !data.disabled;
+          let committedEffectiveDisabled = externalActivation
+            ? Boolean(controllerOptions.ownerDisabled?.())
+            : trigger.matches(":disabled");
           const retainedRuntimeState = surface.__citryUiMenuRuntime ?? null;
           let handoffRecoveryReady = !retainedRuntimeState;
           let handoffRecoveryScheduled = false;
@@ -1026,7 +1262,7 @@ class CMenu(LibraryComponent):
             }
             invalidEpisodes.add(name);
             console.error(
-              `[citry-ui] CMenu ${name} received invalid client value `
+              `[citry-ui] ${componentName} ${name} received invalid client value `
                 + `${describeValue(value)}; ${fallback}.`,
               surface,
             );
@@ -1126,6 +1362,9 @@ class CMenu(LibraryComponent):
             if (
               anchoredLayerRuntime.composedContains(trigger, target)
               || anchoredLayerRuntime.composedContains(surface, target)
+              || (controllerOptions.insideElements ?? []).some((element) => (
+                anchoredLayerRuntime.composedContains(element, target)
+              ))
             ) {
               return true;
             }
@@ -1320,9 +1559,7 @@ class CMenu(LibraryComponent):
             submenu.trigger.setAttribute("aria-expanded", "false");
             submenu.childSurface.inert = true;
             submenu.childSurface.removeAttribute("data-open");
-            if (submenu.childSurface.matches(":popover-open")) {
-              submenu.childSurface.hidePopover();
-            }
+            hideNativePopover(submenu.childSurface);
             layerCoordinator.unregister(submenu.layer, { cascade: true });
             submenu.stopGeometry?.();
             submenu.cancelIntent?.();
@@ -1336,17 +1573,43 @@ class CMenu(LibraryComponent):
               closeSubmenu(open[index], { restore: false });
             }
           };
+          const effectiveOwnerDisabled = () => (
+            configuration.disabled
+            || (
+              externalActivation
+                ? Boolean(controllerOptions.ownerDisabled?.())
+                : trigger.matches(":disabled")
+            )
+          );
           const updateTrigger = () => {
-            trigger.setAttribute("aria-expanded", logicalOpen ? "true" : "false");
+            controllerOptions.committedOpen?.(logicalOpen);
+            if (externalActivation) {
+              return;
+            }
+            const expanded = logicalOpen ? "true" : "false";
+            if (trigger.getAttribute("aria-expanded") !== expanded) {
+              trigger.setAttribute("aria-expanded", expanded);
+            }
             const desiredDisabled = configuration.disabled || authorDirectDisabled;
             if (trigger.disabled !== desiredDisabled) {
               trigger.disabled = desiredDisabled;
             }
           };
           const focusFallback = () => {
-            if (trigger.isConnected && !trigger.matches(":disabled")) {
-              trigger.focus({ preventScroll: true });
-              return;
+            const preferred = controllerOptions.focusReturnTarget?.()
+              ?? controllerOptions.disabledFocusTarget?.()
+              ?? trigger;
+            for (const candidate of [preferred, trigger]) {
+              if (
+                candidate?.isConnected
+                && !candidate.matches(":disabled")
+                && candidate.getClientRects().length > 0
+              ) {
+                candidate.focus({ preventScroll: true });
+                if (layerCoordinator.deepActiveElement() === candidate) {
+                  return;
+                }
+              }
             }
             const nearestContainingModal = (start) => {
               let current = start;
@@ -1369,10 +1632,30 @@ class CMenu(LibraryComponent):
             }
             target.focus({ preventScroll: true });
             if (!hadTabIndex) {
-              target.addEventListener("blur", () => target.removeAttribute("tabindex"), { once: true });
+              const removeTemporaryTabIndex = () => {
+                if (target.getAttribute("tabindex") === "-1") {
+                  target.removeAttribute("tabindex");
+                }
+              };
+              if (!externalActivation) {
+                target.addEventListener("blur", removeTemporaryTabIndex, { once: true });
+              } else if (layerCoordinator.deepActiveElement() === target) {
+                removeTemporaryTabIndex();
+              } else {
+                const currentGeneration = generation;
+                target.addEventListener("blur", removeTemporaryTabIndex, { once: true });
+                scheduleTask(() => {
+                  if (currentGeneration === generation) {
+                    removeTemporaryTabIndex();
+                  }
+                });
+              }
             }
           };
           const restoreAfterClose = (reason, source) => {
+            if (controllerOptions.shouldRestoreFocus?.(reason, source) === false) {
+              return;
+            }
             if (["outside", "focus-outside", "tab", "ancestor"].includes(reason)) {
               return;
             }
@@ -1395,20 +1678,18 @@ class CMenu(LibraryComponent):
             surface.inert = true;
             surface.removeAttribute("data-open");
             surface.removeAttribute("data-citry-menu-exiting");
-            if (surface.matches(":popover-open")) {
-              surface.hidePopover();
-            }
+            hideNativePopover(surface);
             layerCoordinator.unregister(layer, { reason, source, cascade: true });
             updateTrigger();
+            controllerOptions.closed?.();
           };
           const finishExit = (currentGeneration) => {
             if (!active || logicalOpen || currentGeneration !== generation) {
               return;
             }
-            if (surface.matches(":popover-open")) {
-              surface.hidePopover();
-            }
+            hideNativePopover(surface);
             surface.removeAttribute("data-citry-menu-exiting");
+            controllerOptions.closed?.();
           };
           const applyRootOpen = (nextOpen, context = {}) => {
             if (nextOpen === logicalOpen) {
@@ -1422,9 +1703,12 @@ class CMenu(LibraryComponent):
               if (
                 !structureValid
                 || structuralSuppressed
-                || configuration.disabled
-                || trigger.matches(":disabled")
+                || effectiveOwnerDisabled()
               ) {
+                normalizeRootClosed("ancestor", surface);
+                return;
+              }
+              if (controllerOptions.prepareOpen?.(context) === false) {
                 normalizeRootClosed("ancestor", surface);
                 return;
               }
@@ -1443,7 +1727,11 @@ class CMenu(LibraryComponent):
                   surface.showPopover();
                 }
               } catch (error) {
-                console.error("[citry-ui] CMenu could not enter the top layer:", error, surface);
+                console.error(
+                  `[citry-ui] ${componentName} could not enter the top layer:`,
+                  error,
+                  surface,
+                );
                 normalizeRootClosed("ancestor", surface);
                 return;
               }
@@ -1453,10 +1741,11 @@ class CMenu(LibraryComponent):
               surface.setAttribute("data-open", "");
               if (!layerCoordinator.register(layer)) {
                 logicalOpen = false;
-                surface.hidePopover();
+                hideNativePopover(surface);
                 surface.inert = true;
                 surface.removeAttribute("data-open");
                 updateTrigger();
+                controllerOptions.closed?.();
                 return;
               }
               updateTrigger();
@@ -1514,7 +1803,7 @@ class CMenu(LibraryComponent):
             });
           };
           const notifyOpen = (nextOpen, reason, source, forced = false) => {
-            onOpenChange?.(nextOpen, {
+            return onOpenChange?.(nextOpen, {
               reason,
               controlled,
               forced,
@@ -1523,17 +1812,38 @@ class CMenu(LibraryComponent):
           };
           const requestRootOpen = (nextOpen, reason, source, focus = "first") => {
             if (nextOpen === logicalOpen) {
-              return;
+              return {
+                accepted: true,
+                callbackResult: undefined,
+                controlled,
+                request: null,
+                same: true,
+              };
             }
             if (nextOpen) {
+              if (externalActivation && (!structureValid || effectiveOwnerDisabled())) {
+                return {
+                  accepted: false,
+                  callbackResult: undefined,
+                  controlled,
+                  request: null,
+                  same: false,
+                };
+              }
               structuralSuppressed = false;
               layerCoordinator.clearSuppression(layer);
               invalidEpisodes.delete("ancestor-open");
             }
             if (controlled) {
+              if (!nextOpen) {
+                // A controlled close request supersedes any queued focus from
+                // the opening commit even before the owner prop settles.
+                generation += 1;
+              }
               pendingOpenRequest = { nextOpen, reason, source, focus };
+              const request = pendingOpenRequest;
               const repairEntry = currentEntry;
-              notifyOpen(nextOpen, reason, source);
+              const callbackResult = notifyOpen(nextOpen, reason, source);
               if (!nextOpen && ["trigger", "escape"].includes(reason)) {
                 queueMicrotask(() => {
                   if (
@@ -1549,14 +1859,113 @@ class CMenu(LibraryComponent):
                   }
                 });
               }
-              return;
+              return {
+                accepted: Boolean(
+                  active
+                  && pendingOpenRequest === request
+                  && structureValid
+                  && !effectiveOwnerDisabled()
+                  && (!nextOpen || layerCoordinator.mayOpen(layer))
+                ),
+                callbackResult,
+                controlled: true,
+                request,
+                same: false,
+              };
             }
             internalOpen = nextOpen;
             applyRootOpen(nextOpen, { reason, source, focus });
+            let callbackResult;
             if (logicalOpen === nextOpen) {
-              notifyOpen(nextOpen, reason, source);
+              callbackResult = notifyOpen(nextOpen, reason, source);
             }
+            return {
+              accepted: Boolean(
+                active
+                && logicalOpen === nextOpen
+                && (
+                  !nextOpen
+                  || (surface.matches(":popover-open") && layer.__citryAnchoredRegistration)
+                )
+              ),
+              callbackResult,
+              controlled: false,
+              request: null,
+              same: false,
+            };
           };
+          const cancelOpenRequest = (request) => {
+            if (request !== null && pendingOpenRequest === request) {
+              pendingOpenRequest = null;
+              return true;
+            }
+            return false;
+          };
+          const beginPrimaryAction = (source, event) => {
+            if (!active || !logicalOpen) {
+              return null;
+            }
+            if (
+              event?.type === "click"
+              && acceptedPrimaryClick?.event === event
+              && acceptedPrimaryClick.source === source
+            ) {
+              return acceptedPrimaryClick.transaction;
+            }
+            const transaction = {
+              callback: onOpenChange,
+              controlled,
+              event,
+              source,
+              generation: null,
+              openInputRevision,
+            };
+            if (!controlled) {
+              internalOpen = false;
+              applyRootOpen(false, { reason: "action", source });
+            }
+            transaction.generation = generation;
+            primaryTransactions.add(transaction);
+            if (event?.type === "click") {
+              acceptedPrimaryClick = { event, source, transaction };
+            }
+            scheduleTask(() => {
+              primaryTransactions.delete(transaction);
+              if (acceptedPrimaryClick?.transaction === transaction) {
+                acceptedPrimaryClick = null;
+              }
+              if (
+                transaction.generation !== generation
+                || transaction.openInputRevision !== openInputRevision
+              ) {
+                return;
+              }
+              transaction.callback?.(
+                false,
+                Object.freeze({
+                  reason: "action",
+                  controlled: transaction.controlled,
+                  forced: false,
+                  source: transaction.source,
+                }),
+              );
+            });
+            return transaction;
+          };
+          const observePrimarySubmit = (event) => {
+            const source = event?.submitter;
+            if (
+              acceptedPrimaryClick?.source === source
+              && acceptedPrimaryClick.transaction.event?.type === "click"
+            ) {
+              return acceptedPrimaryClick.transaction;
+            }
+            return beginPrimaryAction(source, event);
+          };
+          const hasPrimaryClickToken = (source) => (
+            acceptedPrimaryClick?.source === source
+            && primaryTransactions.has(acceptedPrimaryClick.transaction)
+          );
           const forceRootClose = (reason, source) => {
             const publicReason = reason === "modal" ? "ancestor" : reason;
             const wasOpen = logicalOpen;
@@ -1579,9 +1988,15 @@ class CMenu(LibraryComponent):
           const layer = {
             surface,
             trigger,
-            isEligible: () => !trigger.matches(":disabled") && structureValid,
+            isEligible: () => !effectiveOwnerDisabled() && structureValid,
             isOpen: () => active && logicalOpen,
             requestDismiss: (reason, source) => {
+              if (
+                reason === "focus-outside"
+                && controllerOptions.ignoreFocusOutside?.(source)
+              ) {
+                return;
+              }
               if (actionTransaction && reason === "focus-outside") {
                 deferredFocusOutside = source;
                 return;
@@ -1589,7 +2004,7 @@ class CMenu(LibraryComponent):
               requestRootOpen(false, reason, source);
             },
             forceClose: (reason, source) => forceRootClose(reason, source),
-            insideElements: [host],
+            insideElements: [...new Set([host, ...(controllerOptions.insideElements ?? [])])],
           };
 
           const openSubmenu = (submenu, options = {}) => {
@@ -1728,7 +2143,10 @@ class CMenu(LibraryComponent):
             focusEntry(entries[next]);
           };
           const onClick = (event) => {
-            if (event.target === trigger || trigger.contains(event.target)) {
+            if (
+              !externalActivation
+              && (event.target === trigger || trigger.contains(event.target))
+            ) {
               refreshNativeDisabledObserver();
               if (trigger.type !== "button") {
                 event.preventDefault();
@@ -1756,7 +2174,10 @@ class CMenu(LibraryComponent):
             activate(entry, event);
           };
           const onKeydown = (event) => {
-            if (event.target === trigger || trigger.contains(event.target)) {
+            if (
+              !externalActivation
+              && (event.target === trigger || trigger.contains(event.target))
+            ) {
               if (["ArrowDown", "ArrowUp"].includes(event.key)) {
                 event.preventDefault();
                 requestRootOpen(true, "trigger", trigger, event.key === "ArrowUp" ? "last" : "first");
@@ -1863,6 +2284,43 @@ class CMenu(LibraryComponent):
           };
 
           const validateActivator = () => {
+            if (externalActivation) {
+              const valid = controllerOptions.validateOwner?.() !== false;
+              if (!valid && !invalidEpisodes.has("activator-structure")) {
+                invalidEpisodes.add("activator-structure");
+                console.error(
+                  `[citry-ui] ${componentName} external owner structure is invalid.`,
+                  host,
+                );
+              }
+              if (valid) {
+                invalidEpisodes.delete("activator-structure");
+              }
+              return valid;
+            }
+            if (controllerOptions.compound) {
+              const children = [...host.children];
+              const valid = (
+                !unsafeInitialTriggerType
+                && children.length === 3
+                && children[1] === trigger
+                && children[2] === surface
+                && children[0] instanceof HTMLButtonElement
+                && trigger.type === "button"
+              );
+              if (!valid && !invalidEpisodes.has("activator-structure")) {
+                invalidEpisodes.add("activator-structure");
+                console.error(
+                  `[citry-ui] ${componentName} requires two immediate native Buttons `
+                    + "followed by its Menu surface.",
+                  host,
+                );
+              }
+              if (valid) {
+                invalidEpisodes.delete("activator-structure");
+              }
+              return valid;
+            }
             const interactive = [...host.querySelectorAll(
               "button, a[href], input, select, textarea, "
                 + "[contenteditable]:not([contenteditable='false']), "
@@ -1880,7 +2338,7 @@ class CMenu(LibraryComponent):
               if (!invalidEpisodes.has("activator-structure")) {
                 invalidEpisodes.add("activator-structure");
                 console.error(
-                  "[citry-ui] CMenu activator must contain exactly one native "
+                  `[citry-ui] ${componentName} activator must contain exactly one native `
                     + "Button with type=\"button\" and no additional interactive content.",
                   host,
                 );
@@ -1953,6 +2411,7 @@ class CMenu(LibraryComponent):
                 internalOpen = false;
               }
               surface.removeAttribute("data-citry-menu-initialized");
+              controllerOptions.readyChanged?.(false);
               normalizeRootClosed("ancestor", surface);
               if (wasOpen) {
                 notifyOpen(false, "ancestor", surface, true);
@@ -2053,6 +2512,7 @@ class CMenu(LibraryComponent):
             pendingRemovedEntry = null;
             updateCurrent(currentEntry);
             surface.setAttribute("data-citry-menu-initialized", "");
+            controllerOptions.readyChanged?.(true);
             const desiredOpen = controlled ? Boolean(props.open) : internalOpen;
             const retainedFocus = runtimeState.currentValue !== null
               || runtimeState.currentKey !== null;
@@ -2064,7 +2524,11 @@ class CMenu(LibraryComponent):
               },
             );
             if (desiredOpen && logicalOpen) {
+              const focusGeneration = generation;
               scheduleTask(() => {
+                if (!active || !logicalOpen || generation !== focusGeneration) {
+                  return;
+                }
                 restoreRetainedSubmenus();
                 if (currentEntry) {
                   focusEntry(currentEntry);
@@ -2079,6 +2543,9 @@ class CMenu(LibraryComponent):
             }
             reconciliationTimer = setTimeout(() => {
               reconciliationTimer = null;
+              if (!active || !host.isConnected) {
+                return;
+              }
               reconcile();
             }, 0);
           };
@@ -2090,6 +2557,36 @@ class CMenu(LibraryComponent):
             radioGroup: null,
             rootLayer: layer,
             register(entry) {
+              entry.serverBaseline ??= JSON.stringify([
+                entry.kind,
+                entry.value ?? null,
+                entry.href ?? null,
+                entry.ownDisabled ?? null,
+                entry.closeOnSelect ?? null,
+                entry.intent ?? null,
+                entry.textValue ?? null,
+                entry.checked ?? null,
+                entry.serverValue ?? null,
+                entry.root.textContent,
+                [...entry.root.attributes]
+                  .filter((attribute) => (
+                    !attribute.name.startsWith("data-cid")
+                    && !attribute.name.startsWith("data-cev")
+                    && attribute.name !== "data-has-alpine-state"
+                    && attribute.name !== "x-citry-fill-source"
+                    && ![
+                      "aria-checked",
+                      "aria-disabled",
+                      "aria-expanded",
+                      "data-checked",
+                      "data-disabled",
+                      "data-open",
+                      "tabindex",
+                    ].includes(attribute.name)
+                  ))
+                  .map((attribute) => [attribute.name, attribute.value])
+                  .sort(),
+              ]);
               registrations.set(entry.root, entry);
               scheduleReconcile();
               return () => {
@@ -2162,8 +2659,10 @@ class CMenu(LibraryComponent):
               return;
             }
             if (nativeOpen) {
-              surface.hidePopover();
-              notifyOpen(true, "native", surface);
+              hideNativePopover(surface);
+              if (!externalActivation) {
+                notifyOpen(true, "native", surface);
+              }
               return;
             }
             if (controlled) {
@@ -2192,11 +2691,16 @@ class CMenu(LibraryComponent):
             layerCoordinator.unregister(layer, { cascade: true });
             updateTrigger();
             notifyOpen(false, "native", surface);
+            controllerOptions.closed?.();
           };
           surface.addEventListener("toggle", onToggle);
 
           effect(() => {
             const suppliedOpen = props.open;
+            if (!Object.is(suppliedOpen, previousOpenInput)) {
+              previousOpenInput = suppliedOpen;
+              openInputRevision += 1;
+            }
             if (suppliedOpen === undefined || suppliedOpen === null) {
               if (controlled) {
                 internalOpen = logicalOpen;
@@ -2230,11 +2734,15 @@ class CMenu(LibraryComponent):
             };
             onOpenChange = resolveCallback("onOpenChange");
             onAction = resolveCallback("onAction");
-            surface.dataset.placement = configuration.placement;
-            surface.dataset.size = configuration.size;
+            if (surface.dataset.placement !== configuration.placement) {
+              surface.dataset.placement = configuration.placement;
+            }
+            if (surface.dataset.size !== configuration.size) {
+              surface.dataset.size = configuration.size;
+            }
             surface.toggleAttribute("data-match-width", configuration.matchWidth);
             updateTrigger();
-            const effectiveDisabled = trigger.matches(":disabled");
+            const effectiveDisabled = effectiveOwnerDisabled();
             if (pendingDisabledHandoff && effectiveDisabled) {
               pendingDisabledHandoff = false;
               if (!controlled) {
@@ -2252,18 +2760,23 @@ class CMenu(LibraryComponent):
             }
             pendingDisabledHandoff = false;
             committedEffectiveDisabled = effectiveDisabled;
+            controllerOptions.disabledChanged?.();
             scheduleReconcile();
           });
 
           const reconcileNativeDisabled = (records = []) => {
             if (
+              !externalActivation
+              &&
+              !controllerOptions.ownsTriggerDisabled
+              &&
               records.some((record) => record.type === "attributes" && record.target === trigger)
               && trigger.disabled !== (configuration.disabled || authorDirectDisabled)
             ) {
               authorDirectDisabled = trigger.disabled;
             }
             updateTrigger();
-            const effectiveDisabled = trigger.matches(":disabled");
+            const effectiveDisabled = effectiveOwnerDisabled();
             if (effectiveDisabled && logicalOpen) {
               if (!controlled) {
                 internalOpen = false;
@@ -2274,10 +2787,11 @@ class CMenu(LibraryComponent):
               applyRootOpen(true, { reason: "disabled", source: trigger, focus: "first" });
             }
             committedEffectiveDisabled = effectiveDisabled;
+            controllerOptions.disabledChanged?.();
           };
           const registerNativeDisabled = () => {
             anchoredLayerRuntime.menuDisabledObservers ??= new WeakMap();
-            const rootNode = trigger.getRootNode();
+            const rootNode = disabledElement.getRootNode();
             let manager = anchoredLayerRuntime.menuDisabledObservers.get(rootNode);
             if (!manager) {
               const entries = new Map();
@@ -2309,9 +2823,12 @@ class CMenu(LibraryComponent):
               manager = { entries, observer };
               anchoredLayerRuntime.menuDisabledObservers.set(rootNode, manager);
             }
-            manager.entries.set(trigger, reconcileNativeDisabled);
+            manager.entries.set(disabledElement, reconcileNativeDisabled);
             return () => {
-              manager.entries.delete(trigger);
+              if (manager.entries.get(disabledElement) !== reconcileNativeDisabled) {
+                return;
+              }
+              manager.entries.delete(disabledElement);
               if (manager.entries.size === 0) {
                 manager.observer.disconnect();
                 anchoredLayerRuntime.menuDisabledObservers.delete(rootNode);
@@ -2321,7 +2838,7 @@ class CMenu(LibraryComponent):
           let nativeDisabledRoot = null;
           let unregisterNativeDisabled = () => {};
           refreshNativeDisabledObserver = () => {
-            const nextRoot = trigger.getRootNode();
+            const nextRoot = disabledElement.getRootNode();
             if (nextRoot === nativeDisabledRoot) {
               return;
             }
@@ -2355,7 +2872,11 @@ class CMenu(LibraryComponent):
             attributeFilter: ["contenteditable", "href", "role", "tabindex", "type"],
           });
 
-          return () => {
+          const cleanup = (options = {}) => {
+            if (!active) {
+              return;
+            }
+            const handoff = options.handoff === true;
             active = false;
             runtimeState.open = logicalOpen;
             runtimeState.currentKey = currentEntry?.key ?? null;
@@ -2388,7 +2909,14 @@ class CMenu(LibraryComponent):
             host.removeEventListener("pointerover", onPointerOver, true);
             host.removeEventListener("pointerout", onPointerOut, true);
             surface.removeEventListener("toggle", onToggle);
-            closeAllSubmenus();
+            if (handoff) {
+              for (const submenu of submenus) {
+                submenu.stopGeometry?.();
+                layerCoordinator.unregister(submenu.layer, { cascade: false });
+              }
+            } else {
+              closeAllSubmenus();
+            }
             generation += 1;
             exitAnimation?.cancel();
             resetTypeahead();
@@ -2399,24 +2927,72 @@ class CMenu(LibraryComponent):
               clearTimeout(task);
             }
             scheduledTasks.clear();
-            layerCoordinator.unregister(layer, { cascade: true });
-            if (surface.matches(":popover-open")) {
-              surface.hidePopover();
+            layerCoordinator.unregister(layer, { cascade: !handoff });
+            if (!handoff) {
+              hideNativePopover(surface);
+              surface.inert = true;
+              surface.removeAttribute("data-open");
+              surface.removeAttribute("data-citry-menu-exiting");
+              surface.removeAttribute("data-citry-menu-initialized");
+              controllerOptions.readyChanged?.(false);
+              if (!externalActivation) {
+                trigger.setAttribute("aria-expanded", "false");
+              }
+              controllerOptions.closed?.();
             }
-            surface.inert = true;
-            surface.removeAttribute("data-open");
-            surface.removeAttribute("data-citry-menu-exiting");
-            surface.removeAttribute("data-citry-menu-initialized");
-            trigger.setAttribute("aria-expanded", "false");
             registrations.clear();
             submenus.clear();
+            primaryTransactions.clear();
+            acceptedPrimaryClick = null;
           };
+          if (controllerOptions.controller) {
+            return {
+              cleanup,
+              beginPrimaryAction,
+              cancelOpenRequest,
+              forceClose: forceRootClose,
+              observePrimarySubmit,
+              hasPrimaryClickToken,
+              focusRoot(boundary = "first") {
+                if (logicalOpen) {
+                  focusBoundary(surface, boundary);
+                }
+              },
+              isControlled: () => controlled,
+              isOpen: () => logicalOpen,
+              declarationSignature: () => JSON.stringify(
+                [...registrations.values()].map((entry) => entry.serverBaseline),
+              ),
+              requestOpen: requestRootOpen,
+              repairOwned() {
+                if (surface.inert === logicalOpen) {
+                  surface.inert = !logicalOpen;
+                }
+                surface.toggleAttribute("data-open", logicalOpen);
+                if (surface.dataset.placement !== configuration.placement) {
+                  surface.dataset.placement = configuration.placement;
+                }
+                if (surface.dataset.size !== configuration.size) {
+                  surface.dataset.size = configuration.size;
+                }
+                surface.toggleAttribute("data-match-width", configuration.matchWidth);
+                updateTrigger();
+              },
+              refreshRootScope() {
+                refreshNativeDisabledObserver();
+                if (logicalOpen) {
+                  layerCoordinator.register(layer);
+                }
+              },
+            };
+          }
+          return cleanup;
         },
       });
     """
     )
 
-    css = """
+    _style_source = """
       @layer citry-ui.theme {
         :where(.cui-menu-host) {
           display: contents;
@@ -2890,6 +3466,24 @@ class CMenu(LibraryComponent):
         }
       }
     """
+
+
+_CMENU_SHARED_ASSETS = build_shared_component_assets(
+    component_name="CMenu",
+    runtime_key=_CMENU_ROOT_RUNTIME_KEY,
+    generation=_CMENU_ROOT_RUNTIME_GENERATION,
+    component_source=CMenu._runtime_source,
+    style_source=CMenu._style_source,
+)
+
+
+class _CMenuDependencies:
+    js: ClassVar = [ANCHORED_LAYER_RUNTIME_DEPENDENCY, _CMENU_SHARED_ASSETS.runtime]
+    css: ClassVar = [_CMENU_SHARED_ASSETS.style]
+
+
+CMenu.js = _CMENU_SHARED_ASSETS.component_js
+CMenu.Dependencies = _CMenuDependencies
 
 
 _MENU_ITEM_JS = r"""
@@ -3768,6 +4362,7 @@ class CMenuRadioGroup(LibraryComponent):
             key: data.key,
             kind: "radio-group",
             value: null,
+            serverValue: data.value,
             surface: context.surface,
             container: context.container,
             requestValue(radio, event, path) {
@@ -4555,7 +5150,7 @@ class CMenuSubmenu(LibraryComponent):
               return;
             }
             if (nativeOpen) {
-              surface.hidePopover();
+              hideNativePopover(surface);
               return;
             }
             context.closeSubmenu(entry, { restore: false });
@@ -4575,6 +5170,46 @@ class CMenuSubmenu(LibraryComponent):
       });
     """
     )
+
+
+class CInternalMenuSurface(LibraryComponent):
+    @dataclass(slots=True)
+    class Kwargs:
+        surface: _MenuSurfaceRecord
+
+    @dataclass(slots=True)
+    class Slots:
+        default: SlotInput[object]
+
+    template = """
+      <div
+        class="cui-menu"
+        c-id="surface.menu_id"
+        c-aria-label="surface.aria_label"
+        c-aria-labelledby="surface.aria_labelledby"
+        c-inert="not surface.open"
+        c-data-open="surface.open"
+        c-data-placement="surface.placement"
+        c-data-match-width="surface.match_width"
+        c-data-size="surface.size"
+        c-bind="surface.attrs"
+        popover="manual"
+        role="menu"
+        data-citry-menu-root
+        data-citry-ui-part="menu"
+      >
+        <c-if cond="surface.declarations is not None">
+          <c-CInternalMenuCollection c-registry="surface.registry">
+            <c-for each="declaration in surface.declarations">{{ declaration }}</c-for>
+          </c-CInternalMenuCollection>
+        </c-if>
+        <c-else>
+          <c-CInternalMenuCollection c-registry="surface.registry">
+            <c-slot required />
+          </c-CInternalMenuCollection>
+        </c-else>
+      </div>
+    """
 
 
 class CInternalMenuCollection(LibraryComponent):

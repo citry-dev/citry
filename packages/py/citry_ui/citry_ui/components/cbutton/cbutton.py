@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping  # noqa: TC003
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from citry import LibraryComponent, SlotInput
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
 from citry_ui.components._context import FORM_CONTEXT_KEY
+from citry_ui.components._shared_component_assets import build_shared_component_assets
 from citry_ui.components._validation import (
     reject_owned_attrs,
     validate_boolean,
@@ -20,6 +21,9 @@ CButtonVariant = Literal["solid", "outline", "ghost"]
 CButtonIntent = Literal["primary", "neutral", "success", "warn", "danger"]
 CButtonSize = Literal["sm", "md", "lg"]
 CButtonLoadingPos = Literal["start", "center", "end"]
+
+_CBUTTON_RUNTIME_KEY = "citry-ui:button-runtime"
+_CBUTTON_RUNTIME_GENERATION = 1
 
 
 class CButtonDefaultSlotData:
@@ -74,6 +78,92 @@ def _get_case_insensitive(attrs: Mapping[str, object] | None, name: str) -> obje
     return value
 
 
+def _build_button_snapshot(component: Any, kwargs: Any) -> dict[str, Any]:
+    """Build the native Button render record shared by Button facades."""
+    validate_choice("CButton", "type", kwargs.type, ("button", "submit", "reset"))
+    validate_choice("CButton", "variant", kwargs.variant, ("solid", "outline", "ghost"))
+    validate_choice(
+        "CButton",
+        "intent",
+        kwargs.intent,
+        ("primary", "neutral", "success", "warn", "danger"),
+    )
+    validate_choice("CButton", "size", kwargs.size, ("sm", "md", "lg"))
+    validate_choice(
+        "CButton",
+        "loading_pos",
+        kwargs.loading_pos,
+        ("start", "center", "end"),
+    )
+    if kwargs.href is not None and not isinstance(kwargs.href, str):
+        msg = f"CButton href must be a string or None, got {kwargs.href!r}."
+        raise TypeError(msg)
+    if kwargs.href is not None and kwargs.type != "button":
+        msg = "CButton type applies only to action buttons and must remain 'button' when href is set."
+        raise ValueError(msg)
+    validate_boolean("CButton", "disabled", kwargs.disabled)
+    validate_boolean("CButton", "loading", kwargs.loading)
+    validate_boolean("CButton", "block", kwargs.block)
+    reject_owned_attrs(
+        kwargs.attrs,
+        {
+            "aria-busy",
+            "aria-disabled",
+            "data-block",
+            "data-citry-button-has-end",
+            "data-citry-button-has-start",
+            "data-citry-button-initialized",
+            "data-citry-ui-part",
+            "data-disabled",
+            "data-intent",
+            "data-loading",
+            "data-loading-position",
+            "data-size",
+            "data-variant",
+            "disabled",
+            "href",
+            "type",
+        },
+        "CButton",
+    )
+    if kwargs.href is not None:
+        _reject_link_form_attrs(kwargs.attrs)
+
+    form = component.inject(FORM_CONTEXT_KEY, None)
+    disabled = (bool(form.disabled) if form is not None else False) or kwargs.disabled
+    is_link = kwargs.href is not None
+    unavailable = disabled or kwargs.loading
+    attrs = merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style)
+    authored_tabindex = _pop_case_insensitive(attrs, "tabindex")
+    if not is_link:
+        tabindex_without_js = authored_tabindex
+    elif disabled:
+        tabindex_without_js = -1
+    elif kwargs.loading:
+        tabindex_without_js = authored_tabindex if authored_tabindex is not None else 0
+    else:
+        tabindex_without_js = authored_tabindex
+    return {
+        "root_tag": "a" if is_link else "button",
+        "type_without_js": None if is_link else kwargs.type,
+        "href_without_js": None if unavailable else kwargs.href,
+        "disabled_without_js": unavailable if not is_link else None,
+        "tabindex_without_js": tabindex_without_js,
+        "aria_busy": "true" if kwargs.loading else None,
+        "aria_disabled": "true" if unavailable else None,
+        "disabled": disabled,
+        "loading": kwargs.loading,
+        "variant": kwargs.variant,
+        "intent": kwargs.intent,
+        "size": kwargs.size,
+        "block": kwargs.block,
+        "loading_pos": kwargs.loading_pos,
+        "attrs": attrs,
+        "has_start": "start" in component.raw_slots,
+        "has_end": "end" in component.raw_slots,
+    }
+
+
 class CButton(LibraryComponent):
     @dataclass(slots=True)
     class Kwargs:
@@ -102,88 +192,7 @@ class CButton(LibraryComponent):
         kwargs: Kwargs,
         slots: Slots,  # noqa: ARG002
     ) -> dict[str, Any]:
-        validate_choice("CButton", "type", kwargs.type, ("button", "submit", "reset"))
-        validate_choice("CButton", "variant", kwargs.variant, ("solid", "outline", "ghost"))
-        validate_choice(
-            "CButton",
-            "intent",
-            kwargs.intent,
-            ("primary", "neutral", "success", "warn", "danger"),
-        )
-        validate_choice("CButton", "size", kwargs.size, ("sm", "md", "lg"))
-        validate_choice(
-            "CButton",
-            "loading_pos",
-            kwargs.loading_pos,
-            ("start", "center", "end"),
-        )
-        if kwargs.href is not None and not isinstance(kwargs.href, str):
-            msg = f"CButton href must be a string or None, got {kwargs.href!r}."
-            raise TypeError(msg)
-        if kwargs.href is not None and kwargs.type != "button":
-            msg = "CButton type applies only to action buttons and must remain 'button' when href is set."
-            raise ValueError(msg)
-        validate_boolean("CButton", "disabled", kwargs.disabled)
-        validate_boolean("CButton", "loading", kwargs.loading)
-        validate_boolean("CButton", "block", kwargs.block)
-        reject_owned_attrs(
-            kwargs.attrs,
-            {
-                "aria-busy",
-                "aria-disabled",
-                "data-block",
-                "data-citry-button-has-end",
-                "data-citry-button-has-start",
-                "data-citry-button-initialized",
-                "data-citry-ui-part",
-                "data-disabled",
-                "data-intent",
-                "data-loading",
-                "data-loading-position",
-                "data-size",
-                "data-variant",
-                "disabled",
-                "href",
-                "type",
-            },
-            "CButton",
-        )
-        if kwargs.href is not None:
-            _reject_link_form_attrs(kwargs.attrs)
-
-        form = self.inject(FORM_CONTEXT_KEY, None)
-        disabled = (bool(form.disabled) if form is not None else False) or kwargs.disabled
-        is_link = kwargs.href is not None
-        unavailable = disabled or kwargs.loading
-        attrs = merge_root_attrs(kwargs.attrs, kwargs.class_, kwargs.style)
-        authored_tabindex = _pop_case_insensitive(attrs, "tabindex")
-        if not is_link:
-            tabindex_without_js = authored_tabindex
-        elif disabled:
-            tabindex_without_js = -1
-        elif kwargs.loading:
-            tabindex_without_js = authored_tabindex if authored_tabindex is not None else 0
-        else:
-            tabindex_without_js = authored_tabindex
-        return {
-            "root_tag": "a" if is_link else "button",
-            "type_without_js": None if is_link else kwargs.type,
-            "href_without_js": None if unavailable else kwargs.href,
-            "disabled_without_js": unavailable if not is_link else None,
-            "tabindex_without_js": tabindex_without_js,
-            "aria_busy": "true" if kwargs.loading else None,
-            "aria_disabled": "true" if unavailable else None,
-            "disabled": disabled,
-            "loading": kwargs.loading,
-            "variant": kwargs.variant,
-            "intent": kwargs.intent,
-            "size": kwargs.size,
-            "block": kwargs.block,
-            "loading_pos": kwargs.loading_pos,
-            "attrs": attrs,
-            "has_start": "start" in self.raw_slots,
-            "has_end": "end" in self.raw_slots,
-        }
+        return _build_button_snapshot(self, kwargs)
 
     def js_data(
         self,
@@ -259,8 +268,156 @@ class CButton(LibraryComponent):
       </c-element>
     """
 
-    js = """
+    _runtime_source = """
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
       $component({
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
         props: {
           disabled: {},
           loading: {},
@@ -281,7 +438,7 @@ class CButton(LibraryComponent):
             size: ["sm", "md", "lg"],
             loadingPosition: ["start", "center", "end"],
           };
-          const invalidEpisodes = new Map();
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
           let configuration = {
             disabled: data.disabled,
             loading: data.loading,
@@ -292,90 +449,12 @@ class CButton(LibraryComponent):
             loadingPosition: data.loadingPosition,
           };
 
-          const describeValue = (value) => {
-            try {
-              return JSON.stringify(value) ?? String(value);
-            } catch {
-              return String(value);
-            }
-          };
-          const reportInvalid = (name, value) => {
-            const describedValue = describeValue(value);
-            const fingerprint = `${typeof value}:${describedValue}`;
-            if (invalidEpisodes.get(name) === fingerprint) {
-              return;
-            }
-            invalidEpisodes.set(name, fingerprint);
-            console.error(
-              `[citry-ui] CButton ${name} received invalid client value ${describedValue}; `
-                + "using the server-rendered fallback.",
-              root,
-            );
-          };
-          const resolveChoice = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
-            if (allowedValues[name].includes(value)) {
-              invalidEpisodes.delete(name);
-              return value;
-            }
-            reportInvalid(name, value);
-            return data[name];
-          };
-          const resolveBoolean = (name) => {
-            const value = props[name] === undefined ? data[name] : props[name];
-            if (typeof value === "boolean") {
-              invalidEpisodes.delete(name);
-              return value;
-            }
-            reportInvalid(name, value);
-            return data[name];
-          };
           const applyConfiguration = (next) => {
             configuration = next;
-            if (isLink) {
-              if (next.disabled || next.loading) {
-                root.removeAttribute("href");
-              } else {
-                root.setAttribute("href", data.href);
-              }
-              const tabIndex = next.disabled
-                ? -1
-                : next.loading
-                  ? (data.tabIndex ?? 0)
-                  : data.tabIndex;
-              if (tabIndex === null || tabIndex === undefined) {
-                root.removeAttribute("tabindex");
-              } else {
-                root.setAttribute("tabindex", String(tabIndex));
-              }
-            } else {
-              root.disabled = next.disabled;
-            }
-            root.toggleAttribute("data-disabled", next.disabled);
-            root.toggleAttribute("data-loading", next.loading);
-            root.toggleAttribute("data-block", next.block);
-            root.dataset.variant = next.variant;
-            root.dataset.intent = next.intent;
-            root.dataset.size = next.size;
-            root.dataset.loadingPosition = next.loadingPosition;
-            if (next.loading) {
-              root.setAttribute("aria-busy", "true");
-            } else {
-              root.removeAttribute("aria-busy");
-            }
-            if (next.disabled || next.loading) {
-              root.setAttribute("aria-disabled", "true");
-            } else {
-              root.removeAttribute("aria-disabled");
-            }
-            indicator.hidden = !next.loading;
+            applyButtonConfiguration(root, indicator, data, next);
           };
           const blockUnavailableActivation = (event) => {
-            if (!configuration.loading && !(isLink && configuration.disabled)) {
-              return;
-            }
-            event.preventDefault();
-            event.stopImmediatePropagation();
+            guardButtonActivation(root, configuration, event);
           };
           const blockLoadingSubmitter = (event) => {
             if (!configuration.loading || event.submitter !== root) {
@@ -389,15 +468,15 @@ class CButton(LibraryComponent):
           root.addEventListener("click", blockUnavailableActivation, true);
           nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
           effect(() => {
-            const localDisabled = resolveBoolean("disabled");
+            const localDisabled = resolver.boolean("disabled");
             applyConfiguration({
               disabled: Boolean(formContext?.disabled) || localDisabled,
-              loading: resolveBoolean("loading"),
-              variant: resolveChoice("variant"),
-              intent: resolveChoice("intent"),
-              size: resolveChoice("size"),
-              block: resolveBoolean("block"),
-              loadingPosition: resolveChoice("loadingPosition"),
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
             });
           });
           root.setAttribute("data-citry-button-initialized", "");
@@ -411,7 +490,7 @@ class CButton(LibraryComponent):
       });
     """
 
-    css = """
+    _style_source = """
       @layer citry-ui.theme {
         :where(.cui-button) {
           --_cui-button-tone: LinkText;
@@ -633,11 +712,17 @@ class CButton(LibraryComponent):
         ),
         :where(
           .cui-button[data-loading][data-loading-position="start"]
-          [data-citry-ui-part="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
         ),
         :where(
           .cui-button[data-loading][data-loading-position="end"]
-          [data-citry-ui-part="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
         ) {
           opacity: 0;
         }
@@ -698,6 +783,24 @@ class CButton(LibraryComponent):
         }
       }
     """
+
+
+_CBUTTON_SHARED_ASSETS = build_shared_component_assets(
+    component_name="CButton",
+    runtime_key=_CBUTTON_RUNTIME_KEY,
+    generation=_CBUTTON_RUNTIME_GENERATION,
+    component_source=CButton._runtime_source,
+    style_source=CButton._style_source,
+)
+
+
+class _CButtonDependencies:
+    js: ClassVar = [_CBUTTON_SHARED_ASSETS.runtime]
+    css: ClassVar = [_CBUTTON_SHARED_ASSETS.style]
+
+
+CButton.js = _CBUTTON_SHARED_ASSETS.component_js
+CButton.Dependencies = _CButtonDependencies
 
 
 __all__ = [

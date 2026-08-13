@@ -10,7 +10,7 @@ import pytest
 pytest.importorskip("pytest_playwright")
 
 from citry_ui.quality.accessibility import AXE_INCOMPLETE_DISPOSITIONS
-from citry_ui.quality.routes import render_scenario
+from citry_ui.quality.routes import build_scenario, render_scenario
 from citry_ui.quality.scenarios import SCENARIOS, QualityTool
 
 pytestmark = pytest.mark.e2e
@@ -58,6 +58,29 @@ def _with_external_css(html: str, css: str, *, after_citry: bool) -> str:
     return html[:first_citry_style] + stylesheet + html[first_citry_style:]
 
 
+def _install_image_scenario_routes(page: Any) -> None:
+    valid = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720">'
+        '<rect width="1280" height="720" fill="#334155"/></svg>'
+    )
+
+    def serve(route: Any) -> None:
+        url = route.request.url
+        if "missing" in url or "blocked-images" in url:
+            route.fulfill(status=200, content_type="image/png", body=b"not-an-image")
+            return
+        route.fulfill(
+            status=200,
+            content_type="image/svg+xml",
+            body=valid,
+            headers={"access-control-allow-origin": "*"},
+        )
+
+    page.route("https://images.citry.test/**", serve)
+    page.route("https://cross-origin.citry.test/**", serve)
+    page.route("https://blocked-images.citry.test/**", serve)
+
+
 def _activate_representative_state(page: Any, scenario_id: str) -> None:
     if scenario_id == "accordion.states":
         page.get_by_role("button", name="Understory").click()
@@ -70,6 +93,16 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
         return
     if scenario_id == "button.states":
         page.get_by_role("button", name="Client-controlled loading").click()
+        return
+    if scenario_id == "split-button.states":
+        page.get_by_role("button", name="Save accession").click()
+        return
+    if scenario_id == "tags-input.states":
+        page.locator('[data-quality-states~="draft"] [data-citry-ui-part="input"]').fill("quality draft")
+        return
+    if scenario_id == "image.states":
+        page.get_by_role("button", name="Broken", exact=True).click()
+        page.wait_for_function("document.querySelector('#quality-image-reactive').dataset.status === 'error'")
         return
     if scenario_id == "field-input.states":
         page.get_by_role("textbox", name="Controlled species note").fill("x")
@@ -128,6 +161,13 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
         page.get_by_role("button", name="Open archive index").click()
         page.wait_for_function("document.querySelector('#quality-menu').matches(':popover-open')")
         return
+    if scenario_id == "context-menu.states":
+        page.locator("#quality-context-menu-basic-target").click(
+            button="right",
+            position={"x": 24, "y": 24},
+        )
+        page.wait_for_function("document.querySelector('#quality-context-menu-basic-menu').matches(':popover-open')")
+        return
     if scenario_id == "navigation-menu.states":
         page.get_by_role("button", name="المزيد").click()
         page.wait_for_function(
@@ -172,6 +212,8 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
 ) -> None:
     console_errors: list[str] = []
     page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+    if scenario.id == "image.states":
+        _install_image_scenario_routes(page)
     page.set_content(render_scenario(scenario.id), wait_until="load")
     page.wait_for_selector(scenario.ready_selector, state="attached")
     if scenario.id == "textarea.states":
@@ -197,6 +239,9 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
         "accordion.states",
         "disclosure.states",
         "alert.states",
+        "split-button.states",
+        "tags-input.states",
+        "image.states",
         "alert-dialog.states",
         "textarea.states",
         "native-select.states",
@@ -204,6 +249,7 @@ def test_shared_scenario_semantics_and_active_state_have_no_high_impact_axe_find
         "toggle.states",
         "pagination.states",
         "menu.states",
+        "context-menu.states",
         "navigation-menu.states",
         "carousel.states",
         "drawer.states",
@@ -311,6 +357,320 @@ def test_disclosure_quality_form_continuity_and_brand_contrast(page: Any) -> Non
     for color_scheme in ("light", "dark"):
         page.emulate_media(color_scheme=color_scheme)
         assert all(ratio >= 4.5 for ratio in page.evaluate(contrast_script))
+
+
+def test_split_button_quality_form_state_and_lifecycle(page: Any, serve_citry_ui_live: Any) -> None:
+    console_errors: list[str] = []
+    page_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    rendered = build_scenario(
+        "split-button.states",
+        configure_app=lambda app: app.set_mounted_prefix("/citry"),
+    )
+    base_url = serve_citry_ui_live(rendered.app, rendered.html)
+    scenario_component = rendered.app.get("CitryUiSplitButtonStates")
+    morph_fragments = [
+        scenario_component(include_lifecycle=False).render().serialize(deps_strategy="fragment"),
+        *(scenario_component().render().serialize(deps_strategy="fragment") for _ in range(3)),
+    ]
+    page.goto(base_url + "/", wait_until="load")
+    page.wait_for_selector(
+        '[data-citry-ui-part="split-button"][data-citry-split-button-initialized]',
+        state="attached",
+    )
+    page.wait_for_function(
+        """() => document.querySelectorAll('[data-citry-ui-part="split-button"]').length
+          === document.querySelectorAll(
+            '[data-citry-ui-part="split-button"][data-citry-split-button-initialized]',
+          ).length"""
+    )
+    expected_roots = page.locator('[data-citry-ui-part="split-button"]').count()
+    expected_layers = page.evaluate("globalThis[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length")
+
+    submit_root = page.locator("#quality-split-submit")
+    primary = submit_root.get_by_role("button", name="Save accession")
+    primary.click()
+    assert page.locator("#split-button-quality-log").text_content().startswith("Submits: 1;")
+    assert page.evaluate(
+        """() => Array.from(new FormData(
+          document.querySelector('#split-button-quality-form'),
+          document.querySelector('#quality-split-submit-primary'),
+        ).entries())"""
+    ) == [["accession", "G-104"], ["action", "save"]]
+
+    page.get_by_role("button", name="Reset accession").click()
+    assert "resets: 1" in page.locator("#split-button-quality-log").text_content()
+
+    loading_root = page.locator('[data-quality-states~="loading-start"]')
+    loading_primary = loading_root.get_by_role("button", name="Save image")
+    assert loading_primary.get_attribute("aria-busy") == "true"
+    assert loading_primary.evaluate("element => element.matches(':disabled')") is False
+    loading_primary.evaluate("element => element.focus()")
+    assert loading_primary.evaluate("element => element === document.activeElement") is True
+    loading_root.get_by_role("button", name="More loading image actions").click()
+    assert loading_root.locator('[data-citry-ui-part="menu"]').evaluate("element => element.matches(':popover-open')")
+
+    controlled = page.locator('[data-quality-states~="controlled"]')
+    controlled_trigger = controlled.get_by_role("button", name="More controlled publication actions")
+    before = controlled_trigger.get_attribute("aria-expanded")
+    page.get_by_role("button", name="Toggle controlled Menu").click()
+    assert controlled_trigger.get_attribute("aria-expanded") != before
+
+    lifecycle = page.locator('[data-quality-states~="lifecycle"]')
+    assert lifecycle.count() == 1
+
+    morph_snapshots = page.evaluate(
+        r"""async (fragments) => {
+          const internal = Citry.events._internal;
+          const root = document.querySelector('.split-button-quality');
+          const componentId = root.getAttribute('data-cid').trim().split(/\s+/).at(-1);
+          const anchor = internal.getAnchor(componentId);
+          const snapshots = [];
+          for (const html of fragments) {
+            const epoch = anchor.epoch + 1;
+            anchor.epoch = epoch;
+            await internal.applyResult(
+              {
+                ok: true,
+                epoch,
+                actions: [{
+                  action: 'render',
+                  target: 'render:' + anchor.componentId,
+                  swap: 'morph',
+                  html,
+                }],
+              },
+              {anchor, instance: anchor.componentId, event: 'split-button-quality-morph'},
+            );
+            await new Promise((resolve) => requestAnimationFrame(
+              () => requestAnimationFrame(resolve),
+            ));
+            await new Promise((resolve) => setTimeout(resolve, 200));
+            const roots = document.querySelectorAll('[data-citry-ui-part="split-button"]');
+            snapshots.push({
+              roots: roots.length,
+              ready: document.querySelectorAll(
+                '[data-citry-ui-part="split-button"][data-citry-split-button-initialized]',
+              ).length,
+              lifecycle: document.querySelectorAll('[data-quality-states~="lifecycle"]').length,
+              layers: globalThis[Symbol.for('citry-ui:anchored-layer-runtime')].layers.length,
+              submit: {
+                ...globalThis[Symbol.for('citry-ui:split-button-submit-runtime')].stats,
+              },
+            });
+          }
+          return snapshots;
+        }""",
+        morph_fragments,
+    )
+    assert len(morph_snapshots) == 4
+    removed, *restored = morph_snapshots
+    assert removed["roots"] == expected_roots - 1
+    assert removed["lifecycle"] == 0
+    assert restored[0] == restored[1] == restored[2]
+    assert restored[0]["roots"] == expected_roots
+    assert restored[0]["lifecycle"] == 1
+    for snapshot in morph_snapshots:
+        assert snapshot["ready"] == snapshot["roots"]
+        assert snapshot["layers"] == expected_layers
+        assert snapshot["submit"] == {"scopes": 1, "registrations": 1}
+    assert console_errors == []
+    assert page_errors == []
+
+
+def test_tags_input_quality_form_tokenization_focus_and_morph(page: Any, serve_citry_ui_live: Any) -> None:
+    console_errors: list[str] = []
+    page_errors: list[str] = []
+    page.on(
+        "console",
+        lambda message: console_errors.append(message.text) if message.type == "error" else None,
+    )
+    page.on("pageerror", lambda error: page_errors.append(str(error)))
+    rendered = build_scenario(
+        "tags-input.states",
+        configure_app=lambda app: app.set_mounted_prefix("/citry"),
+    )
+    base_url = serve_citry_ui_live(rendered.app, rendered.html)
+
+    page.goto(base_url + "/", wait_until="load")
+    page.wait_for_function(
+        """() => document.querySelectorAll('[data-citry-ui-part="tags-input"]').length
+          === document.querySelectorAll(
+            '[data-citry-ui-part="tags-input"][data-citry-tags-input-initialized]',
+          ).length"""
+    )
+    expected_roots = page.locator('[data-citry-ui-part="tags-input"]').count()
+
+    form = page.locator("#tags-input-quality-form")
+    required_root = page.locator('[data-quality-states~="form-data"]')
+    required_editor = required_root.locator('[data-citry-ui-part="input"]')
+    assert page.evaluate(
+        "() => new FormData(document.querySelector('#tags-input-quality-form')).getAll('labels')"
+    ) == ["alpine", "ordered"]
+    required_editor.fill("new-label")
+    required_editor.press("Enter")
+    assert page.evaluate(
+        "() => new FormData(document.querySelector('#tags-input-quality-form')).getAll('labels')"
+    ) == ["alpine", "ordered", "new-label"]
+    form.evaluate("element => element.reset()")
+    page.wait_for_function(
+        """() => [...document.querySelector(
+          '[data-quality-states~="form-data"] [data-citry-tags-input-native]',
+        ).selectedOptions].map(option => option.value).join() === 'alpine,ordered'"""
+    )
+    assert page.evaluate(
+        "() => new FormData(document.querySelector('#tags-input-quality-form')).getAll('readonly-labels')"
+    ) == ["readonly-one", "readonly-two"]
+    assert page.evaluate(
+        "() => new FormData(document.querySelector('#tags-input-quality-form')).getAll('external-labels')"
+    ) == ["external-one", "external-two"]
+    assert (
+        page.evaluate(
+            "() => new FormData(document.querySelector('#tags-input-quality-form')).getAll('disabled-labels')"
+        )
+        == []
+    )
+
+    paste_root = page.locator('[data-quality-states~="paste"]')
+    paste_editor = paste_root.locator('[data-citry-ui-part="input"]')
+    paste_editor.evaluate(
+        """input => {
+          input.setSelectionRange(0,input.value.length);
+          const event=new Event('paste',{bubbles:true,cancelable:true});
+          Object.defineProperty(event,'clipboardData',{value:{getData:()=> 'fresh,trail'}});
+          input.dispatchEvent(event);
+        }"""
+    )
+    assert paste_root.locator("option:checked").evaluate_all("options => options.map(option => option.value)") == [
+        "paste-base",
+        "fresh",
+    ]
+    assert paste_editor.input_value() == "trail"
+    paste_editor.evaluate(
+        """input => {
+          input.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+          input.value='ime,';
+          input.dispatchEvent(new InputEvent('input',{bubbles:true,data:'ime,',isComposing:true}));
+          input.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'ime,'}));
+          input.dispatchEvent(new InputEvent('input',{bubbles:true,isComposing:false}));
+        }"""
+    )
+    page.wait_for_function(
+        """() => document.querySelector(
+          '[data-quality-states~="paste"] [data-citry-tags-input-native]',
+        ).selectedOptions.length === 3"""
+    )
+    assert paste_editor.input_value() == ""
+
+    controlled = page.locator('[data-quality-states~="controlled-value"]')
+    controlled_editor = controlled.locator('[data-citry-ui-part="input"]')
+    controlled_editor.press("Enter")
+    assert controlled.locator("option:checked").count() == 1
+    assert controlled_editor.input_value() == "owner draft"
+    page.get_by_role("checkbox", name="Accept controlled value requests").check()
+    controlled_editor.press("Enter")
+    page.wait_for_function(
+        """() => document.querySelector(
+          '[data-quality-states~="controlled-value"] [data-citry-tags-input-native]',
+        ).selectedOptions.length === 2"""
+    )
+    assert controlled_editor.input_value() == ""
+
+    invalid_root = page.locator('[data-quality-states~="invalid-focus"]')
+    invalid_editor = invalid_root.locator('[data-citry-ui-part="input"]')
+    invalid_root.locator("[data-citry-tags-input-native]").evaluate("element => element.reportValidity()")
+    page.wait_for_function(
+        """() => document.activeElement === document.querySelector(
+          '[data-quality-states~="invalid-focus"] [data-citry-ui-part="input"]',
+        )"""
+    )
+    assert invalid_root.get_attribute("data-invalid") == ""
+    assert invalid_editor.evaluate("element => element === document.activeElement") is True
+
+    lifecycle = page.locator('[data-quality-states~="lifecycle"]')
+    lifecycle_editor = lifecycle.locator('[data-citry-ui-part="input"]')
+    lifecycle_editor.fill("typed draft")
+    lifecycle_editor.focus()
+    lifecycle_editor.evaluate(
+        """input => {
+          input.setSelectionRange(2,5);
+          input.dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true}));
+          window.__tagsInputCompositionEditor=input;
+        }"""
+    )
+    morph_snapshots = []
+    for step in range(1, 6):
+        page.evaluate(
+            """() => {
+              void Citry.events.send(
+                document.querySelector('.tags-input-quality'),
+                'refresh',
+                {},
+              );
+            }"""
+        )
+        page.wait_for_function(
+            "step => Number(document.querySelector('[data-quality-morph-step]').textContent) === step",
+            arg=step,
+            timeout=10_000,
+        )
+        expected_step_roots = expected_roots - 1 if step in {2, 4} else expected_roots
+        page.wait_for_function(
+            r"""expected => {
+              const roots=document.querySelectorAll('[data-citry-ui-part="tags-input"]').length;
+              const ready=document.querySelectorAll(
+                '[data-citry-ui-part="tags-input"][data-citry-tags-input-initialized]',
+              ).length;
+              const registry=document[Symbol.for('citry-ui:form-control-reset-registry')];
+              return roots===expected && ready===expected && registry?.entries.size===expected;
+            }""",
+            arg=expected_step_roots,
+            timeout=10_000,
+        )
+        page.evaluate("() => new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))")
+        page.wait_for_timeout(50)
+        snapshot = page.evaluate(
+            r"""() => {
+              const editor=document.querySelector('#tags-input-quality-lifecycle');
+              const roots=document.querySelectorAll('[data-citry-ui-part="tags-input"]');
+              const registry=document[Symbol.for('citry-ui:form-control-reset-registry')];
+              const snapshot={
+                roots:roots.length,
+                ready:document.querySelectorAll(
+                  '[data-citry-ui-part="tags-input"][data-citry-tags-input-initialized]',
+                ).length,
+                lifecycle:document.querySelectorAll('[data-quality-states~="lifecycle"]').length,
+                registrations:registry?.entries.size??0,
+                sameNode:editor===window.__tagsInputCompositionEditor,
+                draft:editor?.value??null,
+                selection:[editor?.selectionStart??null,editor?.selectionEnd??null],
+              };
+              if (editor===window.__tagsInputCompositionEditor) {
+                editor.dispatchEvent(new CompositionEvent('compositionend',{bubbles:true}));
+              }
+              return snapshot;
+            }"""
+        )
+        morph_snapshots.append(snapshot)
+    same, first_removed, first_restored, second_removed, second_restored = morph_snapshots
+    assert same["sameNode"] is True
+    assert same["draft"] == "typed draft"
+    assert same["selection"] == [2, 5]
+    for removed in (first_removed, second_removed):
+        assert removed["roots"] == expected_roots - 1
+        assert removed["lifecycle"] == 0
+    assert first_restored == second_restored
+    assert first_restored["roots"] == expected_roots
+    assert first_restored["lifecycle"] == 1
+    for snapshot in morph_snapshots:
+        assert snapshot["ready"] == snapshot["roots"]
+        assert snapshot["registrations"] == snapshot["roots"]
+    assert console_errors == []
+    assert page_errors == []
 
 
 def test_menu_quality_form_safety_native_disabledness_and_brand_contrast(page: Any) -> None:

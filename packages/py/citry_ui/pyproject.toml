@@ -52,6 +52,9 @@ Homepage = "https://citry.dev"
 Repository = "https://github.com/citry-dev/citry"
 Issues = "https://github.com/citry-dev/citry/issues"
 
+[tool.setuptools]
+include-package-data = false
+
 [tool.setuptools.packages.find]
 include = ["citry_ui*"]
 exclude = [
@@ -63,8 +66,16 @@ exclude = [
     "citry_ui.components.*.snippets.*",
     "citry_ui.components.*.tests",
     "citry_ui.components.*.tests.*",
+    "citry_ui.components.*.tools",
+    "citry_ui.components.*.tools.*",
 ]
-namespaces = false
+namespaces = true
 
 [tool.setuptools.package-data]
 citry_ui = ["py.typed"]
+citry_ui_i18n = [
+    "citry-i18n.toml",
+    "formats.json",
+    "locales/**/*.ftl",
+    "_compiled/*.json",
+]

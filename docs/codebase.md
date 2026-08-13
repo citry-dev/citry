@@ -505,7 +505,15 @@ and the source distribution, compares the two wheels member by member, and
 installs each wheel into its own fresh environment. The installed checks run
 outside the repository with Node absent from `PATH` and without `jsonschema`.
 They exercise both embedded protocol packages, both browser data files, the
-typing marker, the top-level import, and `citry --help`.
+typing marker, the top-level import, and `citry --help`. Both wheels must also
+stay below the checked 1.1 MiB release cap.
+
+The main test workflow has a separate i18n release-qualification job. It builds
+the native extension in release mode, runs `benchmarks/i18n.py`, checks the
+browser i18n payload, and uploads the machine-readable result. The Citry UI
+wheel job also builds a source distribution, rebuilds the wheel from it, and
+requires both wheels to contain the same checked catalog package. Its installed
+production smoke resolves a real Citry UI message without parsing package FTL.
 
 During active development, `citry` can need an unreleased companion
 `citry-core` change. Build that wheel explicitly and pass it to the same

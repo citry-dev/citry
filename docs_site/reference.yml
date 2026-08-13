@@ -76,6 +76,9 @@ categories:
       - citry.CitrySettings
       - citry.LintSettings
       - citry.LintSeverity
+      - citry.SecurityCspMode
+      - citry.SecurityJavascriptMode
+      - citry.SecurityScriptIntegrityMode
       - citry.CitryCache
       - citry.InMemoryCache
 
@@ -89,6 +92,9 @@ categories:
     symbols:
       - citry.CitryElement
       - citry.CitryRender
+      - citry.SerializedRender
+      - citry.SerializedSecurity
+      - citry.SerializedScriptSecurity
       - citry.CitryContext
       - citry.CitryTemplate
       - citry.Placeholder
@@ -183,6 +189,7 @@ categories:
       - citry.CommandArgGroup
       - citry.CommandSubcommand
       - citry.OnAttrsResolvedContext
+      - citry.OnCitryClearedContext
       - citry.OnComponentClassCreatedContext
       - citry.OnComponentDataContext
       - citry.OnComponentInputContext
@@ -193,6 +200,7 @@ categories:
       - citry.OnExtensionCreatedContext
       - citry.OnFilesResetContext
       - citry.OnJsLoadedContext
+      - citry.OnMessagesLoadedContext
       - citry.OnRenderContextMergeContext
       - citry.OnSerializeContext
       - citry.OnSlotRenderedContext
@@ -207,6 +215,7 @@ categories:
     title: Dependencies
     intro: The JS/CSS dependency types collected and placed at serialize time, and the built-in `citry.ext.dependencies` extension that owns them.
     symbols:
+      - citry.DependenciesConfig
       - citry.ext.dependencies.CitryDependencies
       - citry.ext.dependencies.Dependency
       - citry.ext.dependencies.DependencyRecord
@@ -221,10 +230,51 @@ categories:
     title: Render cache keys
     intro: Exact key helpers and errors for component and named-fragment render caches.
     symbols:
+      - citry.CacheConfig
       - citry.ext.cache.CacheKeyError
       - citry.ext.cache.OnComponentCacheHitContext
       - citry.ext.cache.component_cache_key
       - citry.ext.cache.fragment_cache_key
+
+  - kind: generated_python
+    slug: internationalization
+    title: Internationalization
+    intro: Locale contexts, messages, named formats, and strict localized-input parsers.
+    symbols:
+      - citry.ext.i18n.make_context
+      - citry.ext.i18n.I18nExtension
+      - citry.I18n
+      - citry.I18nService
+      - citry.I18nFormatter
+      - citry.I18nParser
+      - citry.LocaleContext
+      - citry.LocalizedText
+      - citry.FormatRegistry
+      - citry.NumberFormat
+      - citry.NumberInput
+      - citry.NumberParseResult
+      - citry.PercentFormat
+      - citry.PercentInput
+      - citry.PercentParseResult
+      - citry.CurrencyFormat
+      - citry.DateFormat
+      - citry.DateInput
+      - citry.DateSegments
+      - citry.DateParseResult
+      - citry.TimeFormat
+      - citry.TimeInput
+      - citry.TimeSegments
+      - citry.TimeParseResult
+      - citry.DateTimeFormat
+      - citry.DateTimeInput
+      - citry.DateTimeSegments
+      - citry.DateTimeParseResult
+      - citry.RelativeTimeFormat
+      - citry.ListFormat
+      - citry.UnitFormat
+      - citry.I18nError
+      - citry.I18nNotConfiguredError
+      - citry.I18nRuntimeUnavailableError
 
   - kind: generated_python
     slug: events
@@ -260,6 +310,8 @@ categories:
     source: reference/browser-apis.md
     entries:
       - { key: "$component", anchor: component, role: "js:function" }
+      - { key: "$component.i18n", anchor: component-i18n, role: "js:data" }
+      - { key: "$i18n", anchor: i18n, role: "js:data" }
       - { key: "$state", anchor: state, role: "js:data" }
       - { key: "$loading", anchor: loading, role: "js:function" }
       - { key: "$error", anchor: error, role: "js:data" }
@@ -332,5 +384,7 @@ categories:
       - provide
       - cache
       - error-fallback
+      - i18n
+      - trans
       - css
       - js

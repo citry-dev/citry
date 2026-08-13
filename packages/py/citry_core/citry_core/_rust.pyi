@@ -43,6 +43,8 @@ class i18n:
         @property
         def formats_revision(self) -> str: ...
         def artifact_json(self) -> str: ...
+        def browser_artifact_json(self, locale: str, request_json: str) -> str: ...
+        def browser_parser_artifact_json(self, locale: str) -> str: ...
         def format(
             self,
             locale: str,
@@ -67,6 +69,8 @@ class i18n:
         ) -> str: ...
         def format_number(self, locale: str, profile: str, value: str) -> str: ...
         def parse_number_json(self, locale: str, profile: str, input: str) -> str: ...
+        def format_percent(self, locale: str, profile: str, value: str) -> str: ...
+        def parse_percent_json(self, locale: str, profile: str, input: str) -> str: ...
         def format_currency(
             self,
             locale: str,
@@ -82,6 +86,15 @@ class i18n:
             month: int,
             day: int,
         ) -> str: ...
+        def parse_date_json(self, locale: str, profile: str, input: str) -> str: ...
+        def parse_date_segments_json(
+            self,
+            locale: str,
+            profile: str,
+            year: str,
+            month: str,
+            day: str,
+        ) -> str: ...
         def format_time(
             self,
             locale: str,
@@ -90,6 +103,16 @@ class i18n:
             minute: int,
             second: int,
             nanosecond: int,
+        ) -> str: ...
+        def parse_time_json(self, locale: str, profile: str, input: str) -> str: ...
+        def parse_time_segments_json(
+            self,
+            locale: str,
+            profile: str,
+            hour: str,
+            minute: str,
+            second: str | None,
+            day_period: str | None,
         ) -> str: ...
         def format_datetime(
             self,
@@ -106,6 +129,19 @@ class i18n:
             offset_seconds: int,
             epoch_seconds: int,
         ) -> str: ...
+        def parse_datetime_json(self, locale: str, profile: str, input: str) -> str: ...
+        def parse_datetime_segments_json(
+            self,
+            locale: str,
+            profile: str,
+            year: str,
+            month: str,
+            day: str,
+            hour: str,
+            minute: str,
+            second: str | None,
+            day_period: str | None,
+        ) -> str: ...
         def format_relative_time(
             self,
             locale: str,
@@ -114,11 +150,19 @@ class i18n:
             unit: str,
         ) -> str: ...
         def format_list(self, locale: str, profile: str, values: list[str]) -> str: ...
+        def format_unit(
+            self,
+            locale: str,
+            profile: str,
+            value: str,
+            unit: str,
+        ) -> str: ...
 
     class CatalogCompiler:
         def __init__(self) -> None: ...
         def compile(self, request_json: str) -> i18n.CompiledCatalog: ...
         def compile_link_unit(self, request_json: str) -> str: ...
+        def analyze_source(self, path: str, source: str) -> str: ...
         def clear(self) -> None: ...
 
     class TextCatalog:

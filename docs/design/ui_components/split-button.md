@@ -1,7 +1,11 @@
 # Split Button component design
 
-Status: frozen for independent design review on 2026-08-11. No runtime or
-public documentation work is authorized until this package passes that review.
+Status: production implementation pass and independent implementation review
+complete on 2026-08-11. Runtime, public documentation, focused server/browser
+evidence, API projection, quality scenarios, incremental asset accounting,
+scaling, exports, and registration are checked in. Human visual review, live
+assistive-technology review, the growing-catalog asset-cap rebaseline, and
+release qualification remain.
 
 ## 1. Purpose and product bar
 
@@ -44,7 +48,7 @@ Common jobs and their shortest intended surfaces are:
 | Job | Template or Python expression | Support path |
 |---|---|---|
 | run the dominant command | `<c-CSplitButton label="Save actions" menu_label="More save actions"><c-fill name="default">Save</c-fill><c-fill name="menu">...</c-fill></c-CSplitButton>` | direct component API plus native `@click` |
-| submit with alternatives | `CSplitButton("Save", type="submit", primary_attrs={"name": "action", "value": "save"}, menu=[...], ...)` | native Button/form attributes |
+| submit with alternatives | `CSplitButton(label="Save actions", menu_label="More save actions", type="submit", primary_attrs={"name": "action", "value": "save"}, slots={"default": "Save", "menu": (...)})` | native Button/form attributes |
 | expose related commands and choices | existing `CMenuItem`, choice, group, separator, and submenu declarations in `menu` | composition with the existing CMenu family |
 | own Menu visibility | `$c-props="{open, onOpenChange}"` | controlled client API |
 | keep alternatives usable while primary work is pending | `$c-props="{loading}"` | direct reactive configuration |
@@ -71,13 +75,13 @@ release recorded in Citry's source dossier.
 | [PrimeVue SplitButton](https://primevue.org/splitbutton/) | 4.5.5 | dedicated two-native-Button anatomy, explicit Menu Button name, nested Menu and keyboard support | adopt the boundary and naming requirement; reject model-only content and opaque pass-through bags |
 | [MUI Button Group, Split button](https://mui.com/material-ui/react-button-group/) | 9.3.1 | immediate-child grouping; Menu may change the default or run a related action | adopt joined visual precedent; keep Citry's dominant action stable and immediate |
 | [Fluent 2 Button usage](https://fluent2.microsoft.design/components/web/react/core/button/usage) | reviewed 2026-08-11 | dominant action plus related Menu; dominant action should not be repeated; full accessible wording | adopt product and content guidance |
-| [Web Awesome Button Group, Split Buttons](https://webawesome.com/docs/components/button-group/) | 3.9.0 | Button + Dropdown composition and visually hidden Menu Button label | adopt explicit secondary name; dedicated Citry component closes ownership gaps |
+| [Web Awesome Button Group, Split Buttons](https://webawesome.com/docs/components/button-group/) | docs footer 3.11.0 | Button + Dropdown composition and visually hidden Menu Button label | adopt explicit secondary name; dedicated Citry component closes ownership gaps |
 | [React Spectrum MenuTrigger](https://react-spectrum.adobe.com/react-spectrum/MenuTrigger.html) | React Spectrum 1.4.0; React Aria 1.20.0 | trigger/Menu composition and long-press alternative | retain ordinary two-Button behavior; omit long press and Alt+Arrow hidden modes |
 | [Open UI Menu Elements explainer](https://open-ui.org/components/menu.explainer/) | current, 2026-08-11 | Button-invoked Menu roles and platform direction | follow through CMenu; do not use customizable-select semantics |
 | [Vuetify Button](https://vuetifyjs.com/en/components/buttons/), [Button Group](https://vuetifyjs.com/en/components/button-groups/), and [Menu](https://vuetifyjs.com/en/components/menus/) | 4.1.8 | composition from `VBtn`, `VBtnGroup`, `VMenu`, and list declarations | use as a coverage ledger, not a public API template; Vuetify has no dedicated current SplitButton |
 | PrimeVue implementation | 4.5.5 | tagged [`SplitButton.vue`](https://github.com/primefaces/primevue/blob/4.5.5/packages/primevue/src/splitbutton/SplitButton.vue) and [type/API source](https://github.com/primefaces/primevue/blob/4.5.5/packages/primevue/src/splitbutton/SplitButton.d.ts) | verify two-Button implementation, Menu ownership, pass-through pressure, and events rather than copying docs labels alone |
 | Material UI implementation | 9.3.1 | tagged [`ButtonGroup.js`](https://github.com/mui/material-ui/blob/v9.3.1/packages/mui-material/src/ButtonGroup/ButtonGroup.js) and [`Button.js`](https://github.com/mui/material-ui/blob/v9.3.1/packages/mui-material/src/Button/Button.js) | verify immediate-child styling and Button loading/form behavior behind the composed demo |
-| Web Awesome implementation | 3.9.0 | tagged [`button-group.ts`](https://github.com/shoelace-style/webawesome/blob/v3.9.0/packages/webawesome/src/components/button-group/button-group.ts) and [`dropdown.ts`](https://github.com/shoelace-style/webawesome/blob/v3.9.0/packages/webawesome/src/components/dropdown/dropdown.ts) | verify composition remains separate components and needs an explicit trigger name |
+| Web Awesome public implementation snapshot | latest public GitHub release tag v3.10.0 | tagged [`button-group.ts`](https://github.com/shoelace-style/webawesome/blob/v3.10.0/packages/webawesome/src/components/button-group/button-group.ts) and [`dropdown.ts`](https://github.com/shoelace-style/webawesome/blob/v3.10.0/packages/webawesome/src/components/dropdown/dropdown.ts); no public v3.11.0 source tag was available on 2026-08-11 | verify composition remains separate components and needs an explicit trigger name; keep current docs evidence distinct from the inspectable tagged source snapshot |
 | Vuetify implementation | 4.1.8 | tagged [`VBtn.tsx`](https://github.com/vuetifyjs/vuetify/blob/v4.1.8/packages/vuetify/src/components/VBtn/VBtn.tsx), [`VBtnGroup.tsx`](https://github.com/vuetifyjs/vuetify/blob/v4.1.8/packages/vuetify/src/components/VBtnGroup/VBtnGroup.tsx), and [`VMenu.tsx`](https://github.com/vuetifyjs/vuetify/blob/v4.1.8/packages/vuetify/src/components/VMenu/VMenu.tsx) | primary styled-suite source for direct Button, group, activator, controlled visibility, placement, and omitted layer props |
 | Citry local foundations | current workspace, 2026-08-11 | [Button](./button.md), [ButtonGroup](./button-group.md), [Menu](./menu.md), [overlay foundations](../ui_overlay_foundations.md), current runtime, server tests, browser tests, asset tests, inventory, taxonomy, and complaint register | prove why public composition alone cannot forward state or preserve immediate-child geometry; reuse all completed behavior privately |
 
@@ -106,6 +110,12 @@ current local source/tests, not presented as external issue reports. General
 Menu complaints and tagged issue dispositions remain recorded in the current
 [Menu specification](./menu.md); SplitButton adopts those exact acceptance
 cases rather than duplicating them here.
+
+Web Awesome is deliberately recorded with two versions: the live docs footer
+reports 3.11.0, while the official public GitHub release/tag listing inspected
+on 2026-08-11 ended at v3.10.0 and exposed no v3.11.0 source tag. Citry uses the
+live page for current documented behavior and v3.10.0 only for inspectable
+implementation evidence. The two are not presented as the same snapshot.
 
 Vuetify carries the primary styled-suite comparison weight. Its current
 surfaces map as follows:
@@ -154,7 +164,7 @@ Template composition:
   c-primary_attrs="{'name': 'action', 'value': 'save'}"
 >
   <c-fill name="default">Save</c-fill>
-  <c-fill name="start"><c-CIcon name="save" /></c-fill>
+  <c-fill name="start"><c-CIcon name="check" /></c-fill>
   <c-fill name="menu">
     <c-CMenuItem value="save-copy">Save a copy</c-CMenuItem>
     <c-CMenuItem value="export">Export</c-CMenuItem>
@@ -172,7 +182,7 @@ CSplitButton(
     primary_attrs={"name": "action", "value": "save"},
     slots={
         "default": "Save",
-        "start": CIcon(name="save"),
+        "start": CIcon(name="check"),
         "menu": (
             CMenuItem(value="save-copy", slots={"default": "Save a copy"}),
             CMenuItem(value="export", slots={"default": "Export"}),
@@ -344,16 +354,23 @@ close suppresses resurrection until a new accepted edge, exactly as CMenu.
 Primary activation is one transaction:
 
 1. the CButton capture guard rejects it if disabled or already loading;
-2. if the Menu is open, SplitButton synchronously requests one ordinary close
-   during the component's capture handler with
-   `reason="action"` and `source` equal to the primary Button;
-3. the uncontrolled Menu commits closed and notifies, or the controlled Menu
-   notifies and waits for its owner; and
-4. the native target/bubble handlers and click, submit, or reset default action
-   continue.
+2. if the Menu is open, the capture handler starts a generation-owned primary
+   action transaction with `source` equal to the primary Button;
+3. an uncontrolled Menu synchronously commits its visual/logical close,
+   unregisters the layer, and guards against another dismissal, but snapshots
+   and defers its public `action` close notice; a controlled Menu remains open,
+   guards the same gesture, and defers its public close request;
+4. native target/bubble handlers and the click, submit, or reset default action
+   continue; and
+5. one generation-cancelable `setTimeout(..., 0)` task queued from capture runs after
+   event propagation and native activation. In the ordinary case that task
+   sends exactly one deferred
+   `onOpenChange(false, reason="action")`; uncontrolled state is already
+   committed, while controlled state still waits for the owner.
 
-The primary Button is registered as an `insideElement` of the Menu layer. Its
-pointer/focus transition is therefore not an outside dismissal. One primary
+The entire SplitButton root is registered as an `insideElement` of the Menu
+layer. Primary focus/click and pointer events on root padding or the joined
+divider are therefore not outside dismissal. One primary
 activation cannot report both `outside` and `action`. An uncontrolled Menu
 commits closed before the native primary default action. A controlled owner may
 decline the close; that does not cancel the native action. Focus stays on the
@@ -361,16 +378,60 @@ primary Button, and accepted Menu close never restores focus to the Menu
 Button when focus already belongs to the primary Button or another owner-moved
 destination.
 
-The synchronous ordinary action-close notice cannot be retracted, relabelled,
-or superseded by a later consumer click/form handler. If it already closed the
-Menu, a handler that then opens a modal or removes/replaces the SplitButton
-produces no second close notice. If a controlled owner refused the action
-request and a later handler opens a modal, the still-open Menu receives the
-separate forced `ancestor` safety close required by CMenu; that is a later real
-transition, not duplicate reporting of the ordinary request. Removal disposes
-without another notice. A primary handler that sets `loading=True` affects
-later activations, not the accepted current click. Same-value commits do not
-notify. Every notice uses CMenu's callback snapshot rules.
+This two-phase ordering is deliberate. A synchronous consumer
+`onOpenChange(action)` could otherwise remove, replace, retype, disable, or
+change the form owner of the primary before the browser performs its native
+submit/reset default. Deferral lets the accepted native activation finish
+exactly once first. At transaction start it snapshots the resolved callback,
+controlled flag, source, and immutable/copy detail exactly as CMenu snapshots
+an accepted activation. It invokes that callback snapshot only if the same
+initialized generation and open-input revision remain current when the task
+settles. Replacing only `onOpenChange` in a target/bubble handler does not
+redirect the old transaction to the new callback. A valid target/bubble change
+to controlled `open`, control release through omission/`null`, or removal/
+replacement increments the open-input revision or generation and cancels the
+pending task/notice. A deferred callback may itself remove, replace, retype, or
+change form ownership only after native activation and therefore cannot cancel
+or duplicate that activation.
+
+For an uncontrolled Menu, synchronous close unregisters the layer. A later
+modal transition is irrelevant to that already-closed layer; if the same
+generation survives, its deferred public reason stays `action`. No hidden
+modal arbitration or second close exists. For a controlled Menu, the layer
+remains visibly open and registered while the task is pending. A real forced
+ancestor/modal close may therefore emit its truthful `ancestor` notice, bump
+the generation, and cancel the pending ordinary action notice. Removal also
+cancels the pending task. Otherwise the controlled action request runs from
+the task. A primary handler that sets `loading=True` affects later
+activations, not the accepted current click. Same-value commits do not notify.
+
+The settlement task runs after the click's native submit/reset activation, not
+merely after capture. Browser evidence must prove
+that an `onOpenChange` callback
+which removes/replaces the component, changes `type`, or changes `form` cannot
+cancel or duplicate the native submit/reset and that consumer
+`preventDefault()` still cancels the native default in the ordinary way.
+
+A disposable 2026-08-11 probe in Chromium 151.0.7922.34, Firefox 153.0, and
+WebKit 26.5 falsified `queueMicrotask()` from click capture: every engine logged
+`capture, microtask, target, bubble, submit/reset`. That mechanism is rejected.
+The zero-delay task probe logged `capture, target, bubble, submit/reset, task`
+in all three engines, and reset field values were already restored when the
+task ran. A second uncanceled submit to a target iframe logged `submit`, then
+native `formdata`, then the task in all three engines. The focused
+implementation test preserves these exact event logs for submit and reset,
+including consumer propagation, `preventDefault`, uncanceled FormData/default,
+click-plus-submit deduplication, and generation cancellation.
+
+Exactly-once notification applies while the current JavaScript realm survives
+through settlement. An uncanceled same-context native form navigation may
+replace the document and terminate that realm before its timer task runs; in
+that case no old-document callback is promised. Native navigation still occurs
+once, the old uncontrolled Menu was synchronously closed, and unload cleanup
+cannot leak or later deliver the canceled task. A target-iframe submission or
+prevented/Ajax submission keeps the realm and must deliver exactly one notice.
+The same-context-navigation falsifier accepts zero or one old-realm notice,
+never two, and asserts one destination navigation plus no retained task.
 
 ## 6. Slots and slot data
 
@@ -405,14 +466,15 @@ attributes and callback detail, not through reactive Python slot data.
 
 ## 7. Callbacks, native events, and methods
 
-| Callback | Arguments | Trigger and timing | Controlled behavior |
-|---|---|---|---|
-| `onOpenChange` | `(requestedOpen, CMenuOpenChangeDetail)` | every CMenu root request, plus primary `action` close; after validation and before controlled commit | uncontrolled commits first; controlled waits; forced safety closes bypass refusal |
-| `onAction` | `(value: str, CMenuActionDetail)` | existing valued command/check/radio action after item-specific change callback | identical to CMenu |
+| Callback | Arguments | Trigger | Timing | Controlled behavior | Cancellation |
+|---|---|---|---|---|---|
+| `onOpenChange` | `(requestedOpen, CMenuOpenChangeDetail)` | every CMenu root request plus primary `action` close | CMenu timing for Menu gestures; primary action settles in a generation-cancelable zero-delay task after native activation | uncontrolled primary state closes before notification; controlled waits for the deferred owner request; forced safety closes bypass refusal | no semantic cancellation; owner chooses controlled state |
+| `onAction` | `(value: str, CMenuActionDetail)` | existing valued command/check/radio action | after item-specific change callback, exactly as CMenu | identical to CMenu | native `preventDefault` does not cancel component callback |
 
 The detail records, reason vocabulary, callback sequence, source, controlled
 and forced fields, canonical path, mutation isolation, error propagation, and
-generation rechecks are exactly CMenu's public contract. A primary close uses
+generation rechecks are exactly CMenu's public contract except for the
+explicit two-phase primary-action notification timing in section 5. A primary close uses
 the existing `"action"` reason but does not call `onAction`; only Menu
 declarations can emit a Menu action. Anonymous commands and links retain
 CMenu's native-event policy.
@@ -501,6 +563,47 @@ The Menu Button cannot submit even when consumer attributes, omitted HTML
 defaults, a morph, or a structural failure occur. Its `type=button` is
 server-rendered, owned, synchronously revalidated, and repaired before any
 activation. Menu declarations keep CMenu's no-form-submit contract.
+
+The family uses one shared capture `submit` listener per actual Document or
+open ShadowRoot scope and a registry keyed by current primary elements. When a
+`SubmitEvent.submitter` is a registered primary, the listener starts the same
+two-phase action-close transaction unless the initiating click already started
+it. Because matching uses submitter identity at event time, external form
+`id`/replacement, authored `form` changes, and native form reassociation need
+no arbitrary external-form observer or per-form listener transfer. A correlated
+morph/root move refreshes the primary entry and transfers it if its actual root
+scope changed. One combined capture path runs the shared CButton availability
+guard before `observePrimarySubmit`: an already disabled/loading primary with no accepted
+click token blocks the submit and starts no close transaction. When an enabled
+click already produced a token, a target handler setting `loading=True` does
+not retroactively block that current submission, matching CButton; the submit
+listener consumes/deduplicates the accepted token instead of rechecking later
+configuration.
+`form.requestSubmit(primary)` therefore closes/requests close exactly once on
+a valid submission. If constraint validation prevents the `submit` event,
+there is no accepted submit activation and the Menu remains unchanged.
+`form.submit()`, a submitter other than the primary, and an implicit submit with
+`submitter is null` leave the Menu unchanged. `primary.click()` uses the click
+transaction even when later constraint validation blocks submission.
+
+A clicked `type=reset` primary starts the click transaction and resets once.
+Programmatic `form.reset()` has no submitter identity and leaves the Menu
+unchanged. The registry entry is removed or transferred before a stale scope
+can observe a later submit. Tests change `primary_attrs.form` and physically move
+the root between forms/scopes, then prove one close transaction and one native
+submission on the current owner only.
+An already-loading `requestSubmit(primary)` must produce no submission, no Menu
+close/guard, and no `onOpenChange`; this is a dedicated ordering assertion.
+
+The scope manager exists only while at least one submit-capable SplitButton is
+registered. The final registrant removes the listener and manager. A disposable
+Chromium 151.0.7922.34, Firefox 153.0, and WebKit 26.5 probe proved that native
+`submit` bubbles with `composed=false` and is captured by the containing open
+ShadowRoot, not Document; the ShadowRoot listener received the exact primary
+`SubmitEvent.submitter` in all three. Tests cover Document and open-ShadowRoot
+registries, transfer, 1/10/100 deduplication, and zero-resource cleanup. Static
+`type=button`/`reset` instances do not register until a correlated morph makes
+them submit-capable.
 
 `form`, `name`, and `value` do not apply to the Menu Button or Menu surface and
 are rejected there. As with native Button and CButton, a `value` without a
@@ -682,7 +785,7 @@ is the semantic trigger and focus-return target. The private Menu controller
 must therefore accept distinct `trigger`, `anchor`, `surface`, and
 `insideElements`; CMenu passes the same activator as trigger and anchor, while
 CSplitButton passes the Menu Button as trigger, the group as anchor, and the
-primary Button as an inside element. This adapter is private and does not
+whole group as an inside element. This adapter is private and does not
 change CMenu's public anatomy.
 
 Placement uses CMenu's six logical root placements and current collision
@@ -694,15 +797,15 @@ the top layer while preserving logical DOM ancestry and CSS inheritance.
 Outside pointer/focus, Escape, Tab, modal changes, ancestor layer close,
 ShadowRoot scope discovery, nested parentage, forced structural close,
 generation cancellation, focus return, and resource accounting are CMenu's
-exact behavior. The primary Button is inside this logical layer only for
-dismissal deduplication. It is not a Menu activator and does not inherit Menu
+exact behavior. The whole root is inside this logical layer only for dismissal
+deduplication. It is not a Menu activator and does not inherit Menu
 Button keyboard behavior.
 
 SplitButton inside an open ShadowRoot is supported. SplitButton inside an open
 Dialog/Popover is supported when the coordinator finds the same logical modal
 and ancestor ownership as CMenu. A primary action may open a sibling Dialog;
-the prior synchronous action-close remains the recorded ordinary reason and
-the Dialog owns its later focus. Closed or
+the transaction records that structural transition before its deferred task
+settles and the Dialog owns its later focus. Closed or
 opaque descendant shadow roots and already-open top-layer reparenting retain
 the shared foundation's documented limits.
 
@@ -769,8 +872,9 @@ Implementation has one required private refactor and no public prerequisite:
    configuration record, semantic trigger, positioning anchor, surface,
    inside-elements list, callback getters, a `disabledFocusTarget()` resolver,
    a committed-open reflection sink, and the existing declaration registry.
-   The controller returns one synchronous `requestActionClose(source)` handle
-   bound to its current generation. `CMenu` and `CSplitButton` both call these
+   The controller returns `beginPrimaryAction(source, event)` and
+   `observePrimarySubmit(event)` transaction hooks bound to its current
+   generation. `CMenu` and `CSplitButton` both call these
    helpers. CMenu passes a resolver that returns `null`; SplitButton returns its
    connected, rendered, effectively enabled primary Button or `null`.
 2. Keep all root Menu state transitions, collection code, submenus, callbacks,
@@ -793,10 +897,20 @@ Implementation has one required private refactor and no public prerequisite:
    its compound Style. Shared private selectors accept an exact part-name map
    so CButton and SplitButton can keep distinct public parts without copying
    declarations.
+7. Add one private submit-scope registry keyed by actual Document/open
+   ShadowRoot. Its one capture listener maps `SubmitEvent.submitter` directly
+   to a registered primary, runs the shared Button availability guard, and
+   calls the Menu transaction hook. Root-scope morph/move transfers the entry;
+   final disposal removes the scope listener. It observes no arbitrary form
+   nodes or IDs.
 
-`requestActionClose(source)` runs the controller's ordinary controlled or
-uncontrolled CMenu request synchronously and at most once for the current
-native activation. The committed-open sink receives every logical root change
+`beginPrimaryAction(source, event)` synchronously commits/guards uncontrolled
+visual close or guards a controlled request, then schedules one cancelable
+`setTimeout(..., 0)` settlement. `observePrimarySubmit(event)` starts the same
+transaction for `requestSubmit(primary)` and reuses the existing click token
+when the submit came from that click. The token is keyed by native
+event/primary and consumed once, so click capture plus form submit capture
+cannot double-close or double-notify. The committed-open sink receives every logical root change
 after commit and removes/sets SplitButton root `data-open`; requested but
 refused controlled state never reaches it. Disabled focus recovery asks the
 resolver only after hiding/inerting the tree, verifies focus success, and then
@@ -806,12 +920,13 @@ to one controller; they do not fork its state machine.
 The implementation gate is falsifiable: if the extracted Menu controller
 cannot mount both CMenu's activator anatomy and SplitButton's distinct
 trigger/anchor anatomy while the entire CMenu test suite remains unchanged,
-the action-close handle cannot notify synchronously once, the committed mirror
-or enabled-primary focus target is wrong, a SplitButton-only page lacks current
-Button/Menu styling, coexistence emits duplicate Style/Script content, or
-retained-resource counts do not return to baseline, SplitButton runtime work
-stops. Copying Menu JavaScript/CSS or nesting CMenu behind reactive forwarding
-is not an allowed fallback.
+runtime work stops. It also stops if the primary transaction cannot settle once
+or cancel for the documented generation/navigation cases without duplicates;
+the committed mirror or enabled-primary focus target is wrong; a
+SplitButton-only page lacks current Button/Menu styling; coexistence emits
+duplicate Style/Script content; or retained-resource counts do not return to
+baseline. Copying Menu JavaScript/CSS or nesting CMenu behind reactive
+forwarding is not an allowed fallback.
 
 ## 15. Security and content trust
 
@@ -849,6 +964,14 @@ Presence, naming, disabledness, busy state, and editability are likewise
 component-owned for the entire lifetime, not conditionally reserved only while
 a state happens to be active.
 
+`menu_attrs` is intentionally stricter than public `CMenu.attrs`: SplitButton
+rejects `x-data`, `x-init`, `x-effect`, and `x-id` in addition to CMenu's
+current ownership directives because one compound `$c-props` owner must govern
+the root, Buttons, committed mirror, and Menu. Reuse remains feasible because
+the private surface builder receives already validated/snapshotted mappings;
+each public facade keeps its own validator policy. This stricter wrapper policy
+does not narrow direct CMenu composition.
+
 Class and style values merge only through direct `class_`/`style` and the
 ordinary allowed mapping rules. Generated anchor ownership merges last and
 cannot be replaced by consumer style. URL-like native form action destinations
@@ -870,6 +993,12 @@ icon network request, font, external package, per-instance document listener,
 scroll listener, resize loop, or coordinate-writing engine. The chevron is CSS
 or the existing bundled icon primitive and is hidden from accessibility.
 
+Submit-capable instances add the form-association registry's one shared capture
+`submit` listener per active Document/open ShadowRoot scope. This is the only
+new scope listener. It is identity-filtered, creates no form observer, and is
+removed with the last registrant. Asset/resource reports count active submit
+scopes and registrations separately from anchored-layer scopes.
+
 Asset evidence records raw, gzip, and Brotli size for the incremental family
 and verifies one copy of every shared dependency for 1, 10, and 100 instances.
 The target is less than 3 KiB gzip incremental JavaScript and less than 2 KiB
@@ -889,12 +1018,12 @@ Automated evidence is required before release:
 
 | Area | Required proof and falsifier |
 |---|---|
-| schema and exports | exact `Kwargs`, six family exports, existing alias reuse, template and Python composition, missing/empty menu label/content/Menu errors, exact declaration acceptance |
+| schema and exports | exact `Kwargs`, six family exports, existing alias reuse, renderable template and Python composition, missing/empty group label/Menu label/content/Menu errors, exact declaration acceptance |
 | anatomy | one group, two immediate native Buttons, Menu Button always `type=button`, exact IDs/ARIA/parts/reflections, Menu surface identical to CMenu |
-| native primary | click, Enter, Space, submit, reset, name/value FormData, `SubmitEvent.submitter`, external `form`, submit overrides, `requestSubmit`, disabled and loading guards |
+| native primary | click, Enter, Space, submit, reset, name/value FormData, `SubmitEvent.submitter`, external `form`, submit overrides, valid/invalid/loading-blocked `requestSubmit`, click-token dedupe, dynamic form reassociation, and disabled/loading guards |
 | no accidental submit | Menu Button, Menu item Buttons, submenu triggers, malformed/morphed type repair, Enter/Space/Arrow activation never submit |
 | state ownership | uncontrolled open/close, controlled accept/refuse/release, same-value commits, forced disabled/fieldset/ancestor/modal close, re-enable, suppression/new-edge behavior |
-| primary while open | synchronous capture `action` close before native handlers/default action, no outside duplicate, native action proceeds after controlled refusal, accepted close gets no later duplicate, refused close plus later modal reports one distinct forced ancestor transition |
+| primary while open | synchronous internal uncontrolled close with later `action` notice, deferred controlled request, no outside duplicate, native action before callback, click/submit dedupe, controlled forced-close generation cancellation, and removal cancellation |
 | disabled/loading | common and each per-half combination, native fieldset changes/moves, loading focus retention, available Menu during primary loading, verified focus fallback on Menu disable |
 | keyboard/focus | native two-stop Tab order, primary no arrow behavior, Menu Button open keys, complete CMenu root/submenu/typeahead keys, Escape, Tab out, focus restoration and refusal repair |
 | collection | every existing CMenu declaration/slot/callback, choices, links, duplicate/invalid structures, settled invalidity/recovery, correlated reorder/removal/path recovery |
@@ -904,7 +1033,7 @@ Automated evidence is required before release:
 | accessibility | separate primary/Menu Button names, group and Menu relationships, busy/disabled states, target size, axe, browser AX snapshots, VoiceOver/NVDA manual record |
 | trust | every destination allowlist/reserved attr/static and dynamic alias, namespace/directive rejection, `is`, unsafe slot descendants, spoofed declaration roots, mutation recovery |
 | SSR/lifecycle | no-JS primary/form utility and Menu fallback, delayed init, repeat init, fragment insertion, morph handoff/replacement, removal while open/loading, zero retained resources |
-| reuse/performance | full existing CButton/CButtonGroup/CMenu suites stay green; one Menu runtime and anchored dependency in output; incremental asset budgets and 1/10/100 instance timing |
+| reuse/performance | full existing CButton/CButtonGroup/CMenu suites stay green; one Menu runtime and anchored dependency; one submit listener per actual root with 1/10/100 dedupe/transfer/cleanup; incremental asset budgets and instance timing |
 
 Focused cross-browser evidence runs in current Chromium, Firefox, and WebKit.
 Family tests must include open-ShadowRoot and native Dialog compositions, not
@@ -954,18 +1083,18 @@ APG Menu Button guidance, and the native Button no-JavaScript path.
 
 The public example catalog is required in this order:
 
-| Order and module | Reader task and evidence |
-|---|---|
-| 1. `at_a_glance.py` | visible dominant Save action plus related alternatives; separate names and no repeated dominant item |
-| 2. `basic_actions.py` | minimal template and Python composition with existing `CMenuItem` declarations and native click evidence |
-| 3. `forms.py` | submit/reset/name/value/external form behavior; prove Menu Button and items never submit |
-| 4. `controlled_menu.py` | accept, refuse, and release controlled `open`; display owner and committed state |
-| 5. `variants_and_sizes.py` | external controls update variant, intent, size, block, placement, width matching, and reflections |
-| 6. `disabled_and_loading.py` | common/per-half disabled, fieldset, focus-retaining primary loading, Menu remains useful |
-| 7. `menu_composition.py` | groups, separators, choices, valued commands, links, and nested submenu through existing declarations |
-| 8. `focus_and_keyboard.py` | two Tab stops, primary native keys, Menu Button arrow keys, Escape/Tab and focus restoration |
-| 9. `layers_and_dialog.py` | SplitButton in overflow, open ShadowRoot, and modal; primary/item opens a sibling controlled Dialog |
-| 10. `customization.py` | Button/Menu/compound variables and stable selectors across two brands, dark nested scheme, RTL, long label, narrow width |
+| Order and module | Reader task and fixture copy | Visible states | Controls and interaction | Environment profile | Contract map | Focused browser evidence |
+|---|---|---|---|---|---|---|
+| 1. `at_a_glance.py` | Save one field-journal specimen; Menu offers Save a copy, Export record, and Archive specimen without repeating Save. | enabled solid pair, Menu closed/open, one danger item | primary click and Menu trigger | ordinary light docs surface plus narrow wrap | purpose, hierarchy, explicit `label`/`menu_label`, anatomy | exact two names/roles, primary native event, open/action close, no overflow/console error |
+| 2. `basic_actions.py` | Build the same specimen action in template and Python forms. | two equivalent minimal pairs | open each and activate a valued item | ordinary light and docs dark toggle | valid composition syntax, existing declarations, slot records | render both exact source forms; IDs/ARIA/parts match and callbacks fire once |
+| 3. `forms.py` | Commit or reset a botanical accession form; related Menu exports a draft. | submit, reset, external-form owner, invalid field, open Menu | fill, click, Enter submit, reset, `requestSubmit(primary)`, switch form owner | light, narrow form, no-JavaScript snapshot | native form section, two-phase task, no accidental Menu submit | exact FormData/submitter/reset; click-submit dedupe; invalid `requestSubmit` keeps Menu open; event-order log; callback removal/retype cannot cancel/duplicate |
+| 4. `controlled_menu.py` | A curator accepts or refuses opening the publication-actions Menu, then releases ownership. | accepted open, refused open/close, retained uncontrolled baseline | Accept requests toggle, Show/Hide, Release control | ordinary light; focus-outside target beside preview | nullable controlled state, forced close, committed root mirror | no flash, exact callback detail/order, release baseline, disabled/ancestor forced behavior |
+| 5. `variants_and_sizes.py` | Compare action emphasis for collecting, approving, and warning about a specimen. | representative variant/intent/size matrix plus one live subject | external selects/checkboxes change variant, intent, size, block, placement, match width | light/dark, wide/narrow | every presentation client input and reflection | controls update both Buttons/Menu size; full-root placement/width; invalid episode logs once |
+| 6. `disabled_and_loading.py` | Save a large specimen image while alternate export actions remain available. | common disabled, primary-only disabled, Menu-only disabled, primary loading, disabled+loading | toggle each condition and a real disabled fieldset | light, forced colors preview, narrow | precedence, native fieldset, focus fallback, pending availability | loading retains primary focus/blocks activation; Menu works; fieldset closes; enabled-primary/modal/body fallback verified |
+| 7. `menu_composition.py` | Organize specimen export, visibility choice, format radio group, and nested archive destinations. | commands, link, group, separator, checkbox, radio, submenu, danger | activate every declaration and reorder one retained collection | light/dark and RTL submenu profile | complete reused CMenu declaration/state/callback surface | exact paths/order, link native behavior, choices, typeahead, nested collision, correlated identity recovery |
+| 8. `focus_and_keyboard.py` | Complete the save task without a pointer. | closed/open, loading primary, each per-half disabled | documented Tab, Shift+Tab, Enter, Space, arrows, Home/End, typeahead, Escape | narrow LTR and RTL | two-stop model, native primary keys, full CMenu keyboard/focus | ordered focus trace, prevent-default rules, rejection repair, no trap, no duplicate action/outside request |
+| 9. `layers_and_dialog.py` | Open specimen actions from a clipped field tray; an action opens a sibling provenance Dialog. | overflow escape, nested submenu, controlled Dialog, open-ShadowRoot fixture | primary and item Dialog launches, outside, Escape, ancestor close | overflow container, open ShadowRoot, modal, RTL collision | shared layer, root anchor, inside root, modal generation, cleanup | top-layer geometry, padded-root click is not outside, Dialog owns focus, controlled pending task cancellation, zero retained layer resources |
+| 10. `customization.py` | Apply Orchard and Harbor field-guide brands to the same long translated action. | two branded pairs and open Menus, long label, divider states | no state configurator; public selector/variable overrides are visible source | light/dark nested scheme, RTL, 20rem width, forced colors/reduced motion/print profiles | exhaustive Button/Menu/compound CSS and environmental contract | effective backgrounds and contrast, visible divider, logical corners, variable/selector override, no overflow, screenshot set |
 
 Reader prose must state:
 
@@ -1017,3 +1146,12 @@ private runtime lacks hooks. Any future addition needs its own evidence and
 compatibility review. Until the mandatory extraction preserves all existing
 CMenu and CButton behavior and the section 17 matrix passes, runtime release is
 blocked. The design itself is frozen for independent adversarial review.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

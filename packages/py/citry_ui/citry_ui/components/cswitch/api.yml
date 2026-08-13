@@ -100,3 +100,5 @@ interfaces:
       - {id: label-pos, name: CSwitchLabelPos, definition: 'Literal["start", "end"]'}
   - {id: default, kind: record, name: CSwitchDefaultSlotData, entries: []}
   - {id: description, kind: record, name: CSwitchDescriptionSlotData, entries: []}
+
+translations: []

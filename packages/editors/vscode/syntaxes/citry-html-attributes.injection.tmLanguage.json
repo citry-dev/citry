@@ -11,7 +11,7 @@
 		{ "include": "citry.html.injection#state-handler-attribute" },
 		{ "include": "citry.html.injection#javascript-attribute" },
 		{
-			"match": "(?x)(?<![[:alnum:]_.:-])(?:\\$c-props|\\#c-(?:key|ignore)|:c-[^[:space:]=/>]+|c-(?:\\$c-props|@[^[:space:]=/>]+|class))(?=[[:space:]=/>\\{])",
+			"match": "(?x)(?<![[:alnum:]_.:-])(?:\\$c-props|\\$c-tr(?=[:.\\[])[^[:space:]=/>]*|\\#c-(?:key|ignore)|:c-[^[:space:]=/>]+|c-(?:\\$c-props|\\$c-tr(?=[:.\\[])[^[:space:]=/>]*|@[^[:space:]=/>]+|class))(?=[[:space:]=/>\\{])",
 			"name": "entity.other.attribute-name.citry"
 		},
 		{

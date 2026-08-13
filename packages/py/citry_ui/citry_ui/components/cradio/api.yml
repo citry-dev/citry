@@ -131,3 +131,5 @@ interfaces:
   - {id: group-label, kind: record, name: CRadioGroupLabelSlotData, entries: []}
   - {id: radio-default, kind: record, name: CRadioDefaultSlotData, entries: []}
   - {id: radio-description, kind: record, name: CRadioDescriptionSlotData, entries: []}
+
+translations: []

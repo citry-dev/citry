@@ -27,6 +27,7 @@ _CATEGORIES = (
     "attributes",
     "selectors",
     "interfaces",
+    "translations",
 )
 _CATEGORY_TITLES = {
     "inputs": "Inputs",
@@ -37,6 +38,7 @@ _CATEGORY_TITLES = {
     "selectors": "Selectors",
     "css": "CSS",
     "interfaces": "Interfaces",
+    "translations": "Translation keys",
 }
 _ANCHOR_PARTS = {
     "inputs": "input",
@@ -46,6 +48,7 @@ _ANCHOR_PARTS = {
     "attributes": "attribute",
     "selectors": "selector",
     "css": "css",
+    "translations": "translation",
 }
 _API_HEADING_RE = re.compile(r"^## API reference\s*$", re.MULTILINE)
 _CONCEPT_HEADING_RE = re.compile(r"^## (?!API reference\s*$).+", re.MULTILINE)
@@ -158,6 +161,7 @@ def render_ui_api_reference(reference: UiApiReference) -> str:
         "attributes": _render_attributes,
         "selectors": _render_selectors,
         "interfaces": _render_interfaces,
+        "translations": _render_translations,
     }
     for category in _CATEGORIES:
         lines.extend((f"### {_CATEGORY_TITLES[category]}", ""))
@@ -191,7 +195,7 @@ def _validate_reference_relationships(reference: UiApiReference) -> None:
             _claim_anchor(anchors, ui_api_entry_anchor(reference, "interfaces", table), reference.source)
             _validate_entry_ids(reference, "interfaces", table, anchors)
 
-    for category in _CATEGORIES[:-1]:
+    for category in (category for category in _CATEGORIES if category != "interfaces"):
         table_ids: set[str] = set()
         for table in reference.sections[category]:
             table_id = str(table["id"])
@@ -580,6 +584,40 @@ def _render_interfaces(
             ("Field", "Type", "Default", "Meaning"),
             rows,
             widths=_column_widths(table, ("fit", "13rem", "8rem", "auto")),
+        )
+
+
+def _render_translations(
+    lines: list[str],
+    reference: UiApiReference,
+    interface_anchors: Mapping[str, str],  # noqa: ARG001 - renderer signature is uniform
+) -> None:
+    tables = reference.sections["translations"]
+    if not tables:
+        lines.extend(("-", ""))
+        return
+    _add_paragraph(
+        lines,
+        "Catalog keys used by this family. An explicit component input or slot listed in Override "
+        "takes precedence over the catalog for that instance.",
+    )
+    for table in tables:
+        lines.extend((f"#### {table['component']} translation keys", ""))
+        rows = [
+            (
+                _entry_code(reference, "translations", table, entry, str(entry["key"])),
+                _inline(str(entry["purpose"])),
+                _code(str(entry["variables"])),
+                _inline(str(entry["override"])),
+                _inline(str(entry["updates"])),
+            )
+            for entry in _entries(table)
+        ]
+        _add_table(
+            lines,
+            ("Key", "Purpose", "Variables", "Override", "Browser updates"),
+            rows,
+            widths=_column_widths(table, ("18rem", "auto", "10rem", "12rem", "13rem")),
         )
 
 

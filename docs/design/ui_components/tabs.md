@@ -527,3 +527,12 @@ plumbing, and raw attribute maps are important but not intrinsically visual;
 the composition example and API reference can own them. Every visual or
 interactive contract should appear in at least one rendered example, and the
 coverage table above should remain traceable as inputs are added.
+
+## 21. Internationalization
+
+This family has not yet completed its localization audit. Before adding any
+catalog output, apply the Citry UI component-authoring i18n checklist and make
+the structured **Translation keys** table in the family API reference the
+authoritative inventory. Record dormant fallback behavior, explicit override
+precedence, typed variables, formatting and direction claims, and the exact
+browser update path for every library-owned string.

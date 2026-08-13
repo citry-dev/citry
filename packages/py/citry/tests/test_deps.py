@@ -61,6 +61,7 @@ class TestPublicSurface:
     def test_all_exposes_the_documented_surface(self):
         assert citry.ext.dependencies.__all__ == [
             "CitryDependencies",
+            "DependenciesConfig",
             "DependenciesExtension",
             "Dependency",
             "DependencyRecord",

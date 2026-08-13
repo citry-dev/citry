@@ -1,13 +1,18 @@
 """Persistent Toast queue, viewport, timers, focus access, and announcers."""
 
+# ruff: noqa: E501 - Citry template expressions stay on their owning attribute lines.
+
 from __future__ import annotations
 
+import json
+import string
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from citry import LibraryComponent, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._i18n import inline_translation_value, uses_catalog_default
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean, validate_html_id
 
 CToastIntent = Literal["neutral", "info", "success", "warn", "error"]
@@ -77,6 +82,14 @@ class CToastMessage:
     dismissible: bool = True
 
 
+@dataclass(frozen=True, slots=True)
+class CToastMessages:
+    """Optional caller-owned patterns for text created by the Toast runtime."""
+
+    dismiss_label: str | None = None
+    action_announcement: str | None = None
+
+
 def _plain_text(
     input_name: str,
     value: object,
@@ -131,6 +144,25 @@ def _duration(input_name: str, value: object, *, optional: bool = False) -> int 
         msg = f"CToastRegion {input_name} must be 0 or between 1000 and 120000 milliseconds."
         raise ValueError(msg)
     return raw
+
+
+def _message_pattern(name: str, value: object, *, required: str) -> str:
+    pattern = _plain_text(f"messages.{name}", value)
+    assert pattern is not None  # noqa: S101 - nonoptional normalization
+    fields: list[str] = []
+    try:
+        parsed = tuple(string.Formatter().parse(pattern))
+    except ValueError as error:
+        raise ValueError(f"CToastRegion messages.{name} is not a valid message pattern.") from error
+    for _text, field, format_spec, conversion in parsed:
+        if field is None:
+            continue
+        if field != required or format_spec or conversion:
+            raise ValueError(f"CToastRegion messages.{name} contains an unsupported placeholder.")
+        fields.append(field)
+    if required not in fields:
+        raise ValueError(f"CToastRegion messages.{name} must contain {{{required}}}.")
+    return pattern
 
 
 def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
@@ -196,11 +228,15 @@ def _normalize_message(message: object, index: int) -> dict[str, object]:
 
 
 class CToastRegion(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         items: Sequence[CToastMessage] = ()
         id: str | None = None
         label: str = "Notifications"
+        messages: CToastMessages | None = None
         placement: CToastPlacement = "block-end-end"
         limit: int = 3
         duration_ms: int = 8000
@@ -220,7 +256,30 @@ class CToastRegion(LibraryComponent):
         if kwargs.id is not None and "\0" in kwargs.id:
             msg = "CToastRegion id cannot contain U+0000."
             raise ValueError(msg)
-        label = _plain_text("label", kwargs.label)
+        catalog_label = uses_catalog_default(self, "label")
+        label = _plain_text(
+            "label",
+            self.i18n.tr("citry-ui-toast-region") if catalog_label else kwargs.label,
+        )
+        if kwargs.messages is not None and not isinstance(kwargs.messages, CToastMessages):
+            raise TypeError(f"CToastRegion messages must be CToastMessages or None, got {kwargs.messages!r}.")
+        overrides = kwargs.messages or CToastMessages()
+        catalog_dismiss = overrides.dismiss_label is None
+        catalog_action_announcement = overrides.action_announcement is None
+        dismiss_pattern = _message_pattern(
+            "dismiss_label",
+            overrides.dismiss_label
+            if overrides.dismiss_label is not None
+            else self.i18n.tr("citry-ui-toast-dismiss", title="{title}"),
+            required="title",
+        )
+        action_pattern = _message_pattern(
+            "action_announcement",
+            overrides.action_announcement
+            if overrides.action_announcement is not None
+            else self.i18n.tr("citry-ui-toast-action-available", action_label="{action_label}"),
+            required="action_label",
+        )
         placement = _plain_choice("placement", kwargs.placement, _PLACEMENTS)
         if isinstance(kwargs.limit, bool) or not isinstance(kwargs.limit, int):
             msg = f"CToastRegion limit must be an integer, got {kwargs.limit!r}."
@@ -235,10 +294,36 @@ class CToastRegion(LibraryComponent):
         if isinstance(kwargs.items, (str, bytes)) or not isinstance(kwargs.items, Sequence):
             msg = f"CToastRegion items must be a sequence of CToastMessage, got {kwargs.items!r}."
             raise TypeError(msg)
-        messages = tuple(_normalize_message(message, index) for index, message in enumerate(tuple(kwargs.items)))
+        normalized = tuple(_normalize_message(message, index) for index, message in enumerate(tuple(kwargs.items)))
+        messages = tuple(
+            {
+                **message,
+                "dismissLabel": self.i18n.tr(
+                    "citry-ui-toast-dismiss",
+                    title=inline_translation_value(cast("str", message["title"])),
+                )
+                if catalog_dismiss
+                else dismiss_pattern.format(title=message["title"]),
+                "actionAnnouncement": self.i18n.tr(
+                    "citry-ui-toast-action-available",
+                    action_label=inline_translation_value(cast("str", message["actionLabel"])),
+                )
+                if catalog_action_announcement and message["actionLabel"] is not None
+                else action_pattern.format(action_label=message["actionLabel"])
+                if message["actionLabel"] is not None
+                else None,
+            }
+            for message in normalized
+        )
         # Template HTML and the initializer consume one snapshot even when a
         # caller supplies a mutable or side-effecting public Sequence.
         self._toast_messages = messages
+        self._toast_i18n_data = {
+            "catalogDismiss": catalog_dismiss,
+            "catalogActionAnnouncement": catalog_action_announcement,
+            "dismissPattern": dismiss_pattern,
+            "actionAnnouncementPattern": action_pattern,
+        }
         ids = [message["id"] for message in messages]
         if len(ids) != len(set(ids)):
             msg = "CToastRegion items require unique canonical ids."
@@ -251,13 +336,21 @@ class CToastRegion(LibraryComponent):
                 **message,
                 "titleId": f"{region_id}-title-{index}",
                 "descriptionId": f"{region_id}-description-{index}",
-                "dismissLabel": f"Dismiss {message['title']}",
+                "translationTitle": inline_translation_value(cast("str", message["title"])),
+                "dismissValuesExpression": "{ title: "
+                + json.dumps(
+                    inline_translation_value(cast("str", message["title"])),
+                    ensure_ascii=False,
+                )
+                + " }",
             }
             for index, message in enumerate(messages[: kwargs.limit])
         )
         return {
             "region_id": region_id,
             "label": label,
+            "catalog_label": catalog_label,
+            "catalog_dismiss": catalog_dismiss,
             "placement": placement,
             "visible_messages": visible_messages,
             "attrs": merge_root_attrs(attrs, kwargs.class_, kwargs.style),
@@ -273,6 +366,7 @@ class CToastRegion(LibraryComponent):
             "pauseOnHover": kwargs.pause_on_hover,
             "pauseOnFocus": kwargs.pause_on_focus,
             "pauseOnHidden": kwargs.pause_on_hidden,
+            **self._toast_i18n_data,
         }
 
     template = """
@@ -280,7 +374,8 @@ class CToastRegion(LibraryComponent):
         class="cui-toast-region"
         c-id="region_id"
         c-bind="attrs"
-        c-aria-label="label"
+        c-aria-label="tr('citry-ui-toast-region') if catalog_label else label"
+        c-$c-tr:citry-ui-toast-region[aria-label]="True if catalog_label else None"
         c-data-placement="placement"
         role="region"
         tabindex="-1"
@@ -333,7 +428,8 @@ class CToastRegion(LibraryComponent):
                   <c-if cond="message['dismissible']">
                     <button
                       type="button"
-                      c-aria-label="message['dismissLabel']"
+                      c-aria-label="tr('citry-ui-toast-dismiss', title=message['translationTitle']) if catalog_dismiss else message['dismissLabel']"
+                      c-$c-tr:citry-ui-toast-dismiss[aria-label]="message['dismissValuesExpression'] if catalog_dismiss else None"
                       data-citry-toast-dismiss
                       data-citry-ui-part="dismiss"
                     >&times;</button>
@@ -356,7 +452,7 @@ class CToastRegion(LibraryComponent):
           items: {}, placement: {}, limit: {}, durationMs: {}, pauseOnHover: {},
           pauseOnFocus: {}, pauseOnHidden: {}, onDismiss: {}, onAction: {},
         },
-        init: ({ els, data, props, effect }) => {
+        init: ({ els, data, props, effect, i18n }) => {
           const region = els[0];
           const scope = region.getRootNode();
           const ownerDocument = region.ownerDocument;
@@ -550,6 +646,10 @@ class CToastRegion(LibraryComponent):
             }
             return normalized;
           };
+          const formatPattern = (pattern, name, value) => pattern.split(`{${name}}`).join(value);
+          const inlineTranslationValue = (value) => value
+            .replace(/[\n\r\u001c-\u001e\u0085\u2029]/gu, " ")
+            .replace(/[\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu, "");
           const normalizeMessage = (raw, index) => {
             if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
               throw new TypeError(`items[${index}] must be an object.`);
@@ -582,6 +682,14 @@ class CToastRegion(LibraryComponent):
                 ? null : text(`items[${index}].actionLabel`, raw.actionLabel, { optional: true }),
               closeOnAction,
               dismissible,
+              dismissLabel: raw.dismissLabel === undefined
+                ? null : text(`items[${index}].dismissLabel`, raw.dismissLabel, { optional: true }),
+              actionAnnouncement: raw.actionAnnouncement === undefined
+                ? null : text(
+                    `items[${index}].actionAnnouncement`,
+                    raw.actionAnnouncement,
+                    { optional: true },
+                  ),
             };
             value.fingerprint = JSON.stringify(value);
             return value;
@@ -663,10 +771,25 @@ class CToastRegion(LibraryComponent):
               else scheduleTimer(entry);
             }
           };
+          const actionAnnouncement = (message) => {
+            if (!message.actionLabel) return null;
+            if (data.catalogActionAnnouncement) {
+              return i18n
+                ? i18n.tr("citry-ui-toast-action-available", {
+                    action_label: inlineTranslationValue(message.actionLabel),
+                  })
+                : formatPattern(
+                    data.actionAnnouncementPattern,
+                    "action_label",
+                    inlineTranslationValue(message.actionLabel),
+                  );
+            }
+            return formatPattern(data.actionAnnouncementPattern, "action_label", message.actionLabel);
+          };
           const announcementText = (message) => [
             message.title,
             message.description,
-            message.actionLabel ? `Action available: ${message.actionLabel}.` : null,
+            actionAnnouncement(message),
           ].filter(Boolean).join(" ");
           const drainAnnouncements = () => {
             if (announcementRunning || disposed || modalPaused
@@ -752,6 +875,7 @@ class CToastRegion(LibraryComponent):
             root.append(content, actions);
             const value = {
               root, title, description, actions, action, dismissButton, descriptionId,
+              dismissBinding: null,
             };
             nodes.set(entry.message.id, value);
             return value;
@@ -769,7 +893,31 @@ class CToastRegion(LibraryComponent):
             value.action.textContent = message.actionLabel ?? "";
             value.action.hidden = message.actionLabel === null;
             value.dismissButton.hidden = !message.dismissible;
-            value.dismissButton.setAttribute("aria-label", `Dismiss ${message.title}`);
+            if (data.catalogDismiss && i18n) {
+              if (value.dismissBinding === null) {
+                value.dismissBinding = i18n.bind({
+                  message: "citry-ui-toast-dismiss",
+                  values: () => ({title: inlineTranslationValue(entry.message.title)}),
+                  onChange: (text) => value.dismissButton.setAttribute("aria-label", text),
+                });
+              } else {
+                value.dismissBinding.refresh();
+              }
+            } else if (data.catalogDismiss) {
+              value.dismissButton.setAttribute(
+                "aria-label",
+                formatPattern(
+                  data.dismissPattern,
+                  "title",
+                  inlineTranslationValue(message.title),
+                ),
+              );
+            } else {
+              value.dismissButton.setAttribute(
+                "aria-label",
+                formatPattern(data.dismissPattern, "title", inlineTranslationValue(message.title)),
+              );
+            }
             value.actions.hidden = message.actionLabel === null && !message.dismissible;
             return value;
           };
@@ -799,6 +947,7 @@ class CToastRegion(LibraryComponent):
             const activeIds = new Set(active.map((entry) => entry.message.id));
             for (const [id, value] of nodes) {
               if (activeIds.has(id)) continue;
+              value.dismissBinding?.dispose();
               value.root.remove();
               nodes.delete(id);
             }
@@ -1004,6 +1153,7 @@ class CToastRegion(LibraryComponent):
             for (const handle of taskHandles) clearTimeout(handle);
             taskHandles.clear();
             timerRecords.clear();
+            for (const value of nodes.values()) value.dismissBinding?.dispose();
             region.removeEventListener("pointerenter", onPointerEnter);
             region.removeEventListener("pointerleave", onPointerLeave);
             region.removeEventListener("focusin", onFocusIn);
@@ -1181,10 +1331,19 @@ class CToastRegion(LibraryComponent):
       }
     """
 
+    messages = """
+      citry-ui-toast-region = Notifications
+      # @param {str} $title - Toast title.
+      citry-ui-toast-dismiss = Dismiss { $title }
+      # @param {str} $action_label - Visible toast action label.
+      citry-ui-toast-action-available = Action available: { $action_label }.
+    """
+
 
 __all__ = [
     "CToastIntent",
     "CToastMessage",
+    "CToastMessages",
     "CToastPlacement",
     "CToastPriority",
     "CToastRegion",

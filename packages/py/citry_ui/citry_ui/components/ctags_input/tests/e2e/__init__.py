@@ -1,0 +1,1 @@
+"""TagsInput browser tests."""

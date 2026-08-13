@@ -21,6 +21,7 @@ from scripts.verify_citry_distribution import (  # noqa: E402
     sdist_inventory,
     wheel_inventory,
 )
+from scripts.verify_wheel_size import verify as verify_wheel_sizes  # noqa: E402
 
 
 def test_archive_inventories_hash_payloads_without_extracting(tmp_path: Path) -> None:
@@ -46,3 +47,18 @@ def test_archive_inventories_hash_payloads_without_extracting(tmp_path: Path) ->
 def test_inventory_comparison_names_changed_and_missing_files() -> None:
     with pytest.raises(DistributionVerificationError, match=r"a\.py, b\.py"):
         require_equal("payload", {"a.py": "old"}, {"a.py": "new", "b.py": "new"})
+
+
+def test_wheel_size_gate_reports_and_rejects_the_exact_compressed_size(tmp_path: Path) -> None:
+    wheel = tmp_path / "citry_core-1.0.0-py3-none-any.whl"
+    wheel.write_bytes(b"wheel")
+
+    assert verify_wheel_sizes([wheel], max_bytes=5) == [
+        {
+            "wheel": wheel.name,
+            "bytes": 5,
+            "maxBytes": 5,
+        }
+    ]
+    with pytest.raises(ValueError, match="release cap is 4 bytes"):
+        verify_wheel_sizes([wheel], max_bytes=4)

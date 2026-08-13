@@ -121,7 +121,6 @@ def test_pages_load_with_no_broken_assets(page: Any, docs_site_url: str) -> None
         "/reference/component/",
         "/reference/",
         "/blog/",
-        "/blog/language-agnostic-tools/",
     ):
         bad = _failed_requests(page, docs_site_url + path)
         assert bad == [], f"{path} loaded with failed requests: {bad}"
@@ -591,6 +590,73 @@ def test_sidebar_groups_follow_declared_order_and_active_page(
     assert page.locator(f'.djc-sidebar__link.is-active[href="{target.path}"]').count() == 1
 
 
+def test_sidebar_category_labels_keep_readable_hierarchy_in_both_themes(
+    page: Any,
+    docs_site_url: str,
+) -> None:
+    page.goto(docs_site_url + "/docs/")
+    theme_cases = (
+        ("light", "light"),
+        ("dark", "light"),
+        (None, "dark"),
+    )
+    for theme, color_scheme in theme_cases:
+        page.emulate_media(color_scheme=color_scheme)
+        page.evaluate(
+            """theme => {
+              if (theme) document.documentElement.dataset.theme = theme;
+              else delete document.documentElement.dataset.theme;
+            }""",
+            theme,
+        )
+        # Group labels animate their foreground when the theme changes, so
+        # measure the settled theme rather than one transition frame.
+        page.wait_for_timeout(200)
+        styles = page.evaluate(
+            """() => {
+              const canvas = document.createElement('canvas');
+              canvas.width = canvas.height = 1;
+              const context = canvas.getContext('2d');
+              const rgb = (value) => {
+                context.clearRect(0, 0, 1, 1);
+                context.fillStyle = value;
+                context.fillRect(0, 0, 1, 1);
+                return [...context.getImageData(0, 0, 1, 1).data]
+                  .slice(0, 3).map(channel => channel / 255);
+              };
+              const luminance = (value) => {
+                const channels = rgb(value).map(channel => channel <= .04045
+                  ? channel / 12.92
+                  : ((channel + .055) / 1.055) ** 2.4);
+                return .2126 * channels[0] + .7152 * channels[1] + .0722 * channels[2];
+              };
+              const background = luminance(getComputedStyle(document.body).backgroundColor);
+              const labels = [...document.querySelectorAll(
+                '.djc-sidebar__label, '
+                + '.djc-sidebar__group--top > .djc-sidebar__group-label'
+              )];
+              const regularLink = document.querySelector(
+                '.djc-sidebar__link:not(.is-active):not(.djc-sidebar__link--top)'
+              );
+              const linkColor = rgb(getComputedStyle(regularLink).color);
+              return labels.map(label => {
+                const color = getComputedStyle(label).color;
+                const foreground = luminance(color);
+                return {
+                  color: rgb(color),
+                  contrast: (Math.max(foreground, background) + .05)
+                    / (Math.min(foreground, background) + .05),
+                  linkColor,
+                };
+              });
+            }"""
+        )
+
+        assert styles
+        assert all(style["contrast"] >= 4.5 for style in styles), styles
+        assert all(style["color"] != style["linkColor"] for style in styles)
+
+
 def test_desktop_primary_navigation_does_not_overlap_actions(page: Any, docs_site_url: str) -> None:
     page.goto(docs_site_url + "/community/help/")
     for extra_labels in ((), ("Try it", "Citry UI")):
@@ -637,26 +703,24 @@ def test_mobile_shows_overflow_menu(page: Any, docs_site_url: str) -> None:
     assert page.locator('.djc-sidebar__topnav a[aria-current="true"]').inner_text() == "Reference"
 
 
-def test_blog_post_has_scoped_navigation_toc_and_feed(page: Any, docs_site_url: str) -> None:
+def test_empty_blog_has_scoped_navigation_and_no_feed(page: Any, docs_site_url: str) -> None:
     tree = load_site_nav(config)
     blog_area = tree.areas[-1]
     assert blog_area.label == "Blog"
-    post = blog_area.items[1]
 
-    page.goto(docs_site_url + post.path)
+    page.goto(docs_site_url + blog_area.entry_path)
 
     primary = page.locator(".djc-header__nav a")
     assert primary.last.inner_text() == "Blog"
     assert primary.last.get_attribute("href") == "/blog/"
     assert page.locator(".djc-header__nav a.is-active").inner_text() == "Blog"
     assert page.locator("article.prose h1").count() == 1
-    assert page.locator(".djc-toc .djc-toc__link").count() >= 1
-    assert page.locator(f'.djc-sidebar__link.is-active[href="{post.path}"] time').count() == 1
+    assert page.locator(".blog-index__empty").inner_text() == "No Blog posts have been published yet."
     assert page.locator(".djc-header__actions > .djc-version-picker").count() == 0
+    assert page.locator('link[rel="alternate"][type="application/atom+xml"]').count() == 0
 
     feed = page.request.get(docs_site_url + "/blog/feed.xml")
-    assert feed.ok
-    assert feed.headers["content-type"].startswith(("application/atom+xml", "application/xml"))
+    assert feed.status == 404
 
     page.set_viewport_size({"width": 375, "height": 800})
     page.locator(".djc-hamburger").click()

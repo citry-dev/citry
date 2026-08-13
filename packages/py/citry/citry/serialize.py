@@ -29,9 +29,13 @@ See docs/design/component_rendering_defer.md section 6.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from secrets import token_hex
 from typing import TYPE_CHECKING, get_args
 
+from citry._csp_validation import _CspRenderValidator
+from citry._javascript_policy import _JavascriptPolicy
+from citry._serialization_security import _ScriptSecurityMaterializer
 from citry.citry_render import (
     CitryRender,
     DepsPosition,
@@ -39,12 +43,22 @@ from citry.citry_render import (
     PhysicalRegionPart,
     PhysicalRegionRender,
     Placeholder,
+    SerializedRender,
+    SerializedSecurity,
 )
 from citry.ownership_manifest import EXTRA_KEY as OWNERSHIP_MANIFEST_KEY
 from citry.ownership_manifest import (
     OwnershipManifestArtifact,
     ownership_manifest_required,
     prepare_ownership_manifest,
+)
+from citry.settings import (
+    SecurityCspMode,
+    SecurityJavascriptMode,
+    SecurityScriptIntegrityMode,
+    _validate_security_csp,
+    _validate_security_javascript,
+    _validate_security_script_integrity,
 )
 from citry_core.html_transform import mark_html
 
@@ -65,6 +79,7 @@ _VALUED_MARKER_RE = re.compile(r'^[^\s"\'=<>/]+="[^"<>]*"$')
 # runs once per page).
 _DEPS_STRATEGIES = get_args(DepsStrategy)
 _DEPS_POSITIONS = get_args(DepsPosition)
+_CSP_NONCE_RE = re.compile(r"^[A-Za-z0-9+/_-]+={0,2}$")
 
 # One scanned frame: the HTML split around child placeholders (always one more
 # segment than placeholders), and per placeholder its id, its own text (with
@@ -72,30 +87,162 @@ _DEPS_POSITIONS = get_args(DepsPosition)
 _Frame = tuple[list[str], list[tuple[str, str, list[str]]]]
 
 
+@dataclass(slots=True)
+class _SerializationSession:
+    """Mutable, call-local state that freezes into public security metadata."""
+
+    security_csp: SecurityCspMode
+    security_javascript: SecurityJavascriptMode
+    security_script_integrity: SecurityScriptIntegrityMode
+    csp_nonce: str | None
+    _script_security: _ScriptSecurityMaterializer | None = field(init=False, default=None)
+    _javascript_policy: _JavascriptPolicy | None = field(init=False, default=None)
+
+    def __post_init__(self) -> None:
+        if self.security_javascript != "allow":
+            self._javascript_policy = _JavascriptPolicy(self.security_javascript)
+        if (
+            self.security_script_integrity == "citry"
+            or self.csp_nonce is not None
+            or self.security_csp != "off"
+            or self.security_javascript != "allow"
+        ):
+            materializer_csp = self.security_csp
+            if (
+                materializer_csp == "off"
+                and self.security_javascript != "allow"
+                and self.security_script_integrity == "off"
+                and self.csp_nonce is None
+            ):
+                materializer_csp = "warn"
+            self._script_security = _ScriptSecurityMaterializer(
+                collect_integrity=self.security_script_integrity == "citry",
+                csp_nonce=self.csp_nonce,
+                csp_mode=materializer_csp,
+            )
+
+    @classmethod
+    def for_render(
+        cls,
+        root: CitryRender,
+        *,
+        csp_nonce: str | None,
+        security_csp: SecurityCspMode | None,
+        security_javascript: SecurityJavascriptMode | None,
+        security_script_integrity: SecurityScriptIntegrityMode | None,
+    ) -> _SerializationSession:
+        component = root.context.component
+        settings = component.citry.settings if component is not None else None
+        effective_csp = settings.security_csp if settings is not None else "off"
+        effective_javascript = settings.security_javascript if settings is not None else "allow"
+        effective_integrity = settings.security_script_integrity if settings is not None else "off"
+
+        if security_csp is not None:
+            effective_csp = _validate_security_csp(security_csp)
+        if security_javascript is not None:
+            effective_javascript = _validate_security_javascript(security_javascript)
+        if security_script_integrity is not None:
+            effective_integrity = _validate_security_script_integrity(security_script_integrity)
+        effective_nonce = _validate_csp_nonce(csp_nonce)
+
+        return cls(
+            security_csp=effective_csp,
+            security_javascript=effective_javascript,
+            security_script_integrity=effective_integrity,
+            csp_nonce=effective_nonce,
+        )
+
+    def freeze(self) -> SerializedSecurity:
+        """Return an immutable, document-order snapshot for the caller."""
+        if self._script_security is None:
+            return SerializedSecurity()
+        return SerializedSecurity(
+            scripts=self._script_security.scripts,
+            csp_script_hashes=self._script_security.csp_script_hashes,
+        )
+
+    def require_implemented_modes(self) -> None:
+        """Retained as the phase boundary hook; every public mode is implemented."""
+
+
 def serialize_render(
     root: CitryRender,
     *,
     deps_strategy: DepsStrategy = "document",
     deps_position: DepsPosition = "smart",
+    csp_nonce: str | None = None,
+    security_csp: SecurityCspMode | None = None,
+    security_javascript: SecurityJavascriptMode | None = None,
+    security_script_integrity: SecurityScriptIntegrityMode | None = None,
 ) -> str:
-    """Serialize a render tree to HTML, adding ``data-cid-<id>`` markers (see module doc)."""
+    """Compatibility wrapper returning only the serialized HTML string."""
+    return serialize_render_result(
+        root,
+        deps_strategy=deps_strategy,
+        deps_position=deps_position,
+        csp_nonce=csp_nonce,
+        security_csp=security_csp,
+        security_javascript=security_javascript,
+        security_script_integrity=security_script_integrity,
+    ).html
+
+
+def serialize_render_result(
+    root: CitryRender,
+    *,
+    deps_strategy: DepsStrategy = "document",
+    deps_position: DepsPosition = "smart",
+    csp_nonce: str | None = None,
+    security_csp: SecurityCspMode | None = None,
+    security_javascript: SecurityJavascriptMode | None = None,
+    security_script_integrity: SecurityScriptIntegrityMode | None = None,
+) -> SerializedRender:
+    """Serialize a render tree and return its HTML and security metadata."""
     if deps_strategy not in _DEPS_STRATEGIES:
         msg = f"Invalid deps_strategy {deps_strategy!r}; must be one of {_DEPS_STRATEGIES}"
         raise ValueError(msg)
     if deps_position not in _DEPS_POSITIONS:
         msg = f"Invalid deps_position {deps_position!r}; must be one of {_DEPS_POSITIONS}"
         raise ValueError(msg)
-    artifact: OwnershipManifestArtifact | None
+    session = _SerializationSession.for_render(
+        root,
+        csp_nonce=csp_nonce,
+        security_csp=security_csp,
+        security_javascript=security_javascript,
+        security_script_integrity=security_script_integrity,
+    )
+    session.require_implemented_modes()
+    analysis_artifact: OwnershipManifestArtifact | None
     if (
-        deps_strategy in ("document", "fragment")
-        and root.context.component is not None
+        root.context.component is not None
         and ownership_manifest_required(root)
+        and (deps_strategy in ("document", "fragment") or session.security_javascript != "allow")
     ):
-        artifact = prepare_ownership_manifest(root)
+        analysis_artifact = prepare_ownership_manifest(root)
+    else:
+        analysis_artifact = None
+    artifact = (
+        analysis_artifact
+        if deps_strategy in ("document", "fragment") and session.security_javascript in {"allow", "warn"}
+        else None
+    )
+    if artifact is not None:
         root.context.extra[OWNERSHIP_MANIFEST_KEY] = artifact
     else:
-        artifact = None
         root.context.extra.pop(OWNERSHIP_MANIFEST_KEY, None)
+    csp_validator = (
+        None
+        if session.security_csp == "off"
+        else _CspRenderValidator(
+            session.security_csp,
+            check_alpine=session.security_javascript in {"allow", "warn"},
+        )
+    )
+    javascript_policy = session._javascript_policy
+    if javascript_policy is not None:
+        javascript_policy.inspect_reached_bindings(root)
+    if csp_validator is not None:
+        csp_validator.validate_reached_bindings(root)
     # Pass 1 (top-down): build each component's HTML with its children still as
     # placeholders, add its markers, and work out which markers each child
     # inherits. An explicit stack keeps depth off the Python call stack.
@@ -107,6 +254,7 @@ def serialize_render(
     # uses the key "".
     frame_by_key: dict[str, _Frame] = {}
     order: list[str] = []
+    component_classes: dict[str, str] = {}
     root_key = ""
 
     # Placeholder parts found while building frames: unique placeholder id
@@ -130,6 +278,8 @@ def serialize_render(
         render, inherited, inherited_valued, key = stack.pop()
         component = render.context.component
         render_frame = render.frame
+        if render_frame.render_id is not None:
+            component_classes[render_frame.render_id] = render_frame.class_name or render_frame.class_id or "component"
 
         children: list[tuple[CitryRender, str]] = []
         frame = _build_frame(render, children, placeholder_map, placeholder_nonce, artifact)
@@ -147,6 +297,12 @@ def serialize_render(
             extension_markers = list(render_frame.root_markers)
             if component is not None:
                 extension_markers.extend(render.context._get_root_markers())
+            if session.security_javascript in {"omit", "forbid"}:
+                extension_markers = [
+                    marker
+                    for marker in extension_markers
+                    if not marker.startswith('data-cid="') and not marker.startswith("data-citry")
+                ]
             extension_markers = list(dict.fromkeys(extension_markers))
             fixed_id_marker = f'data-cid="{render_frame.render_id}"'
             own_markers = [
@@ -224,6 +380,11 @@ def serialize_render(
 
     html = finished[root_key]
 
+    if javascript_policy is not None:
+        javascript_policy.validate_pre_extension_html(html, component_classes=component_classes)
+    if csp_validator is not None:
+        csp_validator.validate_pre_extension_html(html, component_classes=component_classes)
+
     # The serialize hook: extensions do whole-page work here, e.g. the
     # dependencies extension places the collected JS/CSS (filling the
     # placeholder texts and the default head/body locations). A render with
@@ -237,6 +398,11 @@ def serialize_render(
             placeholders=placeholder_map,
             deps_strategy=deps_strategy,
             deps_position=deps_position,
+            _script_security=session._script_security,
+            _security_csp=session.security_csp,
+            _javascript_policy=javascript_policy,
+            _security_javascript=session.security_javascript,
+            _ownership_artifact=analysis_artifact,
         )
 
     # A Placeholder is an optional serialize-time insertion point. Extensions
@@ -247,10 +413,52 @@ def serialize_render(
     # install the producing extension.
     for placeholder_html in placeholder_map.values():
         html = html.replace(placeholder_html, "")
-    if artifact is not None:
-        artifact.assert_unchanged()
+    if analysis_artifact is not None:
+        analysis_artifact.assert_unchanged()
+    if javascript_policy is not None:
+        javascript_policy.validate_settled_html(
+            html,
+            marker_prefix=session._script_security.marker_prefix if session._script_security is not None else "",
+            trusted_tag_starts=(
+                session._script_security.trusted_tag_starts(html)
+                if session._script_security is not None
+                else frozenset()
+            ),
+            component_classes=component_classes,
+        )
+        javascript_policy.report()
+    if session._script_security is not None:
+        session._script_security.require_strict_nonce(deps_strategy=deps_strategy)
+    if csp_validator is not None:
+        if session._script_security is not None:
+            csp_validator.add_dependency_findings(session._script_security.csp_findings)
+        csp_validator.validate_settled_html(
+            html,
+            marker_prefix=session._script_security.marker_prefix if session._script_security is not None else "",
+            trusted_tag_starts=(
+                session._script_security.trusted_tag_starts(html)
+                if session._script_security is not None
+                else frozenset()
+            ),
+            component_classes=component_classes,
+        )
+        csp_validator.report()
+    if session._script_security is not None:
+        html = session._script_security.finalize(html)
 
-    return html
+    return SerializedRender(html=html, security=session.freeze())
+
+
+def _validate_csp_nonce(value: str | None) -> str | None:
+    """Validate the CSP Level 3 base64-value syntax used by nonce sources."""
+    if value is None:
+        return None
+    if type(value) is not str or _CSP_NONCE_RE.fullmatch(value) is None:
+        raise ValueError(
+            "Invalid csp_nonce: expected a non-empty CSP base64 value using letters, digits, '+', '/', '-', '_', "
+            "and at most two trailing '=' characters."
+        )
+    return value
 
 
 def _apply_valued_markers(

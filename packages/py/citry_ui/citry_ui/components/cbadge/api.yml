@@ -74,3 +74,5 @@ interfaces:
   - {id: cbadge-default-slot-data, kind: record, name: CBadgeDefaultSlotData, entries: []}
   - {id: cbadge-start-slot-data, kind: record, name: CBadgeStartSlotData, entries: []}
   - {id: cbadge-end-slot-data, kind: record, name: CBadgeEndSlotData, entries: []}
+
+translations: []

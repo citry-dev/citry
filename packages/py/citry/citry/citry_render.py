@@ -69,6 +69,7 @@ if TYPE_CHECKING:
     from citry.citry_context import CitryContext
     from citry.component import Component
     from citry.ownership import OwnershipGraph, PhysicalRegionId
+    from citry.settings import SecurityCspMode, SecurityJavascriptMode, SecurityScriptIntegrityMode
 
 # One piece of rendered output. It is one of:
 #   - str: final text.
@@ -88,6 +89,46 @@ DepsStrategy: TypeAlias = Literal["document", "simple", "fragment", "ignore"]
 
 # Where the dependency tags go for the "document"/"simple" strategies.
 DepsPosition: TypeAlias = Literal["smart", "prepend", "append"]
+
+
+@dataclass(frozen=True, slots=True)
+class SerializedScriptSecurity:
+    """
+    Security metadata for one structured script in serialized output.
+
+    ``digests`` uses the unquoted SRI form, such as ``"sha384-..."``.
+    ``provenance`` states whether Citry computed or verified those bytes.
+    ``origin_class_id`` identifies the component class when one owns the tag.
+    """
+
+    location: Literal["inline", "external"]
+    url: str | None
+    digests: tuple[str, ...]
+    provenance: Literal["citry-computed", "declared-verified", "declared-unverified"]
+    origin_class_id: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class SerializedSecurity:
+    """
+    Security contributions produced by one serialization call.
+
+    ``csp_script_hashes`` is the deduplicated document-order tuple of quoted
+    hash sources that a host can add to ``script-src``. It and ``scripts`` are
+    empty when digest-producing security features are disabled.
+    """
+
+    scripts: tuple[SerializedScriptSecurity, ...] = ()
+    csp_script_hashes: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SerializedRender:
+    """Final HTML plus host-facing security metadata for those exact bytes."""
+
+    html: str
+    security: SerializedSecurity
+
 
 # What ``Component.on_render`` may return to replace the component's whole
 # output (docs/design/component_on_render.md section 3): final text (a ``str``, used
@@ -180,7 +221,16 @@ class CitryRender:
         """Whether this render is the whole output frame of one component."""
         return self.frame.is_component_root
 
-    def serialize(self, deps_strategy: DepsStrategy = "document", deps_position: DepsPosition = "smart") -> str:
+    def serialize(
+        self,
+        deps_strategy: DepsStrategy = "document",
+        deps_position: DepsPosition = "smart",
+        *,
+        csp_nonce: str | None = None,
+        security_csp: SecurityCspMode | None = None,
+        security_javascript: SecurityJavascriptMode | None = None,
+        security_script_integrity: SecurityScriptIntegrityMode | None = None,
+    ) -> str:
         """
         Turn this render into a final HTML string.
 
@@ -214,17 +264,66 @@ class CitryRender:
                   CSS is prepended and JS appended.
                 - ``"prepend"`` / ``"append"``: all tags before/after the
                   whole output.
+            csp_nonce: Raw request nonce to add to structured scripts and
+                inline styles. The host owns nonce generation and the matching
+                Content-Security-Policy response header.
+            security_csp: Override this render's engine-level CSP policy.
+            security_javascript: Override this render's engine-level
+                JavaScript delivery policy.
+            security_script_integrity: Override this render's engine-level
+                script integrity policy.
 
         Raises ``RuntimeError`` if any child component was left unrendered (a
         ``DeferredComponent`` still in the parts), which can only happen if this
         render did not come from ``render()``.
 
+        CSP warning mode reports incompatibilities without changing the
+        standard-runtime output. Strict mode selects the CSP runtime and
+        rejects incompatible reached-tree or final HTML. JavaScript warning
+        mode inventories client requirements, omit removes Citry-managed
+        executable output while retaining HTML and CSS, and forbid rejects a
+        rendered subtree that requires client behavior.
+
+        """
+        return self.serialize_result(
+            deps_strategy=deps_strategy,
+            deps_position=deps_position,
+            csp_nonce=csp_nonce,
+            security_csp=security_csp,
+            security_javascript=security_javascript,
+            security_script_integrity=security_script_integrity,
+        ).html
+
+    def serialize_result(
+        self,
+        deps_strategy: DepsStrategy = "document",
+        deps_position: DepsPosition = "smart",
+        *,
+        csp_nonce: str | None = None,
+        security_csp: SecurityCspMode | None = None,
+        security_javascript: SecurityJavascriptMode | None = None,
+        security_script_integrity: SecurityScriptIntegrityMode | None = None,
+    ) -> SerializedRender:
+        """
+        Return final HTML together with security metadata for those exact bytes.
+
+        Arguments and validation match :meth:`serialize`; this richer method
+        exposes the host-facing metadata while :meth:`serialize` returns only
+        ``result.html``.
         """
         # Imported here, not at module load, to avoid an import cycle:
         # serialize.py imports CitryRender from this module.
-        from citry.serialize import serialize_render  # noqa: PLC0415
+        from citry.serialize import serialize_render_result  # noqa: PLC0415
 
-        return serialize_render(self, deps_strategy=deps_strategy, deps_position=deps_position)
+        return serialize_render_result(
+            self,
+            deps_strategy=deps_strategy,
+            deps_position=deps_position,
+            csp_nonce=csp_nonce,
+            security_csp=security_csp,
+            security_javascript=security_javascript,
+            security_script_integrity=security_script_integrity,
+        )
 
     def __str__(self) -> str:
         return self.serialize()

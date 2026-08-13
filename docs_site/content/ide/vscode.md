@@ -5,11 +5,12 @@ description: Highlight Citry templates and connect VS Code to the Citry language
 
 # VS Code
 
-The Citry extension highlights `template`, `js`, and `css` multiline strings
-inside Python components. It also supplies a **Citry Template** language mode
-for standalone files and starts one `citry-lsp` process for each workspace
-folder. Formatter commands edit definite Citry-authored sections while leaving
-the selected Python formatter in place.
+The Citry extension highlights `template`, `js`, `css`, and `messages`
+multiline strings inside Python components. It also supplies language modes for
+standalone Citry templates and Fluent `.ftl` files, and starts one `citry-lsp`
+process for each workspace folder. Formatter commands edit definite template,
+JavaScript, and CSS sections while leaving Fluent and the selected Python
+formatter unchanged.
 
 The extension and `citry-lsp` are implemented in the repository. Their public
 registry releases are part of the Citry 0.3.2 open beta, so the installation
@@ -130,6 +131,56 @@ unproven. When a `JsData` annotation or known literal value cannot cross
 Citry's strict JSON wire, Citry reports `citry.js-data.unsupported-type` as a
 warning and lets JavaScript tooling treat that value as `unknown`.
 
+## Navigate i18n messages and profiles
+
+When the selected application configures i18n, Citry uses its checked catalog
+index across Python, templates, Fluent, Alpine, and component JavaScript.
+Literal message IDs complete and navigate from `tr()`,
+`<c-trans message="...">`, `self.i18n.tr()`,
+`Component.I18n.client_messages`, `$i18n.tr()`, and the injected component
+`i18n` service. Checked `$c-tr:message.output[target]` directives and bounded
+`i18n.bind({ message: "...", output: "..." })` calls use the same index. Go to
+definition on a `$c-tr` message opens the selected message value, or the exact
+Fluent attribute when the directive includes `.output`. Hover shows the
+selected output, its typed direct and
+transitive parameters, translator descriptions, and defining owner. The
+catalog belongs to the selected Citry application, so a definition may live
+in another component, another Python file, or a configured catalog package.
+
+Hover an argument name such as `count` in
+`tr("account-unread", count=value)` to see its `@param` type and description.
+Go to definition on that argument to open the exact `@param` declaration.
+The same rule works in template and Python `tr()` calls, Alpine `$i18n.tr()`,
+the injected component JavaScript `i18n.tr()`, and literal `<c-trans>` values
+and fills.
+
+Named formatter and parser profiles complete in the matching operation, such
+as `fmt.number(..., format="...")`, `self.i18n.parse.percent(...)`, and
+`$i18n.format.currency(...)`. Template `fmt` methods include their call
+signatures and return types. A misspelled template method or a literal profile
+that is not registered for that exact operation is an error. `$i18n` and the
+`i18n` value in a `$component`
+callback include the nested `context`, `format`, and `parse` APIs. Public
+Fluent message references navigate to the same defining source; private term
+references navigate within their own `messages` block.
+
+The live diagnostics use the same Rust Fluent parser and checked app catalog.
+They report unsupported `@param` types, unknown literal keys or profiles,
+missing, extra, or provably mistyped message arguments, and mismatched
+`<c-trans>` values or fills. `$c-tr` values receive the same named-input
+checks, and malformed directive names such as `$c-tr:`, `$c-tr:notice[]`, or
+`$c-tr:notice.` are errors before rendering. Component inputs complete in
+both their static
+form (`client`) and their expression form (`c-client`). `$i18n` receives
+semantic help only inside a statically known client-enabled `<c-i18n>`
+provider; a server-only nested provider blocks that scope.
+
+These features need `citry.app`, because syntax-only mode has no complete
+catalog or profile registry. Fluent syntax coloring itself remains available
+without the application index. Static checks follow literal message IDs,
+literal profile names, and statically named argument-object keys. A dynamic
+message ID or computed argument object remains a runtime responsibility.
+
 ## Navigate from CSS variables to Python data
 
 When the selected registry owns a component's CSS, Citry connects a
@@ -188,6 +239,10 @@ The command palette exposes only two Citry formatting commands:
   and `css` literal in the current Python file.
 - **Citry: Format at Cursor** formats only the direct literal body containing
   the cursor.
+
+The commands do not format `messages` blocks or standalone `.ftl` files.
+Fluent syntax highlighting is available in both places, but Citry does not yet
+define a Fluent formatting contract.
 
 Both include Citry/HTML structure and Python expressions, eligible direct
 JavaScript and CSS, and eligible `<script>` and `<style>` bodies. A cursor on a
@@ -312,6 +367,12 @@ diagnostics. This works in interpolations, Python-valued attributes, loop
 clauses, and nested templates. Template conditions narrow optional and union
 types, while shared templates keep only suggestions that apply to every
 proven component consumer and return path.
+
+Citry also gives every name used as a call target the standard Python function
+or method syntax scope. That keeps calls such as `tr(...)`, `fmt.currency(...)`,
+and application helpers visually distinct even before the language server has
+enough project information to prove their types. A member that is only read,
+such as `fmt.currency` without `(...)`, keeps its ordinary member scope.
 
 The language server installs its supported Python analyzer automatically in
 the same environment. If that analyzer cannot start or stops responding,

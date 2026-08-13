@@ -1,0 +1,12 @@
+[package]
+name = "citry-i18n-formatting-followup"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+fixed_decimal = "=0.7.2"
+icu = { version = "=2.2.0", features = ["compiled_data", "sync", "unstable"] }
+writeable = "=0.6.2"
+
+[workspace]

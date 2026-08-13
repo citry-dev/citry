@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Literal, cast
 
 from citry import LibraryComponent, const_value
@@ -134,6 +135,9 @@ def _copy_attrs(attrs: Mapping[str, object] | None) -> dict[str, object]:
 
 
 class CProgress(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         label: str
@@ -180,7 +184,27 @@ class CProgress(LibraryComponent):
         value = cast("float | None", data["value"])
         maximum = cast("float", data["max"])
         data["state"] = "indeterminate" if value is None else "determinate"
-        data["fallback_text"] = label if value is None else f"{label}: {float(value):g} of {float(maximum):g}"
+        catalog_fallback_text = self.i18n.configured
+        if value is None:
+            data["fallback_text"] = label
+        else:
+            formatted_value = (
+                self.i18n.format.number(Decimal(str(value)), format="citry-ui-progress-value")
+                if self.i18n.configured
+                else f"{float(value):g}"
+            )
+            formatted_maximum = (
+                self.i18n.format.number(Decimal(str(maximum)), format="citry-ui-progress-value")
+                if self.i18n.configured
+                else f"{float(maximum):g}"
+            )
+            data["fallback_text"] = self.i18n.tr(
+                "citry-ui-progress-value-text",
+                label=label,
+                value=formatted_value,
+                max=formatted_maximum,
+            )
+        data["catalogFallbackText"] = catalog_fallback_text
         data["attrs"] = merge_root_attrs(_copy_attrs(kwargs.attrs), kwargs.class_, kwargs.style)
         return data
 
@@ -198,6 +222,7 @@ class CProgress(LibraryComponent):
             "intent": normalized["intent"],
             "size": normalized["size"],
             "shape": normalized["shape"],
+            "catalogFallbackText": self.i18n.configured,
         }
 
     template = """
@@ -226,7 +251,7 @@ class CProgress(LibraryComponent):
           size: {},
           shape: {},
         },
-        init: ({ els, data, props, effect }) => {
+        init: ({ els, data, props, effect, i18n }) => {
           const progress = els[0];
           const allowedValues = {
             intent: ["neutral", "primary", "success", "warn", "danger"],
@@ -311,6 +336,23 @@ class CProgress(LibraryComponent):
             }
           };
 
+          const fallbackBinding = i18n && data.catalogFallbackText
+            ? i18n.bind({
+                message: "citry-ui-progress-value-text",
+                values: () => {
+                  const value = resolveValue();
+                  return {
+                    label: resolveLabel(),
+                    value: i18n.format.number(value ?? 0, {format: "citry-ui-progress-value"}),
+                    max: i18n.format.number(data.max, {format: "citry-ui-progress-value"}),
+                  };
+                },
+                onChange: (text) => {
+                  progress.textContent = resolveValue() === null ? resolveLabel() : text;
+                },
+              })
+            : null;
+
           effect(() => {
             const value = resolveValue();
             setAttribute("value", value);
@@ -324,6 +366,7 @@ class CProgress(LibraryComponent):
 
           progress.setAttribute("data-citry-progress-initialized", "");
           return () => {
+            fallbackBinding?.dispose();
             progress.removeAttribute("data-citry-progress-initialized");
           };
         },
@@ -469,6 +512,13 @@ class CProgress(LibraryComponent):
           }
         }
       }
+    """
+
+    messages = """
+      # @param {str} $label - Progress label.
+      # @param {str} $value - Locale-formatted current value.
+      # @param {str} $max - Locale-formatted maximum value.
+      citry-ui-progress-value-text = { $label }: { $value } of { $max }
     """
 
 

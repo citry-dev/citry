@@ -52,7 +52,11 @@ from citry.util.misc import is_glob
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from citry._javascript_policy import _JavascriptPolicy
+    from citry._serialization_security import _ScriptSecurityMaterializer
     from citry.component import Component
+    from citry.ownership_manifest import OwnershipManifestArtifact
+    from citry.settings import SecurityCspMode, SecurityJavascriptMode
     from citry.util.routing import URLRoute
 
 
@@ -135,6 +139,31 @@ def get_dependencies(comp_cls: type[Component]) -> CitryDependencies:
     return extension.resolve(comp_cls)
 
 
+class DependenciesConfig(ExtensionConfig):
+    """
+    Typed runtime view of one component's ``Dependencies`` declaration.
+
+    Citry creates this value from the component's nested ``Dependencies``
+    class. Read it through ``component.dependencies`` while the component is
+    rendering. Use ``Component.get_dependencies()`` when you need the resolved,
+    inherited asset list.
+
+    Attributes:
+        js: JavaScript dependency declarations.
+        css: CSS dependency declarations.
+        extend: Whether to inherit dependencies, or which component classes to
+            inherit them from.
+        local_files: Whether local dependency files are inlined or served from
+            Citry's asset routes.
+
+    """
+
+    js: Any = None
+    css: Any = None
+    extend: bool | list[type[Component]] = True
+    local_files: str = "inline"
+
+
 class DependenciesExtension(Extension):
     """
     The built-in extension owning the ``Dependencies`` secondary-asset class.
@@ -154,28 +183,7 @@ class DependenciesExtension(Extension):
     name = "dependencies"
     render_cache_mode = "payload"
     render_cache_version = 1
-
-    class Config(ExtensionConfig):
-        """Defaults for the per-component ``Dependencies`` config class."""
-
-        js: Any = None
-        css: Any = None
-        extend: bool | list[type[Component]] = True
-        local_files: str = "inline"
-        """
-        What a ``Dependencies`` entry that resolved to a local file becomes
-        in the output:
-
-        - ``"inline"`` embeds the file content in the page;
-        - ``"serve"`` emits a fingerprinted URL on citry's routes
-        (``asset/<content hash>.<ext>``), so the browser caches the file and
-        the client-side manager de-duplicates it across pages and fragments.
-
-        ``"serve"`` falls back to inlining when no web integration is
-        mounted. Set per component here, or globally via
-        ``extensions_defaults={"dependencies": {"local_files": "serve"}}``.
-
-        See docs/design/dependencies.md section 9.4."""
+    Config = DependenciesConfig
 
     def on_component_unregistered(self, ctx: OnComponentUnregisteredContext) -> None:
         # A PascalCase class may retain another registry alias. Keep its
@@ -335,6 +343,27 @@ class DependenciesExtension(Extension):
 
     def on_serialize(self, ctx: OnSerializeContext) -> str | None:
         return emit_dependencies(ctx.citry, ctx)
+
+    def _on_serialize_internal(
+        self,
+        ctx: OnSerializeContext,
+        script_security: _ScriptSecurityMaterializer | None,
+        security_csp: SecurityCspMode,
+        javascript_policy: _JavascriptPolicy | None,
+        security_javascript: SecurityJavascriptMode,
+        ownership_artifact: OwnershipManifestArtifact | None,
+    ) -> str | None:
+        if type(self).on_serialize is not DependenciesExtension.on_serialize:
+            return self.on_serialize(ctx)
+        return emit_dependencies(
+            ctx.citry,
+            ctx,
+            script_security=script_security,
+            security_csp=security_csp,
+            javascript_policy=javascript_policy,
+            security_javascript=security_javascript,
+            ownership_artifact=ownership_artifact,
+        )
 
     # ----- HTTP routes (docs/design/dependencies.md section 9) -----
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
 from typing import Protocol
@@ -10,6 +11,7 @@ from citry import (
     LspPosition,
     LspRange,
     PythonComponentAssetKind,
+    PythonTemplateSourceMap,
     discover_python_component_assets,
     discover_python_templates,
 )
@@ -63,6 +65,15 @@ class JsRegion:
     component_name: str | None
     source_map: TemplateSourceMap
     ast_proven: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class MessagesRegion:
+    """One direct component ``messages`` literal containing Fluent source."""
+
+    key: str
+    component_name: str
+    source_map: TemplateSourceMap
 
 
 class StandaloneTemplateSourceMap:
@@ -155,6 +166,41 @@ def discover_python_js_regions(source: str) -> tuple[JsRegion, ...]:
     )
 
 
+def discover_python_messages_regions(source: str) -> tuple[MessagesRegion, ...]:
+    """Return direct static ``messages`` literals from valid Python source."""
+    try:
+        module = ast.parse(source)
+    except (SyntaxError, TypeError, ValueError):
+        return ()
+    regions: list[MessagesRegion] = []
+    for node in ast.walk(module):
+        if not isinstance(node, ast.ClassDef):
+            continue
+        declarations: list[ast.expr] = []
+        for statement in node.body:
+            matches = False
+            value: ast.expr | None = None
+            if isinstance(statement, ast.Assign):
+                matches = any(isinstance(target, ast.Name) and target.id == "messages" for target in statement.targets)
+                value = statement.value
+            elif isinstance(statement, ast.AnnAssign):
+                matches = isinstance(statement.target, ast.Name) and statement.target.id == "messages"
+                value = statement.value
+            if matches and value is not None:
+                declarations.append(value)
+        if not declarations:
+            continue
+        selected = declarations[-1]
+        if not isinstance(selected, ast.Constant) or type(selected.value) is not str:
+            continue
+        try:
+            source_map = PythonTemplateSourceMap.from_ast(source, selected)
+        except (TypeError, ValueError):
+            continue
+        regions.append(MessagesRegion(f"messages:{node.name}", node.name, source_map))
+    return tuple(regions)
+
+
 def standalone_css_region(source: str) -> CssRegion:
     """Treat one registry-owned CSS file as its own authored region."""
     return CssRegion("css:standalone", None, StandaloneTemplateSourceMap(source))
@@ -163,6 +209,38 @@ def standalone_css_region(source: str) -> CssRegion:
 def standalone_js_region(source: str) -> JsRegion:
     """Treat one registry-owned JavaScript file as its authored region."""
     return JsRegion("js:standalone", None, StandaloneTemplateSourceMap(source))
+
+
+def python_messages_source_map(source: str, component_name: str) -> PythonTemplateSourceMap | None:
+    """Map one direct inline ``messages`` literal named by a compiled origin."""
+    try:
+        module = ast.parse(source)
+    except (SyntaxError, TypeError, ValueError):
+        return None
+    candidates: list[ast.Constant] = []
+    for node in ast.walk(module):
+        if not isinstance(node, ast.ClassDef) or node.name != component_name:
+            continue
+        declarations: list[ast.expr] = []
+        for statement in node.body:
+            if isinstance(statement, ast.Assign):
+                matches = any(isinstance(target, ast.Name) and target.id == "messages" for target in statement.targets)
+            elif isinstance(statement, ast.AnnAssign):
+                matches = isinstance(statement.target, ast.Name) and statement.target.id == "messages"
+            else:
+                continue
+            if matches and statement.value is not None:
+                declarations.append(statement.value)
+        if declarations:
+            selected = declarations[-1]
+            if isinstance(selected, ast.Constant) and type(selected.value) is str:
+                candidates.append(selected)
+    if len(candidates) != 1:
+        return None
+    try:
+        return PythonTemplateSourceMap.from_ast(source, candidates[0])
+    except (TypeError, ValueError):
+        return None
 
 
 def css_region_at_position(regions: tuple[CssRegion, ...], position: LspPosition) -> CssRegion | None:

@@ -1,11 +1,11 @@
 """
 Flag a ``python`` code fence that defines a Citry component.
 
-A Citry component embeds HTML, JS, and CSS in its ``template`` / ``js`` / ``css``
-string attributes. Under a ```python fence those bodies render as one flat
-string; the ```citry fence (the pygments-citry lexer) highlights them as real
-markup. This guard warns when a component class is still in a ```python fence,
-so a later edit does not quietly undo the switch to ```citry.
+A Citry component embeds other languages in its ``template``, ``js``, ``css``,
+and ``messages`` string attributes. Under a ```python fence those bodies render
+as flat strings; the ```citry fence highlights each one in its own language.
+This guard warns when a component class is still in a ```python fence, so a
+later edit does not quietly undo the switch to ```citry.
 
 ``fence_defines_component`` is the shared detector: the one-time content
 migration that first flipped the fences uses the same predicate, so the guard
@@ -33,9 +33,9 @@ _PYTHON_LANGS = frozenset({"python", "py", "python3"})
 _COMPONENT_CLASS = re.compile(r"^[ \t]*class\s+\w+\([^)]*\bComponent\b", re.MULTILINE)
 # Any class definition, used together with the attribute check below.
 _CLASS_DEF = re.compile(r"^[ \t]*class\s+\w+\(", re.MULTILINE)
-# A component-shaped attribute: template/js/css assigned a string literal (the
+# A component-shaped asset assigned a string literal (the
 # optional `: Type` covers the annotated form `template: "html" = "..."`).
-_COMPONENT_ATTR = re.compile(r'^[ \t]*(?:template|js|css)\s*(?::[^=\n]+)?=\s*["\']', re.MULTILINE)
+_COMPONENT_ATTR = re.compile(r'^[ \t]*(?:template|js|css|messages)\s*(?::[^=\n]+)?=\s*["\']', re.MULTILINE)
 
 
 def fence_defines_component(body: str) -> bool:
@@ -45,7 +45,7 @@ def fence_defines_component(body: str) -> bool:
     Either signal is enough:
 
     - a class whose bases include ``Component`` (``class Card(Component):``); or
-    - any class that assigns a ``template`` / ``js`` / ``css`` string, which
+    - any class that assigns a ``template`` / ``js`` / ``css`` / ``messages`` string, which
       catches a component subclass whose base is another component
       (``class SpecialCard(BaseCard):``) and so never names ``Component``.
 
@@ -63,7 +63,9 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
             if fence.closed and fence.lang in _PYTHON_LANGS and fence_defines_component(fence.body):
                 yield GuardResult.warning(
                     guard="component_fence",
-                    message="Citry component in a ```python fence; use ```citry to highlight its template/js/css",
+                    message=(
+                        "Citry component in a ```python fence; use ```citry to highlight its template/js/css/messages"
+                    ),
                     source=label,
                     line=fence.open_line,
                 )

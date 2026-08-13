@@ -158,3 +158,5 @@ interfaces:
       - {id: previous-open, name: previousOpen, type: boolean, meaning: Committed expansion before the request.}
       - {id: source, name: source, type: '"activation"', meaning: Native trigger activation source.}
       - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client Boolean owned state when requested.}
+
+translations: []

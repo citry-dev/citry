@@ -9,6 +9,7 @@ import pytest
 import citry_ui
 from citry import Citry, Component
 from citry_ui import CCarousel, CCarouselSlide
+from citry_ui.components._scroll_geometry import SCROLL_GEOMETRY_RUNTIME_DEPENDENCY
 
 
 def _render(source: str) -> str:
@@ -61,6 +62,7 @@ def test_schema_registration_and_types_are_public() -> None:
         "previous_label",
         "next_label",
         "picker_label",
+        "role_description",
         "class_",
         "style",
         "attrs",
@@ -69,6 +71,13 @@ def test_schema_registration_and_types_are_public() -> None:
     assert get_args(hints["orientation"]) == ("horizontal", "vertical")
     assert CCarousel in citry_ui.COMPONENTS
     assert CCarouselSlide in citry_ui.COMPONENTS
+
+
+def test_carousel_uses_the_shared_scroll_geometry_dependency() -> None:
+    assert CCarousel.Dependencies.js == [SCROLL_GEOMETRY_RUNTIME_DEPENDENCY]
+    assert 'Symbol.for("citry-ui:scroll-geometry")' in CCarousel.js
+    assert "horizontalFromRaw" in CCarousel.js
+    assert "horizontalToRaw" in CCarousel.js
 
 
 @pytest.mark.parametrize(

@@ -1,0 +1,1 @@
+"""Scroll Area component tests."""

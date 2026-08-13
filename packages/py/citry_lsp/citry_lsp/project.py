@@ -24,6 +24,300 @@ if TYPE_CHECKING:
 
 WORKER_TIMEOUT_SECONDS = 5.0
 _SOURCE_ANALYSIS_VERSION = 1
+_I18N_ANALYSIS_VERSION = 2
+
+
+@dataclass(frozen=True, slots=True)
+class I18nDefinitionRecord:
+    """One compiler-proven source definition in UTF-8 catalog coordinates."""
+
+    path: str
+    start: int
+    end: int
+    line: int
+    column: int
+
+
+@dataclass(frozen=True, slots=True)
+class I18nParameterDeclarationRecord:
+    """One exact source comment that declares a message parameter."""
+
+    path: str
+    start: int
+    end: int
+    line: int
+    column: int
+    description: str | None
+    annotated: bool
+
+
+@dataclass(frozen=True, slots=True)
+class I18nParameterRecord:
+    """One effective typed input and its source declarations."""
+
+    name: str
+    type_name: str
+    direct: bool
+    declarations: tuple[I18nParameterDeclarationRecord, ...]
+
+    @property
+    def descriptions(self) -> tuple[str, ...]:
+        """Return distinct translator-facing descriptions in source order."""
+        return tuple(
+            dict.fromkeys(declaration.description for declaration in self.declarations if declaration.description)
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class I18nOutputRecord:
+    """One public message value or attribute from the checked catalog graph."""
+
+    token: str
+    message: str
+    attribute: str | None
+    owner: str
+    definition: I18nDefinitionRecord
+    parameters: tuple[I18nParameterRecord, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class I18nReferenceRecord:
+    """One compiler-proven public Fluent message reference."""
+
+    path: str
+    start: int
+    end: int
+    token: str
+
+
+class I18nProjectIndex:
+    """Validated i18n facts copied out of the disposable app worker."""
+
+    __slots__ = ("available", "configured", "locales", "outputs", "profiles", "references", "revision")
+    available: bool
+    configured: bool
+    locales: tuple[str, ...]
+    outputs: dict[str, I18nOutputRecord]
+    profiles: dict[str, dict[str, tuple[str, ...]]]
+    references: tuple[I18nReferenceRecord, ...]
+    revision: str | None
+
+    def __init__(self, payload: object) -> None:
+        if type(payload) is not dict:
+            raise ValueError("i18n analysis envelope is invalid")
+        if payload.get("version") != _I18N_ANALYSIS_VERSION:
+            raise ValueError(f"i18n analysis version {payload.get('version')!r} is unsupported")
+        configured = payload.get("configured")
+        if type(configured) is not bool:
+            raise ValueError("i18n analysis configured flag is invalid")
+        available = payload.get("available")
+        if type(available) is not bool:
+            raise ValueError("i18n analysis available flag is invalid")
+        self.configured = configured
+        self.available = available
+        if not available:
+            if configured:
+                raise ValueError("configured i18n analysis cannot be unavailable")
+            if set(payload) != {"version", "available", "configured"}:
+                raise ValueError("unavailable i18n analysis has unexpected fields")
+            self.revision = None
+            self.locales = ()
+            self.outputs = {}
+            self.references = ()
+            self.profiles = {"format": {}, "parse": {}}
+            return
+        if set(payload) != {
+            "version",
+            "available",
+            "configured",
+            "revision",
+            "locales",
+            "outputs",
+            "references",
+            "profiles",
+        }:
+            raise ValueError("available i18n analysis has unexpected fields")
+        revision = payload.get("revision")
+        locales = payload.get("locales")
+        raw_outputs = payload.get("outputs")
+        raw_references = payload.get("references")
+        raw_profiles = payload.get("profiles")
+        if type(revision) is not str or not revision:
+            raise ValueError("i18n analysis revision is invalid")
+        if type(locales) is not list or not locales or any(type(item) is not str or not item for item in locales):
+            raise ValueError("i18n analysis locales are invalid")
+        if type(raw_outputs) is not list:
+            raise ValueError("i18n analysis outputs must be a list")
+        if type(raw_references) is not list:
+            raise ValueError("i18n analysis references must be a list")
+        self.revision = revision
+        self.locales = tuple(cast("list[str]", locales))
+        outputs: dict[str, I18nOutputRecord] = {}
+        for raw_output in raw_outputs:
+            output = _i18n_output(raw_output)
+            if output.token in outputs:
+                raise ValueError(f"duplicate i18n output {output.token!r}")
+            outputs[output.token] = output
+        self.outputs = outputs
+        self.references = tuple(_i18n_reference(item) for item in raw_references)
+        self.profiles = _i18n_profiles(raw_profiles)
+
+    def message_ids(self) -> tuple[str, ...]:
+        """Return every public message ID in deterministic order."""
+        return tuple(sorted({output.message for output in self.outputs.values()}))
+
+    def output(self, message: str, attribute: str | None = None) -> I18nOutputRecord | None:
+        """Return one checked main value or attribute."""
+        token = message if attribute is None else f"{message}.{attribute}"
+        return self.outputs.get(token)
+
+    def profile_names(self, namespace: str, operation: str) -> tuple[str, ...]:
+        """Return checked profile names for one formatter or parser operation."""
+        return self.profiles.get(namespace, {}).get(operation, ())
+
+
+def _i18n_output(payload: object) -> I18nOutputRecord:
+    if type(payload) is not dict or set(payload) != {
+        "token",
+        "message",
+        "attribute",
+        "owner",
+        "definition",
+        "interface",
+    }:
+        raise ValueError("i18n output metadata is invalid")
+    token = payload.get("token")
+    message = payload.get("message")
+    attribute = payload.get("attribute")
+    owner = payload.get("owner")
+    if type(token) is not str or not token or type(message) is not str or not message:
+        raise ValueError("i18n output name is invalid")
+    if attribute is not None and (type(attribute) is not str or not attribute):
+        raise ValueError("i18n output attribute is invalid")
+    expected_token = message if attribute is None else f"{message}.{attribute}"
+    if token != expected_token or type(owner) is not str or not owner:
+        raise ValueError("i18n output identity is invalid")
+    definition = _i18n_definition(payload.get("definition"))
+    raw_interface = payload.get("interface")
+    if type(raw_interface) is not dict:
+        raise ValueError("i18n output interface is invalid")
+    parameters = tuple(
+        _i18n_parameter(name, metadata) for name, metadata in sorted(raw_interface.items()) if type(name) is str
+    )
+    if len(parameters) != len(raw_interface):
+        raise ValueError("i18n output parameter name is invalid")
+    return I18nOutputRecord(token, message, cast("str | None", attribute), owner, definition, parameters)
+
+
+def _i18n_definition(payload: object) -> I18nDefinitionRecord:
+    if type(payload) is not dict or set(payload) != {"path", "start", "end", "line", "column"}:
+        raise ValueError("i18n definition metadata is invalid")
+    path = payload.get("path")
+    start = payload.get("start")
+    end = payload.get("end")
+    line = payload.get("line")
+    column = payload.get("column")
+    if type(path) is not str or not path:
+        raise ValueError("i18n definition path is invalid")
+    if not all(type(item) is int for item in (start, end, line, column)):
+        raise ValueError("i18n definition range is invalid")
+    start = cast("int", start)
+    end = cast("int", end)
+    line = cast("int", line)
+    column = cast("int", column)
+    if min(start, end, line, column) < 0 or end <= start:
+        raise ValueError("i18n definition range is invalid")
+    return I18nDefinitionRecord(path, start, end, line, column)
+
+
+def _i18n_reference(payload: object) -> I18nReferenceRecord:
+    if type(payload) is not dict or set(payload) != {"path", "start", "end", "token"}:
+        raise ValueError("i18n reference metadata is invalid")
+    path = payload.get("path")
+    start = payload.get("start")
+    end = payload.get("end")
+    token = payload.get("token")
+    if type(path) is not str or not path or type(token) is not str or not token:
+        raise ValueError("i18n reference identity is invalid")
+    if type(start) is not int or type(end) is not int or start < 0 or end <= start:
+        raise ValueError("i18n reference range is invalid")
+    return I18nReferenceRecord(path, start, end, token)
+
+
+def _i18n_parameter(name: object, payload: object) -> I18nParameterRecord:
+    if type(name) is not str or not name or type(payload) is not dict:
+        raise ValueError("i18n parameter metadata is invalid")
+    if set(payload) != {"type_name", "direct", "declarations"}:
+        raise ValueError("i18n parameter metadata has unexpected fields")
+    type_name = payload.get("type_name")
+    direct = payload.get("direct")
+    declarations = payload.get("declarations")
+    if type(type_name) is not str or not type_name or type(direct) is not bool or type(declarations) is not list:
+        raise ValueError("i18n parameter metadata is invalid")
+    validated_declarations: list[I18nParameterDeclarationRecord] = []
+    for declaration in declarations:
+        if type(declaration) is not dict or set(declaration) != {
+            "path",
+            "start",
+            "end",
+            "line",
+            "column",
+            "description",
+            "annotated",
+        }:
+            raise ValueError("i18n parameter declaration is invalid")
+        path = declaration.get("path")
+        start = declaration.get("start")
+        end = declaration.get("end")
+        line = declaration.get("line")
+        column = declaration.get("column")
+        description = declaration.get("description")
+        annotated = declaration.get("annotated")
+        if (
+            type(path) is not str
+            or not path
+            or type(start) is not int
+            or type(end) is not int
+            or type(line) is not int
+            or type(column) is not int
+            or min(start, end, line, column) < 0
+            or end <= start
+            or type(annotated) is not bool
+        ):
+            raise ValueError("i18n parameter declaration is invalid")
+        if description is not None and type(description) is not str:
+            raise ValueError("i18n parameter description is invalid")
+        validated_declarations.append(
+            I18nParameterDeclarationRecord(
+                path,
+                start,
+                end,
+                line,
+                column,
+                cast("str | None", description),
+                annotated,
+            )
+        )
+    return I18nParameterRecord(name, type_name, direct, tuple(validated_declarations))
+
+
+def _i18n_profiles(payload: object) -> dict[str, dict[str, tuple[str, ...]]]:
+    if type(payload) is not dict or set(payload) != {"format", "parse"}:
+        raise ValueError("i18n profile metadata is invalid")
+    result: dict[str, dict[str, tuple[str, ...]]] = {}
+    for namespace in ("format", "parse"):
+        raw_namespace = payload.get(namespace)
+        if type(raw_namespace) is not dict:
+            raise ValueError(f"i18n {namespace} profile metadata is invalid")
+        operations: dict[str, tuple[str, ...]] = {}
+        for operation, names in raw_namespace.items():
+            if type(operation) is not str or not operation or type(names) is not list:
+                raise ValueError(f"i18n {namespace} profile metadata is invalid")
+            if any(type(name) is not str or not name for name in names) or len(names) != len(set(names)):
+                raise ValueError(f"i18n {namespace} profile names are invalid")
+            operations[operation] = tuple(cast("list[str]", names))
+        result[namespace] = operations
+    return result
 
 
 @dataclass(frozen=True, slots=True)
@@ -382,6 +676,8 @@ class ProjectState:
     analysis: TemplateAnalysis | None = None
     catalog: CatalogIndex | None = None
     source_analysis: SourceAnalysisIndex | None = None
+    i18n: I18nProjectIndex | None = None
+    security_csp: Literal["off", "warn", "strict"] | None = None
     _slot_data_fields: dict[str, dict[str, tuple[str, ...]]] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -588,6 +884,18 @@ def _project_from_worker_output(
         )
     try:
         source_analysis = SourceAnalysisIndex(payload.get("source_analysis"), catalog)
+        raw_extensions = payload.get("extensions")
+        if type(raw_extensions) is not dict or set(raw_extensions) != {"i18n"}:
+            raise ValueError("extension analysis envelope is invalid")
+        i18n = I18nProjectIndex(raw_extensions.get("i18n"))
+        raw_settings = payload.get("engine_settings")
+        if type(raw_settings) is not dict or set(raw_settings) != {"version", "security_csp"}:
+            raise ValueError("engine settings envelope is invalid")
+        if raw_settings.get("version") != 1:
+            raise ValueError("engine settings version is unsupported")
+        security_csp = raw_settings.get("security_csp")
+        if type(security_csp) is not str or security_csp not in {"off", "warn", "strict"}:
+            raise ValueError("engine security_csp setting is invalid")
     except (TypeError, ValueError) as exc:
         return _failure(workspace, app, f"App worker protocol mismatch: {exc}")
     project_output = payload.get("project_output")
@@ -611,6 +919,8 @@ def _project_from_worker_output(
         analysis=analysis,
         catalog=catalog,
         source_analysis=source_analysis,
+        i18n=i18n,
+        security_csp=cast("Literal['off', 'warn', 'strict']", security_csp),
     )
 
 

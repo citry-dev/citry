@@ -24,6 +24,7 @@ inputs:
       - {id: previous-label, name: previous_label, type: str, default: {kind: literal, value: Previous slide}, effect: Names the previous Button for the current locale.}
       - {id: next-label, name: next_label, type: str, default: {kind: literal, value: Next slide}, effect: Names the next Button for the current locale.}
       - {id: picker-label, name: picker_label, type: str, default: {kind: literal, value: Choose slide}, effect: Names the picker Button group for the current locale.}
+      - {id: role-description, name: role_description, type: 'str | None', default: {kind: literal, value: carousel}, effect: Sets the localized `aria-roledescription`; None omits it.}
       - {id: class, name: class_, type: {display: CClassValue, interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes.}
       - {id: style, name: style, type: {display: CStyleValue, interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root inline styles.}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed native and data attributes to the root.}
@@ -47,6 +48,7 @@ inputs:
     entries:
       - {id: value, name: value, type: str, default: {kind: required}, effect: Sets unique stable Slide identity.}
       - {id: label, name: label, type: str, default: {kind: required}, effect: Names Slide content without repeating the word slide.}
+      - {id: role-description, name: role_description, type: 'str | None', default: {kind: literal, value: slide}, effect: Sets the localized `aria-roledescription`; None omits it.}
       - {id: class, name: class_, type: {display: CClassValue, interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds Slide classes.}
       - {id: style, name: style, type: {display: CStyleValue, interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds Slide inline styles.}
       - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds allowed native and data attributes to the Slide.}
@@ -151,3 +153,16 @@ interfaces:
       - {id: controlled, name: controlled, type: boolean, meaning: Whether client index owns state.}
       - {id: forced, name: forced, type: boolean, meaning: Whether structure forced fallback.}
       - {id: source, name: source, type: 'EventTarget | null', meaning: Browser source.}
+
+translations:
+  - id: ccarousel-translations
+    component: CCarousel
+    entries:
+      - {id: previous, key: citry-ui-carousel-previous, purpose: Names the previous-slide control., variables: None, override: '`previous_label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: next, key: citry-ui-carousel-next, purpose: Names the next-slide control., variables: None, override: '`next_label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: picker, key: citry-ui-carousel-picker, purpose: Names the slide-picker group., variables: None, override: '`picker_label` input', updates: '$c-tr updates `aria-label`.'}
+      - {id: role, key: citry-ui-carousel-role, purpose: Describes the carousel region role., variables: None, override: '`role_description` input', updates: '$c-tr updates `aria-roledescription`.'}
+  - id: ccarousel-slide-translations
+    component: CCarouselSlide
+    entries:
+      - {id: role, key: citry-ui-carousel-slide-role, purpose: Describes each slide group role., variables: None, override: '`role_description` input', updates: '$c-tr updates `aria-roledescription`.'}

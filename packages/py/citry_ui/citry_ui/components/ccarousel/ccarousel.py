@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict, overload
+from typing import Any, ClassVar, Literal, TypedDict, overload
 
 from citry import LibraryComponent, SlotInput, const_value
 from citry_ui.components._attrs import CClassValue, CStyleValue, merge_root_attrs
+from citry_ui.components._i18n import uses_catalog_default
+from citry_ui.components._scroll_geometry import SCROLL_GEOMETRY_RUNTIME_DEPENDENCY
 from citry_ui.components._validation import reject_owned_attrs, validate_boolean
 
 CCarouselOrientation = Literal["horizontal", "vertical"]
@@ -161,6 +163,12 @@ def _attrs(component: str, value: Mapping[str, object] | None, owned: frozenset[
 
 
 class CCarousel(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
+    class Dependencies:
+        js: ClassVar = [SCROLL_GEOMETRY_RUNTIME_DEPENDENCY]
+
     @dataclass(slots=True)
     class Kwargs:
         label: str
@@ -177,6 +185,7 @@ class CCarousel(LibraryComponent):
         previous_label: str = "Previous slide"
         next_label: str = "Next slide"
         picker_label: str = "Choose slide"
+        role_description: str | None = "carousel"
         class_: CClassValue | None = None
         style: CStyleValue | None = None
         attrs: Mapping[str, object] | None = None
@@ -211,9 +220,31 @@ class CCarousel(LibraryComponent):
             "draggable": bool(kwargs.draggable),
             "variant": variant,
             "size": size,
-            "previous_label": _plain("CCarousel previous_label", kwargs.previous_label),
-            "next_label": _plain("CCarousel next_label", kwargs.next_label),
-            "picker_label": _plain("CCarousel picker_label", kwargs.picker_label),
+            "previous_label": _plain(
+                "CCarousel previous_label",
+                kwargs.previous_label
+                if "previous_label" in self.raw_kwargs
+                else self.i18n.tr("citry-ui-carousel-previous"),
+            ),
+            "catalog_previous_label": uses_catalog_default(self, "previous_label"),
+            "next_label": _plain(
+                "CCarousel next_label",
+                kwargs.next_label if "next_label" in self.raw_kwargs else self.i18n.tr("citry-ui-carousel-next"),
+            ),
+            "catalog_next_label": uses_catalog_default(self, "next_label"),
+            "picker_label": _plain(
+                "CCarousel picker_label",
+                kwargs.picker_label if "picker_label" in self.raw_kwargs else self.i18n.tr("citry-ui-carousel-picker"),
+            ),
+            "catalog_picker_label": uses_catalog_default(self, "picker_label"),
+            "role_description": _plain(
+                "CCarousel role_description",
+                kwargs.role_description
+                if "role_description" in self.raw_kwargs
+                else self.i18n.tr("citry-ui-carousel-role"),
+                optional=True,
+            ),
+            "catalog_role_description": uses_catalog_default(self, "role_description"),
             "attrs": merge_root_attrs(
                 _attrs("CCarousel", kwargs.attrs, _ROOT_OWNED),
                 kwargs.class_,
@@ -259,7 +290,8 @@ class CCarousel(LibraryComponent):
         c-bind="attrs"
         role="region"
         c-aria-label="label"
-        aria-roledescription="carousel"
+        c-aria-roledescription="tr('citry-ui-carousel-role') if catalog_role_description else role_description"
+        c-$c-tr:citry-ui-carousel-role[aria-roledescription]="True if catalog_role_description else None"
         c-data-index="index"
         c-data-orientation="orientation"
         c-data-loop="loop"
@@ -273,14 +305,16 @@ class CCarousel(LibraryComponent):
         <div c-hidden="not controls" data-citry-ui-part="controls">
           <button
             type="button"
-            c-aria-label="previous_label"
+            c-aria-label="tr('citry-ui-carousel-previous') if catalog_previous_label else previous_label"
+            c-$c-tr:citry-ui-carousel-previous[aria-label]="True if catalog_previous_label else None"
             c-disabled="disabled or (index == 0 and not loop)"
             data-citry-carousel-previous
             data-citry-ui-part="previous"
           ><span aria-hidden="true">&#x2190;</span></button>
           <button
             type="button"
-            c-aria-label="next_label"
+            c-aria-label="tr('citry-ui-carousel-next') if catalog_next_label else next_label"
+            c-$c-tr:citry-ui-carousel-next[aria-label]="True if catalog_next_label else None"
             c-disabled="disabled"
             data-citry-carousel-next
             data-citry-ui-part="next"
@@ -292,14 +326,15 @@ class CCarousel(LibraryComponent):
         <div
           c-hidden="not indicators"
           role="group"
-          c-aria-label="picker_label"
+          c-aria-label="tr('citry-ui-carousel-picker') if catalog_picker_label else picker_label"
+          c-$c-tr:citry-ui-carousel-picker[aria-label]="True if catalog_picker_label else None"
           data-citry-carousel-indicators
           data-citry-ui-part="indicators"
         ></div>
       </section>
     """
 
-    js = r"""
+    js = """
       $component({
         props: {
           index: {},
@@ -315,6 +350,10 @@ class CCarousel(LibraryComponent):
         },
         init: ({ els, data, props, effect }) => {
           const root = els[0];
+          const geometry = globalThis[Symbol.for("citry-ui:scroll-geometry")];
+          if (geometry?.generation !== 1) {
+            throw new Error("[citry-ui] CCarousel scroll geometry dependency did not load.");
+          }
           const viewport = root.querySelector("[data-citry-carousel-viewport]");
           const track = viewport?.querySelector(':scope > [data-citry-ui-part="track"]');
           const previousButton = root.querySelector("[data-citry-carousel-previous]");
@@ -401,17 +440,30 @@ class CCarousel(LibraryComponent):
             else invalidEpisodes.delete("structure");
           };
           const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+          const horizontalMaximum = () => geometry.maximum(viewport.scrollWidth, viewport.clientWidth);
+          const horizontalRtl = () => getComputedStyle(viewport).direction === "rtl";
+          const horizontalPosition = () => geometry.horizontalFromRaw(
+            viewport.scrollLeft,
+            horizontalMaximum(),
+            horizontalRtl(),
+          );
+          const horizontalRaw = (position) => geometry.horizontalToRaw(
+            position,
+            horizontalMaximum(),
+            horizontalRtl(),
+          );
+          const horizontalSlidePosition = (slide) => Math.abs(slide.offsetLeft - track.offsetLeft);
           const scrollPosition = (index) => {
             const slide = slides[index];
             if (!slide) return 0;
             return configuration.orientation === "horizontal"
-              ? slide.offsetLeft - track.offsetLeft
+              ? horizontalSlidePosition(slide)
               : slide.offsetTop - track.offsetTop;
           };
           const scrollToIndex = (index, instant = false) => {
             const position = scrollPosition(index);
             const currentPosition = configuration.orientation === "horizontal"
-              ? viewport.scrollLeft
+              ? horizontalPosition()
               : viewport.scrollTop;
             if (Math.abs(currentPosition - position) <= 1) {
               suppressScroll = false;
@@ -419,7 +471,7 @@ class CCarousel(LibraryComponent):
             }
             suppressScroll = true;
             viewport.scrollTo({
-              left: configuration.orientation === "horizontal" ? position : 0,
+              left: configuration.orientation === "horizontal" ? horizontalRaw(position) : 0,
               top: configuration.orientation === "vertical" ? position : 0,
               behavior: instant || reducedMotion() ? "instant" : "smooth",
             });
@@ -489,12 +541,12 @@ class CCarousel(LibraryComponent):
             notify(next, previousIndex, reason, source, forced);
           };
           const nearestIndex = () => {
-            const position = configuration.orientation === "horizontal" ? viewport.scrollLeft : viewport.scrollTop;
+            const position = configuration.orientation === "horizontal" ? horizontalPosition() : viewport.scrollTop;
             let best = 0;
             let distance = Number.POSITIVE_INFINITY;
             slides.forEach((slide, index) => {
               const candidate = configuration.orientation === "horizontal"
-                ? slide.offsetLeft - track.offsetLeft
+                ? horizontalSlidePosition(slide)
                 : slide.offsetTop - track.offsetTop;
               const currentDistance = Math.abs(position - candidate);
               if (currentDistance < distance) {
@@ -536,7 +588,7 @@ class CCarousel(LibraryComponent):
           };
           const axisPosition = (event) => configuration.orientation === "horizontal" ? event.clientX : event.clientY;
           const axisScroll = () => configuration.orientation === "horizontal"
-            ? viewport.scrollLeft
+            ? horizontalPosition()
             : viewport.scrollTop;
           const onPointerDown = (event) => {
             if (
@@ -552,7 +604,7 @@ class CCarousel(LibraryComponent):
           const onPointerMove = (event) => {
             if (!drag || drag.id !== event.pointerId) return;
             const position = drag.scroll + drag.start - axisPosition(event);
-            if (configuration.orientation === "horizontal") viewport.scrollLeft = position;
+            if (configuration.orientation === "horizontal") viewport.scrollLeft = horizontalRaw(position);
             else viewport.scrollTop = position;
             event.preventDefault();
           };
@@ -836,12 +888,23 @@ class CCarousel(LibraryComponent):
       }
     """
 
+    messages = """
+      citry-ui-carousel-previous = Previous slide
+      citry-ui-carousel-next = Next slide
+      citry-ui-carousel-picker = Choose slide
+      citry-ui-carousel-role = carousel
+    """
+
 
 class CCarouselSlide(LibraryComponent):
+    class I18n:
+        messages_locale = "en-US"
+
     @dataclass(slots=True)
     class Kwargs:
         value: str
         label: str
+        role_description: str | None = "slide"
         class_: CClassValue | None = None
         style: CStyleValue | None = None
         attrs: Mapping[str, object] | None = None
@@ -867,6 +930,14 @@ class CCarouselSlide(LibraryComponent):
             "label": _plain("CCarouselSlide label", kwargs.label),
             "index": index,
             "active": index == context.selected_index,
+            "role_description": _plain(
+                "CCarouselSlide role_description",
+                kwargs.role_description
+                if "role_description" in self.raw_kwargs
+                else self.i18n.tr("citry-ui-carousel-slide-role"),
+                optional=True,
+            ),
+            "catalog_role_description": uses_catalog_default(self, "role_description"),
             "attrs": merge_root_attrs(
                 _attrs("CCarouselSlide", kwargs.attrs, _SLIDE_OWNED),
                 kwargs.class_,
@@ -880,13 +951,18 @@ class CCarouselSlide(LibraryComponent):
         c-bind="attrs"
         role="group"
         c-aria-label="label"
-        aria-roledescription="slide"
+        c-aria-roledescription="tr('citry-ui-carousel-slide-role') if catalog_role_description else role_description"
+        c-$c-tr:citry-ui-carousel-slide-role[aria-roledescription]="True if catalog_role_description else None"
         c-data-value="value"
         c-data-index="index"
         c-data-active="active"
         data-citry-carousel-slide
         data-citry-ui-part="slide"
       ><c-slot required /></div>
+    """
+
+    messages = """
+      citry-ui-carousel-slide-role = slide
     """
 
 

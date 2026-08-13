@@ -407,7 +407,8 @@ Coarse pointers retain the same outside start-and-end rule. Print omits closed
 Dialogs and uses ordinary flow for an explicitly open Dialog where supported.
 
 The only library-authored visible string is the default `close_label` value,
-`Close`. Locale selection and translation remain separate follow-up work.
+`Close`. The Citry UI i18n migration assigns it a stable catalog key and keeps
+the browser-owned close control live-switchable.
 
 ## 12. Overlay and layering behavior
 
@@ -544,11 +545,19 @@ Interfaces with stable entry IDs.
 
 ## 20. Open decisions and deferred work
 
-- AlertDialog needs distinct urgency semantics, focus guidance, and examples.
-- Drawer, Popover, non-modal Dialog, generic positioning, and a global Dialog
-  service need separate specifications.
+- `CAlertDialog` owns urgent decisions; `CDrawer` and `CPopover` own their
+  respective non-modal surfaces. A global Dialog service remains separate.
 - Motion waits for a library-wide transition and reduced-motion contract.
 - Browser-history close integration waits for a router/history extension.
-- Localization owns the default close label in follow-up work.
+- The Citry UI i18n migration owns the default close-label key and its
+  server/browser fallback contract.
 - A future headless API and portal host require real application evidence and
   must preserve theme context, nested ownership, focus, and cleanup.
+
+## 21. Internationalization
+
+The generated close control uses the key and precedence recorded in the
+structured [Translation keys table](../../../packages/py/citry_ui/citry_ui/components/cdialog/api.yml).
+Server `tr()` supplies the initial accessible name and `$c-tr` follows locale
+changes. An explicit `close_label` or `close` slot owns the result and prevents
+registration of the default catalog binding.

@@ -324,8 +324,7 @@ preview and source remain fully usable without it.
 Blog sources live in `content/blog/`. Keep `index.md` as the only undated file
 and name each post `YYYY-MM-DD-lowercase-kebab-slug.md`. The date prefix keeps
 source files sortable, while the public URL omits it. For example,
-`2026-07-27-language-agnostic-tools.md` is published at
-`/blog/language-agnostic-tools/`.
+`2026-07-27-project-update.md` is published at `/blog/project-update/`.
 
 Every post starts with strict front matter:
 

@@ -243,6 +243,13 @@ def test_component_fence_catches_subclass_via_attr_fallback(tmp_path: Path) -> N
     assert len(list(component_fence.check(_content_ctx(tmp_path)))) == 1
 
 
+def test_component_fence_catches_messages_only_subclass(tmp_path: Path) -> None:
+    source = '```python\nclass Labels(BaseLabels):\n    messages = """hello = Welcome"""\n```\n'
+    (tmp_path / "p.md").write_text(source, encoding="utf-8")
+
+    assert len(list(component_fence.check(_content_ctx(tmp_path)))) == 1
+
+
 def test_component_fence_ignores_plain_python_fragments_and_citry_fences(tmp_path: Path) -> None:
     source = (
         "```python\nx = 1\nprint(x)\n```\n\n"  # plain Python, no component

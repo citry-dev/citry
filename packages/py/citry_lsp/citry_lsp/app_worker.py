@@ -113,7 +113,23 @@ def _run(app: str, workspace: Path) -> dict[str, object]:
         "analysis": analysis.to_dict(),
         "catalog": catalog.to_dict(),
         "source_analysis": _source_analysis(engine, catalog, analysis, app),
+        "extensions": _extension_analysis(engine),
+        "engine_settings": {
+            "version": 1,
+            "security_csp": engine.settings.security_csp,
+        },
     }
+
+
+def _extension_analysis(engine: Citry) -> dict[str, object]:
+    """Copy opt-in extension indexes without retaining project objects."""
+    indexes: dict[str, object] = {}
+    for name in ("i18n",):
+        extension = engine.extensions.get_extension(name)
+        inspector = getattr(extension, "_tooling_index", None)
+        if callable(inspector):
+            indexes[name] = inspector()
+    return indexes
 
 
 def _source_analysis(

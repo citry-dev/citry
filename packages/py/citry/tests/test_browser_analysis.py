@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+from citry._alpine_csp import ALPINE_CSP_COMPATIBILITY_VERSION, classify_alpine_csp
+from citry._browser_expressions import BrowserExpression
 from citry.analysis import (
     AlpineLintConsumer,
     ComponentJsLintConsumer,
@@ -14,12 +19,18 @@ from citry.analysis import (
     browser_component_scope_writes,
     browser_declarative_events,
     browser_expressions,
+    browser_i18n_bind_calls,
+    browser_i18n_binding_directives,
+    browser_i18n_message_calls,
+    browser_i18n_profile_calls,
     browser_identifiers,
     browser_literal_calls,
     browser_literal_wire_type,
     browser_member_at,
+    browser_member_literal_calls,
     json_wire_type_from_annotation,
     json_wire_type_from_expression,
+    lint_csp_compatibility,
     lint_unknown_alpine_variables,
     lint_unknown_component_js_variables,
     python_event_handler_range,
@@ -112,6 +123,152 @@ def test_browser_hosts_preserve_loop_bindings_and_literal_event_ranges():
     ]
 
 
+def test_browser_hosts_capture_csp_element_attribute_and_evaluator_context():
+    source = (
+        '<main X-DATA="{ open: true }"><span X-TEXT="open"></span></main>'
+        '<c-card @click="save()" @c-save="save({ id: item.id })" $c-props="{ id: item.id }" />'
+        '<button @C-CLICK="save(() => 1)"></button>'
+    )
+
+    expressions = browser_expressions(parse_template(source))
+
+    assert [(item.canonical_attribute, item.element, item.host, item.evaluator) for item in expressions] == [
+        ("x-data", "main", "alpine", "normal"),
+        ("x-text", "span", "alpine", "normal"),
+        ("@click", "c-card", "alpine", "raw"),
+        ("@c-save", "c-card", "citry-event-args", "raw"),
+        ("$c-props", "c-card", "citry-props", "raw"),
+        ("@c-click", "button", "alpine", "normal"),
+    ]
+    assert "open" in expressions[1].bindings
+    encoded = source.encode()
+    assert [
+        encoded[item.attribute_start_index : item.attribute_end_index].decode()  # type: ignore[index]
+        for item in expressions
+    ] == ["X-DATA", "X-TEXT", "@click", "@c-save", "$c-props", "@C-CLICK"]
+
+
+def test_case_variant_dynamic_element_uses_the_rendered_html_evaluator_context():
+    source = (
+        '<c-Element is="SCRIPT" @click="value = 1"></c-Element>'
+        '<c-Element is="IFRAME" x-text="value"></c-Element>'
+        '<c-Card @click="value = 1" />'
+    )
+    expressions = browser_expressions(parse_template(source))
+
+    assert [(item.element, item.evaluator) for item in expressions] == [
+        ("script", "normal"),
+        ("iframe", "normal"),
+        ("c-card", "raw"),
+    ]
+    findings = lint_csp_compatibility(
+        expressions,
+        (AlpineLintConsumer(frozenset({"value"}), "ignore"),),
+        "strict",
+    )
+    assert len(findings) == 2
+    assert [source.encode()[item.start_index : item.end_index].decode() for item in findings] == [
+        "@click",
+        "x-text",
+    ]
+
+
+def test_alpine_csp_classifier_matches_the_pinned_expression_corpus():
+    fixture = json.loads(
+        (Path(__file__).parents[3] / "js/citry-client/test/fixtures/alpine-csp-3.16.1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert fixture["alpineVersion"] == ALPINE_CSP_COMPATIBILITY_VERSION
+
+    for case in fixture["cases"]:
+        expression = BrowserExpression(
+            case["source"],
+            0,
+            len(case["source"].encode()),
+            "expression",
+            "x-text",
+            transform=case.get("transform", "identity"),
+        )
+        actual = classify_alpine_csp(expression).outcome
+        expected = case.get("staticOutcome", "compatible" if case["outcome"] == "accepted" else "incompatible")
+        assert actual == expected, case["id"]
+
+
+def test_alpine_csp_checker_handles_directives_casing_derived_code_and_mode():
+    source = (
+        '<div X-HTML></div><SCRIPT x-text="value"></SCRIPT>'
+        '<input x-modelable="count + 1">'
+        '<template x-for="item in rows?.items"></template>'
+    )
+    expressions = browser_expressions(parse_template(source))
+    consumer = AlpineLintConsumer(frozenset({"count", "rows", "value"}), "ignore")
+
+    assert lint_csp_compatibility(expressions, (consumer,), "off") == ()
+    warnings = lint_csp_compatibility(expressions, (consumer,), "warn")
+    errors = lint_csp_compatibility(expressions, (consumer,), "strict")
+
+    assert len(warnings) == 4
+    assert {finding.severity for finding in warnings} == {"warning"}
+    assert {finding.severity for finding in errors} == {"error"}
+    assert all(finding.code == "citry.csp.incompatible-browser-code" for finding in errors)
+    assert [source.encode()[finding.start_index : finding.end_index].decode() for finding in errors] == [
+        "X-HTML",
+        "x-text",
+        "count + 1",
+        "?.",
+    ]
+
+
+def test_alpine_csp_checker_requires_explicit_scope_for_javascript_globals():
+    expression = browser_expressions(parse_template('<span x-text="Math.max(1, 2)"></span>'))[0]
+
+    missing = lint_csp_compatibility(
+        (expression,),
+        (AlpineLintConsumer(frozenset(), "ignore"),),
+        "strict",
+    )
+    supplied = lint_csp_compatibility(
+        (expression,),
+        (AlpineLintConsumer(frozenset({"Math"}), "ignore"),),
+        "strict",
+    )
+
+    assert len(missing) == 1
+    assert "unprovided JavaScript global 'Math'" in missing[0].message
+    assert supplied == ()
+    undefined = browser_expressions(parse_template('<span x-text="undefined"></span>'))[0]
+    assert lint_csp_compatibility((undefined,), (AlpineLintConsumer(frozenset(), "ignore"),), "strict") == ()
+
+
+def test_alpine_csp_checker_reports_unterminated_strings_without_raising():
+    expression = BrowserExpression("'unterminated", 7, 20, "expression", "x-text")
+
+    classification = classify_alpine_csp(expression)
+    findings = lint_csp_compatibility(
+        (expression,),
+        (AlpineLintConsumer(frozenset(), "ignore"),),
+        "strict",
+    )
+
+    assert classification.outcome == "incompatible"
+    assert classification.detail == "an unterminated string"
+    assert (classification.start_index, classification.end_index) == (7, 20)
+    assert len(findings) == 1
+
+
+def test_alpine_csp_directive_empty_rules_use_javascript_whitespace_semantics():
+    source = '<div x-data="\u001c"></div><button @click="\u001c"></button><div x-init="\ufeff"></div>'
+    expressions = browser_expressions(parse_template(source))
+    findings = lint_csp_compatibility(expressions, (), "strict")
+
+    assert len(findings) == 2
+    assert [source.encode()[item.start_index : item.end_index].decode() for item in findings] == [
+        "\u001c",
+        "\u001c",
+    ]
+
+
 def test_declarative_event_handlers_preserve_wire_names_arguments_and_nested_ranges():
     source = (
         '<button @c-click="save-card" @c-blur="update(name)"></button>'
@@ -152,6 +309,139 @@ def test_oxc_browser_analysis_distinguishes_free_roots_from_javascript_locals():
     ]
     assert click_analysis.valid
     assert [item.name for item in click_analysis.references] == ["count", "submit"]
+
+
+def test_member_literal_calls_keep_direct_i18n_calls_and_exact_utf8_ranges():
+    source_text = "<span x-text=\"$i18n.tr('čau') + other.tr('skip') + $i18n['tr']('skip')\"></span>"
+    template = parse_template(source_text)
+    expression = browser_expressions(template)[0]
+
+    calls = browser_member_literal_calls(
+        expression,
+        frozenset({"$i18n"}),
+        frozenset({"resolve", "tr"}),
+    )
+
+    assert [(call.owner, call.function, call.value) for call in calls] == [("$i18n", "tr", "čau")]
+    source = source_text.encode()
+    assert source[calls[0].start_index : calls[0].end_index].decode() == "čau"
+
+
+def test_i18n_profile_calls_keep_nested_method_and_literal_option_ranges():
+    source_text = (
+        "<span x-text=\"$i18n.format.number(total, {format: 'measurement'}) "
+        "+ $i18n.parse.percent(value, { format: 'editing' }) + other.format.number(1, {format: 'skip'})"
+        '"></span>'
+    )
+    expression = browser_expressions(parse_template(source_text))[0]
+
+    calls = browser_i18n_profile_calls(expression)
+
+    assert [(call.namespace, call.operation, call.profile) for call in calls] == [
+        ("format", "number", "measurement"),
+        ("parse", "percent", "editing"),
+    ]
+    encoded = source_text.encode()
+    assert [encoded[call.start_index : call.end_index].decode() for call in calls] == ["measurement", "editing"]
+
+
+def test_i18n_magic_binding_follows_client_provider_and_server_barrier():
+    for client_input in ('c-client="True"', "client"):
+        source = f"""
+        <c-i18n {client_input} tag="main">
+          <span x-text="$i18n.tr('outer')"></span>
+          <c-i18n tag="section">
+            <span x-text="$i18n.tr('blocked')"></span>
+          </c-i18n>
+        </c-i18n>
+        """
+
+        expressions = browser_expressions(parse_template(source))
+
+        assert [expression.bindings for expression in expressions] == [("$i18n",), ()]
+
+
+def test_i18n_bind_calls_extract_only_bounded_literal_object_roots():
+    source = """
+        i18n.bind({
+          message: 'toast-title',
+          output: 'aria-label',
+          values: () => ({ title }),
+          onChange(text) { el.setAttribute('aria-label', text) },
+        });
+        i18n.bind({ message: 'dynamic-output', output, onChange: apply });
+        i18n.bind(options);
+        other.bind({ message: 'skip', onChange: apply });
+    """
+    expression = BrowserExpression(source, 7, len(source.encode()) + 7, "statement", "component-js")
+
+    calls = browser_i18n_bind_calls(expression)
+
+    assert [(call.message, call.output, call.has_dynamic_output) for call in calls] == [
+        ("toast-title", "aria-label", False),
+        ("dynamic-output", None, True),
+    ]
+    encoded = source.encode()
+    assert encoded[calls[0].message_start_index - 7 : calls[0].message_end_index - 7].decode() == "toast-title"
+    assert encoded[calls[0].output_start_index - 7 : calls[0].output_end_index - 7].decode() == "aria-label"
+
+
+def test_browser_i18n_message_calls_keep_parameter_and_attribute_spans():
+    source = "$i18n.tr('account-title', { name: accountName, count }, { attr: 'aria-label' })"
+    expression = BrowserExpression(source, 11, len(source.encode("utf-8")) + 11, "expression", "x-text")
+
+    calls = browser_i18n_message_calls(expression)
+
+    assert len(calls) == 1
+    call = calls[0]
+    assert (call.message, call.attribute) == ("account-title", "aria-label")
+    assert [(item.name, item.value_source) for item in call.arguments] == [
+        ("name", "accountName"),
+        ("count", "count"),
+    ]
+    encoded = source.encode()
+    assert encoded[call.message_start_index - 11 : call.message_end_index - 11].decode() == "account-title"
+    assert [encoded[item.start_index - 11 : item.end_index - 11].decode() for item in call.arguments] == [
+        "name",
+        "count",
+    ]
+
+
+def test_browser_i18n_binding_directives_keep_names_values_and_errors() -> None:
+    source = """\
+<div
+  $c-tr:notice.aria-label[title]="{ name: person.name, count: 2 }"
+  c-$c-tr:dynamic[aria-label]="binding"
+  $c-tr:broken[]
+></div>
+"""
+    directives = browser_i18n_binding_directives(parse_template(source))
+
+    assert len(directives) == 3
+    direct, server_dynamic, malformed = directives
+    assert (direct.message, direct.output, direct.target) == ("notice", "aria-label", "title")
+    assert [argument.name for argument in direct.arguments] == ["name", "count"]
+    assert not direct.has_dynamic_arguments
+    encoded = source.encode()
+    assert encoded[direct.message_start_index : direct.message_end_index].decode() == "notice"
+    assert encoded[direct.output_start_index : direct.output_end_index].decode() == "aria-label"
+    assert encoded[direct.target_start_index : direct.target_end_index].decode() == "title"
+    assert server_dynamic.message == "dynamic"
+    assert server_dynamic.server_dynamic
+    assert server_dynamic.has_dynamic_arguments
+    assert malformed.message is None
+    assert malformed.error is not None
+    assert "non-empty HTML attribute" in malformed.error
+
+
+def test_browser_i18n_binding_value_is_an_alpine_expression_host() -> None:
+    template = parse_template('<span $c-tr:greeting="{ name: person.name }"></span>')
+    expressions = browser_expressions(template)
+
+    assert len(expressions) == 1
+    assert expressions[0].attribute == "$c-tr:greeting"
+    assert expressions[0].host == "citry-i18n-values"
+    assert expressions[0].source == "{ name: person.name }"
 
 
 def test_oxc_loop_analysis_checks_only_the_outer_iterable_expression():

@@ -1,10 +1,10 @@
-/* Citry events client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles AlpineJS 3.15.12 + @alpinejs/morph 3.15.12 (MIT). */
+/* Citry events CSP client runtime. GENERATED FILE, do not edit: built from packages/js/citry-client/src/citry-events.ts (pnpm run build there). Bundles @alpinejs/csp 3.16.1 + @alpinejs/morph 3.16.1 (MIT). */
 (() => {
   var __defProp = Object.defineProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/scheduler.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/scheduler.js
   var flushPending = false;
   var flushing = false;
   var queue = [];
@@ -47,7 +47,7 @@
     flushing = false;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/reactivity.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/reactivity.js
   var reactive;
   var effect;
   var release;
@@ -127,7 +127,7 @@
     }
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/mutation.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/mutation.js
   var onAttributeAddeds = [];
   var onElRemoveds = [];
   var onElAddeds = [];
@@ -272,7 +272,7 @@
     removedAttributes = null;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/scope.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/scope.js
   function scope(node) {
     return mergeProxies(closestDataStack(node));
   }
@@ -343,8 +343,9 @@
     }, {});
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/interceptor.js
-  function initInterceptors(data2) {
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/interceptor.js
+  function initInterceptors(data2, cleanup2 = () => {
+  }) {
     let isObject3 = (val) => typeof val === "object" && !Array.isArray(val) && val !== null;
     let recurse = (obj, basePath = "") => {
       Object.entries(Object.getOwnPropertyDescriptors(obj)).forEach(([key, { value, enumerable }]) => {
@@ -352,7 +353,7 @@
         if (typeof value === "object" && value !== null && value.__v_skip) return;
         let path = basePath === "" ? key : `${basePath}.${key}`;
         if (typeof value === "object" && value !== null && value._x_interceptor) {
-          obj[key] = value.initialize(data2, path, key);
+          obj[key] = value.initialize(data2, path, key, cleanup2);
         } else {
           if (isObject3(value) && value !== obj && !(value instanceof Element)) {
             recurse(value, path);
@@ -367,18 +368,18 @@
     let obj = {
       initialValue: void 0,
       _x_interceptor: true,
-      initialize(data2, path, key) {
-        return callback(this.initialValue, () => get(data2, path), (value) => set(data2, path, value), path, key);
+      initialize(data2, path, key, cleanup2) {
+        return callback(this.initialValue, () => get(data2, path), (value) => set(data2, path, value), path, key, cleanup2);
       }
     };
     mutateObj(obj);
     return (initialValue) => {
       if (typeof initialValue === "object" && initialValue !== null && initialValue._x_interceptor) {
         let initialize = obj.initialize.bind(obj);
-        obj.initialize = (data2, path, key) => {
-          let innerValue = initialValue.initialize(data2, path, key);
+        obj.initialize = (data2, path, key, cleanup2) => {
+          let innerValue = initialValue.initialize(data2, path, key, cleanup2);
           obj.initialValue = innerValue;
-          return initialize(data2, path, key);
+          return initialize(data2, path, key, cleanup2);
         };
       } else {
         obj.initialValue = initialValue;
@@ -403,7 +404,7 @@
     }
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics.js
   var magics = {};
   function magic(name, callback) {
     magics[name] = callback;
@@ -427,7 +428,7 @@
     return utils;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/error.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/error.js
   function tryCatch(el, expression, callback, ...args) {
     try {
       return callback(...args);
@@ -455,7 +456,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }, 0);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/evaluator.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/evaluator.js
   var shouldAutoEvaluateFunctions = true;
   function dontAutoEvaluateFunctions(callback) {
     let cache = shouldAutoEvaluateFunctions;
@@ -481,13 +482,6 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   function setRawEvaluator(newEvaluator) {
     theRawEvaluatorFunction = newEvaluator;
   }
-  function normalEvaluator(el, expression) {
-    let overriddenMagics = {};
-    injectMagics(overriddenMagics, el);
-    let dataStack = [overriddenMagics, ...closestDataStack(el)];
-    let evaluator = typeof expression === "function" ? generateEvaluatorFromFunction(dataStack, expression) : generateEvaluatorFromString(dataStack, expression, el);
-    return tryCatch.bind(null, el, expression, evaluator);
-  }
   function generateEvaluatorFromFunction(dataStack, func) {
     return (receiver = () => {
     }, { scope: scope2 = {}, params = [], context } = {}) => {
@@ -497,53 +491,6 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       }
       let result = func.apply(mergeProxies([scope2, ...dataStack]), params);
       runIfTypeOfFunction(receiver, result);
-    };
-  }
-  var evaluatorMemo = {};
-  function generateFunctionFromString(expression, el) {
-    if (evaluatorMemo[expression]) {
-      return evaluatorMemo[expression];
-    }
-    let AsyncFunction = Object.getPrototypeOf(async function() {
-    }).constructor;
-    let rightSideSafeExpression = /^[\n\s]*if.*\(.*\)/.test(expression.trim()) || /^(let|const)\s/.test(expression.trim()) ? `(async()=>{ ${expression} })()` : expression;
-    const safeAsyncFunction = () => {
-      try {
-        let func2 = new AsyncFunction(
-          ["__self", "scope"],
-          `with (scope) { __self.result = ${rightSideSafeExpression} }; __self.finished = true; return __self.result;`
-        );
-        Object.defineProperty(func2, "name", {
-          value: `[Alpine] ${expression}`
-        });
-        return func2;
-      } catch (error2) {
-        handleError(error2, el, expression);
-        return Promise.resolve();
-      }
-    };
-    let func = safeAsyncFunction();
-    evaluatorMemo[expression] = func;
-    return func;
-  }
-  function generateEvaluatorFromString(dataStack, expression, el) {
-    let func = generateFunctionFromString(expression, el);
-    return (receiver = () => {
-    }, { scope: scope2 = {}, params = [], context } = {}) => {
-      func.result = void 0;
-      func.finished = false;
-      let completeScope = mergeProxies([scope2, ...dataStack]);
-      if (typeof func === "function") {
-        let promise = func.call(context, func, completeScope).catch((error2) => handleError(error2, el, expression));
-        if (func.finished) {
-          runIfTypeOfFunction(receiver, func.result, completeScope, params, el);
-          func.result = void 0;
-        } else {
-          promise.then((result) => {
-            runIfTypeOfFunction(receiver, result, completeScope, params, el);
-          }).catch((error2) => handleError(error2, el, expression)).finally(() => func.result = void 0);
-        }
-      }
     };
   }
   function runIfTypeOfFunction(receiver, value, scope2, params, el) {
@@ -563,37 +510,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   function evaluateRaw(...args) {
     return theRawEvaluatorFunction(...args);
   }
-  function normalRawEvaluator(el, expression, extras = {}) {
-    let overriddenMagics = {};
-    injectMagics(overriddenMagics, el);
-    let dataStack = [overriddenMagics, ...closestDataStack(el)];
-    let scope2 = mergeProxies([extras.scope ?? {}, ...dataStack]);
-    let params = extras.params ?? [];
-    if (expression.includes("await")) {
-      let AsyncFunction = Object.getPrototypeOf(async function() {
-      }).constructor;
-      let rightSideSafeExpression = /^[\n\s]*if.*\(.*\)/.test(expression.trim()) || /^(let|const)\s/.test(expression.trim()) ? `(async()=>{ ${expression} })()` : expression;
-      let func = new AsyncFunction(
-        ["scope"],
-        `with (scope) { let __result = ${rightSideSafeExpression}; return __result }`
-      );
-      let result = func.call(extras.context, scope2);
-      return result;
-    } else {
-      let rightSideSafeExpression = /^[\n\s]*if.*\(.*\)/.test(expression.trim()) || /^(let|const)\s/.test(expression.trim()) ? `(()=>{ ${expression} })()` : expression;
-      let func = new Function(
-        ["scope"],
-        `with (scope) { let __result = ${rightSideSafeExpression}; return __result }`
-      );
-      let result = func.call(extras.context, scope2);
-      if (typeof result === "function" && shouldAutoEvaluateFunctions) {
-        return result.apply(scope2, params);
-      }
-      return result;
-    }
-  }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives.js
   function runCitryAmbientDirective(el, attributeName, registerCleanup, callback) {
     let run = globalThis.Citry && globalThis.Citry.alpine && globalThis.Citry.alpine._runDirective;
     return typeof run === "function" ? run(el, attributeName, registerCleanup, callback) : callback();
@@ -765,7 +683,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return directiveOrder.indexOf(typeA) - directiveOrder.indexOf(typeB);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/dispatch.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/dispatch.js
   function dispatch(el, name, detail = {}, options = {}) {
     return el.dispatchEvent(
       new CustomEvent(name, {
@@ -780,7 +698,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     );
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/walk.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/walk.js
   function walk(el, callback) {
     if (typeof ShadowRoot === "function" && el instanceof ShadowRoot) {
       Array.from(el.children).forEach((el2) => walk(el2, callback));
@@ -796,12 +714,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/warn.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/warn.js
   function warn(message, ...args) {
     console.warn(`Alpine Warning: ${message}`, ...args);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/lifecycle.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/lifecycle.js
   var started = false;
   function start() {
     if (started) warn("Alpine has already been initialized on this page. Calling Alpine.start() more than once can cause problems.");
@@ -900,7 +818,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     });
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/nextTick.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/nextTick.js
   var tickStack = [];
   var isHolding = false;
   function nextTick(callback = () => {
@@ -925,7 +843,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     isHolding = true;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/classes.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/classes.js
   function setClasses(el, value) {
     if (Array.isArray(value)) {
       return setClassesFromString(el, value.join(" "));
@@ -973,7 +891,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/styles.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/styles.js
   function setStyles(el, value) {
     if (typeof value === "object" && value !== null) {
       return setStylesFromObject(el, value);
@@ -1009,7 +927,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return subject.replace(/([a-z])([A-Z])/g, "$1-$2").toLowerCase();
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/once.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/once.js
   function once(callback, fallback = () => {
   }) {
     let called = false;
@@ -1023,7 +941,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-transition.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-transition.js
   directive("transition", (el, { value, modifiers, expression }, { evaluate: evaluate2 }) => {
     if (typeof expression === "function") expression = evaluate2(expression);
     if (expression === false) return;
@@ -1284,7 +1202,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return rawValue;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/clone.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/clone.js
   var isCloning = false;
   function skipDuringClone(callback, fallback = () => {
   }) {
@@ -1342,7 +1260,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     overrideEffect(cache);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/bind.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/bind.js
   function bind(el, name, value, modifiers = []) {
     if (!el._x_bindings) el._x_bindings = reactive({});
     el._x_bindings[name] = value;
@@ -1388,8 +1306,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       }
     } else if (el.tagName === "SELECT") {
       updateSelect(el, value);
+    } else if (el.tagName === "OPTION") {
+      bindAttribute(el, "value", value);
     } else {
-      if (el.value === value) return;
+      if (el.value === value && (typeof value !== "object" || value === null)) return;
       el.value = value === void 0 ? "" : value;
     }
   }
@@ -1410,6 +1330,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       el.removeAttribute(name);
     } else {
       if (isBooleanAttr(name)) value = name;
+      if (isObjectAttr(value)) value = JSON.stringify(value);
       setIfChanged(el, name, value);
     }
   }
@@ -1481,6 +1402,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   function attributeShouldntBePreservedIfFalsy(name) {
     return !["aria-pressed", "aria-checked", "aria-expanded", "aria-selected"].includes(name);
   }
+  function isObjectAttr(value) {
+    return typeof value === "object" && value !== null;
+  }
   function getBinding(el, name, fallback) {
     if (el._x_bindings && el._x_bindings[name] !== void 0) return el._x_bindings[name];
     return getAttributeBinding(el, name, fallback);
@@ -1512,7 +1436,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return el.type === "radio" || el.localName === "ui-radio";
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/debounce.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/debounce.js
   function debounce(func, wait) {
     let timeout;
     return function() {
@@ -1526,7 +1450,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/throttle.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/throttle.js
   function throttle(func, limit) {
     let inThrottle;
     return function() {
@@ -1539,7 +1463,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/entangle.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/entangle.js
   function entangle({ get: outerGet, set: outerSet }, { get: innerGet, set: innerSet }) {
     let firstRun = true;
     let outerHash;
@@ -1571,13 +1495,13 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return typeof value === "object" ? JSON.parse(JSON.stringify(value)) : value;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/plugin.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/plugin.js
   function plugin(callback) {
     let callbacks = Array.isArray(callback) ? callback : [callback];
     callbacks.forEach((i) => i(alpine_default));
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/store.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/store.js
   var stores = {};
   var isReactive = false;
   function store(name, value) {
@@ -1589,7 +1513,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       return stores[name];
     }
     stores[name] = value;
-    initInterceptors(stores[name]);
+    if (typeof value === "object" && value !== null && value._x_interceptor) {
+      stores[name] = value.initialize(stores, name, name, () => {
+      });
+    } else {
+      initInterceptors(stores[name]);
+    }
     if (typeof value === "object" && value !== null && value.hasOwnProperty("init") && typeof value.init === "function") {
       stores[name].init();
     }
@@ -1598,7 +1527,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return stores;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/binds.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/binds.js
   var binds = {};
   function bind2(name, bindings) {
     let getBindings = typeof bindings !== "function" ? () => bindings : bindings;
@@ -1645,7 +1574,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/datas.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/datas.js
   var datas = {};
   function data(name, callback) {
     datas[name] = callback;
@@ -1664,7 +1593,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return obj;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/alpine.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/alpine.js
   var Alpine = {
     get reactive() {
       return reactive;
@@ -1681,7 +1610,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     get transaction() {
       return transaction;
     },
-    version: "3.15.12",
+    version: "3.16.1",
     flushAndStopDeferringMutations,
     dontAutoEvaluateFunctions,
     disableEffectScheduling,
@@ -1745,6 +1674,851 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     bind: bind2
   };
   var alpine_default = Alpine;
+
+  // ../../../node_modules/.pnpm/@alpinejs+csp@3.16.1/node_modules/@alpinejs/csp/src/parser.js
+  var safemap = /* @__PURE__ */ new WeakMap();
+  var globals = /* @__PURE__ */ new Set();
+  Object.getOwnPropertyNames(globalThis).forEach((key) => {
+    if (key === "styleMedia" || key === "sharedStorage") return;
+    globals.add(globalThis[key]);
+  });
+  var Token = class {
+    constructor(type, value, start2, end) {
+      this.type = type;
+      this.value = value;
+      this.start = start2;
+      this.end = end;
+    }
+  };
+  var Tokenizer = class {
+    constructor(input) {
+      this.input = input;
+      this.position = 0;
+      this.tokens = [];
+    }
+    tokenize() {
+      while (this.position < this.input.length) {
+        this.skipWhitespace();
+        if (this.position >= this.input.length) break;
+        const char = this.input[this.position];
+        if (this.isDigit(char)) {
+          this.readNumber();
+        } else if (this.isAlpha(char) || char === "_" || char === "$") {
+          this.readIdentifierOrKeyword();
+        } else if (char === '"' || char === "'") {
+          this.readString();
+        } else if (char === "/" && this.peek() === "/") {
+          this.skipLineComment();
+        } else {
+          this.readOperatorOrPunctuation();
+        }
+      }
+      this.tokens.push(new Token("EOF", null, this.position, this.position));
+      return this.tokens;
+    }
+    skipWhitespace() {
+      while (this.position < this.input.length && /\s/.test(this.input[this.position])) {
+        this.position++;
+      }
+    }
+    skipLineComment() {
+      while (this.position < this.input.length && this.input[this.position] !== "\n") {
+        this.position++;
+      }
+    }
+    isDigit(char) {
+      return /[0-9]/.test(char);
+    }
+    isAlpha(char) {
+      return /[a-zA-Z]/.test(char);
+    }
+    isAlphaNumeric(char) {
+      return /[a-zA-Z0-9_$]/.test(char);
+    }
+    peek(offset = 1) {
+      return this.input[this.position + offset] || "";
+    }
+    readNumber() {
+      const start2 = this.position;
+      let hasDecimal = false;
+      while (this.position < this.input.length) {
+        const char = this.input[this.position];
+        if (this.isDigit(char)) {
+          this.position++;
+        } else if (char === "." && !hasDecimal) {
+          hasDecimal = true;
+          this.position++;
+        } else {
+          break;
+        }
+      }
+      const value = this.input.slice(start2, this.position);
+      this.tokens.push(new Token("NUMBER", parseFloat(value), start2, this.position));
+    }
+    readIdentifierOrKeyword() {
+      const start2 = this.position;
+      while (this.position < this.input.length && this.isAlphaNumeric(this.input[this.position])) {
+        this.position++;
+      }
+      const value = this.input.slice(start2, this.position);
+      const keywords = ["true", "false", "null", "undefined", "new", "typeof", "void", "delete", "in", "instanceof"];
+      if (keywords.includes(value)) {
+        if (value === "true" || value === "false") {
+          this.tokens.push(new Token("BOOLEAN", value === "true", start2, this.position));
+        } else if (value === "null") {
+          this.tokens.push(new Token("NULL", null, start2, this.position));
+        } else if (value === "undefined") {
+          this.tokens.push(new Token("UNDEFINED", void 0, start2, this.position));
+        } else {
+          this.tokens.push(new Token("KEYWORD", value, start2, this.position));
+        }
+      } else {
+        this.tokens.push(new Token("IDENTIFIER", value, start2, this.position));
+      }
+    }
+    readString() {
+      const start2 = this.position;
+      const quote = this.input[this.position];
+      this.position++;
+      let value = "";
+      let escaped = false;
+      while (this.position < this.input.length) {
+        const char = this.input[this.position];
+        if (escaped) {
+          switch (char) {
+            case "n":
+              value += "\n";
+              break;
+            case "t":
+              value += "	";
+              break;
+            case "r":
+              value += "\r";
+              break;
+            case "\\":
+              value += "\\";
+              break;
+            case quote:
+              value += quote;
+              break;
+            default:
+              value += char;
+          }
+          escaped = false;
+        } else if (char === "\\") {
+          escaped = true;
+        } else if (char === quote) {
+          this.position++;
+          this.tokens.push(new Token("STRING", value, start2, this.position));
+          return;
+        } else {
+          value += char;
+        }
+        this.position++;
+      }
+      throw new Error(`Unterminated string starting at position ${start2}`);
+    }
+    readOperatorOrPunctuation() {
+      const start2 = this.position;
+      const char = this.input[this.position];
+      const next = this.peek();
+      const nextNext = this.peek(2);
+      if (char === "=" && next === "=" && nextNext === "=") {
+        this.position += 3;
+        this.tokens.push(new Token("OPERATOR", "===", start2, this.position));
+      } else if (char === "!" && next === "=" && nextNext === "=") {
+        this.position += 3;
+        this.tokens.push(new Token("OPERATOR", "!==", start2, this.position));
+      } else if (char === "=" && next === "=") {
+        this.position += 2;
+        this.tokens.push(new Token("OPERATOR", "==", start2, this.position));
+      } else if (char === "!" && next === "=") {
+        this.position += 2;
+        this.tokens.push(new Token("OPERATOR", "!=", start2, this.position));
+      } else if (char === "<" && next === "=") {
+        this.position += 2;
+        this.tokens.push(new Token("OPERATOR", "<=", start2, this.position));
+      } else if (char === ">" && next === "=") {
+        this.position += 2;
+        this.tokens.push(new Token("OPERATOR", ">=", start2, this.position));
+      } else if (char === "&" && next === "&") {
+        this.position += 2;
+        this.tokens.push(new Token("OPERATOR", "&&", start2, this.position));
+      } else if (char === "|" && next === "|") {
+        this.position += 2;
+        this.tokens.push(new Token("OPERATOR", "||", start2, this.position));
+      } else if (char === "+" && next === "+") {
+        this.position += 2;
+        this.tokens.push(new Token("OPERATOR", "++", start2, this.position));
+      } else if (char === "-" && next === "-") {
+        this.position += 2;
+        this.tokens.push(new Token("OPERATOR", "--", start2, this.position));
+      } else {
+        this.position++;
+        const type = "()[]{},.;:?".includes(char) ? "PUNCTUATION" : "OPERATOR";
+        this.tokens.push(new Token(type, char, start2, this.position));
+      }
+    }
+  };
+  var Parser = class {
+    constructor(tokens) {
+      this.tokens = tokens;
+      this.position = 0;
+    }
+    parse() {
+      if (this.isAtEnd()) {
+        throw new Error("Empty expression");
+      }
+      const expr = this.parseExpression();
+      this.match("PUNCTUATION", ";");
+      if (!this.isAtEnd()) {
+        throw new Error(`Unexpected token: ${this.current().value}`);
+      }
+      return expr;
+    }
+    parseExpression() {
+      return this.parseAssignment();
+    }
+    parseAssignment() {
+      const expr = this.parseTernary();
+      if (this.match("OPERATOR", "=")) {
+        const value = this.parseAssignment();
+        if (expr.type === "Identifier" || expr.type === "MemberExpression") {
+          return {
+            type: "AssignmentExpression",
+            left: expr,
+            operator: "=",
+            right: value
+          };
+        }
+        throw new Error("Invalid assignment target");
+      }
+      return expr;
+    }
+    parseTernary() {
+      const expr = this.parseLogicalOr();
+      if (this.match("PUNCTUATION", "?")) {
+        const consequent = this.parseExpression();
+        this.consume("PUNCTUATION", ":");
+        const alternate = this.parseExpression();
+        return {
+          type: "ConditionalExpression",
+          test: expr,
+          consequent,
+          alternate
+        };
+      }
+      return expr;
+    }
+    parseLogicalOr() {
+      let expr = this.parseLogicalAnd();
+      while (this.match("OPERATOR", "||")) {
+        const operator = this.previous().value;
+        const right = this.parseLogicalAnd();
+        expr = {
+          type: "BinaryExpression",
+          operator,
+          left: expr,
+          right
+        };
+      }
+      return expr;
+    }
+    parseLogicalAnd() {
+      let expr = this.parseEquality();
+      while (this.match("OPERATOR", "&&")) {
+        const operator = this.previous().value;
+        const right = this.parseEquality();
+        expr = {
+          type: "BinaryExpression",
+          operator,
+          left: expr,
+          right
+        };
+      }
+      return expr;
+    }
+    parseEquality() {
+      let expr = this.parseRelational();
+      while (this.match("OPERATOR", "==", "!=", "===", "!==")) {
+        const operator = this.previous().value;
+        const right = this.parseRelational();
+        expr = {
+          type: "BinaryExpression",
+          operator,
+          left: expr,
+          right
+        };
+      }
+      return expr;
+    }
+    parseRelational() {
+      let expr = this.parseAdditive();
+      while (this.match("OPERATOR", "<", ">", "<=", ">=")) {
+        const operator = this.previous().value;
+        const right = this.parseAdditive();
+        expr = {
+          type: "BinaryExpression",
+          operator,
+          left: expr,
+          right
+        };
+      }
+      return expr;
+    }
+    parseAdditive() {
+      let expr = this.parseMultiplicative();
+      while (this.match("OPERATOR", "+", "-")) {
+        const operator = this.previous().value;
+        const right = this.parseMultiplicative();
+        expr = {
+          type: "BinaryExpression",
+          operator,
+          left: expr,
+          right
+        };
+      }
+      return expr;
+    }
+    parseMultiplicative() {
+      let expr = this.parseUnary();
+      while (this.match("OPERATOR", "*", "/", "%")) {
+        const operator = this.previous().value;
+        const right = this.parseUnary();
+        expr = {
+          type: "BinaryExpression",
+          operator,
+          left: expr,
+          right
+        };
+      }
+      return expr;
+    }
+    parseUnary() {
+      if (this.match("OPERATOR", "++", "--")) {
+        const operator = this.previous().value;
+        const argument = this.parseUnary();
+        return {
+          type: "UpdateExpression",
+          operator,
+          argument,
+          prefix: true
+        };
+      }
+      if (this.match("OPERATOR", "!", "-", "+")) {
+        const operator = this.previous().value;
+        const argument = this.parseUnary();
+        return {
+          type: "UnaryExpression",
+          operator,
+          argument,
+          prefix: true
+        };
+      }
+      return this.parsePostfix();
+    }
+    parsePostfix() {
+      let expr = this.parseMember();
+      if (this.match("OPERATOR", "++", "--")) {
+        const operator = this.previous().value;
+        return {
+          type: "UpdateExpression",
+          operator,
+          argument: expr,
+          prefix: false
+        };
+      }
+      return expr;
+    }
+    parseMember() {
+      let expr = this.parsePrimary();
+      while (true) {
+        if (this.match("PUNCTUATION", ".")) {
+          const property = this.consume("IDENTIFIER");
+          expr = {
+            type: "MemberExpression",
+            object: expr,
+            property: { type: "Identifier", name: property.value },
+            computed: false
+          };
+        } else if (this.match("PUNCTUATION", "[")) {
+          const property = this.parseExpression();
+          this.consume("PUNCTUATION", "]");
+          expr = {
+            type: "MemberExpression",
+            object: expr,
+            property,
+            computed: true
+          };
+        } else if (this.match("PUNCTUATION", "(")) {
+          const args = this.parseArguments();
+          expr = {
+            type: "CallExpression",
+            callee: expr,
+            arguments: args
+          };
+        } else {
+          break;
+        }
+      }
+      return expr;
+    }
+    parseArguments() {
+      const args = [];
+      if (!this.check("PUNCTUATION", ")")) {
+        do {
+          args.push(this.parseExpression());
+        } while (this.match("PUNCTUATION", ","));
+      }
+      this.consume("PUNCTUATION", ")");
+      return args;
+    }
+    parsePrimary() {
+      if (this.match("NUMBER")) {
+        return { type: "Literal", value: this.previous().value };
+      }
+      if (this.match("STRING")) {
+        return { type: "Literal", value: this.previous().value };
+      }
+      if (this.match("BOOLEAN")) {
+        return { type: "Literal", value: this.previous().value };
+      }
+      if (this.match("NULL")) {
+        return { type: "Literal", value: null };
+      }
+      if (this.match("UNDEFINED")) {
+        return { type: "Literal", value: void 0 };
+      }
+      if (this.match("IDENTIFIER")) {
+        return { type: "Identifier", name: this.previous().value };
+      }
+      if (this.match("PUNCTUATION", "(")) {
+        const expr = this.parseExpression();
+        this.consume("PUNCTUATION", ")");
+        return expr;
+      }
+      if (this.match("PUNCTUATION", "[")) {
+        return this.parseArrayLiteral();
+      }
+      if (this.match("PUNCTUATION", "{")) {
+        return this.parseObjectLiteral();
+      }
+      throw new Error(`Unexpected token: ${this.current().type} "${this.current().value}"`);
+    }
+    parseArrayLiteral() {
+      const elements = [];
+      while (!this.check("PUNCTUATION", "]") && !this.isAtEnd()) {
+        elements.push(this.parseExpression());
+        if (this.match("PUNCTUATION", ",")) {
+          if (this.check("PUNCTUATION", "]")) {
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+      this.consume("PUNCTUATION", "]");
+      return {
+        type: "ArrayExpression",
+        elements
+      };
+    }
+    parseObjectLiteral() {
+      const properties = [];
+      while (!this.check("PUNCTUATION", "}") && !this.isAtEnd()) {
+        let key;
+        let computed = false;
+        if (this.match("STRING")) {
+          key = { type: "Literal", value: this.previous().value };
+        } else if (this.match("IDENTIFIER")) {
+          const name = this.previous().value;
+          key = { type: "Identifier", name };
+        } else if (this.match("PUNCTUATION", "[")) {
+          key = this.parseExpression();
+          computed = true;
+          this.consume("PUNCTUATION", "]");
+        } else {
+          throw new Error("Expected property key");
+        }
+        this.consume("PUNCTUATION", ":");
+        const value = this.parseExpression();
+        properties.push({
+          type: "Property",
+          key,
+          value,
+          computed,
+          shorthand: false
+        });
+        if (this.match("PUNCTUATION", ",")) {
+          if (this.check("PUNCTUATION", "}")) {
+            break;
+          }
+        } else {
+          break;
+        }
+      }
+      this.consume("PUNCTUATION", "}");
+      return {
+        type: "ObjectExpression",
+        properties
+      };
+    }
+    match(...args) {
+      for (let i = 0; i < args.length; i++) {
+        const arg = args[i];
+        if (i === 0 && args.length > 1) {
+          const type = arg;
+          for (let j = 1; j < args.length; j++) {
+            if (this.check(type, args[j])) {
+              this.advance();
+              return true;
+            }
+          }
+          return false;
+        } else if (args.length === 1) {
+          if (this.checkType(arg)) {
+            this.advance();
+            return true;
+          }
+          return false;
+        }
+      }
+      return false;
+    }
+    check(type, value) {
+      if (this.isAtEnd()) return false;
+      if (value !== void 0) {
+        return this.current().type === type && this.current().value === value;
+      }
+      return this.current().type === type;
+    }
+    checkType(type) {
+      if (this.isAtEnd()) return false;
+      return this.current().type === type;
+    }
+    advance() {
+      if (!this.isAtEnd()) this.position++;
+      return this.previous();
+    }
+    isAtEnd() {
+      return this.current().type === "EOF";
+    }
+    current() {
+      return this.tokens[this.position];
+    }
+    previous() {
+      return this.tokens[this.position - 1];
+    }
+    consume(type, value) {
+      if (value !== void 0) {
+        if (this.check(type, value)) return this.advance();
+        throw new Error(`Expected ${type} "${value}" but got ${this.current().type} "${this.current().value}"`);
+      }
+      if (this.check(type)) return this.advance();
+      throw new Error(`Expected ${type} but got ${this.current().type} "${this.current().value}"`);
+    }
+  };
+  var Evaluator = class {
+    evaluate({ node, scope: scope2 = {}, context = null, forceBindingRootScopeToFunctions = true }) {
+      switch (node.type) {
+        case "Literal":
+          return node.value;
+        case "Identifier":
+          if (node.name in scope2) {
+            const value2 = scope2[node.name];
+            this.checkForDangerousValues(value2);
+            if (typeof value2 === "function") {
+              return value2.bind(scope2);
+            }
+            return value2;
+          }
+          throw new Error(`Undefined variable: ${node.name}`);
+        case "MemberExpression":
+          const object = this.evaluate({ node: node.object, scope: scope2, context, forceBindingRootScopeToFunctions });
+          if (object == null) {
+            throw new Error("Cannot read property of null or undefined");
+          }
+          let property;
+          if (node.computed) {
+            property = this.evaluate({ node: node.property, scope: scope2, context, forceBindingRootScopeToFunctions });
+          } else {
+            property = node.property.name;
+          }
+          this.checkForDangerousKeywords(property);
+          let memberValue = object[property];
+          this.checkForDangerousValues(memberValue);
+          if (typeof memberValue === "function") {
+            if (forceBindingRootScopeToFunctions) {
+              return memberValue.bind(scope2);
+            } else {
+              return memberValue.bind(object);
+            }
+          }
+          return memberValue;
+        case "CallExpression":
+          const args = node.arguments.map((arg) => this.evaluate({ node: arg, scope: scope2, context, forceBindingRootScopeToFunctions }));
+          let returnValue;
+          if (node.callee.type === "MemberExpression") {
+            const obj = this.evaluate({ node: node.callee.object, scope: scope2, context, forceBindingRootScopeToFunctions });
+            let prop;
+            if (node.callee.computed) {
+              prop = this.evaluate({ node: node.callee.property, scope: scope2, context, forceBindingRootScopeToFunctions });
+            } else {
+              prop = node.callee.property.name;
+            }
+            this.checkForDangerousKeywords(prop);
+            let func = obj[prop];
+            if (typeof func !== "function") {
+              throw new Error("Value is not a function");
+            }
+            returnValue = func.apply(obj, args);
+          } else {
+            if (node.callee.type === "Identifier") {
+              const name = node.callee.name;
+              let func;
+              if (name in scope2) {
+                func = scope2[name];
+              } else {
+                throw new Error(`Undefined variable: ${name}`);
+              }
+              if (typeof func !== "function") {
+                throw new Error("Value is not a function");
+              }
+              const thisContext = context !== null ? context : scope2;
+              returnValue = func.apply(thisContext, args);
+            } else {
+              const callee = this.evaluate({ node: node.callee, scope: scope2, context, forceBindingRootScopeToFunctions });
+              if (typeof callee !== "function") {
+                throw new Error("Value is not a function");
+              }
+              returnValue = callee.apply(context, args);
+            }
+          }
+          this.checkForDangerousValues(returnValue);
+          return returnValue;
+        case "UnaryExpression":
+          const argument = this.evaluate({ node: node.argument, scope: scope2, context, forceBindingRootScopeToFunctions });
+          switch (node.operator) {
+            case "!":
+              return !argument;
+            case "-":
+              return -argument;
+            case "+":
+              return +argument;
+            default:
+              throw new Error(`Unknown unary operator: ${node.operator}`);
+          }
+        case "UpdateExpression":
+          if (node.argument.type === "Identifier") {
+            const name = node.argument.name;
+            if (!(name in scope2)) {
+              throw new Error(`Undefined variable: ${name}`);
+            }
+            const oldValue = scope2[name];
+            if (node.operator === "++") {
+              scope2[name] = oldValue + 1;
+            } else if (node.operator === "--") {
+              scope2[name] = oldValue - 1;
+            }
+            return node.prefix ? scope2[name] : oldValue;
+          } else if (node.argument.type === "MemberExpression") {
+            const obj = this.evaluate({ node: node.argument.object, scope: scope2, context, forceBindingRootScopeToFunctions });
+            const prop = node.argument.computed ? this.evaluate({ node: node.argument.property, scope: scope2, context, forceBindingRootScopeToFunctions }) : node.argument.property.name;
+            if (this.isDOMObject(obj)) {
+              throw new Error("Property assignments on DOM objects are prohibited in the CSP build");
+            }
+            this.checkForDangerousKeywords(prop);
+            const oldValue = obj[prop];
+            if (node.operator === "++") {
+              obj[prop] = oldValue + 1;
+            } else if (node.operator === "--") {
+              obj[prop] = oldValue - 1;
+            }
+            return node.prefix ? obj[prop] : oldValue;
+          }
+          throw new Error("Invalid update expression target");
+        case "BinaryExpression":
+          const left = this.evaluate({ node: node.left, scope: scope2, context, forceBindingRootScopeToFunctions });
+          const evalRight = () => this.evaluate({ node: node.right, scope: scope2, context, forceBindingRootScopeToFunctions });
+          if (node.operator === "&&") return left && evalRight();
+          if (node.operator === "||") return left || evalRight();
+          const right = evalRight();
+          switch (node.operator) {
+            case "+":
+              return left + right;
+            case "-":
+              return left - right;
+            case "*":
+              return left * right;
+            case "/":
+              return left / right;
+            case "%":
+              return left % right;
+            case "==":
+              return left == right;
+            case "!=":
+              return left != right;
+            case "===":
+              return left === right;
+            case "!==":
+              return left !== right;
+            case "<":
+              return left < right;
+            case ">":
+              return left > right;
+            case "<=":
+              return left <= right;
+            case ">=":
+              return left >= right;
+            default:
+              throw new Error(`Unknown binary operator: ${node.operator}`);
+          }
+        case "ConditionalExpression":
+          const test = this.evaluate({ node: node.test, scope: scope2, context, forceBindingRootScopeToFunctions });
+          return test ? this.evaluate({ node: node.consequent, scope: scope2, context, forceBindingRootScopeToFunctions }) : this.evaluate({ node: node.alternate, scope: scope2, context, forceBindingRootScopeToFunctions });
+        case "AssignmentExpression":
+          const value = this.evaluate({ node: node.right, scope: scope2, context, forceBindingRootScopeToFunctions });
+          if (node.left.type === "Identifier") {
+            scope2[node.left.name] = value;
+            return value;
+          } else if (node.left.type === "MemberExpression") {
+            const obj = this.evaluate({ node: node.left.object, scope: scope2, context, forceBindingRootScopeToFunctions });
+            const prop = node.left.computed ? this.evaluate({ node: node.left.property, scope: scope2, context, forceBindingRootScopeToFunctions }) : node.left.property.name;
+            if (this.isDOMObject(obj)) {
+              throw new Error("Property assignments on DOM objects are prohibited in the CSP build");
+            }
+            this.checkForDangerousKeywords(prop);
+            obj[prop] = value;
+            return value;
+          }
+          throw new Error("Invalid assignment target");
+        case "ArrayExpression":
+          return node.elements.map((el) => this.evaluate({ node: el, scope: scope2, context, forceBindingRootScopeToFunctions }));
+        case "ObjectExpression":
+          const result = {};
+          for (const prop of node.properties) {
+            const key = prop.computed ? this.evaluate({ node: prop.key, scope: scope2, context, forceBindingRootScopeToFunctions }) : prop.key.type === "Identifier" ? prop.key.name : this.evaluate({ node: prop.key, scope: scope2, context, forceBindingRootScopeToFunctions });
+            const value2 = this.evaluate({ node: prop.value, scope: scope2, context, forceBindingRootScopeToFunctions });
+            result[key] = value2;
+          }
+          return result;
+        default:
+          throw new Error(`Unknown node type: ${node.type}`);
+      }
+    }
+    isDOMObject(obj) {
+      return obj instanceof Node || typeof CSSStyleDeclaration !== "undefined" && obj instanceof CSSStyleDeclaration || typeof DOMStringMap !== "undefined" && obj instanceof DOMStringMap || typeof DOMTokenList !== "undefined" && obj instanceof DOMTokenList || typeof NamedNodeMap !== "undefined" && obj instanceof NamedNodeMap;
+    }
+    checkForDangerousKeywords(keyword) {
+      let blacklist = [
+        "constructor",
+        "prototype",
+        "__proto__",
+        "__defineGetter__",
+        "__defineSetter__",
+        "insertAdjacentHTML",
+        "setAttribute",
+        "setAttributeNS",
+        "setAttributeNode",
+        "setAttributeNodeNS"
+      ];
+      if (blacklist.includes(keyword)) {
+        throw new Error(`Accessing "${keyword}" is prohibited in the CSP build`);
+      }
+    }
+    checkForDangerousValues(prop) {
+      if (prop === null) {
+        return;
+      }
+      if (typeof prop !== "object" && typeof prop !== "function") {
+        return;
+      }
+      if (safemap.has(prop)) {
+        return;
+      }
+      if (prop instanceof HTMLIFrameElement || prop instanceof HTMLScriptElement) {
+        throw new Error("Accessing iframes and scripts is prohibited in the CSP build");
+      }
+      if (globals.has(prop)) {
+        throw new Error("Accessing global variables is prohibited in the CSP build");
+      }
+      safemap.set(prop, true);
+      return true;
+    }
+  };
+  function generateRuntimeFunction(expression) {
+    try {
+      const tokenizer = new Tokenizer(expression);
+      const tokens = tokenizer.tokenize();
+      const parser = new Parser(tokens);
+      const ast = parser.parse();
+      const evaluator = new Evaluator();
+      return function(options = {}) {
+        const { scope: scope2 = {}, context = null, forceBindingRootScopeToFunctions = false } = options;
+        return evaluator.evaluate({ node: ast, scope: scope2, context, forceBindingRootScopeToFunctions });
+      };
+    } catch (error2) {
+      throw new Error(`CSP Parser Error: ${error2.message}`);
+    }
+  }
+
+  // ../../../node_modules/.pnpm/@alpinejs+csp@3.16.1/node_modules/@alpinejs/csp/src/evaluator.js
+  function cspRawEvaluator(el, expression, extras = {}) {
+    let dataStack = generateDataStack(el);
+    let scope2 = mergeProxies([extras.scope ?? {}, ...dataStack]);
+    let params = extras.params ?? [];
+    let evaluate2 = generateRuntimeFunction(expression);
+    let result = evaluate2({
+      scope: scope2,
+      forceBindingRootScopeToFunctions: true
+    });
+    if (typeof result === "function" && shouldAutoEvaluateFunctions) {
+      return result.apply(scope2, params);
+    }
+    return result;
+  }
+  function cspEvaluator(el, expression) {
+    let dataStack = generateDataStack(el);
+    if (typeof expression === "function") {
+      return generateEvaluatorFromFunction(dataStack, expression);
+    }
+    let evaluator = generateEvaluator(el, expression, dataStack);
+    return tryCatch.bind(null, el, expression, evaluator);
+  }
+  function generateDataStack(el) {
+    let overriddenMagics = {};
+    injectMagics(overriddenMagics, el);
+    return [overriddenMagics, ...closestDataStack(el)];
+  }
+  function generateEvaluator(el, expression, dataStack) {
+    if (el instanceof HTMLIFrameElement) {
+      throw new Error("Evaluating expressions on an iframe is prohibited in the CSP build");
+    }
+    if (el instanceof HTMLScriptElement) {
+      throw new Error("Evaluating expressions on a script is prohibited in the CSP build");
+    }
+    return (receiver = () => {
+    }, { scope: scope2 = {}, params = [] } = {}) => {
+      let completeScope = mergeProxies([scope2, ...dataStack]);
+      let evaluate2 = generateRuntimeFunction(expression);
+      let returnValue = evaluate2({
+        scope: completeScope,
+        forceBindingRootScopeToFunctions: true
+      });
+      if (shouldAutoEvaluateFunctions && typeof returnValue === "function") {
+        let nextReturnValue = returnValue.apply(returnValue, params);
+        if (nextReturnValue instanceof Promise) {
+          nextReturnValue.then((i) => receiver(i));
+        } else {
+          receiver(nextReturnValue);
+        }
+      } else if (typeof returnValue === "object" && returnValue instanceof Promise) {
+        returnValue.then((i) => receiver(i));
+      } else {
+        receiver(returnValue);
+      }
+    };
+  }
 
   // ../../../node_modules/.pnpm/@vue+shared@3.1.5/node_modules/@vue/shared/dist/shared.esm-bundler.js
   function makeMap(str, expectsLowerCase) {
@@ -2454,13 +3228,13 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return Boolean(r && r.__v_isRef === true);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$nextTick.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$nextTick.js
   magic("nextTick", () => nextTick);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$dispatch.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$dispatch.js
   magic("dispatch", (el) => dispatch.bind(dispatch, el));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$watch.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$watch.js
   magic("watch", (el, { evaluateLater: evaluateLater2, cleanup: cleanup2 }) => (key, callback) => {
     let evaluate2 = evaluateLater2(key);
     let getter = () => {
@@ -2472,16 +3246,16 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     cleanup2(unwatch);
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$store.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$store.js
   magic("store", getStores);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$data.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$data.js
   magic("data", (el) => scope(el));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$root.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$root.js
   magic("root", (el) => closestRoot(el));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$refs.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$refs.js
   magic("refs", (el) => {
     if (el._x_refs_proxy) return el._x_refs_proxy;
     el._x_refs_proxy = mergeProxies(getArrayOfRefObject(el));
@@ -2495,7 +3269,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return refObjects;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/ids.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/ids.js
   var globalIdMemo = {};
   function findAndIncrementId(name) {
     if (!globalIdMemo[name]) globalIdMemo[name] = 0;
@@ -2511,7 +3285,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     if (!el._x_ids[name]) el._x_ids[name] = findAndIncrementId(name);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$id.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$id.js
   magic("id", (el, { cleanup: cleanup2 }) => (name, key = null) => {
     let cacheKey = `${name}${key ? `-${key}` : ""}`;
     return cacheIdByNameOnElement(el, cacheKey, cleanup2, () => {
@@ -2536,17 +3310,17 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return output;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/$el.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/$el.js
   magic("el", (el) => el);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/magics/index.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/magics/index.js
   warnMissingPluginMagic("Focus", "focus", "focus");
   warnMissingPluginMagic("Persist", "persist", "persist");
   function warnMissingPluginMagic(name, magicName, slug) {
     magic(magicName, (el) => warn(`You can't use [$${magicName}] without first installing the "${name}" plugin here: https://alpinejs.dev/plugins/${slug}`, el));
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-modelable.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-modelable.js
   directive("modelable", (el, { expression }, { effect: effect3, evaluateLater: evaluateLater2, cleanup: cleanup2 }) => {
     let func = evaluateLater2(expression);
     let innerGet = () => {
@@ -2586,7 +3360,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     });
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-teleport.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-teleport.js
   directive("teleport", (el, { modifiers, expression }, { cleanup: cleanup2 }) => {
     if (el.tagName.toLowerCase() !== "template") warn("x-teleport can only be used on a <template> tag", el);
     let target = getTarget(expression);
@@ -2643,7 +3417,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return target;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-ignore.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-ignore.js
   var handler = () => {
   };
   handler.inline = (el, { modifiers }, { cleanup: cleanup2 }) => {
@@ -2654,12 +3428,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   };
   directive("ignore", handler);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-effect.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-effect.js
   directive("effect", skipDuringClone((el, { expression }, { effect: effect3 }) => {
     effect3(evaluateLater(el, expression));
   }));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/utils/on.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/utils/on.js
   function on(el, event, modifiers, callback) {
     let listenerTarget = el;
     let handler4 = (e) => callback(e);
@@ -2811,7 +3585,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }).filter((modifier) => modifier);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-model.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-model.js
   directive("model", (el, { modifiers, expression }, { effect: effect3, cleanup: cleanup2 }) => {
     let scopeTarget = el;
     if (modifiers.includes("parent")) {
@@ -2934,6 +3708,13 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         }
       });
     };
+    if (el.tagName === "SELECT") {
+      let observer2 = new MutationObserver(() => {
+        el._x_forceModelUpdate(getValue());
+      });
+      observer2.observe(el, { childList: true });
+      cleanup2(() => observer2.disconnect());
+    }
     effect3(() => {
       let value = getValue();
       if (modifiers.includes("unintrusive") && document.activeElement.isSameNode(el)) return;
@@ -3010,10 +3791,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return value !== null && typeof value === "object" && typeof value.get === "function" && typeof value.set === "function";
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-cloak.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-cloak.js
   directive("cloak", (el) => queueMicrotask(() => mutateDom(() => el.removeAttribute(prefix("cloak")))));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-init.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-init.js
   addInitSelector(() => `[${prefix("init")}]`);
   directive("init", skipDuringClone((el, { expression }, { evaluate: evaluate2 }) => {
     if (typeof expression === "string") {
@@ -3022,7 +3803,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return evaluate2(expression, {}, false);
   }));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-text.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-text.js
   directive("text", (el, { expression }, { effect: effect3, evaluateLater: evaluateLater2 }) => {
     let evaluate2 = evaluateLater2(expression);
     effect3(() => {
@@ -3034,7 +3815,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     });
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-html.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-html.js
   directive("html", (el, { expression }, { effect: effect3, evaluateLater: evaluateLater2 }) => {
     let evaluate2 = evaluateLater2(expression);
     effect3(() => {
@@ -3049,7 +3830,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     });
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-bind.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-bind.js
   mapAttributes(startingWith(":", into(prefix("bind:"))));
   var handler2 = (el, { value, modifiers, expression, original }, { effect: effect3, cleanup: cleanup2 }) => {
     if (!value) {
@@ -3087,10 +3868,13 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     el._x_keyExpression = expression;
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-data.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-data.js
   addRootSelector(() => `[${prefix("data")}]`);
+  var dataForReconciliation = /* @__PURE__ */ Symbol();
   directive("data", ((el, { expression }, { cleanup: cleanup2 }) => {
     if (shouldSkipRegisteringDataDuringClone(el)) return;
+    let dataToReconcile = el[dataForReconciliation];
+    if (dataToReconcile?.expression === expression) return;
     expression = expression === "" ? "{}" : expression;
     let magicContext = {};
     injectMagics(magicContext, el);
@@ -3099,15 +3883,49 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     let data2 = evaluate(el, expression, { scope: dataProviderContext });
     if (data2 === void 0 || data2 === true) data2 = {};
     injectMagics(data2, el);
-    let reactiveData = reactive(data2);
-    initInterceptors(reactiveData);
+    let reactiveData;
+    if (dataToReconcile?.reactiveData) {
+      reactiveData = dataToReconcile.reactiveData;
+      reconcileData(reactiveData, data2);
+      let initialized = { expression };
+      el[dataForReconciliation] = initialized;
+      queueMicrotask(() => {
+        if (el[dataForReconciliation] === initialized) {
+          delete el[dataForReconciliation];
+        }
+      });
+    } else {
+      reactiveData = reactive(data2);
+    }
+    initInterceptors(reactiveData, cleanup2);
     let undo = addScopeToNode(el, reactiveData);
     reactiveData["init"] && evaluate(el, reactiveData["init"]);
     cleanup2(() => {
       reactiveData["destroy"] && evaluate(el, reactiveData["destroy"]);
       undo();
+      let removed = { reactiveData };
+      el[dataForReconciliation] = removed;
+      queueMicrotask(() => {
+        if (el[dataForReconciliation] === removed) {
+          delete el[dataForReconciliation];
+        }
+      });
     });
   }));
+  function reconcileData(target, source) {
+    Object.keys(source).forEach((key) => {
+      let descriptor = Object.getOwnPropertyDescriptor(source, key);
+      let existingDescriptor = Object.getOwnPropertyDescriptor(target, key);
+      if (descriptor.get || descriptor.set || existingDescriptor?.get || existingDescriptor?.set) {
+        if (existingDescriptor) delete target[key];
+        if (!existingDescriptor) target[key] = void 0;
+        descriptor.get || descriptor.set ? Object.defineProperty(target, key, descriptor) : target[key] = source[key];
+      } else {
+        target[key] = source[key];
+      }
+    });
+    Object.keys(target).filter((key) => !Object.prototype.hasOwnProperty.call(source, key)).forEach((key) => delete target[key]);
+  }
   interceptClone((from, to) => {
     if (from._x_dataStack) {
       to._x_dataStack = from._x_dataStack;
@@ -3120,7 +3938,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return el.hasAttribute("data-has-alpine-state");
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-show.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-show.js
   directive("show", (el, { modifiers, expression }, { effect: effect3 }) => {
     let evaluate2 = evaluateLater(el, expression);
     if (!el._x_doHide) el._x_doHide = () => {
@@ -3167,8 +3985,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }));
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-for.js
-  directive("for", (el, { expression }, { effect: effect3, cleanup: cleanup2 }) => {
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-for.js
+  directive("for", skipDuringClone((el, { expression }, { effect: effect3, cleanup: cleanup2 }) => {
     let iteratorNames = parseForExpression(expression);
     let evaluateItems = evaluateLater(el, iteratorNames.items);
     let evaluateKey = evaluateLater(
@@ -3186,8 +4004,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         })
       );
       delete el._x_lookup;
+      delete el._x_lastRenderedEl;
     });
-  });
+  }));
   function refreshScope(scope2) {
     return (newScope) => {
       Object.entries(newScope).forEach(([key, value]) => {
@@ -3256,7 +4075,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           prev.after(clone2);
           prev = clone2;
         });
-        skipDuringClone(() => added.forEach((clone2) => initTree(clone2)))();
+        added.forEach((clone2) => initTree(clone2));
+        if (prev !== templateEl) {
+          templateEl._x_lastRenderedEl = prev;
+        } else {
+          delete templateEl._x_lastRenderedEl;
+        }
       });
     });
   }
@@ -3307,7 +4131,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     return typeof subject === "object" && !Array.isArray(subject);
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-ref.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-ref.js
   function handler3() {
   }
   handler3.inline = (el, { expression }, { cleanup: cleanup2 }) => {
@@ -3319,8 +4143,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
   };
   directive("ref", handler3);
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-if.js
-  directive("if", (el, { expression }, { effect: effect3, cleanup: cleanup2 }) => {
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-if.js
+  directive("if", skipDuringClone((el, { expression }, { effect: effect3, cleanup: cleanup2 }) => {
     if (el.tagName.toLowerCase() !== "template") warn("x-if can only be used on a <template> tag", el);
     let evaluate2 = evaluateLater(el, expression);
     let show = () => {
@@ -3329,15 +4153,17 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       addScopeToNode(clone2, {}, el);
       mutateDom(() => {
         el.after(clone2);
-        skipDuringClone(() => initTree(clone2))();
+        initTree(clone2);
       });
       el._x_currentIfEl = clone2;
+      el._x_lastRenderedEl = clone2;
       el._x_undoIf = () => {
         mutateDom(() => {
           destroyTree(clone2);
           clone2.remove();
         });
         delete el._x_currentIfEl;
+        delete el._x_lastRenderedEl;
       };
       return clone2;
     };
@@ -3350,9 +4176,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       value ? show() : hide();
     }));
     cleanup2(() => el._x_undoIf && el._x_undoIf());
-  });
+  }));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-id.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-id.js
   directive("id", (el, { expression }, { evaluate: evaluate2 }) => {
     let names = evaluate2(expression);
     names.forEach((name) => setIdRoot(el, name));
@@ -3363,7 +4189,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     }
   });
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/x-on.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/x-on.js
   mapAttributes(startingWith("@", into(prefix("on:"))));
   directive("on", skipDuringClone((el, { value, modifiers, expression }, { cleanup: cleanup2 }) => {
     let evaluate2 = expression ? evaluateLater(el, expression) : () => {
@@ -3379,7 +4205,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     cleanup2(() => removeListener());
   }));
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/directives/index.js
+  // ../../../node_modules/.pnpm/alpinejs@3.16.1/node_modules/alpinejs/src/directives/index.js
   warnMissingPluginDirective("Collapse", "collapse", "collapse");
   warnMissingPluginDirective("Intersect", "intersect", "intersect");
   warnMissingPluginDirective("Focus", "trap", "focus");
@@ -3388,13 +4214,18 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     directive(directiveName, (el) => warn(`You can't use [x-${directiveName}] without first installing the "${name}" plugin here: https://alpinejs.dev/plugins/${slug}`, el));
   }
 
-  // ../../../node_modules/.pnpm/alpinejs@3.15.12/node_modules/alpinejs/src/index.js
-  alpine_default.setEvaluator(normalEvaluator);
-  alpine_default.setRawEvaluator(normalRawEvaluator);
+  // ../../../node_modules/.pnpm/@alpinejs+csp@3.16.1/node_modules/@alpinejs/csp/src/directives/x-html.js
+  directive("html", (el, { expression }) => {
+    handleError(new Error("Using the x-html directive is prohibited in the CSP build"), el);
+  });
+
+  // ../../../node_modules/.pnpm/@alpinejs+csp@3.16.1/node_modules/@alpinejs/csp/src/index.js
+  alpine_default.setEvaluator(cspEvaluator);
+  alpine_default.setRawEvaluator(cspRawEvaluator);
   alpine_default.setReactivityEngine({ reactive: reactive2, effect: effect2, release: stop, raw: toRaw });
   var src_default = alpine_default;
 
-  // ../../../node_modules/.pnpm/@alpinejs+morph@3.15.12/node_modules/@alpinejs/morph/dist/module.esm.js
+  // ../../../node_modules/.pnpm/@alpinejs+morph@3.16.1/node_modules/@alpinejs/morph/dist/module.esm.js
   function morph(from, toHtml, options) {
     monkeyPatchDomSetAttributeToAllowAtSymbols();
     let context = createMorphContext(options);
@@ -3690,6 +4521,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         }
         let currentFromNext = currentFrom && getNextSibling(from, currentFrom);
         context.patch(currentFrom, currentTo);
+        if (currentFrom._x_lastRenderedEl) {
+          currentFromNext = getNextSibling(from, currentFrom._x_lastRenderedEl);
+        }
         currentTo = currentTo && getNextSibling(to, currentTo);
         currentFrom = currentFromNext;
       }
@@ -5390,7 +6224,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     var C = globalThis.Citry = globalThis.Citry || {};
     if (!C.alpine) throw new Error("[Citry] Alpine: the core hook broker is not loaded.");
     var alpineRuntime = C.alpine;
-    if (!alpineRuntime._install(src_default, module_default)) return;
+    if (!alpineRuntime._install(src_default, module_default, "csp")) return;
     if (C.events && !C.events._stubQueue) return;
     var bootstrapStub = C.events || null;
     var pointedError = function(message) {
@@ -6085,11 +6919,11 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var current = document.currentScript;
       var tag;
       var src = current && typeof current.src === "string" ? current.src : "";
-      if (!/\/runtime\.js([?#]|$)/.test(src)) {
-        tag = document.querySelector('script[src$="ext/events/runtime.js"]');
+      if (!/\/runtime(?:-csp)?\.js([?#]|$)/.test(src)) {
+        tag = document.querySelector('script[src*="ext/events/runtime.js"],script[src*="ext/events/runtime-csp.js"]');
         src = tag ? tag.src : "";
       }
-      var match = /^(.*\/)runtime\.js([?#].*)?$/.exec(src);
+      var match = /^(.*\/)runtime(?:-csp)?\.js([?#].*)?$/.exec(src);
       return match ? match[1] : null;
     };
     var detectedEventsBase = detectEventsBase();
@@ -7287,11 +8121,11 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
     var unsentDrafts = /* @__PURE__ */ new WeakSet();
     var decodeBindSpecs = function(el) {
-      return decodeCevSpecs(el, DATA_CEV_BIND);
+      return decodeValidBindSpecs(el);
     };
     var isTwoWayBound = function(el) {
       return decodeBindSpecs(el).some(function(spec) {
-        return spec != null && spec.mode === "two";
+        return spec.binding_mode === "two-way" && classifyStateBinding(el, spec).active;
       });
     };
     var anchorForElement = function(el) {
@@ -7303,7 +8137,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var anchor = anchorForElement(el);
       if (!anchor) return false;
       return decodeBindSpecs(el).some(function(spec) {
-        return spec != null && spec.mode === "two" && typeof spec.field === "string" && Object.prototype.hasOwnProperty.call(anchor.pending, spec.field);
+        return spec.binding_mode === "two-way" && classifyStateBinding(el, spec).active && typeof spec.field === "string" && Object.prototype.hasOwnProperty.call(anchor.pending, spec.field);
       });
     };
     var applyMultipleSelectValue = function(select, value) {
@@ -7317,7 +8151,15 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var live = el;
       var incoming = toEl;
       var guardedValue;
-      if (el.tagName === "SELECT" && el.multiple && toEl.tagName === "SELECT" && toEl.multiple) {
+      var custom = isBindableCustomElement(el.tagName);
+      if (custom) {
+        try {
+          guardedValue = el.value;
+        } catch (err) {
+          reportCustomElementValueError(el, null, "read", err);
+          return;
+        }
+      } else if (el.tagName === "SELECT" && el.multiple && toEl.tagName === "SELECT" && toEl.multiple) {
         guardedValue = Array.from(el.selectedOptions, function(option) {
           return option.value;
         });
@@ -7327,7 +8169,8 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         guardedValue = live.value;
       }
       applyValueToControl(toEl, guardedValue);
-      if (live.type === "checkbox" || live.type === "radio") {
+      if (custom) {
+      } else if (live.type === "checkbox" || live.type === "radio") {
         if (live.checked) incoming.setAttribute("checked", "");
         else incoming.removeAttribute("checked");
       } else if (typeof live.value === "string") incoming.setAttribute("value", live.value);
@@ -7366,13 +8209,44 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         element.setSelectionRange(snapshot[1], snapshot[2]);
       }
     };
-    var applyValueToControl = function(el, value) {
+    var applyingStateValues = /* @__PURE__ */ new WeakSet();
+    var reportedCustomElementValueErrors = /* @__PURE__ */ new WeakMap();
+    var reportCustomElementValueError = function(el, field, operation, error2) {
+      var key = operation + ":" + (field || "");
+      var reported = reportedCustomElementValueErrors.get(el);
+      if (!reported) {
+        reported = /* @__PURE__ */ new Set();
+        reportedCustomElementValueErrors.set(el, reported);
+      }
+      if (reported.has(key)) return;
+      reported.add(key);
+      console.error(
+        "[Citry] events: could not " + operation + " " + (field ? "$state." + field : "the State value") + (operation === "read" ? " from " : " to ") + "<" + el.tagName.toLowerCase() + ">.value:",
+        error2
+      );
+    };
+    var applyValueToControl = function(el, value, field) {
       var control = el;
+      var custom;
       var nextChecked;
       var next;
-      if (el.tagName === "SELECT" && el.multiple) {
+      if (isBindableCustomElement(el.tagName)) {
+        if (!customElements.get(el.tagName.toLowerCase()) || !("value" in el)) return;
+        if (applyingStateValues.has(el)) return;
+        custom = el;
+        value = src_default.raw(value);
+        applyingStateValues.add(el);
+        try {
+          if (Object.is(custom.value, value)) return;
+          custom.value = value;
+        } catch (err) {
+          reportCustomElementValueError(el, field || null, "write", err);
+        } finally {
+          applyingStateValues.delete(el);
+        }
+      } else if (el.tagName === "SELECT" && el.multiple) {
         applyMultipleSelectValue(el, value);
-      } else if (control.type === "checkbox" || control.type === "radio") {
+      } else if (el.tagName === "INPUT" && (control.type === "checkbox" || control.type === "radio")) {
         nextChecked = Boolean(value);
         if (control.checked !== nextChecked) control.checked = nextChecked;
       } else if (typeof control.value === "string") {
@@ -7393,6 +8267,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           if (seen.has(el)) return;
           seen.add(el);
           if (guardKept.has(el)) {
+            if (!decodeBindSpecs(el).some(function(spec) {
+              return spec.binding_mode === "two-way" && classifyStateBinding(el, spec).active;
+            }))
+              return;
             guardedValue = guardKept.get(el);
             if (guardedValue !== void 0) applyValueToControl(el, guardedValue);
             return;
@@ -7400,9 +8278,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           var anchor = anchorForElement(el);
           if (!anchor || !anchor.values) return;
           decodeBindSpecs(el).forEach(function(spec) {
-            if (spec == null || typeof spec.field !== "string") return;
+            if (!classifyStateBinding(el, spec).active || typeof spec.field !== "string") return;
             if (!Object.prototype.hasOwnProperty.call(anchor.values, spec.field)) return;
-            applyValueToControl(el, anchor.values[spec.field]);
+            applyValueToControl(el, anchor.values[spec.field], spec.field);
           });
         });
       });
@@ -7751,7 +8629,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         return null;
       }
     };
-    var applyRenderAction = function(action, run) {
+    var applyRenderAction = async function(action, run) {
       var targetSpec = typeof action.target === "string" ? action.target : "";
       var swap = typeof action.swap === "string" && action.swap ? action.swap : "morph";
       if (!targetSpec) {
@@ -7839,6 +8717,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       var ownershipPlan = null;
       var adoptionRoot = null;
       var dependencyManifest = null;
+      var dependencyPreparation = null;
+      var frameworkPreparation = null;
+      var fragmentMutated = false;
+      var fragmentPreparationFailed = false;
       var priorClasses = [];
       var priorErrorBoxes = [];
       var descriptorRevisionStaged = false;
@@ -7955,8 +8837,63 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             return;
           }
           ownership._applyAdoptionPlan(ownershipPlan);
+          if (parsed.dependencyTag && dependencyManifest) {
+            try {
+              dependencyPreparation = await ownership._prepareDependency(ownershipTransaction, dependencyManifest);
+            } catch (err) {
+              fragmentPreparationFailed = true;
+              throw err;
+            }
+            if (selfRender && !epochAllowsApply(run, run.anchor)) {
+              ownership._rollbackDependency(
+                dependencyPreparation,
+                new Error("the incoming render became stale while its framework manifests prepared")
+              );
+              dependencyPreparation = null;
+              ownership._abortAdoption(
+                ownershipTransaction,
+                new Error("the incoming render became stale while its framework manifests prepared")
+              );
+              dropStaleEpoch(run, "a self-render");
+              return;
+            }
+          }
         }
         const acceptedIncomingIds = ownershipPlan?.acceptedIncomingRenderIds ?? null;
+        const frameworkManager = globalThis.Citry?.manager;
+        if (parsed.tags.length && frameworkManager?._prepareFrameworkManifests) {
+          try {
+            frameworkPreparation = await frameworkManager._prepareFrameworkManifests(parsed.tags, {
+              acceptedOwners: acceptedIncomingIds,
+              candidateRoot: parsed.fragment
+            });
+          } catch (err) {
+            fragmentPreparationFailed = true;
+            throw err;
+          }
+          if (selfRender && !epochAllowsApply(run, run.anchor)) {
+            frameworkManager._rollbackFrameworkManifests?.(
+              frameworkPreparation,
+              new Error("the incoming render became stale while its framework manifests prepared")
+            );
+            frameworkPreparation = null;
+            if (dependencyPreparation && ownership) {
+              ownership._rollbackDependency(
+                dependencyPreparation,
+                new Error("the incoming render became stale while its framework manifests prepared")
+              );
+              dependencyPreparation = null;
+            }
+            if (ownershipTransaction && ownership) {
+              ownership._abortAdoption(
+                ownershipTransaction,
+                new Error("the incoming render became stale while its framework manifests prepared")
+              );
+            }
+            dropStaleEpoch(run, "a self-render");
+            return;
+          }
+        }
         if (fragmentEvents.staged) {
           const acceptedClassIds = /* @__PURE__ */ new Set();
           fragmentEvents.staged.instances.forEach(function(meta) {
@@ -8045,6 +8982,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           });
         }
         if (ownershipTransaction && ownership) ownership._activateAdoption(ownershipTransaction);
+        fragmentMutated = true;
         regions.forEach(function(regionEls, index) {
           var stripOuterCaps = parsed.graphRevision != null && isInstanceTarget && (swap === "morph" || swap === "replace");
           if (parsed.graphRevision != null && isInstanceTarget && (swap === "morph" || swap === "replace") && ownership && targetAnchor?.clientAnchor) {
@@ -8065,14 +9003,24 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           }
           applyFragmentToRegion(regionEls, parsed, swap, state, index === 0, placementIds[index], stripOuterCaps);
         });
+        if (frameworkPreparation) {
+          globalThis.Citry?.manager?._commitFrameworkManifests?.(frameworkPreparation);
+        }
         let adoptionReady = Promise.resolve();
         if (ownershipTransaction && ownership) {
           ownership._commitAdoption(ownershipTransaction);
           consumedOwnershipRevisions.add(parsed.graphRevision);
           if (parsed.dependencyTag && dependencyManifest) {
-            adoptionReady = ownership._applyDependency(ownershipTransaction, dependencyManifest, parsed.dependencyTag);
+            adoptionReady = ownership._applyDependency(
+              ownershipTransaction,
+              dependencyManifest,
+              parsed.dependencyTag,
+              dependencyPreparation
+            );
+            dependencyPreparation = null;
           }
         }
+        frameworkPreparation = null;
         state.pendingFinish.forEach(function(pending) {
           finishRender(pending.anchor, pending.oldComponentId);
         });
@@ -8094,6 +9042,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         scheduleAnchorSweep();
         return adoptionReady;
       } catch (err) {
+        if (frameworkPreparation) {
+          globalThis.Citry?.manager?._rollbackFrameworkManifests?.(frameworkPreparation, err);
+        }
+        if (dependencyPreparation && ownership) ownership._rollbackDependency(dependencyPreparation, err);
         const restoredClassIds = /* @__PURE__ */ new Set();
         if (descriptorRevisionStaged && parsed.graphRevision != null) {
           restoreDescriptorRevision(parsed.graphRevision, hadDescriptorRevision, priorDescriptorRevision);
@@ -8120,10 +9072,12 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             if (failedAnchor && failedAnchor !== run.anchor) retireAnchor(failedAnchor);
           });
         }
-        if (selfRender && run.anchor && run.anchor.componentId != null) retireAnchor(run.anchor);
-        targetEls.forEach(function(element) {
-          if (element.isConnected) element.remove();
-        });
+        if (fragmentMutated || !fragmentPreparationFailed) {
+          if (selfRender && run.anchor && run.anchor.componentId != null) retireAnchor(run.anchor);
+          targetEls.forEach(function(element) {
+            if (element.isConnected) element.remove();
+          });
+        }
         scheduleAnchorSweep();
         throw err;
       }
@@ -8297,10 +9251,70 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       try {
         parsed = JSON.parse(fromBase64(raw2));
         if (Array.isArray(parsed)) specs = parsed;
+        else console.error("[Citry] events: ignored a " + attrName + " payload because it is not a JSON array.");
       } catch (err) {
         console.error("[Citry] events: failed to decode a " + attrName + " spec:", err);
       }
       perAttr.set(attrName, { raw: raw2, specs });
+      return specs;
+    };
+    var STATE_BINDING_KEYS = ["binding_mode", "cid", "debounce", "field", "handler", "key", "lazy", "on", "throttle"];
+    var validBindSpecCache = /* @__PURE__ */ new WeakMap();
+    var isNullableNonnegativeNumber = function(value) {
+      return value === null || typeof value === "number" && Number.isInteger(value) && value >= 0;
+    };
+    var validateStateBindingSpec = function(value) {
+      if (value == null || typeof value !== "object" || Array.isArray(value)) return "the entry is not an object";
+      var spec = value;
+      var keys = Object.keys(value).sort();
+      if (keys.length !== STATE_BINDING_KEYS.length || keys.some(function(key, index) {
+        return key !== STATE_BINDING_KEYS[index];
+      })) {
+        return "the entry does not have the exact canonical keys";
+      }
+      if (typeof spec.cid !== "string" || !spec.cid) return "'cid' must be a non-empty string";
+      if (typeof spec.field !== "string" || !spec.field) return "'field' must be a non-empty string";
+      if (spec.binding_mode !== "one-way" && spec.binding_mode !== "two-way") {
+        return "'binding_mode' must be 'one-way' or 'two-way'";
+      }
+      if (typeof spec.lazy !== "boolean") return "'lazy' must be a boolean";
+      if (spec.on !== null && (typeof spec.on !== "string" || !spec.on)) {
+        return "'on' must be null or a non-empty string";
+      }
+      if (spec.key !== null && spec.key !== "enter" && spec.key !== "escape") {
+        return "'key' must be null, 'enter', or 'escape'";
+      }
+      if (!isNullableNonnegativeNumber(spec.debounce)) return "'debounce' must be null or a non-negative integer";
+      if (!isNullableNonnegativeNumber(spec.throttle)) return "'throttle' must be null or a non-negative integer";
+      if (spec.binding_mode === "one-way") {
+        if (spec.handler !== null || spec.lazy || spec.on !== null || spec.key !== null || spec.debounce !== null || spec.throttle !== null) {
+          return "a one-way binding cannot carry update-event or timing fields";
+        }
+      } else if (typeof spec.handler !== "string" || !spec.handler) {
+        return "a two-way binding requires a non-empty 'handler'";
+      } else if (spec.lazy && spec.on !== null) {
+        return "a two-way binding cannot combine 'lazy' with an explicit 'on' event";
+      }
+      return null;
+    };
+    var decodeValidBindSpecs = function(el) {
+      var raw2 = el.getAttribute(DATA_CEV_BIND) || "";
+      if (!raw2) return [];
+      var cached = validBindSpecCache.get(el);
+      if (cached && cached.raw === raw2) return cached.specs;
+      var specs = [];
+      var invalid = false;
+      decodeCevSpecs(el, DATA_CEV_BIND).forEach(function(value, index) {
+        var error2 = validateStateBindingSpec(value);
+        if (error2) {
+          invalid = true;
+          console.error("[Citry] events: ignored invalid data-cev-bind spec " + index + ": " + error2 + ".");
+          return;
+        }
+        specs.push(value);
+      });
+      if (invalid) specs = [];
+      validBindSpecCache.set(el, { raw: raw2, specs });
       return specs;
     };
     var evaluateBindingArgs = function(el, bindingName, handler4, expression, event) {
@@ -8477,48 +9491,189 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       if (expected.size) polledElements.add(el);
       else polledElements.delete(el);
     };
-    var resolveUpdateEventType = function(el, spec) {
-      var inputType;
-      if (typeof spec.on === "string" && spec.on) return spec.on;
-      var tag = el.tagName;
-      if (tag === "SELECT") return "change";
-      if (tag === "TEXTAREA") return spec.lazy === true ? "change" : "input";
-      if (tag === "INPUT") {
-        inputType = el.type;
-        if (inputType === "file") return null;
-        if (inputType === "checkbox" || inputType === "radio") return "change";
-        return spec.lazy === true ? "change" : "input";
-      }
-      return null;
+    var TWO_WAY_INPUT_TYPES = /* @__PURE__ */ new Set([
+      "checkbox",
+      "color",
+      "date",
+      "datetime-local",
+      "email",
+      "month",
+      "number",
+      "password",
+      "radio",
+      "range",
+      "search",
+      "tel",
+      "text",
+      "time",
+      "url",
+      "week"
+    ]);
+    var TEXTUAL_INPUT_TYPES = /* @__PURE__ */ new Set(["email", "password", "search", "tel", "text", "url"]);
+    var UNSUPPORTED_INPUT_TYPES = /* @__PURE__ */ new Set(["button", "file", "image", "reset", "submit"]);
+    var RESERVED_HYPHENATED_TAGS = /* @__PURE__ */ new Set([
+      "annotation-xml",
+      "color-profile",
+      "font-face",
+      "font-face-format",
+      "font-face-name",
+      "font-face-src",
+      "font-face-uri",
+      "missing-glyph"
+    ]);
+    var isBindableCustomElement = function(tag) {
+      var normalized = tag.toLowerCase();
+      return /^[a-z]/.test(normalized) && normalized.includes("-") && !normalized.startsWith("c-") && !RESERVED_HYPHENATED_TAGS.has(normalized);
     };
-    var resolveNaturalDraftEventType = function(el) {
+    var observedCustomElementDefinitions = /* @__PURE__ */ new Set();
+    var observeCustomElementDefinition = function(name) {
+      if (customElements.get(name) || observedCustomElementDefinitions.has(name)) return;
+      observedCustomElementDefinitions.add(name);
+      customElements.whenDefined(name).then(
+        function() {
+          scheduleBindingScan();
+        },
+        function(err) {
+          console.error("[Citry] events: could not observe the <" + name + "> custom-element definition:", err);
+        }
+      );
+    };
+    var inactiveStateBinding = function(signature, error2) {
+      return { active: false, signature, updateType: null, draftType: null, error: error2 };
+    };
+    var classifyStateBinding = function(el, spec) {
       var tag = el.tagName;
-      if (tag === "SELECT") return "change";
-      if (tag === "TEXTAREA") return "input";
-      if (tag !== "INPUT") return null;
-      var inputType = el.type;
-      if (inputType === "file") return null;
-      if (inputType === "checkbox" || inputType === "radio") return "change";
-      return "input";
+      var mode = spec.binding_mode;
+      var updateType = null;
+      var draftType = null;
+      var signature;
+      var customName;
+      var rawType;
+      var inputType;
+      if (tag === "INPUT") {
+        rawType = el.getAttribute("type");
+        inputType = rawType == null || rawType === "" ? "text" : rawType.toLowerCase();
+        signature = "input:" + inputType + ":" + mode;
+        if (!TWO_WAY_INPUT_TYPES.has(inputType)) {
+          if (inputType === "hidden") {
+            if (mode !== "one-way") {
+              return inactiveStateBinding(signature, '<input type="hidden"> supports one-way State bindings only');
+            }
+            return { active: true, signature, updateType: null, draftType: null, error: null };
+          }
+          if (inputType === "file") {
+            return inactiveStateBinding(signature, '<input type="file"> cannot be bound to State');
+          }
+          if (UNSUPPORTED_INPUT_TYPES.has(inputType)) {
+            return inactiveStateBinding(
+              signature,
+              '<input type="' + inputType + '"> is an action control and cannot be bound to State'
+            );
+          }
+          return inactiveStateBinding(
+            signature,
+            '<input type="' + (rawType || "") + '"> is not a recognized input type in this Citry version'
+          );
+        }
+        signature = "input:" + (TEXTUAL_INPUT_TYPES.has(inputType) ? "textual" : inputType) + ":" + mode;
+        if (mode === "two-way") {
+          if (spec.lazy && (inputType === "checkbox" || inputType === "radio")) {
+            return inactiveStateBinding(
+              signature,
+              "'.lazy' has no effect because this input already commits on 'change'"
+            );
+          }
+          updateType = spec.on || (inputType === "checkbox" || inputType === "radio" ? "change" : spec.lazy ? "change" : "input");
+          draftType = inputType === "checkbox" || inputType === "radio" ? "change" : "input";
+        }
+      } else if (tag === "SELECT") {
+        signature = "select:" + (el.multiple ? "multiple" : "single") + ":" + mode;
+        if (mode === "two-way") {
+          if (spec.lazy) {
+            return inactiveStateBinding(signature, "'.lazy' has no effect because <select> already commits on 'change'");
+          }
+          updateType = spec.on || "change";
+          draftType = "change";
+        }
+      } else if (tag === "TEXTAREA") {
+        signature = "textarea:" + mode;
+        if (mode === "two-way") {
+          updateType = spec.on || (spec.lazy ? "change" : "input");
+          draftType = "input";
+        }
+      } else if (isBindableCustomElement(tag)) {
+        customName = tag.toLowerCase();
+        signature = "custom:" + customName + ":" + mode + ":" + (spec.on || "");
+        if (mode === "two-way" && !spec.on) {
+          return inactiveStateBinding(signature, "a two-way custom-element binding requires '.on:<event>'");
+        }
+        if (!customElements.get(customName)) {
+          return {
+            active: false,
+            signature: signature + ":pending-definition",
+            updateType: null,
+            draftType: null,
+            error: null
+          };
+        }
+        if (!("value" in el)) {
+          return inactiveStateBinding(signature + ":defined", "<" + customName + "> has no 'value' property");
+        }
+        signature += ":defined";
+        if (mode === "two-way") updateType = spec.on || null;
+      } else {
+        signature = tag.toLowerCase() + ":" + mode;
+        return inactiveStateBinding(signature, "<" + tag.toLowerCase() + "> holds no value to bind");
+      }
+      return {
+        active: true,
+        signature: signature + ":" + (updateType || "") + ":" + (draftType || ""),
+        updateType,
+        draftType,
+        error: null
+      };
     };
     var readControlValue = function(el) {
       var control = el;
       var numeric;
+      if (isBindableCustomElement(el.tagName)) return el.value;
       if (el.tagName === "SELECT" && el.multiple) {
         return Array.from(el.selectedOptions, function(option) {
           return option.value;
         });
       }
-      if (control.type === "checkbox" || control.type === "radio") return control.checked;
-      if (control.type === "number" || control.type === "range") {
+      if (el.tagName === "INPUT" && (control.type === "checkbox" || control.type === "radio")) {
+        return control.checked;
+      }
+      if (el.tagName === "INPUT" && (control.type === "number" || control.type === "range")) {
         numeric = control.valueAsNumber;
         return Number.isFinite(numeric) ? numeric : control.value;
       }
       return control.value;
     };
     var warnedValuelessControl = /* @__PURE__ */ new WeakSet();
+    var reportedNonJsonControlValues = /* @__PURE__ */ new WeakMap();
+    var reportNonJsonControlValue = function(el, field, error2) {
+      var reported = reportedNonJsonControlValues.get(el);
+      if (!reported) {
+        reported = /* @__PURE__ */ new Set();
+        reportedNonJsonControlValues.set(el, reported);
+      }
+      if (reported.has(field)) return;
+      reported.add(field);
+      var message = "[Citry] events: <" + el.tagName.toLowerCase() + ">.value is not JSON-compatible, so $state." + field + " was left unchanged and the binding's handler was not sent.";
+      if (error2 === void 0) console.error(message);
+      else console.error(message, error2);
+    };
     var writeControlValueToState = function(proxy, field, el, failure) {
-      var value = readControlValue(el);
+      var value;
+      try {
+        value = readControlValue(el);
+      } catch (err) {
+        if (isBindableCustomElement(el.tagName)) reportCustomElementValueError(el, field, "read", err);
+        else console.error("[Citry] events: " + failure + " $state." + field + " because the control value threw:", err);
+        return false;
+      }
       if (value === void 0) {
         if (!warnedValuelessControl.has(el)) {
           warnedValuelessControl.add(el);
@@ -8526,6 +9681,17 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
             "[Citry] events: <" + el.tagName.toLowerCase() + "> has no value to read, so $state." + field + " was left unchanged."
           );
         }
+        return false;
+      }
+      var jsonCompatible = false;
+      try {
+        jsonCompatible = isJsonValue(value);
+      } catch (err) {
+        reportNonJsonControlValue(el, field, err);
+        return false;
+      }
+      if (!jsonCompatible) {
+        reportNonJsonControlValue(el, field);
         return false;
       }
       try {
@@ -8538,15 +9704,50 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
     var twoWayFlushStates = /* @__PURE__ */ new WeakMap();
     var pendingTwoWayFlushes = /* @__PURE__ */ new Set();
-    var twoWayStateFor = function(el, key, spec) {
+    var clearDraftIfNoPendingFlush = function(el) {
+      var perEl = twoWayFlushStates.get(el);
+      if (perEl && Array.from(perEl.values()).some(function(state) {
+        return pendingTwoWayFlushes.has(state);
+      }))
+        return;
+      unsentDrafts.delete(el);
+    };
+    var cancelTwoWayState = function(state) {
+      if (state.flushTimer) window.clearTimeout(state.flushTimer);
+      state.flushTimer = 0;
+      pendingTwoWayFlushes.delete(state);
+      var perEl = twoWayFlushStates.get(state.el);
+      if (perEl && perEl.get(state.key) === state) {
+        perEl.delete(state.key);
+        if (!perEl.size) twoWayFlushStates.delete(state.el);
+      }
+      clearDraftIfNoPendingFlush(state.el);
+    };
+    var twoWayStateFor = function(el, key, spec, activation) {
       var perEl = twoWayFlushStates.get(el);
       if (!perEl) {
         perEl = /* @__PURE__ */ new Map();
         twoWayFlushStates.set(el, perEl);
       }
       var state = perEl.get(key);
+      if (state && state.activationSignature !== activation.signature) {
+        cancelTwoWayState(state);
+        perEl = twoWayFlushStates.get(el);
+        if (!perEl) {
+          perEl = /* @__PURE__ */ new Map();
+          twoWayFlushStates.set(el, perEl);
+        }
+        state = void 0;
+      }
       if (!state) {
-        state = { el, spec, flushTimer: 0, throttleUntil: 0 };
+        state = {
+          el,
+          key,
+          spec,
+          activationSignature: activation.signature,
+          flushTimer: 0,
+          throttleUntil: 0
+        };
         perEl.set(key, state);
       }
       state.spec = spec;
@@ -8560,11 +9761,15 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       pendingTwoWayFlushes.delete(state);
       var el = state.el;
       var spec = state.spec;
+      var activation = classifyStateBinding(el, spec);
+      if (spec.binding_mode !== "two-way" || !activation.active || activation.signature !== state.activationSignature) {
+        cancelTwoWayState(state);
+        return;
+      }
       var anchor = elementIsInCurrentDocument(el) ? anchorForElement(el) : null;
       if (anchor && anchor.stateProxy != null && typeof spec.field === "string") {
-        if (writeControlValueToState(anchor.stateProxy, spec.field, el, "a two-way binding could not write")) {
-          unsentDrafts.delete(el);
-        }
+        if (!writeControlValueToState(anchor.stateProxy, spec.field, el, "a two-way binding could not write")) return;
+        unsentDrafts.delete(el);
       } else {
         unsentDrafts.delete(el);
       }
@@ -8582,9 +9787,9 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         flushTwoWayBinding(state);
       }, delayMs);
     };
-    var scheduleTwoWayUpdate = function(el, spec, key, event) {
+    var scheduleTwoWayUpdate = function(el, spec, activation, key, event) {
       if (typeof spec.key === "string" && spec.key && !keyFilterMatches(event, spec.key)) return;
-      var state = twoWayStateFor(el, key, spec);
+      var state = twoWayStateFor(el, key, spec, activation);
       unsentDrafts.add(el);
       var debounceMs = bindingTimingMs(el, spec, "debounce");
       var throttleMs = bindingTimingMs(el, spec, "throttle");
@@ -8604,14 +9809,16 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       armTwoWayFlush(state, debounceMs, throttleMs);
     };
     var runElementStateBindings = function(el, event, type) {
+      if (applyingStateValues.has(el)) return;
       decodeBindSpecs(el).forEach(function(spec, index) {
-        if (spec == null || typeof spec !== "object" || spec.mode !== "two") return;
-        var updateType = resolveUpdateEventType(el, spec);
-        if (updateType !== type) {
-          if (resolveNaturalDraftEventType(el) === type) unsentDrafts.add(el);
+        if (spec.binding_mode !== "two-way") return;
+        var activation = classifyStateBinding(el, spec);
+        if (!activation.active) return;
+        if (activation.updateType !== type) {
+          if (activation.draftType === type) unsentDrafts.add(el);
           return;
         }
-        scheduleTwoWayUpdate(el, spec, "bind:" + index, event);
+        scheduleTwoWayUpdate(el, spec, activation, "bind:" + index, event);
       });
     };
     var elementBindingListeners = /* @__PURE__ */ new WeakMap();
@@ -8651,12 +9858,11 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         }
       });
       decodeBindSpecs(el).forEach(function(spec) {
-        if (spec == null || typeof spec !== "object" || spec.mode !== "two") return;
-        var updateType = resolveUpdateEventType(el, spec);
-        if (!updateType) return;
-        expected.add(updateType);
-        var draftType = resolveNaturalDraftEventType(el);
-        if (draftType && draftType !== updateType) expected.add(draftType);
+        if (spec.binding_mode !== "two-way") return;
+        var activation = classifyStateBinding(el, spec);
+        if (!activation.active || !activation.updateType) return;
+        expected.add(activation.updateType);
+        if (activation.draftType && activation.draftType !== activation.updateType) expected.add(activation.draftType);
       });
       return expected;
     };
@@ -8693,6 +9899,11 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       pendingTwoWayFlushes.forEach(function(state) {
         var el = state.el;
         if (!elementIsInCurrentDocument(el) || anchorForElement(el) !== anchor) return;
+        var activation = classifyStateBinding(el, state.spec);
+        if (!activation.active || activation.signature !== state.activationSignature) {
+          cancelTwoWayState(state);
+          return;
+        }
         if (anchor.stateProxy == null || typeof state.spec.field !== "string") return;
         if (writeControlValueToState(anchor.stateProxy, state.spec.field, el, "could not piggyback the two-way draft of")) {
           unsentDrafts.delete(el);
@@ -8701,7 +9912,21 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
     };
     var controlBindings = /* @__PURE__ */ new WeakMap();
     var boundControls = /* @__PURE__ */ new Set();
-    var warnedUnresolvedUpdate = /* @__PURE__ */ new WeakSet();
+    var reportedStateBindingErrors = /* @__PURE__ */ new WeakMap();
+    var reportStateBindingError = function(el, spec, activation) {
+      if (!activation.error) return;
+      var key = activation.signature + ":" + activation.error;
+      var reported = reportedStateBindingErrors.get(el);
+      if (!reported) {
+        reported = /* @__PURE__ */ new Set();
+        reportedStateBindingErrors.set(el, reported);
+      }
+      if (reported.has(key)) return;
+      reported.add(key);
+      console.error(
+        "[Citry] events: ignored the :c-" + (spec.field || "?") + " binding because " + activation.error + "."
+      );
+    };
     var releaseControlBindings = function(el) {
       var record = controlBindings.get(el);
       if (record) {
@@ -8712,51 +9937,83 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
       }
       boundControls.delete(el);
     };
-    var makeApplicationEffect = function(el, anchor, field) {
+    var makeApplicationEffect = function(el, anchor, spec, activationSignature) {
       return src_default.effect(function() {
         var values = anchor.values;
         if (values == null) return;
+        var activation = classifyStateBinding(el, spec);
+        if (!activation.active || activation.signature !== activationSignature) return;
+        var field = spec.field;
         if (!Object.prototype.hasOwnProperty.call(values, field)) return;
         var value = values[field];
         if (unsentDrafts.has(el)) return;
-        applyValueToControl(el, value);
+        applyValueToControl(el, value, field);
       });
     };
     var syncControlBindings = function(el) {
       var raw2 = el.getAttribute(DATA_CEV_BIND) || "";
       var anchor = elementIsInCurrentDocument(el) ? anchorForElement(el) : null;
       var record = controlBindings.get(el);
-      if (!raw2 || !anchor || anchor.values == null) {
+      var activeSpecs = [];
+      decodeBindSpecs(el).forEach(function(spec) {
+        var activation = classifyStateBinding(el, spec);
+        if (activation.active) activeSpecs.push({ spec, activation });
+      });
+      var activationKey = activeSpecs.map(function(entry) {
+        return entry.activation.signature;
+      }).join("|");
+      if (!raw2 || !anchor || anchor.values == null || !activeSpecs.length) {
         if (record) releaseControlBindings(el);
         return;
       }
-      if (record && record.anchor === anchor && record.values === anchor.values && record.raw === raw2) return;
+      if (record && record.anchor === anchor && record.values === anchor.values && record.raw === raw2 && record.activationKey === activationKey)
+        return;
       if (record) releaseControlBindings(el);
       var effects = [];
       var liveAnchor = anchor;
-      decodeBindSpecs(el).forEach(function(spec) {
-        if (spec == null || typeof spec !== "object" || typeof spec.field !== "string") return;
-        effects.push(makeApplicationEffect(el, liveAnchor, spec.field));
+      activeSpecs.forEach(function(entry) {
+        effects.push(makeApplicationEffect(el, liveAnchor, entry.spec, entry.activation.signature));
       });
       controlBindings.set(el, {
         anchor: liveAnchor,
         values: liveAnchor.values,
         raw: raw2,
+        activationKey,
         effects
       });
       boundControls.add(el);
     };
-    var syncStateBindings = function(el) {
-      decodeBindSpecs(el).forEach(function(spec) {
-        if (spec == null || typeof spec !== "object" || spec.mode !== "two") return;
-        var type = resolveUpdateEventType(el, spec);
-        if (!type && !warnedUnresolvedUpdate.has(el)) {
-          warnedUnresolvedUpdate.add(el);
-          console.warn(
-            "[Citry] events: the two-way :c-" + (typeof spec.field === "string" ? spec.field : "?") + " binding has no update event for this control; name one with '.on:<event>' (design 5.1)."
-          );
+    var reconcilePendingTwoWayStates = function(el) {
+      var perEl = twoWayFlushStates.get(el);
+      if (!perEl) return;
+      var hasCompiledBinding = Boolean(el.getAttribute(DATA_CEV_BIND));
+      var hasAnyValidSpec = decodeBindSpecs(el).length > 0;
+      Array.from(perEl.values()).forEach(function(state) {
+        var activation = classifyStateBinding(el, state.spec);
+        if (!activation.active || activation.signature !== state.activationSignature || hasCompiledBinding && !hasAnyValidSpec) {
+          cancelTwoWayState(state);
         }
       });
+    };
+    var syncStateBindings = function(el) {
+      var specs = decodeBindSpecs(el);
+      if (specs.length && isBindableCustomElement(el.tagName)) {
+        observeCustomElementDefinition(el.tagName.toLowerCase());
+      }
+      var activeTwoWaySignatures = [];
+      specs.forEach(function(spec) {
+        var activation = classifyStateBinding(el, spec);
+        if (!activation.active) reportStateBindingError(el, spec, activation);
+        else if (spec.binding_mode === "two-way") activeTwoWaySignatures.push(activation.signature);
+      });
+      var priorRecord = controlBindings.get(el);
+      var activeTwoWayKey = activeTwoWaySignatures.join("|");
+      if (!activeTwoWaySignatures.length || priorRecord && priorRecord.activationKey.split("|").filter(function(signature) {
+        return signature.includes(":two-way:");
+      }).join("|") !== activeTwoWayKey) {
+        unsentDrafts.delete(el);
+      }
+      reconcilePendingTwoWayStates(el);
       syncControlBindings(el);
     };
     var RESERVED_FORM_FIELDS = {
@@ -8814,6 +10071,10 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
         if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_POLL)) clearPollTimers(el);
       });
       document.querySelectorAll("[" + DATA_CEV_BIND + "]").forEach(syncStateBindings);
+      pendingTwoWayFlushes.forEach(function(state) {
+        var activation = classifyStateBinding(state.el, state.spec);
+        if (!activation.active || activation.signature !== state.activationSignature) cancelTwoWayState(state);
+      });
       boundControls.forEach(function(el) {
         if (!elementIsInCurrentDocument(el) || !el.hasAttribute(DATA_CEV_BIND)) releaseControlBindings(el);
       });
@@ -9098,6 +10359,7 @@ ${expression ? 'Expression: "' + expression + '"\n\n' : ""}`, el);
           classes: classes.size,
           descriptorRevisions: descriptorRevisions.size,
           pendingDescriptorRevisionRefs: pendingDescriptorRevisionRefs.size,
+          observedCustomElementDefinitions: observedCustomElementDefinitions.size,
           bindingListenerElements: bindingListenerElements.size,
           bindingListenerTargets,
           polledElements: polledElements.size,

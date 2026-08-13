@@ -1,5 +1,6 @@
 """
-Static-typing contract of the ``citry.Events`` generic base.
+Static-typing contract of the built-in extension attributes on ``Component``
+and of the ``citry.Events`` generic base.
 
 The ``assert_type`` calls are the static half of the contract: they must stay
 green under both mypy and pyright. The check gate runs both over this file:
@@ -19,17 +20,29 @@ verified spelling matrix behind this design is
 
 from __future__ import annotations
 
+from typing import Any
+
 from typing_extensions import assert_type
 
 import citry
-from citry import Citry, Component, RouteRequest
+from citry import CacheConfig, Citry, Component, DependenciesConfig, I18n, RouteRequest
 from citry import Events as EventsBase
 from citry.ext.events import EventsExtension
 
 app = Citry()
 
 assert_type(Component.State, type | None)
+assert_type(Component.Cache, type | None)
+assert_type(Component.Dependencies, type | None)
 assert_type(Component.Events, type | None)
+assert_type(Component.I18n, type | None)
+
+
+def _assert_component_extension_types(component: Component) -> None:
+    assert_type(component.cache, CacheConfig)
+    assert_type(component.dependencies, DependenciesConfig)
+    assert_type(component.events, EventsBase[Any])
+    assert_type(component.i18n, I18n)
 
 
 class TodoState:

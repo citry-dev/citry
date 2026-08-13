@@ -214,3 +214,11 @@ interfaces:
   - {id: ctable-empty-slot-data, kind: record, name: CTableEmptySlotData, entries: []}
   - {id: ctable-loading-slot-data, kind: record, name: CTableLoadingSlotData, entries: []}
   - {id: ctable-error-slot-data, kind: record, name: CTableErrorSlotData, entries: []}
+
+translations:
+  - id: ctable-translations
+    component: CTable
+    entries:
+      - {id: loading, key: citry-ui-table-loading, purpose: Labels and announces the loading state., variables: None, override: '`loading_label` input or `loading` slot', updates: '$c-tr updates component fallback text and the announcer.'}
+      - {id: empty, key: citry-ui-table-empty, purpose: Labels and announces an empty ready state., variables: None, override: '`empty_label` input or `empty` slot', updates: '$c-tr updates component fallback text and the announcer.'}
+      - {id: error, key: citry-ui-table-error, purpose: Labels and announces the error state., variables: None, override: '`error_label` input or `error` slot', updates: '$c-tr updates component fallback text and the announcer.'}

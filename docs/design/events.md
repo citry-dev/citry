@@ -77,6 +77,8 @@ Related docs: the extension substrate this plugs into is
 URL layer it stands on are [`dependencies.md`](dependencies.md) sections 8
 and 9; the migration verdicts it fulfills are in
 [`migration_djc.md`](migration_djc.md) (search "Component.Events").
+The focused implemented CSRF ownership and usage guide is
+[`security_csrf.md`](security_csrf.md).
 Operating rules: [`/CLAUDE.md`](../../CLAUDE.md).
 
 ---
@@ -1377,6 +1379,7 @@ colliding with component addressing:
 POST      ext/events/call               batch endpoint
                                         (envelope w/ calls[])
 GET       ext/events/runtime.js             events JS code
+GET       ext/events/runtime-csp.js         CSP-compatible events JS code
 GET|POST  ext/events/e/{class_id}/{event}   per-event dispatch
 ```
 
@@ -1804,13 +1807,15 @@ v2.
 
 ## 5. The client API
 
-The pinned Alpine/Events bundle is served at the stable
-`ext/events/runtime.js` route and injected through the existing
-`on_dependencies` hook whenever a rendered page or fragment contains a
-client-active ownership graph. The route responds with `Cache-Control:
-no-store`. The bundle embeds **AlpineJS as its reactivity layer** (decision
+The pinned Alpine/Events bundles are served at the stable
+`ext/events/runtime.js` and `ext/events/runtime-csp.js` routes and injected
+through the existing `on_dependencies` hook whenever a rendered page or
+fragment contains a client-active ownership graph. Both routes respond with
+`Cache-Control: no-store`. Off and warning serialization use the standard
+bundle; strict CSP serialization uses the version-matched CSP bundle. The
+bundle embeds **AlpineJS as its reactivity layer** (decision
 record 14.1.10)
-and installs exact Alpine 3.15.x plus morph into the permanent
+and installs exact Alpine 3.16.1 plus morph into the permanent
 `Citry.alpine` broker. The broker owns the single startup, root selector,
 init interceptor, mutation fan-out, magic dispatchers, morph entry point, and
 duplicate-instance warning. Events-declaring components create Events
@@ -3622,7 +3627,14 @@ stable-anchor normalization, grouped mirrored regions, contextual parsing,
 and a nested-range island guard; A6 lands those range mechanisms. A2 already
 settled O11 by requiring exact `citry:g1` caps and cap-preserving deployment.
 A8 landed atomic incoming graph, Events, dependency, and DOM adoption with
-rollback before publication.
+rollback before publication. That adoption now also exposes the unpublished
+accepted-owner set to core framework-manifest handlers. Their asynchronous
+prepare hooks finish before DOM mutation; successful handlers commit after the
+fragment lands and before component activation, while failure rolls handlers
+back in reverse order and preserves the old region. I18n uses this lifecycle to
+prepare a switched provider's current-locale binding output. The generic
+contract is owned by [`dependencies.md`](dependencies.md#81-what-a-fragment-is),
+not duplicated in Events.
 The remaining gated edge mechanism is a named
 client-target helper that creates fresh identities for direct `x-for` clones. A later
 browser-side blueprint-instantiation feature would be needed to clone a
@@ -5418,9 +5430,10 @@ their critique records shaped the design.
   lifecycle, State, timer, cap, and cleanup identity. A named client target or
   browser blueprint is a separate protocol decision; see
   [`alpinejs/a9_client_instantiation.md`](alpinejs/a9_client_instantiation.md).
-- **A constrained CSP mode** pairing Alpine's CSP build with
-  argless-compiled-bindings usage (5.5 records the trade; the standard
-  build needs `unsafe-eval` like Livewire).
+- **A constrained CSP mode.** The version-matched runtime artifact,
+  expression checker, settled-output validation, and strict runtime selection
+  are implemented in [`security_csp.md`](security_csp.md). The standard
+  default still needs `unsafe-eval` like Livewire.
 - **GET event caching**: `no-store` default now; `@event(cache=...)`
   recipes when the Cache extension lands.
 - **Anchor creation versus update for server push and host-inserted
