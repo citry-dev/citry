@@ -14,8 +14,8 @@
 		"check": "pnpm run typecheck && pnpm run lint && pnpm run test"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "2.5.7",
-		"esbuild": "0.28.1",
+		"@biomejs/biome": "2.5.8",
+		"esbuild": "0.28.2",
 		"typescript": "7.0.2"
 	}
 }

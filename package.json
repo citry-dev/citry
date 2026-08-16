@@ -12,8 +12,8 @@
     "@tailwindcss/cli": "4.3.3",
     "axe-core": "4.13.0",
     "bootstrap": "5.3.8",
-    "pyright": "1.1.411",
+    "pyright": "1.1.412",
     "tailwindcss": "4.3.3",
-    "vnu-jar": "26.8.4"
+    "vnu-jar": "26.8.6"
   }
 }
