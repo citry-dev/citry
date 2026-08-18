@@ -1,0 +1,256 @@
+# Qualify and publish the pure-Python citry-lsp package.
+#
+# A manual run builds and tests one artifact pair for an exact main commit.
+# Pushing citry-lsp@<version> at that commit promotes those same bytes; tag and
+# manual-dispatch runs cannot publish freshly rebuilt or already-published files.
+name: Publish citry-lsp to PyPI
+
+on:
+  push:
+    tags:
+      - "citry-lsp@*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PROJECT_DIR: packages/py/citry_lsp
+  UV_VERSION: "0.10.12"
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify tag matches pyproject version
+        id: package-version
+        run: |
+          pkg_version=$(grep -m1 '^version' "$PROJECT_DIR/pyproject.toml" | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            exit 0
+          fi
+          tag_version="${GITHUB_REF_NAME#citry-lsp@}"
+          echo "tag version: $tag_version, pyproject version: $pkg_version"
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "::error::tag '$tag_version' does not match $PROJECT_DIR/pyproject.toml version '$pkg_version'"
+            exit 1
+          fi
+
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Build the wheel and source distribution
+        run: uv build --package citry-lsp --out-dir dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: raw-citry-lsp-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  smoke-python:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [verify-version, build]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: raw-citry-lsp-distributions
+          path: dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Rebuild the sdist and smoke the installed server
+        run: python scripts/verify_citry_lsp_distribution.py --dist-dir dist
+
+  verify-distributions:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [verify-version, build, smoke-python]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: raw-citry-lsp-distributions
+          path: dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Verify and stage the closed release pair
+        run: >-
+          python scripts/verify_citry_lsp_distribution.py
+          --dist-dir dist
+          --skip-install-smoke
+          --stage-output-dir verified
+      - name: Check package-index rendering metadata
+        run: uvx --from twine==6.2.0 twine check verified/*.whl verified/*.tar.gz
+      - name: Attest the qualified build outputs
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            verified/*.whl
+            verified/*.tar.gz
+            verified/release-inventory.json
+      - name: Upload the only bundle a tag may promote
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-citry-lsp-distributions
+          path: verified
+          if-no-files-found: error
+          retention-days: 14
+
+  select-qualification:
+    name: Select the exact main-commit qualification
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    needs: verify-version
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run_id: ${{ steps.select.outputs.run_id }}
+      run_url: ${{ steps.select.outputs.run_url }}
+      artifact_id: ${{ steps.select.outputs.artifact_id }}
+      artifact_digest: ${{ steps.select.outputs.artifact_digest }}
+      head_sha: ${{ steps.select.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Record the peeled tag commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Find a successful qualification for this commit
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/select_citry_core_qualification.py
+          --repository "$GITHUB_REPOSITORY"
+          --commit "${{ steps.commit.outputs.sha }}"
+          --workflow py--citry-lsp--publish.yml
+          --artifact-name verified-citry-lsp-distributions
+          --github-output "$GITHUB_OUTPUT"
+
+  release:
+    name: Promote qualified bytes and release
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    needs: [verify-version, select-qualification]
+    runs-on: ubuntu-latest
+    # Pending PyPI publisher identity:
+    # citry-lsp / citry-dev / citry / py--citry-lsp--publish.yml / pypi
+    environment: pypi
+    env:
+      CITRY_LSP_VERSION: ${{ needs.verify-version.outputs.version }}
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require the qualified commit to remain on main
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ needs.select-qualification.outputs.head_sha }}"
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD origin/main
+      - name: Download the immutable qualification archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail --location --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip" \
+            --output qualification.zip
+      - name: Verify GitHub's digest and every qualified artifact again
+        run: >-
+          python scripts/verify_citry_lsp_distribution.py
+          --promote-archive qualification.zip
+          --artifact-digest '${{ needs.select-qualification.outputs.artifact_digest }}'
+          --promotion-output-dir verified
+      - name: Record the promoted qualification
+        run: |
+          jq -n \
+            --arg run_id '${{ needs.select-qualification.outputs.run_id }}' \
+            --arg run_url '${{ needs.select-qualification.outputs.run_url }}' \
+            --arg artifact_digest '${{ needs.select-qualification.outputs.artifact_digest }}' \
+            --arg head_sha '${{ needs.select-qualification.outputs.head_sha }}' \
+            '{run_id: $run_id, run_url: $run_url, artifact_digest: $artifact_digest, head_sha: $head_sha}' \
+            > verified/qualification-provenance.json
+          mkdir dist
+          cp verified/*.whl verified/*.tar.gz dist/
+      - name: Require a new PyPI version and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pypi_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "https://pypi.org/pypi/citry-lsp/${CITRY_LSP_VERSION}/json")
+          if [ "$pypi_status" != "404" ]; then
+            echo "::error::expected PyPI version ${CITRY_LSP_VERSION} to be absent; HTTP ${pypi_status}"
+            exit 1
+          fi
+          release_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME")
+          case "$release_status" in
+            404) ;;
+            200)
+              echo "::error::GitHub Release ${GITHUB_REF_NAME} already exists"
+              exit 1
+              ;;
+            *)
+              echo "::error::could not prove GitHub Release ${GITHUB_REF_NAME} is absent; HTTP ${release_status}"
+              exit 1
+              ;;
+          esac
+      - name: Attest the promotion of the qualified bytes
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*
+            verified/release-inventory.json
+            verified/qualification-provenance.json
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          dist/* verified/release-inventory.json verified/qualification-provenance.json
+          --repo "$GITHUB_REPOSITORY"
+          --title "$GITHUB_REF_NAME"
+          --generate-notes

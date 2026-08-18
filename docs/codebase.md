@@ -1110,6 +1110,7 @@ Tags follow the format: `<package-name>@<version>`. A tag with no language prefi
 
 - `citry-core@1.3.0` - the citry-core Python package
 - `citry@0.2.0` - the citry Python package
+- `citry-lsp@0.1.0` - the Citry language server
 - `pygments-citry@0.1.0` - the Citry Pygments lexer
 - `vscode-citry@0.1.0` - the Citry VS Code extension
 
@@ -1138,16 +1139,18 @@ Currently, releases are managed manually:
 3. **Update the package's owning changelog** with release notes. Use the root
    `CHANGELOG.md` only for `citry`; auxiliary packages use the `CHANGELOG.md`
    in their own package directory.
-4. **Qualify Citry Core or Citry** when releasing either package: manually run
-   its publish workflow on the exact release commit on `main` and wait for the
-   complete distribution gate. The tag promotes that run's exact bytes;
-   packages without a qualify-then-promote workflow skip this step.
+4. **Qualify Citry Core, Citry, or citry-lsp** when releasing one of those
+   packages: manually run its publish workflow on the exact release commit on
+   `main` and wait for the complete distribution gate. The tag promotes that
+   run's exact bytes; packages without a qualify-then-promote workflow skip
+   this step.
 5. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
 6. **Push the tag**: `git push origin citry-core@1.3.0`
 
 Pushing the tag triggers the package's publish workflow and verifies that the
-tag matches the package version. Citry Core and Citry promote exact qualified
-bytes; the remaining package workflows build and smoke-test from the tag. A
+tag matches the package version. Citry Core, Citry, and citry-lsp promote exact
+qualified bytes; the remaining package workflows build and smoke-test from the
+tag. A
 `citry@X.Y.Z` tag also triggers the documentation release workflow that builds,
 validates, commits, and deploys a version snapshot; sibling package tags do not.
 Review the snapshot procedure and first-release blockers in
@@ -1436,15 +1439,16 @@ the `docs` extra and avoids the Rust build entirely.
 ### Publishing
 
 Each published Python package has its own tag-triggered workflow:
-`py--citry-core--publish.yml`, `py--citry--publish.yml`, or
+`py--citry-core--publish.yml`, `py--citry--publish.yml`,
+`py--citry-lsp--publish.yml`, or
 `py--pygments-citry--publish.yml`. Most package workflows build and test from
 the `<package>@<version>` tag, publish to PyPI, and create a matching GitHub
-Release. Citry Core and Citry use qualify-then-promote: the tag can publish only
-the exact bytes already qualified for its `main` commit.
+Release. Citry Core, Citry, and citry-lsp use qualify-then-promote: the tag can
+publish only the exact bytes already qualified for its `main` commit.
 
 **PyPI auth is Trusted Publishing (OIDC), not a stored API token.** The release jobs carry `id-token: write` and target a GitHub environment named `pypi`; PyPI verifies the workflow's OIDC identity, so there is no secret to keep. Before a package's first publish, configure a PyPI **publisher** (a *pending publisher* if the project does not exist yet) with:
 
-- PyPI project name (`citry-core`, `citry`, or `pygments-citry`)
+- PyPI project name (`citry-core`, `citry`, `citry-lsp`, or `pygments-citry`)
 - Owner and repository (`citry-dev/citry`)
 - Matching workflow filename under `.github/workflows/`
 - Environment name (`pypi`)
@@ -1537,6 +1541,35 @@ artifact digest, safely extracts and re-verifies the pair against the tagged
 checkout, requires the commit to remain on `main`, and fails closed if the
 PyPI version or GitHub Release already exists. It never rebuilds, skips an
 existing PyPI file, or overwrites a release asset.
+
+### citry-lsp distribution qualification
+
+Run `py--citry-lsp--publish.yml` manually on the exact `main` commit that will
+receive the `citry-lsp@<version>` tag. The workflow builds one universal wheel
+and one source distribution, then requires that closed pair and its package,
+metadata, license, console-entry-point, and `RECORD` inventories. It rebuilds
+the source distribution outside the checkout and installs the wheel with only
+public binary dependencies on CPython 3.10 through 3.14.
+
+The installed-wheel smoke imports every shipped module, verifies Citry 0.4.x,
+`pygls` 2.1.1, and `ty` 0.0.69, checks `citry-lsp --help`, and starts the stdio
+server with closed input. This proves that a clean install resolves the public
+`citry[analysis-ty]` dependency without reading another workspace package.
+
+The manual run retains `verified-citry-lsp-distributions` and its exact byte
+inventory for 14 days. Pushing the matching tag at that same commit selects the
+successful manual run by repository, `main` branch, and full commit SHA. The tag
+run checks GitHub's artifact digest, safely extracts and re-verifies the pair
+against the tagged checkout, requires the commit to remain on `main`, and fails
+closed if the PyPI version or GitHub Release already exists. It never rebuilds,
+skips an existing PyPI file, or overwrites a release asset.
+
+For the first release, create a pending PyPI Trusted Publisher with this exact
+identity: project `citry-lsp`, owner `citry-dev`, repository `citry`, workflow
+`py--citry-lsp--publish.yml`, and environment `pypi`. The workflow file and the
+tagged commit must be on `main` before publication. Configure the GitHub `pypi`
+environment to permit `citry-lsp@*` tags as well as any existing package tag
+rules.
 
 - Rust crates are not published to crates.io; they are an internal implementation detail surfaced through the Python packages.
 - The root `pyproject.toml` is never published (no build-system; `Private :: Do Not Upload`).

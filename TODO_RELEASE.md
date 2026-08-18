@@ -334,16 +334,58 @@ pin.
 
 ## 4. First release of `citry-lsp` 0.1.0
 
-- [ ] Update its Citry dependency to the 0.4 series and update docs/changelog
-  claims that still name the unreleased 0.3.2/0.3 line.
-- [ ] Add a dedicated PyPI OIDC publish workflow and tag convention.
-- [ ] Create/configure the PyPI project through a pending Trusted Publisher if
-  it does not yet exist. Match the exact GitHub owner, repository, workflow
-  filename, and environment.
-- [ ] Build and inspect its distribution and console-script entry point.
-- [ ] After Citry 0.4.0 is public, verify a clean installation of `citry-lsp`
-  pulls `citry[analysis-ty]` and starts the server.
-- [ ] Tag, publish, and verify the public package page/install.
+### Stage 1: pre-release preparation
+
+**Status: locally complete on 2026-08-18.** No branch update, qualification
+workflow dispatch, tag, publish, or deployment was performed.
+
+- [x] Keep the Phase 1 Citry dependency and runtime guard on the compatible
+  0.4 series: `citry[analysis-ty]>=0.4.0,<0.5` and supported series `(0, 4)`.
+- [x] Replace the implementation-history changelog with seven skimmable
+  outcome-focused first-release entries.
+- [x] Prepare the PyPI README with installation, registry and syntax-only
+  modes, analyzer degradation, formatting, compatibility, and support links.
+- [x] Add `py--citry-lsp--publish.yml` and the package tag
+  `citry-lsp@<version>` with the same qualify-then-promote boundary used by
+  Citry: manual runs cannot publish, and a tag can promote only the retained
+  artifacts qualified for its exact `main` commit.
+- [x] Add a closed wheel/sdist verifier, source-distribution rebuild, exact
+  metadata/license/entry-point/`RECORD` checks, byte inventory, safe promotion
+  extraction, and fail-closed PyPI/GitHub Release preflight.
+- [x] Build and inspect the 0.1.0 universal wheel and source distribution;
+  `twine check` passed.
+- [x] Install the built wheel with only public binary dependencies on CPython
+  3.10 through 3.14. Every supported interpreter resolved Citry 0.4.x,
+  `ty==0.0.69`, and `pygls==2.1.1`, imported every shipped module, ran the
+  installed `citry-lsp --help` entry point, and started/exited the stdio server
+  on clean EOF.
+- [x] Pass all 479 focused LSP tests, Ruff, formatting, host and Linux mypy,
+  the repository fast profile, and the repository full coverage and
+  qualification profile.
+
+### Stage 2: update `main`
+
+- [ ] Copy the named LSP release files into the clean `main` release worktree,
+  inspect the resulting diff, run the agreed integration gate, commit, and
+  push normally. Keep the original `review` branch pointer, index, and files
+  unchanged.
+
+### Stage 3: qualify, tag, and publish
+
+- [ ] Create the pending PyPI Trusted Publisher with project `citry-lsp`,
+  owner `citry-dev`, repository `citry`, workflow
+  `py--citry-lsp--publish.yml`, and environment `pypi`. The project currently
+  returns 404 from PyPI; the pending publisher creates it on first use but
+  does not reserve the name before publication.
+- [ ] Allow `citry-lsp@*` tags in the GitHub `pypi` environment's deployment
+  policy and retain any desired manual approval.
+- [ ] Manually run `py--citry-lsp--publish.yml` on the exact release commit on
+  `main` and wait for the five-version qualification matrix and retained
+  `verified-citry-lsp-distributions` bundle.
+- [ ] Create and push the annotated `citry-lsp@0.1.0` tag at that exact commit.
+- [ ] Verify the tag workflow promoted the qualified bytes, PyPI and the
+  GitHub Release contain the expected pair, and a clean public install starts
+  the server.
 
 ## 5. First early-access release of `citry-ui` 0.1.0
 

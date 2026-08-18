@@ -14,6 +14,7 @@ _TOOLCHAIN_FILE = REPO_ROOT / "rust-toolchain.toml"
 _WORKFLOW_FILE = REPO_ROOT / ".github" / "workflows" / "rust--tests.yml"
 _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-core--publish.yml"
 _CITRY_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry--publish.yml"
+_CITRY_LSP_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-lsp--publish.yml"
 _ROOT_CARGO = REPO_ROOT / "Cargo.toml"
 _CORE_BINDING_CARGO = REPO_ROOT / "crates" / "citry_core_py" / "Cargo.toml"
 _PYODIDE_CONFIG = REPO_ROOT / "packages" / "py" / "citry_core" / "pyodide-build.json"
@@ -53,6 +54,7 @@ def check() -> list[str]:
         _WORKFLOW_FILE,
         _PUBLISH_WORKFLOW,
         _CITRY_PUBLISH_WORKFLOW,
+        _CITRY_LSP_PUBLISH_WORKFLOW,
         _ROOT_CARGO,
         _CORE_BINDING_CARGO,
         _PYODIDE_CONFIG,
@@ -247,4 +249,30 @@ def check() -> list[str]:
     ):
         if marker not in citry_publish:
             errors.append(f"citry release immutability preflight is missing {marker!r}")
+
+    citry_lsp_publish = _CITRY_LSP_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    if citry_lsp_publish.count(release_guard) != 2:
+        errors.append("citry-lsp publish selection and release jobs must both reject workflow_dispatch refs")
+    if citry_lsp_publish.count(f"uses: {_PYPI_ACTION}") != 1:
+        errors.append("citry-lsp Trusted Publishing must use the reviewed immutable action commit")
+    if citry_lsp_publish.count(f"uses: {_UV_ACTION}") != len(
+        re.findall(r"uses:\s+astral-sh/setup-uv@", citry_lsp_publish)
+    ):
+        errors.append("every citry-lsp publish uv action must use the reviewed immutable commit")
+    if "skip-existing" in citry_lsp_publish or "--clobber" in citry_lsp_publish:
+        errors.append("citry-lsp release retries must fail closed instead of replacing or skipping artifacts")
+    for marker in (
+        "select-qualification:",
+        "--workflow py--citry-lsp--publish.yml",
+        "--artifact-name verified-citry-lsp-distributions",
+        "needs: [verify-version, select-qualification]",
+        "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
+        "--promote-archive qualification.zip",
+        "retention-days: 14",
+        "Require a new PyPI version and GitHub Release",
+        "https://pypi.org/pypi/citry-lsp/${CITRY_LSP_VERSION}/json",
+        "releases/tags/$GITHUB_REF_NAME",
+    ):
+        if marker not in citry_lsp_publish:
+            errors.append(f"citry-lsp release immutability preflight is missing {marker!r}")
     return errors

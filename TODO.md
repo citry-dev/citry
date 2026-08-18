@@ -14,17 +14,16 @@ Nothing else needs to be added to the LSP runtime package. Installing citry-lsp 
 
 pytest and pytest-lsp are development dependencies only.
 
-Neither Citry 0.4.0 nor citry-lsp 0.1.0 has been published yet. Until then, test from this checkout:
+Citry 0.4.0 and citry-core 1.5.0 are published. `citry-lsp` 0.1.0 is not yet
+published, so test the server from this checkout:
 
 cd /Users/mac/repos/citry
 uv sync --all-packages
 
-The release order must be:
+The remaining release order is:
 
-1. Publish citry-core 1.5.0.
-2. Publish Citry 0.4.0.
-3. Publish citry-lsp 0.1.0.
-4. Publish the VS Code extension when ready.
+1. Publish citry-lsp 0.1.0.
+2. Publish the VS Code extension when ready.
 
 ## Testing the VS Code integration
 
