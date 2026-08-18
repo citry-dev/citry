@@ -10,7 +10,7 @@ or deploying anything.
 
 - [x] Released `citry-core` **1.5.0** on 2026-08-18. Phase 1 corrected the
   accidental unreleased `1.6.0` source version; it was not published as 1.6.0.
-- [ ] Release `citry` **0.4.0**, positioned as the Citry beta release. This is
+- [x] Release `citry` **0.4.0**, positioned as the Citry beta release. This is
   the final package version (`0.4.0`), not a PEP 440 prerelease such as
   `0.4.0b1`.
 - [ ] Release `pygments-citry` **0.2.0**, including the unreleased Fluent
@@ -30,7 +30,7 @@ or deploying anything.
 | Artifact | Public state found during audit | Repository state | Target |
 | --- | --- | --- | --- |
 | `citry-core` | PyPI 1.5.0 | tagged and released at `citry-core@1.5.0` | 1.5.0 complete |
-| `citry` | PyPI 0.3.1 | 0.4.0, unreleased | 0.4.0 beta |
+| `citry` | PyPI 0.4.0 | 0.4.0, released | 0.4.0 beta |
 | `pygments-citry` | PyPI 0.1.2 | 0.2.0, unreleased | 0.2.0 |
 | `citry-lsp` | not found on PyPI | 0.1.0 | 0.1.0 first release |
 | `citry-ui` | not found on PyPI | 0.1.0 | 0.1.0 first release |
@@ -264,12 +264,31 @@ normal dependency on `citry-core` is satisfied by the browser-compatible
 - [x] Finalize the 0.4.0 changelog and public beta positioning.
 - [x] Verify the existing PyPI Trusted Publisher/workflow/environment setup.
 - [x] Build and inspect the pure-Python wheel and sdist.
-- [ ] Tag and publish `citry@0.4.0` from the intended main commit.
-- [ ] Verify a clean install, import, and representative render using only
+- [x] Tag and publish `citry@0.4.0` from the intended main commit.
+- [x] Verify a clean install, import, and representative render using only
   public artifacts.
 
-**Pre-release preparation completed on 2026-08-18; no main update, tag, or
-publish was performed.** The Citry publish workflow now uses the same
+**Released on 2026-08-18.** The annotated `citry@0.4.0` tag points to qualified
+commit `1084daff`. Non-publishing qualification run
+[`32170190303`](https://github.com/citry-dev/citry/actions/runs/32170190303)
+passed across CPython 3.10-3.14, and tag promotion run
+[`32172270315`](https://github.com/citry-dev/citry/actions/runs/32172270315)
+published its attested wheel/sdist pair to PyPI and the GitHub Release. A clean
+public Python 3.10 install resolved `citry==0.4.0` with
+`citry-core==1.5.0`, and both packages imported from site-packages.
+
+The first docs tag run exposed two release-only gaps: detached tag worktrees
+did not install the tagged Citry packages, and the version-tree guard treated
+fictional UI-preview navigation as real while structured `api.yml` links were
+not published. Main now creates a locked tag-local docs environment, publishes
+the structured API files, and supports immutable-tag recovery through the
+manual `release_tag` input. Recovery run
+[`32176192140`](https://github.com/citry-dev/citry/actions/runs/32176192140)
+built the exact tag snapshot, committed it as `31e7d721`, and deployed Pages.
+The live `/v/0.4.0/` build stamp records source commit `1084daff`; the removed
+dummy blog URL returns 404 as intended.
+
+The Citry publish workflow uses the same
 qualify-then-promote boundary as Citry Core: a manual run qualifies one closed
 wheel/sdist pair for an exact `main` commit across CPython 3.10-3.14, and the
 tag run may publish only those attested bytes. Manual dispatch cannot publish;
