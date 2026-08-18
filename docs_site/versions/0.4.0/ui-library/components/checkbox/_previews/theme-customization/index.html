@@ -1,0 +1,677 @@
+<!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:1:s--><!doctype html><html data-cid-cqkeawmhw lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Theme two botanical checklists</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CheckboxThemeCustomization_7d627a>:where(.checkbox-themes) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 1rem;
+  max-width: 52rem;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.checkbox-themes article) {
+  display: grid;
+  align-content: start;
+  gap: 0.9rem;
+  padding: 1.1rem;
+  border-radius: 1rem;
+}
+
+:where(.checkbox-themes article > p) {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.checkbox-themes__conservatory) {
+  --cui-checkbox-active-color: #24734a;
+  --cui-checkbox-focus-color: #4b9b69;
+  --cui-checkbox-radius: 0.45rem;
+
+  border: 1px solid #a9cbb3;
+  background: #f3fbf4;
+  color: #173c25;
+}
+
+:where(.checkbox-themes__night) {
+  --cui-checkbox-active-color: #c4a7ff;
+  --cui-checkbox-indicator-color: #22173d;
+  --cui-checkbox-focus-color: #e2d5ff;
+  --cui-checkbox-description-color: #cbbde7;
+
+  border: 1px solid #584873;
+  background: #191426;
+  color: #f2ecff;
+}
+
+:where(.checkbox-themes__night [data-citry-ui-part="input"]) {
+  border-width: 2px;
+}</style><style data-citry-css-class=CCheckbox_05d638>@layer citry-ui.theme {
+  :where(.cui-checkbox) {
+    --_cui-checkbox-background: var(--cui-checkbox-background, Canvas);
+    --_cui-checkbox-foreground: var(--cui-checkbox-foreground, CanvasText);
+    --_cui-checkbox-border-color: var(
+      --cui-checkbox-border-color,
+      color-mix(in srgb, CanvasText 42%, transparent)
+    );
+    --_cui-checkbox-hover-border-color: var(
+      --cui-checkbox-hover-border-color,
+      color-mix(in srgb, CanvasText 72%, transparent)
+    );
+    --_cui-checkbox-active-color: var(
+      --cui-checkbox-active-color,
+      light-dark(#2563eb, #60a5fa)
+    );
+    --_cui-checkbox-indicator-color: var(
+      --cui-checkbox-indicator-color,
+      light-dark(white, #0b1220)
+    );
+    --_cui-checkbox-focus-color: var(--cui-checkbox-focus-color, Highlight);
+    --_cui-checkbox-invalid-color: var(
+      --cui-checkbox-invalid-color,
+      light-dark(#b42318, #f97066)
+    );
+    --_cui-checkbox-disabled-opacity: var(--cui-checkbox-disabled-opacity, 0.55);
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1.125rem);
+    --_cui-checkbox-radius: var(--cui-checkbox-radius, 0.3rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.625rem);
+    --_cui-checkbox-description-color: var(
+      --cui-checkbox-description-color,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-checkbox-description-gap: var(--cui-checkbox-description-gap, 0.2rem);
+
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--_cui-checkbox-gap);
+    min-inline-size: 0;
+    color: var(--_cui-checkbox-foreground);
+    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.4;
+    vertical-align: middle;
+  }
+
+  :where(.cui-checkbox[data-label-pos="start"]) {
+    flex-direction: row-reverse;
+  }
+
+  :where(.cui-checkbox[data-size="sm"]) {
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.5rem);
+
+    font-size: 0.875rem;
+  }
+
+  :where(.cui-checkbox[data-size="lg"]) {
+    --_cui-checkbox-control-size: var(--cui-checkbox-control-size, 1.25rem);
+    --_cui-checkbox-gap: var(--cui-checkbox-gap, 0.75rem);
+
+    font-size: 1.0625rem;
+  }
+
+  :where(.cui-checkbox__input) {
+    appearance: none;
+    display: grid;
+    flex: 0 0 auto;
+    place-content: center;
+    box-sizing: border-box;
+    inline-size: var(--_cui-checkbox-control-size);
+    block-size: var(--_cui-checkbox-control-size);
+    margin: 0.15em 0 0;
+    border: 1px solid var(--_cui-checkbox-border-color);
+    border-radius: var(--_cui-checkbox-radius);
+    background: var(--_cui-checkbox-background);
+    color: var(--_cui-checkbox-indicator-color);
+    cursor: pointer;
+    font: inherit;
+    transition: border-color 120ms ease, background-color 120ms ease;
+  }
+
+  :where(.cui-checkbox__input)::after {
+    content: "";
+    display: block;
+    box-sizing: border-box;
+    opacity: 0;
+  }
+
+  :where(.cui-checkbox__input:checked) {
+    border-color: var(--_cui-checkbox-active-color);
+    background: var(--_cui-checkbox-active-color);
+  }
+
+  :where(.cui-checkbox__input:checked)::after {
+    inline-size: 0.32em;
+    block-size: 0.62em;
+    border: solid currentcolor;
+    border-width: 0 0.13em 0.13em 0;
+    opacity: 1;
+    transform: translateY(-0.04em) rotate(45deg);
+  }
+
+  :where(.cui-checkbox__input:indeterminate) {
+    border-color: var(--_cui-checkbox-active-color);
+    background: var(--_cui-checkbox-active-color);
+  }
+
+  :where(.cui-checkbox__input:indeterminate)::after {
+    inline-size: 0.58em;
+    block-size: 0.13em;
+    border-radius: 999px;
+    background: currentcolor;
+    opacity: 1;
+  }
+
+  :where(.cui-checkbox[data-variant="outline"] .cui-checkbox__input:checked),
+  :where(.cui-checkbox[data-variant="outline"] .cui-checkbox__input:indeterminate) {
+    --_cui-checkbox-indicator-color: var(
+      --cui-checkbox-indicator-color,
+      var(--_cui-checkbox-active-color)
+    );
+
+    background: var(--_cui-checkbox-background);
+    color: var(--_cui-checkbox-indicator-color);
+  }
+
+  :where(.cui-checkbox__input:focus-visible) {
+    border-color: var(--_cui-checkbox-focus-color);
+    outline: 0.1875rem solid color-mix(
+      in srgb,
+      var(--_cui-checkbox-focus-color) 38%,
+      transparent
+    );
+    outline-offset: 0.125rem;
+  }
+
+  @media (hover: hover) {
+    :where(.cui-checkbox:not([data-disabled]) .cui-checkbox__input:hover) {
+      border-color: var(--_cui-checkbox-hover-border-color);
+    }
+  }
+
+  :where(.cui-checkbox[data-invalid] .cui-checkbox__input) {
+    border-color: var(--_cui-checkbox-invalid-color);
+  }
+
+  :where(.cui-checkbox__body) {
+    display: grid;
+    min-inline-size: 0;
+    gap: var(--_cui-checkbox-description-gap);
+  }
+
+  :where(.cui-checkbox [data-citry-ui-part="label"]) {
+    min-inline-size: 0;
+    color: inherit;
+    cursor: pointer;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-checkbox[data-disabled]),
+  :where(.cui-checkbox:has(> .cui-checkbox__input:disabled)) {
+    opacity: var(--_cui-checkbox-disabled-opacity);
+  }
+
+  :where(.cui-checkbox[data-disabled] .cui-checkbox__input),
+  :where(.cui-checkbox[data-disabled] [data-citry-ui-part="label"]),
+  :where(.cui-checkbox > .cui-checkbox__input:disabled),
+  :where(.cui-checkbox:has(> .cui-checkbox__input:disabled) [data-citry-ui-part="label"]) {
+    cursor: not-allowed;
+  }
+
+  :where(.cui-checkbox [data-citry-ui-part="description"]) {
+    min-inline-size: 0;
+    color: var(--_cui-checkbox-description-color);
+    font-size: 0.875em;
+    overflow-wrap: anywhere;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-checkbox__input) {
+      transition: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-checkbox__input) {
+      border-color: ButtonText;
+      forced-color-adjust: auto;
+    }
+
+    :where(.cui-checkbox[data-invalid] .cui-checkbox__input) {
+      border-color: Mark;
+    }
+  }
+
+  @media print {
+    :where(.cui-checkbox__input) {
+      print-color-adjust: exact;
+    }
+  }
+}</style></head><body><main><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:2:s--><section class=checkbox-themes data-cid-cqkeawmhx><article class=checkbox-themes__conservatory><p>Sunlit conservatory</p><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:3:s--><span class=cui-checkbox data-cid=cqkeawmhy data-cid-cqkeawmhy data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=solid> <input checked class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-cqkeawmhy type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-cqkeawmhy><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:r:1:s--> Mist the cloud-forest ferns <!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:r:1:e--></label> </span> </span><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:3:e--><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:4:s--><span class=cui-checkbox data-cid=cqkeawmhz data-cid-cqkeawmhz data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=outline> <input class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-cqkeawmhz type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-cqkeawmhz><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:r:2:s--> Rotate the orchid trays <!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:r:2:e--></label> </span> </span><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:4:e--></article><article style="color-scheme: dark" class=checkbox-themes__night><p>Moonlit field station</p><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:5:s--><span class=cui-checkbox data-cid=cqkeawmi0 data-cid-cqkeawmi0 data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=solid> <input checked class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-cqkeawmi0 type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-cqkeawmi0><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:r:3:s--> Log nocturnal flower opening <!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:r:3:e--></label> </span> </span><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:5:e--><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:6:s--><span class=cui-checkbox data-cid=cqkeawmi1 data-cid-cqkeawmi1 data-citry-root data-citry-ui-part=checkbox data-label-pos=end data-size=md data-variant=outline> <input class=cui-checkbox__input data-citry-ui-part=input id=cui-checkbox-cqkeawmi1 type=checkbox value=on> <span class=cui-checkbox__body> <label data-citry-ui-part=label for=cui-checkbox-cqkeawmi1><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:r:4:s--> Review moth-pollination images <!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:r:4:e--></label> </span> </span><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:6:e--></article></section><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"CheckboxThemeCustomization_7d627a","className":"CheckboxThemeCustomization"},{"classId":"CCheckbox_05d638","className":"CCheckbox"}],"componentExecutionOrderConstraints":[{"childRenderId":"cqkeawmhy","invocationId":2,"parentRenderId":"cqkeawmhx"},{"childRenderId":"cqkeawmhz","invocationId":3,"parentRenderId":"cqkeawmhx"},{"childRenderId":"cqkeawmi0","invocationId":4,"parentRenderId":"cqkeawmhx"},{"childRenderId":"cqkeawmi1","invocationId":5,"parentRenderId":"cqkeawmhx"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawmhw","transparent":false},{"classId":"CheckboxThemeCustomization_7d627a","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawmhx","transparent":false},{"classId":"CCheckbox_05d638","instanceId":3,"invocationId":2,"parentRenderId":"cqkeawmhx","renderId":"cqkeawmhy","transparent":false},{"classId":"CCheckbox_05d638","instanceId":4,"invocationId":3,"parentRenderId":"cqkeawmhx","renderId":"cqkeawmhz","transparent":false},{"classId":"CCheckbox_05d638","instanceId":5,"invocationId":4,"parentRenderId":"cqkeawmhx","renderId":"cqkeawmi0","transparent":false},{"classId":"CCheckbox_05d638","instanceId":6,"invocationId":5,"parentRenderId":"cqkeawmhx","renderId":"cqkeawmi1","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxThemeCustomization_7d627a","ownerRenderId":"cqkeawmhx","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"cqkeawmhy","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxThemeCustomization_7d627a","ownerRenderId":"cqkeawmhx","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"cqkeawmhz","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":3,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxThemeCustomization_7d627a","ownerRenderId":"cqkeawmhx","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"cqkeawmi0","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":4,"kind":"implicit","locationId":null,"ownerClassId":"CheckboxThemeCustomization_7d627a","ownerRenderId":"cqkeawmhx","policy":"template","receiverClassId":"CCheckbox_05d638","receiverRenderId":"cqkeawmi1","slotName":"default","sourceInvocationId":5}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxThemeCustomization_7d627a","sourceRenderId":"cqkeawmhx","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"cqkeawmhy"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxThemeCustomization_7d627a","sourceRenderId":"cqkeawmhx","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"cqkeawmhz"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxThemeCustomization_7d627a","sourceRenderId":"cqkeawmhx","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"cqkeawmi0"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CheckboxThemeCustomization_7d627a","sourceRenderId":"cqkeawmhx","tagName":"ccheckbox","targetClassId":"CCheckbox_05d638","targetRenderId":"cqkeawmi1"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cqkeawmhx","parentRegionId":null,"receiverRenderId":"cqkeawmhy","regionId":1,"resultOwnerRenderId":"cqkeawmhx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmhy"},{"fillId":2,"ownerRenderId":"cqkeawmhx","parentRegionId":null,"receiverRenderId":"cqkeawmhz","regionId":2,"resultOwnerRenderId":"cqkeawmhx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmhz"},{"fillId":3,"ownerRenderId":"cqkeawmhx","parentRegionId":null,"receiverRenderId":"cqkeawmi0","regionId":3,"resultOwnerRenderId":"cqkeawmhx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmi0"},{"fillId":4,"ownerRenderId":"cqkeawmhx","parentRegionId":null,"receiverRenderId":"cqkeawmi1","regionId":4,"resultOwnerRenderId":"cqkeawmhx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmi1"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguODg0MTQ5NmJhZTdkLmpz", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguNmI3ZTZmMDg1MmJlNTM0MDRhODhjYTZlZjI1M2JlMjguanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguNzVmNzZiNDgwMzEyOTg2OTk2YTlkMzFkYTEwMzkwZjguanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguNWZhYzU5ZDUxOTMyNzNiNWNiZTJmYTFmNDZlM2UxN2MuanM=", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguZWQyZmE3MGExMjJkY2I3ODE1ZGRjYTljNDgyZmNkMzIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NoZWNrYm94VGhlbWVDdXN0b21pemF0aW9uXzdkNjI3YS5kYTU4ZTViNjQ3YzIuY3Nz", "L2NpdHJ5L2NhY2hlL0NDaGVja2JveF8wNWQ2MzguMDQzNWRiNmEzMjQwLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3FrZWF3bWh5", "NmI3ZTZmMDg1MmJlNTM0MDRhODhjYTZlZjI1M2JlMjg=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3FrZWF3bWh6", "NzVmNzZiNDgwMzEyOTg2OTk2YTlkMzFkYTEwMzkwZjg=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3FrZWF3bWkw", "NWZhYzU5ZDUxOTMyNzNiNWNiZTJmYTFmNDZlM2UxN2M=", "init"], ["Q0NoZWNrYm94XzA1ZDYzOA==", "Y3FrZWF3bWkx", "ZWQyZmE3MGExMjJkY2I3ODE1ZGRjYTljNDgyZmNkMzI=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3bWh3"], ["Q2hlY2tib3hUaGVtZUN1c3RvbWl6YXRpb25fN2Q2Mjdh", "Y3FrZWF3bWh4"]], "graph": "b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CCheckbox_05d638", {
+  props: {
+    checked: {},
+    indeterminate: {},
+    value: {},
+    required: {},
+    disabled: {},
+    invalid: {},
+    variant: {},
+    size: {},
+    label_pos: {},
+  },
+  init: ({ els, data, props, effect, inject }) => {
+    const root = els[0];
+    const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
+    if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
+      throw new Error("[citry-ui] CCheckbox requires one direct native checkbox input.");
+    }
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const handoffKey = Symbol.for("citry-ui:checkbox-handoff");
+    const allowedValues = {
+      variant: ["solid", "outline"],
+      size: ["sm", "md", "lg"],
+      label_pos: ["start", "end"],
+    };
+    const invalidEpisodes = new Map();
+    const resetTimers = new Set();
+    let nativeInvalid = false;
+    let controlledChecked = false;
+    let controlledCheckedValue = false;
+    let controlledIndeterminate = false;
+    let controlledIndeterminateValue = false;
+    let activationPending = false;
+    let reconcileTimer = null;
+
+    const handoff = root[handoffKey];
+    delete root[handoffKey];
+    // Correlated rerenders replace the initializer but may retain this root.
+    // Restore browser-owned current state after HTML updates reset defaults.
+    if (handoff) {
+      input.checked = Boolean(handoff.checked);
+      input.indeterminate = Boolean(handoff.indeterminate);
+    } else {
+      input.indeterminate = data.indeterminate;
+    }
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CCheckbox ${name} received invalid client value ${describedValue}; `
+          + "using the documented fallback.",
+        root,
+      );
+    };
+    const reportFieldOwned = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `field:${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CCheckbox ${name} is controlled by its enclosing CField; `
+          + `ignoring client value ${describedValue}.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const canonicalizeValue = (value) => {
+      if (typeof value !== "string" || value.includes("\0")) {
+        return null;
+      }
+      return value.replace(/\r\n?/g, "\n");
+    };
+    const resolveValue = () => {
+      if (props.value === undefined) {
+        invalidEpisodes.delete("value");
+        return data.value;
+      }
+      const canonical = canonicalizeValue(props.value);
+      if (canonical === null) {
+        reportInvalid("value", props.value);
+        return data.value;
+      }
+      invalidEpisodes.delete("value");
+      return canonical;
+    };
+    const idrefs = (...values) => {
+      const result = [];
+      values.forEach((value) => {
+        if (typeof value !== "string") {
+          return;
+        }
+        value.split(/\s+/).filter(Boolean).forEach((token) => {
+          if (!result.includes(token)) {
+            result.push(token);
+          }
+        });
+      });
+      return result.join(" ") || null;
+    };
+    const syncRelationships = (invalid) => {
+      const describedBy = idrefs(
+        field?.hasDescription ? field.descriptionId : null,
+        data.hasDescription ? data.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      );
+      const errorMessage = invalid
+        ? idrefs(field?.hasError ? field.errorId : null, data.externalErrorMessage)
+        : null;
+      if (describedBy) {
+        input.setAttribute("aria-describedby", describedBy);
+      } else {
+        input.removeAttribute("aria-describedby");
+      }
+      if (errorMessage) {
+        input.setAttribute("aria-errormessage", errorMessage);
+      } else {
+        input.removeAttribute("aria-errormessage");
+      }
+    };
+    const syncNativeMirrors = () => {
+      root.toggleAttribute("data-checked", input.checked);
+      root.toggleAttribute("data-indeterminate", input.indeterminate);
+    };
+    const applyState = () => {
+      let required;
+      let disabled;
+      let externalInvalid;
+      if (field) {
+        ["required", "disabled", "invalid"].forEach((name) => {
+          if (props[name] !== undefined) {
+            reportFieldOwned(name, props[name]);
+          } else {
+            invalidEpisodes.delete(name);
+          }
+        });
+        required = field.required;
+        disabled = field.disabled;
+        externalInvalid = field.invalid;
+      } else {
+        required = resolveBoolean("required", data.required);
+        disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+        externalInvalid = resolveBoolean("invalid", data.invalid);
+      }
+      const invalid = externalInvalid || nativeInvalid;
+      const variant = resolveChoice("variant", data.variant);
+      const size = resolveChoice("size", data.size);
+      const labelPos = resolveChoice("label_pos", data.labelPos);
+      const value = resolveValue();
+
+      input.required = required;
+      input.disabled = disabled;
+      if (input.value !== value) {
+        input.value = value;
+      }
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", input.matches(":disabled"));
+      root.toggleAttribute("data-invalid", invalid);
+      root.dataset.variant = variant;
+      root.dataset.size = size;
+      root.dataset.labelPos = labelPos;
+      if (invalid) {
+        input.setAttribute("aria-invalid", "true");
+      } else {
+        input.removeAttribute("aria-invalid");
+      }
+      syncRelationships(invalid);
+      syncNativeMirrors();
+    };
+    const clearNativeInvalidWhenValid = () => {
+      if (!nativeInvalid || !input.validity.valid) {
+        return;
+      }
+      nativeInvalid = false;
+      field?.setNativeInvalid(false);
+      applyState();
+    };
+    const applyControlledBoolean = (name, property) => {
+      const value = props[name];
+      const controlledName = name === "checked" ? "controlledChecked" : "controlledIndeterminate";
+      if (value === undefined) {
+        invalidEpisodes.delete(name);
+        if (controlledName === "controlledChecked") {
+          controlledChecked = false;
+        } else {
+          controlledIndeterminate = false;
+        }
+        return;
+      }
+      if (typeof value !== "boolean") {
+        reportInvalid(name, value);
+        const isControlled = controlledName === "controlledChecked"
+          ? controlledChecked
+          : controlledIndeterminate;
+        const retained = controlledName === "controlledChecked"
+          ? controlledCheckedValue
+          : controlledIndeterminateValue;
+        if (isControlled && !activationPending && input[property] !== retained) {
+          input[property] = retained;
+        }
+        return;
+      }
+      invalidEpisodes.delete(name);
+      if (controlledName === "controlledChecked") {
+        controlledChecked = true;
+        controlledCheckedValue = value;
+      } else {
+        controlledIndeterminate = true;
+        controlledIndeterminateValue = value;
+      }
+      if (!activationPending && input[property] !== value) {
+        input[property] = value;
+      }
+    };
+    const applyLatestControlled = () => {
+      applyControlledBoolean("checked", "checked");
+      applyControlledBoolean("indeterminate", "indeterminate");
+      syncNativeMirrors();
+    };
+    const scheduleReconcile = () => {
+      if (reconcileTimer !== null) {
+        clearTimeout(reconcileTimer);
+      }
+      reconcileTimer = setTimeout(() => {
+        reconcileTimer = null;
+        activationPending = false;
+        applyLatestControlled();
+        clearNativeInvalidWhenValid();
+        applyState();
+      }, 0);
+    };
+    const onInvalid = () => {
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      applyState();
+    };
+    const onInput = () => {
+      // A microtask can run between native input and change. Keep the
+      // browser-produced state visible to both consumer handlers.
+      activationPending = true;
+      syncNativeMirrors();
+      scheduleReconcile();
+      if (!controlledChecked) {
+        clearNativeInvalidWhenValid();
+      }
+    };
+    const onChange = () => {
+      if (!activationPending) {
+        activationPending = true;
+        scheduleReconcile();
+      }
+      syncNativeMirrors();
+      if (!controlledChecked) {
+        clearNativeInvalidWhenValid();
+      }
+    };
+    const onReset = (event) => {
+      const resetTimer = setTimeout(() => {
+        resetTimers.delete(resetTimer);
+        if (event.defaultPrevented) {
+          return;
+        }
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        activationPending = false;
+        applyLatestControlled();
+        applyState();
+      }, 0);
+      resetTimers.add(resetTimer);
+    };
+    const unregisterCapabilities = field?.registerCapabilities({
+      required: true,
+      readonly: false,
+    });
+    const nativeForm = input.form;
+    const ancestorFieldsets = [];
+    for (let ancestor = root.parentElement; ancestor; ancestor = ancestor.parentElement) {
+      if (ancestor instanceof HTMLFieldSetElement) {
+        ancestorFieldsets.push(ancestor);
+      }
+    }
+    // Native fieldset disabledness does not change input.disabled. Watch
+    // only the resolved ancestor fieldsets so the public mirror follows
+    // the browser's effective :disabled state.
+    const fieldsetObserver = ancestorFieldsets.length > 0
+      ? new MutationObserver(() => applyState())
+      : null;
+    ancestorFieldsets.forEach(fieldset => fieldsetObserver.observe(fieldset, {
+      attributes: true,
+      attributeFilter: ["disabled"],
+    }));
+
+    input.addEventListener("invalid", onInvalid);
+    input.addEventListener("input", onInput);
+    input.addEventListener("change", onChange);
+    nativeForm?.addEventListener("reset", onReset);
+    effect(() => {
+      applyState();
+      applyLatestControlled();
+      if (!activationPending) {
+        clearNativeInvalidWhenValid();
+      }
+    });
+    root.setAttribute("data-citry-checkbox-initialized", "");
+
+    return () => {
+      root[handoffKey] = {
+        checked: input.checked,
+        indeterminate: input.indeterminate,
+      };
+      input.removeEventListener("invalid", onInvalid);
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("change", onChange);
+      nativeForm?.removeEventListener("reset", onReset);
+      if (reconcileTimer !== null) {
+        clearTimeout(reconcileTimer);
+      }
+      resetTimers.forEach((resetTimer) => clearTimeout(resetTimer));
+      resetTimers.clear();
+      fieldsetObserver?.disconnect();
+      unregisterCapabilities?.();
+      if (nativeInvalid) {
+        field?.setNativeInvalid(false);
+      }
+      root.removeAttribute("data-citry-checkbox-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "6b7e6f0852be53404a88ca6ef253be28", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6Im1kIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWNoZWNrYm94LWNxa2Vhd21oeS1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "75f76b480312986996a9d31da10390f8", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsImluZGV0ZXJtaW5hdGUiOmZhbHNlLCJyZXF1aXJlZCI6ZmFsc2UsImRpc2FibGVkIjpmYWxzZSwiaW52YWxpZCI6ZmFsc2UsInZhcmlhbnQiOiJvdXRsaW5lIiwic2l6ZSI6Im1kIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWNoZWNrYm94LWNxa2Vhd21oei1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "5fac59d5193273b5cbe2fa1f46e3e17c", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwiaW5kZXRlcm1pbmF0ZSI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwic2l6ZSI6Im1kIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWNoZWNrYm94LWNxa2Vhd21pMC1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CCheckbox_05d638", "ed2fa70a122dcb7815ddca9c482fcd32", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsImluZGV0ZXJtaW5hdGUiOnRydWUsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktY2hlY2tib3gtY3FrZWF3bWkxLWRlc2NyaXB0aW9uIiwiaGFzRGVzY3JpcHRpb24iOmZhbHNlLCJleHRlcm5hbERlc2NyaWJlZEJ5IjpudWxsLCJleHRlcm5hbEVycm9yTWVzc2FnZSI6bnVsbH0="));
+})();</script></body></html><!--citry:g1:b07bc8be7fb6c2c581c74180d18567334deeea697c6b2aaab0db07050d214bdf:0:i:1:e-->

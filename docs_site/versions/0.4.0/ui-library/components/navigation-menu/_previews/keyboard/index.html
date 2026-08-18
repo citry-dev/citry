@@ -1,0 +1,732 @@
+<!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:1:s--><!doctype html><html data-cid-cqkeawok6 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>NavigationMenu keyboard behavior</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CNavigationMenu_3d3ab8>@layer citry-ui.theme {
+  :where([data-citry-ui-part="navigation-menu"]) {
+    --_cui-navigation-menu-background: var(--cui-navigation-menu-background, transparent);
+    --_cui-navigation-menu-foreground: var(--cui-navigation-menu-foreground, CanvasText);
+    --_cui-navigation-menu-border-color: var(--cui-navigation-menu-border-color, light-dark(#e7e5e4, #44403c));
+    --_cui-navigation-menu-trigger-background: var(--cui-navigation-menu-trigger-background, transparent);
+    --_cui-navigation-menu-trigger-hover-background:
+      var(--cui-navigation-menu-trigger-hover-background, light-dark(#f5f5f4, #292524));
+    --_cui-navigation-menu-trigger-open-background:
+      var(--cui-navigation-menu-trigger-open-background, light-dark(#e7e5e4, #44403c));
+    --_cui-navigation-menu-focus-color: var(--cui-navigation-menu-focus-color, Highlight);
+    --_cui-navigation-menu-radius: var(--cui-navigation-menu-radius, 0.75rem);
+    --_cui-navigation-menu-gap: var(--cui-navigation-menu-gap, 0.25rem);
+    --_cui-navigation-menu-padding: var(--cui-navigation-menu-padding, 0.35rem);
+    --_cui-navigation-menu-panel-background: var(--cui-navigation-menu-panel-background, Canvas);
+    --_cui-navigation-menu-panel-inline-size: var(--cui-navigation-menu-panel-inline-size, 24rem);
+    --_cui-navigation-menu-panel-max-inline-size:
+      var(--cui-navigation-menu-panel-max-inline-size, calc(100vw - 2rem));
+    --_cui-navigation-menu-panel-padding: var(--cui-navigation-menu-panel-padding, 1rem);
+    --_cui-navigation-menu-panel-shadow:
+      var(--cui-navigation-menu-panel-shadow,
+        0 18px 45px light-dark(rgb(28 25 23 / 0.16), rgb(0 0 0 / 0.45)));
+    --_cui-navigation-menu-offset: var(--cui-navigation-menu-offset, 0.45rem);
+    --_cui-navigation-menu-duration: var(--cui-navigation-menu-duration, 150ms);
+    --_cui-navigation-menu-easing: var(--cui-navigation-menu-easing, ease-out);
+    position: relative;
+    z-index: 1;
+    color: var(--_cui-navigation-menu-foreground);
+    background: var(--_cui-navigation-menu-background);
+  }
+  :where([data-citry-ui-part="navigation-menu"] > [data-citry-ui-part="list"]) {
+    display: flex;
+    align-items: center;
+    gap: var(--_cui-navigation-menu-gap);
+    margin: 0;
+    padding: var(--_cui-navigation-menu-padding);
+    list-style: none;
+  }
+  :where([data-citry-ui-part="navigation-menu"][data-orientation="vertical"] > [data-citry-ui-part="list"]) {
+    display: grid;
+    align-items: stretch;
+  }
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="link-item"]),
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="item"]) {
+    position: relative;
+    min-inline-size: 0;
+  }
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="link"]),
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="trigger"]) {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-block-size: 2.5rem;
+    padding: 0.55rem 0.8rem;
+    border: 0;
+    border-radius: calc(var(--_cui-navigation-menu-radius) - 0.2rem);
+    color: inherit;
+    background: var(--_cui-navigation-menu-trigger-background);
+    font: inherit;
+    font-weight: 620;
+    line-height: 1.2;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="link"]:hover),
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="trigger"]:hover) {
+    background: var(--_cui-navigation-menu-trigger-hover-background);
+  }
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="trigger"][data-open]) {
+    background: var(--_cui-navigation-menu-trigger-open-background);
+  }
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="link"]:focus-visible),
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="trigger"]:focus-visible),
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="panel"] :focus-visible) {
+    outline: 3px solid var(--_cui-navigation-menu-focus-color);
+    outline-offset: 2px;
+  }
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="indicator"]) {
+    inline-size: 0.48rem;
+    block-size: 0.48rem;
+    border-inline-end: 0.12rem solid currentColor;
+    border-block-end: 0.12rem solid currentColor;
+    transform: translateY(-0.12rem) rotate(45deg);
+    transition: transform var(--_cui-navigation-menu-duration) var(--_cui-navigation-menu-easing);
+  }
+  :where([data-citry-ui-part="navigation-menu"]
+    [data-citry-ui-part="trigger"][data-open]
+    [data-citry-ui-part="indicator"]) {
+    transform: translateY(0.08rem) rotate(225deg);
+  }
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="panel"]) {
+    box-sizing: border-box;
+    position: absolute;
+    inset-block-start: calc(100% + var(--_cui-navigation-menu-offset));
+    inset-inline-start: 0;
+    z-index: 2;
+    inline-size:
+      min(var(--_cui-navigation-menu-panel-inline-size), var(--_cui-navigation-menu-panel-max-inline-size));
+    min-inline-size: 0;
+    max-inline-size: var(--_cui-navigation-menu-panel-max-inline-size);
+    padding: var(--_cui-navigation-menu-panel-padding);
+    overflow-wrap: anywhere;
+    border: 1px solid var(--_cui-navigation-menu-border-color);
+    border-radius: var(--_cui-navigation-menu-radius);
+    color: var(--_cui-navigation-menu-foreground);
+    background: var(--_cui-navigation-menu-panel-background);
+    box-shadow: var(--_cui-navigation-menu-panel-shadow);
+    transform: translateX(var(--_cui-navigation-menu-panel-shift, 0px));
+  }
+  :where([data-citry-ui-part="navigation-menu"]
+    [data-citry-ui-part="panel"][data-cui-navigation-menu-align-end]) {
+    inset-inline-start: auto;
+    inset-inline-end: 0;
+  }
+  :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="panel"][hidden]) {
+    display: none !important;
+  }
+  :where([data-citry-ui-part="navigation-menu"][data-orientation="vertical"] [data-citry-ui-part="panel"]) {
+    position: static;
+    inline-size: 100%;
+    margin-block-start: var(--_cui-navigation-menu-offset);
+    box-shadow: none;
+  }
+  :where([data-citry-ui-part="navigation-menu"][data-variant="surface"]) {
+    border: 1px solid var(--_cui-navigation-menu-border-color);
+    border-radius: var(--_cui-navigation-menu-radius);
+    background: var(--_cui-navigation-menu-panel-background);
+  }
+  :where([data-citry-ui-part="navigation-menu"][data-size="sm"]) {
+    font-size: 0.875rem;
+    --_cui-navigation-menu-padding: 0.25rem;
+  }
+  :where([data-citry-ui-part="navigation-menu"][data-size="lg"]) {
+    font-size: 1.0625rem;
+    --_cui-navigation-menu-padding: 0.45rem;
+  }
+  :where([data-citry-ui-part="navigation-menu"][data-disabled]),
+  :where([data-citry-ui-part="navigation-menu"] [data-disabled]) {
+    opacity: 0.55;
+  }
+  :where([data-citry-ui-part="navigation-menu"][data-disabled] [data-citry-ui-part="link"]),
+  :where([data-citry-ui-part="navigation-menu"] [data-disabled] [data-citry-ui-part="trigger"]) {
+    cursor: not-allowed;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="navigation-menu"]) {
+      --_cui-navigation-menu-duration: 0ms;
+    }
+  }
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="panel"]) {
+      border-color: CanvasText;
+      box-shadow: none;
+    }
+    :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="trigger"][data-open]) {
+      outline: 1px solid CanvasText;
+    }
+  }
+  @media print {
+    :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="item"]) {
+      display: none;
+    }
+    :where([data-citry-ui-part="navigation-menu"] [data-citry-ui-part="link"]) {
+      color: black;
+      background: transparent;
+    }
+  }
+}</style><style data-citry-css-class=CStack_3c2a26>@layer citry-ui.theme {
+  :where([data-citry-ui-part="stack"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.75rem);
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: var(--_cui-stack-gap);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="0"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xs"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="sm"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="lg"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xl"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="start"]) {
+    align-items: flex-start;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="center"]) {
+    align-items: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="end"]) {
+    align-items: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="baseline"]) {
+    align-items: baseline;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="center"]) {
+    justify-content: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="end"]) {
+    justify-content: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="between"]) {
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="around"]) {
+    justify-content: space-around;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="evenly"]) {
+    justify-content: space-evenly;
+  }
+
+  :where([data-citry-ui-part="stack"][data-reverse]) {
+    flex-direction: column-reverse;
+  }
+
+  :where([data-citry-ui-part="stack"] > *) {
+    min-inline-size: 0;
+  }
+}</style></head><body><main><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:2:s--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:3:s--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:4:s--><div class=cui-stack data-align=stretch data-cid-cqkeawok7 data-cid-cqkeawok8 data-citry-ui-part=stack data-gap=sm data-justify=start><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:1:s--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:2:s--><p>Tab normally. Use Arrow keys between top-level controls, Down to enter an open panel, and Escape to close it.</p><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:5:s--><nav aria-label="Keyboard example" class=cui-navigation-menu data-cid=cqkeawoka data-cid-cqkeawoka data-citry-navigation-menu-root data-citry-root data-citry-ui-part=navigation-menu data-loop data-orientation=horizontal data-size=md data-variant=plain id=cui-navigation-menu-cqkeawoka><ul data-citry-ui-part=list><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:3:s--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:6:s--><li class=cui-navigation-menu__link-item data-cid-cqkeawokb data-citry-ui-part=link-item><a data-citry-navigation-menu-link data-citry-ui-part=link href=#start><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:4:s-->Start<!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:4:e--></a></li><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:6:e--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:7:s--><li class=cui-navigation-menu__item data-cid-cqkeawokc data-citry-navigation-menu-item data-citry-ui-part=item data-value=topics><button aria-controls=cui-navigation-menu-cqkeawoka-panel-cqkeawokc aria-expanded=false class=cui-navigation-menu__trigger data-citry-navigation-menu-trigger data-citry-ui-part=trigger data-value=topics id=cui-navigation-menu-cqkeawoka-trigger-cqkeawokc type=button><span><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:5:s-->Topics<!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:5:e--></span> <span aria-hidden=true data-citry-ui-part=indicator></span></button> <div class=cui-navigation-menu__panel data-citry-navigation-menu-panel data-citry-ui-part=panel data-value=topics hidden id=cui-navigation-menu-cqkeawoka-panel-cqkeawokc inert><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:6:s--><a href=#accessibility>Accessibility</a><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:6:e--></div></li><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:7:e--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:8:s--><li class=cui-navigation-menu__link-item data-cid-cqkeawokd data-citry-ui-part=link-item><a data-citry-navigation-menu-link data-citry-ui-part=link href=#finish><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:7:s-->Finish<!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:7:e--></a></li><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:8:e--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:3:e--></ul></nav><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:5:e--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:2:e--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:r:1:e--></div><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:4:e--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:3:e--><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"NavigationKeyboard_d3ddb8","className":"NavigationKeyboard"},{"classId":"CStack_3c2a26","className":"CStack"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CNavigationMenu_3d3ab8","className":"CNavigationMenu"},{"classId":"CNavigationMenuLink_2c9996","className":"CNavigationMenuLink"},{"classId":"CNavigationMenuItem_4751b5","className":"CNavigationMenuItem"}],"componentExecutionOrderConstraints":[{"childRenderId":"cqkeawok8","invocationId":2,"parentRenderId":"cqkeawok7"},{"childRenderId":"cqkeawoka","invocationId":4,"parentRenderId":"cqkeawok7"},{"childRenderId":"cqkeawokb","invocationId":5,"parentRenderId":"cqkeawok7"},{"childRenderId":"cqkeawokc","invocationId":6,"parentRenderId":"cqkeawok7"},{"childRenderId":"cqkeawokd","invocationId":7,"parentRenderId":"cqkeawok7"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawok6","transparent":false},{"classId":"NavigationKeyboard_d3ddb8","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawok7","transparent":false},{"classId":"CStack_3c2a26","instanceId":3,"invocationId":2,"parentRenderId":"cqkeawok7","renderId":"cqkeawok8","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":3,"parentRenderId":"cqkeawok8","renderId":"cqkeawok9","transparent":true},{"classId":"CNavigationMenu_3d3ab8","instanceId":5,"invocationId":4,"parentRenderId":"cqkeawok7","renderId":"cqkeawoka","transparent":false},{"classId":"CNavigationMenuLink_2c9996","instanceId":6,"invocationId":5,"parentRenderId":"cqkeawok7","renderId":"cqkeawokb","transparent":false},{"classId":"CNavigationMenuItem_4751b5","instanceId":7,"invocationId":6,"parentRenderId":"cqkeawok7","renderId":"cqkeawokc","transparent":false},{"classId":"CNavigationMenuLink_2c9996","instanceId":8,"invocationId":7,"parentRenderId":"cqkeawok7","renderId":"cqkeawokd","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"NavigationKeyboard_d3ddb8","ownerRenderId":"cqkeawok7","policy":"template","receiverClassId":"CStack_3c2a26","receiverRenderId":"cqkeawok8","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CStack_3c2a26","ownerRenderId":"cqkeawok8","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawok9","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"NavigationKeyboard_d3ddb8","ownerRenderId":"cqkeawok7","policy":"template","receiverClassId":"CNavigationMenu_3d3ab8","receiverRenderId":"cqkeawoka","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":7,"kind":"implicit","locationId":null,"ownerClassId":"NavigationKeyboard_d3ddb8","ownerRenderId":"cqkeawok7","policy":"template","receiverClassId":"CNavigationMenuLink_2c9996","receiverRenderId":"cqkeawokb","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":8,"kind":"named","locationId":null,"ownerClassId":"NavigationKeyboard_d3ddb8","ownerRenderId":"cqkeawok7","policy":"template","receiverClassId":"CNavigationMenuItem_4751b5","receiverRenderId":"cqkeawokc","slotName":"label","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":9,"kind":"named","locationId":null,"ownerClassId":"NavigationKeyboard_d3ddb8","ownerRenderId":"cqkeawok7","policy":"template","receiverClassId":"CNavigationMenuItem_4751b5","receiverRenderId":"cqkeawokc","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":10,"kind":"implicit","locationId":null,"ownerClassId":"NavigationKeyboard_d3ddb8","ownerRenderId":"cqkeawok7","policy":"template","receiverClassId":"CNavigationMenuLink_2c9996","receiverRenderId":"cqkeawokd","slotName":"default","sourceInvocationId":7}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"NavigationKeyboard_d3ddb8","sourceRenderId":"cqkeawok7","tagName":"cstack","targetClassId":"CStack_3c2a26","targetRenderId":"cqkeawok8"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CStack_3c2a26","sourceRenderId":"cqkeawok8","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawok9"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"NavigationKeyboard_d3ddb8","sourceRenderId":"cqkeawok7","tagName":"cnavigationmenu","targetClassId":"CNavigationMenu_3d3ab8","targetRenderId":"cqkeawoka"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":3,"sourceClassId":"NavigationKeyboard_d3ddb8","sourceRenderId":"cqkeawok7","tagName":"cnavigationmenulink","targetClassId":"CNavigationMenuLink_2c9996","targetRenderId":"cqkeawokb"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":3,"sourceClassId":"NavigationKeyboard_d3ddb8","sourceRenderId":"cqkeawok7","tagName":"cnavigationmenuitem","targetClassId":"CNavigationMenuItem_4751b5","targetRenderId":"cqkeawokc"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":3,"sourceClassId":"NavigationKeyboard_d3ddb8","sourceRenderId":"cqkeawok7","tagName":"cnavigationmenulink","targetClassId":"CNavigationMenuLink_2c9996","targetRenderId":"cqkeawokd"}],"slotRegions":[{"fillId":2,"ownerRenderId":"cqkeawok8","parentRegionId":null,"receiverRenderId":"cqkeawok9","regionId":1,"resultOwnerRenderId":"cqkeawok8","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawok9"},{"fillId":1,"ownerRenderId":"cqkeawok7","parentRegionId":1,"receiverRenderId":"cqkeawok8","regionId":2,"resultOwnerRenderId":"cqkeawok7","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawok8"},{"fillId":5,"ownerRenderId":"cqkeawok7","parentRegionId":2,"receiverRenderId":"cqkeawoka","regionId":3,"resultOwnerRenderId":"cqkeawok7","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawok7"},{"fillId":7,"ownerRenderId":"cqkeawok7","parentRegionId":3,"receiverRenderId":"cqkeawokb","regionId":4,"resultOwnerRenderId":"cqkeawok7","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawok7"},{"fillId":8,"ownerRenderId":"cqkeawok7","parentRegionId":3,"receiverRenderId":"cqkeawokc","regionId":5,"resultOwnerRenderId":"cqkeawok7","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawok7"},{"fillId":9,"ownerRenderId":"cqkeawok7","parentRegionId":3,"receiverRenderId":"cqkeawokc","regionId":6,"resultOwnerRenderId":"cqkeawok7","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawok7"},{"fillId":10,"ownerRenderId":"cqkeawok7","parentRegionId":3,"receiverRenderId":"cqkeawokd","regionId":7,"resultOwnerRenderId":"cqkeawok7","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawok7"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NOYXZpZ2F0aW9uTWVudV8zZDNhYjguODE0ZmJjNThjYWY5Lmpz", "L2NpdHJ5L2NhY2hlL0NOYXZpZ2F0aW9uTWVudV8zZDNhYjguM2M2NzdhMjJkODFkMzAxYWYzYzEzODY1Zjk5ZjNmNTQuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NOYXZpZ2F0aW9uTWVudV8zZDNhYjguZDAzYjhhYWM2MTYxLmNzcw==", "L2NpdHJ5L2NhY2hlL0NTdGFja18zYzJhMjYuYjk5MjE5MGEwMzg5LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q05hdmlnYXRpb25NZW51XzNkM2FiOA==", "Y3FrZWF3b2th", "M2M2NzdhMjJkODFkMzAxYWYzYzEzODY1Zjk5ZjNmNTQ=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3b2s2"], ["Q1N0YWNrXzNjMmEyNg==", "Y3FrZWF3b2s4"]], "graph": "c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CNavigationMenu_3d3ab8", {
+  props: {
+    value: {},
+    disabled: {},
+    delay: {},
+    closeDelay: {},
+    loop: {},
+    orientation: {},
+    variant: {},
+    size: {},
+    onValueChange: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const root = els[0];
+    const list = root.querySelector(':scope > [data-citry-ui-part="list"]');
+    if (!(root instanceof HTMLElement) || !(list instanceof HTMLUListElement)) {
+      throw new Error("[citry-ui] CNavigationMenu requires its owned nav/list anatomy.");
+    }
+    const handoffKey = Symbol.for("citry-ui:navigation-menu-handoff");
+    const previous = root[handoffKey];
+    delete root[handoffKey];
+    let active = true;
+    let controlled = false;
+    let internalValue = previous?.serverValue === data.value ? previous.value : data.value;
+    let effectiveValue = null;
+    let onValueChange = null;
+    let entries = [];
+    let invalidStructure = false;
+    let openTimer = null;
+    let closeTimer = null;
+    let reconcileFrame = null;
+    let geometryFrame = null;
+    let geometryListening = false;
+    let outsideListening = false;
+    const invalidEpisodes = new Set();
+    let configuration = {
+      disabled: data.disabled,
+      delay: data.delay,
+      closeDelay: data.closeDelay,
+      loop: data.loop,
+      orientation: data.orientation,
+      variant: data.variant,
+      size: data.size,
+    };
+
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(`[citry-ui] CNavigationMenu ${name} received invalid client value.`, value, root);
+    };
+    const resolveBoolean = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveDelay = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (Number.isInteger(value) && value >= 0 && value <= 60000) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveChoice = (name, allowed) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowed.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveCallback = () => {
+      const value = props.onValueChange;
+      if (value === undefined || value === null || typeof value === "function") {
+        invalidEpisodes.delete("onValueChange");
+        return value ?? null;
+      }
+      reportInvalid("onValueChange", value);
+      return null;
+    };
+    const clearTimers = () => {
+      clearTimeout(openTimer);
+      clearTimeout(closeTimer);
+      openTimer = null;
+      closeTimer = null;
+    };
+    const directChildren = () => [...list.children].filter((element) => (
+      element.matches(':scope[data-citry-ui-part="link-item"], :scope[data-citry-ui-part="item"]')
+    ));
+    const collect = () => {
+      const children = directChildren();
+      const next = [];
+      const values = new Set();
+      let valid = children.length > 0 && children.length === list.children.length;
+      for (const child of children) {
+        const trigger = child.querySelector(':scope > [data-citry-navigation-menu-trigger]');
+        if (!trigger) continue;
+        const panel = child.querySelector(':scope > [data-citry-navigation-menu-panel]');
+        const value = trigger.dataset.value;
+        if (
+          !(trigger instanceof HTMLButtonElement)
+          || trigger.type !== "button"
+          || !panel
+          || !value
+          || values.has(value)
+        ) {
+          valid = false;
+          continue;
+        }
+        values.add(value);
+        next.push({ item: child, trigger, panel, value });
+      }
+      entries = next;
+      invalidStructure = !valid;
+      if (!valid) reportInvalid("structure", children.length);
+      else invalidEpisodes.delete("structure");
+    };
+    const entryFor = (value) => entries.find((entry) => entry.value === value) ?? null;
+    const deepActive = () => {
+      let current = root.ownerDocument.activeElement;
+      while (current?.shadowRoot?.activeElement) current = current.shadowRoot.activeElement;
+      return current;
+    };
+    const composedContains = (container, target) => {
+      let current = target;
+      while (current) {
+        if (current === container) return true;
+        current = current.parentNode ?? current.getRootNode?.()?.host ?? null;
+      }
+      return false;
+    };
+    const focusTargets = () => [...list.querySelectorAll(
+      ':scope > li > a[href], :scope > li > button:not(:disabled)',
+    )].filter((element) => element.offsetParent !== null);
+    const panelFocusTarget = (panel) => panel.querySelector(
+      'a[href], button:not(:disabled), input:not(:disabled), '
+        + 'select:not(:disabled), textarea:not(:disabled), '
+        + '[tabindex]:not([tabindex="-1"])',
+    );
+    const alignOpenPanel = () => {
+      geometryFrame = null;
+      for (const entry of entries) {
+        entry.panel.removeAttribute("data-cui-navigation-menu-align-end");
+        entry.panel.style.removeProperty("--_cui-navigation-menu-panel-shift");
+      }
+      if (configuration.orientation !== "horizontal") return;
+      const entry = entryFor(effectiveValue);
+      if (!entry || entry.panel.hidden) return;
+      const view = root.ownerDocument.defaultView;
+      const viewportWidth = view?.visualViewport?.width ?? view?.innerWidth ?? 0;
+      if (!viewportWidth) return;
+      const margin = 16;
+      let rect = entry.panel.getBoundingClientRect();
+      const rtl = getComputedStyle(root).direction === "rtl";
+      const overInlineEnd = rtl ? rect.left < margin : rect.right > viewportWidth - margin;
+      entry.panel.toggleAttribute("data-cui-navigation-menu-align-end", overInlineEnd);
+      rect = entry.panel.getBoundingClientRect();
+      let shift = 0;
+      if (rect.right > viewportWidth - margin) shift -= rect.right - (viewportWidth - margin);
+      if (rect.left + shift < margin) shift += margin - (rect.left + shift);
+      if (Math.abs(shift) > 0.5) {
+        entry.panel.style.setProperty("--_cui-navigation-menu-panel-shift", `${shift}px`);
+      }
+    };
+    const scheduleGeometry = () => {
+      if (geometryFrame !== null) return;
+      geometryFrame = requestAnimationFrame(alignOpenPanel);
+    };
+    const startGeometry = () => {
+      if (!geometryListening) {
+        geometryListening = true;
+        root.ownerDocument.defaultView?.addEventListener("resize", scheduleGeometry);
+        root.ownerDocument.addEventListener("scroll", scheduleGeometry, true);
+      }
+      scheduleGeometry();
+    };
+    const stopGeometry = () => {
+      if (geometryListening) {
+        geometryListening = false;
+        root.ownerDocument.defaultView?.removeEventListener("resize", scheduleGeometry);
+        root.ownerDocument.removeEventListener("scroll", scheduleGeometry, true);
+      }
+      cancelAnimationFrame(geometryFrame);
+      geometryFrame = null;
+    };
+    const startOutside = () => {
+      if (outsideListening || effectiveValue === null) return;
+      outsideListening = true;
+      root.ownerDocument.addEventListener("pointerdown", onDocumentPointerDown, true);
+      root.ownerDocument.addEventListener("focusin", onDocumentFocusIn, true);
+    };
+    const stopOutside = () => {
+      if (!outsideListening) return;
+      outsideListening = false;
+      root.ownerDocument.removeEventListener("pointerdown", onDocumentPointerDown, true);
+      root.ownerDocument.removeEventListener("focusin", onDocumentFocusIn, true);
+    };
+    const apply = (value) => {
+      const next = configuration.disabled || invalidStructure || !entryFor(value) ? null : value;
+      effectiveValue = next;
+      root.toggleAttribute("data-disabled", configuration.disabled);
+      root.dataset.orientation = configuration.orientation;
+      root.dataset.variant = configuration.variant;
+      root.dataset.size = configuration.size;
+      root.toggleAttribute("data-loop", configuration.loop);
+      if (next === null) delete root.dataset.value;
+      else root.dataset.value = next;
+      for (const entry of entries) {
+        const open = entry.value === next;
+        const disabled = configuration.disabled || entry.trigger.disabled;
+        entry.item.toggleAttribute("data-open", open);
+        entry.item.toggleAttribute("data-disabled", disabled);
+        entry.trigger.toggleAttribute("data-open", open);
+        entry.trigger.toggleAttribute("data-disabled", disabled);
+        entry.trigger.setAttribute("aria-expanded", String(open));
+        entry.panel.toggleAttribute("data-open", open);
+        entry.panel.hidden = !open;
+        entry.panel.inert = !open;
+      }
+      if (next === null) {
+        stopOutside();
+        stopGeometry();
+      } else {
+        startOutside();
+        startGeometry();
+      }
+    };
+    const notify = (next, previousValue, reason, source, forced = false) => {
+      onValueChange?.(next, {
+        value: next,
+        previousValue,
+        reason,
+        controlled,
+        forced,
+        source,
+      });
+    };
+    const request = (next, reason, source, forced = false) => {
+      clearTimers();
+      const previousValue = effectiveValue;
+      if (forced) {
+        internalValue = null;
+        apply(null);
+        if (previousValue !== null) notify(null, previousValue, reason, source, true);
+        return;
+      }
+      if (!controlled) {
+        internalValue = next;
+        apply(next);
+      }
+      if (next !== previousValue) notify(next, previousValue, reason, source, false);
+    };
+    function onDocumentPointerDown(event) {
+      if (!event.composedPath().includes(root)) request(null, "outside", event.target);
+    }
+    function onDocumentFocusIn(event) {
+      if (!event.composedPath().includes(root)) request(null, "focus-outside", event.target);
+    }
+    const onClick = (event) => {
+      const path = event.composedPath();
+      const trigger = path.find((element) => element?.matches?.("[data-citry-navigation-menu-trigger]"));
+      if (trigger && root.contains(trigger)) {
+        const entry = entries.find((candidate) => candidate.trigger === trigger);
+        if (entry && !configuration.disabled && !trigger.disabled) {
+          request(effectiveValue === entry.value ? null : entry.value, "trigger", trigger);
+        }
+        return;
+      }
+      const link = path.find((element) => element?.matches?.("a[href]"));
+      if (link && root.contains(link) && effectiveValue !== null) request(null, "link", link);
+    };
+    const onKeyDown = (event) => {
+      const target = event.target;
+      const controls = focusTargets();
+      const index = controls.indexOf(target);
+      if (event.key === "Escape" && effectiveValue !== null) {
+        const entry = entryFor(effectiveValue);
+        request(null, "escape", target);
+        entry?.trigger.focus();
+        event.preventDefault();
+        return;
+      }
+      if (index < 0) return;
+      const rtl = getComputedStyle(root).direction === "rtl";
+      let delta = 0;
+      if (configuration.orientation === "horizontal") {
+        if (event.key === (rtl ? "ArrowLeft" : "ArrowRight")) delta = 1;
+        if (event.key === (rtl ? "ArrowRight" : "ArrowLeft")) delta = -1;
+        if (event.key === "ArrowDown") {
+          const entry = entries.find((candidate) => (
+            candidate.trigger === target && candidate.value === effectiveValue
+          ));
+          const focusTarget = entry && panelFocusTarget(entry.panel);
+          if (focusTarget) {
+            focusTarget.focus();
+            event.preventDefault();
+            return;
+          }
+        }
+      } else {
+        if (event.key === "ArrowDown") delta = 1;
+        if (event.key === "ArrowUp") delta = -1;
+      }
+      if (event.key === "Home") {
+        controls[0]?.focus();
+        event.preventDefault();
+        return;
+      }
+      if (event.key === "End") {
+        controls.at(-1)?.focus();
+        event.preventDefault();
+        return;
+      }
+      if (!delta) return;
+      let next = index + delta;
+      if (configuration.loop) next = (next + controls.length) % controls.length;
+      if (next >= 0 && next < controls.length) controls[next].focus();
+      event.preventDefault();
+    };
+    const hoverEligible = (event) => event.pointerType === "mouse" || (
+      event.pointerType === "pen" && event.buttons === 0 && event.pressure === 0
+    );
+    const onPointerOver = (event) => {
+      if (!hoverEligible(event) || configuration.disabled) return;
+      const trigger = event.target.closest?.("[data-citry-navigation-menu-trigger]");
+      if (!trigger || !root.contains(trigger) || trigger.disabled) return;
+      const entry = entries.find((candidate) => candidate.trigger === trigger);
+      if (!entry || trigger.contains(event.relatedTarget)) return;
+      clearTimeout(closeTimer);
+      clearTimeout(openTimer);
+      openTimer = setTimeout(() => request(entry.value, "hover", trigger), configuration.delay);
+    };
+    const onPointerOut = (event) => {
+      if (!hoverEligible(event) || root.contains(event.relatedTarget)) return;
+      clearTimeout(openTimer);
+      clearTimeout(closeTimer);
+      closeTimer = setTimeout(() => request(null, "hover", event.target), configuration.closeDelay);
+    };
+    const reconcile = () => {
+      reconcileFrame = null;
+      const previousValue = effectiveValue;
+      collect();
+      if (invalidStructure) {
+        apply(null);
+        if (previousValue !== null) notify(null, previousValue, "structure", root, true);
+        return;
+      }
+      if (previousValue !== null && !entryFor(previousValue)) {
+        internalValue = null;
+        apply(null);
+        notify(null, previousValue, "structure", root, true);
+        return;
+      }
+      apply(controlled ? effectiveValue : internalValue);
+    };
+    const scheduleReconcile = () => {
+      if (reconcileFrame !== null) return;
+      reconcileFrame = requestAnimationFrame(reconcile);
+    };
+    const observer = new MutationObserver(scheduleReconcile);
+    observer.observe(list, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled"] });
+    root.addEventListener("click", onClick, true);
+    root.addEventListener("keydown", onKeyDown, true);
+    root.addEventListener("pointerover", onPointerOver);
+    root.addEventListener("pointerout", onPointerOut);
+    collect();
+
+    effect(() => {
+      configuration = {
+        disabled: resolveBoolean("disabled"),
+        delay: resolveDelay("delay"),
+        closeDelay: resolveDelay("closeDelay"),
+        loop: resolveBoolean("loop"),
+        orientation: resolveChoice("orientation", ["horizontal", "vertical"]),
+        variant: resolveChoice("variant", ["plain", "surface"]),
+        size: resolveChoice("size", ["sm", "md", "lg"]),
+      };
+      onValueChange = resolveCallback();
+      const supplied = props.value !== undefined;
+      let next = internalValue;
+      if (supplied) {
+        if (props.value === null || (typeof props.value === "string" && entryFor(props.value))) {
+          controlled = true;
+          invalidEpisodes.delete("value");
+          next = props.value;
+          internalValue = props.value;
+        } else {
+          controlled = false;
+          reportInvalid("value", props.value);
+          next = internalValue;
+        }
+      } else {
+        controlled = false;
+        invalidEpisodes.delete("value");
+      }
+      if (configuration.disabled && effectiveValue !== null) {
+        request(null, "disabled", root, true);
+      } else {
+        apply(next);
+      }
+      root.setAttribute("data-citry-navigation-menu-initialized", "");
+    });
+
+    return () => {
+      active = false;
+      clearTimers();
+      cancelAnimationFrame(reconcileFrame);
+      stopGeometry();
+      observer.disconnect();
+      stopOutside();
+      root.removeEventListener("click", onClick, true);
+      root.removeEventListener("keydown", onKeyDown, true);
+      root.removeEventListener("pointerover", onPointerOver);
+      root.removeEventListener("pointerout", onPointerOut);
+      root[handoffKey] = { value: internalValue, serverValue: data.value };
+      root.removeAttribute("data-citry-navigation-menu-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CNavigationMenu_3d3ab8", "3c677a22d81d301af3c13865f99f3f54", atob("eyJ2YWx1ZSI6bnVsbCwib3JpZW50YXRpb24iOiJob3Jpem9udGFsIiwiZGlzYWJsZWQiOmZhbHNlLCJkZWxheSI6MjAwLCJjbG9zZURlbGF5IjozMDAsImxvb3AiOnRydWUsInZhcmlhbnQiOiJwbGFpbiIsInNpemUiOiJtZCJ9"));
+})();</script></body></html><!--citry:g1:c3e8965c9190bcf7d45bfa5352d7f5c4fda07ea622ec154b93673ccc9ed4bbc4:0:i:1:e-->

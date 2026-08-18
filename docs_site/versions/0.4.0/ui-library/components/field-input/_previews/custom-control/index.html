@@ -1,0 +1,323 @@
+<!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:i:1:s--><!doctype html><html data-cid-cqkeawm9n lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Connect a custom control</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CustomFieldControl_b6c571>:where(.shore-custom-control) {
+  max-width: 40rem;
+  padding: 1.25rem;
+  border: 1px solid light-dark(#b9d8df, #315967);
+  border-radius: 0.875rem;
+  background: Canvas;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.shore-custom-control textarea) {
+  box-sizing: border-box;
+  inline-size: 100%;
+  padding: 0.75rem;
+  border: 1px solid color-mix(in srgb, CanvasText 38%, transparent);
+  border-radius: 0.5rem;
+  background: Canvas;
+  color: CanvasText;
+  font: inherit;
+  resize: vertical;
+}</style><style data-citry-css-class=CField_81c723>@layer citry-ui.theme {
+  :where(.cui-field) {
+    --_cui-field-gap: var(--cui-field-gap, 0.5rem);
+    --_cui-field-label-color: var(--cui-field-label-color, CanvasText);
+    --_cui-field-label-weight: var(--cui-field-label-weight, 600);
+    --_cui-field-description-color: var(
+      --cui-field-description-color,
+      color-mix(in srgb, CanvasText 68%, transparent)
+    );
+    --_cui-field-error-color: var(
+      --cui-field-error-color,
+      light-dark(#b42318, #fda29b)
+    );
+    --_cui-field-required-color: var(
+      --cui-field-required-color,
+      var(--_cui-field-error-color)
+    );
+
+    display: grid;
+    gap: var(--_cui-field-gap);
+    min-inline-size: 0;
+    color: CanvasText;
+    font-family: ui-sans-serif, system-ui, sans-serif;
+  }
+
+  :where(.cui-field[data-orientation="horizontal"]) {
+    grid-template-columns: minmax(8rem, 0.35fr) minmax(0, 1fr);
+    align-items: start;
+  }
+
+  :where(.cui-field[data-density="comfortable"]) {
+    --_cui-field-gap: var(--cui-field-gap, 0.375rem);
+  }
+
+  :where(.cui-field[data-density="compact"]) {
+    --_cui-field-gap: var(--cui-field-gap, 0.25rem);
+  }
+
+  :where(.cui-field > [data-citry-ui-part="label"]) {
+    color: var(--_cui-field-label-color);
+    font-weight: var(--_cui-field-label-weight);
+  }
+
+  :where(.cui-field__required) {
+    color: var(--_cui-field-required-color);
+  }
+
+  :where(.cui-field > [data-citry-ui-part="description"]) {
+    color: var(--_cui-field-description-color);
+    font-size: 0.875em;
+  }
+
+  :where(.cui-field > [data-citry-ui-part="error"]) {
+    color: var(--_cui-field-error-color);
+    font-size: 0.875em;
+  }
+
+  @media (max-width: 32rem) {
+    :where(.cui-field[data-orientation="horizontal"]) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-field[data-invalid] > [data-citry-ui-part="error"]) {
+      color: Mark;
+    }
+  }
+}</style></head><body><main><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:i:2:s--><section class=shore-custom-control data-cid-cqkeawm9o><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:i:3:s--><div class=cui-field data-cid=cqkeawm9p data-cid-cqkeawm9p data-citry-field-root data-citry-root data-citry-ui-part=field data-density=default data-orientation=vertical data-required id=cui-field-cqkeawm9p-control-field><label data-citry-ui-part=label for=cui-field-cqkeawm9p-control id=cui-field-cqkeawm9p-control-label><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:r:1:s--> Shore observation <!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:r:1:e--> <span aria-hidden=true class=cui-field__required data-citry-ui-part=required-indicator> * </span></label><div data-citry-ui-part=control><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:r:2:s--><textarea placeholder="Describe the pool, weather, and visible species" aria-describedby=cui-field-cqkeawm9p-control-description data-citry-field-control id=cui-field-cqkeawm9p-control required rows=5></textarea><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:r:2:e--></div><div data-citry-ui-part=description id=cui-field-cqkeawm9p-control-description><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:r:3:s--> The textarea receives Field IDs and server state from slot data. <!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:r:3:e--></div><div aria-live=polite data-citry-ui-part=error hidden id=cui-field-cqkeawm9p-control-error></div></div><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:i:3:e--></section><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"CustomFieldControl_b6c571","className":"CustomFieldControl"},{"classId":"CField_81c723","className":"CField"}],"componentExecutionOrderConstraints":[{"childRenderId":"cqkeawm9p","invocationId":2,"parentRenderId":"cqkeawm9o"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawm9n","transparent":false},{"classId":"CustomFieldControl_b6c571","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawm9o","transparent":false},{"classId":"CField_81c723","instanceId":3,"invocationId":2,"parentRenderId":"cqkeawm9o","renderId":"cqkeawm9p","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"CustomFieldControl_b6c571","ownerRenderId":"cqkeawm9o","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"cqkeawm9p","slotName":"label","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"CustomFieldControl_b6c571","ownerRenderId":"cqkeawm9o","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"cqkeawm9p","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"CustomFieldControl_b6c571","ownerRenderId":"cqkeawm9o","policy":"template","receiverClassId":"CField_81c723","receiverRenderId":"cqkeawm9p","slotName":"description","sourceInvocationId":2}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CustomFieldControl_b6c571","sourceRenderId":"cqkeawm9o","tagName":"cfield","targetClassId":"CField_81c723","targetRenderId":"cqkeawm9p"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cqkeawm9o","parentRegionId":null,"receiverRenderId":"cqkeawm9p","regionId":1,"resultOwnerRenderId":"cqkeawm9o","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawm9p"},{"fillId":2,"ownerRenderId":"cqkeawm9o","parentRegionId":null,"receiverRenderId":"cqkeawm9p","regionId":2,"resultOwnerRenderId":"cqkeawm9o","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawm9p"},{"fillId":3,"ownerRenderId":"cqkeawm9o","parentRegionId":null,"receiverRenderId":"cqkeawm9p","regionId":3,"resultOwnerRenderId":"cqkeawm9o","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawm9p"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuZDNhODE3Yjg5YjI5Lmpz", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuMmQ2YjAyODZiZThhNTljZDhhYmVjYWE5YjQyNDcwNDYuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0N1c3RvbUZpZWxkQ29udHJvbF9iNmM1NzEuZDFlOWY0YzIwZTFiLmNzcw==", "L2NpdHJ5L2NhY2hlL0NGaWVsZF84MWM3MjMuOTk2YTE3ZGJmZGUwLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q0ZpZWxkXzgxYzcyMw==", "Y3FrZWF3bTlw", "MmQ2YjAyODZiZThhNTljZDhhYmVjYWE5YjQyNDcwNDY=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3bTlu"], ["Q3VzdG9tRmllbGRDb250cm9sX2I2YzU3MQ==", "Y3FrZWF3bTlv"]], "graph": "3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CField_81c723", {
+  props: {
+    required: {},
+    disabled: {},
+    readonly: {},
+    invalid: {},
+    orientation: {},
+    density: {},
+  },
+  init: ({ els, data, props, effect, reactive, provide, inject }) => {
+    const root = els[0];
+    const requiredIndicator = root.querySelector(
+      ':scope > [data-citry-ui-part="label"] > [data-citry-ui-part="required-indicator"]',
+    );
+    // Controls may expose parts with the same public names. Restrict the
+    // lookup to this Field's direct status node so nested component
+    // internals are never mistaken for Field-owned UI.
+    const error = root.querySelector(':scope > [data-citry-ui-part="error"]');
+    const controls = root.querySelectorAll('[data-citry-field-control]');
+    if (controls.length !== 1) {
+      throw new Error(
+        `[citry-ui] CField requires exactly one marked control, but found ${controls.length}.`,
+      );
+    }
+    const control = controls[0];
+    const initialSupportsRequired = control.getAttribute(
+      "data-citry-field-supports-required",
+    ) !== "false";
+    const initialSupportsReadonly = control.getAttribute(
+      "data-citry-field-supports-readonly",
+    ) !== "false";
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const allowedValues = {
+      orientation: ["vertical", "horizontal"],
+      density: ["default", "comfortable", "compact"],
+    };
+    const invalidEpisodes = new Map();
+    let externalInvalid = data.invalid;
+    let capabilityGeneration = 0;
+    let activeCapabilityGeneration = null;
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      const describedValue = describeValue(value);
+      const fingerprint = `${typeof value}:${describedValue}`;
+      if (invalidEpisodes.get(name) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(name, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name} received invalid client value ${describedValue}; `
+          + "using the server-rendered fallback.",
+        root,
+      );
+    };
+    const reportUnsupported = (name) => {
+      const episode = `capability:${name}`;
+      const fingerprint = "unsupported:true";
+      if (invalidEpisodes.get(episode) === fingerprint) {
+        return;
+      }
+      invalidEpisodes.set(episode, fingerprint);
+      console.error(
+        `[citry-ui] CField ${name}=true is not supported by its registered control; using false.`,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const context = reactive({
+      controlId: data.controlId,
+      descriptionId: data.descriptionId,
+      errorId: data.errorId,
+      hasDescription: data.hasDescription,
+      hasError: data.hasError,
+      required: data.required,
+      disabled: data.disabled,
+      readonly: data.readonly,
+      invalid: data.invalid,
+      nativeInvalid: false,
+      supportsRequired: initialSupportsRequired,
+      supportsReadonly: initialSupportsReadonly,
+      registerCapabilities(capabilities) {
+        const generation = ++capabilityGeneration;
+        activeCapabilityGeneration = generation;
+        context.supportsRequired = capabilities.required !== false;
+        context.supportsReadonly = capabilities.readonly !== false;
+        return () => {
+          if (activeCapabilityGeneration !== generation) {
+            return;
+          }
+          activeCapabilityGeneration = null;
+          context.supportsRequired = true;
+          context.supportsReadonly = true;
+        };
+      },
+      setNativeInvalid(value) {
+        context.nativeInvalid = Boolean(value);
+        applyInvalid();
+      },
+    });
+    provide(Symbol.for("citry-ui:field"), context);
+
+    const applyInvalid = () => {
+      const invalid = externalInvalid || context.nativeInvalid;
+      context.invalid = invalid;
+      root.toggleAttribute("data-invalid", invalid);
+      error.hidden = !(invalid && context.hasError);
+    };
+    effect(() => {
+      const requestedRequired = resolveBoolean("required", data.required);
+      const readonlyFallback = data.inheritsReadonly && form ? form.readonly : data.readonly;
+      // CForm uses a native disabled fieldset, so its disabled state
+      // must win over a descendant's local configuration.
+      const disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+      const requestedReadonly = resolveBoolean("readonly", readonlyFallback);
+      const required = requestedRequired && context.supportsRequired;
+      const readonly = requestedReadonly && context.supportsReadonly;
+      if (requestedRequired && !context.supportsRequired) {
+        reportUnsupported("required");
+      } else {
+        invalidEpisodes.delete("capability:required");
+      }
+      if (requestedReadonly && !context.supportsReadonly) {
+        reportUnsupported("readonly");
+      } else {
+        invalidEpisodes.delete("capability:readonly");
+      }
+      externalInvalid = resolveBoolean("invalid", data.invalid);
+      const orientation = resolveChoice("orientation");
+      const density = resolveChoice("density");
+
+      context.required = required;
+      context.disabled = disabled;
+      context.readonly = readonly;
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", disabled);
+      root.toggleAttribute("data-readonly", readonly);
+      root.dataset.orientation = orientation;
+      root.dataset.density = density;
+      requiredIndicator.hidden = !required;
+      applyInvalid();
+    });
+    root.setAttribute("data-citry-field-initialized", "");
+
+    return () => {
+      root.removeAttribute("data-citry-field-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CField_81c723", "2d6b0286be8a59cd8abecaa9b4247046", atob("eyJyZXF1aXJlZCI6dHJ1ZSwiZGlzYWJsZWQiOmZhbHNlLCJyZWFkb25seSI6ZmFsc2UsImluaGVyaXRzUmVhZG9ubHkiOnRydWUsImludmFsaWQiOmZhbHNlLCJvcmllbnRhdGlvbiI6InZlcnRpY2FsIiwiZGVuc2l0eSI6ImRlZmF1bHQiLCJjb250cm9sSWQiOiJjdWktZmllbGQtY3FrZWF3bTlwLWNvbnRyb2wiLCJkZXNjcmlwdGlvbklkIjoiY3VpLWZpZWxkLWNxa2Vhd205cC1jb250cm9sLWRlc2NyaXB0aW9uIiwiZXJyb3JJZCI6ImN1aS1maWVsZC1jcWtlYXdtOXAtY29udHJvbC1lcnJvciIsImhhc0Rlc2NyaXB0aW9uIjp0cnVlLCJoYXNFcnJvciI6ZmFsc2V9"));
+})();</script></body></html><!--citry:g1:3f9648fe067f55ef2af120dabb6f011992071f952a97cdbe686d056bda38df02:0:i:1:e-->

@@ -1,0 +1,504 @@
+<!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:1:s--><!doctype html><html data-cid-cqkeawmkw lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Change home settings</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CSwitch_fa49a4>@layer citry-ui.theme {
+  :where(.cui-switch) {
+    --_cui-switch-off-color: var(--cui-switch-off-color, light-dark(#667085, #98a2b3));
+    --_cui-switch-on-color: var(--cui-switch-on-color, light-dark(#175cd3, #84adff));
+    --_cui-switch-thumb-color: var(--cui-switch-thumb-color, Canvas);
+    --_cui-switch-foreground: var(--cui-switch-foreground, CanvasText);
+    --_cui-switch-focus-color: var(--cui-switch-focus-color, Highlight);
+    --_cui-switch-invalid-color: var(--cui-switch-invalid-color, light-dark(#b42318, #f97066));
+    --_cui-switch-disabled-opacity: var(--cui-switch-disabled-opacity, 0.52);
+    --_cui-switch-width: var(--cui-switch-width, 2.5rem);
+    --_cui-switch-height: var(--cui-switch-height, 1.5rem);
+    --_cui-switch-padding: var(--cui-switch-padding, 0.1875rem);
+    --_cui-switch-gap: var(--cui-switch-gap, 0.625rem);
+    --_cui-switch-duration: var(--cui-switch-duration, 140ms);
+    position: relative;
+    display: inline-grid;
+    color: var(--_cui-switch-foreground);
+    font: inherit;
+    line-height: 1.35;
+  }
+
+  :where(.cui-switch[data-size="sm"]) {
+    --_cui-switch-width: var(--cui-switch-width, 2rem);
+    --_cui-switch-height: var(--cui-switch-height, 1.25rem);
+    font-size: 0.8125rem;
+  }
+
+  :where(.cui-switch[data-size="lg"]) {
+    --_cui-switch-width: var(--cui-switch-width, 3rem);
+    --_cui-switch-height: var(--cui-switch-height, 1.75rem);
+    font-size: 1rem;
+  }
+
+  :where(.cui-switch__input) {
+    position: absolute;
+    inline-size: var(--_cui-switch-width);
+    block-size: var(--_cui-switch-height);
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 1;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="surface"]) {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--_cui-switch-gap);
+    cursor: pointer;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="track"]) {
+    box-sizing: border-box;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    inline-size: var(--_cui-switch-width);
+    block-size: var(--_cui-switch-height);
+    padding: var(--_cui-switch-padding);
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: var(--_cui-switch-off-color);
+    transition: background-color var(--_cui-switch-duration) ease;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="thumb"]) {
+    box-sizing: border-box;
+    display: block;
+    inline-size: calc(var(--_cui-switch-height) - 2 * var(--_cui-switch-padding) - 2px);
+    block-size: calc(var(--_cui-switch-height) - 2 * var(--_cui-switch-padding) - 2px);
+    border-radius: 50%;
+    background: var(--_cui-switch-thumb-color);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 25%);
+    transform: translateX(0);
+    transition: transform var(--_cui-switch-duration) ease;
+  }
+
+  :where(.cui-switch__input:checked + [data-citry-ui-part="surface"] [data-citry-ui-part="track"]) {
+    background: var(--_cui-switch-on-color);
+  }
+
+  :where(.cui-switch__input:checked + [data-citry-ui-part="surface"] [data-citry-ui-part="thumb"]) {
+    transform: translateX(
+      calc(var(--_cui-switch-width) - var(--_cui-switch-height))
+    );
+  }
+
+  :where(
+    .cui-switch:dir(rtl)
+    .cui-switch__input:checked
+    + [data-citry-ui-part="surface"]
+    [data-citry-ui-part="thumb"]
+  ) {
+    transform: translateX(
+      calc((var(--_cui-switch-width) - var(--_cui-switch-height)) * -1)
+    );
+  }
+
+  :where(.cui-switch__input:focus-visible + [data-citry-ui-part="surface"] [data-citry-ui-part="track"]) {
+    outline: 0.1875rem solid color-mix(in srgb, var(--_cui-switch-focus-color) 42%, transparent);
+    outline-offset: 0.125rem;
+  }
+
+  :where(.cui-switch[data-invalid] [data-citry-ui-part="track"]) {
+    box-shadow: 0 0 0 2px var(--_cui-switch-invalid-color);
+  }
+
+  :where(.cui-switch[data-disabled]) {
+    opacity: var(--_cui-switch-disabled-opacity);
+  }
+
+  :where(.cui-switch[data-disabled] .cui-switch__input),
+  :where(.cui-switch[data-disabled] [data-citry-ui-part="surface"]) {
+    cursor: not-allowed;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="body"]) {
+    display: grid;
+    min-inline-size: 0;
+    gap: 0.2rem;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="label"], .cui-switch [data-citry-ui-part="description"]) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+
+  :where(.cui-switch [data-citry-ui-part="description"]) {
+    color: color-mix(in srgb, currentColor 72%, transparent);
+    font-size: 0.82em;
+  }
+
+  :where(.cui-switch[data-label-pos="start"] [data-citry-ui-part="surface"]) {
+    flex-direction: row-reverse;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(.cui-switch [data-citry-ui-part="track"], .cui-switch [data-citry-ui-part="thumb"]) {
+      transition-duration: 0.01ms;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-switch [data-citry-ui-part="track"]) {
+      border-color: ButtonText;
+      background: Canvas;
+    }
+
+    :where(.cui-switch__input:checked + [data-citry-ui-part="surface"] [data-citry-ui-part="track"]) {
+      background: Highlight;
+    }
+
+    :where(.cui-switch [data-citry-ui-part="thumb"]) {
+      background: ButtonText;
+      box-shadow: none;
+    }
+  }
+
+  @media print {
+    :where(.cui-switch [data-citry-ui-part="track"]) {
+      border-color: currentColor;
+      background: transparent;
+    }
+
+    :where(.cui-switch__input:checked + [data-citry-ui-part="surface"] [data-citry-ui-part="track"]) {
+      background: currentColor;
+    }
+  }
+}</style><style data-citry-css-class=CStack_3c2a26>@layer citry-ui.theme {
+  :where([data-citry-ui-part="stack"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.75rem);
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: var(--_cui-stack-gap);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="0"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xs"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="sm"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="lg"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xl"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="start"]) {
+    align-items: flex-start;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="center"]) {
+    align-items: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="end"]) {
+    align-items: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="baseline"]) {
+    align-items: baseline;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="center"]) {
+    justify-content: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="end"]) {
+    justify-content: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="between"]) {
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="around"]) {
+    justify-content: space-around;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="evenly"]) {
+    justify-content: space-evenly;
+  }
+
+  :where([data-citry-ui-part="stack"][data-reverse]) {
+    flex-direction: column-reverse;
+  }
+
+  :where([data-citry-ui-part="stack"] > *) {
+    min-inline-size: 0;
+  }
+}</style></head><body><main><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:2:s--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:3:s--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:4:s--><div class=cui-stack data-align=stretch data-cid-cqkeawmkx data-cid-cqkeawmky data-citry-ui-part=stack data-gap=md data-justify=start><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:1:s--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:2:s--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:5:s--><span class=cui-switch data-cid=cqkeawml0 data-cid-cqkeawml0 data-citry-root data-citry-ui-part=switch data-label-pos=end data-size=md> <input checked class=cui-switch__input data-citry-ui-part=input id=cui-switch-cqkeawml0 role=switch type=checkbox value=on> <span data-citry-ui-part=surface> <span aria-hidden=true data-citry-ui-part=track> <span data-citry-ui-part=thumb></span> </span> <span data-citry-ui-part=body> <label data-citry-ui-part=label for=cui-switch-cqkeawml0><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:3:s-->Porch light<!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:3:e--></label> </span> </span> </span><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:5:e--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:6:s--><span class=cui-switch data-cid=cqkeawml1 data-cid-cqkeawml1 data-citry-root data-citry-ui-part=switch data-label-pos=end data-size=md> <input class=cui-switch__input data-citry-ui-part=input id=cui-switch-cqkeawml1 role=switch type=checkbox value=on> <span data-citry-ui-part=surface> <span aria-hidden=true data-citry-ui-part=track> <span data-citry-ui-part=thumb></span> </span> <span data-citry-ui-part=body> <label data-citry-ui-part=label for=cui-switch-cqkeawml1><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:4:s-->Robot vacuum schedule<!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:4:e--></label> </span> </span> </span><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:6:e--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:7:s--><span class=cui-switch data-cid=cqkeawml2 data-cid-cqkeawml2 data-citry-root data-citry-ui-part=switch data-label-pos=end data-size=md> <input checked class=cui-switch__input data-citry-ui-part=input id=cui-switch-cqkeawml2 role=switch type=checkbox value=on> <span data-citry-ui-part=surface> <span aria-hidden=true data-citry-ui-part=track> <span data-citry-ui-part=thumb></span> </span> <span data-citry-ui-part=body> <label data-citry-ui-part=label for=cui-switch-cqkeawml2><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:5:s-->Door chime<!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:5:e--></label> </span> </span> </span><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:7:e--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:2:e--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:r:1:e--></div><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:4:e--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:3:e--><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"HomeSettings_a60974","className":"HomeSettings"},{"classId":"CStack_3c2a26","className":"CStack"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CSwitch_fa49a4","className":"CSwitch"}],"componentExecutionOrderConstraints":[{"childRenderId":"cqkeawmky","invocationId":2,"parentRenderId":"cqkeawmkx"},{"childRenderId":"cqkeawml0","invocationId":4,"parentRenderId":"cqkeawmkx"},{"childRenderId":"cqkeawml1","invocationId":5,"parentRenderId":"cqkeawmkx"},{"childRenderId":"cqkeawml2","invocationId":6,"parentRenderId":"cqkeawmkx"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawmkw","transparent":false},{"classId":"HomeSettings_a60974","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawmkx","transparent":false},{"classId":"CStack_3c2a26","instanceId":3,"invocationId":2,"parentRenderId":"cqkeawmkx","renderId":"cqkeawmky","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":3,"parentRenderId":"cqkeawmky","renderId":"cqkeawmkz","transparent":true},{"classId":"CSwitch_fa49a4","instanceId":5,"invocationId":4,"parentRenderId":"cqkeawmkx","renderId":"cqkeawml0","transparent":false},{"classId":"CSwitch_fa49a4","instanceId":6,"invocationId":5,"parentRenderId":"cqkeawmkx","renderId":"cqkeawml1","transparent":false},{"classId":"CSwitch_fa49a4","instanceId":7,"invocationId":6,"parentRenderId":"cqkeawmkx","renderId":"cqkeawml2","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"HomeSettings_a60974","ownerRenderId":"cqkeawmkx","policy":"template","receiverClassId":"CStack_3c2a26","receiverRenderId":"cqkeawmky","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CStack_3c2a26","ownerRenderId":"cqkeawmky","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawmkz","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"implicit","locationId":null,"ownerClassId":"HomeSettings_a60974","ownerRenderId":"cqkeawmkx","policy":"template","receiverClassId":"CSwitch_fa49a4","receiverRenderId":"cqkeawml0","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":6,"kind":"implicit","locationId":null,"ownerClassId":"HomeSettings_a60974","ownerRenderId":"cqkeawmkx","policy":"template","receiverClassId":"CSwitch_fa49a4","receiverRenderId":"cqkeawml1","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":7,"kind":"implicit","locationId":null,"ownerClassId":"HomeSettings_a60974","ownerRenderId":"cqkeawmkx","policy":"template","receiverClassId":"CSwitch_fa49a4","receiverRenderId":"cqkeawml2","slotName":"default","sourceInvocationId":6}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"HomeSettings_a60974","sourceRenderId":"cqkeawmkx","tagName":"cstack","targetClassId":"CStack_3c2a26","targetRenderId":"cqkeawmky"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CStack_3c2a26","sourceRenderId":"cqkeawmky","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawmkz"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"HomeSettings_a60974","sourceRenderId":"cqkeawmkx","tagName":"cswitch","targetClassId":"CSwitch_fa49a4","targetRenderId":"cqkeawml0"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"HomeSettings_a60974","sourceRenderId":"cqkeawmkx","tagName":"cswitch","targetClassId":"CSwitch_fa49a4","targetRenderId":"cqkeawml1"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"HomeSettings_a60974","sourceRenderId":"cqkeawmkx","tagName":"cswitch","targetClassId":"CSwitch_fa49a4","targetRenderId":"cqkeawml2"}],"slotRegions":[{"fillId":2,"ownerRenderId":"cqkeawmky","parentRegionId":null,"receiverRenderId":"cqkeawmkz","regionId":1,"resultOwnerRenderId":"cqkeawmky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmkz"},{"fillId":1,"ownerRenderId":"cqkeawmkx","parentRegionId":1,"receiverRenderId":"cqkeawmky","regionId":2,"resultOwnerRenderId":"cqkeawmkx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmky"},{"fillId":5,"ownerRenderId":"cqkeawmkx","parentRegionId":2,"receiverRenderId":"cqkeawml0","regionId":3,"resultOwnerRenderId":"cqkeawmkx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmkx"},{"fillId":6,"ownerRenderId":"cqkeawmkx","parentRegionId":2,"receiverRenderId":"cqkeawml1","regionId":4,"resultOwnerRenderId":"cqkeawmkx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmkx"},{"fillId":7,"ownerRenderId":"cqkeawmkx","parentRegionId":2,"receiverRenderId":"cqkeawml2","regionId":5,"resultOwnerRenderId":"cqkeawmkx","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawmkx"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0LmJmMWMxYTlmYzFmYS5qcw==", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0LjIyYzMxYTRjNGZmYTM3ZjZlYjFhMzMyN2YzOGY1MTA3Lmpz", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0LmIyNGFkNmM3ODMwYWQ3OGViNzFhNWIxYTIzMmY0OGY1Lmpz", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0LjE0YzJjMmYxMmI5NGYxMmNlZmZjMTEzMzcwODNhZDFiLmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NTd2l0Y2hfZmE0OWE0Ljg1M2M3NjZlOWVlZC5jc3M=", "L2NpdHJ5L2NhY2hlL0NTdGFja18zYzJhMjYuYjk5MjE5MGEwMzg5LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1N3aXRjaF9mYTQ5YTQ=", "Y3FrZWF3bWww", "MjJjMzFhNGM0ZmZhMzdmNmViMWEzMzI3ZjM4ZjUxMDc=", "init"], ["Q1N3aXRjaF9mYTQ5YTQ=", "Y3FrZWF3bWwx", "YjI0YWQ2Yzc4MzBhZDc4ZWI3MWE1YjFhMjMyZjQ4ZjU=", "init"], ["Q1N3aXRjaF9mYTQ5YTQ=", "Y3FrZWF3bWwy", "MTRjMmMyZjEyYjk0ZjEyY2VmZmMxMTMzNzA4M2FkMWI=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3bWt3"], ["Q1N0YWNrXzNjMmEyNg==", "Y3FrZWF3bWt5"]], "graph": "d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CSwitch_fa49a4", {
+  props: {
+    checked: {},
+    value: {},
+    required: {},
+    disabled: {},
+    invalid: {},
+    size: {},
+    label_pos: {},
+  },
+  init: ({ els, data, props, effect, inject }) => {
+    const root = els[0];
+    const input = root.querySelector(':scope > [data-citry-ui-part="input"]');
+    if (!(input instanceof HTMLInputElement) || input.type !== "checkbox") {
+      throw new Error("[citry-ui] CSwitch requires one direct native checkbox input.");
+    }
+    const field = inject(Symbol.for("citry-ui:field"), null);
+    const form = inject(Symbol.for("citry-ui:form"), null);
+    const handoffKey = Symbol.for("citry-ui:switch-handoff");
+    const invalidEpisodes = new Set();
+    const resetTimers = new Set();
+    let nativeInvalid = false;
+    let controlled = false;
+    let controlledValue = false;
+    let activationPending = false;
+    let reconcileTimer = null;
+    const handoff = root[handoffKey];
+    delete root[handoffKey];
+    if (handoff) input.checked = Boolean(handoff.checked);
+
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) return;
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CSwitch ${name} received invalid client value; using the fallback.`,
+        value,
+        root,
+      );
+    };
+    const resolveBoolean = (name, fallback) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (typeof value === "boolean") {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const resolveChoice = (name, fallback, choices) => {
+      const value = props[name] === undefined ? fallback : props[name];
+      if (choices.includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return fallback;
+    };
+    const canonicalValue = () => {
+      if (props.value === undefined) return data.value;
+      if (typeof props.value !== "string" || props.value.includes("\0")) {
+        reportInvalid("value", props.value);
+        return data.value;
+      }
+      invalidEpisodes.delete("value");
+      return props.value.replace(/\r\n?/g, "\n");
+    };
+    const syncRelationships = (invalid) => {
+      const values = [
+        field?.hasDescription ? field.descriptionId : null,
+        data.hasDescription ? data.descriptionId : null,
+        invalid && field?.hasError ? field.errorId : null,
+        data.externalDescribedBy,
+      ];
+      const describedBy = [...new Set(values.filter(Boolean).flatMap((value) => value.split(/\s+/)))].join(" ");
+      const errorMessage = invalid
+        ? [field?.hasError ? field.errorId : null, data.externalErrorMessage].filter(Boolean).join(" ")
+        : "";
+      describedBy
+        ? input.setAttribute("aria-describedby", describedBy)
+        : input.removeAttribute("aria-describedby");
+      errorMessage
+        ? input.setAttribute("aria-errormessage", errorMessage)
+        : input.removeAttribute("aria-errormessage");
+    };
+    const applyState = () => {
+      let required;
+      let disabled;
+      let externalInvalid;
+      if (field) {
+        ["required", "disabled", "invalid"].forEach((name) => {
+          if (props[name] !== undefined) reportInvalid(`${name}:field-owned`, props[name]);
+          else invalidEpisodes.delete(`${name}:field-owned`);
+        });
+        required = field.required;
+        disabled = field.disabled;
+        externalInvalid = field.invalid;
+      } else {
+        required = resolveBoolean("required", data.required);
+        disabled = Boolean(form?.disabled) || resolveBoolean("disabled", data.disabled);
+        externalInvalid = resolveBoolean("invalid", data.invalid);
+      }
+      const invalid = externalInvalid || nativeInvalid;
+      input.required = required;
+      input.disabled = disabled;
+      const value = canonicalValue();
+      if (input.value !== value) input.value = value;
+      root.toggleAttribute("data-required", required);
+      root.toggleAttribute("data-disabled", input.matches(":disabled"));
+      root.toggleAttribute("data-invalid", invalid);
+      root.toggleAttribute("data-checked", input.checked);
+      root.dataset.size = resolveChoice("size", data.size, ["sm", "md", "lg"]);
+      root.dataset.labelPos = resolveChoice("label_pos", data.labelPos, ["start", "end"]);
+      invalid ? input.setAttribute("aria-invalid", "true") : input.removeAttribute("aria-invalid");
+      syncRelationships(invalid);
+    };
+    const applyControlled = () => {
+      if (props.checked === undefined) {
+        controlled = false;
+        invalidEpisodes.delete("checked");
+        return;
+      }
+      if (typeof props.checked !== "boolean") {
+        reportInvalid("checked", props.checked);
+        if (controlled && !activationPending) input.checked = controlledValue;
+        return;
+      }
+      invalidEpisodes.delete("checked");
+      controlled = true;
+      controlledValue = props.checked;
+      if (!activationPending && input.checked !== controlledValue) input.checked = controlledValue;
+    };
+    const settle = () => {
+      activationPending = false;
+      applyControlled();
+      if (nativeInvalid && input.validity.valid) {
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+      }
+      applyState();
+    };
+    const scheduleSettle = () => {
+      if (reconcileTimer !== null) clearTimeout(reconcileTimer);
+      reconcileTimer = setTimeout(() => {
+        reconcileTimer = null;
+        settle();
+      }, 0);
+    };
+    const onInput = () => {
+      activationPending = true;
+      root.toggleAttribute("data-checked", input.checked);
+      scheduleSettle();
+    };
+    const onChange = () => scheduleSettle();
+    const onInvalid = () => {
+      nativeInvalid = true;
+      field?.setNativeInvalid(true);
+      applyState();
+    };
+    const nativeForm = input.form;
+    const onReset = (event) => {
+      const timer = setTimeout(() => {
+        resetTimers.delete(timer);
+        if (event.defaultPrevented) return;
+        if (controlled) input.checked = controlledValue;
+        nativeInvalid = false;
+        field?.setNativeInvalid(false);
+        applyState();
+      }, 0);
+      resetTimers.add(timer);
+    };
+    input.addEventListener("input", onInput);
+    input.addEventListener("change", onChange);
+    input.addEventListener("invalid", onInvalid);
+    nativeForm?.addEventListener("reset", onReset);
+    const unregisterCapability = field?.registerControlCapabilities?.({
+      supportsRequired: true,
+      supportsReadonly: false,
+    });
+    effect(() => {
+      applyControlled();
+      applyState();
+    });
+    root.setAttribute("data-citry-switch-initialized", "");
+    return () => {
+      root[handoffKey] = {checked: input.checked};
+      input.removeEventListener("input", onInput);
+      input.removeEventListener("change", onChange);
+      input.removeEventListener("invalid", onInvalid);
+      nativeForm?.removeEventListener("reset", onReset);
+      if (reconcileTimer !== null) clearTimeout(reconcileTimer);
+      resetTimers.forEach((timer) => clearTimeout(timer));
+      unregisterCapability?.();
+      root.removeAttribute("data-citry-switch-initialized");
+    };
+  },
+})
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSwitch_fa49a4", "22c31a4c4ffa37f6eb1a3327f38f5107", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktc3dpdGNoLWNxa2Vhd21sMC1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSwitch_fa49a4", "b24ad6c7830ad78eb71a5b1a232f48f5", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6ZmFsc2UsInJlcXVpcmVkIjpmYWxzZSwiZGlzYWJsZWQiOmZhbHNlLCJpbnZhbGlkIjpmYWxzZSwic2l6ZSI6Im1kIiwibGFiZWxQb3MiOiJlbmQiLCJkZXNjcmlwdGlvbklkIjoiY3VpLXN3aXRjaC1jcWtlYXdtbDEtZGVzY3JpcHRpb24iLCJoYXNEZXNjcmlwdGlvbiI6ZmFsc2UsImV4dGVybmFsRGVzY3JpYmVkQnkiOm51bGwsImV4dGVybmFsRXJyb3JNZXNzYWdlIjpudWxsfQ=="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CSwitch_fa49a4", "14c2c2f12b94f12ceffc11337083ad1b", atob("eyJ2YWx1ZSI6Im9uIiwiY2hlY2tlZCI6dHJ1ZSwicmVxdWlyZWQiOmZhbHNlLCJkaXNhYmxlZCI6ZmFsc2UsImludmFsaWQiOmZhbHNlLCJzaXplIjoibWQiLCJsYWJlbFBvcyI6ImVuZCIsImRlc2NyaXB0aW9uSWQiOiJjdWktc3dpdGNoLWNxa2Vhd21sMi1kZXNjcmlwdGlvbiIsImhhc0Rlc2NyaXB0aW9uIjpmYWxzZSwiZXh0ZXJuYWxEZXNjcmliZWRCeSI6bnVsbCwiZXh0ZXJuYWxFcnJvck1lc3NhZ2UiOm51bGx9"));
+})();</script></body></html><!--citry:g1:d8d2ada72d1ff4474ec2c160f5df6c2e4c657c6cd40e91eabbb2887b87d04000:0:i:1:e-->

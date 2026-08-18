@@ -1,0 +1,231 @@
+<!doctype html><html data-cid-cqkeawnbe lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compare Divider variants and sizes</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=DividerVariantsAndSizes_b2790c>:where(.divider-matrix) {
+  display: grid;
+  gap: 1rem;
+  max-inline-size: 42rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.divider-matrix__row) {
+  display: grid;
+  grid-template-columns: 5rem repeat(3, minmax(4rem, 1fr));
+  align-items: center;
+  gap: 0.75rem;
+}
+
+:where(.divider-matrix__row > div) {
+  display: grid;
+  gap: 0.35rem;
+}
+
+:where(.divider-matrix span) {
+  color: light-dark(#475569, #cbd5e1);
+  font-size: 0.72rem;
+  text-align: center;
+}</style><style data-citry-css-class=CDivider_a9261f>@layer citry-ui.theme {
+  :where([data-citry-ui-part="divider"]) {
+    --_cui-divider-color: var(--cui-divider-color, light-dark(#d6d3d1, #57534e));
+    --_cui-divider-thickness: var(--cui-divider-thickness, 1px);
+    --_cui-divider-inset: var(--cui-divider-inset, 1.5rem);
+    --_cui-divider-label-gap: var(--cui-divider-label-gap, 0.75rem);
+    --_cui-divider-label-color: var(--cui-divider-label-color, CanvasText);
+    --_cui-divider-label-font-size: var(--cui-divider-label-font-size, 0.875rem);
+    --_cui-divider-label-font-weight: var(--cui-divider-label-font-weight, 600);
+    --_cui-divider-min-length: var(--cui-divider-min-length, 1em);
+    box-sizing: border-box;
+    min-inline-size: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    color: var(--_cui-divider-color);
+  }
+
+  :where([data-citry-ui-part="divider"][data-size="md"]) {
+    --_cui-divider-thickness: var(--cui-divider-thickness, 2px);
+  }
+
+  :where([data-citry-ui-part="divider"][data-size="lg"]) {
+    --_cui-divider-thickness: var(--cui-divider-thickness, 4px);
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="horizontal"]:not([data-labeled])) {
+    inline-size: 100%;
+    block-size: 0;
+    border-block-start-width: var(--_cui-divider-thickness);
+    border-block-start-style: solid;
+    border-block-start-color: var(--_cui-divider-color);
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="vertical"]) {
+    align-self: stretch;
+    inline-size: 0;
+    min-block-size: var(--_cui-divider-min-length);
+    border-inline-start-width: var(--_cui-divider-thickness);
+    border-inline-start-style: solid;
+    border-inline-start-color: var(--_cui-divider-color);
+  }
+
+  :where([data-citry-ui-part="divider"][data-variant="dashed"]:not([data-labeled])) {
+    border-block-start-style: dashed;
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="vertical"][data-variant="dashed"]) {
+    border-block-start-style: none;
+    border-inline-start-style: dashed;
+  }
+
+  :where([data-citry-ui-part="divider"][data-variant="dotted"]:not([data-labeled])) {
+    border-block-start-style: dotted;
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="vertical"][data-variant="dotted"]) {
+    border-block-start-style: none;
+    border-inline-start-style: dotted;
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="horizontal"][data-inset="start"]) {
+    inline-size: calc(100% - var(--_cui-divider-inset));
+    margin-inline-start: var(--_cui-divider-inset);
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="horizontal"][data-inset="end"]) {
+    inline-size: calc(100% - var(--_cui-divider-inset));
+    margin-inline-end: var(--_cui-divider-inset);
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="horizontal"][data-inset="both"]) {
+    inline-size: calc(100% - var(--_cui-divider-inset) - var(--_cui-divider-inset));
+    margin-inline: var(--_cui-divider-inset);
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="vertical"][data-inset="start"]) {
+    min-block-size: 0;
+    block-size: calc(100% - var(--_cui-divider-inset));
+    margin-block-start: var(--_cui-divider-inset);
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="vertical"][data-inset="end"]) {
+    min-block-size: 0;
+    block-size: calc(100% - var(--_cui-divider-inset));
+    margin-block-end: var(--_cui-divider-inset);
+  }
+
+  :where([data-citry-ui-part="divider"][data-orientation="vertical"][data-inset="both"]) {
+    min-block-size: 0;
+    block-size: calc(100% - var(--_cui-divider-inset) - var(--_cui-divider-inset));
+    margin-block: var(--_cui-divider-inset);
+  }
+
+  :where([data-citry-ui-part="divider"][data-labeled]) {
+    display: flex;
+    inline-size: 100%;
+    align-items: center;
+    gap: var(--_cui-divider-label-gap);
+  }
+
+  :where([data-citry-ui-part="divider"] > [data-citry-ui-part="line"]) {
+    box-sizing: border-box;
+    min-inline-size: 0;
+    flex: 1 1 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-block-start-width: var(--_cui-divider-thickness);
+    border-block-start-style: solid;
+    border-block-start-color: var(--_cui-divider-color);
+  }
+
+  :where([data-citry-ui-part="divider"][data-variant="dashed"] > [data-citry-ui-part="line"]) {
+    border-block-start-style: dashed;
+  }
+
+  :where([data-citry-ui-part="divider"][data-variant="dotted"] > [data-citry-ui-part="line"]) {
+    border-block-start-style: dotted;
+  }
+
+  :where([data-citry-ui-part="divider"] > [data-citry-ui-part="label"]) {
+    min-inline-size: 0;
+    color: var(--_cui-divider-label-color);
+    font-size: var(--_cui-divider-label-font-size);
+    font-weight: var(--_cui-divider-label-font-weight);
+    line-height: 1.3;
+    overflow-wrap: anywhere;
+  }
+
+  :where([data-citry-ui-part="divider"][data-label-pos="start"] > [data-citry-ui-part="line"]:first-child),
+  :where([data-citry-ui-part="divider"][data-label-pos="end"] > [data-citry-ui-part="line"]:last-child) {
+    flex: 0 1 8%;
+  }
+
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="divider"]) {
+      --_cui-divider-color: var(--cui-divider-color, CanvasText);
+      --_cui-divider-label-color: var(--cui-divider-label-color, CanvasText);
+      forced-color-adjust: auto;
+    }
+  }
+
+  @media print {
+    :where([data-citry-ui-part="divider"]) {
+      --_cui-divider-color: var(--cui-divider-color, currentColor);
+      --_cui-divider-label-color: var(--cui-divider-label-color, currentColor);
+    }
+  }
+}</style></head><body><main><section class=divider-matrix data-cid-cqkeawnbf><div class=divider-matrix__row><code>solid</code><div><span>sm</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbg data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=sm data-variant=solid></div><div><span>md</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbh data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=md data-variant=solid></div><div><span>lg</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbi data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=lg data-variant=solid></div></div><div class=divider-matrix__row><code>dashed</code><div><span>sm</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbj data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=sm data-variant=dashed></div><div><span>md</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbk data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=md data-variant=dashed></div><div><span>lg</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbl data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=lg data-variant=dashed></div></div><div class=divider-matrix__row><code>dotted</code><div><span>sm</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbm data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=sm data-variant=dotted></div><div><span>md</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbn data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=md data-variant=dotted></div><div><span>lg</span><hr aria-hidden class=cui-divider data-cid-cqkeawnbo data-citry-ui-part=divider data-decorative data-inset=none data-orientation=horizontal data-size=lg data-variant=dotted></div></div></section></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0RpdmlkZXJWYXJpYW50c0FuZFNpemVzX2IyNzkwYy4yMDZiMjIxNTg2OGMuY3Nz", "L2NpdHJ5L2NhY2hlL0NEaXZpZGVyX2E5MjYxZi4wNThiODNmNDRkOWYuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3bmJl"], ["RGl2aWRlclZhcmlhbnRzQW5kU2l6ZXNfYjI3OTBj", "Y3FrZWF3bmJm"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJn"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJo"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJp"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJq"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJr"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJs"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJt"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJu"], ["Q0RpdmlkZXJfYTkyNjFm", "Y3FrZWF3bmJv"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

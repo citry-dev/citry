@@ -1,0 +1,258 @@
+schema_version: 1
+family: split-button
+
+components:
+  - CSplitButton
+
+inputs:
+  - id: csplit-button-server-inputs
+    component: CSplitButton
+    channel: server
+    column_widths: [fit, 15rem, 8rem, auto]
+    entries:
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: 'Sets the literal root ID base and the primary, Menu Button, and Menu surface ID family.'}
+      - {id: label, name: label, type: non-whitespace str, default: {kind: required}, effect: Names the related two-Button group.}
+      - {id: menu-label, name: menu_label, type: non-whitespace str, default: {kind: required}, effect: Names the secondary Menu Button with its specific purpose.}
+      - {id: type, name: type, type: {display: '"button" | "submit" | "reset"', interfaces: [CButtonType]}, default: {kind: literal, value: button}, effect: Selects the primary native Button activation and Form behavior.}
+      - {id: disabled, name: disabled, type: bool, default: {kind: literal, value: false}, effect: Disables both Buttons and force-closes the Menu.}
+      - {id: primary-disabled, name: primary_disabled, type: bool, default: {kind: literal, value: false}, effect: Disables only the primary Button.}
+      - {id: menu-disabled, name: menu_disabled, type: bool, default: {kind: literal, value: false}, effect: Disables only the Menu Button and force-closes the Menu.}
+      - {id: loading, name: loading, type: bool, default: {kind: literal, value: false}, effect: 'Marks only the primary pending, retains its focus, and blocks new primary activation.'}
+      - {id: variant, name: variant, type: {display: '"solid" | "outline" | "ghost"', interfaces: [CButtonVariant]}, default: {kind: literal, value: solid}, effect: Sets both Buttons' presentation strength.}
+      - {id: intent, name: intent, type: {display: '"primary" | "neutral" | "success" | "warn" | "danger"', interfaces: [CButtonIntent]}, default: {kind: literal, value: primary}, effect: Sets both Buttons' semantic color role.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CButtonSize]}, default: {kind: literal, value: md}, effect: Sets both Buttons and Menu item geometry.}
+      - {id: block, name: block, type: bool, default: {kind: literal, value: false}, effect: Fills the containing inline size while the primary takes remaining space.}
+      - {id: loading-pos, name: loading_pos, type: {display: '"start" | "center" | "end"', interfaces: [CButtonLoadingPos]}, default: {kind: literal, value: center}, effect: Places the primary loading indicator.}
+      - {id: open, name: open, type: bool, default: {kind: literal, value: false}, effect: Sets initial Menu visibility and the uncontrolled fallback.}
+      - {id: loop, name: loop, type: bool, default: {kind: literal, value: true}, effect: Wraps Menu arrow navigation and typeahead.}
+      - {id: placement, name: placement, type: {display: '"top-start" | "top" | "top-end" | "bottom-start" | "bottom" | "bottom-end"', interfaces: [CMenuPlacement]}, default: {kind: literal, value: bottom-end}, effect: Sets the preferred logical placement relative to the full group.}
+      - {id: match-width, name: match_width, type: bool, default: {kind: literal, value: false}, effect: Matches the full group width up to the Menu viewport-safe maximum.}
+      - {id: close-on-select, name: close_on_select, type: bool, default: {kind: literal, value: true}, effect: Sets the root Menu default close policy.}
+      - {id: class, name: class_, type: {display: 'str | Mapping[str, bool] | Sequence[CClassValue] | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds root classes and merges them with attrs.}
+      - {id: style, name: style, type: {display: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue] | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds root styles; generated anchor ownership merges last.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed attributes to the labelled group root.}
+      - {id: primary-attrs, name: primary_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed ARIA, Form, data, style, and native listener attributes to the primary Button.'}
+      - {id: trigger-attrs, name: trigger_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive, data, style, and native listener attributes to the Menu Button.'}
+      - {id: menu-attrs, name: menu_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: 'Adds copied allowed descriptive, language, data, style, and native listener attributes to the root Menu surface.'}
+
+  - id: csplit-button-client-inputs
+    component: CSplitButton
+    channel: client
+    column_widths: [fit, 15rem, 15rem, auto]
+    entries:
+      - {id: open, name: open, type: 'boolean | null', omitted: Releases control from the latest committed state. null has the same effect., effect: Controls Menu visibility while supplied as a Boolean.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses the server input., effect: Controls common disabledness; native fieldset disabledness remains authoritative.}
+      - {id: primary-disabled, name: primaryDisabled, type: boolean, omitted: Uses the server input., effect: Controls primary-only disabledness.}
+      - {id: menu-disabled, name: menuDisabled, type: boolean, omitted: Uses the server input., effect: Controls Menu-only disabledness and forced close.}
+      - {id: loading, name: loading, type: boolean, omitted: Uses the server input., effect: Controls the focus-retaining primary pending guard.}
+      - {id: variant, name: variant, type: {display: '"solid" | "outline" | "ghost"', interfaces: [CButtonVariant]}, omitted: Uses the server input., effect: Controls both Buttons' presentation strength.}
+      - {id: intent, name: intent, type: {display: '"primary" | "neutral" | "success" | "warn" | "danger"', interfaces: [CButtonIntent]}, omitted: Uses the server input., effect: Controls both Buttons' semantic color role.}
+      - {id: size, name: size, type: {display: '"sm" | "md" | "lg"', interfaces: [CButtonSize]}, omitted: Uses the server input., effect: Controls Button and Menu geometry.}
+      - {id: block, name: block, type: boolean, omitted: Uses the server input., effect: Controls full-inline group layout.}
+      - {id: loading-position, name: loadingPosition, type: {display: '"start" | "center" | "end"', interfaces: [CButtonLoadingPos]}, omitted: Uses the server input., effect: Controls primary loading-indicator placement.}
+      - {id: loop, name: loop, type: boolean, omitted: Uses the server input., effect: Controls Menu navigation wrapping.}
+      - {id: placement, name: placement, type: {display: six logical placement strings, interfaces: [CMenuPlacement]}, omitted: Uses the server input., effect: Controls requested full-root Menu placement.}
+      - {id: match-width, name: matchWidth, type: boolean, omitted: Uses the server input., effect: Controls clamped full-group width matching.}
+      - {id: close-on-select, name: closeOnSelect, type: boolean, omitted: Uses the server input., effect: Controls the root Menu default close policy.}
+      - {id: on-open-change, name: onOpenChange, type: function, omitted: Omission or null selects no visibility callback., effect: 'Receives Menu requests, forced closes, and deferred primary action-close notices.'}
+      - {id: on-action, name: onAction, type: function, omitted: Omission or null selects no Menu action callback., effect: Receives valued Menu command and choice activations.}
+
+slots:
+  - id: csplit-button-slots
+    component: CSplitButton
+    entries:
+      - {id: default, name: default, required: true, data: {display: '{}', interfaces: [CSplitButtonDefaultSlotData]}, fallback: None. Must be structurally nonempty and help provide the final primary accessible name.}
+      - {id: start, name: start, required: false, data: {display: '{}', interfaces: [CSplitButtonStartSlotData]}, fallback: Omitted.}
+      - {id: end, name: end, required: false, data: {display: '{}', interfaces: [CSplitButtonEndSlotData]}, fallback: Omitted.}
+      - {id: loading, name: loading, required: false, data: {display: '{}', interfaces: [CSplitButtonLoadingSlotData]}, fallback: CSS spinner hidden from accessibility.}
+      - {id: menu, name: menu, required: true, data: {display: '{}', interfaces: [CSplitButtonMenuSlotData]}, fallback: None. Requires a nonempty collection of existing CMenu declarations.}
+
+events:
+  - id: csplit-button-events
+    component: CSplitButton
+    entries:
+      - id: on-open-change
+        name: onOpenChange
+        signature: {display: '(requestedOpen: boolean, detail: CMenuOpenChangeDetail) => void', interfaces: [CMenuOpenChangeDetail]}
+        trigger: A root Menu visibility request, forced close, or accepted primary action close occurs.
+        detail: {display: '{reason, controlled, forced, source}', interfaces: [CMenuOpenChangeDetail]}
+        behavior: Menu gestures use CMenu timing. A primary action notice runs in a cancelable zero-delay task after native activation; uncontrolled state already closed and controlled state waits.
+      - id: on-action
+        name: onAction
+        signature: {display: '(value: string, detail: CMenuActionDetail) => void', interfaces: [CMenuActionDetail]}
+        trigger: An enabled valued Menu command, checkbox, or radio activates.
+        detail: {display: '{kind, item, event, path}', interfaces: [CMenuActionDetail]}
+        behavior: Uses CMenu callback order and fires once. The primary action, links, and anonymous commands do not fire it.
+
+methods: []
+
+css:
+  - id: csplit-button-css-variables
+    component: CSplitButton
+    entries:
+      - {id: cui-split-button-divider-color, name: --cui-split-button-divider-color, type: color, purpose: Boundary between the two native Buttons., default: 'color-mix(in srgb, currentColor 32%, transparent)'}
+      - {id: cui-split-button-divider-width, name: --cui-split-button-divider-width, type: length, purpose: Joined divider width and overlap., default: 1px}
+      - {id: cui-split-button-menu-inline-size, name: --cui-split-button-menu-inline-size, type: length, purpose: Menu Button inline target size., default: Effective Button height.}
+      - {id: cui-split-button-radius, name: --cui-split-button-radius, type: length, purpose: Joined outer corners., default: 'var(--cui-button-radius, 0.5rem)'}
+      - {id: cui-button-background, name: --cui-button-background, type: color, purpose: Both Button resting surfaces., default: Variant- and intent-derived color.}
+      - {id: cui-button-foreground, name: --cui-button-foreground, type: color, purpose: Both Button foregrounds., default: Derived contrast color.}
+      - {id: cui-button-border-color, name: --cui-button-border-color, type: color, purpose: Both Button borders., default: Variant- and intent-derived color.}
+      - {id: cui-button-hover-background, name: --cui-button-hover-background, type: color, purpose: Enabled hover surfaces., default: Derived color mix.}
+      - {id: cui-button-active-background, name: --cui-button-active-background, type: color, purpose: Enabled active surfaces., default: Derived stronger color mix.}
+      - {id: cui-button-focus-color, name: --cui-button-focus-color, type: color, purpose: Both focus-visible outlines., default: Highlight}
+      - {id: cui-button-radius, name: --cui-button-radius, type: length, purpose: Source Button radius used by the joined fallback., default: 0.5rem}
+      - {id: cui-button-font-weight, name: --cui-button-font-weight, type: font-weight, purpose: Both Button labels., default: '600'}
+      - {id: cui-button-gap, name: --cui-button-gap, type: length, purpose: Primary content-region gaps., default: 0.5rem}
+      - {id: cui-button-disabled-opacity, name: --cui-button-disabled-opacity, type: number, purpose: Disabled Button content opacity., default: '0.48'}
+      - {id: cui-button-height, name: --cui-button-height, type: length, purpose: Both Button minimum block size., default: Size-derived length.}
+      - {id: cui-button-inline-padding, name: --cui-button-inline-padding, type: length, purpose: Primary inline padding., default: Size-derived length.}
+      - {id: cui-button-block-padding, name: --cui-button-block-padding, type: length, purpose: Both Button block padding., default: Size-derived length.}
+      - {id: cui-button-font-size, name: --cui-button-font-size, type: length, purpose: Both Button font size., default: Size-derived length.}
+      - {id: cui-menu-background, name: --cui-menu-background, type: color, purpose: Root and submenu surfaces., default: Canvas}
+      - {id: cui-menu-foreground, name: --cui-menu-foreground, type: color, purpose: Menu item text., default: CanvasText}
+      - {id: cui-menu-muted-color, name: --cui-menu-muted-color, type: color, purpose: 'Menu descriptions, labels, and shortcuts.', default: 'color-mix(in srgb, current foreground 72%, transparent)'}
+      - {id: cui-menu-border-color, name: --cui-menu-border-color, type: color, purpose: Menu surface and separator boundaries., default: 'color-mix(in srgb, CanvasText 18%, transparent)'}
+      - {id: cui-menu-border-width, name: --cui-menu-border-width, type: length, purpose: Menu surface boundary width., default: 1px}
+      - {id: cui-menu-radius, name: --cui-menu-radius, type: length, purpose: Menu surface corners., default: 0.75rem}
+      - {id: cui-menu-shadow, name: --cui-menu-shadow, type: shadow, purpose: Root Menu elevation., default: '0 0.75rem 2rem rgb(15 23 42 / 18%)'}
+      - {id: cui-menu-submenu-shadow, name: --cui-menu-submenu-shadow, type: shadow, purpose: Nested Menu elevation., default: '0 1rem 2.5rem rgb(15 23 42 / 22%)'}
+      - {id: cui-menu-inline-size, name: --cui-menu-inline-size, type: length, purpose: Preferred Menu width., default: 14rem}
+      - {id: cui-menu-min-inline-size, name: --cui-menu-min-inline-size, type: length, purpose: Minimum useful submenu corridor., default: 10rem}
+      - {id: cui-menu-max-inline-size, name: --cui-menu-max-inline-size, type: length, purpose: Viewport-safe Menu width., default: 'calc(100dvi - 1rem)'}
+      - {id: cui-menu-max-block-size, name: --cui-menu-max-block-size, type: length, purpose: Menu scroll limit., default: 'min(24rem, calc(100dvb - 1rem))'}
+      - {id: cui-menu-padding, name: --cui-menu-padding, type: length, purpose: Menu surface edge spacing., default: 0.375rem}
+      - {id: cui-menu-item-block-size, name: --cui-menu-item-block-size, type: length, purpose: Menu item minimum height., default: Size-derived.}
+      - {id: cui-menu-item-padding-inline, name: --cui-menu-item-padding-inline, type: length, purpose: Menu item inline spacing., default: Size-derived.}
+      - {id: cui-menu-item-gap, name: --cui-menu-item-gap, type: length, purpose: Menu item-region gap., default: 0.625rem}
+      - {id: cui-menu-item-radius, name: --cui-menu-item-radius, type: length, purpose: Menu item corners., default: 0.5rem}
+      - {id: cui-menu-hover-background, name: --cui-menu-hover-background, type: color, purpose: Menu pointer-hover fill., default: 'color-mix(in srgb, CanvasText 8%, transparent)'}
+      - {id: cui-menu-focus-background, name: --cui-menu-focus-background, type: color, purpose: Focused Menu item fill., default: 'light-dark(#175cd3, #84adff)'}
+      - {id: cui-menu-focus-foreground, name: --cui-menu-focus-foreground, type: color, purpose: Focused Menu item content., default: 'light-dark(#ffffff, #101828)'}
+      - {id: cui-menu-focus-outline-color, name: --cui-menu-focus-outline-color, type: color, purpose: Menu item focus-visible outline., default: 'light-dark(#175cd3, #84adff)'}
+      - {id: cui-menu-danger-color, name: --cui-menu-danger-color, type: color, purpose: Destructive Menu item content., default: 'light-dark(#b42318, #fda29b)'}
+      - {id: cui-menu-disabled-opacity, name: --cui-menu-disabled-opacity, type: number, purpose: Disabled Menu content opacity., default: '0.5'}
+      - {id: cui-menu-offset, name: --cui-menu-offset, type: length, purpose: Root Menu anchor gap., default: 0.375rem}
+      - {id: cui-menu-submenu-offset, name: --cui-menu-submenu-offset, type: length, purpose: Nested Menu anchor gap., default: 0.25rem}
+      - {id: cui-menu-duration, name: --cui-menu-duration, type: time, purpose: Menu entry and exit duration., default: 120ms}
+      - {id: cui-menu-easing, name: --cui-menu-easing, type: easing, purpose: Menu entry and exit curve., default: 'cubic-bezier(0.2, 0.8, 0.2, 1)'}
+
+attributes:
+  - id: csplit-button-root-attributes
+    component: CSplitButton
+    entries:
+      - {id: role, name: role, element: Root, type: '"group"', meaning: Groups the dominant action and its related Menu Button.}
+      - {id: aria-label, name: aria-label, element: Root, type: non-whitespace string, meaning: Uses the required group label.}
+      - {id: data-variant, name: data-variant, element: Root, type: {display: '"solid" | "outline" | "ghost"', interfaces: [CButtonVariant]}, meaning: Mirrors effective common presentation.}
+      - {id: data-intent, name: data-intent, element: Root, type: {display: five CButton intents, interfaces: [CButtonIntent]}, meaning: Mirrors effective common semantic color.}
+      - {id: data-size, name: data-size, element: Root, type: {display: '"sm" | "md" | "lg"', interfaces: [CButtonSize]}, meaning: Mirrors effective Button and Menu geometry.}
+      - {id: data-block, name: data-block, element: Root, type: present | absent, meaning: Present when the group fills available inline size.}
+      - {id: data-disabled, name: data-disabled, element: Root, type: present | absent, meaning: Mirrors the common disabled override.}
+      - {id: data-primary-disabled, name: data-primary-disabled, element: Root, type: present | absent, meaning: Mirrors browser-effective primary disabledness.}
+      - {id: data-menu-disabled, name: data-menu-disabled, element: Root, type: present | absent, meaning: Mirrors browser-effective Menu Button disabledness.}
+      - {id: data-loading, name: data-loading, element: Root, type: present | absent, meaning: Mirrors effective primary pending state.}
+      - {id: data-loading-position, name: data-loading-position, element: Root, type: {display: '"start" | "center" | "end"', interfaces: [CButtonLoadingPos]}, meaning: Mirrors primary loading placement.}
+      - {id: data-open, name: data-open, element: Root, type: present | absent, meaning: Mirrors committed root Menu visibility.}
+  - id: csplit-button-primary-attributes
+    component: CSplitButton
+    entries:
+      - {id: id, name: id, element: Primary Button, type: root ID plus -primary, meaning: Uses the exact owned primary identity.}
+      - {id: type, name: type, element: Primary Button, type: {display: '"button" | "submit" | "reset"', interfaces: [CButtonType]}, meaning: Preserves the authored native action.}
+      - {id: disabled, name: disabled, element: Primary Button, type: present | absent, meaning: Represents effective native disabledness and the no-JavaScript loading fallback.}
+      - {id: aria-busy, name: aria-busy, element: Primary Button, type: '"true" | absent', meaning: Present only while primary work is pending.}
+      - {id: aria-disabled, name: aria-disabled, element: Primary Button, type: '"true" | absent', meaning: Present while disabled or loading.}
+      - {id: data-disabled, name: data-disabled, element: Primary Button, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-loading, name: data-loading, element: Primary Button, type: present | absent, meaning: Mirrors effective pending state.}
+      - {id: data-variant, name: data-variant, element: Primary Button, type: {display: three CButton variants, interfaces: [CButtonVariant]}, meaning: Mirrors presentation strength.}
+      - {id: data-intent, name: data-intent, element: Primary Button, type: {display: five CButton intents, interfaces: [CButtonIntent]}, meaning: Mirrors semantic color.}
+      - {id: data-size, name: data-size, element: Primary Button, type: {display: three CButton sizes, interfaces: [CButtonSize]}, meaning: Mirrors geometry.}
+      - {id: data-loading-position, name: data-loading-position, element: Primary Button, type: {display: three positions, interfaces: [CButtonLoadingPos]}, meaning: Mirrors pending-indicator placement.}
+  - id: csplit-button-menu-attributes
+    component: CSplitButton
+    entries:
+      - {id: trigger-id, name: id, element: Menu Button, type: root ID plus -menu-trigger, meaning: Uses the exact owned Menu Button identity.}
+      - {id: trigger-type, name: type, element: Menu Button, type: '"button"', meaning: Prevents Form submission in every state.}
+      - {id: trigger-aria-label, name: aria-label, element: Menu Button, type: non-whitespace string, meaning: Uses menu_label as the explicit secondary action name.}
+      - {id: aria-haspopup, name: aria-haspopup, element: Menu Button, type: '"menu"', meaning: Announces the popup kind.}
+      - {id: aria-controls, name: aria-controls, element: Menu Button, type: Menu surface IDREF, meaning: References the owned root Menu surface.}
+      - {id: aria-expanded, name: aria-expanded, element: Menu Button, type: '"true" | "false"', meaning: Mirrors logical root Menu state.}
+      - {id: trigger-disabled, name: disabled, element: Menu Button, type: present | absent, meaning: Mirrors effective native Menu disabledness.}
+      - {id: trigger-data-disabled, name: data-disabled, element: Menu Button, type: present | absent, meaning: Styles effective Menu disabledness.}
+      - {id: trigger-data-variant, name: data-variant, element: Menu Button, type: {display: three CButton variants, interfaces: [CButtonVariant]}, meaning: Mirrors presentation strength.}
+      - {id: trigger-data-intent, name: data-intent, element: Menu Button, type: {display: five CButton intents, interfaces: [CButtonIntent]}, meaning: Mirrors semantic color.}
+      - {id: trigger-data-size, name: data-size, element: Menu Button, type: {display: three CButton sizes, interfaces: [CButtonSize]}, meaning: Mirrors geometry.}
+      - {id: surface-id, name: id, element: Root Menu surface, type: root ID plus -menu, meaning: Uses the exact owned Menu surface identity.}
+      - {id: popover, name: popover, element: Root and submenu Menu surfaces, type: '"manual"', meaning: Uses native top-layer presence with Citry dismissal.}
+      - {id: menu-role, name: role, element: Root and submenu Menu surfaces, type: '"menu"', meaning: Exposes application Menu semantics.}
+      - {id: menu-aria-labelledby, name: aria-labelledby, element: Root Menu surface, type: Menu Button IDREF, meaning: Names the root Menu from its trigger.}
+      - {id: menu-data-open, name: data-open, element: Root and submenu Menu surfaces, type: present | absent, meaning: Mirrors logical Menu visibility.}
+      - {id: data-placement, name: data-placement, element: Root Menu surface, type: {display: six logical placement strings, interfaces: [CMenuPlacement]}, meaning: Mirrors the requested root placement.}
+      - {id: data-match-width, name: data-match-width, element: Root Menu surface, type: present | absent, meaning: Indicates clamped full-root width matching.}
+      - {id: menu-data-size, name: data-size, element: Root Menu surface, type: {display: three sizes, interfaces: [CButtonSize]}, meaning: Mirrors effective Menu item geometry.}
+  - id: csplit-button-reused-menu-item-attributes
+    component: CSplitButton
+    entries:
+      - {id: aria-describedby, name: aria-describedby, element: Menu item root, type: description IDREF | absent, meaning: Uses CMenu's optional separate item description.}
+      - {id: aria-checked, name: aria-checked, element: Checkbox or radio item Button, type: '"false" | "true" | "mixed"', meaning: Uses the effective CMenu choice state; radio items never use mixed.}
+      - {id: data-checked, name: data-checked, element: Checkbox or radio item Button, type: '"false" | "true" | "mixed"', meaning: Mirrors the effective CMenu choice state for styling.}
+
+selectors:
+  - id: csplit-button-selectors
+    component: CSplitButton
+    entries:
+      - {id: split-button, selector: '[data-citry-ui-part="split-button"]', element: Root div, purpose: 'Labelled group and class, style, and attrs destination.'}
+      - {id: split-button-primary, selector: '[data-citry-ui-part="split-button-primary"]', element: Primary native Button, purpose: Dominant action and primary_attrs destination.}
+      - {id: split-button-primary-start, selector: '[data-citry-ui-part="split-button-primary-start"]', element: Optional decorative wrapper, purpose: Primary logical-start content.}
+      - {id: split-button-primary-content, selector: '[data-citry-ui-part="split-button-primary-content"]', element: Required content wrapper, purpose: Visible dominant action content.}
+      - {id: split-button-primary-end, selector: '[data-citry-ui-part="split-button-primary-end"]', element: Optional decorative wrapper, purpose: Primary logical-end content.}
+      - {id: split-button-primary-loading-indicator, selector: '[data-citry-ui-part="split-button-primary-loading-indicator"]', element: Stable decorative wrapper, purpose: Primary pending indicator.}
+      - {id: split-button-menu-trigger, selector: '[data-citry-ui-part="split-button-menu-trigger"]', element: Secondary native Button, purpose: Menu activation and trigger_attrs destination.}
+      - {id: split-button-menu-indicator, selector: '[data-citry-ui-part="split-button-menu-indicator"]', element: Decorative span, purpose: Logical-down Menu indicator.}
+      - {id: menu, selector: '[data-citry-ui-part="menu"]', element: Root or submenu Menu surface, purpose: Popover presence and collection focus.}
+      - {id: menu-item, selector: '[data-citry-ui-part="menu-item"]', element: 'Command, link, checkbox, or radio root', purpose: Menu item styling.}
+      - {id: menu-item-start, selector: '[data-citry-ui-part="menu-item-start"]', element: Decorative item wrapper, purpose: Item logical-start content.}
+      - {id: menu-item-label, selector: '[data-citry-ui-part="menu-item-label"]', element: Visible item label, purpose: Layout and exact owned label target.}
+      - {id: menu-item-description, selector: '[data-citry-ui-part="menu-item-description"]', element: Optional description, purpose: Supporting text and accessible description.}
+      - {id: menu-item-end, selector: '[data-citry-ui-part="menu-item-end"]', element: Decorative item wrapper, purpose: Shortcut or logical-end content.}
+      - {id: menu-choice-indicator, selector: '[data-citry-ui-part="menu-choice-indicator"]', element: Decorative choice marker, purpose: Checkbox and radio state.}
+      - {id: menu-group, selector: '[data-citry-ui-part="menu-group"]', element: Labelled group root, purpose: Generic command grouping.}
+      - {id: menu-group-label, selector: '[data-citry-ui-part="menu-group-label"]', element: Visible group label, purpose: Exact group name and layout.}
+      - {id: menu-radio-group, selector: '[data-citry-ui-part="menu-radio-group"]', element: Radio group root, purpose: Exclusive choice grouping.}
+      - {id: menu-separator, selector: '[data-citry-ui-part="menu-separator"]', element: Horizontal separator, purpose: Collection division.}
+      - {id: menu-submenu, selector: '[data-citry-ui-part="menu-submenu"]', element: Neutral submenu wrapper, purpose: Child trigger and surface ownership.}
+      - {id: menu-submenu-trigger, selector: '[data-citry-ui-part="menu-submenu-trigger"]', element: Nested Menu Button, purpose: Submenu activation and placement anchor.}
+
+interfaces:
+  - id: csplit-button-reused-aliases
+    kind: aliases
+    entries:
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, str | int | float | bool | None] | Sequence[CStyleValue]'}
+      - {id: button-type, name: CButtonType, definition: 'Literal["button", "submit", "reset"]'}
+      - {id: button-variant, name: CButtonVariant, definition: 'Literal["solid", "outline", "ghost"]'}
+      - {id: button-intent, name: CButtonIntent, definition: 'Literal["primary", "neutral", "success", "warn", "danger"]'}
+      - {id: button-size, name: CButtonSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: button-loading-pos, name: CButtonLoadingPos, definition: 'Literal["start", "center", "end"]'}
+      - {id: menu-placement, name: CMenuPlacement, definition: 'Literal["top-start", "top", "top-end", "bottom-start", "bottom", "bottom-end"]'}
+  - {id: csplit-button-default-slot-data, kind: record, name: CSplitButtonDefaultSlotData, entries: []}
+  - {id: csplit-button-start-slot-data, kind: record, name: CSplitButtonStartSlotData, entries: []}
+  - {id: csplit-button-end-slot-data, kind: record, name: CSplitButtonEndSlotData, entries: []}
+  - {id: csplit-button-loading-slot-data, kind: record, name: CSplitButtonLoadingSlotData, entries: []}
+  - {id: csplit-button-menu-slot-data, kind: record, name: CSplitButtonMenuSlotData, entries: []}
+  - id: csplit-button-open-change-detail
+    kind: record
+    name: CMenuOpenChangeDetail
+    entries:
+      - {id: reason, name: reason, type: '"trigger" | "escape" | "outside" | "focus-outside" | "tab" | "action" | "native" | "disabled" | "ancestor"', meaning: Cause of the requested or forced visibility change.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether a valid client Boolean owns desired Menu state.}
+      - {id: forced, name: forced, type: boolean, meaning: Whether native or structural safety overrides owner refusal.}
+      - {id: source, name: source, type: 'Element | EventTarget | null', meaning: Browser source associated with the change.}
+  - id: csplit-button-action-detail
+    kind: record
+    name: CMenuActionDetail
+    entries:
+      - {id: kind, name: kind, type: '"command" | "checkbox" | "radio"', meaning: Activated semantic Menu item kind.}
+      - {id: item, name: item, type: Element, meaning: Activated Menu item root.}
+      - {id: event, name: event, type: Event, meaning: Native Menu activation event.}
+      - {id: path, name: path, type: 'list[str]', meaning: Canonical ancestor-submenu path from the SplitButton root Menu.}
+
+translations: []

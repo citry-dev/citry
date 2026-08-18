@@ -1,0 +1,205 @@
+<!doctype html><html data-cid-cqkeawn6i lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compare fixed and responsive columns</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=GridResponsiveColumns_0f7440>:where(.grid-columns) {
+  max-inline-size: 52rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.grid-columns h2, .grid-columns h3, .grid-columns p) {
+  margin: 0;
+}
+
+:where(.grid-columns h2) {
+  font-size: 1rem;
+}
+
+:where(.grid-columns h3) {
+  margin-block-start: 1.25rem;
+  margin-block-end: 0.5rem;
+  font-size: 0.82rem;
+}
+
+:where(.grid-columns p) {
+  margin-block: 0.25rem 0.8rem;
+  color: GrayText;
+  font-size: 0.78rem;
+}
+
+:where(.grid-columns__cell) {
+  min-block-size: 3.25rem;
+  padding: 0.7rem;
+  border-inline-start: 0.3rem solid #4b77be;
+  border-radius: 0.35rem;
+  background: light-dark(#edf4ff, #1c2b40);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+:where(.grid-columns__cell--quiet) {
+  border-inline-start-color: #a55f38;
+  background: light-dark(#faf0e9, #35241c);
+}</style><style data-citry-css-class=CGrid_4b2c8c>@layer citry-ui.theme {
+  :where([data-citry-ui-part="grid"]) {
+    --_cui-grid-cols-sm: initial;
+    --_cui-grid-cols-md: initial;
+    --_cui-grid-cols-lg: initial;
+    --_cui-grid-cols-xl: initial;
+    --_cui-grid-cols-xxl: initial;
+    --_cui-grid-min-column-input: initial;
+    --_cui-grid-cols-through-sm: var(
+      --_cui-grid-cols-sm,
+      var(--_cui-grid-cols-base)
+    );
+    --_cui-grid-cols-through-md: var(
+      --_cui-grid-cols-md,
+      var(--_cui-grid-cols-through-sm)
+    );
+    --_cui-grid-cols-through-lg: var(
+      --_cui-grid-cols-lg,
+      var(--_cui-grid-cols-through-md)
+    );
+    --_cui-grid-cols-through-xl: var(
+      --_cui-grid-cols-xl,
+      var(--_cui-grid-cols-through-lg)
+    );
+    --_cui-grid-cols-through-xxl: var(
+      --_cui-grid-cols-xxl,
+      var(--_cui-grid-cols-through-xl)
+    );
+    --_cui-grid-effective-columns: var(--_cui-grid-cols-base);
+    --_cui-grid-columns: var(
+      --cui-grid-columns,
+      var(--_cui-grid-effective-columns)
+    );
+    --_cui-grid-gap: var(--cui-grid-gap, 0.75rem);
+    display: grid;
+    min-inline-size: 0;
+    grid-template-columns: repeat(
+      var(--_cui-grid-columns),
+      minmax(0, 1fr)
+    );
+    gap: var(--_cui-grid-gap);
+  }
+
+  :where([data-citry-ui-part="grid"][data-intrinsic]) {
+    --_cui-grid-min-column: var(
+      --cui-grid-min-column,
+      var(--_cui-grid-min-column-input, 16rem)
+    );
+    grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(100%, var(--_cui-grid-min-column)), 1fr)
+    );
+  }
+
+  :where([data-citry-ui-part="grid"][data-gap="0"]) {
+    --_cui-grid-gap: var(--cui-grid-gap, 0);
+  }
+
+  :where([data-citry-ui-part="grid"][data-gap="xs"]) {
+    --_cui-grid-gap: var(--cui-grid-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="grid"][data-gap="sm"]) {
+    --_cui-grid-gap: var(--cui-grid-gap, 0.5rem);
+  }
+
+  :where([data-citry-ui-part="grid"][data-gap="lg"]) {
+    --_cui-grid-gap: var(--cui-grid-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="grid"][data-gap="xl"]) {
+    --_cui-grid-gap: var(--cui-grid-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="grid"] > *) {
+    min-inline-size: 0;
+    min-block-size: 0;
+  }
+
+  @media (min-width: 40rem) {
+    :where([data-citry-ui-part="grid"]) {
+      --_cui-grid-effective-columns: var(--_cui-grid-cols-through-sm);
+    }
+  }
+
+  @media (min-width: 48rem) {
+    :where([data-citry-ui-part="grid"]) {
+      --_cui-grid-effective-columns: var(--_cui-grid-cols-through-md);
+    }
+  }
+
+  @media (min-width: 64rem) {
+    :where([data-citry-ui-part="grid"]) {
+      --_cui-grid-effective-columns: var(--_cui-grid-cols-through-lg);
+    }
+  }
+
+  @media (min-width: 80rem) {
+    :where([data-citry-ui-part="grid"]) {
+      --_cui-grid-effective-columns: var(--_cui-grid-cols-through-xl);
+    }
+  }
+
+  @media (min-width: 96rem) {
+    :where([data-citry-ui-part="grid"]) {
+      --_cui-grid-effective-columns: var(--_cui-grid-cols-through-xxl);
+    }
+  }
+}</style></head><body><main><section aria-labelledby=grid-columns-title class=grid-columns data-cid-cqkeawn6j><h2 id=grid-columns-title>Crystal systems</h2><p>Resize the preview to watch one column become two, then four.</p><div style="--_cui-grid-cols-base: 1; --_cui-grid-cols-sm: 2; --_cui-grid-cols-lg: 4;" class=cui-grid data-cid-cqkeawn6k data-citry-ui-part=grid data-cols=1 data-cols-lg=4 data-cols-sm=2 data-gap=sm><div class=grid-columns__cell>Cubic</div><div class=grid-columns__cell>Hexagonal</div><div class=grid-columns__cell>Monoclinic</div><div class=grid-columns__cell>Trigonal</div></div><h3>Fixed three-column index</h3><div style="--_cui-grid-cols-base: 3;" class=cui-grid data-cid-cqkeawn6m data-citry-ui-part=grid data-cols=3 data-gap=sm><div class="grid-columns__cell grid-columns__cell--quiet">Quartz</div><div class="grid-columns__cell grid-columns__cell--quiet">Calcite</div><div class="grid-columns__cell grid-columns__cell--quiet">Galena</div></div></section></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0dyaWRSZXNwb25zaXZlQ29sdW1uc18wZjc0NDAuNGNiMTBkNmU1OTgxLmNzcw==", "L2NpdHJ5L2NhY2hlL0NHcmlkXzRiMmM4Yy4yMzIwZjQwY2Q2NDIuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3bjZp"], ["R3JpZFJlc3BvbnNpdmVDb2x1bW5zXzBmNzQ0MA==", "Y3FrZWF3bjZq"], ["Q0dyaWRfNGIyYzhj", "Y3FrZWF3bjZr"], ["Q0dyaWRfNGIyYzhj", "Y3FrZWF3bjZt"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

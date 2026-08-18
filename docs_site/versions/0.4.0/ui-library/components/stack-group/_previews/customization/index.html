@@ -1,0 +1,239 @@
+<!doctype html><html data-cid-cqkeawn5o lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Customize Flow with public CSS</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=FlowCustomization_1a991e>:where(.flow-custom) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  max-inline-size: 40rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.flow-custom__brand) {
+  padding: 1rem;
+  border-radius: 0.75rem;
+}
+
+:where(.flow-custom__brand--cobalt) {
+  --cui-stack-gap: 1.35rem;
+  background: light-dark(#dbe8f5, #172b40);
+}
+
+:where(.flow-custom__brand--clay) {
+  --cui-group-gap: 0.25rem;
+  background: light-dark(#f2dfd0, #3b2820);
+}
+
+:where(.flow-custom__brand [data-citry-ui-part="stack"], .flow-custom__brand [data-citry-ui-part="group"]) {
+  padding: 0.7rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+}</style><style data-citry-css-class=CStack_3c2a26>@layer citry-ui.theme {
+  :where([data-citry-ui-part="stack"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.75rem);
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: var(--_cui-stack-gap);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="0"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xs"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="sm"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 0.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="lg"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-gap="xl"]) {
+    --_cui-stack-gap: var(--cui-stack-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="start"]) {
+    align-items: flex-start;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="center"]) {
+    align-items: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="end"]) {
+    align-items: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-align="baseline"]) {
+    align-items: baseline;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="center"]) {
+    justify-content: center;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="end"]) {
+    justify-content: flex-end;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="between"]) {
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="around"]) {
+    justify-content: space-around;
+  }
+
+  :where([data-citry-ui-part="stack"][data-justify="evenly"]) {
+    justify-content: space-evenly;
+  }
+
+  :where([data-citry-ui-part="stack"][data-reverse]) {
+    flex-direction: column-reverse;
+  }
+
+  :where([data-citry-ui-part="stack"] > *) {
+    min-inline-size: 0;
+  }
+}</style><style data-citry-css-class=CGroup_40f988>@layer citry-ui.theme {
+  :where([data-citry-ui-part="group"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.5rem);
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--_cui-group-gap);
+  }
+
+  :where([data-citry-ui-part="group"][data-wrap]) {
+    flex-wrap: wrap;
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="0"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="xs"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="md"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.75rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="lg"]) {
+    --_cui-group-gap: var(--cui-group-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="xl"]) {
+    --_cui-group-gap: var(--cui-group-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-align="start"]) {
+    align-items: flex-start;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="end"]) {
+    align-items: flex-end;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="stretch"]) {
+    align-items: stretch;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="baseline"]) {
+    align-items: baseline;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="center"]) {
+    justify-content: center;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="end"]) {
+    justify-content: flex-end;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="between"]) {
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="around"]) {
+    justify-content: space-around;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="evenly"]) {
+    justify-content: space-evenly;
+  }
+
+  :where([data-citry-ui-part="group"][data-reverse]) {
+    flex-direction: row-reverse;
+  }
+
+  :where([data-citry-ui-part="group"] > *) {
+    min-inline-size: 0;
+  }
+}</style></head><body><main><section aria-label="Customized Flow layouts" class=flow-custom data-cid-cqkeawn5p><div class="flow-custom__brand flow-custom__brand--cobalt"><div class=cui-stack data-align=stretch data-cid-cqkeawn5q data-citry-ui-part=stack data-gap=md data-justify=start><strong>Cobalt studio</strong><span>Wide vertical rhythm</span></div></div><div class="flow-custom__brand flow-custom__brand--clay"><div class=cui-group data-align=center data-cid-cqkeawn5s data-citry-ui-part=group data-gap=sm data-justify=start data-wrap><strong>Clay archive</strong><span>Compact action spacing</span></div></div></section></main><script src=/citry/citry.js></script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0Zsb3dDdXN0b21pemF0aW9uXzFhOTkxZS43ZjliOWJiYzgwYzIuY3Nz", "L2NpdHJ5L2NhY2hlL0NTdGFja18zYzJhMjYuYjk5MjE5MGEwMzg5LmNzcw==", "L2NpdHJ5L2NhY2hlL0NHcm91cF80MGY5ODguMTUwODUwZDk3NTRmLmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3bjVv"], ["Rmxvd0N1c3RvbWl6YXRpb25fMWE5OTFl", "Y3FrZWF3bjVw"], ["Q1N0YWNrXzNjMmEyNg==", "Y3FrZWF3bjVx"], ["Q0dyb3VwXzQwZjk4OA==", "Y3FrZWF3bjVz"]], "graph": null, "alpineRuntime": "standard"}</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script></body></html>

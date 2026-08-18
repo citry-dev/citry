@@ -1,0 +1,429 @@
+<!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:1:s--><!doctype html><html data-cid-cqkeawoo3 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Control Progress in the browser</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=ControlledProgress_1d1c78>:where(.progress-controlled) {
+  display: grid;
+  gap: 0.85rem;
+  max-inline-size: 34rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.progress-controlled h2) {
+  margin: 0;
+  font-size: 1rem;
+}
+
+:where(.progress-controlled label) {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+
+:where(.progress-controlled input) {
+  inline-size: 100%;
+}</style><style data-citry-css-class=CGroup_40f988>@layer citry-ui.theme {
+  :where([data-citry-ui-part="group"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.5rem);
+    display: flex;
+    min-inline-size: 0;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--_cui-group-gap);
+  }
+
+  :where([data-citry-ui-part="group"][data-wrap]) {
+    flex-wrap: wrap;
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="0"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="xs"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.25rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="md"]) {
+    --_cui-group-gap: var(--cui-group-gap, 0.75rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="lg"]) {
+    --_cui-group-gap: var(--cui-group-gap, 1rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-gap="xl"]) {
+    --_cui-group-gap: var(--cui-group-gap, 1.5rem);
+  }
+
+  :where([data-citry-ui-part="group"][data-align="start"]) {
+    align-items: flex-start;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="end"]) {
+    align-items: flex-end;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="stretch"]) {
+    align-items: stretch;
+  }
+
+  :where([data-citry-ui-part="group"][data-align="baseline"]) {
+    align-items: baseline;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="center"]) {
+    justify-content: center;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="end"]) {
+    justify-content: flex-end;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="between"]) {
+    justify-content: space-between;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="around"]) {
+    justify-content: space-around;
+  }
+
+  :where([data-citry-ui-part="group"][data-justify="evenly"]) {
+    justify-content: space-evenly;
+  }
+
+  :where([data-citry-ui-part="group"][data-reverse]) {
+    flex-direction: row-reverse;
+  }
+
+  :where([data-citry-ui-part="group"] > *) {
+    min-inline-size: 0;
+  }
+}</style><style data-citry-css-class=CProgress_dbddf8>@layer citry-ui.theme {
+  :where([data-citry-ui-part="progress"]) {
+    --_cui-progress-track-color: var(
+      --cui-progress-track-color,
+      light-dark(#e7e5e4, #44403c)
+    );
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#1d4ed8, #60a5fa)
+    );
+    --_cui-progress-height: var(--cui-progress-height, 0.625rem);
+    --_cui-progress-radius: var(--cui-progress-radius, 0.25rem);
+    display: block;
+    box-sizing: border-box;
+    inline-size: 100%;
+    block-size: var(--_cui-progress-height);
+    border: 0;
+    border-radius: var(--_cui-progress-radius);
+    overflow: hidden;
+    appearance: none;
+    background: var(--_cui-progress-track-color);
+    color: var(--_cui-progress-range-color);
+    accent-color: var(--_cui-progress-range-color);
+    vertical-align: middle;
+  }
+
+  :where([data-citry-ui-part="progress"][data-intent="neutral"]) {
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#57534e, #d6d3d1)
+    );
+  }
+
+  :where([data-citry-ui-part="progress"][data-intent="success"]) {
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#15803d, #4ade80)
+    );
+  }
+
+  :where([data-citry-ui-part="progress"][data-intent="warn"]) {
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#b45309, #fbbf24)
+    );
+  }
+
+  :where([data-citry-ui-part="progress"][data-intent="danger"]) {
+    --_cui-progress-range-color: var(
+      --cui-progress-range-color,
+      light-dark(#b91c1c, #f87171)
+    );
+  }
+
+  :where([data-citry-ui-part="progress"][data-size="sm"]) {
+    --_cui-progress-height: var(--cui-progress-height, 0.375rem);
+  }
+
+  :where([data-citry-ui-part="progress"][data-size="lg"]) {
+    --_cui-progress-height: var(--cui-progress-height, 0.875rem);
+  }
+
+  :where([data-citry-ui-part="progress"][data-shape="square"]) {
+    --_cui-progress-radius: var(--cui-progress-radius, 0);
+  }
+
+  :where([data-citry-ui-part="progress"][data-shape="pill"]) {
+    --_cui-progress-radius: var(--cui-progress-radius, 999px);
+  }
+
+  :where([data-citry-ui-part="progress"])::-webkit-progress-bar {
+    border-radius: var(--_cui-progress-radius);
+    background: var(--_cui-progress-track-color);
+  }
+
+  :where([data-citry-ui-part="progress"])::-webkit-progress-value {
+    border-radius: var(--_cui-progress-radius);
+    background: var(--_cui-progress-range-color);
+  }
+
+  :where([data-citry-ui-part="progress"])::-moz-progress-bar {
+    border-radius: var(--_cui-progress-radius);
+    background: var(--_cui-progress-range-color);
+  }
+
+  :where([data-citry-ui-part="progress"]:indeterminate),
+  :where([data-citry-ui-part="progress"]:indeterminate)::-webkit-progress-bar {
+    background-color: var(--_cui-progress-track-color);
+    background-image: linear-gradient(
+      100deg,
+      transparent 20%,
+      var(--_cui-progress-range-color) 45%,
+      var(--_cui-progress-range-color) 55%,
+      transparent 80%
+    );
+    background-size: 200% 100%;
+    animation: cui-progress-indeterminate 1.4s linear infinite;
+  }
+
+  @keyframes cui-progress-indeterminate {
+    from {
+      background-position: 100% 0;
+    }
+
+    to {
+      background-position: -100% 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where([data-citry-ui-part="progress"]:indeterminate),
+    :where([data-citry-ui-part="progress"]:indeterminate)::-webkit-progress-bar {
+      background-image: repeating-linear-gradient(
+        135deg,
+        transparent 0 0.35rem,
+        var(--_cui-progress-range-color) 0.35rem 0.7rem
+      );
+      background-size: auto;
+      animation: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="progress"]) {
+      --_cui-progress-track-color: var(--cui-progress-track-color, Canvas);
+      --_cui-progress-range-color: var(--cui-progress-range-color, Highlight);
+      border: 1px solid CanvasText;
+      forced-color-adjust: auto;
+    }
+  }
+
+  @media print {
+    :where([data-citry-ui-part="progress"]:indeterminate),
+    :where([data-citry-ui-part="progress"]:indeterminate)::-webkit-progress-bar {
+      animation: none;
+    }
+  }
+}</style></head><body><main><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:2:s--><section x-data="{value: 28}" class=progress-controlled data-cid=cqkeawoo4 data-cid-cqkeawoo4 data-citry-root><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:3:s--><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:4:s--><div class=cui-group data-align=center data-cid=cqkeawoo5 data-cid-cqkeawoo5 data-citry-root data-citry-ui-part=group data-gap=sm data-justify=between data-wrap><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:r:1:s--><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:r:2:s--><h2>Transect upload</h2><output x-text="`${value}%`"></output><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:r:2:e--><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:r:1:e--></div><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:4:e--><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:3:e--><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:5:s--><progress aria-label="Transect upload" class=cui-progress data-cid=cqkeawoo7 data-cid-cqkeawoo7 data-citry-root data-citry-ui-part=progress data-intent=primary data-shape=pill data-size=md data-state=indeterminate max=100.0>Transect upload</progress><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:5:e--><label>Completion <input max=100 min=0 type=range x-model.number=value></label></section><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ControlledProgress_1d1c78","className":"ControlledProgress"},{"classId":"CGroup_40f988","className":"CGroup"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CProgress_dbddf8","className":"CProgress"}],"componentExecutionOrderConstraints":[{"childRenderId":"cqkeawoo5","invocationId":2,"parentRenderId":"cqkeawoo4"},{"childRenderId":"cqkeawoo7","invocationId":3,"parentRenderId":"cqkeawoo4"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawoo3","transparent":false},{"classId":"ControlledProgress_1d1c78","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawoo4","transparent":false},{"classId":"CGroup_40f988","instanceId":3,"invocationId":2,"parentRenderId":"cqkeawoo4","renderId":"cqkeawoo5","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":4,"parentRenderId":"cqkeawoo5","renderId":"cqkeawoo6","transparent":true},{"classId":"CProgress_dbddf8","instanceId":5,"invocationId":3,"parentRenderId":"cqkeawoo4","renderId":"cqkeawoo7","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ControlledProgress_1d1c78","ownerRenderId":"cqkeawoo4","policy":"template","receiverClassId":"CGroup_40f988","receiverRenderId":"cqkeawoo5","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"implicit","locationId":null,"ownerClassId":"CGroup_40f988","ownerRenderId":"cqkeawoo5","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawoo6","slotName":"default","sourceInvocationId":4}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ControlledProgress_1d1c78","sourceRenderId":"cqkeawoo4","tagName":"cgroup","targetClassId":"CGroup_40f988","targetRenderId":"cqkeawoo5"},{"clientBindings":[{"key":"$c-props","locationId":null,"payload":{"expression":"{value}","type":"props"},"source":"direct"}],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ControlledProgress_1d1c78","sourceRenderId":"cqkeawoo4","tagName":"cprogress","targetClassId":"CProgress_dbddf8","targetRenderId":"cqkeawoo7"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CGroup_40f988","sourceRenderId":"cqkeawoo5","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawoo6"}],"slotRegions":[{"fillId":2,"ownerRenderId":"cqkeawoo5","parentRegionId":null,"receiverRenderId":"cqkeawoo6","regionId":1,"resultOwnerRenderId":"cqkeawoo5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawoo6"},{"fillId":1,"ownerRenderId":"cqkeawoo4","parentRegionId":1,"receiverRenderId":"cqkeawoo5","regionId":2,"resultOwnerRenderId":"cqkeawoo4","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawoo5"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NQcm9ncmVzc19kYmRkZjguOTBiNTQzODkyZTUwLmpz", "L2NpdHJ5L2NhY2hlL0NQcm9ncmVzc19kYmRkZjguYmNkZWNhN2Y1NmUzM2U4MjQyYTFkNmQwYjMyZGE2NTUuanM="], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NvbnRyb2xsZWRQcm9ncmVzc18xZDFjNzguMDA2OGZjMzNmMzMwLmNzcw==", "L2NpdHJ5L2NhY2hlL0NHcm91cF80MGY5ODguMTUwODUwZDk3NTRmLmNzcw==", "L2NpdHJ5L2NhY2hlL0NQcm9ncmVzc19kYmRkZjguNGVmYWY2MjU3ZTY3LmNzcw=="]}, "fetch": {"js": [], "css": []}, "calls": [["Q1Byb2dyZXNzX2RiZGRmOA==", "Y3FrZWF3b283", "YmNkZWNhN2Y1NmUzM2U4MjQyYTFkNmQwYjMyZGE2NTU=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3b28z"], ["Q29udHJvbGxlZFByb2dyZXNzXzFkMWM3OA==", "Y3FrZWF3b280"], ["Q0dyb3VwXzQwZjk4OA==", "Y3FrZWF3b281"]], "graph": "09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CProgress_dbddf8", {
+  props: {
+    value: {},
+    label: {},
+    valueText: {},
+    intent: {},
+    size: {},
+    shape: {},
+  },
+  init: ({ els, data, props, effect, i18n }) => {
+    const progress = els[0];
+    const allowedValues = {
+      intent: ["neutral", "primary", "success", "warn", "danger"],
+      size: ["sm", "md", "lg"],
+      shape: ["square", "rounded", "pill"],
+    };
+    const invalidEpisodes = new Set();
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) {
+        return;
+      }
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CProgress ${name} received invalid client value ${describeValue(value)}; `
+          + "using the server-rendered fallback.",
+        progress,
+      );
+    };
+    const sourceValue = (name) => props[name] === undefined ? data[name] : props[name];
+    const resolveChoice = (name) => {
+      const value = sourceValue(name);
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveLabel = () => {
+      const value = sourceValue("label");
+      if (typeof value === "string" && value.length > 0) {
+        invalidEpisodes.delete("label");
+        return value;
+      }
+      reportInvalid("label", value);
+      return data.label;
+    };
+    const resolveValueText = () => {
+      const value = sourceValue("valueText");
+      if (value === null || (typeof value === "string" && value.length > 0)) {
+        invalidEpisodes.delete("valueText");
+        return value;
+      }
+      reportInvalid("valueText", value);
+      return data.valueText;
+    };
+    const resolveValue = () => {
+      const value = sourceValue("value");
+      if (
+        value === null
+        || (
+          typeof value === "number"
+          && Number.isFinite(value)
+          && value >= 0
+          && value <= data.max
+        )
+      ) {
+        invalidEpisodes.delete("value");
+        return value;
+      }
+      reportInvalid("value", value);
+      return data.value;
+    };
+    const setAttribute = (name, value) => {
+      if (value === null) {
+        progress.removeAttribute(name);
+      } else if (progress.getAttribute(name) !== String(value)) {
+        progress.setAttribute(name, String(value));
+      }
+    };
+    const setData = (name, value) => {
+      if (progress.dataset[name] !== value) {
+        progress.dataset[name] = value;
+      }
+    };
+
+    const fallbackBinding = i18n && data.catalogFallbackText
+      ? i18n.bind({
+          message: "citry-ui-progress-value-text",
+          values: () => {
+            const value = resolveValue();
+            return {
+              label: resolveLabel(),
+              value: i18n.format.number(value ?? 0, {format: "citry-ui-progress-value"}),
+              max: i18n.format.number(data.max, {format: "citry-ui-progress-value"}),
+            };
+          },
+          onChange: (text) => {
+            progress.textContent = resolveValue() === null ? resolveLabel() : text;
+          },
+        })
+      : null;
+
+    effect(() => {
+      const value = resolveValue();
+      setAttribute("value", value);
+      setAttribute("aria-label", resolveLabel());
+      setAttribute("aria-valuetext", resolveValueText());
+      setData("state", value === null ? "indeterminate" : "determinate");
+      setData("intent", resolveChoice("intent"));
+      setData("size", resolveChoice("size"));
+      setData("shape", resolveChoice("shape"));
+    });
+
+    progress.setAttribute("data-citry-progress-initialized", "");
+    return () => {
+      fallbackBinding?.dispose();
+      progress.removeAttribute("data-citry-progress-initialized");
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CProgress_dbddf8", "bcdeca7f56e33e8242a1d6d0b32da655", atob("eyJsYWJlbCI6IlRyYW5zZWN0IHVwbG9hZCIsInZhbHVlIjpudWxsLCJtYXgiOjEwMC4wLCJ2YWx1ZVRleHQiOm51bGwsImludGVudCI6InByaW1hcnkiLCJzaXplIjoibWQiLCJzaGFwZSI6InBpbGwiLCJjYXRhbG9nRmFsbGJhY2tUZXh0IjpmYWxzZX0="));
+})();</script></body></html><!--citry:g1:09422a0df425dfd9a9a4cd43d7a1f5cc896c63d51299b20b5fc24294b89b16d1:0:i:1:e-->

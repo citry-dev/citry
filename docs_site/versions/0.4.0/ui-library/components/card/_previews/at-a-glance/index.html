@@ -1,0 +1,857 @@
+<!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:1:s--><!doctype html><html data-cid-cqkeawnkx lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Card at a glance</title><style>@layer citry-ui.theme {
+        :where(.cui-button) {
+          --_cui-button-tone: LinkText;
+          --_cui-button-on-tone: Canvas;
+          --_cui-button-background-default: var(--_cui-button-tone);
+          --_cui-button-foreground-default: var(--_cui-button-on-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 12%
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone),
+            CanvasText 22%
+          );
+          --_cui-button-background: var(
+            --cui-button-background,
+            var(--_cui-button-background-default)
+          );
+          --_cui-button-foreground: var(
+            --cui-button-foreground,
+            var(--_cui-button-foreground-default)
+          );
+          --_cui-button-border-color: var(
+            --cui-button-border-color,
+            var(--_cui-button-border-default)
+          );
+          --_cui-button-hover-background: var(
+            --cui-button-hover-background,
+            var(--_cui-button-hover-default)
+          );
+          --_cui-button-active-background: var(
+            --cui-button-active-background,
+            var(--_cui-button-active-default)
+          );
+          --_cui-button-focus-color: var(--cui-button-focus-color, Highlight);
+          --_cui-button-radius: var(--cui-button-radius, 0.5rem);
+          --_cui-button-font-weight: var(--cui-button-font-weight, 600);
+          --_cui-button-gap: var(--cui-button-gap, 0.5rem);
+          --_cui-button-disabled-opacity: var(--cui-button-disabled-opacity, 0.48);
+          --_cui-button-height: var(--cui-button-height, 2.5rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.5rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.9375rem);
+
+          position: relative;
+          display: inline-flex;
+          box-sizing: border-box;
+          align-items: center;
+          justify-content: center;
+          gap: var(--_cui-button-gap);
+          min-block-size: var(--_cui-button-height);
+          margin: 0;
+          padding-block: var(--_cui-button-block-padding);
+          padding-inline: var(--_cui-button-inline-padding);
+          border: 1px solid var(--_cui-button-border-color);
+          border-radius: var(--_cui-button-radius);
+          background: var(--_cui-button-background);
+          color: var(--_cui-button-foreground);
+          font: inherit;
+          font-size: var(--_cui-button-font-size);
+          font-weight: var(--_cui-button-font-weight);
+          line-height: 1.25;
+          text-align: center;
+          text-decoration: none;
+          vertical-align: middle;
+          cursor: pointer;
+          isolation: isolate;
+          -webkit-tap-highlight-color: transparent;
+        }
+
+        :where(.cui-button[data-intent="neutral"]) {
+          --_cui-button-tone: CanvasText;
+          --_cui-button-on-tone: Canvas;
+        }
+
+        :where(.cui-button[data-intent="success"]) {
+          --_cui-button-tone: light-dark(#067647, #75e0a7);
+          --_cui-button-on-tone: light-dark(#ffffff, #102a1d);
+        }
+
+        :where(.cui-button[data-intent="warn"]) {
+          --_cui-button-tone: light-dark(#b54708, #fec84b);
+          --_cui-button-on-tone: light-dark(#ffffff, #1d2939);
+        }
+
+        :where(.cui-button[data-intent="danger"]) {
+          --_cui-button-tone: light-dark(#b42318, #fda29b);
+          --_cui-button-on-tone: light-dark(#ffffff, #3f0e0a);
+        }
+
+        :where(.cui-button[data-variant="outline"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: var(--_cui-button-tone);
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-variant="ghost"]) {
+          --_cui-button-background-default: transparent;
+          --_cui-button-foreground-default: var(--_cui-button-tone);
+          --_cui-button-border-default: transparent;
+          --_cui-button-hover-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 10%,
+            transparent
+          );
+          --_cui-button-active-default: color-mix(
+            in srgb,
+            var(--_cui-button-tone) 18%,
+            transparent
+          );
+        }
+
+        :where(.cui-button[data-size="sm"]) {
+          --_cui-button-height: var(--cui-button-height, 2.25rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 0.75rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.375rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 0.875rem);
+        }
+
+        :where(.cui-button[data-size="lg"]) {
+          --_cui-button-height: var(--cui-button-height, 2.75rem);
+          --_cui-button-inline-padding: var(--cui-button-inline-padding, 1.25rem);
+          --_cui-button-block-padding: var(--cui-button-block-padding, 0.625rem);
+          --_cui-button-font-size: var(--cui-button-font-size, 1rem);
+        }
+
+        :where(.cui-button[data-block]) {
+          display: flex;
+          inline-size: 100%;
+        }
+
+        @media (hover: hover) {
+          :where(
+            .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):hover
+          ) {
+            background: var(--_cui-button-hover-background);
+          }
+        }
+
+        :where(
+          .cui-button:not(:disabled):not([data-disabled]):not([data-loading]):active
+        ) {
+          background: var(--_cui-button-active-background);
+        }
+
+        :where(.cui-button:focus-visible) {
+          outline: 0.1875rem solid var(--_cui-button-focus-color);
+          outline-offset: 0.1875rem;
+        }
+
+        :where(
+          .cui-button:disabled,
+          .cui-button[data-disabled],
+          .cui-button[data-loading]
+        ) {
+          cursor: not-allowed;
+        }
+
+        :where(.cui-button:disabled, .cui-button[data-disabled]) {
+          opacity: var(--_cui-button-disabled-opacity);
+        }
+
+        :where(.cui-button__content) {
+          min-inline-size: 0;
+        }
+
+        :where(.cui-button__decoration, .cui-button__loading) {
+          display: inline-flex;
+          flex: 0 0 auto;
+          align-items: center;
+          justify-content: center;
+          inline-size: 1em;
+          block-size: 1em;
+        }
+
+        :where(.cui-button__loading) {
+          position: absolute;
+          inset-block-start: 50%;
+          translate: 0 -50%;
+        }
+
+        :where(.cui-button__loading[hidden]) {
+          display: none;
+        }
+
+        :where(.cui-button[data-loading-position="start"] .cui-button__loading) {
+          inset-inline-start: var(--_cui-button-inline-padding);
+        }
+
+        :where(.cui-button[data-loading-position="center"] .cui-button__loading) {
+          inset-inline-start: 50%;
+          translate: -50% -50%;
+        }
+
+        :where(.cui-button[data-loading-position="end"] .cui-button__loading) {
+          inset-inline-end: var(--_cui-button-inline-padding);
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__decoration
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="center"]
+          .cui-button__content
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]
+          :is(
+            [data-citry-ui-part="start"],
+            [data-citry-ui-part="split-button-primary-start"]
+          )
+        ),
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]
+          :is(
+            [data-citry-ui-part="end"],
+            [data-citry-ui-part="split-button-primary-end"]
+          )
+        ) {
+          opacity: 0;
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="start"]:not(
+            [data-citry-button-has-start]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-start: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(
+          .cui-button[data-loading][data-loading-position="end"]:not(
+            [data-citry-button-has-end]
+          )
+          .cui-button__content
+        ) {
+          margin-inline-end: calc(1em + var(--_cui-button-gap));
+        }
+
+        :where(.cui-button__spinner) {
+          display: block;
+          box-sizing: border-box;
+          inline-size: 1em;
+          block-size: 1em;
+          border: 0.125em solid currentColor;
+          border-inline-end-color: transparent;
+          border-radius: 50%;
+          animation: cui-button-spin 700ms linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          :where(.cui-button__spinner) {
+            border-inline-end-color: currentColor;
+            border-block-start-color: transparent;
+            animation: none;
+          }
+        }
+
+        @media (forced-colors: active) {
+          :where(.cui-button) {
+            border-color: ButtonText;
+          }
+
+          :where(.cui-button:disabled, .cui-button[data-disabled]) {
+            border-color: GrayText;
+            color: GrayText;
+            opacity: 1;
+          }
+        }
+
+        @keyframes cui-button-spin {
+          to {
+            rotate: 1turn;
+          }
+        }
+      }</style><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CardAtAGlance_4eeaef>:where(.card-glance) {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+  max-width: 68rem;
+  color: CanvasText;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+
+:where(.card-glance [data-citry-ui-part="card"]) {
+  align-self: start;
+}
+
+:where(.card-glance h2, .card-glance p) {
+  margin: 0;
+}
+
+:where(.card-glance h2) {
+  font-size: 1.05rem;
+}
+
+:where(.card-glance__eyebrow) {
+  margin-block-end: 0.25rem;
+  color: light-dark(#72531b, #e4bd70);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:where(.card-glance__scene) {
+  position: relative;
+  block-size: 8.5rem;
+  overflow: hidden;
+}
+
+:where(.card-glance__scene::before) {
+  position: absolute;
+  inset: 0;
+  content: "";
+}
+
+:where(.card-glance__scene--sunroom::before) {
+  background:
+    linear-gradient(90deg, transparent 66%, rgb(255 255 255 / 46%) 66% 70%, transparent 70%),
+    linear-gradient(160deg, #e9cfa0, #8aaa79);
+}
+
+:where(.card-glance__scene--studio::before) {
+  background:
+    radial-gradient(circle at 62% 38%, #fff1c7 0 13%, transparent 14%),
+    linear-gradient(145deg, #8ba4bd, #3f5068);
+}
+
+:where(.card-glance__scene span) {
+  position: absolute;
+  inset-inline: 18%;
+  inset-block-end: 16%;
+  block-size: 30%;
+  border-radius: 999px 999px 0.35rem 0.35rem;
+  background: rgb(255 255 255 / 62%);
+}
+
+:where(.card-glance__sr-only) {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}</style><style data-citry-css-class=CCard_19daae>@layer citry-ui.theme {
+  :where(.cui-card) {
+    --_cui-card-background-default: Canvas;
+    --_cui-card-border-default: transparent;
+    --_cui-card-shadow-default: 0 0.5rem 1.5rem
+      color-mix(in srgb, CanvasText 14%, transparent);
+    --_cui-card-background: var(
+      --cui-card-background,
+      var(--_cui-card-background-default)
+    );
+    --_cui-card-foreground: var(--cui-card-foreground, CanvasText);
+    --_cui-card-border-color: var(
+      --cui-card-border-color,
+      var(--_cui-card-border-default)
+    );
+    --_cui-card-shadow: var(
+      --cui-card-shadow,
+      var(--_cui-card-shadow-default)
+    );
+    --_cui-card-radius: var(--cui-card-radius, 0.75rem);
+    --_cui-card-padding: var(--cui-card-padding, 1rem);
+    --_cui-card-section-gap: var(--cui-card-section-gap, 0.75rem);
+    --_cui-card-actions-gap: var(--cui-card-actions-gap, 0.5rem);
+    --_cui-card-actions-justify: var(
+      --cui-card-actions-justify,
+      flex-start
+    );
+
+    position: static;
+    display: block;
+    box-sizing: border-box;
+    min-inline-size: 0;
+    overflow: visible;
+    border: 1px solid var(--_cui-card-border-color);
+    border-radius: var(--_cui-card-radius);
+    background: var(--_cui-card-background);
+    color: var(--_cui-card-foreground);
+    box-shadow: var(--_cui-card-shadow);
+  }
+
+  :where(.cui-card[data-variant="outline"]) {
+    --_cui-card-border-default: color-mix(
+      in srgb,
+      CanvasText 24%,
+      transparent
+    );
+    --_cui-card-shadow-default: none;
+  }
+
+  :where(.cui-card[data-variant="subtle"]) {
+    --_cui-card-background-default: color-mix(
+      in srgb,
+      CanvasText 5%,
+      Canvas
+    );
+    --_cui-card-shadow-default: none;
+  }
+
+  :where(.cui-card[data-size="sm"]) {
+    --_cui-card-padding: var(--cui-card-padding, 0.75rem);
+    --_cui-card-section-gap: var(--cui-card-section-gap, 0.5rem);
+    --_cui-card-actions-gap: var(--cui-card-actions-gap, 0.375rem);
+  }
+
+  :where(.cui-card[data-size="lg"]) {
+    --_cui-card-padding: var(--cui-card-padding, 1.25rem);
+    --_cui-card-section-gap: var(--cui-card-section-gap, 1rem);
+    --_cui-card-actions-gap: var(--cui-card-actions-gap, 0.625rem);
+  }
+
+  :where(.cui-card > .cui-card__media) {
+    min-inline-size: 0;
+    overflow: clip;
+    border-start-start-radius: var(--_cui-card-radius);
+    border-start-end-radius: var(--_cui-card-radius);
+  }
+
+  :where(.cui-card > .cui-card__media:only-child) {
+    border-end-start-radius: var(--_cui-card-radius);
+    border-end-end-radius: var(--_cui-card-radius);
+  }
+
+  :where(
+    .cui-card > .cui-card__media > img,
+    .cui-card > .cui-card__media > picture,
+    .cui-card > .cui-card__media > video,
+    .cui-card > .cui-card__media > picture > img
+  ) {
+    display: block;
+    max-inline-size: 100%;
+    block-size: auto;
+  }
+
+  :where(.cui-card > .cui-card__header, .cui-card > .cui-card__footer) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--_cui-card-section-gap);
+    align-items: center;
+    min-inline-size: 0;
+    padding: var(--_cui-card-padding);
+  }
+
+  :where(.cui-card > .cui-card__row--split) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  :where(.cui-card > .cui-card__header > .cui-card__header-content) {
+    grid-column: 1;
+    min-inline-size: 0;
+  }
+
+  :where(.cui-card > .cui-card__footer > .cui-card__footer-content) {
+    grid-column: 1;
+    min-inline-size: 0;
+  }
+
+  :where(.cui-card > .cui-card__body) {
+    min-inline-size: 0;
+    padding: var(--_cui-card-padding);
+    overflow-wrap: anywhere;
+  }
+
+  :where(
+    .cui-card > .cui-card__header > .cui-card__header-actions,
+    .cui-card > .cui-card__footer > .cui-card__actions
+  ) {
+    display: flex;
+    grid-column: 1;
+    flex-wrap: wrap;
+    gap: var(--_cui-card-actions-gap);
+    align-items: center;
+    justify-content: var(--_cui-card-actions-justify);
+    min-inline-size: 0;
+  }
+
+  :where(
+    .cui-card > .cui-card__row--split > .cui-card__header-actions,
+    .cui-card > .cui-card__row--split > .cui-card__actions
+  ) {
+    grid-column: 2;
+  }
+
+  @media (forced-colors: active) {
+    :where(.cui-card) {
+      border-color: CanvasText;
+      box-shadow: none;
+    }
+  }
+
+  @media print {
+    :where(.cui-card) {
+      border-color: currentColor;
+      box-shadow: none;
+    }
+  }
+}</style><style data-citry-css-class=CIcon_8e5345>@layer citry-ui.theme {
+  :where(.cui-icon) {
+    --_cui-icon-size: var(--cui-icon-size, 1em);
+    --_cui-icon-stroke-width: var(--cui-icon-stroke-width, 2);
+    display: inline-block;
+    flex: none;
+    inline-size: var(--_cui-icon-size);
+    block-size: var(--_cui-icon-size);
+    overflow: visible;
+    color: inherit;
+    stroke-width: var(--_cui-icon-stroke-width);
+    vertical-align: -0.125em;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  :where(.cui-icon[data-size="sm"]) {
+    --_cui-icon-size: var(--cui-icon-size, 0.875em);
+  }
+
+  :where(.cui-icon[data-size="lg"]) {
+    --_cui-icon-size: var(--cui-icon-size, 1.25em);
+  }
+
+  :where(.cui-icon--logical:dir(rtl) > .cui-icon__glyph) {
+    transform: scaleX(-1);
+    transform-origin: center;
+  }
+}</style></head><body><main><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:2:s--><section aria-label="Rooms and furnishings" class=card-glance data-cid-cqkeawnky><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:3:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:4:s--><div class=cui-card data-cid-cqkeawnkz data-citry-ui-part=card data-size=md data-variant=elevated><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:1:s--><div class=cui-card__media data-citry-ui-part=media><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:2:s--><div class="card-glance__scene card-glance__scene--sunroom" aria-hidden=true><span></span></div><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:2:e--></div><div class=cui-card__header data-citry-ui-part=header><div class=cui-card__header-content><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:3:s--><p class=card-glance__eyebrow>Sunroom</p><h2>Window reading chair</h2><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:3:e--></div></div><div class=cui-card__body data-citry-ui-part=body><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:4:s--> Oak arms, woven rush, and a linen cushion for slow afternoons. <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:4:e--></div><div class="cui-card__footer cui-card__row--split" data-citry-ui-part=footer><div class=cui-card__footer-content><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:5:s--> Natural oak · 76 cm wide <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:5:e--></div><div class=cui-card__actions data-citry-ui-part=actions><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:6:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:5:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:6:s--><button class=cui-button data-cid=cqkeawnl1 data-cid-cqkeawnl1 data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=sm data-variant=solid type=button><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:7:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:8:s--> <span class=cui-button__spinner></span> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:8:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:9:s-->View chair<!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:9:e--> </span><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:7:e--></button><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:6:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:5:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:6:e--></div></div><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:1:e--></div><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:4:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:3:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:7:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:8:s--><div class=cui-card data-cid-cqkeawnl3 data-citry-ui-part=card data-size=md data-variant=outline><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:10:s--><div class=cui-card__media data-citry-ui-part=media><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:11:s--><div class="card-glance__scene card-glance__scene--studio" aria-hidden=true><span></span></div><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:11:e--></div><div class="cui-card__header cui-card__row--split" data-citry-ui-part=header><div class=cui-card__header-content><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:12:s--><p class=card-glance__eyebrow>Studio</p><h2>Cloud pendant</h2><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:12:e--></div><div class=cui-card__header-actions data-citry-ui-part=header-actions><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:13:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:9:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:10:s--><button aria-label="Save Cloud pendant" class=cui-button data-cid=cqkeawnl5 data-cid-cqkeawnl5 data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=sm data-variant=ghost type=button><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:15:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:16:s--> <span class=cui-button__spinner></span> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:16:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:17:s--> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:11:s--> <svg viewbox="0 0 24 24" aria-hidden=true class=cui-icon data-cid-cqkeawnl7 data-citry-ui-part=icon data-name=heart data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><path d="M2 9.5a5.5 5.5 0 0 1 9.591-3.676.56.56 0 0 0 .818 0A5.49 5.49 0 0 1 22 9.5c0 2.29-1.5 4-3 5.5l-5.492 5.313a2 2 0 0 1-3 .019L5 15c-1.5-1.5-3-3.2-3-5.5"></path></g></svg> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:11:e--> <span class=card-glance__sr-only>Save</span> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:17:e--> </span><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:15:e--></button><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:10:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:9:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:13:e--></div></div><div class=cui-card__body data-citry-ui-part=body><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:14:s--> A softly diffused shade for desks, drawing tables, and late-night sketches. <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:14:e--></div><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:10:e--></div><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:8:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:7:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:12:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:13:s--><div class=cui-card data-cid-cqkeawnl8 data-citry-ui-part=card data-size=md data-variant=subtle><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:18:s--><div class=cui-card__header data-citry-ui-part=header><div class=cui-card__header-content><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:19:s--><p class=card-glance__eyebrow>Library</p><h2>Walnut wall shelf</h2><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:19:e--></div></div><div class=cui-card__body data-citry-ui-part=body><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:20:s--> Three slim shelves keep favorite books close without crowding the room. <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:20:e--></div><div class=cui-card__footer data-citry-ui-part=footer><div class=cui-card__actions data-citry-ui-part=actions><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:21:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:14:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:15:s--><button class=cui-button data-cid=cqkeawnla data-cid-cqkeawnla data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=sm data-variant=outline type=button><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:22:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:23:s--> <span class=cui-button__spinner></span> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:23:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:24:s-->See dimensions<!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:24:e--> </span><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:22:e--></button><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:15:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:14:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:16:s--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:17:s--><button class=cui-button data-cid=cqkeawnlc data-cid-cqkeawnlc data-citry-root data-citry-ui-part=button data-intent=primary data-loading-position=center data-size=sm data-variant=ghost type=button><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:25:s--><span aria-hidden=true class=cui-button__loading data-citry-ui-part=loading-indicator hidden> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:26:s--> <span class=cui-button__spinner></span> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:26:e--> </span> <span class=cui-button__content data-citry-ui-part=content> <!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:27:s-->Add to room<!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:27:e--> </span><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:25:e--></button><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:17:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:16:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:21:e--></div></div><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:r:18:e--></div><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:13:e--><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:12:e--></section><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"CardAtAGlance_4eeaef","className":"CardAtAGlance"},{"classId":"CCard_19daae","className":"CCard"},{"classId":"DynamicElement_29900a","className":"DynamicElement"},{"classId":"CButton_353146","className":"CButton"},{"classId":"CIcon_8e5345","className":"CIcon"}],"componentExecutionOrderConstraints":[{"childRenderId":"cqkeawnkz","invocationId":2,"parentRenderId":"cqkeawnky"},{"childRenderId":"cqkeawnl1","invocationId":6,"parentRenderId":"cqkeawnky"},{"childRenderId":"cqkeawnl3","invocationId":3,"parentRenderId":"cqkeawnky"},{"childRenderId":"cqkeawnl5","invocationId":9,"parentRenderId":"cqkeawnky"},{"childRenderId":"cqkeawnl7","invocationId":11,"parentRenderId":"cqkeawnky"},{"childRenderId":"cqkeawnl8","invocationId":4,"parentRenderId":"cqkeawnky"},{"childRenderId":"cqkeawnla","invocationId":13,"parentRenderId":"cqkeawnky"},{"childRenderId":"cqkeawnlc","invocationId":14,"parentRenderId":"cqkeawnky"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawnkx","transparent":false},{"classId":"CardAtAGlance_4eeaef","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawnky","transparent":false},{"classId":"CCard_19daae","instanceId":3,"invocationId":2,"parentRenderId":"cqkeawnky","renderId":"cqkeawnkz","transparent":false},{"classId":"DynamicElement_29900a","instanceId":4,"invocationId":5,"parentRenderId":"cqkeawnkz","renderId":"cqkeawnl0","transparent":true},{"classId":"CButton_353146","instanceId":5,"invocationId":6,"parentRenderId":"cqkeawnky","renderId":"cqkeawnl1","transparent":false},{"classId":"DynamicElement_29900a","instanceId":6,"invocationId":7,"parentRenderId":"cqkeawnl1","renderId":"cqkeawnl2","transparent":true},{"classId":"CCard_19daae","instanceId":7,"invocationId":3,"parentRenderId":"cqkeawnky","renderId":"cqkeawnl3","transparent":false},{"classId":"DynamicElement_29900a","instanceId":8,"invocationId":8,"parentRenderId":"cqkeawnl3","renderId":"cqkeawnl4","transparent":true},{"classId":"CButton_353146","instanceId":9,"invocationId":9,"parentRenderId":"cqkeawnky","renderId":"cqkeawnl5","transparent":false},{"classId":"DynamicElement_29900a","instanceId":10,"invocationId":10,"parentRenderId":"cqkeawnl5","renderId":"cqkeawnl6","transparent":true},{"classId":"CIcon_8e5345","instanceId":11,"invocationId":11,"parentRenderId":"cqkeawnky","renderId":"cqkeawnl7","transparent":false},{"classId":"CCard_19daae","instanceId":12,"invocationId":4,"parentRenderId":"cqkeawnky","renderId":"cqkeawnl8","transparent":false},{"classId":"DynamicElement_29900a","instanceId":13,"invocationId":12,"parentRenderId":"cqkeawnl8","renderId":"cqkeawnl9","transparent":true},{"classId":"CButton_353146","instanceId":14,"invocationId":13,"parentRenderId":"cqkeawnky","renderId":"cqkeawnla","transparent":false},{"classId":"DynamicElement_29900a","instanceId":15,"invocationId":15,"parentRenderId":"cqkeawnla","renderId":"cqkeawnlb","transparent":true},{"classId":"CButton_353146","instanceId":16,"invocationId":14,"parentRenderId":"cqkeawnky","renderId":"cqkeawnlc","transparent":false},{"classId":"DynamicElement_29900a","instanceId":17,"invocationId":16,"parentRenderId":"cqkeawnlc","renderId":"cqkeawnld","transparent":true}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnkz","slotName":"media","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":2,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnkz","slotName":"header","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnkz","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnkz","slotName":"footer","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnkz","slotName":"actions","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":6,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnl3","slotName":"media","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":7,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnl3","slotName":"header","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":8,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnl3","slotName":"header_actions","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":9,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnl3","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":10,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnl8","slotName":"header","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":11,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnl8","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":12,"kind":"named","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CCard_19daae","receiverRenderId":"cqkeawnl8","slotName":"actions","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":13,"kind":"implicit","locationId":null,"ownerClassId":"CCard_19daae","ownerRenderId":"cqkeawnkz","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawnl0","slotName":"default","sourceInvocationId":5},{"fallbackLocationId":null,"fillId":20,"kind":"implicit","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cqkeawnl1","slotName":"default","sourceInvocationId":6},{"fallbackLocationId":null,"fillId":21,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cqkeawnl1","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawnl2","slotName":"default","sourceInvocationId":7},{"fallbackLocationId":null,"fillId":23,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cqkeawnl1","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cqkeawnl1","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":25,"kind":"implicit","locationId":null,"ownerClassId":"CCard_19daae","ownerRenderId":"cqkeawnl3","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawnl4","slotName":"default","sourceInvocationId":8},{"fallbackLocationId":null,"fillId":30,"kind":"implicit","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cqkeawnl5","slotName":"default","sourceInvocationId":9},{"fallbackLocationId":null,"fillId":32,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cqkeawnl5","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawnl6","slotName":"default","sourceInvocationId":10},{"fallbackLocationId":null,"fillId":34,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cqkeawnl5","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cqkeawnl5","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":36,"kind":"implicit","locationId":null,"ownerClassId":"CCard_19daae","ownerRenderId":"cqkeawnl8","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawnl9","slotName":"default","sourceInvocationId":12},{"fallbackLocationId":null,"fillId":41,"kind":"implicit","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cqkeawnla","slotName":"default","sourceInvocationId":13},{"fallbackLocationId":null,"fillId":42,"kind":"implicit","locationId":null,"ownerClassId":"CardAtAGlance_4eeaef","ownerRenderId":"cqkeawnky","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cqkeawnlc","slotName":"default","sourceInvocationId":14},{"fallbackLocationId":null,"fillId":43,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cqkeawnla","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawnlb","slotName":"default","sourceInvocationId":15},{"fallbackLocationId":null,"fillId":45,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cqkeawnla","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cqkeawnla","slotName":"loading","sourceInvocationId":null},{"fallbackLocationId":null,"fillId":47,"kind":"implicit","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cqkeawnlc","policy":"template","receiverClassId":"DynamicElement_29900a","receiverRenderId":"cqkeawnld","slotName":"default","sourceInvocationId":16},{"fallbackLocationId":null,"fillId":49,"kind":"fallback","locationId":null,"ownerClassId":"CButton_353146","ownerRenderId":"cqkeawnlc","policy":"template","receiverClassId":"CButton_353146","receiverRenderId":"cqkeawnlc","slotName":"loading","sourceInvocationId":null}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CardAtAGlance_4eeaef","sourceRenderId":"cqkeawnky","tagName":"ccard","targetClassId":"CCard_19daae","targetRenderId":"cqkeawnkz"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CardAtAGlance_4eeaef","sourceRenderId":"cqkeawnky","tagName":"ccard","targetClassId":"CCard_19daae","targetRenderId":"cqkeawnl3"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CardAtAGlance_4eeaef","sourceRenderId":"cqkeawnky","tagName":"ccard","targetClassId":"CCard_19daae","targetRenderId":"cqkeawnl8"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CCard_19daae","sourceRenderId":"cqkeawnkz","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawnl0"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":6,"sourceClassId":"CardAtAGlance_4eeaef","sourceRenderId":"cqkeawnky","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cqkeawnl1"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":6,"sourceClassId":"CButton_353146","sourceRenderId":"cqkeawnl1","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawnl2"},{"clientBindings":[],"invocationId":8,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CCard_19daae","sourceRenderId":"cqkeawnl3","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawnl4"},{"clientBindings":[],"invocationId":9,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":13,"sourceClassId":"CardAtAGlance_4eeaef","sourceRenderId":"cqkeawnky","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cqkeawnl5"},{"clientBindings":[],"invocationId":10,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":13,"sourceClassId":"CButton_353146","sourceRenderId":"cqkeawnl5","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawnl6"},{"clientBindings":[],"invocationId":11,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":17,"sourceClassId":"CardAtAGlance_4eeaef","sourceRenderId":"cqkeawnky","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"cqkeawnl7"},{"clientBindings":[],"invocationId":12,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"CCard_19daae","sourceRenderId":"cqkeawnl8","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawnl9"},{"clientBindings":[],"invocationId":13,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":21,"sourceClassId":"CardAtAGlance_4eeaef","sourceRenderId":"cqkeawnky","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cqkeawnla"},{"clientBindings":[],"invocationId":14,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":21,"sourceClassId":"CardAtAGlance_4eeaef","sourceRenderId":"cqkeawnky","tagName":"cbutton","targetClassId":"CButton_353146","targetRenderId":"cqkeawnlc"},{"clientBindings":[],"invocationId":15,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":21,"sourceClassId":"CButton_353146","sourceRenderId":"cqkeawnla","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawnlb"},{"clientBindings":[],"invocationId":16,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":21,"sourceClassId":"CButton_353146","sourceRenderId":"cqkeawnlc","tagName":"element","targetClassId":"DynamicElement_29900a","targetRenderId":"cqkeawnld"}],"slotRegions":[{"fillId":13,"ownerRenderId":"cqkeawnkz","parentRegionId":null,"receiverRenderId":"cqkeawnl0","regionId":1,"resultOwnerRenderId":"cqkeawnkz","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl0"},{"fillId":1,"ownerRenderId":"cqkeawnky","parentRegionId":1,"receiverRenderId":"cqkeawnkz","regionId":2,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnkz"},{"fillId":2,"ownerRenderId":"cqkeawnky","parentRegionId":1,"receiverRenderId":"cqkeawnkz","regionId":3,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnkz"},{"fillId":3,"ownerRenderId":"cqkeawnky","parentRegionId":1,"receiverRenderId":"cqkeawnkz","regionId":4,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnkz"},{"fillId":4,"ownerRenderId":"cqkeawnky","parentRegionId":1,"receiverRenderId":"cqkeawnkz","regionId":5,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnkz"},{"fillId":5,"ownerRenderId":"cqkeawnky","parentRegionId":1,"receiverRenderId":"cqkeawnkz","regionId":6,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnkz"},{"fillId":21,"ownerRenderId":"cqkeawnl1","parentRegionId":6,"receiverRenderId":"cqkeawnl2","regionId":7,"resultOwnerRenderId":"cqkeawnl1","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnky"},{"fillId":23,"ownerRenderId":"cqkeawnl1","parentRegionId":7,"receiverRenderId":"cqkeawnl1","regionId":8,"resultOwnerRenderId":"cqkeawnl1","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl1"},{"fillId":20,"ownerRenderId":"cqkeawnky","parentRegionId":7,"receiverRenderId":"cqkeawnl1","regionId":9,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl1"},{"fillId":25,"ownerRenderId":"cqkeawnl3","parentRegionId":null,"receiverRenderId":"cqkeawnl4","regionId":10,"resultOwnerRenderId":"cqkeawnl3","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl4"},{"fillId":6,"ownerRenderId":"cqkeawnky","parentRegionId":10,"receiverRenderId":"cqkeawnl3","regionId":11,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl3"},{"fillId":7,"ownerRenderId":"cqkeawnky","parentRegionId":10,"receiverRenderId":"cqkeawnl3","regionId":12,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl3"},{"fillId":8,"ownerRenderId":"cqkeawnky","parentRegionId":10,"receiverRenderId":"cqkeawnl3","regionId":13,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl3"},{"fillId":9,"ownerRenderId":"cqkeawnky","parentRegionId":10,"receiverRenderId":"cqkeawnl3","regionId":14,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl3"},{"fillId":32,"ownerRenderId":"cqkeawnl5","parentRegionId":13,"receiverRenderId":"cqkeawnl6","regionId":15,"resultOwnerRenderId":"cqkeawnl5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnky"},{"fillId":34,"ownerRenderId":"cqkeawnl5","parentRegionId":15,"receiverRenderId":"cqkeawnl5","regionId":16,"resultOwnerRenderId":"cqkeawnl5","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl5"},{"fillId":30,"ownerRenderId":"cqkeawnky","parentRegionId":15,"receiverRenderId":"cqkeawnl5","regionId":17,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl5"},{"fillId":36,"ownerRenderId":"cqkeawnl8","parentRegionId":null,"receiverRenderId":"cqkeawnl9","regionId":18,"resultOwnerRenderId":"cqkeawnl8","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl9"},{"fillId":10,"ownerRenderId":"cqkeawnky","parentRegionId":18,"receiverRenderId":"cqkeawnl8","regionId":19,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl8"},{"fillId":11,"ownerRenderId":"cqkeawnky","parentRegionId":18,"receiverRenderId":"cqkeawnl8","regionId":20,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl8"},{"fillId":12,"ownerRenderId":"cqkeawnky","parentRegionId":18,"receiverRenderId":"cqkeawnl8","regionId":21,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnl8"},{"fillId":43,"ownerRenderId":"cqkeawnla","parentRegionId":21,"receiverRenderId":"cqkeawnlb","regionId":22,"resultOwnerRenderId":"cqkeawnla","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnky"},{"fillId":45,"ownerRenderId":"cqkeawnla","parentRegionId":22,"receiverRenderId":"cqkeawnla","regionId":23,"resultOwnerRenderId":"cqkeawnla","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnla"},{"fillId":41,"ownerRenderId":"cqkeawnky","parentRegionId":22,"receiverRenderId":"cqkeawnla","regionId":24,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnla"},{"fillId":47,"ownerRenderId":"cqkeawnlc","parentRegionId":21,"receiverRenderId":"cqkeawnld","regionId":25,"resultOwnerRenderId":"cqkeawnlc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnky"},{"fillId":49,"ownerRenderId":"cqkeawnlc","parentRegionId":25,"receiverRenderId":"cqkeawnlc","regionId":26,"resultOwnerRenderId":"cqkeawnlc","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnlc"},{"fillId":42,"ownerRenderId":"cqkeawnky","parentRegionId":25,"receiverRenderId":"cqkeawnlc","regionId":27,"resultOwnerRenderId":"cqkeawnky","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnlc"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjE1OWZjYTZkZDE1Yi5qcw==", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjQ0NWNmNGNmODBiOGU5MTg1MDFkZWZiYzFmMjVjY2E4Lmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LmE3MTNhZTM3MzNhNjE1ZjU5NWM3OTYwZDEyNjczYWEwLmpz", "L2NpdHJ5L2NhY2hlL0NCdXR0b25fMzUzMTQ2LjAzNTBkYmE4OTAxNGMxNWQ4NjA5MDM0OWYwNGM3NjU5Lmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NhcmRBdEFHbGFuY2VfNGVlYWVmLmNjYWI2NzJkN2FhZS5jc3M=", "L2NpdHJ5L2NhY2hlL0NDYXJkXzE5ZGFhZS43ZjgxMjUzMTgxMGEuY3Nz", "L2NpdHJ5L2NhY2hlL0NJY29uXzhlNTM0NS4zM2NkM2ZhOGNlZTEuY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q0J1dHRvbl8zNTMxNDY=", "Y3FrZWF3bmwx", "NDQ1Y2Y0Y2Y4MGI4ZTkxODUwMWRlZmJjMWYyNWNjYTg=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3FrZWF3bmw1", "YTcxM2FlMzczM2E2MTVmNTk1Yzc5NjBkMTI2NzNhYTA=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3FrZWF3bmxh", "MDM1MGRiYTg5MDE0YzE1ZDg2MDkwMzQ5ZjA0Yzc2NTk=", "init"], ["Q0J1dHRvbl8zNTMxNDY=", "Y3FrZWF3bmxj", "YTcxM2FlMzczM2E2MTVmNTk1Yzc5NjBkMTI2NzNhYTA=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3bmt4"], ["Q2FyZEF0QUdsYW5jZV80ZWVhZWY=", "Y3FrZWF3bmt5"], ["Q0NhcmRfMTlkYWFl", "Y3FrZWF3bmt6"], ["Q0ljb25fOGU1MzQ1", "Y3FrZWF3bmw3"], ["Q0NhcmRfMTlkYWFl", "Y3FrZWF3bmwz"], ["Q0NhcmRfMTlkYWFl", "Y3FrZWF3bmw4"]], "graph": "84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+      const guardButtonActivation = (root, configuration, event) => {
+        const isLink = root.localName === "a";
+        if (
+          !configuration.loading
+          && !(isLink && configuration.disabled)
+          && !root.matches(":disabled")
+        ) {
+          return true;
+        }
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return false;
+      };
+      const applyButtonConfiguration = (root, indicator, data, next) => {
+        const isLink = root.localName === "a";
+        if (isLink) {
+          if (next.disabled || next.loading) {
+            root.removeAttribute("href");
+          } else {
+            root.setAttribute("href", data.href);
+          }
+          const tabIndex = next.disabled
+            ? -1
+            : next.loading
+              ? (data.tabIndex ?? 0)
+              : data.tabIndex;
+          if (tabIndex === null || tabIndex === undefined) {
+            root.removeAttribute("tabindex");
+          } else {
+            root.setAttribute("tabindex", String(tabIndex));
+          }
+        } else {
+          if (root.disabled !== next.disabled) {
+            root.disabled = next.disabled;
+          }
+        }
+        root.toggleAttribute("data-disabled", next.disabled);
+        root.toggleAttribute("data-loading", next.loading);
+        root.toggleAttribute("data-block", next.block);
+        if (root.dataset.variant !== next.variant) root.dataset.variant = next.variant;
+        if (root.dataset.intent !== next.intent) root.dataset.intent = next.intent;
+        if (root.dataset.size !== next.size) root.dataset.size = next.size;
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        if (next.loading) {
+          root.setAttribute("aria-busy", "true");
+        } else {
+          root.removeAttribute("aria-busy");
+        }
+        if (next.disabled || next.loading) {
+          root.setAttribute("aria-disabled", "true");
+        } else {
+          root.removeAttribute("aria-disabled");
+        }
+        if (indicator) {
+          indicator.hidden = !next.loading;
+        }
+      };
+      const createButtonResolver = (componentName, root, data, props, allowed) => {
+        const invalid = new Map();
+        const describe = (value) => {
+          try {
+            return JSON.stringify(value) ?? String(value);
+          } catch {
+            return String(value);
+          }
+        };
+        const report = (name, value) => {
+          const shown = describe(value);
+          const fingerprint = `${typeof value}:${shown}`;
+          if (invalid.get(name) === fingerprint) return;
+          invalid.set(name, fingerprint);
+          console.error(
+            `[citry-ui] ${componentName} ${name} received invalid client value ${shown}; `
+              + "using the server-rendered fallback.",
+            root,
+          );
+        };
+        const value = (name) => props[name] === undefined ? data[name] : props[name];
+        return {
+          boolean(name) {
+            const next = value(name);
+            if (typeof next === "boolean") {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+          choice(name) {
+            const next = value(name);
+            if (allowed[name].includes(next)) {
+              invalid.delete(name);
+              return next;
+            }
+            report(name, next);
+            return data[name];
+          },
+        };
+      };
+      const applyCompoundButtonConfiguration = (
+        root,
+        primary,
+        trigger,
+        indicator,
+        formDisabled,
+        next,
+      ) => {
+        const commonDisabled = next.disabled || formDisabled;
+        applyButtonConfiguration(primary, indicator, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.primaryDisabled,
+          block: false,
+        });
+        applyButtonConfiguration(trigger, null, { href: null, tabIndex: null }, {
+          ...next,
+          disabled: commonDisabled || next.menuDisabled,
+          loading: false,
+          block: false,
+          loadingPosition: "center",
+        });
+        for (const name of ["aria-busy", "aria-disabled", "data-block", "data-loading", "data-loading-position"]) {
+          trigger.removeAttribute(name);
+        }
+        for (const name of ["variant", "intent", "size"]) {
+          if (root.dataset[name] !== next[name]) root.dataset[name] = next[name];
+        }
+        if (root.dataset.loadingPosition !== next.loadingPosition) {
+          root.dataset.loadingPosition = next.loadingPosition;
+        }
+        for (const [name, enabled] of [
+          ["data-block", next.block],
+          ["data-disabled", next.disabled],
+          ["data-loading", next.loading],
+          ["data-primary-disabled", primary.matches(":disabled")],
+          ["data-menu-disabled", trigger.matches(":disabled")],
+        ]) {
+          root.toggleAttribute(name, enabled);
+        }
+      };
+
+      
+      (() => {
+        const runtimeKey = Symbol.for('citry-ui:button-runtime');
+        const installed = globalThis[runtimeKey];
+        if (installed !== undefined) {
+          if (installed.generation !== 1) {
+            throw new Error(
+              "[citry-ui] cannot replace an incompatible CButton runtime; "
+                + "a full page reload is required.",
+            );
+          }
+          return;
+        }
+        const definition = {
+        helpers: {
+          applyConfiguration: applyButtonConfiguration,
+          applyCompoundConfiguration: applyCompoundButtonConfiguration,
+          createResolver: createButtonResolver,
+          guardActivation: guardButtonActivation,
+        },
+        props: {
+          disabled: {},
+          loading: {},
+          variant: {},
+          intent: {},
+          size: {},
+          block: {},
+          loadingPosition: {},
+        },
+        init: ({ els, data, props, effect, inject }) => {
+          const root = els[0];
+          const indicator = root.querySelector('[data-citry-ui-part="loading-indicator"]');
+          const formContext = inject(Symbol.for("citry-ui:form"), null);
+          const isLink = root.localName === "a";
+          const allowedValues = {
+            variant: ["solid", "outline", "ghost"],
+            intent: ["primary", "neutral", "success", "warn", "danger"],
+            size: ["sm", "md", "lg"],
+            loadingPosition: ["start", "center", "end"],
+          };
+          const resolver = createButtonResolver("CButton", root, data, props, allowedValues);
+          let configuration = {
+            disabled: data.disabled,
+            loading: data.loading,
+            variant: data.variant,
+            intent: data.intent,
+            size: data.size,
+            block: data.block,
+            loadingPosition: data.loadingPosition,
+          };
+
+          const applyConfiguration = (next) => {
+            configuration = next;
+            applyButtonConfiguration(root, indicator, data, next);
+          };
+          const blockUnavailableActivation = (event) => {
+            guardButtonActivation(root, configuration, event);
+          };
+          const blockLoadingSubmitter = (event) => {
+            if (!configuration.loading || event.submitter !== root) {
+              return;
+            }
+            event.preventDefault();
+            event.stopImmediatePropagation();
+          };
+          const nativeForm = isLink ? null : root.form;
+
+          root.addEventListener("click", blockUnavailableActivation, true);
+          nativeForm?.addEventListener("submit", blockLoadingSubmitter, true);
+          effect(() => {
+            const localDisabled = resolver.boolean("disabled");
+            applyConfiguration({
+              disabled: Boolean(formContext?.disabled) || localDisabled,
+              loading: resolver.boolean("loading"),
+              variant: resolver.choice("variant"),
+              intent: resolver.choice("intent"),
+              size: resolver.choice("size"),
+              block: resolver.boolean("block"),
+              loadingPosition: resolver.choice("loadingPosition"),
+            });
+          });
+          root.setAttribute("data-citry-button-initialized", "");
+
+          return () => {
+            root.removeEventListener("click", blockUnavailableActivation, true);
+            nativeForm?.removeEventListener("submit", blockLoadingSubmitter, true);
+            root.removeAttribute("data-citry-button-initialized");
+          };
+        },
+      };
+        globalThis[runtimeKey] = {
+          generation: 1,
+          definition,
+          mount: definition.init,
+          helpers: definition.helpers ?? {},
+        };
+      })();
+
+})();</script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+const runtime = globalThis[Symbol.for('citry-ui:button-runtime')];
+if (runtime?.generation !== 1) {
+  throw new Error("[citry-ui] CButton runtime dependency did not load.");
+}
+Citry.manager.registerComponent("CButton_353146", runtime.definition);
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "445cf4cf80b8e918501defbc1f25cca8", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6InNvbGlkIiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJzbSIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "a713ae3733a615f595c7960d12673aa0", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Imdob3N0IiwiaW50ZW50IjoicHJpbWFyeSIsInNpemUiOiJzbSIsImJsb2NrIjpmYWxzZSwibG9hZGluZ1Bvc2l0aW9uIjoiY2VudGVyIn0="));
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CButton_353146", "0350dba89014c15d86090349f04c7659", atob("eyJocmVmIjpudWxsLCJ0YWJJbmRleCI6bnVsbCwiZGlzYWJsZWQiOmZhbHNlLCJsb2FkaW5nIjpmYWxzZSwidmFyaWFudCI6Im91dGxpbmUiLCJpbnRlbnQiOiJwcmltYXJ5Iiwic2l6ZSI6InNtIiwiYmxvY2siOmZhbHNlLCJsb2FkaW5nUG9zaXRpb24iOiJjZW50ZXIifQ=="));
+})();</script></body></html><!--citry:g1:84873521ce47fa839a197e8bf959dcc4d0e68e36b4315430562fd0a415329656:0:i:1:e-->

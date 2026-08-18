@@ -1,0 +1,618 @@
+<!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:1:s--><!doctype html><html data-cid-cqkeawnv1 lang=en><head><meta charset=utf-8><meta content="width=device-width,initial-scale=1" name=viewport><meta content=noindex,nofollow name=robots><meta content="light dark" name=color-scheme><title>Compose List Item anatomy</title><style data-citry-css-class=UiPreviewDocument_a1dcd6>:where(*) {
+  box-sizing: border-box;
+}
+
+:where(html, body) {
+  min-width: 0;
+  margin: 0;
+  background: light-dark(
+    oklch(92% 0.007 250),
+    oklch(24% 0.01 250)
+  );
+  color: CanvasText;
+}
+
+:where(html) {
+  font-size: 87.5%;
+}
+
+:where(body) {
+  padding: 1.25rem;
+}
+
+:where(main) {
+  min-width: 0;
+}</style><style data-citry-css-class=CAvatar_516550>@layer citry-ui.theme {
+  :where([data-citry-ui-part="avatar"]) {
+    --_cui-avatar-size: var(--cui-avatar-size, 2.5rem);
+    --_cui-avatar-background: var(--cui-avatar-background, light-dark(#e7e5e4, #44403c));
+    --_cui-avatar-foreground: var(--cui-avatar-foreground, light-dark(#44403c, #fafaf9));
+    --_cui-avatar-border-color: var(--cui-avatar-border-color, transparent);
+    --_cui-avatar-border-width: var(--cui-avatar-border-width, 1px);
+    --_cui-avatar-radius: var(--cui-avatar-radius, 50%);
+    --_cui-avatar-font-size: var(--cui-avatar-font-size, 0.875rem);
+    --_cui-avatar-font-weight: var(--cui-avatar-font-weight, 700);
+    --_cui-avatar-image-fit: var(--cui-avatar-image-fit, cover);
+    --_cui-avatar-image-position: var(--cui-avatar-image-position, center);
+    position: relative;
+    display: inline-grid;
+    box-sizing: border-box;
+    inline-size: var(--_cui-avatar-size);
+    block-size: var(--_cui-avatar-size);
+    flex: 0 0 auto;
+    place-items: center;
+    overflow: hidden;
+    border: var(--_cui-avatar-border-width) solid var(--_cui-avatar-border-color);
+    border-radius: var(--_cui-avatar-radius);
+    background: var(--_cui-avatar-background);
+    color: var(--_cui-avatar-foreground);
+    font-size: var(--_cui-avatar-font-size);
+    font-weight: var(--_cui-avatar-font-weight);
+    line-height: 1;
+    text-align: center;
+    vertical-align: middle;
+    isolation: isolate;
+  }
+
+  :where([data-citry-ui-part="avatar"][data-size="sm"]) {
+    --_cui-avatar-size: var(--cui-avatar-size, 2rem);
+    --_cui-avatar-font-size: var(--cui-avatar-font-size, 0.75rem);
+  }
+
+  :where([data-citry-ui-part="avatar"][data-size="lg"]) {
+    --_cui-avatar-size: var(--cui-avatar-size, 3rem);
+    --_cui-avatar-font-size: var(--cui-avatar-font-size, 1rem);
+  }
+
+  :where([data-citry-ui-part="avatar"][data-shape="rounded"]) {
+    --_cui-avatar-radius: var(--cui-avatar-radius, 0.625rem);
+  }
+
+  :where([data-citry-ui-part="avatar"][data-shape="square"]) {
+    --_cui-avatar-radius: var(--cui-avatar-radius, 0);
+  }
+
+  :where([data-citry-ui-part="avatar"][data-variant="solid"]) {
+    --_cui-avatar-background: var(--cui-avatar-background, light-dark(#44403c, #d6d3d1));
+    --_cui-avatar-foreground: var(--cui-avatar-foreground, light-dark(#ffffff, #1c1917));
+  }
+
+  :where([data-citry-ui-part="avatar"][data-variant="outline"]) {
+    --_cui-avatar-background: var(--cui-avatar-background, transparent);
+    --_cui-avatar-border-color: var(--cui-avatar-border-color, currentColor);
+  }
+
+  :where([data-citry-ui-part="fallback"]) {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    display: grid;
+    min-inline-size: 0;
+    place-items: center;
+    overflow: hidden;
+    padding: 0.125em;
+    overflow-wrap: anywhere;
+    user-select: none;
+  }
+
+  :where([data-citry-ui-part="image"]) {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: block;
+    inline-size: 100%;
+    block-size: 100%;
+    object-fit: var(--_cui-avatar-image-fit);
+    object-position: var(--_cui-avatar-image-position);
+  }
+
+  :where([data-citry-ui-part="image"][hidden]) {
+    display: none !important;
+  }
+
+  :where(.cui-avatar__placeholder) {
+    inline-size: 65%;
+    block-size: 65%;
+    pointer-events: none;
+  }
+
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="avatar"]) {
+      border-color: CanvasText;
+    }
+  }
+
+  @media print {
+    :where([data-citry-ui-part="avatar"]) {
+      print-color-adjust: exact;
+    }
+  }
+}</style><style data-citry-css-class=CBadge_20b1a5>@layer citry-ui.theme {
+  :where([data-citry-ui-part="badge"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#e7e5e4, #44403c));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#292524, #fafaf9));
+    --_cui-badge-border-color: var(--cui-badge-border-color, transparent);
+    --_cui-badge-radius: var(--cui-badge-radius, 0.375rem);
+    --_cui-badge-min-height: var(--cui-badge-min-height, 1.5rem);
+    --_cui-badge-padding-inline: var(--cui-badge-padding-inline, 0.5rem);
+    --_cui-badge-gap: var(--cui-badge-gap, 0.25rem);
+    --_cui-badge-font-size: var(--cui-badge-font-size, 0.75rem);
+    --_cui-badge-font-weight: var(--cui-badge-font-weight, 650);
+    display: inline-flex;
+    box-sizing: border-box;
+    max-inline-size: 100%;
+    min-block-size: var(--_cui-badge-min-height);
+    align-items: center;
+    justify-content: center;
+    gap: var(--_cui-badge-gap);
+    padding-block: 0.125rem;
+    padding-inline: var(--_cui-badge-padding-inline);
+    border: 1px solid var(--_cui-badge-border-color);
+    border-radius: var(--_cui-badge-radius);
+    background: var(--_cui-badge-background);
+    color: var(--_cui-badge-foreground);
+    font-size: var(--_cui-badge-font-size);
+    font-weight: var(--_cui-badge-font-weight);
+    line-height: 1.2;
+    text-align: center;
+    vertical-align: middle;
+    overflow-wrap: anywhere;
+  }
+
+  :where([data-citry-ui-part="badge"][data-intent="primary"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#dbeafe, #1e3a5f));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#1e3a8a, #dbeafe));
+  }
+
+  :where([data-citry-ui-part="badge"][data-intent="success"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#dcfce7, #163f2a));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#14532d, #dcfce7));
+  }
+
+  :where([data-citry-ui-part="badge"][data-intent="warn"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#fef3c7, #4b3514));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#78350f, #fef3c7));
+  }
+
+  :where([data-citry-ui-part="badge"][data-intent="danger"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#fee2e2, #531e24));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#7f1d1d, #fee2e2));
+  }
+
+  :where([data-citry-ui-part="badge"][data-variant="solid"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#44403c, #d6d3d1));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#ffffff, #1c1917));
+    --_cui-badge-border-color: var(--cui-badge-border-color, transparent);
+  }
+
+  :where([data-citry-ui-part="badge"][data-variant="solid"][data-intent="primary"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#1d4ed8, #60a5fa));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#ffffff, #172554));
+  }
+
+  :where([data-citry-ui-part="badge"][data-variant="solid"][data-intent="success"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#15803d, #4ade80));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#ffffff, #052e16));
+  }
+
+  :where([data-citry-ui-part="badge"][data-variant="solid"][data-intent="warn"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#b45309, #fbbf24));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#ffffff, #422006));
+  }
+
+  :where([data-citry-ui-part="badge"][data-variant="solid"][data-intent="danger"]) {
+    --_cui-badge-background: var(--cui-badge-background, light-dark(#b91c1c, #f87171));
+    --_cui-badge-foreground: var(--cui-badge-foreground, light-dark(#ffffff, #450a0a));
+  }
+
+  :where([data-citry-ui-part="badge"][data-variant="outline"]) {
+    --_cui-badge-background: var(--cui-badge-background, transparent);
+    --_cui-badge-border-color: var(--cui-badge-border-color, currentColor);
+  }
+
+  :where([data-citry-ui-part="badge"][data-size="sm"]) {
+    --_cui-badge-min-height: var(--cui-badge-min-height, 1.25rem);
+    --_cui-badge-padding-inline: var(--cui-badge-padding-inline, 0.375rem);
+    --_cui-badge-gap: var(--cui-badge-gap, 0.1875rem);
+    --_cui-badge-font-size: var(--cui-badge-font-size, 0.6875rem);
+  }
+
+  :where([data-citry-ui-part="badge"][data-size="lg"]) {
+    --_cui-badge-min-height: var(--cui-badge-min-height, 1.75rem);
+    --_cui-badge-padding-inline: var(--cui-badge-padding-inline, 0.625rem);
+    --_cui-badge-gap: var(--cui-badge-gap, 0.3125rem);
+    --_cui-badge-font-size: var(--cui-badge-font-size, 0.8125rem);
+  }
+
+  :where([data-citry-ui-part="badge"][data-shape="pill"]) {
+    --_cui-badge-radius: var(--cui-badge-radius, 999px);
+  }
+
+  :where([data-citry-ui-part="start"], [data-citry-ui-part="end"]) {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    color: inherit;
+  }
+
+  :where([data-citry-ui-part="start"] > svg, [data-citry-ui-part="end"] > svg) {
+    inline-size: 1em;
+    block-size: 1em;
+  }
+
+  :where([data-citry-ui-part="label"]) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @media (forced-colors: active) {
+    :where([data-citry-ui-part="badge"]) {
+      --_cui-badge-background: var(--cui-badge-background, Canvas);
+      --_cui-badge-foreground: var(--cui-badge-foreground, CanvasText);
+      --_cui-badge-border-color: var(--cui-badge-border-color, CanvasText);
+    }
+  }
+
+  @media print {
+    :where([data-citry-ui-part="badge"]) {
+      --_cui-badge-background: var(--cui-badge-background, transparent);
+      --_cui-badge-foreground: var(--cui-badge-foreground, CanvasText);
+      --_cui-badge-border-color: var(--cui-badge-border-color, currentColor);
+    }
+  }
+}</style><style data-citry-css-class=CIcon_8e5345>@layer citry-ui.theme {
+  :where(.cui-icon) {
+    --_cui-icon-size: var(--cui-icon-size, 1em);
+    --_cui-icon-stroke-width: var(--cui-icon-stroke-width, 2);
+    display: inline-block;
+    flex: none;
+    inline-size: var(--_cui-icon-size);
+    block-size: var(--_cui-icon-size);
+    overflow: visible;
+    color: inherit;
+    stroke-width: var(--_cui-icon-stroke-width);
+    vertical-align: -0.125em;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  :where(.cui-icon[data-size="sm"]) {
+    --_cui-icon-size: var(--cui-icon-size, 0.875em);
+  }
+
+  :where(.cui-icon[data-size="lg"]) {
+    --_cui-icon-size: var(--cui-icon-size, 1.25em);
+  }
+
+  :where(.cui-icon--logical:dir(rtl) > .cui-icon__glyph) {
+    transform: scaleX(-1);
+    transform-origin: center;
+  }
+}</style><style data-citry-css-class=CList_34f50c>@layer citry-ui.theme {
+  :where([data-citry-ui-part="list"]) {
+    --_cui-list-gap: var(--cui-list-gap, 0.25rem);
+    --_cui-list-padding: var(--cui-list-padding, 0.35rem);
+    --_cui-list-item-padding: var(--cui-list-item-padding, 0.7rem);
+    --_cui-list-radius: var(--cui-list-radius, 0.65rem);
+    --_cui-list-foreground: var(--cui-list-foreground, CanvasText);
+    --_cui-list-muted: var(--cui-list-muted, light-dark(#57534e, #d6d3d1));
+    --_cui-list-background: var(--cui-list-background, transparent);
+    --_cui-list-hover-background: var(--cui-list-hover-background, light-dark(#f5f5f4, #292524));
+    --_cui-list-current-background: var(--cui-list-current-background, light-dark(#dbeafe, #1e3a5f));
+    --_cui-list-divider-color: var(--cui-list-divider-color, light-dark(#e7e5e4, #44403c));
+    --_cui-list-marker-color: var(--cui-list-marker-color, currentColor);
+    --_cui-list-focus-ring: var(--cui-list-focus-ring, Highlight);
+    display: grid;
+    gap: var(--_cui-list-gap);
+    margin: 0;
+    padding: var(--_cui-list-padding);
+    color: var(--_cui-list-foreground);
+    background: var(--_cui-list-background);
+    list-style-position: outside;
+  }
+  :where([data-citry-ui-part="list"][data-marker="none"]) {
+    list-style: none;
+  }
+  :where([data-citry-ui-part="list"][data-marker="disc"]) {
+    list-style-type: disc;
+    padding-inline-start: calc(var(--_cui-list-padding) + 1.25rem);
+  }
+  :where([data-citry-ui-part="list"][data-marker="decimal"]) {
+    list-style-type: decimal;
+    padding-inline-start: calc(var(--_cui-list-padding) + 1.75rem);
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"])::marker {
+    color: var(--_cui-list-marker-color);
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]) {
+    min-inline-size: 0;
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"]) {
+    box-sizing: border-box;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: center;
+    gap: 0.75rem;
+    inline-size: 100%;
+    min-inline-size: 0;
+    padding: var(--_cui-list-item-padding);
+    border: 0;
+    border-radius: var(--_cui-list-radius);
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"][data-cui-list-has-start]) {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"][data-cui-list-has-end]) {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"][data-cui-list-has-start][data-cui-list-has-end]) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+  :where([data-citry-ui-part="list"][data-variant="surface"]
+    > [data-citry-ui-part="list-item"] > [data-citry-ui-part="surface"]) {
+    background: var(--_cui-list-hover-background);
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"][data-current]
+    > [data-citry-ui-part="surface"]) {
+    background: var(--_cui-list-current-background);
+    font-weight: 650;
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"][data-interactive]
+    > [data-citry-ui-part="surface"]:hover) {
+    background: var(--_cui-list-hover-background);
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"][data-disabled]) {
+    opacity: 0.55;
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"]:focus-visible) {
+    outline: 3px solid var(--_cui-list-focus-ring);
+    outline-offset: 2px;
+  }
+  :where([data-citry-ui-part="list"][data-divided]
+    > [data-citry-ui-part="list-item"] + [data-citry-ui-part="list-item"]) {
+    border-block-start: 1px solid var(--_cui-list-divider-color);
+    padding-block-start: var(--_cui-list-gap);
+  }
+  :where([data-citry-ui-part="list"][data-density="compact"]) {
+    --_cui-list-item-padding: 0.45rem 0.6rem;
+    --_cui-list-gap: 0.1rem;
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"] > [data-citry-ui-part="body"]) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"] > [data-citry-ui-part="body"]
+    > [data-citry-ui-part="description"]) {
+    display: block;
+    margin-block-start: 0.15rem;
+    color: var(--_cui-list-muted);
+    font-size: 0.875em;
+    font-weight: 400;
+    overflow-wrap: anywhere;
+  }
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"] > [data-citry-ui-part="start"]),
+  :where([data-citry-ui-part="list"] > [data-citry-ui-part="list-item"]
+    > [data-citry-ui-part="surface"] > [data-citry-ui-part="end"]) {
+    min-inline-size: 0;
+  }
+}</style></head><body><main><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:2:s--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:3:s--><ul aria-label=Specimens class=cui-list data-cid-cqkeawnv2 data-cid-cqkeawnv3 data-citry-ui-part=list data-density=comfortable data-divided data-marker=none data-variant=plain><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:1:s--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:4:s--><li class=cui-list-item data-cid-cqkeawnv4 data-citry-ui-part=list-item><div data-citry-ui-part=surface data-cui-list-has-end data-cui-list-has-start><span data-citry-ui-part=start><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:2:s--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:5:s--> <span aria-label="Mare Imbrium" class=cui-avatar data-cid=cqkeawnv5 data-cid-cqkeawnv5 data-citry-root data-citry-ui-part=avatar data-shape=circle data-size=md data-status=fallback data-variant=soft role=img> <span aria-hidden=true class=cui-avatar__fallback data-citry-ui-part=fallback> <svg viewbox="0 0 24 24" aria-hidden=true class=cui-avatar__placeholder fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round stroke-width=1.75><circle cx=12 cy=8 r=3.25></circle><path d="M5.75 19c.8-3.35 3.05-5 6.25-5s5.45 1.65 6.25 5"></path></svg> </span> <img alt class=cui-avatar__image data-citry-ui-part=image hidden> </span> <!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:5:e--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:2:e--></span><div data-citry-ui-part=body><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:3:s-->Mare Imbrium basalt<!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:3:e--><div data-citry-ui-part=description><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:4:s-->Apollo 15 · sample 15555<!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:4:e--></div></div><span data-citry-ui-part=end><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:5:s--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:6:s--> <span class=cui-badge data-cid-cqkeawnv6 data-citry-ui-part=badge data-intent=neutral data-shape=rounded data-size=md data-variant=outline> <span class=cui-badge__label data-citry-ui-part=label> <!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:6:s-->Lunar<!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:6:e--> </span> </span> <!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:6:e--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:5:e--></span></div></li><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:4:e--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:7:s--><li class=cui-list-item data-cid-cqkeawnv7 data-citry-ui-part=list-item><div data-citry-ui-part=surface data-cui-list-has-end data-cui-list-has-start><span data-citry-ui-part=start><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:7:s--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:8:s--> <svg viewbox="0 0 24 24" aria-hidden=true class=cui-icon data-cid-cqkeawnv8 data-citry-ui-part=icon data-name=star data-size=md fill=none focusable=false stroke=currentColor stroke-linecap=round stroke-linejoin=round xmlns=http://www.w3.org/2000/svg><g class=cui-icon__glyph><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path></g></svg> <!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:8:e--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:7:e--></span><div data-citry-ui-part=body><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:8:s-->Murchison meteorite<!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:8:e--><div data-citry-ui-part=description><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:9:s-->Carbonaceous chondrite · 1969<!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:9:e--></div></div><span data-citry-ui-part=end><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:10:s-->12.4 g<!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:10:e--></span></div></li><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:7:e--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:r:1:e--></ul><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:3:e--><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:2:e--></main><script src=/citry/citry.js></script><script data-citry-graph type=application/json>{"delimiters":{"format":"citry:g1"},"graphs":[{"componentClasses":[{"classId":"UiPreviewDocument_a1dcd6","className":"UiPreviewDocument"},{"classId":"ListAnatomy_556a5c","className":"ListAnatomy"},{"classId":"CList_34f50c","className":"CList"},{"classId":"CListItem_4d2caa","className":"CListItem"},{"classId":"CAvatar_516550","className":"CAvatar"},{"classId":"CBadge_20b1a5","className":"CBadge"},{"classId":"CIcon_8e5345","className":"CIcon"}],"componentExecutionOrderConstraints":[{"childRenderId":"cqkeawnv3","invocationId":2,"parentRenderId":"cqkeawnv2"},{"childRenderId":"cqkeawnv4","invocationId":3,"parentRenderId":"cqkeawnv2"},{"childRenderId":"cqkeawnv5","invocationId":5,"parentRenderId":"cqkeawnv2"},{"childRenderId":"cqkeawnv6","invocationId":6,"parentRenderId":"cqkeawnv2"},{"childRenderId":"cqkeawnv7","invocationId":4,"parentRenderId":"cqkeawnv2"},{"childRenderId":"cqkeawnv8","invocationId":7,"parentRenderId":"cqkeawnv2"}],"componentInstances":[{"classId":"UiPreviewDocument_a1dcd6","instanceId":1,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawnv1","transparent":false},{"classId":"ListAnatomy_556a5c","instanceId":2,"invocationId":null,"parentRenderId":null,"renderId":"cqkeawnv2","transparent":false},{"classId":"CList_34f50c","instanceId":3,"invocationId":2,"parentRenderId":"cqkeawnv2","renderId":"cqkeawnv3","transparent":false},{"classId":"CListItem_4d2caa","instanceId":4,"invocationId":3,"parentRenderId":"cqkeawnv2","renderId":"cqkeawnv4","transparent":false},{"classId":"CAvatar_516550","instanceId":5,"invocationId":5,"parentRenderId":"cqkeawnv2","renderId":"cqkeawnv5","transparent":false},{"classId":"CBadge_20b1a5","instanceId":6,"invocationId":6,"parentRenderId":"cqkeawnv2","renderId":"cqkeawnv6","transparent":false},{"classId":"CListItem_4d2caa","instanceId":7,"invocationId":4,"parentRenderId":"cqkeawnv2","renderId":"cqkeawnv7","transparent":false},{"classId":"CIcon_8e5345","instanceId":8,"invocationId":7,"parentRenderId":"cqkeawnv2","renderId":"cqkeawnv8","transparent":false}],"fills":[{"fallbackLocationId":null,"fillId":1,"kind":"implicit","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CList_34f50c","receiverRenderId":"cqkeawnv3","slotName":"default","sourceInvocationId":2},{"fallbackLocationId":null,"fillId":3,"kind":"named","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cqkeawnv4","slotName":"start","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":4,"kind":"named","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cqkeawnv4","slotName":"default","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":5,"kind":"named","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cqkeawnv4","slotName":"description","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":6,"kind":"named","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cqkeawnv4","slotName":"end","sourceInvocationId":3},{"fallbackLocationId":null,"fillId":7,"kind":"named","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cqkeawnv7","slotName":"start","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":8,"kind":"named","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cqkeawnv7","slotName":"default","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":9,"kind":"named","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cqkeawnv7","slotName":"description","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":10,"kind":"named","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CListItem_4d2caa","receiverRenderId":"cqkeawnv7","slotName":"end","sourceInvocationId":4},{"fallbackLocationId":null,"fillId":15,"kind":"implicit","locationId":null,"ownerClassId":"ListAnatomy_556a5c","ownerRenderId":"cqkeawnv2","policy":"template","receiverClassId":"CBadge_20b1a5","receiverRenderId":"cqkeawnv6","slotName":"default","sourceInvocationId":6}],"graphId":0,"nestedComponents":[{"clientBindings":[],"invocationId":2,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":null,"sourceClassId":"ListAnatomy_556a5c","sourceRenderId":"cqkeawnv2","tagName":"clist","targetClassId":"CList_34f50c","targetRenderId":"cqkeawnv3"},{"clientBindings":[],"invocationId":3,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ListAnatomy_556a5c","sourceRenderId":"cqkeawnv2","tagName":"clistitem","targetClassId":"CListItem_4d2caa","targetRenderId":"cqkeawnv4"},{"clientBindings":[],"invocationId":4,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":1,"sourceClassId":"ListAnatomy_556a5c","sourceRenderId":"cqkeawnv2","tagName":"clistitem","targetClassId":"CListItem_4d2caa","targetRenderId":"cqkeawnv7"},{"clientBindings":[],"invocationId":5,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":2,"sourceClassId":"ListAnatomy_556a5c","sourceRenderId":"cqkeawnv2","tagName":"cavatar","targetClassId":"CAvatar_516550","targetRenderId":"cqkeawnv5"},{"clientBindings":[],"invocationId":6,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":5,"sourceClassId":"ListAnatomy_556a5c","sourceRenderId":"cqkeawnv2","tagName":"cbadge","targetClassId":"CBadge_20b1a5","targetRenderId":"cqkeawnv6"},{"clientBindings":[],"invocationId":7,"locationId":null,"morphKey":null,"morphMode":null,"parentRegionId":7,"sourceClassId":"ListAnatomy_556a5c","sourceRenderId":"cqkeawnv2","tagName":"cicon","targetClassId":"CIcon_8e5345","targetRenderId":"cqkeawnv8"}],"slotRegions":[{"fillId":1,"ownerRenderId":"cqkeawnv2","parentRegionId":null,"receiverRenderId":"cqkeawnv3","regionId":1,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv3"},{"fillId":3,"ownerRenderId":"cqkeawnv2","parentRegionId":1,"receiverRenderId":"cqkeawnv4","regionId":2,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"},{"fillId":4,"ownerRenderId":"cqkeawnv2","parentRegionId":1,"receiverRenderId":"cqkeawnv4","regionId":3,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"},{"fillId":5,"ownerRenderId":"cqkeawnv2","parentRegionId":1,"receiverRenderId":"cqkeawnv4","regionId":4,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"},{"fillId":6,"ownerRenderId":"cqkeawnv2","parentRegionId":1,"receiverRenderId":"cqkeawnv4","regionId":5,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"},{"fillId":15,"ownerRenderId":"cqkeawnv2","parentRegionId":5,"receiverRenderId":"cqkeawnv6","regionId":6,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"},{"fillId":7,"ownerRenderId":"cqkeawnv2","parentRegionId":1,"receiverRenderId":"cqkeawnv7","regionId":7,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"},{"fillId":8,"ownerRenderId":"cqkeawnv2","parentRegionId":1,"receiverRenderId":"cqkeawnv7","regionId":8,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"},{"fillId":9,"ownerRenderId":"cqkeawnv2","parentRegionId":1,"receiverRenderId":"cqkeawnv7","regionId":9,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"},{"fillId":10,"ownerRenderId":"cqkeawnv2","parentRegionId":1,"receiverRenderId":"cqkeawnv7","regionId":10,"resultOwnerRenderId":"cqkeawnv2","slotLocationId":null,"sourceLocationId":null,"transitionFromRenderId":"cqkeawnv2"}],"sourceLocations":[]}],"mode":"production","protocol":"citry-client-graph/1","revision":"78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783"}</script><script data-citry type=application/json>{"markLoaded": {"js": ["L2NpdHJ5L2V4dC9ldmVudHMvcnVudGltZS5qcw==", "L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4xMTU4NDkwNGIwYTIuanM=", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLmY3Y2ZkOGY3YjA5Ny5qcw==", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLmJiYjQ5N2VkOWZkODIwMTExODNhODFiNzY5NmRkODE2Lmpz"], "css": ["L2NpdHJ5L2NhY2hlL1VpUHJldmlld0RvY3VtZW50X2ExZGNkNi4zNDExMTE0MjRiNWYuY3Nz", "L2NpdHJ5L2NhY2hlL0NBdmF0YXJfNTE2NTUwLjg4ZGM3YTBhYTI5Ni5jc3M=", "L2NpdHJ5L2NhY2hlL0NCYWRnZV8yMGIxYTUuNmRkNjhmMWVhM2ZkLmNzcw==", "L2NpdHJ5L2NhY2hlL0NJY29uXzhlNTM0NS4zM2NkM2ZhOGNlZTEuY3Nz", "L2NpdHJ5L2NhY2hlL0NMaXN0XzM0ZjUwYy4xYjI2MDVhNTIwNTguY3Nz"]}, "fetch": {"js": [], "css": []}, "calls": [["Q0F2YXRhcl81MTY1NTA=", "Y3FrZWF3bnY1", "YmJiNDk3ZWQ5ZmQ4MjAxMTE4M2E4MWI3Njk2ZGQ4MTY=", "init"]], "cssInstances": [["VWlQcmV2aWV3RG9jdW1lbnRfYTFkY2Q2", "Y3FrZWF3bnYx"], ["Q0JhZGdlXzIwYjFhNQ==", "Y3FrZWF3bnY2"], ["Q0ljb25fOGU1MzQ1", "Y3FrZWF3bnY4"], ["Q0xpc3RfMzRmNTBj", "Y3FrZWF3bnYz"]], "graph": "78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783", "alpineRuntime": "standard"}</script><script src=/citry/ext/events/runtime.js></script><script>(function() {
+
+const publish = () => {
+  const height = Math.ceil(document.documentElement.scrollHeight);
+  parent.postMessage({ type: "citry-ui-preview-height", height }, "*");
+};
+addEventListener("message", (event) => {
+  if (event.source !== parent) return;
+  if (
+    event.data?.type === "citry-ui-preview-theme"
+    && ["light", "dark"].includes(event.data.theme)
+  ) {
+    document.documentElement.style.colorScheme = event.data.theme;
+    document.body.style.colorScheme = event.data.theme;
+    publish();
+    return;
+  }
+  if (
+    event.data?.type === "citry-ui-preview-controls"
+    && event.data.values
+    && typeof event.data.values === "object"
+    && !Array.isArray(event.data.values)
+  ) {
+    dispatchEvent(new CustomEvent("citry-ui-preview-controls", {
+      detail: event.data.values,
+    }));
+    publish();
+  }
+});
+addEventListener("load", publish);
+new ResizeObserver(publish).observe(document.documentElement);
+publish();
+
+})();</script><script>(function() {
+
+Citry.manager.registerComponent("CAvatar_516550", {
+  props: {
+    src: {},
+    alt: {},
+    variant: {},
+    size: {},
+    shape: {},
+    onStatusChange: {},
+  },
+  init: ({ els, data, props, effect }) => {
+    const root = els[0];
+    const image = root.querySelector('[data-citry-ui-part="image"]');
+    const allowedValues = {
+      variant: ["soft", "solid", "outline"],
+      size: ["sm", "md", "lg"],
+      shape: ["circle", "rounded", "square"],
+    };
+    const invalidEpisodes = new Set();
+    let currentSource = data.src;
+    let currentStatus = root.dataset.status;
+    let sourceGeneration = 0;
+
+    const describeValue = (value) => {
+      try {
+        return JSON.stringify(value) ?? String(value);
+      } catch {
+        return String(value);
+      }
+    };
+    const reportInvalid = (name, value) => {
+      if (invalidEpisodes.has(name)) {
+        return;
+      }
+      invalidEpisodes.add(name);
+      console.error(
+        `[citry-ui] CAvatar ${name} received invalid client value `
+          + `${describeValue(value)}; using the server-rendered fallback.`,
+        root,
+      );
+    };
+    const resolveChoice = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (allowedValues[name].includes(value)) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveText = (name) => {
+      const value = props[name] === undefined ? data[name] : props[name];
+      if (typeof value === "string" && !value.includes("\u0000")) {
+        invalidEpisodes.delete(name);
+        return value;
+      }
+      reportInvalid(name, value);
+      return data[name];
+    };
+    const resolveSource = () => {
+      const value = props.src === undefined ? data.src : props.src;
+      if (value === null || (typeof value === "string" && value && !value.includes("\u0000"))) {
+        invalidEpisodes.delete("src");
+        return value;
+      }
+      reportInvalid("src", value);
+      return data.src;
+    };
+    const notifyStatus = (status, source) => {
+      const callback = props.onStatusChange;
+      if (callback === undefined || callback === null) {
+        invalidEpisodes.delete("onStatusChange");
+        return;
+      }
+      if (typeof callback !== "function") {
+        reportInvalid("onStatusChange", callback);
+        return;
+      }
+      invalidEpisodes.delete("onStatusChange");
+      callback({status, src: source});
+    };
+    const setStatus = (status, source, notify = true) => {
+      if (currentStatus === status && root.dataset.status === status) {
+        return;
+      }
+      currentStatus = status;
+      root.dataset.status = status;
+      if (notify) {
+        notifyStatus(status, source);
+      }
+    };
+    const settleCurrentImage = (generation) => {
+      if (generation !== sourceGeneration || currentSource === null) {
+        return;
+      }
+      if (!image.complete) {
+        return;
+      }
+      if (image.naturalWidth > 0) {
+        image.hidden = false;
+        setStatus("loaded", currentSource);
+      } else {
+        image.hidden = true;
+        setStatus("error", currentSource);
+      }
+    };
+    const onLoad = () => {
+      if (currentSource === null) {
+        return;
+      }
+      image.hidden = false;
+      setStatus("loaded", currentSource);
+    };
+    const onError = () => {
+      if (currentSource === null) {
+        return;
+      }
+      image.hidden = true;
+      setStatus("error", currentSource);
+    };
+
+    image.addEventListener("load", onLoad);
+    image.addEventListener("error", onError);
+
+    effect(() => {
+      const source = resolveSource();
+      const alt = resolveText("alt");
+      const variant = resolveChoice("variant");
+      const size = resolveChoice("size");
+      const shape = resolveChoice("shape");
+
+      root.dataset.variant = variant;
+      root.dataset.size = size;
+      root.dataset.shape = shape;
+      if (alt) {
+        root.setAttribute("role", "img");
+        root.setAttribute("aria-label", alt);
+      } else {
+        root.removeAttribute("role");
+        root.removeAttribute("aria-label");
+      }
+
+      if (source !== currentSource) {
+        currentSource = source;
+        sourceGeneration += 1;
+        if (source === null) {
+          image.removeAttribute("src");
+          image.hidden = true;
+          setStatus("fallback", null);
+        } else {
+          image.hidden = false;
+          image.setAttribute("src", source);
+          setStatus("loading", source);
+          const generation = sourceGeneration;
+          queueMicrotask(() => settleCurrentImage(generation));
+        }
+      } else {
+        settleCurrentImage(sourceGeneration);
+      }
+    });
+
+    root.dataset.citryAvatarInitialized = "";
+    return () => {
+      sourceGeneration += 1;
+      image.removeEventListener("load", onLoad);
+      image.removeEventListener("error", onError);
+      delete root.dataset.citryAvatarInitialized;
+    };
+  },
+});
+
+})();</script><script>(function() {
+Citry.manager.registerComponentData("CAvatar_516550", "bbb497ed9fd82011183a81b7696dd816", atob("eyJzcmMiOm51bGwsImFsdCI6Ik1hcmUgSW1icml1bSIsInZhcmlhbnQiOiJzb2Z0Iiwic2l6ZSI6Im1kIiwic2hhcGUiOiJjaXJjbGUifQ=="));
+})();</script></body></html><!--citry:g1:78d2cc16c044857542be2a7d5a7b912d5d7dafb49b9603e33951514f80590783:0:i:1:e-->
