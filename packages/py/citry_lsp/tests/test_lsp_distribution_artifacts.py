@@ -64,6 +64,32 @@ def test_release_inventory_is_one_universal_wheel_and_one_sdist() -> None:
     }
 
 
+def test_sdist_rebuild_resolves_input_before_switching_workdir(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    checkout = tmp_path / "checkout"
+    sdist = checkout / "dist" / "citry_lsp-0.1.0.tar.gz"
+    sdist.parent.mkdir(parents=True)
+    sdist.write_bytes(b"sdist")
+    outside = tmp_path / "outside"
+    output = outside / "wheel"
+    outside.mkdir()
+    monkeypatch.chdir(checkout)
+
+    def fake_run(command: list[str], *, cwd: Path, env: object = None) -> str:
+        del env
+        assert cwd == outside
+        assert command[2] == str(sdist.resolve())
+        (output / "rebuilt.whl").write_bytes(b"wheel")
+        return ""
+
+    monkeypatch.setattr(distribution_verifier, "_run", fake_run)
+    assert distribution_verifier._build_sdist_wheel(Path("dist") / sdist.name, output, cwd=outside) == (
+        output / "rebuilt.whl"
+    )
+
+
 def test_wheel_verifier_rejects_payload_outside_the_closed_package(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         distribution_verifier,

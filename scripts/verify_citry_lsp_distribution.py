@@ -484,6 +484,9 @@ def _unique(directory: Path, pattern: str) -> Path:
 
 
 def _build_sdist_wheel(sdist: Path, directory: Path, *, cwd: Path) -> Path:
+    # Resolve the artifact before changing the child process's working directory.
+    # CI passes ``dist/<name>.tar.gz`` while rebuilding outside the checkout.
+    sdist = sdist.resolve()
     directory.mkdir(parents=True, exist_ok=True)
     _run(
         [
@@ -639,6 +642,10 @@ def verify_artifacts(source_wheel: Path, sdist: Path, rebuilt_wheel: Path) -> di
 
 def verify_dist_directory(dist_dir: Path, *, smoke: bool) -> tuple[Path, Path, dict[str, Any]]:
     """Verify one raw wheel/sdist pair and rebuild the sdist outside the checkout."""
+    # Every later subprocess runs outside the checkout, so retain absolute
+    # artifact paths even when the CLI receives the conventional relative
+    # ``--dist-dir dist`` used by the release workflow.
+    dist_dir = dist_dir.resolve()
     version = package_version()
     wheel = _unique(dist_dir, f"citry_lsp-{version}-py3-none-any.whl")
     sdist = _unique(dist_dir, f"citry_lsp-{version}.tar.gz")
