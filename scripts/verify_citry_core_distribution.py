@@ -51,6 +51,30 @@ LINUX_PLATFORMS: Final = {
 MUSL_PLATFORMS: Final = {arch: f"musllinux_1_2_{arch}" for arch in ("x86_64", "i686", "aarch64", "armv7l")}
 WINDOWS_PLATFORMS: Final = ("win32", "win_amd64")
 MACOS_PLATFORMS: Final = ("macosx_10_12_x86_64", "macosx_11_0_arm64")
+# auditwheel repairs every musllinux wheel with the target's libgcc_s. Keep the
+# path, size, and bytes closed so a new repair payload requires explicit review.
+MUSLLINUX_LIBGCC: Final = {
+    "musllinux_1_2_aarch64": (
+        "citry_core.libs/libgcc_s-0bf60adc.so.1",
+        529_921,
+        "f33db50df5fb0591ee20b789e7f26cb4593e3a36a3dcd45c668d5af03a3f5a87",
+    ),
+    "musllinux_1_2_armv7l": (
+        "citry_core.libs/libgcc_s-262c4f60.so.1",
+        2_811_941,
+        "7c0d5fafbfccfec6665524bcc9a6a67ede45cda65daeafdb4f140e3eed343851",
+    ),
+    "musllinux_1_2_i686": (
+        "citry_core.libs/libgcc_s-8c2f5de4.so.1",
+        553_865,
+        "b24c00f90e49a77da0f3318250f563ae8bd933c908821df63722a8721b45c7b5",
+    ),
+    "musllinux_1_2_x86_64": (
+        "citry_core.libs/libgcc_s-f685abf1.so.1",
+        538_513,
+        "91a43de5877248a317d14faa35490ef474a1b33a83e235b52fb1eabf7108108e",
+    ),
+}
 
 
 class DistributionVerificationError(RuntimeError):
@@ -249,18 +273,34 @@ def verify_wheel(path: Path, *, version: str) -> dict[str, Any]:
                 raise DistributionVerificationError(
                     f"{path.name} extension {extensions[0]!r} does not match interpreter tag {python_tag!r}"
                 )
+            expected_bundled_libraries: set[str] = set()
+            expected_library = MUSLLINUX_LIBGCC.get(platform_tag)
+            if expected_library is not None:
+                library_name, library_size, library_sha256 = expected_library
+                library_payload = archive.read(library_name) if library_name in names else b""
+                if len(library_payload) != library_size or hex_sha256(library_payload) != library_sha256:
+                    raise DistributionVerificationError(
+                        f"{path.name} does not contain the reviewed {library_name} repair payload"
+                    )
+                if not library_payload.startswith(b"\x7fELF"):
+                    raise DistributionVerificationError(f"{path.name} bundled libgcc_s is not an ELF binary")
+                expected_bundled_libraries.add(library_name)
             if any("__pycache__" in name or name.endswith((".pyc", ".pyo")) for name in names):
                 raise DistributionVerificationError(f"{path.name} contains Python cache artifacts")
             licenses = [name for name in names if ".dist-info/licenses/" in name and name.endswith("/LICENSE")]
             if len(licenses) != 1 or archive.read(licenses[0]) != (PACKAGE_ROOT / "LICENSE").read_bytes():
                 raise DistributionVerificationError(f"{path.name} does not contain the checked MIT license")
-            expected_members = package_members | {
-                f"{dist_info}METADATA",
-                f"{dist_info}WHEEL",
-                f"{dist_info}RECORD",
-                f"{dist_info}licenses/LICENSE",
-                f"{dist_info}sboms/citry_core_py.cyclonedx.json",
-            }
+            expected_members = (
+                package_members
+                | expected_bundled_libraries
+                | {
+                    f"{dist_info}METADATA",
+                    f"{dist_info}WHEEL",
+                    f"{dist_info}RECORD",
+                    f"{dist_info}licenses/LICENSE",
+                    f"{dist_info}sboms/citry_core_py.cyclonedx.json",
+                }
+            )
             unexpected_members = sorted(set(names) - expected_members)
             missing_members = sorted(expected_members - set(names))
             if unexpected_members or missing_members:

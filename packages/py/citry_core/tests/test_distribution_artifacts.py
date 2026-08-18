@@ -35,16 +35,16 @@ def _write_wheel(
     *,
     dist_info: str = "citry_core-1.5.0.dist-info",
     root_is_purelib: str = "false",
+    extension: str = "citry_core/_rust.cpython-314-wasm32-emscripten.so",
+    tag: str = "cp314-cp314-pyemscripten_2026_0_wasm32",
     extra_members: dict[str, bytes] | None = None,
 ) -> None:
     members = {name: (ROOT / "packages" / "py" / "citry_core" / name).read_bytes() for name in source_inventory()}
-    members["citry_core/_rust.cpython-314-wasm32-emscripten.so"] = b"wasm-extension"
+    members[extension] = b"native-extension"
     members[f"{dist_info}/METADATA"] = (
         b"Metadata-Version: 2.4\nName: citry_core\nVersion: 1.5.0\nRequires-Python: >=3.10, <4.0\n"
     )
-    members[f"{dist_info}/WHEEL"] = (
-        f"Wheel-Version: 1.0\nRoot-Is-Purelib: {root_is_purelib}\nTag: cp314-cp314-pyemscripten_2026_0_wasm32\n"
-    ).encode()
+    members[f"{dist_info}/WHEEL"] = (f"Wheel-Version: 1.0\nRoot-Is-Purelib: {root_is_purelib}\nTag: {tag}\n").encode()
     members[f"{dist_info}/licenses/LICENSE"] = (ROOT / "packages" / "py" / "citry_core" / "LICENSE").read_bytes()
     members[f"{dist_info}/sboms/citry_core_py.cyclonedx.json"] = b'{"bomFormat":"CycloneDX"}\n'
     members.update(extra_members or {})
@@ -132,6 +132,37 @@ def test_wheel_verifier_rejects_a_recorded_installer_script(tmp_path: Path) -> N
     _write_wheel(wheel, extra_members={"citry_core-1.5.0.data/scripts/surprise": b"#!/bin/sh\n"})
 
     with pytest.raises(DistributionVerificationError, match="member inventory mismatch"):
+        verify_wheel(wheel, version="1.5.0")
+
+
+def test_wheel_verifier_accepts_only_the_reviewed_musllinux_repair_library(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    wheel = tmp_path / "citry_core-1.5.0-cp314-cp314-musllinux_1_2_aarch64.whl"
+    library_name = "citry_core.libs/libgcc_s-reviewed.so.1"
+    library = b"\x7fELF-reviewed-libgcc"
+    monkeypatch.setitem(
+        distribution_verifier.MUSLLINUX_LIBGCC,
+        "musllinux_1_2_aarch64",
+        (library_name, len(library), hex_sha256(library)),
+    )
+    _write_wheel(
+        wheel,
+        extension="citry_core/_rust.cpython-314-aarch64-linux-musl.so",
+        tag="cp314-cp314-musllinux_1_2_aarch64",
+        extra_members={library_name: library},
+    )
+
+    verify_wheel(wheel, version="1.5.0")
+
+    _write_wheel(
+        wheel,
+        extension="citry_core/_rust.cpython-314-aarch64-linux-musl.so",
+        tag="cp314-cp314-musllinux_1_2_aarch64",
+        extra_members={library_name: b"\x7fELF-tampered-libgcc"},
+    )
+    with pytest.raises(DistributionVerificationError, match=r"reviewed .* repair payload"):
         verify_wheel(wheel, version="1.5.0")
 
 
