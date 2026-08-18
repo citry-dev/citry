@@ -699,7 +699,8 @@ Pushing a `citry@X.Y.Z` tag triggers
 [`repo--docs-release.yml`](../.github/workflows/repo--docs-release.yml). The
 workflow checks out `main` for commit-back and current-root assembly, while
 `build-tag` creates the released snapshot in a detached worktree at the exact
-tag commit:
+tag commit. That worktree receives its own locked docs environment, including
+the tagged Citry and Citry UI workspace packages, before the snapshot build:
 
 ```bash
 uv run --no-sync python -m docs_site build-tag citry@X.Y.Z
@@ -714,8 +715,10 @@ still needs an explicit maintainer decision before the first real snapshot:
   the default `GITHUB_TOKEN`, which may need replacement with an approved
   GitHub App token or PAT.
 
-A manual dispatch of the release workflow only assembles and redeploys the
-existing version tree. Snapshot creation is conditional on a tag event.
+A manual dispatch without inputs only assembles and redeploys the existing
+version tree. For recovery after a tag-triggered build failure, dispatch from
+`main` with `release_tag=citry@X.Y.Z`; it rebuilds from that immutable tag,
+commits the snapshot to `main`, and deploys it without moving the tag.
 
 `build-all` is for bootstrap or disaster recovery, not routine releases:
 

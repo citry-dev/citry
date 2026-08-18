@@ -343,9 +343,39 @@ def _make_build_one(repo_root: Path, ref_map: dict[str, str]) -> Callable[[str, 
             if not _has_docs_builder(wt_docs):
                 return "skipped_no_builder"
             _git(worktree, "submodule", "update", "--init", "--recursive")
-            # `uv run --project <worktree>` resolves that checkout's own dependencies
-            # (an old tag may pin different ones), and cwd=<worktree> lets
-            # `python -m docs_site` import the builder from the checkout.
+            # Give the detached checkout its own locked environment. A bare
+            # `uv run --project <worktree>` installs only the root tooling
+            # project, whose dependency list is intentionally empty; the docs
+            # builder imports Citry and Citry UI, so those workspace packages
+            # must be selected explicitly before the no-sync build below.
+            sync_command = [
+                "uv",
+                "sync",
+                "--project",
+                str(worktree),
+                "--locked",
+                "--package",
+                "citry-monorepo",
+                "--package",
+                "citry",
+                "--package",
+                "citry-ui",
+                "--extra",
+                "docs",
+            ]
+            sync_proc = subprocess.run(
+                sync_command,
+                cwd=str(worktree),
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            if sync_proc.returncode != 0:
+                msg = (sync_proc.stderr or sync_proc.stdout)[-600:]
+                raise RuntimeError(f"tagged docs workspace sync exited {sync_proc.returncode}: {msg}")
+
+            # cwd=<worktree> imports the tagged builder and package sources;
+            # --no-sync guarantees the build uses the environment just qualified.
             version_dir.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.TemporaryDirectory(
                 prefix=f".{version}.build-",
@@ -357,6 +387,7 @@ def _make_build_one(repo_root: Path, ref_map: dict[str, str]) -> Callable[[str, 
                     "run",
                     "--project",
                     str(worktree),
+                    "--no-sync",
                     "python",
                     "-m",
                     "docs_site",

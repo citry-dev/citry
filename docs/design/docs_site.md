@@ -596,7 +596,10 @@ release tag via git worktrees), the two version-tree guards (`versions_manifest`
 `repo--docs-release.yml` workflow that on a `citry@X.Y.Z` tag builds that version
 from the exact tag commit in a detached worktree, stages and registers it under
 `versions/<v>/`, runs the guards, commits it from `main`, and then assembles the
-current root from `main`. Commit-back authorization for a protected default
+current root from `main`. Each detached checkout gets a locked docs environment
+with the tagged Citry and Citry UI packages selected explicitly. A manual
+`release_tag=citry@X.Y.Z` dispatch provides the same immutable-tag path for
+recovery without moving a published tag. Commit-back authorization for a protected default
 branch remains the release blocker. Still deferred: the
 ephemeral per-deploy `dev` snapshot, and per-version search (a `pagefind_path`
 the picker would point at the snapshot's own index).

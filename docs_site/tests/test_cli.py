@@ -346,7 +346,12 @@ def test_build_one_preserves_snapshot_when_old_builder_fails(tmp_path: Path, mon
             (docs / "cli.py").write_text("# old builder\n", encoding="utf-8")
         return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
 
+    commands: list[list[str]] = []
+
     def fake_run(command, **_kwargs):
+        commands.append(command)
+        if command[1] == "sync":
+            return subprocess.CompletedProcess(command, 0, stdout="synced", stderr="")
         staged = Path(command[command.index("-o") + 1])
         staged.mkdir(parents=True, exist_ok=True)
         (staged / "partial.html").write_text("partial", encoding="utf-8")
@@ -362,6 +367,60 @@ def test_build_one_preserves_snapshot_when_old_builder_fails(tmp_path: Path, mon
 
     assert sentinel.read_text(encoding="utf-8") == "known good"
     assert not (version_dir / "partial.html").exists()
+    assert {path.name for path in version_dir.parent.iterdir()} == {"1.0.0"}
+    worktree = commands[0][commands[0].index("--project") + 1]
+    assert commands[0] == [
+        "uv",
+        "sync",
+        "--project",
+        worktree,
+        "--locked",
+        "--package",
+        "citry-monorepo",
+        "--package",
+        "citry",
+        "--package",
+        "citry-ui",
+        "--extra",
+        "docs",
+    ]
+    assert commands[1][:6] == ["uv", "run", "--project", worktree, "--no-sync", "python"]
+
+
+def test_build_one_preserves_snapshot_when_tagged_workspace_sync_fails(tmp_path: Path, monkeypatch) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    version_dir = tmp_path / "versions" / "1.0.0"
+    version_dir.mkdir(parents=True)
+    sentinel = version_dir / "keep.txt"
+    sentinel.write_text("known good", encoding="utf-8")
+
+    def fake_git(_repo, *args, **_kwargs):
+        if args[:3] == ("worktree", "add", "--detach"):
+            worktree = Path(args[3])
+            docs = worktree / "docs_site"
+            docs.mkdir(parents=True)
+            (docs / "__main__.py").touch()
+            (docs / "versioning.py").touch()
+        return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(cli, "_git", fake_git)
+    monkeypatch.setattr(
+        cli.subprocess,
+        "run",
+        lambda command, **_kwargs: subprocess.CompletedProcess(
+            command,
+            1,
+            stdout="",
+            stderr="locked environment failed",
+        ),
+    )
+    build_one = cli._make_build_one(repo, {"v1.0.0": "deadbeef"})
+
+    with pytest.raises(RuntimeError, match="tagged docs workspace sync exited 1: locked environment failed"):
+        build_one("v1.0.0", "1.0.0", version_dir)
+
+    assert sentinel.read_text(encoding="utf-8") == "known good"
     assert {path.name for path in version_dir.parent.iterdir()} == {"1.0.0"}
 
 
