@@ -9,6 +9,7 @@ from docs_site._internal.ui_library_projection import (
     UiLibraryCatalog,
     UiLibraryGroup,
     UiLibraryProjection,
+    copy_ui_library_api_sources,
     ui_library_nav_groups,
     ui_library_overview_groups,
     ui_library_projection_for_path,
@@ -83,6 +84,20 @@ def test_catalog_keeps_source_and_public_route_ownership_separate(tmp_path):
 
     assert source == tmp_path / "package/components/button/api.md"
     assert projection.public_path == "/ui-library/components/button/"
+
+
+def test_structured_api_source_is_published_beside_the_component_guide(tmp_path):
+    source = _write_component_guide(tmp_path)
+    output = tmp_path / "site"
+
+    copied = copy_ui_library_api_sources(
+        UiLibraryCatalog((_widget_projection(),)),
+        repo_root=tmp_path,
+        output_dir=output,
+    )
+
+    assert copied == 1
+    assert (output / "ui-library/components/widget/api.yml").read_bytes() == source.with_suffix(".yml").read_bytes()
 
 
 def test_projection_guard_rejects_an_obsolete_public_copy(tmp_path):

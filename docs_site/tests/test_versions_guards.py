@@ -218,6 +218,32 @@ def test_cross_version_link_valid_passes(tmp_path: Path) -> None:
     assert list(cross_version_link.check(_versions_ctx(root))) == []
 
 
+def test_cross_version_link_skips_isolated_previews_and_structured_api_assets(tmp_path: Path) -> None:
+    root = tmp_path / "versions"
+    _make_version(
+        root,
+        "0.4.0",
+        pages=(
+            "index.html",
+            "ui-library/components/widget/index.html",
+            "ui-library/components/widget/_previews/navigation/index.html",
+        ),
+    )
+    component = root / "0.4.0/ui-library/components/widget"
+    (component / "index.html").write_text(
+        '<html><body><a href="api.yml">structured API</a></body></html>',
+        encoding="utf-8",
+    )
+    (component / "api.yml").write_text("schema_version: 1\n", encoding="utf-8")
+    (component / "_previews/navigation/index.html").write_text(
+        '<html><body><a href="/fictional-app-route">demo navigation</a></body></html>',
+        encoding="utf-8",
+    )
+    _write_versions(root, [("0.4.0", ())])
+
+    assert list(cross_version_link.check(_versions_ctx(root))) == []
+
+
 def test_cross_version_link_broken_errors(tmp_path: Path) -> None:
     root = tmp_path / "versions"
     _make_version(root, "0.1.0")

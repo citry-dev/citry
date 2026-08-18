@@ -26,7 +26,7 @@ from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
-from docs_site._internal.guards.site_index import SiteIndex, strip_base_path
+from docs_site._internal.guards.site_index import SiteIndex, is_isolated_preview_page, strip_base_path
 from docs_site._internal.nav import SCOPE_SITE, load_nav
 from docs_site._internal.versioning import BUILD_INFO_NAME, is_frozen_import
 
@@ -53,6 +53,8 @@ _NON_PAGE_SUFFIXES = frozenset(
         ".json",
         ".txt",
         ".xml",
+        ".yml",
+        ".yaml",
         ".pdf",
         ".zip",
         ".woff",
@@ -100,6 +102,8 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         return patterns
 
     for page in index.pages:
+        if is_isolated_preview_page(page):
+            continue
         parts = PurePosixPath(page.rel_path).parts
         version = parts[0] if parts else ""
         if version and _is_frozen(version):

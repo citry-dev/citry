@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import shutil
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -157,6 +158,25 @@ def ui_library_source_routes(
         ui_library_source_path(projection, repo_root=repo_root).resolve(): projection.public_path
         for projection in catalog.projections
     }
+
+
+def copy_ui_library_api_sources(
+    catalog: UiLibraryCatalog,
+    *,
+    repo_root: Path,
+    output_dir: Path,
+) -> int:
+    """Publish each structured ``api.yml`` beside its rendered component guide."""
+    copied = 0
+    for projection in catalog.projections:
+        source = ui_library_source_path(projection, repo_root=repo_root).with_suffix(".yml")
+        if not source.is_file():
+            raise FileNotFoundError(f"Citry UI API data does not exist: {source.relative_to(repo_root)}")
+        target = output_dir.joinpath(*projection.public_path.strip("/").split("/"), "api.yml")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+        copied += 1
+    return copied
 
 
 def ui_library_projection_for_path(

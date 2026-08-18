@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from docs_site._internal.build import _replace_output_directory, build_site
+from docs_site._internal.ui_library_projection import copy_ui_library_api_sources, load_ui_library_catalog
 from docs_site._internal.versioning import (
     BUILD_INFO_NAME,
     materialize_alias,
@@ -414,6 +415,13 @@ def _make_build_one(repo_root: Path, ref_map: dict[str, str]) -> Callable[[str, 
                 if proc.returncode != 0:
                     msg = (proc.stderr or proc.stdout)[-600:]
                     raise RuntimeError(f"docs build exited {proc.returncode}: {msg}")
+                ui_catalog_path = wt_docs / "ui_library.yml"
+                if ui_catalog_path.is_file():
+                    copy_ui_library_api_sources(
+                        load_ui_library_catalog(ui_catalog_path),
+                        repo_root=worktree,
+                        output_dir=staged_dir,
+                    )
                 if not (staged_dir / BUILD_INFO_NAME).is_file():
                     raise RuntimeError("docs build succeeded without writing a version build stamp")
                 _replace_output_directory(staged_dir, version_dir)

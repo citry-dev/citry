@@ -602,7 +602,8 @@ Reference entries declare their Markdown source and stable anchors there. To
 add, group, or reorder Citry UI pages, edit `ui_library.yml`. A component-owned
 `api.md` supplies the guide, and its sibling `api.yml` supplies a structured API
 reference. Both files are required. The builder validates and combines them at
-the catalog route. The same functional groups drive the collapsible sidebar and
+the catalog route, and publishes the YAML beside the rendered guide so authored
+`api.yml` links remain valid. The same functional groups drive the collapsible sidebar and
 the grouped UI overview; there is no synchronized copy under
 `docs_site/content`.
 Add a published redirect to `redirects.yml`; redirect chains and unsafe paths

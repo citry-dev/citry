@@ -78,6 +78,7 @@ from docs_site._internal.social_cards import generate_social_cards
 from docs_site._internal.static_deps import CITRY_MOUNT_PREFIX, export_fragment_deps, export_runtime
 from docs_site._internal.ui_library_projection import (
     UiLibraryCatalog,
+    copy_ui_library_api_sources,
     ui_library_source_path,
     ui_library_source_routes,
     validate_ui_library_sources,
@@ -442,6 +443,11 @@ def _build_site_to_output(
         outcome.records.extend(ui_records)
         outcome.failed += len(ui_errors)
         outcome.errors.extend(ui_errors)
+        copy_ui_library_api_sources(
+            project.ui_library,
+            repo_root=config.repo_root,
+            output_dir=output_dir,
+        )
         preview_count, preview_errors = _build_ui_previews(
             output_dir,
             ui_previews,
