@@ -756,3 +756,109 @@ Django template; construction is a meaningful slice of that, but trimming it yie
 single-digit percentages, not a different order. The constructs are sound; the wins
 are in making the conditional work conditional and deferring the speculative work,
 not in replacing the model.
+
+## 9. Citry Core release-wheel profile and ABI decision (2026-08-18)
+
+Citry Core's release pipeline needed fewer artifacts and shorter qualification
+runs, but neither is allowed to silently tax application performance. Two
+independent changes were therefore measured as a four-way matrix rather than
+only comparing the old wheel with a candidate that changed both variables:
+
+| Build | Python API | Cargo optimization |
+|---|---|---|
+| Baseline | CPython 3.14 version-specific API | fat LTO, one codegen unit |
+| LTO candidate | CPython 3.14 version-specific API | thin LTO, 16 codegen units |
+| ABI candidate | `abi3-py310` limited API | fat LTO, one codegen unit |
+| Combined candidate | `abi3-py310` limited API | thin LTO, 16 codegen units |
+
+### 9.1 Method
+
+The controlled release-toolchain run used an Apple M4 (`arm64-apple-darwin`),
+Rust 1.95.0, Maturin 1.14.1, and CPython 3.14.3. The ABI3 artifacts were built
+against the Python 3.10 stable ABI and installed into the same CPython 3.14.3
+used for the version-specific artifacts. Each cold build had an empty,
+independent `CARGO_TARGET_DIR`; only the Cargo registry/download cache was
+shared. Maturin stripped all four wheels. These local wall times are a relative
+profile comparison, not a prediction of a particular GitHub runner.
+
+Each wheel was installed into its own virtual environment outside the checkout.
+Runtime cases were warmed once, then timed with nine `timeit.repeat` samples and
+case-specific iteration counts. The complete four-variant order was interleaved
+over three fresh processes; the table reports the median sample within each
+process and then the median across those processes. Cases exercised the PyO3
+boundary and each major current primitive: locale canonicalization, safe-eval
+compilation, template parsing and formatting, small and 60 KB HTML transforms,
+and catalog compilation/format/resolution. The 2 MB transform separately reused
+`benchmark_html_transform.generate_large_html(11_000)` and took the median of
+11 samples of 20 transforms. The ordinary iteration counts were 200,000 locale
+calls; 20,000 safe-eval compilations; 10,000 small parses, formats, and HTML
+transforms; 200 transforms of a 60 KB input; 2,000 catalog compilations; 50,000
+catalog formats; and 30,000 catalog resolutions. Every callable was exercised
+once before timing, all variants used identical inputs, and the normal package
+tests plus isolated release-wheel smokes supplied the correctness gate.
+
+### 9.2 Build and size result
+
+| Variant | Cold build | Wheel | Native extension |
+|---|---:|---:|---:|
+| Fat LTO, version-specific API | 125.1 s | 5.25 MiB | 13.16 MiB |
+| Thin LTO, version-specific API | 60.3 s | 5.62 MiB | 14.74 MiB |
+| Fat LTO, ABI3 | 126.5 s | 5.25 MiB | 13.16 MiB |
+| Thin LTO, ABI3 | 59.6 s | 5.62 MiB | 14.74 MiB |
+
+The candidate profile halved this cold build but made the compressed wheel
+about 7% larger and the unpacked extension about 12% larger. ABI3 itself was
+effectively size- and build-neutral. Its release benefit is multiplicative:
+one standard CPython wheel per OS/architecture replaces five version-specific
+3.10-3.14 wheels, while free-threaded CPython 3.14 and PyPy retain their own
+Linux wheels.
+
+### 9.3 Runtime result
+
+Representative version-specific-API medians isolate the Cargo profile change:
+
+| Operation | Fat LTO | Thin candidate | Delta |
+|---|---:|---:|---:|
+| Locale canonicalization | 88 ns | 102 ns | +15.9% |
+| Safe-eval compilation | 1.97 us | 2.03 us | +2.7% |
+| Small template parse | 5.96 us | 7.65 us | +28.3% |
+| Small template format | 55.8 us | 66.0 us | +18.3% |
+| Small HTML transform | 0.765 us | 0.774 us | +1.1% |
+| 60 KB HTML transform | 0.415 ms | 0.420 ms | +1.2% |
+| 2 MB HTML transform | 3.51 ms | 3.70 ms | +5.6% |
+| Catalog compile | 18.1 us | 18.6 us | +2.9% |
+| Catalog format | 0.532 us | 0.567 us | +6.5% |
+| Catalog resolve | 0.719 us | 0.748 us | +4.0% |
+
+The percentages on the smallest calls are large relative to nanosecond and
+microsecond absolute costs, but they are repeatable and the profile is not
+performance-neutral. This comparison is deliberately named the *profile*
+result: changing both LTO mode and codegen-unit count means it does not claim
+which compiler knob owns each regression.
+
+Holding fat LTO constant isolates ABI3. On CPython 3.14 the ordinary primitive
+cases ranged from -0.3% to +2.2%; the 2 MB transform was +0.6%. Catalog compile,
+format, and resolve were +1.6%, -0.7%, and +3.6% respectively, with the largest
+absolute difference about 26 ns per call. No material ABI3 regression was
+observed for Citry's current surface. A separate oldest-interpreter check on
+CPython 3.10, using the same two fat-LTO variants with the repository's
+development nightly, ranged from -0.9% to +2.1%. Future bindings that require a
+newer limited API must requalify the decision.
+
+### 9.4 Decision
+
+- **Keep `abi3-py310`.** It removes most duplicate CPython builds with no
+  material measured runtime or per-artifact size cost. The release still emits
+  version-specific free-threaded CPython 3.14 and PyPy wheels, and installs the
+  ABI3 artifact on every supported GIL-enabled CPython during qualification.
+- **Keep fat LTO and one codegen unit for published bytes.** Build-once
+  qualification, ABI3, parallel PyEmscripten reproducibility builds, caching,
+  and build-owned smoke tests address release latency without spending user
+  runtime. The `release-wheel` profile differs from the profiler-oriented
+  `release` profile only by omitting debug information from the stripped
+  distribution build.
+- **Do not infer that ABI3 is always free.** CPython's limited API can replace
+  version-specific macros/inlining with stable calls, and PyO3 cannot use every
+  exact-interpreter optimization. Re-run this four-way method when the binding
+  surface, minimum Python version, PyO3 version, or a performance-sensitive
+  boundary changes.

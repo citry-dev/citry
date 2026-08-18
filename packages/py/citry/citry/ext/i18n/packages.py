@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from dataclasses import dataclass
 from hashlib import sha256
 from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # Python 3.10
+    import tomli as tomllib
 
 from citry_core.i18n import CatalogCompiler, canonicalize_locale
 

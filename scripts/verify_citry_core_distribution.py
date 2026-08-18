@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -39,7 +40,6 @@ SOURCE_ROOT: Final = PACKAGE_ROOT / "citry_core"
 PYODIDE_CONFIG: Final = PACKAGE_ROOT / "pyodide-build.json"
 SMOKE_SCRIPT: Final = REPO_ROOT / "scripts" / "smoke_citry_core.py"
 MAX_WHEEL_BYTES: Final = 10 * 1024 * 1024
-SUPPORTED_CPYTHON: Final = ("310", "311", "312", "313", "314")
 LINUX_PLATFORMS: Final = {
     "x86_64": "manylinux_2_17_x86_64.manylinux2014_x86_64",
     "i686": "manylinux_2_5_i686.manylinux1_i686",
@@ -98,6 +98,15 @@ def hex_sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def hex_sha256_file(path: Path) -> str:
+    """Return a lowercase hexadecimal SHA-256 digest without loading the file at once."""
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
 def package_version() -> str:
     """Read the release version from the package metadata."""
     content = (PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -123,11 +132,11 @@ def expected_release_filenames(version: str) -> set[str]:
     """Return the closed artifact set for the support matrix."""
     wheels: set[str] = set()
     for platform in (*LINUX_PLATFORMS.values(), *MUSL_PLATFORMS.values()):
-        wheels.update(f"citry_core-{version}-cp{py}-cp{py}-{platform}.whl" for py in SUPPORTED_CPYTHON)
+        wheels.add(f"citry_core-{version}-cp310-abi3-{platform}.whl")
         wheels.add(f"citry_core-{version}-cp314-cp314t-{platform}.whl")
         wheels.add(f"citry_core-{version}-pp311-pypy311_pp73-{platform}.whl")
     for platform in (*WINDOWS_PLATFORMS, *MACOS_PLATFORMS):
-        wheels.update(f"citry_core-{version}-cp{py}-cp{py}-{platform}.whl" for py in SUPPORTED_CPYTHON)
+        wheels.add(f"citry_core-{version}-cp310-abi3-{platform}.whl")
     config: Any = json.loads(PYODIDE_CONFIG.read_text(encoding="utf-8"))
     wheels.add(f"citry_core-{version}-{config['python_tag']}-{config['abi_tag']}-{config['platform_tag']}.whl")
     wheels.add(f"citry_core-{version}.tar.gz")
@@ -259,9 +268,14 @@ def verify_wheel(path: Path, *, version: str) -> dict[str, Any]:
                 raise DistributionVerificationError(
                     f"{path.name} contains unexpected package files: {', '.join(unexpected_package_members[:20])}"
                 )
-            python_tag, _abi_tag, platform_tag = _wheel_filename_parts(path)
+            python_tag, abi_tag, platform_tag = _wheel_filename_parts(path)
             if platform_tag == "pyemscripten_2026_0_wasm32":
                 expected_extension = "citry_core/_rust.cpython-314-wasm32-emscripten.so"
+                extension_matches = extensions[0] == expected_extension
+            elif abi_tag == "abi3":
+                expected_extension = (
+                    "citry_core/_rust.pyd" if platform_tag.startswith("win") else "citry_core/_rust.abi3.so"
+                )
                 extension_matches = extensions[0] == expected_extension
             elif platform_tag.startswith("win"):
                 extension_matches = f"/_rust.{python_tag}-" in f"/{extensions[0]}"
@@ -477,6 +491,79 @@ def stage_and_verify(raw_dir: Path, output_dir: Path) -> dict[str, Any]:
     return report
 
 
+def verify_staged_bundle(bundle_dir: Path) -> dict[str, Any]:
+    """Re-verify a flat qualification bundle against the current checkout."""
+    if not bundle_dir.is_dir():
+        raise DistributionVerificationError(f"qualification bundle is not a directory: {bundle_dir}")
+    entries = sorted(bundle_dir.iterdir())
+    if any(entry.is_symlink() or not entry.is_file() for entry in entries):
+        raise DistributionVerificationError("qualification bundle must contain only regular files at its root")
+    version = package_version()
+    expected_artifacts = expected_release_filenames(version)
+    expected_names = expected_artifacts | {"release-inventory.json"}
+    by_name = {entry.name: entry for entry in entries}
+    if set(by_name) != expected_names:
+        missing = sorted(expected_names - set(by_name))
+        unexpected = sorted(set(by_name) - expected_names)
+        raise DistributionVerificationError(
+            f"qualification bundle mismatch; missing={missing!r}; unexpected={unexpected!r}"
+        )
+    artifacts = []
+    for name in sorted(expected_artifacts):
+        path = by_name[name]
+        report = verify_wheel(path, version=version) if name.endswith(".whl") else verify_sdist(path, version=version)
+        artifacts.append(report)
+    report = {"version": version, "artifacts": artifacts}
+    try:
+        recorded: Any = json.loads(by_name["release-inventory.json"].read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DistributionVerificationError(f"cannot read release-inventory.json: {error}") from error
+    if recorded != report:
+        raise DistributionVerificationError("release-inventory.json does not match the qualified artifact bytes")
+    return report
+
+
+def promote_qualification_archive(
+    archive_path: Path,
+    *,
+    expected_digest: str,
+    output_dir: Path,
+) -> dict[str, Any]:
+    """Verify GitHub's archive digest, extract it safely, and re-check every file."""
+    match = re.fullmatch(r"sha256:([0-9a-f]{64})", expected_digest)
+    if match is None:
+        raise DistributionVerificationError(f"invalid qualification artifact digest: {expected_digest!r}")
+    if hex_sha256_file(archive_path) != match.group(1):
+        raise DistributionVerificationError("qualification archive SHA-256 does not match GitHub's artifact digest")
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise DistributionVerificationError(f"promotion output directory is not empty: {output_dir}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            bad_member = archive.testzip()
+            if bad_member is not None:
+                raise DistributionVerificationError(f"qualification archive has a corrupt member {bad_member!r}")
+            entries = [entry for entry in archive.infolist() if not entry.is_dir()]
+            names = [entry.filename for entry in entries]
+            if len(names) != len(set(names)):
+                raise DistributionVerificationError("qualification archive contains duplicate member names")
+            for entry in entries:
+                path = _safe_archive_name(entry.filename, artifact=archive_path)
+                if len(path.parts) != 1:
+                    raise DistributionVerificationError(
+                        f"qualification archive member must be a root file: {entry.filename!r}"
+                    )
+                mode = entry.external_attr >> 16
+                if stat.S_ISLNK(mode):
+                    raise DistributionVerificationError(
+                        f"qualification archive contains a symbolic link: {entry.filename!r}"
+                    )
+                (output_dir / entry.filename).write_bytes(archive.read(entry))
+    except zipfile.BadZipFile as error:
+        raise DistributionVerificationError(f"qualification artifact is not a valid zip archive: {error}") from error
+    return verify_staged_bundle(output_dir)
+
+
 def _run(command: Sequence[str], *, cwd: Path, env: Mapping[str, str] | None = None) -> str:
     completed = subprocess.run(command, cwd=cwd, env=env, text=True, capture_output=True, check=False)
     if completed.returncode:
@@ -526,6 +613,8 @@ def smoke_sdist(sdist: Path, *, rust_toolchain: str) -> dict[str, Any]:
                 str(output_dir),
                 "--no-config",
                 "--no-build-logs",
+                "--config-setting",
+                "maturin.build-args=--profile release-wheel",
             ],
             cwd=root,
             env=env,
@@ -563,6 +652,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     wheel.add_argument("--python", default=sys.executable)
     check_wheel = subparsers.add_parser("check-wheel")
     check_wheel.add_argument("--wheel", required=True)
+    bundle = subparsers.add_parser("check-bundle")
+    bundle.add_argument("--bundle-dir", type=Path, required=True)
+    promote = subparsers.add_parser("promote")
+    promote.add_argument("--archive", type=Path, required=True)
+    promote.add_argument("--artifact-digest", required=True)
+    promote.add_argument("--output-dir", type=Path, required=True)
     sdist = subparsers.add_parser("smoke-sdist")
     sdist.add_argument("--sdist", required=True)
     sdist.add_argument("--rust-toolchain", default="1.95.0")
@@ -574,6 +669,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             report = smoke_wheel(_one(args.wheel), python=args.python)
         elif args.command == "check-wheel":
             report = verify_wheel(_one(args.wheel), version=package_version())
+        elif args.command == "check-bundle":
+            report = verify_staged_bundle(args.bundle_dir.resolve())
+        elif args.command == "promote":
+            report = promote_qualification_archive(
+                args.archive.resolve(),
+                expected_digest=args.artifact_digest,
+                output_dir=args.output_dir.resolve(),
+            )
         else:
             report = smoke_sdist(_one(args.sdist), rust_toolchain=args.rust_toolchain)
     except DistributionVerificationError as error:

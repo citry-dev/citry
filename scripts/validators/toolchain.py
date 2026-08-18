@@ -13,10 +13,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 _TOOLCHAIN_FILE = REPO_ROOT / "rust-toolchain.toml"
 _WORKFLOW_FILE = REPO_ROOT / ".github" / "workflows" / "rust--tests.yml"
 _PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry-core--publish.yml"
+_CITRY_PUBLISH_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "py--citry--publish.yml"
 _ROOT_CARGO = REPO_ROOT / "Cargo.toml"
+_CORE_BINDING_CARGO = REPO_ROOT / "crates" / "citry_core_py" / "Cargo.toml"
 _PYODIDE_CONFIG = REPO_ROOT / "packages" / "py" / "citry_core" / "pyodide-build.json"
 _CORE_PYPROJECT = REPO_ROOT / "packages" / "py" / "citry_core" / "pyproject.toml"
 _PLAYGROUND_RUNTIME = REPO_ROOT / "docs_site" / "static" / "playground" / "runtime.json"
+_PYODIDE_BUILDER = REPO_ROOT / "scripts" / "build_citry_core_pyodide_wheel.py"
+_DISTRIBUTION_VERIFIER = REPO_ROOT / "scripts" / "verify_citry_core_distribution.py"
 _DOCS_RUST_WORKFLOWS = tuple(
     REPO_ROOT / ".github" / "workflows" / name
     for name in (
@@ -48,10 +52,14 @@ def check() -> list[str]:
         _TOOLCHAIN_FILE,
         _WORKFLOW_FILE,
         _PUBLISH_WORKFLOW,
+        _CITRY_PUBLISH_WORKFLOW,
         _ROOT_CARGO,
+        _CORE_BINDING_CARGO,
         _PYODIDE_CONFIG,
         _CORE_PYPROJECT,
         _PLAYGROUND_RUNTIME,
+        _PYODIDE_BUILDER,
+        _DISTRIBUTION_VERIFIER,
         *_DOCS_RUST_WORKFLOWS,
     )
     missing = [f"{path} not found" for path in required if not path.exists()]
@@ -86,6 +94,19 @@ def check() -> list[str]:
         manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("package", {}).get("rust-version") != {"workspace": True}:
             errors.append(f"{manifest_path.relative_to(REPO_ROOT)} must inherit workspace rust-version")
+    wheel_profile = root_manifest.get("profile", {}).get("release-wheel")
+    expected_wheel_profile = {
+        "inherits": "release",
+        "debug": False,
+        "lto": True,
+        "codegen-units": 1,
+    }
+    if wheel_profile != expected_wheel_profile:
+        errors.append(f"Cargo release-wheel profile must be {expected_wheel_profile!r}, found {wheel_profile!r}")
+    binding_manifest = tomllib.loads(_CORE_BINDING_CARGO.read_text(encoding="utf-8"))
+    abi3_feature = binding_manifest.get("features", {}).get("abi3-py310")
+    if abi3_feature != ["pyo3/abi3-py310", "pyo3/extension-module"]:
+        errors.append("citry_core_py abi3-py310 feature must enable PyO3's stable ABI and extension module")
 
     docs_toolchain = f"{minimum}.0"
     docs_cache_settings = (
@@ -146,9 +167,9 @@ def check() -> list[str]:
         f"pyodide xbuildenv install {pyodide.get('pyodide')}": "Pyodide xbuild environment",
         f"twine=={pyodide.get('twine')}": "Twine",
     }
-    for text, label in workflow_pins.items():
+    for text, pin_label in workflow_pins.items():
         if text not in publish:
-            errors.append(f"citry-core publish workflow does not use the configured {label} pin")
+            errors.append(f"citry-core publish workflow does not use the configured {pin_label} pin")
     release_guard = "if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}"
     if release_guard not in publish:
         errors.append("citry-core release job must reject every workflow_dispatch ref, including tags")
@@ -176,13 +197,54 @@ def check() -> list[str]:
         errors.append("citry-core tool.maturin.strip must be true for release-size artifacts")
     if publish.count("--locked") != action_count - 1:
         errors.append("every citry-core wheel action must pass --locked")
+    if publish.count("--profile release-wheel") != action_count - 1:
+        errors.append("every native citry-core wheel action must use the release-wheel Cargo profile")
+    if publish.count("--features abi3-py310") != action_count - 1:
+        errors.append("every native citry-core wheel action must select the reviewed ABI3 release feature")
+    if "--find-interpreter" in publish:
+        errors.append("citry-core release builders must select the closed interpreter families explicitly")
+    profile_setting = "maturin.build-args=--profile release-wheel"
+    for script_path in (_PYODIDE_BUILDER, _DISTRIBUTION_VERIFIER):
+        if script_path.read_text(encoding="utf-8").count(profile_setting) != 1:
+            errors.append(f"{script_path.relative_to(REPO_ROOT)} must select the release-wheel profile once")
     if "skip-existing" in publish or "--clobber" in publish:
         errors.append("citry-core release retries must fail closed instead of replacing or skipping artifacts")
     for marker in (
+        "select-qualification:",
+        "scripts/select_citry_core_qualification.py",
+        "needs: [verify-version, select-qualification]",
+        "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
+        "verify_citry_core_distribution.py promote",
+        "retention-days: 14",
+        "PyEmscripten reproducibility build ${{ matrix.copy }}",
         "Require a new PyPI version and GitHub Release",
         "https://pypi.org/pypi/citry-core/${CITRY_CORE_VERSION}/json",
-        'gh release view "$GITHUB_REF_NAME"',
+        "releases/tags/$GITHUB_REF_NAME",
     ):
         if marker not in publish:
             errors.append(f"citry-core release immutability preflight is missing {marker!r}")
+
+    citry_publish = _CITRY_PUBLISH_WORKFLOW.read_text(encoding="utf-8")
+    if citry_publish.count(release_guard) != 2:
+        errors.append("citry publish selection and release jobs must both reject workflow_dispatch refs")
+    if citry_publish.count(f"uses: {_PYPI_ACTION}") != 1:
+        errors.append("citry Trusted Publishing must use the reviewed immutable action commit")
+    if citry_publish.count(f"uses: {_UV_ACTION}") != len(re.findall(r"uses:\s+astral-sh/setup-uv@", citry_publish)):
+        errors.append("every citry publish uv action must use the reviewed immutable commit")
+    if "skip-existing" in citry_publish or "--clobber" in citry_publish:
+        errors.append("citry release retries must fail closed instead of replacing or skipping artifacts")
+    for marker in (
+        "select-qualification:",
+        "--workflow py--citry--publish.yml",
+        "--artifact-name verified-citry-distributions",
+        "needs: [verify-version, select-qualification]",
+        "actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip",
+        "--promote-archive qualification.zip",
+        "retention-days: 14",
+        "Require a new PyPI version and GitHub Release",
+        "https://pypi.org/pypi/citry/${CITRY_VERSION}/json",
+        "releases/tags/$GITHUB_REF_NAME",
+    ):
+        if marker not in citry_publish:
+            errors.append(f"citry release immutability preflight is missing {marker!r}")
     return errors

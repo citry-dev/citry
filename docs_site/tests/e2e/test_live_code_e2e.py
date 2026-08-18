@@ -211,6 +211,11 @@ def test_getting_started_live_examples_run_the_behavior_the_lesson_describes(
     docs_site_url: str,
 ) -> None:
     page.goto(docs_site_url + "/getting-started/browser-interactivity/", wait_until="domcontentloaded")
+    runtime_version = page.evaluate(
+        "async () => (await (await fetch('/static/playground/runtime.json')).json()).citry.version"
+    )
+    if runtime_version != "0.4.0":
+        pytest.skip("direct js_data scope seeding needs the post-release Citry 0.4.0 playground pin")
     examples = page.locator("[data-citry-live-code]")
     expect(examples).to_have_count(1)
 

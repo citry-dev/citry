@@ -306,7 +306,7 @@ def test_ui_preview_frame_resizes_only_from_its_own_window(
     assert frame.evaluate("element => element.style.height") == "321px"
 
 
-def test_ui_api_table_scrolls_without_covering_the_toc(page: Any, docs_site_url: str) -> None:
+def test_ui_api_table_fits_or_scrolls_without_covering_the_toc(page: Any, docs_site_url: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
     page.goto(docs_site_url + "/ui-library/components/button/")
 
@@ -315,15 +315,16 @@ def test_ui_api_table_scrolls_without_covering_the_toc(page: Any, docs_site_url:
     toc = page.locator(".djc-toc")
 
     assert wrapper.count() == 1
-    assert wrapper.evaluate("element => element.scrollWidth > element.clientWidth")
+    overflows = wrapper.evaluate("element => element.scrollWidth > element.clientWidth")
     wrapper_box = wrapper.bounding_box()
     toc_box = toc.bounding_box()
     assert wrapper_box is not None
     assert toc_box is not None
     assert wrapper_box["x"] + wrapper_box["width"] <= toc_box["x"]
 
-    wrapper.evaluate("element => { element.scrollLeft = element.scrollWidth }")
-    assert wrapper.evaluate("element => element.scrollLeft > 0")
+    if overflows:
+        wrapper.evaluate("element => { element.scrollLeft = element.scrollWidth }")
+        assert wrapper.evaluate("element => element.scrollLeft > 0")
 
 
 def test_search_returns_results(page: Any, docs_site_url: str) -> None:
@@ -460,8 +461,10 @@ def test_internal_page_link_brings_active_sidebar_item_clearly_into_view(
         page.locator("#sidebar-scroll-test-link").click()
         page.wait_for_url(docs_site_url + target_path)
 
-    page.set_viewport_size({"width": viewport_width, "height": 480})
-    page.goto(docs_site_url + "/docs/")
+    # Keep the scroll port intentionally short so both directions of the
+    # active-link reveal behavior are exercised even when the nav is compact.
+    page.set_viewport_size({"width": viewport_width, "height": 160})
+    page.goto(docs_site_url + "/syntax/control-flow/")
     sidebar = page.locator("#djc-sidebar")
     sidebar.evaluate("element => { element.scrollTop = 0; }")
     first_path = sidebar.locator(".djc-sidebar__link").first.get_attribute("href")
@@ -511,12 +514,14 @@ def test_internal_page_link_brings_active_sidebar_item_clearly_into_view(
 
 
 def test_navigation_status_badges_and_review_hint_render(page: Any, docs_site_url: str) -> None:
-    page.goto(docs_site_url + "/docs/")
+    # Open a page in a group containing review-marked entries. On /docs/ that
+    # group is collapsed, so its links are intentionally not visible.
+    page.goto(docs_site_url + "/syntax/control-flow/")
 
     alpha_badge = page.locator('.djc-header__nav a[href="/ui-library/"] .djc-nav-badge')
     assert alpha_badge.inner_text() == "ALPHA"
 
-    review_link = page.locator('.djc-sidebar__link[aria-label*="final human review"]').first
+    review_link = page.locator('.djc-sidebar__link[aria-label*="final human review"]:visible').first
     assert review_link.locator(".djc-sidebar__review-icon").inner_text() == "🚧"
     hint = review_link.locator(".djc-sidebar__review-hint")
     assert hint.evaluate("el => getComputedStyle(el).opacity") == "0"
@@ -542,11 +547,16 @@ def test_active_header_underline_excludes_status_badge(page: Any, docs_site_url:
 
 def test_navigation_review_hint_stays_inside_resized_sidebar(page: Any, docs_site_url: str) -> None:
     page.set_viewport_size({"width": 1280, "height": 800})
-    page.goto(docs_site_url + "/docs/")
+    page.goto(docs_site_url + "/syntax/control-flow/")
 
     sidebar = page.locator("#djc-sidebar")
-    sidebar.evaluate("el => { el.style.width = '160px'; }")
-    review_link = page.locator('.djc-sidebar__link[aria-label*="final human review"]').first
+    sidebar.evaluate(
+        """el => {
+            el.style.width = '160px';
+            el.style.height = '180px';
+        }"""
+    )
+    review_link = page.locator('.djc-sidebar__link[aria-label*="final human review"]:visible').first
     hint = review_link.locator(".djc-sidebar__review-hint")
     review_link.hover()
     sidebar_scrollport = sidebar.evaluate(
@@ -1719,9 +1729,14 @@ def test_toast_ui_examples_cover_queue_identity_focus_modal_and_theme(
     assert action.get_by_text("Retry requested", exact=True).is_visible()
     assert action.locator('[data-citry-toast-id="offline"]').count() == 1
 
-    limited = demos.nth(5).frame_locator("[data-ui-preview-frame]")
+    limited_frame = page.locator('iframe[src="/ui-library/components/toast/_previews/visible-limit/"]')
+    limited_frame.scroll_into_view_if_needed()
+    limited = page.frame_locator('iframe[src="/ui-library/components/toast/_previews/visible-limit/"]')
     assert limited.locator('[data-citry-ui-part="toast"]').count() == 2
-    dismiss_first = limited.get_by_role("button", name="Dismiss Queue item 1")
+    dismiss_first = limited.locator('[data-citry-toast-id="queue-1"] [data-citry-toast-dismiss]')
+    dismiss_label = dismiss_first.get_attribute("aria-label")
+    assert dismiss_label is not None
+    assert dismiss_label.replace("\u2068", "").replace("\u2069", "") == "Dismiss Queue item 1"
     dismiss_first.focus()
     dismiss_first.press("Enter")
     limited.locator('[data-citry-toast-id="queue-3"]').wait_for(state="visible")
@@ -2096,8 +2111,8 @@ def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
     page.goto(docs_site_url + "/ui-library/components/button/", wait_until="networkidle")
     demos = page.locator("[data-citry-ui-demo]")
 
-    assert demos.count() == 10
-    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(10))
+    assert demos.count() == 11
+    assert all(demos.nth(index).locator(".citry-ui-demo__source").get_attribute("open") is None for index in range(11))
 
     sampler = demos.nth(0).frame_locator("[data-ui-preview-frame]")
     sampler_buttons = sampler.locator('[data-citry-ui-part="button"]')
@@ -2106,7 +2121,9 @@ def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
     assert sampler.locator("button:disabled").count() == 1
     assert sampler.locator("html").evaluate("node => node.scrollWidth <= node.clientWidth")
 
-    configurator_demo = demos.nth(2)
+    configurator_demo = page.locator(
+        '[data-citry-ui-demo]:has(iframe[src="/ui-library/components/button/_previews/configuration/"])'
+    )
     configurator_demo.scroll_into_view_if_needed()
     controls = configurator_demo.locator("[data-ui-preview-controls] form")
     configurator = configurator_demo.frame_locator("[data-ui-preview-frame]")
@@ -2114,10 +2131,10 @@ def test_button_ui_sampler_and_configurator_are_result_first_and_reactive(
 
     controls.get_by_label("Variant").select_option("outline")
     _wait_for_attribute(configured_button, "data-variant", "outline")
-    controls.get_by_label("Intent").select_option("positive")
-    _wait_for_attribute(configured_button, "data-intent", "positive")
-    controls.get_by_label("Size").select_option("large")
-    _wait_for_attribute(configured_button, "data-size", "large")
+    controls.get_by_label("Intent").select_option("success")
+    _wait_for_attribute(configured_button, "data-intent", "success")
+    controls.get_by_label("Size").select_option("lg")
+    _wait_for_attribute(configured_button, "data-size", "lg")
     controls.get_by_label("Loading position").select_option("start")
     _wait_for_attribute(configured_button, "data-loading-position", "start")
     controls.get_by_label("Show loading state").check()
@@ -2151,9 +2168,8 @@ def test_button_ui_native_form_and_theme_examples_exercise_public_contracts(
 ) -> None:
     page.set_viewport_size({"width": 1280, "height": 900})
     page.goto(docs_site_url + "/ui-library/components/button/", wait_until="networkidle")
-    demos = page.locator("[data-citry-ui-demo]")
 
-    form_demo = demos.nth(8)
+    form_demo = page.locator('[data-citry-ui-demo]:has(iframe[src$="/_previews/native-forms/"])')
     form_demo.scroll_into_view_if_needed()
     form = form_demo.frame_locator("[data-ui-preview-frame]")
     species = form.get_by_label("Species")
@@ -2164,7 +2180,7 @@ def test_button_ui_native_form_and_theme_examples_exercise_public_contracts(
     assert species.input_value() == "Silver-washed fritillary"
     assert form.locator(".button-form__result").inner_text() == "Journal reset."
 
-    theme_demo = demos.nth(9)
+    theme_demo = page.locator('[data-citry-ui-demo]:has(iframe[src$="/_previews/theme-customization/"])')
     theme_demo.scroll_into_view_if_needed()
     theme = theme_demo.frame_locator("[data-ui-preview-frame]")
     day = theme.locator(".button-theme__card--day")

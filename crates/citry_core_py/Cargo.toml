@@ -15,6 +15,11 @@ repository = { workspace = true }
 name = "citry_core_py"
 crate-type = ["cdylib"]
 
+[features]
+# One CPython wheel per platform supports every GIL-enabled interpreter from
+# 3.10 onward; release jobs still build separate PyPy and free-threaded wheels.
+abi3-py310 = ["pyo3/abi3-py310", "pyo3/extension-module"]
+
 [dependencies]
 citry_html_transform = { path = "../citry_html_transform" }
 citry_i18n = { path = "../citry_i18n" }

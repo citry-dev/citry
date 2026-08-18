@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from docs_site._internal.guards.base import GuardResult
-from docs_site._internal.guards.site_index import strip_base_path
+from docs_site._internal.guards.site_index import is_isolated_preview_page, strip_base_path
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -30,6 +30,8 @@ def check(ctx: GuardContext) -> Iterator[GuardResult]:
         return
 
     for page in index.pages:
+        if is_isolated_preview_page(page):
+            continue
         for link in page.links:
             if not link.anchor:
                 continue

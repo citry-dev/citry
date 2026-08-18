@@ -29,6 +29,13 @@ published wheels (the release profile keeps `debug = true` for profiling).
 Passages below that mention pre-commit hooks or `repo--tests.yml` describe the
 original plan, not what shipped.
 
+**Current Citry Core release note (2026-08-18):** the old per-interpreter
+wheel and direct tag-build passages below are historical. Citry Core now
+qualifies an ABI3-based closed artifact set once and promotes those exact bytes
+from a tag. The current procedure is in [`docs/codebase.md`](../codebase.md#citry-core-distribution-qualification),
+and the ABI3/fat-LTO evidence and decision are in
+[`performance.md`](performance.md#9-citry-core-release-wheel-profile-and-abi-decision-2026-08-18).
+
 ---
 
 ## 1. Why this is mostly hardening, not greenfield

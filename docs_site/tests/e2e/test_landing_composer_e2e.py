@@ -375,7 +375,13 @@ def test_key_recipes_are_finished_compositions_not_flat_defaults(page: Any, docs
           shadow: getComputedStyle(element).boxShadow,
         })"""
     )
-    assert button_style["radius"] > 20
+    assert button_style["radius"] > 20, button.evaluate(
+        """element => ({
+          inline: element.getAttribute('style'),
+          radiusVariable: getComputedStyle(element).getPropertyValue('--_cui-button-radius'),
+          publicRadiusVariable: getComputedStyle(element).getPropertyValue('--cui-button-radius'),
+        })"""
+    )
     assert button_style["shadow"] != "none"
     reset.click()
 

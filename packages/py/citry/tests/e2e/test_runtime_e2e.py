@@ -162,7 +162,11 @@ def test_manager_api_surface_is_locked(page: Any, serve_live: Any) -> None:
 
     keys = page.evaluate("() => Object.keys(Citry.manager).sort()")
     assert keys == [
+        "_commitFrameworkManifests",
         "_loadComponentScripts",
+        "_prepareFrameworkManifests",
+        "_requireAlpineRuntime",
+        "_rollbackFrameworkManifests",
         "_stageOwnershipManifest",
         "callComponent",
         "decorateContext",
@@ -173,6 +177,7 @@ def test_manager_api_surface_is_locked(page: Any, serve_live: Any) -> None:
         "ownership",
         "registerComponent",
         "registerComponentData",
+        "registerFrameworkManifest",
     ]
 
 

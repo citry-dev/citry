@@ -256,6 +256,8 @@ def build_wheel(
         str(source),
         "--outdir",
         str(out_dir),
+        "--config-setting",
+        "maturin.build-args=--profile release-wheel",
         "-v",
     ]
     _run(command, cwd=source, env=build_env)

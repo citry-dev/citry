@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 from hashlib import sha256
 from threading import RLock
@@ -822,8 +822,14 @@ class I18nService:
         return self._parse
 
 
-@dataclass(frozen=True, slots=True, weakref_slot=True)
-class _SourceCatalog:
+class _WeakrefableSlots:
+    """Provide a weak-reference slot on every supported Python version."""
+
+    __slots__ = ("__weakref__",)
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceCatalog(_WeakrefableSlots):
     owner: ReferenceType[type]
     content: str
     origin: str
@@ -1582,7 +1588,7 @@ class I18nExtension(Extension):
         zone = load_time_zone(cast("str", context.time_zone))
         candidates: list[datetime] = []
         for fold_value in (0, 1):
-            candidate = local.replace(tzinfo=zone, fold=fold_value).astimezone(UTC)
+            candidate = local.replace(tzinfo=zone, fold=fold_value).astimezone(timezone.utc)
             if candidate.astimezone(zone).replace(tzinfo=None) == local and candidate not in candidates:
                 candidates.append(candidate)
         candidates.sort()
@@ -1650,7 +1656,7 @@ class I18nExtension(Extension):
         if offset is None:
             raise I18nRuntimeUnavailableError(f"Time zone {context.time_zone!r} did not resolve a UTC offset.")
         offset_seconds = int(offset.total_seconds())
-        utc = value.astimezone(UTC)
+        utc = value.astimezone(timezone.utc)
         epoch_seconds = (utc.date() - date(1970, 1, 1)).days * 86_400
         epoch_seconds += utc.hour * 3_600 + utc.minute * 60 + utc.second
         return self._formatter_catalog(context).format_datetime(

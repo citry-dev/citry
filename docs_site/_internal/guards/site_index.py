@@ -127,6 +127,11 @@ class PageRecord:
         return str(self.rel_path)
 
 
+def is_isolated_preview_page(page: PageRecord) -> bool:
+    """Return whether a page is a UI preview with deliberately fictional navigation."""
+    return "_previews" in page.rel_path.parts
+
+
 class SiteIndex:
     """Parses a built docs site once and indexes every page for the guards."""
 

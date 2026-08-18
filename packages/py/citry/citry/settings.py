@@ -215,6 +215,10 @@ class CitrySettings:
     """
     Immutable settings for a ``Citry`` instance.
 
+    Every security mode is enforced during serialization. The defaults
+    preserve established output; restrictive JavaScript modes inventory,
+    omit, or reject client behavior without changing render-cache data.
+
     Attributes:
         extensions: The extensions to install on the instance. Each entry is
             an ``Extension`` subclass, a ready-made instance, or an import
@@ -315,10 +319,6 @@ class CitrySettings:
             clients are not limited to the built-in JSON, form, and query
             formats. Codecs given here are tried before the built-in ones, in
             order.
-
-        Every security mode is enforced during serialization. The defaults
-        preserve established output; restrictive JavaScript modes inventory,
-        omit, or reject client behavior without changing render-cache data.
 
     """
 

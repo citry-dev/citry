@@ -1138,10 +1138,23 @@ Currently, releases are managed manually:
 3. **Update the package's owning changelog** with release notes. Use the root
    `CHANGELOG.md` only for `citry`; auxiliary packages use the `CHANGELOG.md`
    in their own package directory.
-4. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
-5. **Push the tag**: `git push origin citry-core@1.3.0`
+4. **Qualify Citry Core or Citry** when releasing either package: manually run
+   its publish workflow on the exact release commit on `main` and wait for the
+   complete distribution gate. The tag promotes that run's exact bytes;
+   packages without a qualify-then-promote workflow skip this step.
+5. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
+6. **Push the tag**: `git push origin citry-core@1.3.0`
 
-Pushing the tag triggers the package's publish workflow, which verifies the tag matches the pyproject version, builds the distributions, smoke-tests them, and uploads to PyPI. A `citry@X.Y.Z` tag also triggers the documentation release workflow that builds, validates, commits, and deploys a version snapshot; sibling package tags do not. Review the snapshot procedure and first-release blockers in [`docs_site/README.md`](../docs_site/README.md#release-version-snapshots) before pushing a Citry release tag. **Release ordering**: citry depends on `citry-core`, so when bumping both, publish `citry-core` first and let it reach PyPI before tagging `citry`.
+Pushing the tag triggers the package's publish workflow and verifies that the
+tag matches the package version. Citry Core and Citry promote exact qualified
+bytes; the remaining package workflows build and smoke-test from the tag. A
+`citry@X.Y.Z` tag also triggers the documentation release workflow that builds,
+validates, commits, and deploys a version snapshot; sibling package tags do not.
+Review the snapshot procedure and first-release blockers in
+[`docs_site/README.md`](../docs_site/README.md#release-version-snapshots) before
+pushing a Citry release tag. **Release ordering**: citry depends on
+`citry-core`, so when bumping both, publish `citry-core` first and let it reach
+PyPI before tagging `citry`.
 
 The packages are versioned and released **independently on purpose**, so each
 can ship on its own cadence. The ordering rule applies when `citry` and
@@ -1207,10 +1220,9 @@ Two rules that came out of doing this five times:
 
 Releasing straight from `review` looks tempting because publish workflows
 accept a manual `workflow_dispatch`. That is not a supported release route:
-Citry Core treats every manual dispatch (even one targeting a tag ref) as a
-qualification-only run, while older package workflows can upload without
-creating the matching tag or GitHub Release. A tag push from `main` is the
-supported route for every package.
+Citry Core and Citry treat every manual dispatch (even one targeting a tag
+ref) as a qualification-only run; it cannot enter Trusted Publishing. A tag
+push from `main` is the supported release route for every package.
 
 The throwaway `main` worktree preserves the arrangement automatically. Keep the
 original `review` worktree's branch pointer, index, and files unchanged before,
@@ -1425,9 +1437,10 @@ the `docs` extra and avoids the Rust build entirely.
 
 Each published Python package has its own tag-triggered workflow:
 `py--citry-core--publish.yml`, `py--citry--publish.yml`, or
-`py--pygments-citry--publish.yml`. Pushing a `<package>@<version>` tag builds
-the distributions, smoke-tests them, publishes to PyPI, and creates a matching
-GitHub Release.
+`py--pygments-citry--publish.yml`. Most package workflows build and test from
+the `<package>@<version>` tag, publish to PyPI, and create a matching GitHub
+Release. Citry Core and Citry use qualify-then-promote: the tag can publish only
+the exact bytes already qualified for its `main` commit.
 
 **PyPI auth is Trusted Publishing (OIDC), not a stored API token.** The release jobs carry `id-token: write` and target a GitHub environment named `pypi`; PyPI verifies the workflow's OIDC identity, so there is no secret to keep. Before a package's first publish, configure a PyPI **publisher** (a *pending publisher* if the project does not exist yet) with:
 
@@ -1440,32 +1453,61 @@ The first publish from a configured pending publisher creates the project. The G
 
 ### Citry Core distribution qualification
 
-`citry-core` publishes one source distribution and platform wheels for its
-supported native Python matrix. It also publishes one
+Run `py--citry-core--publish.yml` manually on the exact `main` commit that will
+receive the release tag. That qualification run builds one source distribution
+and 34 native wheels. Fourteen `cp310-abi3` wheels cover GIL-enabled CPython
+3.10 and newer across every supported platform. Linux and musllinux also carry
+one CPython 3.14 free-threaded wheel and one PyPy 3.11 wheel per architecture.
+The workflow also builds one
 `cp314-cp314-pyemscripten_2026_0_wasm32` wheel for the exact Pyodide runtime
 pinned by the playground. That browser wheel is another build of
 `citry-core`, not a package dependency.
 
-The publish workflow uses Rust 1.95.0 and Maturin 1.14.1 explicitly. It keeps
-each builder's output in a separate directory, rejects duplicate filenames,
-and requires the complete expected artifact set before it creates the only
-directory eligible for publication. Every wheel is checked against the
-checkout for metadata, tags, Python payload, extension module, license,
-`RECORD`, and size. Every Linux x86_64 interpreter and Windows wheel, plus the
-oldest/newest macOS endpoints, is installed and exercised in a fresh
-environment; the remaining cross-architecture wheels receive the same static
-inspection. The source distribution is rebuilt outside the checkout with the
-declared Rust 1.95 minimum, then its wheel is installed and exercised.
+The qualification uses Rust 1.95.0, Maturin 1.14.1, and Cargo's
+performance-qualified `release-wheel` profile: fat LTO, one codegen unit, and
+no debug information in the stripped distribution build. The four-way
+profile/ABI comparison and keep/drop decision are recorded in
+[`docs/design/performance.md`](design/performance.md#9-citry-core-release-wheel-profile-and-abi-decision-2026-08-18).
+Builders select the three supported interpreter families explicitly, so a
+runner-image change cannot silently add or remove a wheel. Runnable wheels are
+installed and exercised in their build jobs: every supported interpreter on
+Linux x86_64 and Windows, plus the oldest and newest CPython on macOS. The
+remaining cross-architecture wheels receive the same static inspection. The
+sdist job rebuilds outside the checkout with the declared Rust 1.95 minimum and
+exercises the resulting wheel before uploading the sdist.
 
-The PyEmscripten wheel is built twice from clean source trees with the pinned
-Pyodide/Emscripten tuple. The workflow requires byte-identical normalized
-outputs and checks the actual SDK-reported Emscripten version. It uses that
-SDK's `wasm-opt` to remove the workspace's profiler-only DWARF/debug payload
-before regenerating the wheel `RECORD`, then exercises the installed wheel in
-that exact Pyodide runtime. Release-critical third-party actions are pinned to
-reviewed commits. The release job receives only this verified distribution set
-and records its names, byte sizes, and SHA-256 hashes in
-`release-inventory.json`.
+Each builder keeps its output in a separate directory. The final qualification
+job rejects duplicate filenames and requires the complete 36-file set before
+it creates `verified-citry-core-distributions`. Every wheel is checked against
+the checkout for metadata, tags, Python payload, extension module, license,
+`RECORD`, and size. `release-inventory.json` records every filename, byte size,
+and SHA-256 hash. GitHub retains this promotion bundle for 14 days.
+The qualification run records build provenance for the verified set; the tag
+run records a second attestation for promoting those bytes to the registries.
+
+Two separate runners build the PyEmscripten wheel from clean source trees with
+the pinned Pyodide/Emscripten tuple. The workflow requires byte-identical
+normalized outputs and checks the actual SDK-reported Emscripten version. It
+uses that SDK's `wasm-opt` to remove the workspace's profiler-only DWARF/debug
+payload before regenerating `RECORD`, then exercises build A in that exact
+Pyodide runtime.
+
+After qualification succeeds, add and push `citry-core@<version>` at that same
+commit. The tag run searches for the newest successful manual qualification
+whose source repository, branch (`main`), and full commit SHA match the peeled
+tag. It downloads that run's immutable bundle by artifact ID, verifies
+GitHub's archive SHA-256, safely extracts it, and repeats the complete static
+and source-byte verification against the tagged checkout. It publishes those
+qualified bytes without compiling them again. The GitHub Release includes
+`qualification-provenance.json`, which records the qualification run, commit,
+and artifact digest.
+
+The tag run fails before entering Trusted Publishing when no exact
+qualification exists, its artifact expired, its digest differs, the tag commit
+is absent from `main`, or any file differs from the recorded inventory. Run a
+fresh manual qualification for that exact commit; do not substitute artifacts
+from another commit. Release-critical third-party actions are pinned to
+reviewed commits.
 
 The version must be absent from both PyPI and GitHub Releases before publishing.
 The workflow never skips existing PyPI files or overwrites release assets: a
@@ -1478,6 +1520,23 @@ must match `docs_site/static/playground/runtime.json`. Do not update the
 playground to a new Citry Core version until PyPI provides the immutable wheel
 URL and the whole compatible runtime tuple can be promoted and browser-tested
 together.
+
+### Citry distribution qualification
+
+Run `py--citry--publish.yml` manually on the exact `main` commit that will
+receive the Citry tag. The workflow builds the one universal wheel and one
+source distribution, requires that closed pair and its package/metadata/
+license/entry-point/`RECORD` inventories, rebuilds the sdist outside the
+checkout, and install-smokes both wheels on CPython 3.10 through 3.14. Its
+`verified-citry-distributions` bundle and `release-inventory.json` are retained
+for 14 days.
+
+Pushing `citry@<version>` at that commit selects the successful manual run by
+repository, `main` branch, and full commit SHA. The tag run checks the GitHub
+artifact digest, safely extracts and re-verifies the pair against the tagged
+checkout, requires the commit to remain on `main`, and fails closed if the
+PyPI version or GitHub Release already exists. It never rebuilds, skips an
+existing PyPI file, or overwrites a release asset.
 
 - Rust crates are not published to crates.io; they are an internal implementation detail surfaced through the Python packages.
 - The root `pyproject.toml` is never published (no build-system; `Private :: Do Not Upload`).

@@ -9,7 +9,7 @@ description: Connect PyCharm to the Citry language server with LSP4IJ, or run th
 
     Citry does not currently have a native PyCharm or IntelliJ plugin. Follow
     development and vote for the integration on
-    [GitHub issue #78]({{ repo_url }}/issues/78){: target="_blank" rel="noopener"}.
+    [GitHub issue #78](https://github.com/citry-dev/citry/issues/78){: target="_blank" rel="noopener"}.
     The tested LSP4IJ setup below provides substantial language-server
     support while that work remains parked.
 
@@ -103,7 +103,7 @@ One Citry server serves both mappings for that project.
 These are the reasons a small official JetBrains plugin may still be useful
 later: easier setup, first-party status UI, Citry coloring, and private
 embedded-language bridges. That work is tracked in
-[GitHub issue #78]({{ repo_url }}/issues/78){: target="_blank" rel="noopener"}.
+[GitHub issue #78](https://github.com/citry-dev/citry/issues/78){: target="_blank" rel="noopener"}.
 A plugin is not needed merely to attach Citry to Python files.
 
 ## Check templates from PyCharm

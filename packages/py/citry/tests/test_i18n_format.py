@@ -2,7 +2,7 @@
 
 # ruff: noqa: RUF001
 
-from datetime import UTC, date, datetime, time
+from datetime import date, datetime, time, timezone
 from decimal import Decimal
 
 import pytest
@@ -190,7 +190,7 @@ def test_time_is_wall_clock_only_and_datetime_converts_an_instant_with_pinned_tz
     formatter = i18n.for_context(context).format
 
     assert formatter.time(time(14, 5, 9), format="clock") == "2:05:09\u202fPM"
-    instant = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+    instant = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
     assert formatter.datetime(instant, format="event") == "Jan 15, 2026, 1:00:00\u202fPM"
     assert "Central European Standard Time" in formatter.datetime(instant, format="event-zone")
     assert context.tzdb_revision.startswith("tzdata:2026.3:sha256:")
@@ -200,14 +200,14 @@ def test_temporal_formatters_reject_implicit_or_ambiguous_time_zone_inputs() -> 
     i18n = configured_app().extensions.get_extension("i18n")
     without_zone = i18n.for_context(i18n.make_context(locale="en-US")).format
     with_zone = i18n.for_context(i18n.make_context(locale="en-US", time_zone="Europe/Prague")).format
-    naive = datetime(2026, 1, 15, 12, tzinfo=UTC).replace(tzinfo=None)
+    naive = datetime(2026, 1, 15, 12, tzinfo=timezone.utc).replace(tzinfo=None)
 
     with pytest.raises(ValueError, match="wall-clock fields only"):
-        with_zone.time(time(12, tzinfo=UTC), format="clock")
+        with_zone.time(time(12, tzinfo=timezone.utc), format="clock")
     with pytest.raises(ValueError, match="aware datetime"):
         with_zone.datetime(naive, format="event")
     with pytest.raises(ValueError, match="requires time_zone"):
-        without_zone.datetime(datetime(2026, 1, 15, 12, tzinfo=UTC), format="event")
+        without_zone.datetime(datetime(2026, 1, 15, 12, tzinfo=timezone.utc), format="event")
     with pytest.raises(ValueError, match="Unknown IANA"):
         i18n.make_context(locale="en-US", time_zone="Europe/Definitely-Missing")
 
@@ -227,7 +227,7 @@ def test_template_datetime_reads_only_the_explicit_root_locale_context() -> None
 
     i18n = app.extensions.get_extension("i18n")
     context = i18n.make_context(locale="en-US", time_zone="Europe/Prague")
-    rendered = Event(when=datetime(2026, 7, 15, 12, tzinfo=UTC)).render(
+    rendered = Event(when=datetime(2026, 7, 15, 12, tzinfo=timezone.utc)).render(
         provides={"citry_i18n": context},
     )
     assert str(rendered).strip() == "Jul 15, 2026, 2:00:00\u202fPM"
@@ -436,7 +436,7 @@ def test_datetime_parser_resolves_normal_times_and_requires_a_fold_choice() -> N
     context = i18n.make_context(locale="en-US", time_zone="Europe/Prague")
     parser = i18n.for_context(context).parse
     formatter = i18n.for_context(context).format
-    instant = datetime(2026, 1, 15, 12, 0, tzinfo=UTC)
+    instant = datetime(2026, 1, 15, 12, 0, tzinfo=timezone.utc)
     rendered = formatter.datetime(instant, format="datetime-text")
 
     assert parser.datetime(rendered, format="datetime-text").value == instant

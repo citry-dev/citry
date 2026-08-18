@@ -91,7 +91,9 @@ function readRecipeTemplates(root) {
   if (!bank) return new Map();
   const parser = document.createElement("template");
   parser.innerHTML = JSON.parse(bank.textContent);
-  for (const style of parser.content.querySelectorAll("style[data-citry-css-class]")) {
+  // Citry UI emits one unmarked global theme sheet before its component-owned
+  // sheets. Both are inert while they remain inside the parser template.
+  for (const style of parser.content.querySelectorAll("style")) {
     bank.before(style);
   }
   return new Map(

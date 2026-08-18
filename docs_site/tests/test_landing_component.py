@@ -110,6 +110,7 @@ def test_landing_composer_catalog_and_fallback_are_generated_together() -> None:
     assert all(len(item.xpath("./button")) == 1 for item in composer.xpath(".//*[@data-composer-palette-item]"))
     assert len(composer.xpath(".//*[@data-composer-canvas]/*[@data-composer-drop]")) == 1
     assert not composer.xpath(".//*[@data-composer-undo] | .//*[@data-composer-node] | .//*[@data-composer-slot]")
+    assert recipe_document.xpath(".//style[not(@data-citry-css-class)]")
     assert recipe_document.xpath(".//style[@data-citry-css-class]")
     assert not composer.xpath('.//script[not(@type="application/json")]')
     assert not recipe_document.xpath(".//p")
@@ -528,7 +529,7 @@ def test_security_depth_moves_from_csrf_rollout_to_strict_csp() -> None:
     csp = next(case for case in _DEPTH_CASES if case["id"] == "csp")
 
     assert case_ids.index("csrf") < case_ids.index("csp") < case_ids.index("fragments")
-    assert "web host" in str(csp["note"])
+    assert "CSP nonce" in str(csp["note"])
     assert 'security_csp="strict"' in csp["code"]
     assert "serialize_result(csp_nonce=nonce)" in csp["code"]
 

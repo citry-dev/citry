@@ -1,380 +1,49 @@
 # Release notes
 
-## Unreleased
+## v0.4.0
+
+_Beta release · 18 Aug 2026_
+
+Citry v0.4.0 is the first beta release! 🎉
+
+The Citry API is now mostly stable. There might be occasional bugs and minor API breakages.
 
 ### Added
 
-- Declared the configuration attributes owned by every always-installed
-  extension on the base `Component` API. Type checkers and generated reference
-  docs now expose `Component.Cache`, `Component.Dependencies`,
-  `Component.Events`, and `Component.I18n`, plus the matching instance values
-  `cache`, `dependencies`, `events`, and `i18n`.
-- Added the CSP security-configuration and serialization-result foundation.
-  `Citry` now stores typed CSP, JavaScript-delivery, and script-integrity
-  policies, and each render can return immutable HTML/security metadata through
-  `serialize_result()`. Existing `serialize()`, `str()`, and `bytes()` output is
-  unchanged by default. `security_script_integrity="citry"` now hashes exact
-  structured inline bytes, adds verified SHA-384 SRI to Citry-owned external
-  scripts and fragment dependencies, preserves declared third-party SRI as
-  unverified metadata, and rejects later string edits to trusted tags.
-  Request-scoped `csp_nonce` serialization now nonces every structured script
-  and inline style after dependency hooks, rejects explicit conflicts, and is
-  inherited by browser-created fragment dependencies without mutating reusable
-  dependency objects.
-  A version-pinned Alpine CSP 3.16.1 compatibility checker now reports
-  unsupported directives, hosts, expression grammar, derived `x-model` and
-  `x-for` code, and source-proven evaluator restrictions through `citry check`.
-  The configured `security_csp="warn"` or `"strict"` mode controls finding
-  severity; static checking without an app does not guess a policy. A
-  committed CSP Events artifact is now built from the same TypeScript source
-  and Alpine pin as the standard artifact, with dual-runtime browser canaries
-  and checks that the normal evaluator, `AsyncFunction`, and Alpine's `new
-  Function` path are absent from the CSP bundle. Warning serialization now
-  reports reached-tree and final-output incompatibilities while preserving the
-  standard-runtime HTML. Strict serialization selects the CSP runtime and
-  rejects incompatible expressions, raw scripts and styles, native event
-  handlers, and JavaScript URLs after all render hooks. Strict fragments omit
-  the bootstrap preloader and require an existing matching CSP manager, which
-  rejects runtime-variant and nonce conflicts before dependency adoption.
-  JavaScript-delivery modes are now enforced across every dependency strategy.
-  Warning mode inventories reached client behavior without changing bytes;
-  omit mode removes Citry-managed executable scripts, runtimes, preloaders,
-  and manifests while preserving server HTML and CSS; forbid mode rejects
-  component bindings, executable dependencies, Alpine and Events attributes,
-  raw scripts, native handlers, and JavaScript URLs. Static fragments in omit
-  mode emit CSS directly and do not require a mounted browser manager.
-  Citry UI's public and registered internal production component definitions
-  are now checked in CI against the pinned Alpine CSP expression subset.
-  Documentation snippets remain free to teach broader Alpine syntax instead
-  of acting as a product-compatibility allowlist. The landing page now presents
-  the warning-to-strict CSP progression while keeping nonce generation and the
-  complete response header with the host.
-- Added browser-native Citry analysis to the docs playground. A dedicated
-  Worker now reports parser diagnostics and structural completion and hover,
-  while exact-version successful runs publish bounded component catalogs for
-  registered-component hover and unknown-component checks. Portable component
-  name matching and nested-template tag discovery are shared through
-  `citry.analysis` instead of being copied into the browser frontend.
-- Added the production server foundation for Citry i18n. Components can define
-  inline or file-backed Fluent messages, use typed `tr()` and `fmt` helpers,
-  inherit locale context through `<c-i18n>`, and place application-owned fills
-  through `<c-trans>`. The built-in extension now links component and
-  standalone-package catalogs with locale-major fallback, exposes checked
-  ICU4X number, currency, date, relative-time, and list profiles, and provides
-  extract, check, compile, and inspect commands. Localized caches vary through
-  ordinary `Cache.vary()` values. Locale contexts enter a component tree
-  explicitly through root `render(provides=...)` data or a subtree `<c-i18n>`
-  provider.
-  Compiled interfaces retain parameter descriptions and source spans, and
-  `citry check` validates literal attributes, typed arguments, rich values and
-  fills, client-message outputs, and cross-language plain-text fallback.
-- Added client-enabled `<c-i18n>` boundaries and the reactive `$i18n` Alpine
-  service. Browser code can load exact message partitions, translate and format
-  on demand, parse localized numbers and percentages, and switch one provider
-  subtree atomically. Server-rendered `tr()` and `<c-trans>` output stays fixed
-  until the server renders it again. Stable server-rendered text and safe HTML
-  attributes can now opt into checked browser updates with `$c-tr`, while
-  browser-created and custom destinations can use `i18n.bind()` with reactive
-  values, `refresh()`, and `dispose()`. Late fragments prepare the logical
-  provider's current locale before component activation, and failed preparation
-  preserves the existing live region. Runtime compilation, `citry check`, and
-  the language server share strict `$c-tr` name validation; the editor also
-  checks literal named values and navigates messages and Fluent attributes to
-  their exact definitions.
-- Added semantic Fluent tooling across component messages, standalone catalogs,
-  Python, Citry templates, Alpine, and component JavaScript. The project index
-  powers literal message and named-profile completion, typed hover, and
-  go-to-definition. Pygments, VS Code, and the docs playground now highlight
-  Fluent source, with the playground using the reusable
-  `@citry/codemirror-lang-fluent` package.
-- Added zero-configuration i18n source mode. A registered component
-  `messages` or `messages_file` asset, paired with
-  `Component.I18n.messages_locale`, now activates the complete engine-wide
-  source catalog for template `tr()` and `self.i18n.tr()` without requiring
-  application settings. Source-locale selection is deterministic across
-  application and library owners, and `citry ext run i18n coverage` reports
-  exact translations and source fallbacks in human or JSON form with an
-  optional CI failure threshold.
-- Added checked server formatting for percent ratios and explicit CLDR units,
-  plus strict localized parsing for percent, number, date, time, and local
-  datetime edits. Number profiles may opt into scientific notation. Date input
-  supports localized month names, explicit two-digit-year windows, and checked
-  calendar shapes in either one text field or named segments. Time input keeps
-  wall-clock fields zone-free. Datetime input uses the explicitly provided IANA
-  zone, rejects DST gaps, and reports both instants in an unresolved fold.
-  Parse results preserve the submitted input and distinguish valid,
-  incomplete, invalid, and, where applicable, ambiguous state.
-- Added `citry.ext.i18n.make_context(app, ...)` for creating an explicit
-  locale context without a manual extension lookup. Use
-  `i18n.for_context(context)` for translations, resolved message metadata,
-  formatting, and parsing outside a component. Inside components the matching
-  service remains `self.i18n`.
-- Added explicit root provide values through `CitryElement.render(provides=...)`
-  and `LibraryComponentInvocation.render(provides=...)`. Components may pass an
-  existing value unchanged with `provide(key, value)`, while the keyword-field
-  form keeps producing an immutable attribute payload.
-- Added portable browser-expression and strict JSON-wire analysis for editor
-  integrations. `citry check` now warns about source-proven `JsData` fields
-  that cannot cross the JSON wire, reports unknown Alpine variables, validates
-  direct `$c-props` keys and required child props, and checks literal server
-  handlers used by `sendEvent()`, `$sendEvent()`, `$loading()`, `$error()`, or
-  declarative `@c-*` bindings. Dynamic handler names and `onEvent()` remain
-  open. Inferred `js_data()` dictionary values read directly from its kwargs
-  parameter now use the matching effective `Kwargs` field type.
-- Added strict component-JavaScript initializer linting. Free names inside a
-  proven `$component` callback or configuration `init` function are errors by
-  default, including context values used without destructuring. Applications
-  and inheritable `Component.Lint` declarations can select warning or ignore
-  severity and declare typed host-provided globals.
-- Added automatic instance-local `js_data()` seeding for component Alpine
-  scopes. Top-level JSON keys are available directly to Alpine expressions,
-  including for components without `$component`; callback components receive
-  the seed before init. Identical payloads stay content-deduplicated on the
-  wire but are parsed into fresh nested graphs per instance. Correlated
-  rerenders refresh and remove server-owned keys while preserving callback-only
-  scope state, and dependency manifests now distinguish `init` from seed-only
-  calls explicitly.
-- Added portable CSS-data analysis under `citry.analysis`. Tooling can infer
-  exact literal custom-property keys from conservative `css_data()` source,
-  locate source-mapped CSS `var(--name)` references and completion positions,
-  and fingerprint direct template, JavaScript, or CSS asset ownership without
-  treating authored asset-body edits as ownership changes.
-- Added `LintSettings` on `Citry` and inheritable `Component.Lint` overrides
-  for the shared `citry.template.unknown-variable` rule. Unknown free template
-  roots are errors by default in registry-backed `citry check` and editor
-  diagnostics; explicit extra-preserving schemas cap them at warning, while
-  warning-only checks still exit successfully. Runtime `template_globals` are
-  known and conservatively typed automatically, and analysis-only variables
-  accept annotations plus optional `Annotated` descriptions. Extensions can
-  publish detached namespace contributions without changing rule severity.
-- Added condition-specific `citry check` codes and concise, user-facing
-  unknown-variable and unknown-component messages while retaining stable
-  machine-readable identifiers.
-- Added analyzer-ready template-expression records and shadow Python builders
-  under `citry.analysis`. Tooling can enumerate every Python-valued template
-  host, retain lexical control-flow context, bind declared or inferred roots,
-  and map generated analysis ranges back to authored template and Python
-  source. Portable class fingerprints let editor integrations revalidate each
-  component's effective template asset after synchronized inheritance or asset
-  declaration edits. Direct literal and `pathlib.Path(...)` declarations have
-  a static runtime-match proof; unbounded dynamic or imported selection is
-  declined. Live schema, template, JavaScript, and CSS body changes do not
-  invalidate ownership. The optional `analysis-ty` extra pins the supported
-  external Python analyzer without adding it to ordinary runtime installations.
-- Added direct `class_` and `style` root inputs to every public Citry UI
-  component. Structured values merge with class and style contributions in
-  `attrs`.
-- Added Citry UI's first-party `citry_ui_i18n` catalog to the existing
-  `citry-ui` wheel. Breadcrumbs, Carousel, Combobox, Command Palette, Dialog,
-  Drawer, Editable, Pagination, Progress, Table, Tag, Tags Input, and Toast now
-  translate their library-owned defaults while preserving explicit caller
-  labels. Family-owned source keys live in each component's `messages` block;
-  the build combines them with standalone shared FTL into the package catalog
-  and exact dormant source-message constants. Their generated API references
-  end with a structured list of the translation keys each family uses, and the
-  catalog owns namespaced number format profiles for these components.
-- Added native link rendering to Citry UI's `CButton`. Supplying `href`
-  renders an anchor with ordinary browser navigation behavior, while disabled
-  and loading links remain unavailable without relying on JavaScript.
-- Added `citry format` with explicit file and
-  conservative directory discovery, static direct `template_file` resolution,
-  atomic writes, read-only check and unified-diff modes, deterministic
-  summaries, and CI-friendly exit codes. The parser-backed formatter now
-  handles complete conservative Citry/HTML structure, nested template values,
-  comments, suppression, verbatim bodies, and whitespace-sensitive boundaries.
-  It also formats Python expressions, `c-for` clauses, and `c-fill data`
-  patterns through the built-in core adapters. `citry format --verbose`
-  reports the pinned Python provider used by batch and editor surfaces. The
-  command also accepts explicit `.js` and `.css` targets, discovers only
-  statically proven `js_file` and `css_file` component assets in directories,
-  and formats direct Python `js`/`css` literals atomically with their template.
-  JavaScript and CSS use only explicit
-  `biome:/absolute/path/to/native/biome` providers; interpreter scripts and
-  package-manager or Windows command launchers are rejected. `--embedded`
-  selects `off`, best-effort `available`, or all-or-nothing `required`
-  behavior without
-  searching `PATH` or invoking a shell. Biome uses the nearest explicit
-  project configuration and reports a per-target option fingerprint;
-  configurations with external `extends` or `plugins` dependencies (including
-  override plugins), and symlinked configuration files, are not yet accepted.
-  Provider executable/config bytes are isolated and content-fingerprinted,
-  process trees are bounded on POSIX and Windows, and `--embedded=off` never
-  probes an otherwise supplied provider.
-  Embedded bodies whose multiline language tokens or start sentinels cannot
-  be safely reframed are now preserved with an explicit capability notice.
-  Embedded bodies containing Citry expressions or comments are not delegated,
-  and provider output cannot introduce `{{` or `{#` host syntax.
-- Added `format_python_templates()` for atomic, parser-backed formatting of
-  definite direct Citry template literals in Python component classes. It
-  preserves literal prefixes and delimiters, gives multiline triple-quoted
-  templates canonical class-relative framing, supports document and cursor
-  scopes, and reports explicit structured errors when a host literal cannot
-  be rewritten safely.
-- Added `discover_python_component_assets()` and the two-pass
-  `prepare_python_component_assets()` / `finish_python_component_assets()` API
-  for atomic formatting of proven direct `template`, `js`, and `css` literals.
-  The `format_python_component_assets()` convenience function supports
-  document and cursor scopes, reports the JavaScript and CSS providers it
-  accepted, and leaves unavailable provider regions unchanged with notices.
-- Added `Component.Events` as a typed public class attribute with its own API
-  reference entry. Documentation can now link directly to the nested event
-  handler contract as `citry.Component.Events`.
-- Added `citry.Markup`, the exact `markupsafe.Markup` class, as the public way
-  to mark trusted HTML. Its constructor trusts the complete value; use its
-  escaping operations when composing dynamic content.
-- Added `citry.SecurityError`, the exact exception raised by the expression
-  sandbox, so applications can catch blocked template operations from Citry's
-  public package.
-- Added `citry check` for parser-grade template validation in CI and local
-  development. The command requires an explicit mode: `citry check --static`
-  checks conservatively identified literal component templates under the
-  current directory, while `citry --app module:attribute check` completes
-  component discovery and also validates registered inputs, slots, and names.
-  An app import or discovery failure is reported once, syntax-only checking
-  continues, and the command exits with status 2 so CI cannot mistake degraded
-  analysis for a complete registry check.
-- Added `Citry.template_analysis()` for an immutable, registry-complete
-  component-analysis snapshot. Tooling can parse with the engine's registered
-  input and slot contracts, inspect the normalized component names, and use
-  `PythonTemplateSourceMap` to convert parser byte ranges in Python string
-  literals to LSP UTF-16 positions. Snapshots also have a versioned portable
-  `to_dict()` / `from_dict()` form for isolated tooling processes. The public
-  `discover_python_templates()` helper gives batch tools and editors one shared,
-  conservative definition of a definite inline Citry template.
-- Added structured declaring module and qualified-name provenance to catalog
-  `AssetInfo` records. Tools can identify inherited inline declarations even
-  when the declaring base or library component is not itself registered.
-- Added `citry check --format json`, a deterministic schema-v1 report with the
-  selected confidence mode, app failure, exit status, stable finding codes,
-  and structured parser byte and line/column ranges.
+- Configure CSP compatibility, JavaScript delivery, script integrity, and per-response nonces; strict mode ships an Alpine CSP runtime and rejects incompatible output.
+- Build server and browser localization with Fluent catalogs, locale fallback, typed `tr()`/`fmt`, `<c-i18n>`, `<c-trans>`, `$i18n`, `$c-tr`, strict localized input, time-zone/DST handling, and coverage/extract/check/compile/inspect commands.
+- Analyze Citry, Python, Alpine, JavaScript, CSS, and Fluent in editors through portable catalogs, source maps, diagnostics, completion, hover, and definition lookup.
+- Run `citry check --static` or `citry --app module:attribute check` with stable finding codes and deterministic JSON output.
+- Run `citry format` on Citry templates and conservatively discovered Python, JavaScript, and CSS assets, with check/diff modes and explicit Biome providers.
+- Format definite inline component assets programmatically with `format_python_templates()`, `prepare_python_component_assets()`, `finish_python_component_assets()`, and `format_python_component_assets()`.
+- Seed every component Alpine scope directly from `js_data()`; equal wire payloads still produce independent nested state per instance and refresh safely on rerender.
+- Supply explicit root context with `render(provides=...)` and pass existing values unchanged with `provide(key, value)`.
+- Configure shared and component-specific lint severity/types with `LintSettings` and `Component.Lint`.
+- Use `citry.ext.i18n.make_context()`, `citry.Markup`, `citry.SecurityError`, and the typed public `Component.Events` contract.
+- Inspect registry-complete component metadata with `Citry.template_analysis()`, portable catalog serialization, declaring-module provenance, and conservative asset ownership fingerprints.
 
 ### Changed
 
-- Declared `TemplateData`, `JsData`, and `CssData` schemas now provide the
-  normalized result of their validation. Schema defaults and coercions reach
-  templates and extensions instead of Citry discarding the constructed schema
-  instance after validation.
-- Inline component `template`, `js`, and `css` declarations now remove their
-  shared leading indentation before loading. File-backed assets remain exact,
-  and Python template analysis preserves source coordinates through the
-  normalization.
-- Citry UI's `CButton` now uses concise, conventional public values:
-  `primary`, `neutral`, `success`, `warn`, and `danger` intents; `sm`, `md`,
-  and `lg` sizes; and the `loading_pos` input.
-- Event modifiers now follow concrete DOM event capabilities rather than
-  native event-name tables. `.prevent` remains valid for every `@c-*` event
-  because a synthetic event named `scroll` or `input` may be cancelable.
-  `.enter` / `.escape` now accept arbitrary event names on both event and
-  two-way State bindings and match the dispatched event's `key`; events with
-  no matching key simply do not trigger the binding.
-- Citry tag and HTML identity now follow one casing contract. The `c-` prefix
-  is exact lowercase, component suffixes are ASCII-case-insensitive, reserved
-  structural tags require lowercase spelling, and `<c-Element>` /
-  `<c-Component>` use their built-in behavior. HTML closing and void tag
-  identity is ASCII-case-insensitive while authored spelling is preserved.
-  Ordinary HTML attribute case variants now share one identity through
-  dynamic values, spreads, and extension hooks: the last value wins at the
-  first spelling/position, while `class` and `style` merge. Component kwargs,
-  slots, State fields, handlers, and custom event names remain case-sensitive.
-  `<c-element>` consequently accepts case variants of its HTML-style `is` /
-  `c-is` selector; `<c-component>` keeps those input names exact.
-- `<select multiple>` State bindings now read and write every selected option
-  as a `list[str]`, including after morphs and when `multiple` or the binding
-  comes from `c-bind`. Empty selections send `[]`; single `<select>` bindings
-  remain scalar strings. Previously only the first selected option reached
-  State and later selections were lost on the next render.
-- Custom-element State bindings now read and write the element's typed `value`
-  property symmetrically instead of accepting typed values upward but only
-  writing strings downward. Citry waits for late custom-element definitions,
-  applies the current State value only to live elements after upgrade, and
-  reports missing or throwing value APIs without disrupting other bindings.
-  Custom properties named `type` or `checked` no longer trigger native-input
-  coercion, and update events emitted synchronously by a setter cannot feed a
-  Citry write straight back into the server. Non-JSON, absent, and throwing
-  uplinks leave State untouched and do not run the named handler; object
-  uplinks retain their raw identity instead of being redundantly written back
-  as Alpine proxies.
-- A `#c-key` expression that evaluates to `None` now opts out for that render,
-  on both plain elements and component invocations. Citry emits no key, exactly
-  as if the flag were absent. `False`, `0`, and the empty string remain key
-  values, and template flags still cannot arrive through `c-bind`.
-- A `:c-*` State binding now requires `<input>`, `<textarea>`, `<select>`, or a
-  custom element; bindings on value-less elements point at `@c-*` instead.
-  Input directions now cover all standard types: sixteen editable types work
-  both ways, `hidden` is display-only, and file/action inputs work neither way.
-  Unknown or whitespace-padded types are errors instead of silently becoming
-  text, and `.on:` cannot upgrade an unsupported native type. Literal types,
-  Python-resolved dynamic attributes, and Alpine live type changes all enforce
-  the same matrix; invalid live types cancel stale effects, listeners, drafts,
-  and timers and recover cleanly if valid again.
-- Literal Events bindings are now validated and compiled from parser-proven
-  attribute nodes instead of by scanning template text. Binding-shaped text in
-  `<c-raw>`, HTML comments, and native `script` / `style` / `textarea` /
-  `title` bodies stays literal, while real attributes in ordinary bodies,
-  control-flow branches, component bodies, and nested-template attributes all
-  participate. `CitryTemplate.source` retains the authored syntax; validation
-  happens when the template first compiles (normally its first render), and an
-  otherwise-static attribute region collapses back to the static fast path.
-- `<c-element>` State bindings are now checked against the element the `is`
-  attribute names, so `<c-element is="input" :c-query="refresh" />` is
-  accepted. It previously failed to load, asking for an explicit `.on:<event>`
-  that an `<input>` does not need. A computed `is` now defers target-dependent
-  checks until the selected tag and final attributes resolve, while State and
-  handler ownership still validate at template compilation. Dynamic `<c-element>`
-  bindings, including bindings from `c-bind`, now belong to the lexical
-  component that authored the tag instead of the transparent built-in, so they
-  emit the correct class ID and report useful diagnostics.
-- Browser event errors are now read through the callable `$error()` magic.
-  `$error('save')` retains one handler's failure independently, while
-  `$error()` returns the newest retained failure across the component.
-  Existing expressions such as `$error.message` must use `$error()?.message`.
-  The `$component` callback also receives matching `error(name?)` and
-  `loading(name?)` accessors.
-- `actions.Data` always settles its caller in sequence. Passing
-  `wait=False` now raises `ValueError`, and Data actions on the wire omit the
-  `wait` field.
+- Declared `TemplateData`, `JsData`, and `CssData` schemas now return their normalized defaults and coercions to templates and extensions.
+- Inline `template`, `js`, and `css` declarations now remove shared Python indentation; file-backed assets remain byte-exact.
+- Tag identity is now explicit: lowercase `c-`, case-insensitive component suffixes and HTML tag/attribute identity, but case-sensitive component inputs, slots, State fields, handlers, and custom events.
+- Event modifiers follow dispatched-event capabilities: `.prevent` works for cancelable custom names and `.enter`/`.escape` filter any keyed event.
+- `<select multiple>` State values are now `list[str]`, while custom-element State uses the element's typed `value` property in both directions.
+- `:c-*` now accepts editable native controls or custom elements only; unsupported/unknown input types fail explicitly and recover safely after live type changes.
+- Literal Events bindings are compiled from parser-proven attributes, so binding-shaped text in raw/comment/verbatim bodies stays literal.
+- `<c-element>` validates State against its resolved HTML tag and attributes dynamic bindings to the lexical authoring component.
+- `#c-key=None` now omits the key for that render; `False`, `0`, and `""` remain keys.
+- Browser handler state is callable: `$error.message` becomes `$error()?.message`, with matching `error(name?)` and `loading(name?)` callback accessors.
+- `actions.Data` always waits for its caller; `wait=False` now raises `ValueError` and the wire format omits `wait`.
 
 ### Fixed
 
-- `LibraryComponent` authoring now exposes the complete public `Component`
-  type surface in editors and static checkers, including extension declarations
-  and materialized `cache`, `dependencies`, `events`, and `i18n` instances.
-- `citry format` now releases its secured JavaScript and CSS provider
-  executables before removing their private directories, so Windows runs do
-  not leave locked `.citry-biome-*` cache directories behind.
-- Typed `TemplateData` and `Kwargs` fields now retain their authored source and
-  type-aware editor behavior on Python 3.14, including C3-composed schemas and
-  unresolved forward annotations.
-- Direct JavaScript and CSS component literals now accept formatter-added
-  final newlines, quotes, escapes, CRLF, and lone-CR output while preserving
-  their existing Python quote kind. Provider output is streamed into its
-  configured bound, and a timed-out or overproducing provider process tree is
-  terminated without exposing a partial file edit.
-- HTML-element `@c-*` bindings now receive arbitrary non-bubbling native and
-  custom events on the element carrying the binding. Native propagation also
-  gives `.stop` and synchronous `$event.currentTarget` their ordinary DOM
-  behavior, and custom two-way `:c-*` update events use the same listener
-  path.
-- Component `#c-key` now belongs to the component's comment-bounded virtual
-  range instead of being copied onto child root elements. A parent-authored
-  component key and a child's own root element key can coexist without
-  duplicate `data-citry-key` attributes or lost State. Parent morphs match
-  keyed component ranges top-down by class and key, including wrapper moves,
-  multi-root/rootless output, and components without Events. Component
-  self-renders retain the parent-authored range key; `replace` keeps logical
-  State continuity while replacing physical DOM. After keyed matches are
-  reserved, same-class unkeyed direct children now retain positional
-  continuity without scan-ahead.
-- Bare `#c-ignore` is now supported on component tags. It protects the whole
-  comment-delimited component range—including multi-root, text-only, empty,
-  transparent, and mirrored output—without leaking onto a child root element.
-  Citry plans old-side element and range ignore barriers before adopting DOM,
-  State, callbacks, fills, bindings, or dependencies; an ordinary root-element
-  `#c-ignore` still protects only that element subtree. `<c-element>` keeps
-  ordinary-element semantics.
-- Python comment text inside `{{ ... }}` no longer changes where the
-  interpolation ends. Apostrophes and braces after `#` remain comment text,
-  while the host `}}` delimiter stays outside the compiled expression.
+- Component `#c-key` and `#c-ignore` now protect complete comment-delimited component ranges, including multi-root, rootless, transparent, keyed, and moved output.
+- HTML `@c-*` bindings now receive non-bubbling native/custom events on their owning element with correct `.stop` and synchronous `$event.currentTarget`.
+- Python 3.14 retains typed `TemplateData`/`Kwargs` source and C3-composed schema behavior.
+- JavaScript/CSS formatting now handles final newlines, quote/escape variants, CRLF/lone-CR output, bounded streams, timeouts, and Windows cleanup without partial edits.
+- Python comments inside `{{ ... }}` no longer consume apostrophes/braces or the host `}}` delimiter.
+- `LibraryComponent` now exposes the complete public `Component` type surface in editors and static checkers.
 
 ## v0.3.1
 

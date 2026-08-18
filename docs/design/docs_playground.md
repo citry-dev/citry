@@ -601,10 +601,11 @@ normal docs static-file path.
 
 ### Release and rollback automation
 
-The normal Citry Core publish workflow now builds the pinned PyEmscripten
-wheel twice, requires byte-identical normalized output, validates the complete
-native/source/browser artifact inventory, and runs the wheel in the matching
-Pyodide runtime before publication. The build tuple is owned by
+The Citry Core qualification workflow builds the pinned PyEmscripten wheel on
+two separate runners, requires byte-identical normalized output, validates the
+complete native/source/browser artifact inventory, and runs the wheel in the
+matching Pyodide runtime. A later tag run publishes that exact verified bundle.
+The build tuple is owned by
 `packages/py/citry_core/pyodide-build.json`; validators keep its Pyodide and
 Python fields aligned with the deployed playground tuple.
 

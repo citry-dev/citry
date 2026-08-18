@@ -259,14 +259,35 @@ normal dependency on `citry-core` is satisfied by the browser-compatible
 
 ## 3. Release `citry` 0.4.0 beta
 
-- [ ] Confirm that its exact core dependency is `citry-core==1.5.0` and that
+- [x] Confirm that its exact core dependency is `citry-core==1.5.0` and that
   core 1.5.0 is already available from PyPI.
-- [ ] Finalize the 0.4.0 changelog and public beta positioning.
-- [ ] Verify the existing PyPI Trusted Publisher/workflow/environment setup.
-- [ ] Build and inspect the pure-Python wheel and sdist.
+- [x] Finalize the 0.4.0 changelog and public beta positioning.
+- [x] Verify the existing PyPI Trusted Publisher/workflow/environment setup.
+- [x] Build and inspect the pure-Python wheel and sdist.
 - [ ] Tag and publish `citry@0.4.0` from the intended main commit.
 - [ ] Verify a clean install, import, and representative render using only
   public artifacts.
+
+**Pre-release preparation completed on 2026-08-18; no main update, tag, or
+publish was performed.** The Citry publish workflow now uses the same
+qualify-then-promote boundary as Citry Core: a manual run qualifies one closed
+wheel/sdist pair for an exact `main` commit across CPython 3.10-3.14, and the
+tag run may publish only those attested bytes. Manual dispatch cannot publish;
+existing PyPI or GitHub Release files make promotion fail closed.
+
+The local distribution proof rebuilt the sdist outside the checkout, compared
+both wheels byte-for-byte at the installed-package level, installed and
+render-smoked both wheels on Python 3.10 against public `citry-core==1.5.0`, and
+passed Twine metadata checks. That proof found and fixed three genuine 3.10
+incompatibilities: `datetime.UTC`, stdlib-only `tomllib`, and
+`dataclass(weakref_slot=...)`. The final local artifacts were 1,005,387 bytes
+for the wheel and 1,561,149 bytes for the sdist; CI will rebuild and record the
+release candidates after this tree reaches `main`.
+
+External preflight confirmed the `pypi` environment exists, permits
+`citry@*`, and the same Trusted Publishing workflow successfully released
+0.3.0 and 0.3.1. The `github-pages` environment permits both `main` and
+`citry@*`. Recheck these mutable external settings immediately before tagging.
 
 The `citry@0.4.0` tag is coupled to two workflows: Python package publication
 and the versioned docs snapshot/deployment. Before creating it, verify the

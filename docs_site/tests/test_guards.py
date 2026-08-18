@@ -398,6 +398,23 @@ def test_internal_link_flags_broken_and_accepts_valid(tmp_path: Path) -> None:
     assert "/gone/" in errors[0].message
 
 
+def test_link_guards_ignore_fictional_navigation_inside_isolated_ui_previews(tmp_path: Path) -> None:
+    build = tmp_path / "site"
+    preview = build / "ui" / "_previews" / "catalog-card"
+    preview.mkdir(parents=True)
+    preview_body = '<a href="/fictional-library/#missing-section">Demo destination</a>'
+    (preview / "index.html").write_text(_DOC.format(body=preview_body), encoding="utf-8")
+    (build / "index.html").write_text(_DOC.format(body=preview_body), encoding="utf-8")
+    context = _index_ctx(tmp_path, build)
+
+    link_errors = list(internal_link.check(context))
+    anchor_warnings = list(anchor.check(context))
+
+    assert len(link_errors) == 1
+    assert link_errors[0].source == "index.html"
+    assert anchor_warnings == []  # the missing destination belongs to internal_link
+
+
 def test_link_and_anchor_guards_strip_the_deployment_base_path(tmp_path: Path) -> None:
     build = tmp_path / "site"
     build.mkdir()

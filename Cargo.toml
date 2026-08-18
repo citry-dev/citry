@@ -170,6 +170,14 @@ debug = true      # Debug symbols for profiler.
 lto = true        # Link-time optimization.
 codegen-units = 1 # Slower compilation but faster code.
 
+# Published extensions keep the performance-qualified whole-program optimization
+# settings. Debug information is omitted because Maturin strips release wheels.
+[profile.release-wheel]
+inherits = "release"
+debug = false
+lto = true
+codegen-units = 1
+
 [workspace.lints.rust]
 unsafe_code = "warn"
 unreachable_pub = "warn"
