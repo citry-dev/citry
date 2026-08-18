@@ -25,12 +25,10 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           version: "latest"
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: nightly
+      # This script needs the root docs dependencies (notably PyYAML), but does
+      # not render the site or import Citry. Avoid building citry-core entirely.
       - name: Install the locked workspace
-        run: uv sync --locked --all-packages --extra docs
+        run: uv sync --locked --package citry-monorepo --extra docs
 
       # The default token can read the public repositories declared in the
       # manifest. Run inside the locked environment because the loader uses PyYAML.

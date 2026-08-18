@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
 
 from scripts import build_citry_core_pyodide_wheel as pyodide_builder  # noqa: E402
+from scripts import verify_citry_core_distribution as distribution_verifier  # noqa: E402
 from scripts.build_citry_core_pyodide_wheel import (  # noqa: E402
     PyodideBuildError,
     expected_wheel_name,
@@ -76,6 +77,12 @@ def test_expected_release_inventory_is_closed_and_includes_the_browser_wheel() -
     assert sum("cp314t" in name for name in names) == 10
     assert "citry_core-1.5.0-cp310-cp310-manylinux_2_5_i686.manylinux1_i686.whl" in names
     assert not any("manylinux_2_17_i686" in name for name in names)
+
+
+def test_package_version_falls_back_without_python_311_tomllib(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(distribution_verifier, "_tomllib", None)
+
+    assert distribution_verifier.package_version() == "1.5.0"
 
 
 def test_pyodide_build_config_owns_the_exact_wheel_name() -> None:

@@ -1388,6 +1388,27 @@ types, coverage, the custom validators, and a single-environment test pass.
 
 **Why path filters**: Avoids running Python tests when only documentation, scripts, or unrelated files change. Includes `crates/**` because Python packages depend on Rust code via PyO3 bindings.
 
+### Docs workflow Rust cache
+
+The docs workflows build the local `citry_core` extension because the rendered
+site imports Citry. They use the workspace MSRV (`RUSTUP_TOOLCHAIN=1.95.0`), not
+the repository's moving development nightly, and share the
+`docs-citry-core-py314` Rust cache across Ubuntu/CPython 3.14 jobs. The cache
+deliberately omits the GitHub job ID and is saved even if a later docs guard,
+browser audit, link check, or deployment step fails. This prevents an unrelated
+docs failure from throwing away the expensive Cargo build and lets the next
+docs job reuse it. The same jobs use `sccache`'s GitHub Actions backend for
+content-addressed compiler outputs, so concurrently-started cold jobs can share
+crate compilation before any one job has saved its complete Cargo target tree.
+Keep the toolchain, Python ABI, shared key, compiler-cache settings, and cache policy
+aligned across `repo--docs-check.yml`, `repo--docs-deploy.yml`,
+`repo--docs-external-links.yml`, `repo--docs-lighthouse.yml`,
+and `repo--docs-release.yml`; the toolchain validator enforces that contract.
+Those workflows select only the root, Citry, and Citry UI workspace packages,
+because the rendered site does not import the LSP. The people-data refresh does
+not render the site or import Citry at all, so it syncs only the root package and
+the `docs` extra and avoids the Rust build entirely.
+
 ### Testing
 
 - **Rust tests**: Run via `rust--tests.yml` workflow using `cargo test`

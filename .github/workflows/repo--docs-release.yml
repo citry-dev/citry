@@ -48,6 +48,11 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  # Snapshot/root builds need only the workspace MSRV. Keep it fixed so release
+  # docs reuse the same citry-core cache as the ordinary Pages workflows.
+  RUSTUP_TOOLCHAIN: "1.95.0"
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
   # The public URL the built site targets (canonical, Open Graph, sitemap). Keep
   # in step with repo--docs-deploy.yml and the Pages custom domain in settings.
   DOCS_SITE_URL: "https://citry.dev/"
@@ -95,18 +100,27 @@ jobs:
       # Rust is needed because `uv sync` builds the citry_core extension through
       # the maturin backend, and the docs import `citry`, which depends on it.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # pinned 2026-08-18
         with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+
+      - name: Set up shared Rust compiler cache
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: docs-citry-core-py314
+          add-job-id-key: false
+          cache-on-failure: true
 
       # `social-cards` adds Playwright so the per-page OG images render during the
-      # assemble step's root build; `docs` is the build/guard dependency set.
+      # assemble step's root build. The site imports Citry and Citry UI, but not
+      # the LSP workspace package.
       - name: Install the workspace with docs + social-card extras
-        run: uv sync --locked --all-packages --extra docs --extra social-cards
+        run: >-
+          uv sync --locked --package citry-monorepo --package citry
+          --package citry-ui --extra docs --extra social-cards
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6

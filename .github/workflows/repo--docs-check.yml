@@ -54,6 +54,15 @@ on:
 permissions:
   contents: read
 
+env:
+  # Docs only need the workspace MSRV. Override the repository's moving nightly
+  # so all Ubuntu docs jobs can reuse one stable citry-core build cache.
+  RUSTUP_TOOLCHAIN: "1.95.0"
+  # Share compiler objects across simultaneous cold jobs; rust-cache below also
+  # preserves the assembled Cargo target directory between workflow runs.
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
+
 jobs:
   docs-check:
     runs-on: ubuntu-latest
@@ -77,18 +86,29 @@ jobs:
       # Rust is needed because `uv sync` builds the citry_core extension through
       # the maturin backend, and the docs import `citry`, which depends on it.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # pinned 2026-08-18
         with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+
+      - name: Set up shared Rust compiler cache
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          # Both docs jobs compile the same CPython 3.14 extension on Ubuntu.
+          shared-key: docs-citry-core-py314
+          add-job-id-key: false
+          # Preserve the expensive compile even when a later docs guard fails.
+          cache-on-failure: true
 
       # The `docs` extra pulls the guard/build dependencies (lxml, pagefind,
-      # minify-html, ...); social cards are not needed for the gate.
+      # minify-html, ...). The site imports Citry and Citry UI, but not the LSP,
+      # so do not make this docs-only job build every workspace package.
       - name: Install the workspace with the docs extra
-        run: uv sync --locked --all-packages --extra docs
+        run: >-
+          uv sync --locked --package citry-monorepo --package citry
+          --package citry-ui --extra docs
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
@@ -141,16 +161,24 @@ jobs:
           python-version: "3.14"
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # pinned 2026-08-18
         with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+
+      - name: Set up shared Rust compiler cache
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: docs-citry-core-py314
+          add-job-id-key: false
+          cache-on-failure: true
 
       - name: Install the workspace with the docs extra
-        run: uv sync --locked --all-packages --extra docs
+        run: >-
+          uv sync --locked --package citry-monorepo --package citry
+          --package citry-ui --extra docs
 
       # The e2e group belongs to the citry workspace package. Install it
       # additively so uv retains the root project's docs extra from above.

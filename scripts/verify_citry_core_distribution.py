@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,13 @@ from itertools import product
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Final
 
-import tomllib
+_tomllib: Any
+try:
+    import tomllib as _stdlib_tomllib
+except ModuleNotFoundError:  # Python 3.10 wheel-smoke jobs
+    _tomllib = None
+else:
+    _tomllib = _stdlib_tomllib
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -50,6 +57,13 @@ class DistributionVerificationError(RuntimeError):
     """A release artifact is missing, unexpected, malformed, or cannot run."""
 
 
+def _loads_toml(payload: str) -> dict[str, Any]:
+    """Parse TOML for the inventory/sdist gates, which run on Python 3.11+."""
+    if _tomllib is None:
+        raise DistributionVerificationError("TOML artifact checks require Python 3.11 or newer")
+    return _tomllib.loads(payload)
+
+
 def sha256_bytes(payload: bytes) -> str:
     """Return a URL-safe RECORD digest without padding."""
     return base64.urlsafe_b64encode(hashlib.sha256(payload).digest()).rstrip(b"=").decode("ascii")
@@ -62,8 +76,20 @@ def hex_sha256(payload: bytes) -> str:
 
 def package_version() -> str:
     """Read the release version from the package metadata."""
-    project = tomllib.loads((PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]
-    version: Any = project.get("version")
+    content = (PACKAGE_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    if _tomllib is not None:
+        version: Any = _tomllib.loads(content)["project"].get("version")
+    else:
+        project = re.search(r"(?ms)^\[project\][ \t]*\n(?P<body>.*?)(?=^\[|\Z)", content)
+        version_line = (
+            None
+            if project is None
+            else re.search(
+                r"""(?m)^version\s*=\s*["'](?P<version>[^"']+)["']\s*(?:#.*)?$""",
+                project.group("body"),
+            )
+        )
+        version = None if version_line is None else version_line.group("version")
     if not isinstance(version, str) or not version:
         raise DistributionVerificationError("citry-core has no project version")
     return version
@@ -327,9 +353,9 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         if name == "PKG-INFO":
             continue
         if name == "pyproject.toml":
-            expected_manifest = tomllib.loads((PACKAGE_ROOT / name).read_text(encoding="utf-8"))
+            expected_manifest = _loads_toml((PACKAGE_ROOT / name).read_text(encoding="utf-8"))
             expected_manifest["tool"]["maturin"]["manifest-path"] = "crates/citry_core_py/Cargo.toml"
-            if tomllib.loads(payload.decode("utf-8")) != expected_manifest:
+            if _loads_toml(payload.decode("utf-8")) != expected_manifest:
                 raise DistributionVerificationError(f"{path.name} contains an unexpected generated pyproject.toml")
             continue
         if name in {"LICENSE", "README.md"} or name.startswith("citry_core/"):
@@ -339,8 +365,8 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
         if not source_path.is_file():
             raise DistributionVerificationError(f"{path.name} contains unchecked source member {name!r}")
         if name.endswith("Cargo.toml"):
-            expected_manifest = tomllib.loads(source_path.read_text(encoding="utf-8"))
-            actual_manifest = tomllib.loads(payload.decode("utf-8"))
+            expected_manifest = _loads_toml(source_path.read_text(encoding="utf-8"))
+            actual_manifest = _loads_toml(payload.decode("utf-8"))
             expected_package = expected_manifest.get("package", {})
             actual_package = actual_manifest.get("package", {})
             if (
@@ -355,13 +381,13 @@ def verify_sdist(path: Path, *, version: str) -> dict[str, Any]:
                 raise DistributionVerificationError(f"{path.name} contains changed Cargo metadata in {name}")
         elif payload != source_path.read_bytes():
             raise DistributionVerificationError(f"{path.name} contains changed source bytes in {name}")
-    workspace = tomllib.loads(relative["Cargo.toml"].decode("utf-8"))
+    workspace = _loads_toml(relative["Cargo.toml"].decode("utf-8"))
     if workspace.get("workspace", {}).get("package", {}).get("rust-version") != "1.95":
         raise DistributionVerificationError(f"{path.name} does not declare the Rust 1.95 minimum")
     for crate in required:
         if not crate.startswith("crates/") or not crate.endswith("/Cargo.toml"):
             continue
-        manifest = tomllib.loads(relative[crate].decode("utf-8"))
+        manifest = _loads_toml(relative[crate].decode("utf-8"))
         if manifest.get("package", {}).get("rust-version") != {"workspace": True}:
             raise DistributionVerificationError(f"{path.name} does not carry MSRV inheritance in {crate}")
     if any(

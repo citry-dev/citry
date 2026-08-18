@@ -33,6 +33,13 @@ on:
 permissions:
   contents: read
 
+env:
+  # Lighthouse only needs the workspace MSRV. Keep the compiler stable so its
+  # citry-core build can reuse the common Ubuntu docs cache.
+  RUSTUP_TOOLCHAIN: "1.95.0"
+  SCCACHE_GHA_ENABLED: "true"
+  RUSTC_WRAPPER: "sccache"
+
 jobs:
   lighthouse:
     runs-on: ubuntu-latest
@@ -59,18 +66,26 @@ jobs:
       # Rust is needed because `uv sync` builds the citry_core extension through
       # the maturin backend, and the docs import `citry`, which depends on it.
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # pinned 2026-08-18
         with:
-          # NOTE: keep in step with rust-toolchain.toml
-          toolchain: nightly
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+
+      - name: Set up shared Rust compiler cache
+        uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
 
       - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          shared-key: docs-citry-core-py314
+          add-job-id-key: false
+          cache-on-failure: true
 
       # The `docs` extra pulls the build dependencies (lxml, pagefind,
-      # minify-html, ...); social cards are not needed for this audit.
+      # minify-html, ...). The site imports Citry and Citry UI, but not the LSP.
       - name: Install the workspace with the docs extra
-        run: uv sync --locked --all-packages --extra docs
+        run: >-
+          uv sync --locked --package citry-monorepo --package citry
+          --package citry-ui --extra docs
 
       # Build the static site into a served tree lhci can serve. Search and
       # social cards are skipped: search is lazy-loaded (it is not fetched on

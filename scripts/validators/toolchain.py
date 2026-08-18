@@ -17,6 +17,16 @@ _ROOT_CARGO = REPO_ROOT / "Cargo.toml"
 _PYODIDE_CONFIG = REPO_ROOT / "packages" / "py" / "citry_core" / "pyodide-build.json"
 _CORE_PYPROJECT = REPO_ROOT / "packages" / "py" / "citry_core" / "pyproject.toml"
 _PLAYGROUND_RUNTIME = REPO_ROOT / "docs_site" / "static" / "playground" / "runtime.json"
+_DOCS_RUST_WORKFLOWS = tuple(
+    REPO_ROOT / ".github" / "workflows" / name
+    for name in (
+        "repo--docs-check.yml",
+        "repo--docs-deploy.yml",
+        "repo--docs-external-links.yml",
+        "repo--docs-lighthouse.yml",
+        "repo--docs-release.yml",
+    )
+)
 _CORE_CRATES = (
     "citry_core_py",
     "citry_html_transform",
@@ -29,6 +39,8 @@ _MATURIN_ACTION = "PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b"
 _RUST_ACTION = "dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772"
 _PYPI_ACTION = "pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33"
 _UV_ACTION = "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78"
+_SCCACHE_ACTION = "mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad"
+_RUST_CACHE_ACTION = "Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6"
 
 
 def check() -> list[str]:
@@ -40,6 +52,7 @@ def check() -> list[str]:
         _PYODIDE_CONFIG,
         _CORE_PYPROJECT,
         _PLAYGROUND_RUNTIME,
+        *_DOCS_RUST_WORKFLOWS,
     )
     missing = [f"{path} not found" for path in required if not path.exists()]
     if missing:
@@ -73,6 +86,34 @@ def check() -> list[str]:
         manifest = tomllib.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("package", {}).get("rust-version") != {"workspace": True}:
             errors.append(f"{manifest_path.relative_to(REPO_ROOT)} must inherit workspace rust-version")
+
+    docs_toolchain = f"{minimum}.0"
+    docs_cache_settings = (
+        "shared-key: docs-citry-core-py314",
+        "add-job-id-key: false",
+        "cache-on-failure: true",
+    )
+    for workflow_path in _DOCS_RUST_WORKFLOWS:
+        workflow = workflow_path.read_text(encoding="utf-8")
+        label = workflow_path.relative_to(REPO_ROOT)
+        if not re.search(rf'^  RUSTUP_TOOLCHAIN: ["\']{re.escape(docs_toolchain)}["\']$', workflow, re.MULTILINE):
+            errors.append(f"{label} must pin docs Rust to the workspace MSRV {docs_toolchain}")
+        rust_actions = len(re.findall(r"uses:\s+dtolnay/rust-toolchain@", workflow))
+        if workflow.count(f"uses: {_RUST_ACTION}") != rust_actions:
+            errors.append(f"every Rust setup in {label} must use the reviewed immutable action commit")
+        if workflow.count("toolchain: ${{ env.RUSTUP_TOOLCHAIN }}") != rust_actions:
+            errors.append(f"every Rust setup in {label} must select the pinned docs toolchain")
+        if workflow.count(f"uses: {_SCCACHE_ACTION}") != rust_actions:
+            errors.append(f"every Rust setup in {label} must use the reviewed immutable sccache action")
+        for setting in ('SCCACHE_GHA_ENABLED: "true"', 'RUSTC_WRAPPER: "sccache"'):
+            if workflow.count(setting) != 1:
+                errors.append(f"{label} must set {setting!r} once at workflow scope")
+        rust_caches = workflow.count(f"uses: {_RUST_CACHE_ACTION}")
+        if rust_caches != rust_actions:
+            errors.append(f"every Rust setup in {label} must use the reviewed immutable Rust cache action")
+        for setting in docs_cache_settings:
+            if workflow.count(setting) != rust_caches:
+                errors.append(f"every Rust cache in {label} must set {setting!r}")
 
     pyodide: dict[str, object] = json.loads(_PYODIDE_CONFIG.read_text(encoding="utf-8"))
     if pyodide.get("rust") != f"{minimum}.0":
