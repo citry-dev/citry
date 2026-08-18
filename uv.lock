@@ -264,7 +264,7 @@ wheels = [
 
 [[package]]
 name = "citry"
-version = "0.3.2"
+version = "0.4.0"
 source = { editable = "packages/py/citry" }
 dependencies = [
     { name = "citry-core" },
@@ -342,7 +342,7 @@ e2e = [
 
 [[package]]
 name = "citry-core"
-version = "1.6.0"
+version = "1.5.0"
 source = { editable = "packages/py/citry_core" }
 
 [package.dev-dependencies]
@@ -444,7 +444,7 @@ dev = [
 
 [[package]]
 name = "citry-ui"
-version = "0.0.1"
+version = "0.1.0"
 source = { editable = "packages/py/citry_ui" }
 dependencies = [
     { name = "citry" },
@@ -1674,7 +1674,7 @@ wheels = [
 
 [[package]]
 name = "pygments-citry"
-version = "0.1.2"
+version = "0.2.0"
 source = { editable = "packages/py/pygments_citry" }
 dependencies = [
     { name = "fluent-pygments" },

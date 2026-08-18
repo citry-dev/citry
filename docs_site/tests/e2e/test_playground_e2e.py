@@ -164,7 +164,7 @@ def test_local_authoring_runtime_runs_workspace_citry_ui(page: Any, local_docs_s
 
     _run_and_wait(page)
     _run_and_wait(page)
-    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.3.1 · Citry UI 0.0.1")
+    expect(page.locator("#citry-playground-runtime")).to_have_text("Citry 0.4.0 · Citry UI 0.1.0")
 
     preview = page.frame_locator("#citry-playground-preview")
     tabs = preview.locator('[role="tab"]')

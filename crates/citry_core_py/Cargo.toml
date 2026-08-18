@@ -3,6 +3,12 @@ name = "citry_core_py"
 description = "Singular Python API for Rust code used by Citry"
 version = "1.1.0"
 edition = "2024"
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [lib]

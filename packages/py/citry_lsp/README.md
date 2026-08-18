@@ -29,7 +29,7 @@ non-linear Python literal text, stale versions, and unproven source ranges
 return no projection.
 
 Install it in the same Python environment as the Citry project for registry
-knowledge. The first release requires Citry 0.3.2 or newer in the 0.3 series:
+knowledge. The first release requires Citry 0.4.0 or newer in the 0.4 series:
 
 ```console
 python -m pip install citry-lsp

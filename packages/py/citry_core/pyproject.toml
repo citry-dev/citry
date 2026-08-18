@@ -1,10 +1,10 @@
 [build-system]
-requires = ["maturin>=1.8,<2.0"]
+requires = ["maturin==1.14.1"]
 build-backend = "maturin"
 
 [project]
 name = "citry_core"
-version = "1.6.0"
+version = "1.5.0"
 requires-python = ">=3.10, <4.0"
 description = "Rust-powered core for Citry, a fast, simple, and smart frontend framework for Python"
 keywords = [
@@ -29,7 +29,8 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = []
 
 [dependency-groups]
@@ -45,6 +46,12 @@ Donate = "https://github.com/sponsors/JuroOravec"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+# Release and source builds must use the checked workspace lockfile.
+locked = true
+# Release artifacts omit the workspace's profiler debug symbols.
+strip = true
+# Never package interpreter caches from a developer's working tree.
+exclude = ["citry_core/**/__pycache__/**", "citry_core/**/*.pyc", "citry_core/**/*.pyo"]
 # The Rust crate these bindings build from.
 manifest-path = "../../../crates/citry_core_py/Cargo.toml"
 # module-name sets `<python_package>.<rust_module>` for the compiled extension.

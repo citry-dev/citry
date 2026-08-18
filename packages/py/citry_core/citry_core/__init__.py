@@ -4,7 +4,8 @@
 # However, due to the complexity of the project:
 # - having multiple crates
 # - Python-side code for some crates (like template parser or safe eval)
-# - And splitting the Python API into submodules (html_transform, template_parser, safe_eval)
+# - And splitting the Python API into submodules (html_transform, i18n,
+#   safe_eval, template_formatter, template_parser)
 #
 # Instead, we manually manage the Python-side API for each crate.
 #
@@ -16,8 +17,10 @@
 # That way, the API for each crate is neatly separated:
 # ```python
 # from citry_core.html_transform import transform_html
+# from citry_core.i18n import CatalogCompiler
 # from citry_core.safe_eval import safe_eval
-# from citry_core.template_parser import parse_tag
+# from citry_core.template_formatter import format_template
+# from citry_core.template_parser import parse_template
 # ```
 #
 # ---

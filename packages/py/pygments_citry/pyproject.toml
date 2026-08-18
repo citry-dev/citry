@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pygments-citry"
-version = "0.1.2"
+version = "0.2.0"
 requires-python = ">=3.10, <4.0"
 description = "Pygments lexer for Citry components with embedded HTML, JavaScript, CSS, and Fluent"
 readme = "README.md"

@@ -3,6 +3,12 @@ name = "citry_template_parser"
 description = "Parse Citry's Vue-like templates into an AST and compile them to various languages"
 version = "1.0.0"
 edition = "2021"
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
 python_safe_eval = { path = "../python_safe_eval" }

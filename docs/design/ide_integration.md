@@ -7,8 +7,8 @@ VS Code highlighting, `citry check` provides parser-grade batch validation
 with an explicitly bounded static fallback, and the companion language server
 plus VS Code client provide the implemented editor intelligence. The VS Code
 extension and `citry-lsp` 0.1.0 remain release-prepared rather than published
-until they can be cut from a clean release commit. `pygments-citry` 0.1.1 is
-published. The original design is the
+until they can be cut from a clean release commit. `pygments-citry` 0.1.2 is
+published, with 0.2.0 release-prepared. The original design is the
 synthesis of a research and design-panel process: five recon reports,
 three competing design drafts, and two adversarial judge verdicts, all in
 [`ide_research/`](ide_research/README.md) and all dated 2026-07-07. Both
@@ -115,7 +115,7 @@ the inline form. So the defining constraint versus Vue or Svelte is that an
 editor tool must first locate embedded regions in a `.py` file the Python
 tooling already owns.
 
-**Existing assets.** `pygments-citry` 0.1.1 is published on PyPI
+**Existing assets.** `pygments-citry` 0.1.2 is published on PyPI
 (`packages/py/pygments_citry/`): two Pygments lexers
 whose embedded-region detection is useful highlighting prior art and whose
 behavior is updated through normal package releases. The `citry` console script
@@ -255,9 +255,9 @@ server reuse the shipped runtime catalog, plus two small engine changes. No new
 binaries are distributed in the committed scope.
 
 ```
-packages/py/pygments_citry/        0.1.1 published                     (Python)
+packages/py/pygments_citry/        0.1.2 published; 0.2.0 prepared    (Python)
 packages/editors/syntax-fixtures/  exists; portable conformance data  (JSON)
-packages/editors/vscode/           0.0.1 release-prepared              (JSON at v0; TypeScript with LSP)
+packages/editors/vscode/           0.1.0 release-prepared              (JSON at v0; TypeScript with LSP)
 packages/py/citry/                 existing `citry inspect`;          (Python, reuses citry_core)
                                      new `citry check`
 package home decided before v1     new: pygls server, `citry-lsp`     (Python, reuses citry_core + citry)
@@ -510,7 +510,7 @@ Two hard behavior rules, adopted as grafts and stated up front:
 
 Implemented 2026-07-30 and extended within formatter protocol v1 on 2026-08-04
 and library registry targets on 2026-08-08.
-The server supports the Citry 0.3.x and component-catalog v1 contracts and
+The server supports the Citry 0.4.x and component-catalog v1 contracts and
 rejects an incompatible client protocol during initialize. A one-shot worker
 subprocess imports the configured target, captures Python and file-descriptor
 output, and returns only portable `TemplateAnalysis` and `ComponentCatalog`
@@ -780,7 +780,7 @@ implementation plan in
   The server declares its supported Citry, catalog, and protocol versions; the
   skew-refusal behavior in section 3.4 handles versions outside that range.
 - **VS Code extension**: one **universal** vsix (it bundles no binaries),
-  prepared locally at v0.0.1 and, when released, published to both the
+  prepared locally at v0.1.0 and, when released, published to both the
   Microsoft Marketplace and Open VSX. Open VSX is not
   optional: the fork audience (Cursor, Windsurf, VSCodium) defaults to it.
   No download-on-activation, no platform targets, no signing pipeline; this
@@ -1878,9 +1878,9 @@ degradation contract in section 3.4.1.
     deliberately. Editors without Pylance need no setting.
 
 Step 5 selected the companion `citry_lsp` distribution. It exposes the
-`citry-lsp` console command, declares Citry 0.3.2 through 0.3.x, catalog v1,
+`citry-lsp` console command, declares Citry 0.4.0 through 0.4.x, catalog v1,
 and client protocol v1 support, and has project-environment plus isolated
-syntax-only install coverage. Citry 0.3.2 supplies the first published
+syntax-only install coverage. Citry 0.4.0 supplies the first published
 portable analysis and coordinate contracts, so it must reach PyPI before
 `citry-lsp` 0.1.0 can be published.
 

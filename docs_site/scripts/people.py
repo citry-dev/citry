@@ -13,9 +13,9 @@ inspired by @tiangolo's FastAPI People script. It uses the docs environment's
 PyYAML dependency and reads ``GITHUB_TOKEN`` (any token that can read public
 repositories) from the environment for the GitHub GraphQL API.
 
-Run it directly to refresh the file:
+Run it as a module from the repository root to refresh the file:
 
-    GITHUB_TOKEN=... python docs_site/scripts/people.py
+    GITHUB_TOKEN=... uv run --no-sync python -m docs_site.scripts.people
 """
 
 from __future__ import annotations

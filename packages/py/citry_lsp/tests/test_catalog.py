@@ -66,7 +66,7 @@ def _component(*, name: str = "card", aliases: list[str] | None = None) -> dict[
 def _catalog(*components: object) -> dict[str, object]:
     return {
         "schema_version": 1,
-        "citry_version": "0.3.2",
+        "citry_version": "0.4.0",
         "engine_id": "tests.engine",
         "extension_versions": {},
         "components": list(components),

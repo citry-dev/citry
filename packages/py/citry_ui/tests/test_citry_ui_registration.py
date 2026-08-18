@@ -122,7 +122,7 @@ print(citry_ui.__version__)
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, check=False)
 
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "0.0.1"
+    assert result.stdout.strip() == "0.1.0"
 
 
 def test_package_exposes_one_explicit_ordered_component_library():
@@ -619,8 +619,8 @@ def test_distribution_metadata_and_resources_use_only_the_citry_ui_namespace():
 
     assert requirements is not None
     citry_requirement = next(requirement for requirement in requirements if requirement.startswith("citry"))
-    assert ">=0.3.2" in citry_requirement
-    assert "<0.4.0" in citry_requirement
+    assert ">=0.4.0" in citry_requirement
+    assert "<0.5.0" in citry_requirement
     assert all(not requirement.startswith("typing-extensions") for requirement in requirements)
     assert resources.joinpath("py.typed").is_file()
     assert resources.joinpath("components/caccordion/caccordion.py").is_file()

@@ -601,15 +601,21 @@ normal docs static-file path.
 
 ### Release and rollback automation
 
-Potential release work includes:
+The normal Citry Core publish workflow now builds the pinned PyEmscripten
+wheel twice, requires byte-identical normalized output, validates the complete
+native/source/browser artifact inventory, and runs the wheel in the matching
+Pyodide runtime before publication. The build tuple is owned by
+`packages/py/citry_core/pyodide-build.json`; validators keep its Pyodide and
+Python fields aligned with the deployed playground tuple.
 
-- permanent PyEmscripten wheel jobs in the normal Citry Core release workflow;
-- tuple compatibility checks for Python, Pyodide, Emscripten, Citry, and Citry
-  Core;
-- immutable runtime manifests and retained rollback generations;
-- deployment ordering checks and production smoke tests;
-- repository and PyPI environment policies beyond the current sole-developer
-  setup.
+Work that still belongs to release or operations includes:
+
+- promote immutable Citry and Citry Core URLs as one compatible playground
+  tuple after both artifacts are public;
+- retain runtime generations and a content-addressed rollback manifest;
+- add deployment-order checks and production smoke tests;
+- add repository and PyPI environment policies beyond the current
+  sole-developer setup.
 
 ### Events transport extensions
 

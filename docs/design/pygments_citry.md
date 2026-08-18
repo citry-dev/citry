@@ -1,14 +1,15 @@
 # Design: `pygments-citry` (Pygments lexer for Citry components) and docs-site item 1.5
 
-**Status (2026-07-03): built (both phases); `pygments-citry` not yet published.**
+**Status (2026-08-17): both phases are built; `pygments-citry` 0.1.2 is
+published and 0.2.0 is release-prepared.**
 This document covers a releasable Python package, `pygments-citry`, that teaches
 Pygments how to syntax-highlight a Citry component: the Python class plus the
 HTML, JS, and CSS embedded in its `template` / `js` / `css` string attributes.
 It also covers the docs-site wiring (migration item 1.5) that loads the lexer
 and switches Citry component code fences from ` ```python ` to ` ```citry `.
-Phase 1 (the package) and Phase 2 (the docs-site wiring) are both implemented
-and green locally; the remaining step is to configure the PyPI publisher and
-tag `pygments-citry@0.1.0`.
+Phase 1 (the package) and Phase 2 (the docs-site wiring) are both implemented.
+The first-release steps retained below are implementation history; the next
+package tag is `pygments-citry@0.2.0`.
 
 For operating rules see [`/CLAUDE.md`](../../CLAUDE.md). For the docs-site port
 this feeds into, see [`docs_site.md`](docs_site.md) (Phase 8). The upstream

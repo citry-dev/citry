@@ -403,10 +403,12 @@ function activateComposer(root) {
   chooseDrop(selectedDrop);
   root.dataset.composerReady = "";
 
-  listen(window, "pagehide", () => {
+  listen(window, "pagehide", (event) => {
     clearDrag();
-    abort.abort();
-  }, { once: true });
+    // A back-forward-cache restore reuses this document without rerunning the module.
+    // Keep its controller alive so the restored composer remains interactive.
+    if (!event.persisted) abort.abort();
+  });
 }
 
 for (const root of document.querySelectorAll("[data-landing-composer]")) {

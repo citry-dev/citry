@@ -2,36 +2,29 @@
 
 -----
 
-Codex tabs (OLD):
-Harden | Docs | UI Lib | V1 | Protocols
-
-Codex tabs (NEW):
-UI Lib | Docs content | Alpine trigger fix | IDE
-
------
-
 We have both the editor-agnostic LSP and a working VS Code extension. The remaining major gap is PyCharm validation and packaging.
 
 ## Installation state
 
 Nothing else needs to be added to the LSP runtime package. Installing citry-lsp installs:
 
-- citry>=0.3.2,<0.4
+- citry[analysis-ty]>=0.4.0,<0.5
 - pygls==2.1.1
 - The citry-lsp console command
 
 pytest and pytest-lsp are development dependencies only.
 
-Neither Citry 0.3.2 nor citry-lsp 0.1.0 has been published yet. Until then, test from this checkout:
+Neither Citry 0.4.0 nor citry-lsp 0.1.0 has been published yet. Until then, test from this checkout:
 
 cd /Users/mac/repos/citry
 uv sync --all-packages
 
 The release order must be:
 
-1. Publish Citry 0.3.2.
-2. Publish citry-lsp 0.1.0.
-3. Publish the VS Code extension when ready.
+1. Publish citry-core 1.5.0.
+2. Publish Citry 0.4.0.
+3. Publish citry-lsp 0.1.0.
+4. Publish the VS Code extension when ready.
 
 ## Testing the VS Code integration
 
@@ -51,7 +44,7 @@ In VS Code, select the repository’s .venv Python interpreter. If automatic int
 
 Then verify:
 
-- Run Citry: Show Language Server Status. It should report registry, the selected interpreter, your app spec, Citry 0.3.2, and protocol 2.
+- Run Citry: Show Language Server Status. It should report registry, the selected interpreter, your app spec, Citry 0.4.0, and protocol 1.
 - Open a component’s Python file. Its template, js, and css multiline strings should be highlighted.
 - Introduce an unmatched or malformed tag and check for a precise diagnostic.
 - Type <c- and check component completion.

@@ -54,7 +54,7 @@ Citry is still young and there is a lot to build. Getting started is easy.
 
 2. [Set up your environment](/community/development/#getting-set-up).
 
-3. Make your change, add or update tests, and [run codebase checks](http://127.0.0.1:8001/community/development/#running-the-checks)
+3. Make your change, add or update tests, and [run codebase checks](/community/development/#running-the-checks)
 
 4. Open a pull request.
 

@@ -5,6 +5,12 @@ description = "Safe Python expression eval"
 # NOTE: To use this edition, run
 #       `rustup toolchain install nightly && rustup override set nightly`
 edition = "2024"
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
 
 [dependencies]
 ruff_python_parser = { workspace = true }

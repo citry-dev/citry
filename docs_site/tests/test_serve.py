@@ -231,9 +231,9 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
     local_dir = tmp_path / "local-runtime"
     local_wheels = local_dir / "local"
     local_wheels.mkdir(parents=True)
-    citry_wheel = local_wheels / "citry-0.3.2-py3-none-any.whl"
+    citry_wheel = local_wheels / "citry-0.4.0-py3-none-any.whl"
     citry_wheel.write_bytes(b"local Citry wheel")
-    ui_wheel = local_wheels / "citry_ui-0.0.1-py3-none-any.whl"
+    ui_wheel = local_wheels / "citry_ui-0.1.0-py3-none-any.whl"
     ui_wheel.write_bytes(b"local Citry UI wheel")
     (local_dir / "runtime.json").write_text(
         json.dumps(
@@ -241,16 +241,16 @@ def test_serve_uses_local_playground_runtime_and_allows_citry_ui(tmp_path: Path)
                 "source": "local",
                 "schema_version": 1,
                 "protocol_version": 1,
-                "citry": {"version": "0.3.2", "core_version": "1.4.0", "ui_version": "0.0.1"},
+                "citry": {"version": "0.4.0", "core_version": "1.5.0", "ui_version": "0.1.0"},
                 "packages": [
                     {
                         "name": "citry",
-                        "version": "0.3.2",
+                        "version": "0.4.0",
                         "url": f"./local/{citry_wheel.name}",
                     },
                     {
                         "name": "citry-ui",
-                        "version": "0.0.1",
+                        "version": "0.1.0",
                         "url": f"./local/{ui_wheel.name}",
                     },
                 ],
@@ -307,7 +307,7 @@ def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch)
         return LocalPlaygroundRuntime(
             directory=output_dir,
             manifest_path=output_dir / "runtime.json",
-            wheel_names=frozenset({"citry_ui-0.0.1-py3-none-any.whl"}),
+            wheel_names=frozenset({"citry_ui-0.1.0-py3-none-any.whl"}),
         )
 
     monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
@@ -319,7 +319,7 @@ def test_create_local_app_keeps_the_generated_wheel_directory_alive(monkeypatch)
         LocalPlaygroundRuntime(
             directory=built[0],
             manifest_path=built[0] / "runtime.json",
-            wheel_names=frozenset({"citry_ui-0.0.1-py3-none-any.whl"}),
+            wheel_names=frozenset({"citry_ui-0.1.0-py3-none-any.whl"}),
         )
     ]
     # The wheels are served from this directory for as long as the app lives.
@@ -336,7 +336,7 @@ def test_create_local_app_serves_the_committed_runtime_when_the_local_wheel_is_r
 
     def fake_build(*, repo_root: Path, output_dir: Path) -> LocalPlaygroundRuntime:  # noqa: ARG001
         attempted.append(output_dir)
-        raise LocalPlaygroundRuntimeError("local Citry UI 0.0.1 does not accept the playground's Citry 0.3.1")
+        raise LocalPlaygroundRuntimeError("local Citry UI 0.1.0 does not accept the playground's Citry 0.3.1")
 
     monkeypatch.setattr(serve, "build_local_playground_runtime", fake_build)
     seen = _record_create_app(monkeypatch)

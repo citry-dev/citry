@@ -6,7 +6,7 @@ Its current experimental catalog is defined by the package's ordered
 partial list in this README. The package remains pre-release while its
 repository and human qualification records are completed.
 
-The package develops against the `citry>=0.3.2,<0.4.0` source line and
+The package develops against the `citry>=0.4.0,<0.5.0` source line and
 `citry_core 1.5.0`. Those releases contain the framework contracts used by the
 current workspace but are not yet available as the released-artifact floor.
 The current package remains experimental because its dependency artifacts,

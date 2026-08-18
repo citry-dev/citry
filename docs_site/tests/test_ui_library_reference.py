@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
+from lxml import html as lxml_html
 
 from docs_site._internal.config_loading import DocsConfigError
+from docs_site._internal.pipeline import render_page
 from docs_site._internal.project import load_docs_project
 from docs_site._internal.ui_library_reference import (
     compose_ui_library_source,
@@ -156,8 +159,8 @@ def test_structured_reference_renders_the_fixed_api_shape(tmp_path: Path) -> Non
     assert "#### CWidget client inputs" in rendered
     assert "| Input | Type | Omitted behavior | Effect |" in rendered
     assert "tabs" not in rendered
-    assert "<code>quiet &#124; loud</code>" in rendered
-    assert "<code>color &#124; currentColor</code>" in rendered
+    assert "`quiet | loud`" in rendered
+    assert "`color | currentColor`" in rendered
     assert r"\|" not in rendered
     assert "ui-api-table--fit-column-1" in rendered
     assert "ui-api-table--width-column-2" in rendered
@@ -169,6 +172,52 @@ def test_structured_reference_renders_the_fixed_api_shape(tmp_path: Path) -> Non
     assert '<span id="widget-translation-cwidget-translations-label"></span>' in rendered
     assert "| Key | Purpose | Variables | Override | Browser updates |" in rendered
     assert rendered.count("### Methods\n\n-\n") == 1
+
+
+@pytest.mark.parametrize(
+    "default",
+    [
+        "light-dark(#ffffff, #101828)",
+        "light | #101828",
+        "`literal` #101828",
+        "`literal` | #101828",
+    ],
+)
+def test_css_defaults_stay_code_when_magiclink_is_enabled(tmp_path: Path, default: str) -> None:
+    source = _valid_reference().replace("default: currentColor", f"default: '{default}'", 1)
+    reference = load_ui_api_reference(_write_reference(tmp_path, source), expected_family="widget")
+
+    markdown_source = render_ui_api_reference(reference)
+    rendered = render_page(markdown_source, wrap_in_layout=False).html
+
+    assert f"<code>{default}</code>" in rendered
+    assert "issues/101828" not in rendered
+
+
+@pytest.mark.parametrize(
+    "default",
+    [
+        " #101828 ",
+        "#101828\n",
+        " </code><script>alert(1)</script> ",
+    ],
+)
+def test_css_defaults_preserve_fallback_values(tmp_path: Path, default: str) -> None:
+    source = _valid_reference().replace(
+        "default: currentColor",
+        f"default: {json.dumps(default)}",
+        1,
+    )
+    reference = load_ui_api_reference(_write_reference(tmp_path, source), expected_family="widget")
+
+    markdown_source = render_ui_api_reference(reference)
+    rendered = render_page(markdown_source, wrap_in_layout=False).html
+    document = lxml_html.fragment_fromstring(rendered, create_parent="div")
+    defaults = [element for element in document.xpath("//code") if element.text_content() == default]
+
+    assert len(defaults) == 1
+    assert "issues/101828" not in rendered
+    assert not document.xpath("//script")
 
 
 def test_structured_reference_rejects_unknown_fields(tmp_path: Path) -> None:

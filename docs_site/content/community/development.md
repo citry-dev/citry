@@ -72,7 +72,7 @@ pnpm install
 
 This installs the dependencies from `pnpm-lock.yaml`.
 
-[`npm`](http://npmjs.com/){: target="_blank" rel="noopener"} is not a substitute: `pnpm` is used also for managing monorepo dependencies (`pnpm-workspace.yaml`).
+[`npm`](https://docs.npmjs.com/about-npm/){: target="_blank" rel="noopener"} is not a substitute: `pnpm` is used also for managing monorepo dependencies (`pnpm-workspace.yaml`).
 
 
 ## Confirm your setup works

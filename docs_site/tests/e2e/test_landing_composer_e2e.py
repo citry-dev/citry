@@ -256,6 +256,42 @@ def test_landing_showcase_is_simple_nestable_and_visibly_draggable(
     assert page_errors == []
 
 
+def test_cached_restore_keeps_landing_composer_interactive(page: Any, docs_site_url: str) -> None:
+    page.goto(docs_site_url + "/", wait_until="networkidle")
+
+    composer = page.locator("[data-landing-composer]")
+    page.locator("[data-landing-composer][data-composer-ready]").wait_for()
+    card = composer.locator('[data-composer-palette-drag="card"]')
+    card.scroll_into_view_if_needed()
+    for _ in range(2):
+        start = card.bounding_box()
+        assert start
+        page.mouse.move(start["x"] + start["width"] / 2, start["y"] + start["height"] / 2)
+        page.mouse.down()
+        page.mouse.move(start["x"] + start["width"] / 2 + 12, start["y"] + start["height"] / 2 + 8)
+        assert composer.get_attribute("data-composer-dragging") == "content"
+
+        page.evaluate("""() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true }))""")
+        assert composer.get_attribute("data-composer-dragging") is None
+        assert page.locator("body > .landing-composer__drag-ghost").count() == 0
+        page.mouse.up()
+        page.evaluate("""() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))""")
+
+    start = card.bounding_box()
+    assert start
+    page.mouse.move(start["x"] + start["width"] / 2, start["y"] + start["height"] / 2)
+    page.mouse.down()
+    page.mouse.move(start["x"] + start["width"] / 2 + 12, start["y"] + start["height"] / 2 + 8)
+    assert composer.get_attribute("data-composer-dragging") == "content"
+    page.mouse.up()
+
+    canvas = composer.locator("[data-composer-canvas]")
+    composer.locator('[data-composer-palette-drag="button"]').click()
+    assert canvas.locator('[data-composer-rendered-recipe="button"]').count() == 1
+    composer.locator("[data-composer-reset]").click()
+    assert canvas.locator("[data-composer-rendered-recipe]").count() == 0
+
+
 def test_presentation_stage_follows_theme_and_forced_colors(page: Any, docs_site_url: str) -> None:
     page.goto(docs_site_url + "/", wait_until="networkidle")
 

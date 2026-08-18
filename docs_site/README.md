@@ -733,7 +733,7 @@ and the publication window are defined in `docs_versions.yml`.
 
 | Job | Schedule | Manual operation |
 |---|---|---|
-| People data | Monthly | `GITHUB_TOKEN=... uv run --no-sync python docs_site/scripts/people.py` |
+| People data | Monthly | `GITHUB_TOKEN=... uv run --no-sync python -m docs_site.scripts.people` |
 | External links | Mondays at 06:00 UTC | `gh workflow run repo--docs-external-links.yml` |
 | Lighthouse | Relevant pull requests | `gh workflow run repo--docs-lighthouse.yml` |
 

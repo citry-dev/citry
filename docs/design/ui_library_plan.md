@@ -8,7 +8,7 @@ acceptance and release evidence is complete.**
 Phases 0 through 6 are complete. Citry's generic publishing contracts, slot
 contracts, client ambient context, and docs live-component host are
 implemented. Phase 7 began on the released `citry 0.3.1` and `citry_core
-1.4.0` floor. Current source development targets `citry 0.3.2` and
+1.4.0` floor. Current source development targets `citry 0.4.0` and
 `citry_core 1.5.0`; publication waits for those artifacts. The
 [active component inventory](ui_component_inventory.md) owns current family
 status. Counts and family lists inside the chronological phase records below
@@ -289,7 +289,7 @@ The packaging and registration spike covers:
 
 **Gate:** the publishing architecture is proven. Local-artifact installation,
 registration, assets, and atomic rollback have passed. Current source
-development targets `citry>=0.3.2,<0.4.0` with `citry_core 1.5.0`. The
+development targets `citry>=0.4.0,<0.5.0` with `citry_core 1.5.0`. The
 released-artifact floor remains provisional until both releases are published
 and pass the clean-install matrix. Multi-release upgrade, downgrade,
 uninstall, and wheel fixtures remain publication work. Phase 7 uses one public architecture:
@@ -313,7 +313,7 @@ The framework and quality foundations needed to begin Phase 7 now exist:
   registration are implemented;
 - server and client `provide`, `inject`, and `unprovide` contracts are
   implemented and browser-tested; and
-- the `citry 0.3.2` and `citry_core 1.5.0` source line is the current
+- the `citry 0.4.0` and `citry_core 1.5.0` source line is the current
   development target, with publication waiting for released artifacts.
 
 Storybook is now independent optional extension work, tracked in
@@ -1138,7 +1138,7 @@ commitment.
 **Gate:** independent adversarial review of the prototype-backed decision
 before implementation dispatch.
 
-The timing remains deliberate: the `citry 0.3.2` and `citry_core 1.5.0`
+The timing remains deliberate: the `citry 0.4.0` and `citry_core 1.5.0`
 workspace supports production component work while its release artifacts are
 pending. Production component work proceeds through specifications, docs live examples,
 standalone scenarios, and direct quality tools. Storybook may later add an

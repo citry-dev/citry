@@ -303,7 +303,7 @@ again before replacing its previous facts.
 The hosted playground currently installs `citry==0.3.1` and
 `citry-core==1.4.0`. The portable template-variable, Alpine, JavaScript, CSS,
 lint, source-map, and Python component-asset APIs used by the desktop IDE are
-part of the unreleased local `citry==0.3.2` and `citry-core==1.6.0` sources.
+part of the unreleased local `citry==0.4.0` and `citry-core==1.5.0` sources.
 Phase 2B starts when matching wheels are published and pinned by the playground
 runtime. It will then:
 

@@ -1,83 +1,36 @@
 # Release notes
 
-## v1.6.0
+## v1.5.0
 
 _Unreleased_
 
-### Added
-
-- Expose Citry's language-neutral Fluent compiler and runtime through PyO3,
-  including typed message interfaces, deterministic artifacts, locale fallback,
-  structured rich-message segments, source diagnostics, ICU4X plural rules,
-  and the checked number, currency, date, relative-time, and list profiles.
-  Parameter metadata includes descriptions and exact declaration spans, and
-  currency formatting applies CLDR fraction digits and half-expand rounding.
-- Expose the compiler's source-only Fluent analysis so editor tools can reuse
-  the production parser, `@param` validation, symbol inventory, references,
-  and exact spans without building a complete locale artifact.
-- Expose checked percent-ratio and unit formatting plus strict localized
-  number, percent, date, time, and local-datetime parsing. Number input can opt
-  into scientific notation. Date input supports localized month names,
-  explicit two-digit-year windows, and checked calendar shapes. Time and
-  datetime input accept whole text fields or named segments and return
-  structured local fields so the Python layer can resolve an explicit IANA
-  zone, including DST gaps and folds.
-- Expose OXC-backed JavaScript expression analysis and conservative
-  `$component` initializer facts for Citry's batch and editor tooling,
-  including exact context bindings, free references, and synchronous scope
-  writes.
-
-## v1.5.0
-
-_7 Aug 2026_
-
 ### Changed
 
-- Plain-element `#c-key` now compiles to an `ElementKeyNode` wrapping the key
-  expression. This lets a host runtime omit the complete `data-citry-key`
-  attribute when the value is `None`; host runtimes that execute generated
-  source must provide this node class.
+- Compiled nodes now use `ElementKeyNode` for plain-element `#c-key` and tagged
+  `ComponentNode` metadata for component `#c-key`/`#c-ignore`; source-executing
+  host runtimes must support both contracts.
 
 ### Added
 
-- Expose immutable parser-owned directive and context-qualified structural
-  attribute inventories for language tools that need exhaustive Citry syntax
-  coverage.
-- Added `citry_core.template_formatter.format_template()` and the structured
-  `TemplateFormatError` for parser-backed structural formatting of authored
-  Citry template text without application discovery or global state. The
-  structural formatter preserves sensitive, verbatim, and suppressed bytes while
-  formatting proven block structure and nested template attributes.
-- Add built-in Python expression formatting backed by the vendored Ruff
-  0.16.2 pin. Ordinary expressions and `c-for` clauses are accepted only
-  after AST and anchored-comment equivalence checks; direct `c-fill data`
-  patterns use Citry's own formatter. The new
-  `python_expression_provider()` function reports the authoritative provider
-  identity.
-- Add the typed two-pass embedded-formatting API under
-  `citry_core.template_formatter`. `prepare_embedded_format()` exposes
-  immutable JavaScript/CSS requests and capability notices, while
-  `finish_embedded_format()` validates source-bound provider results and
-  composes them atomically. Invalid, stale, missing, duplicate, or unsafe
-  provider output raises `TemplateFormatError` with the stable
-  `citry.format.provider-invalid` code.
-- Template parse failures expose a stable diagnostic code and root-template
-  UTF-8 byte range through `parse_diagnostic()`. They retain their existing
-  `SyntaxError` or `ValueError` class and rendered message. Parsed
-  `HtmlAttr.kind` values are also readable and comparable from Python.
+- Compile and analyze Fluent catalogs, with typed messages, locale fallback,
+  rich text, exact diagnostics, locale-aware formatting, and strict number,
+  percent, date, time, and datetime input.
+- Analyze browser expressions and `$component` initializers for exact bindings,
+  free references, and synchronous scope writes.
+- Format template structure and Python expressions in-process, with a validated
+  two-pass hand-off for JavaScript and CSS.
+- Read stable parse diagnostics, attribute kinds, and parser-owned directive and
+  structural-attribute inventories from Python.
 
 ### Fixed
 
-- Recognize omitted, bare, empty, module, and standard JavaScript MIME
-  `script` types when preparing embedded formatter requests, while retaining
-  data-block and parameterized-type exclusions. Embedded result statuses now
-  reject contradictory output fields.
-- Treat quotes and braces inside Python `#` comments as comment text while
-  finding a `{{ ... }}` interpolation boundary, and keep the host `}}`
-  delimiter outside the compiled expression.
-- Return the parser's validation error for unsupported Python expression kinds
-  such as `await` instead of allowing the safe-expression transformer to
-  panic.
+- Embedded formatting now recognizes common `<script>` type forms and rejects
+  contradictory provider results.
+- Python comments no longer confuse `{{ ... }}` boundaries, and unsupported
+  expressions such as `await` return validation errors instead of panicking.
+- Parser/compiler fixes: preserve tag-shaped raw text, match HTML tag identity
+  case-insensitively, allow template comments between branches and trailing
+  `c-for` comments, and keep extension-owned bindings structured.
 
 ## v1.4.0
 

@@ -1,6 +1,7 @@
 # Monthly refresh of the docs-site people grid (docs_site/data/people.yml) from
 # merged pull requests across citry and django-components, opening a PR when the
-# data changes. Run docs_site/scripts/people.py locally to refresh by hand.
+# data changes. Run `uv run --no-sync python -m docs_site.scripts.people` locally
+# to refresh by hand.
 name: Docs people
 
 on:
@@ -36,7 +37,7 @@ jobs:
       - name: Refresh the people data
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: uv run --no-sync python docs_site/scripts/people.py
+        run: uv run --no-sync python -m docs_site.scripts.people
 
       - name: Open a PR when the data changed
         env:

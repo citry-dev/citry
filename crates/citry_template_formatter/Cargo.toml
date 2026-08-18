@@ -3,6 +3,12 @@ name = "citry_template_formatter"
 description = "Format authored Citry templates"
 version = "0.0.0"
 edition = "2024"
+rust-version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = { workspace = true }
+repository = { workspace = true }
 publish = false
 
 [dependencies]

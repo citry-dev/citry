@@ -175,7 +175,7 @@ All notable changes to `citry-lsp` are documented here.
   provider-identity payloads are refused without an edit.
 - Report the active embedded-language selection mechanism without claiming a
   provider identity or version that the client cannot prove.
-- Require Citry 0.3.2 or newer in the compatible 0.3 series, which supplies
+- Require Citry 0.4.0 or newer in the compatible 0.4 series, which supplies
   the portable analysis and source-coordinate contracts used by the server.
 - Add schema-free structural-tag and directive-attribute snippets plus lexical
   completion and hover for `c-for` and `c-fill` bindings, including shorthand

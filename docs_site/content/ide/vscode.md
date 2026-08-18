@@ -13,7 +13,7 @@ JavaScript, and CSS sections while leaving Fluent and the selected Python
 formatter unchanged.
 
 The extension and `citry-lsp` are implemented in the repository. Their public
-registry releases are part of the Citry 0.3.2 open beta, so the installation
+registry releases are part of the Citry 0.4.0 beta, so the installation
 commands below become the public path when those artifacts are available.
 
 ## Install the language server

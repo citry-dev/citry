@@ -1090,6 +1090,12 @@ changes, and link relevant issues when helpful. Record each release exactly
 once in its owning changelog. The content test and exclusions are defined in
 [`CLAUDE.md`](../CLAUDE.md#what-belongs-in-the-changelog).
 
+Write each item as one outcome-first sentence when practical. Group related
+implementation work, keep only the API names and keywords users need, and use
+a small before/after example when it is faster to understand than prose.
+Breaking migrations may be longer. The complete writing rules live in
+[`CLAUDE.md`](../CLAUDE.md#how-to-write-a-changelog-entry).
+
 ## Versioning, tags and releases
 
 ### Package-specific tags
@@ -1105,6 +1111,10 @@ Tags follow the format: `<package-name>@<version>`. A tag with no language prefi
 - `citry-core@1.3.0` - the citry-core Python package
 - `citry@0.2.0` - the citry Python package
 - `pygments-citry@0.1.0` - the Citry Pygments lexer
+- `vscode-citry@0.1.0` - the Citry VS Code extension
+
+Editor-extension tags include the editor name so they cannot collide with a
+Python distribution. The VS Code extension uses `vscode-citry@<version>`.
 
 **Note:** When a second host language (JS/PHP/Go) is published, we will revisit how to disambiguate its tags from the Python ones (likely a `<language>@` prefix on the non-default languages); until then the prefix would be noise. The version after `@` must match the package's `pyproject.toml` version: the publish workflow checks this and fails the release on a mismatch.
 
@@ -1195,17 +1205,25 @@ Two rules that came out of doing this five times:
   tree later silently reverts the fix. The change then shows up in the panel as
   an ordinary unread entry, which is accurate.
 
-Releasing straight from `review` looks tempting because the publish workflows
-accept a manual `workflow_dispatch`, but that path uploads to PyPI with the
-tag-versus-`pyproject` version check skipped, creates no tag and no GitHub
-Release, and leaves the changelog's `<package>@X.Y.Z` compare links pointing at
-a tag that does not exist. A tag push from `main` is the supported route.
+Releasing straight from `review` looks tempting because publish workflows
+accept a manual `workflow_dispatch`. That is not a supported release route:
+Citry Core treats every manual dispatch (even one targeting a tag ref) as a
+qualification-only run, while older package workflows can upload without
+creating the matching tag or GitHub Release. A tag push from `main` is the
+supported route for every package.
 
-The arrangement is rebuilt by pushing the release commit to `main`, then moving
-the branch pointer with `git reset --mixed`, which leaves the working tree
-untouched so every unread file reappears in the panel. A tag alone cannot do
-this: a tag only names a commit, and the panel is populated from the working
-tree against `HEAD`.
+The throwaway `main` worktree preserves the arrangement automatically. Keep the
+original `review` worktree's branch pointer, index, and files unchanged before,
+during, and after the promotion; `review` continues to point at its recorded
+pre-promotion baseline, so every unread modification and untracked file remains
+visible in the editor. Do not reset `review` to the new `main`: that makes the
+same bytes appear reviewed and hides newly tracked files from the worklist. If
+recovery is ever required, restore `review` to its recorded pre-promotion SHA
+(normally the `reviewed-baseline` recovery point) with a mixed reset so the disk
+contents remain intact.
+
+A tag cannot rebuild this arrangement: it only names a commit, while the panel
+is populated from the original worktree relative to `review`'s `HEAD`.
 
 ### Chronological Ordering
 
@@ -1398,6 +1416,47 @@ GitHub Release.
 - Environment name (`pypi`)
 
 The first publish from a configured pending publisher creates the project. The GitHub `pypi` environment is also where you can add a manual-approval gate on releases.
+
+### Citry Core distribution qualification
+
+`citry-core` publishes one source distribution and platform wheels for its
+supported native Python matrix. It also publishes one
+`cp314-cp314-pyemscripten_2026_0_wasm32` wheel for the exact Pyodide runtime
+pinned by the playground. That browser wheel is another build of
+`citry-core`, not a package dependency.
+
+The publish workflow uses Rust 1.95.0 and Maturin 1.14.1 explicitly. It keeps
+each builder's output in a separate directory, rejects duplicate filenames,
+and requires the complete expected artifact set before it creates the only
+directory eligible for publication. Every wheel is checked against the
+checkout for metadata, tags, Python payload, extension module, license,
+`RECORD`, and size. Every Linux x86_64 interpreter and Windows wheel, plus the
+oldest/newest macOS endpoints, is installed and exercised in a fresh
+environment; the remaining cross-architecture wheels receive the same static
+inspection. The source distribution is rebuilt outside the checkout with the
+declared Rust 1.95 minimum, then its wheel is installed and exercised.
+
+The PyEmscripten wheel is built twice from clean source trees with the pinned
+Pyodide/Emscripten tuple. The workflow requires byte-identical normalized
+outputs and checks the actual SDK-reported Emscripten version. It uses that
+SDK's `wasm-opt` to remove the workspace's profiler-only DWARF/debug payload
+before regenerating the wheel `RECORD`, then exercises the installed wheel in
+that exact Pyodide runtime. Release-critical third-party actions are pinned to
+reviewed commits. The release job receives only this verified distribution set
+and records its names, byte sizes, and SHA-256 hashes in
+`release-inventory.json`.
+
+The version must be absent from both PyPI and GitHub Releases before publishing.
+The workflow never skips existing PyPI files or overwrites release assets: a
+partial publication requires deliberate hash reconciliation and manual
+recovery, not an automatic rerun that could associate different bytes.
+
+The permanent browser build tuple lives in
+`packages/py/citry_core/pyodide-build.json`. Its Pyodide and Python versions
+must match `docs_site/static/playground/runtime.json`. Do not update the
+playground to a new Citry Core version until PyPI provides the immutable wheel
+URL and the whole compatible runtime tuple can be promoted and browser-tested
+together.
 
 - Rust crates are not published to crates.io; they are an internal implementation detail surfaced through the Python packages.
 - The root `pyproject.toml` is never published (no build-system; `Private :: Do Not Upload`).

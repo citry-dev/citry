@@ -18,12 +18,12 @@ _RUNTIME_PACKAGE = Path(__file__).parents[2]
 
 
 def _wheel(tmp_path, *, extra=()):
-    path = tmp_path / "citry_ui-0.0.1-py3-none-any.whl"
-    dist = "citry_ui-0.0.1.dist-info"
+    path = tmp_path / "citry_ui-0.1.0-py3-none-any.whl"
+    dist = "citry_ui-0.1.0.dist-info"
     files = {
         **dict.fromkeys(EXPECTED_RUNTIME_FILES, b""),
         **dict.fromkeys(EXPECTED_I18N_FILES, b""),
-        f"{dist}/METADATA": b"Name: citry-ui\nRequires-Dist: citry>=0.3.1\n",
+        f"{dist}/METADATA": b"Name: citry-ui\nRequires-Dist: citry>=0.4.0,<0.5.0\n",
         f"{dist}/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\n",
         f"{dist}/licenses/LICENSE": b"MIT\n",
         f"{dist}/licenses/THIRD_PARTY_LICENSES.md": _THIRD_PARTY_NOTICE,
@@ -43,7 +43,7 @@ def _wheel(tmp_path, *, extra=()):
 def test_qualify_wheel_accepts_the_runtime_boundary(tmp_path):
     report = qualify_wheel(_wheel(tmp_path))
 
-    assert report.distribution == "citry_ui-0.0.1"
+    assert report.distribution == "citry_ui-0.1.0"
     assert report.pure_python is True
     assert report.runtime_files == len(EXPECTED_RUNTIME_FILES | EXPECTED_I18N_FILES)
     assert report.wheel_bytes > 0
@@ -121,7 +121,7 @@ def test_runtime_boundary_includes_the_side_effect_free_i18n_catalog_package():
 
 
 def test_qualify_wheel_rejects_an_incomplete_third_party_notice(tmp_path):
-    dist = "citry_ui-0.0.1.dist-info"
+    dist = "citry_ui-0.1.0.dist-info"
     path = _wheel(
         tmp_path,
         extra=((f"{dist}/licenses/THIRD_PARTY_LICENSES.md", b"Lucide 1.30.0\nISC License\n"),),
@@ -132,7 +132,7 @@ def test_qualify_wheel_rejects_an_incomplete_third_party_notice(tmp_path):
 
 
 def test_qualify_wheel_rejects_a_marker_only_third_party_notice(tmp_path):
-    dist = "citry_ui-0.0.1.dist-info"
+    dist = "citry_ui-0.1.0.dist-info"
     path = _wheel(
         tmp_path,
         extra=(

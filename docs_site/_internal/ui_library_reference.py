@@ -7,7 +7,6 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from functools import lru_cache
-from html import escape
 from pathlib import Path
 from textwrap import wrap
 from typing import Any
@@ -524,7 +523,7 @@ def _render_css(
                 _entry_code(reference, "css", table, entry, str(entry["name"])),
                 _code(str(entry["type"])),
                 _inline(str(entry["purpose"])),
-                _inline(str(entry["default"])),
+                _code(str(entry["default"])),
             )
             for entry in _entries(table)
         ]
@@ -707,9 +706,20 @@ def _add_table(
 
 
 def _code(value: str) -> str:
-    if "|" in value:
-        return f"<code>{escape(value).replace('|', '&#124;')}</code>"
-    return f"`{value}`"
+    # Markdown's table parser recognizes pipes inside code spans, while raw
+    # <code> tags still let later inline processors rewrite their text.
+    if value != value.strip() or "\n" in value or "\r" in value:
+        # Python-Markdown strips code-span contents. Encode every character in
+        # the raw fallback so whitespace survives and inline processors cannot
+        # reinterpret values such as decimal-only hex colors as issue numbers.
+        encoded = "".join(f"&#x{ord(character):x};" for character in value)
+        return f"<code>{encoded}</code>"
+
+    longest_run = max((len(match.group(0)) for match in re.finditer(r"`+", value)), default=0)
+    delimiter = "`" * (longest_run + 1)
+    needs_padding = value.startswith("`") or value.endswith("`")
+    padding = " " if needs_padding else ""
+    return f"{delimiter}{padding}{value}{padding}{delimiter}"
 
 
 def _inline(value: str) -> str:

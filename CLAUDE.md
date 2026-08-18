@@ -636,6 +636,21 @@ commit history already records it.
   changelog entry. (A batch of internal fixes can still earn one high-level
   line, e.g. "various caching leaks fixed", without detail.)
 
+### How to write a changelog entry
+
+- Lead with the outcome: what users can now do, what behaves differently, or
+  what they must change when upgrading.
+- Keep one user-visible change to one sentence when practical. Group related
+  implementation work under that sentence instead of listing every internal
+  capability, type, dependency, or edge case.
+- Use only the API names and keywords a reader needs to recognize the affected
+  feature. Put exhaustive technical detail in the commit, issue, or design
+  document.
+- Use a small before/after example when it communicates the difference faster
+  than prose. Show only the lines that change.
+- Give breaking changes enough space for the required migration. Ordinary
+  additions and fixes should remain easy to scan in the full release list.
+
 ## Pointers
 
 - Operating rules -> this file

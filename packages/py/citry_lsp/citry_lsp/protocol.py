@@ -10,7 +10,7 @@ from citry_core.template_formatter import python_expression_provider
 SERVER_VERSION = "0.1.0"
 PROTOCOL_VERSION = 1
 CATALOG_SCHEMA_VERSION = 1
-SUPPORTED_CITRY_SERIES = (0, 3)
+SUPPORTED_CITRY_SERIES = (0, 4)
 BROWSER_PROJECTION_METHOD = "citry/browserProjection"
 HTML_PROJECTION_METHOD = "citry/htmlProjection"
 FORMAT_TEMPLATES_METHOD = "citry/formatTemplates"

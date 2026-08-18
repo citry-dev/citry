@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "pyodide": "314.0.3",
+  "python": "3.14.2",
+  "pyodide_cli": "0.5.0",
+  "pyodide_build": "0.37.0",
+  "emscripten": "5.0.3",
+  "rust": "1.95.0",
+  "maturin": "1.14.1",
+  "wheel": "0.46.2",
+  "uv": "0.10.12",
+  "node": "24",
+  "twine": "6.2.0",
+  "python_tag": "cp314",
+  "abi_tag": "cp314",
+  "platform_tag": "pyemscripten_2026_0_wasm32"
+}

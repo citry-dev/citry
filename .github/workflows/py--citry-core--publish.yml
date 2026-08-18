@@ -20,20 +20,30 @@ permissions:
 
 env:
   PROJECT_DIR: packages/py/citry_core
+  CITRY_CORE_RUST_TOOLCHAIN: "1.95.0"
+  CITRY_CORE_EMSCRIPTEN_VERSION: "5.0.3"
+  MATURIN_VERSION: "1.14.1"
 
 jobs:
   # Fail fast if the tag's version does not match the package's pyproject
   # version (the release job needs this, so a mismatch blocks the publish).
-  # Skipped cleanly on manual workflow_dispatch, which has no version tag.
+  # A manual qualification run records the package version but has no tag to
+  # compare; only the release job is skipped in that case.
   verify-version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package-version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - name: Verify tag matches pyproject version
-        if: startsWith(github.ref, 'refs/tags/')
+        id: package-version
         run: |
-          tag_version="${GITHUB_REF_NAME#citry-core@}"
           pkg_version=$(grep -m1 '^version' "$PROJECT_DIR/pyproject.toml" | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            exit 0
+          fi
+          tag_version="${GITHUB_REF_NAME#citry-core@}"
           echo "tag version: $tag_version, pyproject version: $pkg_version"
           if [ "$tag_version" != "$pkg_version" ]; then
             echo "::error::tag '$tag_version' does not match $PROJECT_DIR/pyproject.toml version '$pkg_version'"
@@ -41,6 +51,7 @@ jobs:
           fi
 
   linux:
+    needs: verify-version
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -66,10 +77,12 @@ jobs:
         with:
           python-version: "3.14"
       - name: Build wheels
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --strip --out dist --find-interpreter
+          args: --release --strip --locked --compatibility pypi --out dist --find-interpreter
+          rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
+          maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
           manylinux: auto
           working-directory: ${{ env.PROJECT_DIR }}
@@ -80,6 +93,7 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/dist
 
   musllinux:
+    needs: verify-version
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -101,10 +115,12 @@ jobs:
         with:
           python-version: "3.14"
       - name: Build wheels
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --strip --out dist --find-interpreter
+          args: --release --strip --locked --compatibility pypi --out dist --find-interpreter
+          rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
+          maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
           manylinux: musllinux_1_2
           working-directory: ${{ env.PROJECT_DIR }}
@@ -115,6 +131,7 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/dist
 
   windows:
+    needs: verify-version
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -159,10 +176,12 @@ jobs:
           python-version: "3.14"
           architecture: ${{ matrix.platform.target }}
       - name: Build wheels
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --strip --out dist --find-interpreter
+          args: --release --strip --locked --compatibility pypi --out dist --find-interpreter
+          rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
+          maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Upload wheels
@@ -172,6 +191,7 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/dist
 
   macos:
+    needs: verify-version
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       matrix:
@@ -211,10 +231,12 @@ jobs:
         with:
           python-version: "3.14"
       - name: Build wheels
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --strip --out dist --find-interpreter
+          args: --release --strip --locked --compatibility pypi --out dist --find-interpreter
+          rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
+          maturin-version: ${{ env.MATURIN_VERSION }}
           sccache: "true"
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Upload wheels
@@ -224,6 +246,7 @@ jobs:
           path: ${{ env.PROJECT_DIR }}/dist
 
   sdist:
+    needs: verify-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -231,10 +254,12 @@ jobs:
           # Initialize Ruff submodule
           submodules: recursive
       - name: Build sdist
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: sdist
           args: --out dist
+          rust-toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
+          maturin-version: ${{ env.MATURIN_VERSION }}
           working-directory: ${{ env.PROJECT_DIR }}
       - name: Upload sdist
         uses: actions/upload-artifact@v7
@@ -242,11 +267,320 @@ jobs:
           name: wheels-sdist
           path: ${{ env.PROJECT_DIR }}/dist
 
+  pyemscripten:
+    name: PyEmscripten wheel
+    needs: verify-version
+    runs-on: ubuntu-latest
+    env:
+      CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
+    steps:
+      - name: Checkout build A
+        uses: actions/checkout@v7
+        with:
+          path: source-a
+          submodules: recursive
+      - name: Checkout build B
+        uses: actions/checkout@v7
+        with:
+          path: source-b
+          submodules: recursive
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14.2"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.10.12"
+          enable-cache: true
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # pinned 2026-08-18
+        with:
+          toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
+          targets: wasm32-unknown-emscripten
+      - name: Cache the pinned Pyodide cross environment
+        uses: actions/cache@v5
+        with:
+          path: ${{ runner.temp }}/citry-pyodide-xbuildenv
+          key: pyodide-314.0.3-python-3.14.2-emscripten-5.0.3-rust-1.95.0-cli-0.5.0-build-0.37.0
+      - name: Install the pinned Pyodide cross environment
+        env:
+          CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv
+        run: |
+          PYODIDE_XBUILDENV_PATH="$CITRY_XBUILDENV" uvx --python 3.14.2 \
+            --from pyodide-cli==0.5.0 \
+            --with pyodide-build==0.37.0 \
+            pyodide xbuildenv install 314.0.3 --path "$CITRY_XBUILDENV"
+          PYODIDE_XBUILDENV_PATH="$CITRY_XBUILDENV" uvx --python 3.14.2 \
+            --from pyodide-cli==0.5.0 \
+            --with pyodide-build==0.37.0 \
+            pyodide xbuildenv install-emscripten --path "$CITRY_XBUILDENV"
+      - name: Build the wheel twice from clean sources
+        env:
+          CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv
+        run: |
+          source_epoch=$(git -C source-a show -s --format=%ct HEAD)
+          python source-a/scripts/build_citry_core_pyodide_wheel.py \
+            --source source-a/packages/py/citry_core \
+            --out-dir "${{ runner.temp }}/pyemscripten-a" \
+            --xbuildenv-path "$CITRY_XBUILDENV" \
+            --cargo-target-dir "${{ runner.temp }}/cargo-pyemscripten-a" \
+            --cargo-home "$CARGO_HOME" \
+            --source-date-epoch "$source_epoch"
+          python source-a/scripts/build_citry_core_pyodide_wheel.py \
+            --source source-b/packages/py/citry_core \
+            --out-dir "${{ runner.temp }}/pyemscripten-b" \
+            --xbuildenv-path "$CITRY_XBUILDENV" \
+            --cargo-target-dir "${{ runner.temp }}/cargo-pyemscripten-b" \
+            --cargo-home "$CARGO_HOME" \
+            --source-date-epoch "$source_epoch"
+          cmp \
+            "${{ runner.temp }}/pyemscripten-a/citry_core-${CITRY_CORE_VERSION}-cp314-cp314-pyemscripten_2026_0_wasm32.whl" \
+            "${{ runner.temp }}/pyemscripten-b/citry_core-${CITRY_CORE_VERSION}-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+      - name: Inspect and smoke-test in Pyodide
+        env:
+          CITRY_CORE_EXPECTED_VERSION: ${{ needs.verify-version.outputs.version }}
+          CITRY_XBUILDENV: ${{ runner.temp }}/citry-pyodide-xbuildenv
+        run: |
+          wheel="${{ runner.temp }}/pyemscripten-a/citry_core-${CITRY_CORE_VERSION}-cp314-cp314-pyemscripten_2026_0_wasm32.whl"
+          python source-a/scripts/verify_citry_core_distribution.py check-wheel --wheel "$wheel"
+          uvx --python 3.14.2 --from twine==6.2.0 twine check "$wheel"
+          PYODIDE_XBUILDENV_PATH="$CITRY_XBUILDENV" \
+            uvx --python 3.14.2 \
+              --from pyodide-cli==0.5.0 \
+              --with pyodide-build==0.37.0 \
+              pyodide venv "${{ runner.temp }}/citry-pyodide-venv"
+          "${{ runner.temp }}/citry-pyodide-venv/bin/pip" install --no-deps --no-index "$wheel"
+          "${{ runner.temp }}/citry-pyodide-venv/bin/python" -I source-a/scripts/smoke_citry_core.py
+      - name: Upload PyEmscripten wheel
+        uses: actions/upload-artifact@v7
+        with:
+          name: wheels-pyemscripten-wasm32
+          path: ${{ runner.temp }}/pyemscripten-a/*.whl
+          if-no-files-found: error
+
+  sdist-smoke:
+    name: Rebuild and smoke-test sdist at Rust 1.95
+    needs: sdist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.10.12"
+          enable-cache: true
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # pinned 2026-08-18
+        with:
+          toolchain: ${{ env.CITRY_CORE_RUST_TOOLCHAIN }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-sdist
+          path: sdist
+      - run: >-
+          python scripts/verify_citry_core_distribution.py smoke-sdist
+          --sdist 'sdist/*.tar.gz'
+          --rust-toolchain '${{ env.CITRY_CORE_RUST_TOOLCHAIN }}'
+
+  linux-x86_64-smoke:
+    name: Linux x86_64 smoke (${{ matrix.python }})
+    needs: [verify-version, linux]
+    runs-on: ubuntu-latest
+    env:
+      CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - python: "3.10"
+            tag: cp310-cp310
+          - python: "3.11"
+            tag: cp311-cp311
+          - python: "3.12"
+            tag: cp312-cp312
+          - python: "3.13"
+            tag: cp313-cp313
+          - python: "3.14"
+            tag: cp314-cp314
+          - python: "3.14t"
+            tag: cp314-cp314t
+          - python: "pypy3.11"
+            tag: pp311-pypy311_pp73
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.10.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-linux-x86_64
+          path: wheels
+      - run: >-
+          python scripts/verify_citry_core_distribution.py smoke-wheel
+          --wheel 'wheels/citry_core-${{ env.CITRY_CORE_VERSION }}-${{ matrix.tag }}-manylinux*x86_64.whl'
+
+  windows-smoke:
+    name: Windows ${{ matrix.architecture }} smoke (${{ matrix.python }})
+    needs: [verify-version, windows]
+    runs-on: windows-latest
+    env:
+      CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x86
+            python: "3.10"
+            tag: cp310-cp310
+            platform: win32
+          - architecture: x86
+            python: "3.11"
+            tag: cp311-cp311
+            platform: win32
+          - architecture: x86
+            python: "3.12"
+            tag: cp312-cp312
+            platform: win32
+          - architecture: x86
+            python: "3.13"
+            tag: cp313-cp313
+            platform: win32
+          - architecture: x86
+            python: "3.14"
+            tag: cp314-cp314
+            platform: win32
+          - architecture: x64
+            python: "3.10"
+            tag: cp310-cp310
+            platform: win_amd64
+          - architecture: x64
+            python: "3.11"
+            tag: cp311-cp311
+            platform: win_amd64
+          - architecture: x64
+            python: "3.12"
+            tag: cp312-cp312
+            platform: win_amd64
+          - architecture: x64
+            python: "3.13"
+            tag: cp313-cp313
+            platform: win_amd64
+          - architecture: x64
+            python: "3.14"
+            tag: cp314-cp314
+            platform: win_amd64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          architecture: ${{ matrix.architecture }}
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.10.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-windows-${{ matrix.architecture }}
+          path: wheels
+      - run: >-
+          python scripts/verify_citry_core_distribution.py smoke-wheel
+          --wheel 'wheels/citry_core-${{ env.CITRY_CORE_VERSION }}-${{ matrix.tag }}-${{ matrix.platform }}.whl'
+
+  macos-smoke:
+    name: macOS ${{ matrix.target }} smoke (${{ matrix.python }})
+    needs: [verify-version, macos]
+    runs-on: ${{ matrix.runner }}
+    env:
+      CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64
+            platform: macosx_10_12_x86_64
+            python: "3.10"
+            tag: cp310-cp310
+          - runner: macos-15-intel
+            target: x86_64
+            platform: macosx_10_12_x86_64
+            python: "3.14"
+            tag: cp314-cp314
+          - runner: macos-latest
+            target: aarch64
+            platform: macosx_11_0_arm64
+            python: "3.10"
+            tag: cp310-cp310
+          - runner: macos-latest
+            target: aarch64
+            platform: macosx_11_0_arm64
+            python: "3.14"
+            tag: cp314-cp314
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: "0.10.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: wheels-macos-${{ matrix.target }}
+          path: wheels
+      - run: >-
+          python scripts/verify_citry_core_distribution.py smoke-wheel
+          --wheel 'wheels/citry_core-${{ env.CITRY_CORE_VERSION }}-${{ matrix.tag }}-${{ matrix.platform }}.whl'
+
+  verify-distributions:
+    name: Verify complete distribution inventory
+    needs:
+      - linux
+      - musllinux
+      - windows
+      - macos
+      - sdist
+      - pyemscripten
+      - sdist-smoke
+      - linux-x86_64-smoke
+      - windows-smoke
+      - macos-smoke
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: wheels-*
+          path: raw-artifacts
+      - name: Verify and stage the closed release set
+        run: >-
+          python scripts/verify_citry_core_distribution.py inventory
+          --raw-dir raw-artifacts
+          --output-dir verified
+      - uses: actions/upload-artifact@v7
+        with:
+          name: verified-citry-core-distributions
+          path: verified
+          if-no-files-found: error
+
   release:
     name: Release
     runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: [verify-version, linux, musllinux, windows, macos, sdist]
+    # Manual dispatch is a qualification dry-run. Only a matching tag may
+    # enter the protected publishing environment or mutate external state.
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    needs: [verify-version, verify-distributions]
+    env:
+      CITRY_CORE_VERSION: ${{ needs.verify-version.outputs.version }}
     # Trusted Publishing target. Configure a PyPI publisher for this repo, the
     # workflow file py--citry-core--publish.yml, and the environment 'pypi'.
     environment: pypi
@@ -258,39 +592,49 @@ jobs:
       # Create the GitHub Release
       contents: write
     steps:
-      - uses: actions/checkout@v7
-      # Collect every wheel and the sdist into a single dist/ directory.
       - uses: actions/download-artifact@v8
         with:
-          path: dist
-          merge-multiple: true
-      - name: Check release wheel sizes
-        run: >-
-          python scripts/verify_wheel_size.py
-          --max-bytes 10485760
-          dist/*.whl
+          name: verified-citry-core-distributions
+          path: verified
+      - name: Select only verified distributions for publication
+        run: |
+          mkdir dist
+          cp verified/*.whl verified/*.tar.gz dist/
+      - name: Require a new PyPI version and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pypi_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "https://pypi.org/pypi/citry-core/${CITRY_CORE_VERSION}/json")
+          if [ "$pypi_status" != "404" ]; then
+            echo "::error::expected PyPI version ${CITRY_CORE_VERSION} to be absent; HTTP ${pypi_status}"
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::GitHub Release ${GITHUB_REF_NAME} already exists"
+            exit 1
+          fi
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: "dist/*"
+          subject-path: |
+            dist/*
+            verified/release-inventory.json
       # Trusted Publishing (OIDC): no token. PyPI verifies the workflow's OIDC
       # identity against the configured publisher.
       - name: Publish to PyPI
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          skip-existing: true
-      # No checkout in this job, so gh cannot infer the repo from a local git
-      # remote; pass --repo. Idempotent: if the release already exists (created
-      # in the UI, or a re-run), upload the artifacts to it instead of failing.
-      - name: Create or update the GitHub Release
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+      # There is no checkout in this job, so gh cannot infer the repo from a
+      # local git remote; pass --repo. Existing versions/releases fail closed
+      # above instead of silently mixing bytes from separate builds.
+      - name: Create the GitHub Release
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists; uploading artifacts."
-            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
-          fi
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          dist/* verified/release-inventory.json
+          --repo "$GITHUB_REPOSITORY"
+          --title "$GITHUB_REF_NAME"
+          --generate-notes
