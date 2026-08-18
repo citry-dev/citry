@@ -163,7 +163,8 @@ closes those gaps:
   unchanged 10 MiB release cap and below the 7,011,715-byte 1.4.0 browser
   wheel.
 
-No branch, tag, package registry, or deployment was changed during this work.
+No branch, tag, package registry, or deployment was changed during the local
+pre-release preparation.
 The focused Citry Core plus Citry compatibility run passed 4,907 tests with
 33 skips and one expected failure. The repository `fast` profile also passed
 all 18 phases, including Rust format/lint/tests, Python lint/types/tests,
@@ -172,6 +173,20 @@ An independent adversarial review then passed with no remaining findings or
 release blockers; its focused artifact suite passed all nine tests, including
 the closed archive, canonical metadata, platform-wheel, toolchain, and
 fail-closed publication checks.
+
+### Stage 2: promote the prepared source to `main`
+
+**Status: complete on 2026-08-18.** Commit `e2f141be` was pushed to `main` by
+fast-forward after the source tree and clean promotion worktree matched exactly.
+The original `review` branch, index, and visible working set remained at the
+recorded `reviewed-baseline`.
+
+### Stage 3: qualify, tag, and publish
+
+**Status: in progress on 2026-08-18.** The `citry-core@1.5.0` tag, PyPI
+version, and GitHub Release are absent. The protected GitHub `pypi` environment
+permits `citry-core@*`; a final non-publishing hosted qualification must pass
+before the annotated tag is created.
 
 - [x] Confirm the 1.5.0 source/changelog contents and compatibility expected by
   `citry` 0.4.0.

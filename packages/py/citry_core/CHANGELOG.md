@@ -2,7 +2,7 @@
 
 ## v1.5.0
 
-_Unreleased_
+_18 Aug 2026_
 
 ### Changed
 
