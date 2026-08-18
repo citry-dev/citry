@@ -8,8 +8,8 @@ or deploying anything.
 
 ## Locked release decisions
 
-- [ ] Release `citry-core` **1.5.0**. Phase 1 corrected the accidental
-  unreleased `1.6.0` source version; do not publish it as 1.6.0.
+- [x] Released `citry-core` **1.5.0** on 2026-08-18. Phase 1 corrected the
+  accidental unreleased `1.6.0` source version; it was not published as 1.6.0.
 - [ ] Release `citry` **0.4.0**, positioned as the Citry beta release. This is
   the final package version (`0.4.0`), not a PEP 440 prerelease such as
   `0.4.0b1`.
@@ -29,7 +29,7 @@ or deploying anything.
 
 | Artifact | Public state found during audit | Repository state | Target |
 | --- | --- | --- | --- |
-| `citry-core` | PyPI 1.4.0 | 1.5.0, unreleased | 1.5.0 |
+| `citry-core` | PyPI 1.5.0 | tagged and released at `citry-core@1.5.0` | 1.5.0 complete |
 | `citry` | PyPI 0.3.1 | 0.4.0, unreleased | 0.4.0 beta |
 | `pygments-citry` | PyPI 0.1.2 | 0.2.0, unreleased | 0.2.0 |
 | `citry-lsp` | not found on PyPI | 0.1.0 | 0.1.0 first release |
@@ -176,17 +176,18 @@ fail-closed publication checks.
 
 ### Stage 2: promote the prepared source to `main`
 
-**Status: complete on 2026-08-18.** Commit `e2f141be` was pushed to `main` by
-fast-forward after the source tree and clean promotion worktree matched exactly.
-The original `review` branch, index, and visible working set remained at the
-recorded `reviewed-baseline`.
+**Status: complete on 2026-08-18.** The prepared tree and subsequent release-gate
+fixes were pushed to `main` by fast-forward-only promotions, ending at qualified
+release commit `b61828a4`. The source tree and clean promotion worktree matched
+exactly each time. The original `review` branch, index, and visible working set
+remained at the recorded `reviewed-baseline`.
 
 ### Stage 3: qualify, tag, and publish
 
-**Status: in progress on 2026-08-18.** The `citry-core@1.5.0` tag, PyPI
-version, and GitHub Release are absent. The protected GitHub `pypi` environment
-permits `citry-core@*`; a final non-publishing hosted qualification must pass
-before the annotated tag is created.
+**Status: complete on 2026-08-18.** The annotated `citry-core@1.5.0` tag points
+to qualified commit `b61828a4`. The final non-publishing qualification and the
+tag-triggered publish workflow both passed before PyPI and the GitHub Release
+were independently verified.
 
 - [x] Confirm the 1.5.0 source/changelog contents and compatibility expected by
   `citry` 0.4.0.
@@ -200,19 +201,37 @@ before the annotated tag is created.
   PyEmscripten-compatible **variant of the `citry-core` 1.5.0 wheel** for the
   playground's pinned Pyodide Python and Emscripten ABI. PyEmscripten is a
   build target here, not another runtime dependency.
-- [ ] Verify the PyPI Trusted Publisher/workflow/environment configuration for
-  `citry-core`. The GitHub `pypi` environment exists, permits
-  `citry-core@*` tags, and the same workflow/environment identity successfully
-  published 1.4.0; PyPI's current external publisher record is still not
-  visible from the repository or GitHub API.
-- [ ] Let the tag workflow build and inspect the complete cross-platform
-  distribution set. Local qualification covered the macOS arm64 wheel, sdist,
-  and PyEmscripten wheel; the other platforms are CI-only.
-- [ ] Tag and publish `citry-core@1.5.0` using the repository's release
+- [x] Verify the PyPI Trusted Publisher/workflow/environment configuration for
+  `citry-core`; the tag workflow successfully published through the protected
+  `pypi` environment using Trusted Publishing.
+- [x] Let the tag workflow build and inspect the complete cross-platform
+  distribution set, including all native, PyPy, free-threaded, musllinux, and
+  PyEmscripten artifacts plus the sdist rebuild/install smoke.
+- [x] Tag and publish `citry-core@1.5.0` using the repository's release
   procedure.
-- [ ] Verify PyPI installation on a normal supported platform and verify the
+- [x] Verify PyPI installation on a normal supported platform and verify the
   exact URL of the PyEmscripten-compatible `citry-core` artifact that will be
   placed in the playground tuple.
+
+Release evidence:
+
+- final non-publishing qualification:
+  <https://github.com/citry-dev/citry/actions/runs/32126745998>;
+- successful tag/publish workflow:
+  <https://github.com/citry-dev/citry/actions/runs/32130252035>;
+- public package: <https://pypi.org/project/citry-core/1.5.0/>;
+- GitHub Release:
+  <https://github.com/citry-dev/citry/releases/tag/citry-core%401.5.0>;
+- PyPI and GitHub each contain the exact 92 distributions in
+  `release-inventory.json` with matching sizes and SHA-256 hashes; GitHub also
+  carries one publish attestation per distribution;
+- a clean CPython 3.14 macOS arm64 install from PyPI passed the full installed
+  API smoke suite;
+- the immutable PyEmscripten wheel is
+  `citry_core-1.5.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl`, 4,459,502
+  bytes, SHA-256
+  `4e7c8588f5061f60392f907afc380501e4819b663d29ca75f699bd676970e1a6`, at
+  <https://files.pythonhosted.org/packages/09/1f/dbedc0e88b77c4c93de7d367bdc99aa98427149358d367d8901b211bd54d/citry_core-1.5.0-cp314-cp314-pyemscripten_2026_0_wasm32.whl>.
 
 ### Why `citry-core` 1.5.0 needs a PyEmscripten-compatible build variant
 
