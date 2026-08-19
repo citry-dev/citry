@@ -1142,18 +1142,16 @@ Currently, releases are managed manually:
 3. **Update the package's owning changelog** with release notes. Use the root
    `CHANGELOG.md` only for `citry`; auxiliary packages use the `CHANGELOG.md`
    in their own package directory.
-4. **Qualify Citry Core, Citry, citry-lsp, or citry-ui** when releasing one
-   of those packages: manually run its publish workflow on the exact release
-   commit on `main` and wait for the complete distribution gate. The tag
-   promotes that run's exact bytes; packages without a qualify-then-promote
-   workflow skip this step.
+4. **Qualify the package** by manually running its publish workflow on the
+   exact release commit on `main` and waiting for the complete distribution
+   gate. Citry Core, Citry, citry-lsp, citry-ui, and pygments-citry all retain
+   those checked artifacts; the tag promotes that run's exact bytes.
 5. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
 6. **Push the tag**: `git push origin citry-core@1.3.0`
 
 Pushing the tag triggers the package's publish workflow and verifies that the
-tag matches the package version. Citry Core, Citry, citry-lsp, and citry-ui
-promote exact qualified bytes; the remaining package workflows build and
-smoke-test from the tag. A
+tag matches the package version. Each Python package tag promotes exact bytes
+from a successful qualification of the same `main` commit. A
 `citry@X.Y.Z` tag also triggers the documentation release workflow that builds,
 validates, commits, and deploys a version snapshot; sibling package tags do not.
 Review the snapshot procedure and first-release blockers in
@@ -1444,11 +1442,10 @@ the `docs` extra and avoids the Rust build entirely.
 Each published Python package has its own tag-triggered workflow:
 `py--citry-core--publish.yml`, `py--citry--publish.yml`,
 `py--citry-lsp--publish.yml`, `py--citry-ui--publish.yml`, or
-`py--pygments-citry--publish.yml`. Most package workflows build and test from
-the `<package>@<version>` tag, publish to PyPI, and create a matching GitHub
-Release. Citry Core, Citry, citry-lsp, and citry-ui use
-qualify-then-promote: the tag can publish only the exact bytes already
-qualified for its `main` commit.
+`py--pygments-citry--publish.yml`. Each uses qualify-then-promote: a manual
+run builds, tests, and retains the distributions for one exact `main` commit;
+the `<package>@<version>` tag can publish only those qualified bytes and then
+creates the matching GitHub Release.
 
 **PyPI auth is Trusted Publishing (OIDC), not a stored API token.** The release jobs carry `id-token: write` and target a GitHub environment named `pypi`; PyPI verifies the workflow's OIDC identity, so there is no secret to keep. Before a package's first publish, configure a PyPI **publisher** (a *pending publisher* if the project does not exist yet) with:
 

@@ -1,19 +1,14 @@
-# Publish workflow for the pygments-citry package (pure Python).
-# Builds and publishes pygments-citry to PyPI when a `pygments-citry@<version>`
-# tag is pushed (the version after `@` must match the package's pyproject
-# version). The only dependency is Pygments, already on PyPI, so there is no
-# cross-package release ordering to worry about.
+# Qualify and publish the pure-Python pygments-citry package.
+#
+# A manual run builds and tests one artifact pair for an exact main commit.
+# Pushing pygments-citry@<version> at that commit promotes those same bytes;
+# neither event can publish freshly rebuilt or already-published files.
 name: Publish pygments-citry to PyPI
 
 on:
   push:
     tags:
-      # Tags for this package only, e.g. pygments-citry@0.1.0. A bare (no
-      # language prefix) tag means the Python package; see docs/codebase.md
-      # "Versioning, tags and releases".
       - "pygments-citry@*"
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 permissions:
@@ -21,19 +16,24 @@ permissions:
 
 env:
   PROJECT_DIR: packages/py/pygments_citry
+  UV_VERSION: "0.10.12"
 
 jobs:
-  # Fail fast if the tag's version does not match the package's pyproject
-  # version. Skipped cleanly on manual workflow_dispatch (no version tag).
   verify-version:
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package-version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
       - name: Verify tag matches pyproject version
-        if: startsWith(github.ref, 'refs/tags/')
+        id: package-version
         run: |
-          tag_version="${GITHUB_REF_NAME#pygments-citry@}"
           pkg_version=$(grep -m1 '^version' "$PROJECT_DIR/pyproject.toml" | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            exit 0
+          fi
+          tag_version="${GITHUB_REF_NAME#pygments-citry@}"
           echo "tag version: $tag_version, pyproject version: $pkg_version"
           if [ "$tag_version" != "$pkg_version" ]; then
             echo "::error::tag '$tag_version' does not match $PROJECT_DIR/pyproject.toml version '$pkg_version'"
@@ -41,100 +41,217 @@ jobs:
           fi
 
   build:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     needs: verify-version
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          version: "latest"
-      # pygments-citry is pure Python, so this needs no Rust toolchain: it
-      # produces the sdist and the py3-none-any wheel.
-      - name: Build sdist and wheel
+          version: ${{ env.UV_VERSION }}
+      - name: Build the wheel and source distribution
         run: uv build --package pygments-citry --out-dir dist
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@v7
         with:
-          name: pygments-citry-dist
-          path: dist
+          name: raw-pygments-citry-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
 
-  # Install the built wheel in a clean environment and exercise it, so a broken
-  # package (missing modules, unregistered lexer, broken entry point) blocks the
-  # publish instead of shipping.
-  smoke:
-    needs: build
+  smoke-python:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [verify-version, build]
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
+      - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: pygments-citry-dist
+          name: raw-pygments-citry-distributions
+          path: dist
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: ${{ env.UV_VERSION }}
+      - name: Rebuild the sdist and exercise the installed lexers
+        run: python scripts/verify_pygments_citry_distribution.py --dist-dir dist
+
+  verify-distributions:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [verify-version, build, smoke-python]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: raw-pygments-citry-distributions
           path: dist
       - uses: actions/setup-python@v7
         with:
           python-version: "3.14"
-      - name: Install the built wheel and exercise it
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install "$(ls dist/*.whl)"
-          # The entry point must register the lexer with no explicit import.
-          python - <<'PY'
-          from pygments.lexers import get_lexer_by_name
-
-          lexer = get_lexer_by_name("citry")
-          assert lexer.name == "Citry Python", lexer.name
-          sample = (
-              "class Card(Component):\n"
-              '    template = """\n'
-              "      <div><c-slot></c-slot>{{ title }}</div>\n"
-              '    """\n'
-          )
-          tokens = list(lexer.get_tokens(sample))
-          assert tokens, "the lexer produced no tokens"
-          print("citry lexer resolves and highlights:", lexer)
-          PY
-
-  release:
-    runs-on: ubuntu-latest
-    if: ${{ startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' }}
-    needs: [verify-version, build, smoke]
-    # Trusted Publishing target. Configure a PyPI publisher for this repo, the
-    # workflow file py--pygments-citry--publish.yml, and the environment 'pypi'.
-    environment: pypi
-    permissions:
-      # OIDC token for Trusted Publishing (no stored secret) and the attestation
-      id-token: write
-      # Generate the build-provenance attestation
-      attestations: write
-      # Create the GitHub Release
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v8
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
-          name: pygments-citry-dist
-          path: dist
-      - name: Generate build provenance attestation
+          version: ${{ env.UV_VERSION }}
+      - name: Verify and stage the closed release pair
+        run: >-
+          python scripts/verify_pygments_citry_distribution.py
+          --dist-dir dist
+          --skip-install-smoke
+          --stage-output-dir verified
+      - name: Check package-index rendering metadata
+        run: uvx --from twine==6.2.0 twine check verified/*.whl verified/*.tar.gz
+      - name: Attest the qualified build outputs
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: "dist/*"
-      # Trusted Publishing (OIDC): no token. PyPI verifies the workflow's OIDC
-      # identity against the configured publisher.
-      - name: Publish to PyPI
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
-        uses: pypa/gh-action-pypi-publish@release/v1
+          subject-path: |
+            verified/*.whl
+            verified/*.tar.gz
+            verified/release-inventory.json
+      - name: Upload the only bundle a tag may promote
+        uses: actions/upload-artifact@v7
         with:
-          skip-existing: true
-      # No checkout in this job, so gh cannot infer the repo from a local git
-      # remote; pass --repo. Idempotent: if the release already exists (created
-      # in the UI, or a re-run), upload the artifacts to it instead of failing.
-      - name: Create or update the GitHub Release
-        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+          name: verified-pygments-citry-distributions
+          path: verified
+          if-no-files-found: error
+          retention-days: 14
+
+  select-qualification:
+    name: Select the exact main-commit qualification
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    needs: verify-version
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run_id: ${{ steps.select.outputs.run_id }}
+      run_url: ${{ steps.select.outputs.run_url }}
+      artifact_id: ${{ steps.select.outputs.artifact_id }}
+      artifact_digest: ${{ steps.select.outputs.artifact_digest }}
+      head_sha: ${{ steps.select.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Record the peeled tag commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Find a successful qualification for this commit
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/select_citry_core_qualification.py
+          --repository "$GITHUB_REPOSITORY"
+          --commit "${{ steps.commit.outputs.sha }}"
+          --workflow py--pygments-citry--publish.yml
+          --artifact-name verified-pygments-citry-distributions
+          --github-output "$GITHUB_OUTPUT"
+
+  release:
+    name: Promote qualified bytes and release
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    needs: [verify-version, select-qualification]
+    runs-on: ubuntu-latest
+    # Existing Trusted Publisher identity:
+    # pygments-citry / citry-dev / citry /
+    # py--pygments-citry--publish.yml / pypi
+    environment: pypi
+    env:
+      PYGMENTS_CITRY_VERSION: ${{ needs.verify-version.outputs.version }}
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require the qualified commit to remain on main
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ needs.select-qualification.outputs.head_sha }}"
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD origin/main
+      - name: Download the immutable qualification archive
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $GITHUB_REF_NAME already exists; uploading artifacts."
-            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --generate-notes
+          curl --fail --location --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip" \
+            --output qualification.zip
+      - name: Verify GitHub's digest and every qualified artifact again
+        run: >-
+          python scripts/verify_pygments_citry_distribution.py
+          --promote-archive qualification.zip
+          --artifact-digest '${{ needs.select-qualification.outputs.artifact_digest }}'
+          --promotion-output-dir verified
+      - name: Record the promoted qualification
+        run: |
+          jq -n \
+            --arg run_id '${{ needs.select-qualification.outputs.run_id }}' \
+            --arg run_url '${{ needs.select-qualification.outputs.run_url }}' \
+            --arg artifact_digest '${{ needs.select-qualification.outputs.artifact_digest }}' \
+            --arg head_sha '${{ needs.select-qualification.outputs.head_sha }}' \
+            '{run_id: $run_id, run_url: $run_url, artifact_digest: $artifact_digest, head_sha: $head_sha}' \
+            > verified/qualification-provenance.json
+          mkdir dist
+          cp verified/*.whl verified/*.tar.gz dist/
+      - name: Require a new PyPI version and GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pypi_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "https://pypi.org/pypi/pygments-citry/${PYGMENTS_CITRY_VERSION}/json")
+          if [ "$pypi_status" != "404" ]; then
+            echo "::error::expected PyPI version ${PYGMENTS_CITRY_VERSION} to be absent; HTTP ${pypi_status}"
+            exit 1
           fi
+          release_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME")
+          case "$release_status" in
+            404) ;;
+            200)
+              echo "::error::GitHub Release ${GITHUB_REF_NAME} already exists"
+              exit 1
+              ;;
+            *)
+              echo "::error::could not prove GitHub Release ${GITHUB_REF_NAME} is absent; HTTP ${release_status}"
+              exit 1
+              ;;
+          esac
+      - name: Attest the promotion of the qualified bytes
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*
+            verified/release-inventory.json
+            verified/qualification-provenance.json
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          dist/* verified/release-inventory.json verified/qualification-provenance.json
+          --repo "$GITHUB_REPOSITORY"
+          --title "$GITHUB_REF_NAME"
+          --generate-notes

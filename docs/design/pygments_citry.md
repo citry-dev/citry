@@ -1,15 +1,23 @@
 # Design: `pygments-citry` (Pygments lexer for Citry components) and docs-site item 1.5
 
-**Status (2026-08-17): both phases are built; `pygments-citry` 0.1.2 is
-published and 0.2.0 is release-prepared.**
+**Status (2026-08-19): both phases are built; `pygments-citry` 0.1.2 is
+published and 0.2.0 is locally qualified for release.**
 This document covers a releasable Python package, `pygments-citry`, that teaches
 Pygments how to syntax-highlight a Citry component: the Python class plus the
-HTML, JS, and CSS embedded in its `template` / `js` / `css` string attributes.
+HTML, JavaScript, CSS, and Fluent embedded in its `template`, `js`, `css`, and
+`messages` string attributes.
 It also covers the docs-site wiring (migration item 1.5) that loads the lexer
 and switches Citry component code fences from ` ```python ` to ` ```citry `.
 Phase 1 (the package) and Phase 2 (the docs-site wiring) are both implemented.
 The first-release steps retained below are implementation history; the next
 package tag is `pygments-citry@0.2.0`.
+
+The 0.2.0 release adds Fluent highlighting inside component `messages` blocks,
+the standalone `fluent` and `ftl` aliases supplied by `fluent.pygments`, and
+Citry translation-binding highlighting for `$c-tr` and `c-$c-tr`. Its publish
+workflow qualifies the universal wheel and source distribution on Python 3.10
+through 3.14, rebuilds the source distribution outside the checkout, installs
+and exercises every lexer, and lets the tag promote only those retained bytes.
 
 For operating rules see [`/CLAUDE.md`](../../CLAUDE.md). For the docs-site port
 this feeds into, see [`docs_site.md`](docs_site.md) (Phase 8). The upstream

@@ -476,12 +476,44 @@ Release evidence:
 
 ## 6. Release `pygments-citry` 0.2.0
 
-- [ ] Finalize the existing Fluent syntax work and release notes.
-- [ ] Verify the existing PyPI Trusted Publisher/workflow configuration.
-- [ ] Build and inspect the wheel/sdist and run representative Citry and Fluent
-  lexer checks.
-- [ ] Tag/publish 0.2.0 and verify a clean install and Pygments entry-point
-  discovery.
+### Stage 1: pre-release preparation
+
+**Status: locally complete on 2026-08-19.** No `main` update, qualification
+workflow dispatch, tag, publication, or deployment was performed.
+
+- [x] Keep the package at 0.2.0 and finalize the concise release notes for
+  Fluent `messages` blocks plus `$c-tr` and `c-$c-tr` bindings.
+- [x] Confirm the PyPI README explains the `citry`, `citry-html`, `fluent`, and
+  `ftl` lexer aliases and shows the common Markdown and Python usage paths.
+- [x] Replace the direct tag build with qualify-then-promote. Manual runs
+  cannot publish; tags can promote only the retained artifacts qualified for
+  their exact `main` commit.
+- [x] Add a closed universal-wheel/source-distribution verifier with exact
+  metadata, dependency, entry-point, license, source-byte, `RECORD`, safe
+  extraction, outside-checkout rebuild, and fail-closed retry checks.
+- [x] Verify the existing PyPI Trusted Publisher and the GitHub `pypi`
+  environment's `pygments-citry@*` tag policy.
+- [x] Pass the package tests, Ruff, formatting, host and Linux mypy, lock
+  validation, exact artifact verification, Twine rendering, and installed
+  lexer smoke tests on supported Python versions.
+
+### Stage 2: update `main`
+
+- [ ] Copy the named pygments-citry release files into the clean `main`
+  release worktree, inspect the resulting diff, run the agreed integration
+  gate, commit, and push normally. Keep the original `review` branch pointer,
+  index, and files unchanged.
+
+### Stage 3: qualify, tag, and publish
+
+- [ ] Manually run `py--pygments-citry--publish.yml` on the exact release
+  commit on `main` and retain the `verified-pygments-citry-distributions`
+  bundle.
+- [ ] Date the 0.2.0 changelog, create and push the annotated
+  `pygments-citry@0.2.0` tag at that exact commit, and let the tag promote the
+  qualified bytes.
+- [ ] Verify PyPI and the GitHub Release contain the expected pair and a clean
+  public install discovers and exercises all four lexer aliases.
 
 ## 7. Publish the VS Code extension 0.1.0
 

@@ -32,3 +32,11 @@ def test_citry_html_resolves_by_alias():
 def test_citry_html_entry_point_declared():
     values = {ep.value for ep in entry_points(group="pygments.lexers") if ep.name == "citry-html"}
     assert "pygments_citry.citry_html:CitryHtmlLexer" in values
+
+
+def test_fluent_dependency_aliases_resolve():
+    fluent = get_lexer_by_name("fluent")
+    ftl = get_lexer_by_name("ftl")
+
+    assert fluent.name == "Fluent Lexer"
+    assert type(fluent) is type(ftl)
