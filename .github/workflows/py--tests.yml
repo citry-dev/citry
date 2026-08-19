@@ -6,28 +6,32 @@ on:
     branches:
       - "main"
       - "dev"
-    # Run Python tests when any of following changes:
-    # - Python code
-    # - The Citry client runtime and its Alpine compatibility canaries
-    # - The language-neutral protocol packages exercised by the Python tests
-    # - Rust code (because some Python packages depend on Rust crates)
-    # - Workflows themselves (e.g. this file)
-    # - Third-party dependencies (e.g., Ruff submodule) used by both Rust and Python
-    # - Submodule configuration changes (e.g. .gitmodules)
+    # Run when an input to a Python, browser, or distribution-contract job changes.
     paths:
       - "packages/py/**"
       - "packages/js/citry-client/**"
       - "packages/protocol/**"
       - "benchmarks/i18n.py"
+      - "scripts/build_citry_core_pyodide_wheel.py"
+      - "scripts/select_citry_core_qualification.py"
+      - "scripts/sync_protocol_python.py"
+      - "scripts/verify_citry_core_distribution.py"
       - "scripts/verify_citry_distribution.py"
       - "scripts/verify_citry_lsp_distribution.py"
-      - "scripts/verify_citry_ui_distribution.py"
+      - "scripts/verify_pygments_citry_distribution.py"
       - "scripts/verify_wheel_size.py"
       - "crates/**"
       - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "pyproject.toml"
+      - "uv.lock"
       - "package.json"
       - "pnpm-lock.yaml"
-      - ".github/**"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/py--tests.yml"
+      - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
   pull_request:
     paths:
@@ -35,15 +39,26 @@ on:
       - "packages/js/citry-client/**"
       - "packages/protocol/**"
       - "benchmarks/i18n.py"
+      - "scripts/build_citry_core_pyodide_wheel.py"
+      - "scripts/select_citry_core_qualification.py"
+      - "scripts/sync_protocol_python.py"
+      - "scripts/verify_citry_core_distribution.py"
       - "scripts/verify_citry_distribution.py"
       - "scripts/verify_citry_lsp_distribution.py"
-      - "scripts/verify_citry_ui_distribution.py"
+      - "scripts/verify_pygments_citry_distribution.py"
       - "scripts/verify_wheel_size.py"
       - "crates/**"
       - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "pyproject.toml"
+      - "uv.lock"
       - "package.json"
       - "pnpm-lock.yaml"
-      - ".github/**"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/py--tests.yml"
+      - ".github/workflows/py--pygments-citry--publish.yml"
       - ".gitmodules"
   workflow_dispatch:
 

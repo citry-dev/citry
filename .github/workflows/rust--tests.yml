@@ -6,21 +6,23 @@ on:
     branches:
       - "main"
       - "dev"
-    # Run Rust tests when any of following changes:
-    # - Rust code
-    # - Workflows themselves (e.g. this file)
-    # - Third-party dependencies (e.g., Ruff submodule) that our Rust code depends on
-    # - Submodule configuration changes (e.g. .gitmodules)
+    # Run only when an input to this Cargo test matrix changes.
     paths:
       - "crates/**"
-      - ".github/**"
       - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/rust--tests.yml"
       - ".gitmodules"
   pull_request:
     paths:
       - "crates/**"
-      - ".github/**"
       - "third_party/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - ".github/workflows/rust--tests.yml"
       - ".gitmodules"
   workflow_dispatch:
 

@@ -1324,6 +1324,14 @@ This ensures:
 - **Package-specific workflows** use the `language--package--type.yml` convention (e.g., `py--citry-core--publish.yml`)
 - All workflows are in `.github/workflows/` (no subdirectories supported by GitHub)
 
+**Path-filter ownership:** A path-filtered workflow lists the files its jobs
+actually read, build, or test, including root manifests, lockfiles, toolchain
+configuration, and that workflow's own file. Do not use `.github/**` as a
+shortcut: changing an unrelated workflow is not a dependency. Conversely, a
+new script, generated contract, or source tree consumed by a job must be added
+to both its `push.paths` and `pull_request.paths`. Tag, schedule, release, and
+webhook workflows are event-scoped and intentionally have no file path filter.
+
 ## CI/CD Strategy
 
 ### Test Workflows
@@ -1359,8 +1367,9 @@ types, coverage, the custom validators, and a single-environment test pass.
 **Triggers**: Runs when changes are made to:
 
 - `crates/**` - Rust crate code
-- `.github/**` - Workflow changes that might affect test execution
 - `third_party/**` - Third-party dependencies (e.g., Ruff submodule)
+- `Cargo.toml`, `Cargo.lock`, and `rust-toolchain.toml` - workspace and toolchain inputs
+- `.github/workflows/rust--tests.yml` - this test matrix's own definition
 - `.gitmodules` - Submodule configuration changes
 
 **What it tests**:
@@ -1371,7 +1380,7 @@ types, coverage, the custom validators, and a single-environment test pass.
 **Configuration**:
 
 - Rust nightly toolchain (matching `rust-toolchain.toml`)
-- Tests on ubuntu-latest and windows-latest
+- Tests on ubuntu-latest, windows-latest, and macos-latest
 - Uses Rust dependency caching for faster builds
 
 **Why path filters**: Avoids running Rust tests when only Python code, documentation, or unrelated files change.
@@ -1383,9 +1392,12 @@ types, coverage, the custom validators, and a single-environment test pass.
 **Triggers**: Runs when changes are made to:
 
 - `packages/py/**` - Python package code
+- `packages/js/citry-client/**` and `packages/protocol/**` - browser/runtime contracts exercised by Python jobs
 - `crates/**` - Rust code (Python packages depend on Rust via PyO3 bindings)
 - `third_party/**` - Third-party dependencies used by both Rust and Python
-- `.github/**` - Workflow changes
+- root Python, Cargo, pnpm, lockfile, and toolchain inputs
+- the exact release-helper scripts imported or executed by package tests
+- `.github/workflows/py--tests.yml` and the pygments publish workflow whose safety contract is tested
 - `.gitmodules` - Submodule configuration changes
 
 **What it tests**:
@@ -1402,7 +1414,11 @@ types, coverage, the custom validators, and a single-environment test pass.
 - Requires Rust toolchain (`uv sync` builds the citry_core extension via maturin)
 - Uses Rust dependency caching
 
-**Why path filters**: Avoids running Python tests when only documentation, scripts, or unrelated files change. Includes `crates/**` because Python packages depend on Rust code via PyO3 bindings.
+**Why path filters**: Avoids running Python tests when only documentation,
+unconsumed scripts, or unrelated workflows change. Includes `crates/**`
+because Python packages depend on Rust code via PyO3 bindings, and names the
+release helpers that the distribution tests import so those dependencies are
+not missed.
 
 ### Docs workflow Rust cache
 
@@ -1420,10 +1436,13 @@ Keep the toolchain, Python ABI, shared key, compiler-cache settings, and cache p
 aligned across `repo--docs-check.yml`, `repo--docs-deploy.yml`,
 `repo--docs-external-links.yml`, `repo--docs-lighthouse.yml`,
 and `repo--docs-release.yml`; the toolchain validator enforces that contract.
-Those workflows select only the root, Citry, and Citry UI workspace packages,
-because the rendered site does not import the LSP. The people-data refresh does
-not render the site or import Citry at all, so it syncs only the root package and
-the `docs` extra and avoids the Rust build entirely.
+Those workflows sync the root tooling package and Citry (which brings in
+citry-core and the docs lexer); docs validation reads or builds Citry UI source
+where needed without installing the LSP. Their path filters mirror those actual
+inputs and the diagnostics catalog, rather than all Python packages or all
+workflow files. The people-data refresh does not render the site or import
+Citry at all, so it syncs only the root package and the `docs` extra and avoids
+the Rust build entirely.
 
 ### Testing
 

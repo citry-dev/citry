@@ -105,6 +105,18 @@ class TestBuildTagRules:
 
         assert build_tag_rules(c)["c-grid"].slot_data_fields == {"default": ["item"]}
 
+    def test_parameterized_builtin_slot_data_shape_stays_open(self):
+        c = Citry()
+
+        class Layout(Component):
+            citry = c
+            template = '<c-slot name="body" />'
+
+            class Slots:
+                body: SlotInput[dict[str, object]]
+
+        assert build_tag_rules(c)["c-layout"].slot_data_fields == {}
+
     def test_slot_data_fields_support_schema_adapters(self):
         c = Citry()
 

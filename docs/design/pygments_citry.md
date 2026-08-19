@@ -1,7 +1,7 @@
 # Design: `pygments-citry` (Pygments lexer for Citry components) and docs-site item 1.5
 
-**Status (2026-08-19): both phases are built; `pygments-citry` 0.1.2 is
-published and 0.2.0 is locally qualified for release.**
+**Status (2026-08-19): both phases are built and `pygments-citry` 0.2.0 is
+published.**
 This document covers a releasable Python package, `pygments-citry`, that teaches
 Pygments how to syntax-highlight a Citry component: the Python class plus the
 HTML, JavaScript, CSS, and Fluent embedded in its `template`, `js`, `css`, and
@@ -9,7 +9,7 @@ HTML, JavaScript, CSS, and Fluent embedded in its `template`, `js`, `css`, and
 It also covers the docs-site wiring (migration item 1.5) that loads the lexer
 and switches Citry component code fences from ` ```python ` to ` ```citry `.
 Phase 1 (the package) and Phase 2 (the docs-site wiring) are both implemented.
-The first-release steps retained below are implementation history; the next
+The first-release steps retained below are implementation history; the current
 package tag is `pygments-citry@0.2.0`.
 
 The 0.2.0 release adds Fluent highlighting inside component `messages` blocks,

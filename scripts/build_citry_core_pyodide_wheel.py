@@ -13,7 +13,10 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised by the Python 3.10 matrix
+    import tomli as tomllib
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

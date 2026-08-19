@@ -13,7 +13,7 @@ or deploying anything.
 - [x] Release `citry` **0.4.0**, positioned as the Citry beta release. This is
   the final package version (`0.4.0`), not a PEP 440 prerelease such as
   `0.4.0b1`.
-- [ ] Release `pygments-citry` **0.2.0**, including the unreleased Fluent
+- [x] Released `pygments-citry` **0.2.0** on 2026-08-19, including the Fluent
   syntax support.
 - [x] Released `citry-lsp` **0.1.0** on 2026-08-19.
 - [x] Released `citry-ui` **0.1.0** on 2026-08-19 as an early-access release
@@ -30,7 +30,7 @@ or deploying anything.
 | --- | --- | --- | --- |
 | `citry-core` | PyPI 1.5.0 | tagged and released at `citry-core@1.5.0` | 1.5.0 complete |
 | `citry` | PyPI 0.4.0 | 0.4.0, released | 0.4.0 beta |
-| `pygments-citry` | PyPI 0.1.2 | 0.2.0, unreleased | 0.2.0 |
+| `pygments-citry` | PyPI 0.2.0 | tagged and released at `pygments-citry@0.2.0` | 0.2.0 complete |
 | `citry-lsp` | PyPI 0.1.0 | tagged and released at `citry-lsp@0.1.0` | 0.1.0 complete |
 | `citry-ui` | PyPI 0.1.0 | tagged and released at `citry-ui@0.1.0` | 0.1.0 early access complete |
 | `citry-dev.citry` | not found on VS Marketplace or Open VSX | 0.1.0 | 0.1.0 first release |
@@ -499,21 +499,56 @@ workflow dispatch, tag, publication, or deployment was performed.
 
 ### Stage 2: update `main`
 
-- [ ] Copy the named pygments-citry release files into the clean `main`
+**Status: complete on 2026-08-19.** The prepared files were promoted through
+the clean release worktree in commit `782111a9`. The original `review` branch
+pointer, index, and working files remained unchanged.
+
+- [x] Copy the named pygments-citry release files into the clean `main`
   release worktree, inspect the resulting diff, run the agreed integration
   gate, commit, and push normally. Keep the original `review` branch pointer,
   index, and files unchanged.
 
 ### Stage 3: qualify, tag, and publish
 
-- [ ] Manually run `py--pygments-citry--publish.yml` on the exact release
+**Status: complete on 2026-08-19.** The annotated
+`pygments-citry@0.2.0` tag points to exact commit `782111a9`. Qualification
+run `32258222907` retained the closed wheel/sdist pair; promotion run
+`32261269454` published those exact bytes to PyPI and the GitHub Release.
+
+- [x] Manually run `py--pygments-citry--publish.yml` on the exact release
   commit on `main` and retain the `verified-pygments-citry-distributions`
   bundle.
-- [ ] Date the 0.2.0 changelog, create and push the annotated
+- [x] Date the 0.2.0 changelog, create and push the annotated
   `pygments-citry@0.2.0` tag at that exact commit, and let the tag promote the
   qualified bytes.
-- [ ] Verify PyPI and the GitHub Release contain the expected pair and a clean
+- [x] Verify PyPI and the GitHub Release contain the expected pair and a clean
   public install discovers and exercises all four lexer aliases.
+
+Release evidence:
+
+- qualification: <https://github.com/citry-dev/citry/actions/runs/32258222907>;
+- promotion: <https://github.com/citry-dev/citry/actions/runs/32261269454>;
+- public package: <https://pypi.org/project/pygments-citry/0.2.0/>;
+- GitHub Release:
+  <https://github.com/citry-dev/citry/releases/tag/pygments-citry%400.2.0>;
+- wheel: 12,718 bytes, SHA-256
+  `a8b0a53e60b3d3c0821363555ec4f8990658a74bcc81557d4708a0b9ba01d272`;
+- sdist: 21,170 bytes, SHA-256
+  `3e35a097cf45150fe841c798a4154835bdf9ef3132c580cb4537702e27511193`;
+- a no-cache public CPython 3.14 install discovered `citry`, `citry-html`,
+  `fluent`, and `ftl` through Pygments entry points and exercised component
+  `messages`, `$c-tr`, and `c-$c-tr` highlighting.
+
+Post-release CI follow-up on 2026-08-19:
+
+- workflow path filters now name their real source, manifest, lockfile,
+  toolchain, script, and workflow inputs without treating every `.github/**`
+  change as a dependency;
+- the docs browser job installs the pinned root `axe-core` runtime used by its
+  accessibility checks;
+- Python 3.10 uses `tomli` for the Pyodide build helper, and parameterized
+  built-in slot-data types keep the same open-container behavior as Python
+  3.11 and later.
 
 ## 7. Publish the VS Code extension 0.1.0
 

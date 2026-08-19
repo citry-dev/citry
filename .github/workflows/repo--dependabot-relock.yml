@@ -23,7 +23,8 @@ name: Dependabot relock
 on:
   pull_request:
     paths:
-      - "**/pyproject.toml"
+      - "pyproject.toml"
+      - "packages/py/*/pyproject.toml"
 
 permissions:
   contents: read # the push uses the App/PAT token, not GITHUB_TOKEN

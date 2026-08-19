@@ -202,7 +202,14 @@ def _slot_input_data_shape(annotation: object) -> object | None:
 
 def _data_shape_field_names(data_shape: object | None) -> list[str] | None:
     """Read the finite field set of one supported slot-data shape."""
-    if not isinstance(data_shape, type) or vars(data_shape).get("__module__") == "builtins":
+    # Python 3.10 reports parameterized built-ins such as ``dict[str, object]``
+    # as instances of ``type`` while 3.11+ does not. They are open containers,
+    # not finite schema classes, on every supported interpreter.
+    if (
+        get_origin(data_shape) is not None
+        or not isinstance(data_shape, type)
+        or vars(data_shape).get("__module__") == "builtins"
+    ):
         return None
 
     schema_fields = get_fields(data_shape)
