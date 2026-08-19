@@ -1,15 +1,15 @@
 # Plan: the Citry UI component library
 
-**Status (2026-08-12): the source-development catalog contains 55 documented
+**Status (2026-08-19): the source-development catalog contains 55 documented
 component families and 101 registered definitions, including compound-family
-declarations and private renderers. Every family remains pre-release until its
-acceptance and release evidence is complete.**
+declarations and private renderers. The catalog is preparing for a 0.1
+early-access release; its contracts remain alpha rather than stable.**
 
 Phases 0 through 6 are complete. Citry's generic publishing contracts, slot
 contracts, client ambient context, and docs live-component host are
 implemented. Phase 7 began on the released `citry 0.3.1` and `citry_core
-1.4.0` floor. Current source development targets `citry 0.4.0` and
-`citry_core 1.5.0`; publication waits for those artifacts. The
+1.4.0` floor. Current source development and the 0.1 release target the now
+published `citry 0.4.0` and `citry_core 1.5.0` floor. The
 [active component inventory](ui_component_inventory.md) owns current family
 status. Counts and family lists inside the chronological phase records below
 describe those dated slices rather than the current catalog.
@@ -289,9 +289,9 @@ The packaging and registration spike covers:
 
 **Gate:** the publishing architecture is proven. Local-artifact installation,
 registration, assets, and atomic rollback have passed. Current source
-development targets `citry>=0.4.0,<0.5.0` with `citry_core 1.5.0`. The
-released-artifact floor remains provisional until both releases are published
-and pass the clean-install matrix. Multi-release upgrade, downgrade,
+development targets `citry>=0.4.0,<0.5.0` with the published `citry_core
+1.5.0` floor. The 0.1 release gate verifies that pair in clean installs.
+Multi-release upgrade, downgrade,
 uninstall, and wheel fixtures remain publication work. Phase 7 uses one public architecture:
 `LibraryComponent` definitions in the separate `citry-ui` distribution,
 registered explicitly into each Citry engine. The earlier H1/H2/H3 comparison
@@ -313,8 +313,8 @@ The framework and quality foundations needed to begin Phase 7 now exist:
   registration are implemented;
 - server and client `provide`, `inject`, and `unprovide` contracts are
   implemented and browser-tested; and
-- the `citry 0.4.0` and `citry_core 1.5.0` source line is the current
-  development target, with publication waiting for released artifacts.
+- the published `citry 0.4.0` and `citry_core 1.5.0` line is the current
+  development and 0.1 release target.
 
 Storybook is now independent optional extension work, tracked in
 [`extensions_storybook.md`](extensions_storybook.md) and its supporting
@@ -345,9 +345,9 @@ below: per-state axe coverage, visual-candidate capture, Nu HTML and Lighthouse
 CI profiles, Bootstrap and Tailwind coexistence, bounded asset and scaling
 profiles, host fixtures, public live examples, and clean-wheel lifecycle jobs.
 That infrastructure does not turn configured CI into a pass or replace human
-review. The first hosted Nu, Lighthouse, and clean-wheel records, approved
-screenshots, manual keyboard and assistive-technology results, and real mobile
-and Safari evidence remain release tasks.
+review. Hosted Nu, Lighthouse, approved screenshots, manual keyboard and
+assistive-technology results, and real mobile and Safari evidence remain
+stabilization work after the bounded 0.1 early-access gate.
 
 An InfiniteScroll observer and async-cleanup proof remains optional if those
 required cases expose the same lifecycle constraints. All disposable helpers
@@ -356,21 +356,17 @@ the docs live-component host is the first-party preview surface, and a
 different state browser should be designed only if a concrete need remains
 unserved by the docs site and the optional Storybook extension.
 
-The release qualification sequence remains:
+The 0.1 early-access release qualification sequence is:
 
-1. run the hosted workspace Nu, Lighthouse, and visual-candidate jobs;
-2. review and approve or reject the visual candidates, including the final
-   Tabs human polish and live browser pass;
-3. complete manual assistive-technology and real-device evidence;
-4. after the required Citry releases publish, run clean-wheel and
-   released-artifact compatibility jobs;
-5. add multi-release upgrade and downgrade evidence after two Citry UI
-   releases exist; and
-6. write the Phase 8 production contract and v1 roadmap from the accepted
-   evidence.
+1. build and inspect one wheel and source distribution;
+2. install the wheel with the published Citry floor across supported Python
+   versions, render representative components, and exercise one browser
+   interaction from those exact bytes; and
+3. publish only the retained artifacts that passed that gate.
 
-Workspace-hosted qualification and source development can proceed while clean
-released-artifact installation waits. Source development follows the next
+Visual approval, manual assistive-technology and real-device evidence,
+multi-release upgrade and downgrade checks, and the final Phase 8 production
+contract continue as stabilization work. Source development follows the next
 batch in the
 [active component inventory](ui_component_inventory.md). Each planning group
 receives a bounded family-boundary and dependency pass before implementation
@@ -392,9 +388,9 @@ modes, nested-Table CSS isolation, structured reference, and nine
 astronomy-themed live examples. Human visual, keyboard,
 assistive-technology, print, and real-device review remains release evidence.
 
-Publication and released-artifact qualification currently wait for compatible
-`citry` and `citry_core` releases. The active component inventory pulls forward
-only the Phase 8 inventory and source work that can continue safely. Its
+Compatible `citry` and `citry_core` releases are now public. The active
+component inventory pulls forward the Phase 8 inventory and source work that
+can continue alongside the 0.1 early-access release. Its
 bounded family pass selected Icon, Card, Textarea, Native Select, Checkbox,
 Alert, and Accordion, in that order. IconButton remains a Button + Icon
 composition, generic Surface remains private styling infrastructure, and this

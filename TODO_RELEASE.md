@@ -398,22 +398,57 @@ to PyPI and the GitHub Release.
 
 ## 5. First early-access release of `citry-ui` 0.1.0
 
-- [ ] Update its version and Citry 0.4 dependency constraint.
-- [ ] Write a clear 0.1.0 changelog and label the library early access/alpha:
+### Stage 1: pre-release preparation
+
+**Status: locally complete on 2026-08-19.** No second `main` update,
+qualification workflow dispatch, tag, publish, or deployment was performed.
+
+- [x] Keep its version at 0.1.0 and its dependency on the compatible
+  `citry>=0.4.0,<0.5.0` line.
+- [x] Write a clear 0.1.0 changelog and label the library early access/alpha:
   usable for experimentation, intentionally seeking feedback, and subject to
   API changes.
-- [ ] Document known limitations honestly. Do not block publication on the
+- [x] Document known limitations honestly. Do not block publication on the
   complete long-tail manual qualification matrix.
-- [ ] Define and run a small launch floor: distribution build/metadata,
+- [x] Define and run a small launch floor: distribution build/metadata,
   license/readme, clean install/import, registration of a representative
   component, and one representative render/interaction path.
-- [ ] Add a dedicated PyPI OIDC publish workflow and tag convention.
-- [ ] Create/configure its pending PyPI Trusted Publisher with the exact
-  workflow/environment identity.
-- [ ] After Citry 0.4.0 is public, tag/publish 0.1.0 and verify a clean public
-  install.
-- [ ] Add an obvious feedback/issue path to the package and docs so releasing
+- [x] Add `py--citry-ui--publish.yml` and the `citry-ui@<version>` tag with a
+  qualify-then-promote boundary. Manual runs cannot publish, and tags can
+  promote only the retained artifacts qualified for their exact `main`
+  commit.
+- [x] Require a closed universal-wheel/source-distribution pair, exact
+  metadata, licenses, runtime and source bytes, every `RECORD` hash, an
+  outside-checkout sdist rebuild, Twine rendering, and safe promotion
+  extraction.
+- [x] Pass 1,909 non-browser UI tests, 21 focused distribution tests, Ruff,
+  formatting, host and Linux mypy, five public-dependency install/render
+  smokes on CPython 3.10 through 3.14, an installed-wheel Chromium Tabs
+  interaction, the strict docs build, and the repository fast profile.
+- [x] Add an obvious feedback/issue path to the package and docs so releasing
   early can actually produce useful feedback.
+
+### Stage 2: update `main`
+
+- [ ] Copy the named Citry UI release files into the clean `main` release
+  worktree, inspect the resulting diff, run the agreed integration gate,
+  commit, and push normally. Keep the original `review` branch pointer, index,
+  and files unchanged.
+
+### Stage 3: qualify, tag, and publish
+
+- [x] Create the pending PyPI Trusted Publisher with project `citry-ui`, owner
+  `citry-dev`, repository `citry`, workflow `py--citry-ui--publish.yml`, and
+  environment `pypi`.
+- [x] Allow `citry-ui@*` tags in the GitHub `pypi` environment's deployment
+  policy and retain any desired manual approval.
+- [ ] Manually run `py--citry-ui--publish.yml` on the exact release commit on
+  `main` and retain the `verified-citry-ui-distributions` bundle.
+- [ ] Date the 0.1.0 changelog, create and push the annotated
+  `citry-ui@0.1.0` tag at that exact commit, and let the tag promote the
+  qualified bytes.
+- [ ] Verify PyPI and the GitHub Release contain the expected pair and a clean
+  public install registers, renders, and exercises a representative component.
 
 ## 6. Release `pygments-citry` 0.2.0
 

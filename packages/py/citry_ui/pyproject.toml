@@ -49,8 +49,10 @@ storybook = [
 
 [project.urls]
 Homepage = "https://citry.dev"
+Documentation = "https://citry.dev/ui-library/"
 Repository = "https://github.com/citry-dev/citry"
 Issues = "https://github.com/citry-dev/citry/issues"
+Changelog = "https://github.com/citry-dev/citry/blob/main/packages/py/citry_ui/CHANGELOG.md"
 
 [tool.setuptools]
 include-package-data = false

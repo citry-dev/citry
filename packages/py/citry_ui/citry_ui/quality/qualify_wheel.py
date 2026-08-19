@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import io
 import json
+import re
 import sys
 from dataclasses import asdict, dataclass
+from email.parser import BytesParser
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
@@ -155,6 +158,7 @@ _FORBIDDEN_SUFFIXES = {".html", ".json", ".md", ".png", ".svg"}
 _THIRD_PARTY_NOTICE_SHA256 = "0f1b152923fc9ff1181a9e6c87aa5877e258efe6d7dbc4c3198ab25e9dd3e8ad"
 MAX_WHEEL_BYTES = 700 * 1024
 MAX_I18N_COMPRESSED_BYTES = 20 * 1024
+_WHEEL_NAME = re.compile(r"citry_ui-(?P<version>[0-9A-Za-z.!+_]+)-py3-none-any\.whl")
 
 
 class WheelQualificationError(ValueError):
@@ -176,9 +180,11 @@ class WheelReport:
 
 def qualify_wheel(path: Path) -> WheelReport:
     """Validate runtime contents, metadata, license, typing marker, and RECORD."""
-    if not path.is_file() or path.suffix != ".whl":
+    wheel_match = _WHEEL_NAME.fullmatch(path.name)
+    if not path.is_file() or wheel_match is None:
         msg = f"Expected a built .whl file, got {path}."
         raise WheelQualificationError(msg)
+    version = wheel_match.group("version").replace("_", "-")
     try:
         with ZipFile(path) as archive:
             names = archive.namelist()
@@ -212,10 +218,11 @@ def qualify_wheel(path: Path) -> WheelReport:
         raise WheelQualificationError(msg)
 
     dist_info_roots = sorted({name.split("/", 1)[0] for name in names if ".dist-info/" in name})
-    if len(dist_info_roots) != 1:
-        msg = f"Wheel must contain one .dist-info directory, found {dist_info_roots}."
+    expected_dist_info = f"citry_ui-{version}.dist-info"
+    if dist_info_roots != [expected_dist_info]:
+        msg = f"Wheel must contain {expected_dist_info}, found {dist_info_roots}."
         raise WheelQualificationError(msg)
-    dist_info = dist_info_roots[0]
+    dist_info = expected_dist_info
 
     foreign = sorted(name for name in names if not name.startswith(("citry_ui/", "citry_ui_i18n/", f"{dist_info}/")))
     if foreign:
@@ -239,20 +246,28 @@ def qualify_wheel(path: Path) -> WheelReport:
     record_name = f"{dist_info}/RECORD"
     license_name = f"{dist_info}/licenses/LICENSE"
     third_party_license_name = f"{dist_info}/licenses/THIRD_PARTY_LICENSES.md"
-    missing_metadata = [
-        name
-        for name in (
-            metadata_name,
-            wheel_name,
-            record_name,
-            license_name,
-            third_party_license_name,
+    top_level_name = f"{dist_info}/top_level.txt"
+    expected_metadata = {
+        metadata_name,
+        wheel_name,
+        record_name,
+        license_name,
+        third_party_license_name,
+        top_level_name,
+    }
+    actual_metadata = {name for name in names if name.startswith(f"{dist_info}/")}
+    if actual_metadata != expected_metadata:
+        missing_metadata = sorted(expected_metadata - actual_metadata)
+        unexpected_metadata = sorted(actual_metadata - expected_metadata)
+        msg = (
+            "Wheel distribution metadata differs from the release boundary; "
+            f"missing={missing_metadata}, unexpected={unexpected_metadata}."
         )
-        if name not in name_set
-    ]
-    if missing_metadata:
-        msg = f"Wheel is missing distribution metadata: {', '.join(missing_metadata)}."
         raise WheelQualificationError(msg)
+
+    package_root = Path(__file__).parents[2]
+    if contents[license_name] != (package_root / "LICENSE").read_bytes():
+        raise WheelQualificationError("Wheel MIT license differs from the package license.")
 
     third_party_notice_digest = hashlib.sha256(contents[third_party_license_name]).hexdigest()
     if third_party_notice_digest != _THIRD_PARTY_NOTICE_SHA256:
@@ -260,24 +275,45 @@ def qualify_wheel(path: Path) -> WheelReport:
             "Wheel third-party notice differs from the reviewed Lucide and Feather license notice."
         )
 
-    metadata = contents[metadata_name].decode("utf-8")
-    if "Name: citry-ui\n" not in metadata:
+    metadata = BytesParser().parsebytes(contents[metadata_name])
+    if metadata.get("Name") != "citry-ui":
         raise WheelQualificationError("Wheel METADATA does not identify the citry-ui distribution.")
-    if "Requires-Dist: citry" not in metadata:
-        raise WheelQualificationError("Wheel METADATA does not declare the citry runtime dependency.")
+    if metadata.get("Version") != version:
+        raise WheelQualificationError("Wheel METADATA version does not match its filename.")
+    if metadata.get("Requires-Python") not in {">=3.10, <4.0", "<4.0,>=3.10"}:
+        raise WheelQualificationError("Wheel METADATA has an unexpected Python requirement.")
+    if metadata.get_all("Requires-Dist", []) != ["citry<0.5.0,>=0.4.0"]:
+        raise WheelQualificationError("Wheel METADATA has unexpected runtime dependencies.")
+    if metadata.get_all("Provides-Extra", []):
+        raise WheelQualificationError("Wheel METADATA has unexpected optional extras.")
 
     wheel_metadata = contents[wheel_name].decode("utf-8")
     pure_python = "Root-Is-Purelib: true\n" in wheel_metadata
-    if not pure_python:
-        raise WheelQualificationError("Citry UI wheel is not marked as a pure-Python wheel.")
+    if not pure_python or "Tag: py3-none-any\n" not in wheel_metadata:
+        raise WheelQualificationError("Citry UI wheel does not have pure-Python py3-none-any compatibility.")
+    if contents[top_level_name] != b"citry_ui\ncitry_ui_i18n\n":
+        raise WheelQualificationError("Wheel has unexpected top-level import packages.")
 
     record_rows = list(csv.reader(io.StringIO(contents[record_name].decode("utf-8"))))
-    recorded = {row[0] for row in record_rows if row}
+    if any(len(row) != 3 for row in record_rows):
+        raise WheelQualificationError("Wheel RECORD contains a malformed row.")
+    recorded = {row[0] for row in record_rows}
+    if len(record_rows) != len(recorded):
+        raise WheelQualificationError("Wheel RECORD contains duplicate paths.")
     unrecorded = sorted(name_set - recorded)
     stale = sorted(recorded - name_set)
     if unrecorded or stale:
         msg = f"Wheel RECORD differs from the archive; unrecorded={unrecorded}, stale={stale}."
         raise WheelQualificationError(msg)
+    for name, digest, size in record_rows:
+        if name == record_name:
+            if digest or size:
+                raise WheelQualificationError("Wheel RECORD must leave its own hash and size empty.")
+            continue
+        payload = contents[name]
+        expected_digest = base64.urlsafe_b64encode(hashlib.sha256(payload).digest()).rstrip(b"=").decode("ascii")
+        if digest != f"sha256={expected_digest}" or size != str(len(payload)):
+            raise WheelQualificationError(f"Wheel RECORD has an invalid hash or size for {name}.")
 
     runtime_files = len(runtime_names)
     return WheelReport(

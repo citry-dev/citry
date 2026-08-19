@@ -1,4 +1,6 @@
+import base64
 import csv
+import hashlib
 import io
 from pathlib import Path
 from zipfile import ZipFile
@@ -14,6 +16,7 @@ from citry_ui.quality.qualify_wheel import (
 )
 
 _THIRD_PARTY_NOTICE = (Path(__file__).parents[3] / "THIRD_PARTY_LICENSES.md").read_bytes()
+_LICENSE = (Path(__file__).parents[3] / "LICENSE").read_bytes()
 _RUNTIME_PACKAGE = Path(__file__).parents[2]
 
 
@@ -23,14 +26,21 @@ def _wheel(tmp_path, *, extra=()):
     files = {
         **dict.fromkeys(EXPECTED_RUNTIME_FILES, b""),
         **dict.fromkeys(EXPECTED_I18N_FILES, b""),
-        f"{dist}/METADATA": b"Name: citry-ui\nRequires-Dist: citry>=0.4.0,<0.5.0\n",
-        f"{dist}/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\n",
-        f"{dist}/licenses/LICENSE": b"MIT\n",
+        f"{dist}/METADATA": (
+            b"Name: citry-ui\nVersion: 0.1.0\nRequires-Python: >=3.10, <4.0\nRequires-Dist: citry<0.5.0,>=0.4.0\n"
+        ),
+        f"{dist}/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        f"{dist}/licenses/LICENSE": _LICENSE,
         f"{dist}/licenses/THIRD_PARTY_LICENSES.md": _THIRD_PARTY_NOTICE,
+        f"{dist}/top_level.txt": b"citry_ui\ncitry_ui_i18n\n",
     }
     files.update(dict(extra))
     record_name = f"{dist}/RECORD"
-    rows = [[name, "", ""] for name in (*files, record_name)]
+    rows = []
+    for name, payload in files.items():
+        digest = base64.urlsafe_b64encode(hashlib.sha256(payload).digest()).rstrip(b"=").decode("ascii")
+        rows.append([name, f"sha256={digest}", str(len(payload))])
+    rows.append([record_name, "", ""])
     output = io.StringIO()
     csv.writer(output, lineterminator="\n").writerows(rows)
     files[record_name] = output.getvalue().encode()
