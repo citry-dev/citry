@@ -1,14 +1,15 @@
 # Plan: the Citry UI component library
 
-**Status (2026-08-19): the source-development catalog contains 55 documented
-component families and 101 registered definitions, including compound-family
-declarations and private renderers. The catalog is preparing for a 0.1
-early-access release; its contracts remain alpha rather than stable.**
+**Status (2026-08-19): `citry-ui` 0.1.0 is publicly available as an early-access
+release. The source-development catalog contains 55 documented component
+families and 101 registered definitions, including compound-family
+declarations and private renderers; its contracts remain alpha rather than
+stable.**
 
 Phases 0 through 6 are complete. Citry's generic publishing contracts, slot
 contracts, client ambient context, and docs live-component host are
 implemented. Phase 7 began on the released `citry 0.3.1` and `citry_core
-1.4.0` floor. Current source development and the 0.1 release target the now
+1.4.0` floor. Current source development and the released 0.1.0 line use the
 published `citry 0.4.0` and `citry_core 1.5.0` floor. The
 [active component inventory](ui_component_inventory.md) owns current family
 status. Counts and family lists inside the chronological phase records below
@@ -290,7 +291,7 @@ The packaging and registration spike covers:
 **Gate:** the publishing architecture is proven. Local-artifact installation,
 registration, assets, and atomic rollback have passed. Current source
 development targets `citry>=0.4.0,<0.5.0` with the published `citry_core
-1.5.0` floor. The 0.1 release gate verifies that pair in clean installs.
+1.5.0` floor. The 0.1.0 release gate verified that pair in clean installs.
 Multi-release upgrade, downgrade,
 uninstall, and wheel fixtures remain publication work. Phase 7 uses one public architecture:
 `LibraryComponent` definitions in the separate `citry-ui` distribution,
@@ -314,7 +315,7 @@ The framework and quality foundations needed to begin Phase 7 now exist:
 - server and client `provide`, `inject`, and `unprovide` contracts are
   implemented and browser-tested; and
 - the published `citry 0.4.0` and `citry_core 1.5.0` line is the current
-  development and 0.1 release target.
+  development and published 0.1.0 line.
 
 Storybook is now independent optional extension work, tracked in
 [`extensions_storybook.md`](extensions_storybook.md) and its supporting
@@ -356,7 +357,7 @@ the docs live-component host is the first-party preview surface, and a
 different state browser should be designed only if a concrete need remains
 unserved by the docs site and the optional Storybook extension.
 
-The 0.1 early-access release qualification sequence is:
+The 0.1.0 early-access release qualification sequence was:
 
 1. build and inspect one wheel and source distribution;
 2. install the wheel with the published Citry floor across supported Python
@@ -390,7 +391,7 @@ assistive-technology, print, and real-device review remains release evidence.
 
 Compatible `citry` and `citry_core` releases are now public. The active
 component inventory pulls forward the Phase 8 inventory and source work that
-can continue alongside the 0.1 early-access release. Its
+can continue after the 0.1.0 early-access release. Its
 bounded family pass selected Icon, Card, Textarea, Native Select, Checkbox,
 Alert, and Accordion, in that order. IconButton remains a Button + Icon
 composition, generic Surface remains private styling infrastructure, and this
@@ -1134,14 +1135,14 @@ commitment.
 **Gate:** independent adversarial review of the prototype-backed decision
 before implementation dispatch.
 
-The timing remains deliberate: the `citry 0.4.0` and `citry_core 1.5.0`
-workspace supports production component work while its release artifacts are
-pending. Production component work proceeds through specifications, docs live examples,
+The timing remains deliberate: the released `citry-ui 0.1.0`, `citry 0.4.0`,
+and `citry_core 1.5.0` artifacts support production component work.
+Production component work proceeds through specifications, docs live examples,
 standalone scenarios, and direct quality tools. Storybook may later add an
 optional contributor previewer, but it is not an entry gate. No separate
 custom gallery is planned unless a concrete need remains after using the docs
-site and evaluating the optional Storybook extension. Publication still needs
-the released-artifact compatibility matrix.
+site and evaluating the optional Storybook extension. Later stabilization
+still needs the released-artifact compatibility matrix.
 
 The post-third-batch review has resolved and implemented Grid and Container.
 The research pass for Menu, Tooltip, Popover, Drawer, and Toast is complete in

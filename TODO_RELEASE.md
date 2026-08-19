@@ -16,9 +16,8 @@ or deploying anything.
 - [ ] Release `pygments-citry` **0.2.0**, including the unreleased Fluent
   syntax support.
 - [x] Released `citry-lsp` **0.1.0** on 2026-08-19.
-- [ ] Publish `citry-ui` **0.1.0** for the first time. Treat this as an
-  early-access release intended to generate real-world feedback; incomplete
-  long-tail qualification is not a reason to defer it.
+- [x] Released `citry-ui` **0.1.0** on 2026-08-19 as an early-access release
+  intended to generate real-world feedback.
 - [ ] Publish the VS Code extension `citry-dev.citry` **0.1.0** after
   `citry-lsp` is installable.
 - [ ] Once the new Python artifacts exist, update the playground's complete,
@@ -33,7 +32,7 @@ or deploying anything.
 | `citry` | PyPI 0.4.0 | 0.4.0, released | 0.4.0 beta |
 | `pygments-citry` | PyPI 0.1.2 | 0.2.0, unreleased | 0.2.0 |
 | `citry-lsp` | PyPI 0.1.0 | tagged and released at `citry-lsp@0.1.0` | 0.1.0 complete |
-| `citry-ui` | not found on PyPI | 0.1.0 | 0.1.0 first release |
+| `citry-ui` | PyPI 0.1.0 | tagged and released at `citry-ui@0.1.0` | 0.1.0 early access complete |
 | `citry-dev.citry` | not found on VS Marketplace or Open VSX | 0.1.0 | 0.1.0 first release |
 
 The Rust crates and JavaScript/protocol packages currently marked `0.0.0`, as
@@ -430,25 +429,50 @@ qualification workflow dispatch, tag, publish, or deployment was performed.
 
 ### Stage 2: update `main`
 
-- [ ] Copy the named Citry UI release files into the clean `main` release
+**Status: complete on 2026-08-19.** The prepared files were promoted through
+the clean release worktree in commit `7cc690ac`. The original `review` branch
+pointer, index, and working files remained unchanged.
+
+- [x] Copy the named Citry UI release files into the clean `main` release
   worktree, inspect the resulting diff, run the agreed integration gate,
   commit, and push normally. Keep the original `review` branch pointer, index,
   and files unchanged.
 
 ### Stage 3: qualify, tag, and publish
 
+**Status: complete on 2026-08-19.** The annotated `citry-ui@0.1.0` tag points
+to exact commit `7cc690ac`. Qualification run `32247890671` retained the
+closed wheel/sdist pair; promotion run `32249108125` published those exact
+bytes to PyPI and the GitHub Release.
+
 - [x] Create the pending PyPI Trusted Publisher with project `citry-ui`, owner
   `citry-dev`, repository `citry`, workflow `py--citry-ui--publish.yml`, and
   environment `pypi`.
 - [x] Allow `citry-ui@*` tags in the GitHub `pypi` environment's deployment
   policy and retain any desired manual approval.
-- [ ] Manually run `py--citry-ui--publish.yml` on the exact release commit on
+- [x] Manually run `py--citry-ui--publish.yml` on the exact release commit on
   `main` and retain the `verified-citry-ui-distributions` bundle.
-- [ ] Date the 0.1.0 changelog, create and push the annotated
+- [x] Date the 0.1.0 changelog, create and push the annotated
   `citry-ui@0.1.0` tag at that exact commit, and let the tag promote the
   qualified bytes.
-- [ ] Verify PyPI and the GitHub Release contain the expected pair and a clean
+- [x] Verify PyPI and the GitHub Release contain the expected pair and a clean
   public install registers, renders, and exercises a representative component.
+
+Release evidence:
+
+- qualification: <https://github.com/citry-dev/citry/actions/runs/32247890671>;
+- promotion: <https://github.com/citry-dev/citry/actions/runs/32249108125>;
+- public package: <https://pypi.org/project/citry-ui/0.1.0/>;
+- GitHub Release:
+  <https://github.com/citry-dev/citry/releases/tag/citry-ui%400.1.0>;
+- wheel: 525,573 bytes, SHA-256
+  `8fc344fc634a702dc8da093b68ea5c55acc5487bf6180082b080a314ea59da92`;
+- sdist: 500,675 bytes, SHA-256
+  `ed97e70e009d5827c27045f085ae484d7c5b20d8ecd838f3899767995eeb7d53`;
+- a clean standard CPython 3.14 install from PyPI registered all 101
+  definitions and rendered Button, Pagination, and the translated Pagination
+  label. The release qualification also exercised Tabs in Chromium from the
+  retained wheel.
 
 ## 6. Release `pygments-citry` 0.2.0
 
@@ -483,7 +507,7 @@ compatible public-artifact tuple. It currently pins Citry 0.3.1 and
 `citry-core` 1.4.0 with immutable wheel URLs. A normal deployed build does not
 silently substitute workspace packages.
 
-- [ ] Wait until `citry-core` 1.5.0, `citry` 0.4.0, and—if enabling UI examples
+- [x] Wait until `citry-core` 1.5.0, `citry` 0.4.0, and—if enabling UI examples
   live—`citry-ui` 0.1.0 are publicly downloadable.
 - [ ] Update the entire tuple together: Pyodide/Python if intentionally
   changing it; Citry/core/UI versions; immutable wheel URLs; integrity and
