@@ -6,8 +6,8 @@ The portable syntax corpus drives the aligned Pygments lexers and declarative
 VS Code highlighting, `citry check` provides parser-grade batch validation
 with an explicitly bounded static fallback, and the companion language server
 plus VS Code client provide the implemented editor intelligence. The VS Code
-extension and `citry-lsp` 0.1.0 remain release-prepared rather than published
-until they can be cut from a clean release commit. `pygments-citry` 0.1.2 is
+extension remains release-prepared rather than published. `citry-lsp` 0.1.0
+is published. `pygments-citry` 0.1.2 is
 published, with 0.2.0 release-prepared. The original design is the
 synthesis of a research and design-panel process: five recon reports,
 three competing design drafts, and two adversarial judge verdicts, all in
@@ -260,7 +260,7 @@ packages/editors/syntax-fixtures/  exists; portable conformance data  (JSON)
 packages/editors/vscode/           0.1.0 release-prepared              (JSON at v0; TypeScript with LSP)
 packages/py/citry/                 existing `citry inspect`;          (Python, reuses citry_core)
                                      new `citry check`
-package home decided before v1     new: pygls server, `citry-lsp`     (Python, reuses citry_core + citry)
+packages/py/citry_lsp/             0.1.0 published; pygls server      (Python, reuses citry_core + citry)
 crates/citry_template_parser/ +    two small additive changes         (Rust; Mechanism 2 + 4
 crates/citry_core_py/                (structured diagnostics, kind)     when implemented)
 ```
@@ -807,7 +807,7 @@ This table records the implemented and proposed locations.
 | Pygments lexers | `packages/py/pygments_citry/` | Python | aligned 0.1.1 package published |
 | Shared syntax corpus | `packages/editors/syntax-fixtures/` | JSON | exists; consumed by each highlighter's tests |
 | `citry inspect` and `citry check` subcommands | `packages/py/citry/` (CLI + the #26 introspection API) | Python | implemented, including `check --format json` schema v1 |
-| Language server | `packages/py/citry_lsp/` | Python | v0.1.0 implemented and locally install-tested; not yet published |
+| Language server | `packages/py/citry_lsp/` | Python | v0.1.0 published on 2026-08-19 |
 | VS Code extension + grammars | `packages/editors/vscode/` | JSON + TypeScript | v0.1.0 client and universal VSIX implemented; not yet published |
 | Structured diagnostics and `kind` getter | `crates/citry_template_parser/` + `crates/citry_core_py/` + `_rust.pyi` + Python wrapper | Rust + stubs | implemented 2026-07-30 through the required prior-art, plan, and cross-binding audit |
 | Syntax corpus and authoritative-set validator | Highlighting tests plus `scripts/validators/` if cross-package validation needs it | Fixtures + Python | implemented with v0.1 highlighting |
@@ -1881,8 +1881,8 @@ Step 5 selected the companion `citry_lsp` distribution. It exposes the
 `citry-lsp` console command, declares Citry 0.4.0 through 0.4.x, catalog v1,
 and client protocol v1 support, and has project-environment plus isolated
 syntax-only install coverage. Citry 0.4.0 supplies the first published
-portable analysis and coordinate contracts, so it must reach PyPI before
-`citry-lsp` 0.1.0 can be published.
+portable analysis and coordinate contracts, and reached PyPI before
+`citry-lsp` 0.1.0 was published on 2026-08-19.
 
 Claim each distribution identifier immediately before its artifact is ready to
 publish; speculative name claims do not block earlier local work. The PyCharm

@@ -1,6 +1,6 @@
 # Citry beta release tracker
 
-Updated: 2026-08-18
+Updated: 2026-08-19
 
 This file is the working checklist for the next public release set. It records
 release intent; checking it in does not itself authorize publishing, tagging,
@@ -15,7 +15,7 @@ or deploying anything.
   `0.4.0b1`.
 - [ ] Release `pygments-citry` **0.2.0**, including the unreleased Fluent
   syntax support.
-- [ ] Publish `citry-lsp` **0.1.0** for the first time.
+- [x] Released `citry-lsp` **0.1.0** on 2026-08-19.
 - [ ] Publish `citry-ui` **0.1.0** for the first time. Treat this as an
   early-access release intended to generate real-world feedback; incomplete
   long-tail qualification is not a reason to defer it.
@@ -32,7 +32,7 @@ or deploying anything.
 | `citry-core` | PyPI 1.5.0 | tagged and released at `citry-core@1.5.0` | 1.5.0 complete |
 | `citry` | PyPI 0.4.0 | 0.4.0, released | 0.4.0 beta |
 | `pygments-citry` | PyPI 0.1.2 | 0.2.0, unreleased | 0.2.0 |
-| `citry-lsp` | not found on PyPI | 0.1.0 | 0.1.0 first release |
+| `citry-lsp` | PyPI 0.1.0 | tagged and released at `citry-lsp@0.1.0` | 0.1.0 complete |
 | `citry-ui` | not found on PyPI | 0.1.0 | 0.1.0 first release |
 | `citry-dev.citry` | not found on VS Marketplace or Open VSX | 0.1.0 | 0.1.0 first release |
 
@@ -365,25 +365,34 @@ workflow dispatch, tag, publish, or deployment was performed.
 
 ### Stage 2: update `main`
 
-- [ ] Copy the named LSP release files into the clean `main` release worktree,
+**Status: complete on 2026-08-19.** The prepared files were promoted through
+the clean release worktree in commits `bca20abf` and `1e7989a9`; the dated
+release commit is `3efc6203`. The original `review` branch pointer, index, and
+working files remained unchanged.
+
+- [x] Copy the named LSP release files into the clean `main` release worktree,
   inspect the resulting diff, run the agreed integration gate, commit, and
   push normally. Keep the original `review` branch pointer, index, and files
   unchanged.
 
 ### Stage 3: qualify, tag, and publish
 
-- [ ] Create the pending PyPI Trusted Publisher with project `citry-lsp`,
+**Status: complete on 2026-08-19.** The annotated `citry-lsp@0.1.0` tag points
+to exact commit `3efc6203`. Qualification run `32234879060` produced the
+retained release pair; promotion run `32237406471` published those exact bytes
+to PyPI and the GitHub Release.
+
+- [x] Create the pending PyPI Trusted Publisher with project `citry-lsp`,
   owner `citry-dev`, repository `citry`, workflow
-  `py--citry-lsp--publish.yml`, and environment `pypi`. The project currently
-  returns 404 from PyPI; the pending publisher creates it on first use but
-  does not reserve the name before publication.
-- [ ] Allow `citry-lsp@*` tags in the GitHub `pypi` environment's deployment
+  `py--citry-lsp--publish.yml`, and environment `pypi`. The pending publisher
+  created the project on first use.
+- [x] Allow `citry-lsp@*` tags in the GitHub `pypi` environment's deployment
   policy and retain any desired manual approval.
-- [ ] Manually run `py--citry-lsp--publish.yml` on the exact release commit on
+- [x] Manually run `py--citry-lsp--publish.yml` on the exact release commit on
   `main` and wait for the five-version qualification matrix and retained
   `verified-citry-lsp-distributions` bundle.
-- [ ] Create and push the annotated `citry-lsp@0.1.0` tag at that exact commit.
-- [ ] Verify the tag workflow promoted the qualified bytes, PyPI and the
+- [x] Create and push the annotated `citry-lsp@0.1.0` tag at that exact commit.
+- [x] Verify the tag workflow promoted the qualified bytes, PyPI and the
   GitHub Release contain the expected pair, and a clean public install starts
   the server.
 
