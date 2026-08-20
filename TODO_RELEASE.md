@@ -16,9 +16,9 @@ or deploying anything.
 - [x] Released `pygments-citry` **0.2.0** on 2026-08-19, including the Fluent
   syntax support.
 - [x] Released `citry-lsp` **0.1.0** on 2026-08-19.
-- [ ] Release `citry` **0.4.1** and `citry-lsp` **0.1.1** so editor
-  formatting keeps ordinary triple-quoted asset quotes and uses canonical
-  JavaScript/CSS host framing.
+- [x] Released `citry` **0.4.1** and `citry-lsp` **0.1.1** on 2026-08-20 so
+  editor formatting keeps ordinary triple-quoted asset quotes and uses
+  canonical JavaScript/CSS host framing.
 - [x] Released `citry-ui` **0.1.0** on 2026-08-19 as an early-access release
   intended to generate real-world feedback.
 - [ ] Publish the VS Code extension `citry-dev.citry` **0.1.0** after
@@ -32,9 +32,9 @@ or deploying anything.
 | Artifact | Public state found during audit | Repository state | Target |
 | --- | --- | --- | --- |
 | `citry-core` | PyPI 1.5.0 | tagged and released at `citry-core@1.5.0` | 1.5.0 complete |
-| `citry` | PyPI 0.4.0 | 0.4.0, released | 0.4.0 beta |
+| `citry` | PyPI 0.4.1 | tagged and released at `citry@0.4.1` | 0.4.1 formatter patch complete |
 | `pygments-citry` | PyPI 0.2.0 | tagged and released at `pygments-citry@0.2.0` | 0.2.0 complete |
-| `citry-lsp` | PyPI 0.1.0 | tagged and released at `citry-lsp@0.1.0` | 0.1.0 complete |
+| `citry-lsp` | PyPI 0.1.1 | tagged and released at `citry-lsp@0.1.1` | 0.1.1 formatter patch complete |
 | `citry-ui` | PyPI 0.1.0 | tagged and released at `citry-ui@0.1.0` | 0.1.0 early access complete |
 | `citry-dev.citry` | not found on VS Marketplace or Open VSX | 0.1.0 | 0.1.0 first release |
 
@@ -49,10 +49,10 @@ third-party, research, historical, or internal files.
 citry-core 1.5.0, published for native platforms and Pyodide/WebAssembly
         |
         v
-citry 0.4.0 beta
+citry 0.4.1 beta
    |             |
    v             v
-citry-lsp 0.1.0  citry-ui 0.1.0
+citry-lsp 0.1.1  citry-ui 0.1.0
    |
    v
 VS Code extension 0.1.0
@@ -557,12 +557,12 @@ Post-release CI follow-up on 2026-08-19:
 
 ### Stage 1: pre-publish preparation
 
-**Status: code and package preparation complete on 2026-08-19; demo media is
-still pending.** No `main` update, workflow dispatch, publisher/environment
-change, tag, registry publish, GitHub Release, or docs deployment was
-performed.
+**Status: code and package preparation complete; the public Citry 0.4.1 and
+citry-lsp 0.1.1 prerequisites are live. Demo media, final qualification, and
+publisher setup are still pending.** No extension tag, registry publish, or
+extension GitHub Release has been performed.
 
-- [ ] Wait for public `citry-lsp` 0.1.1. Its dependency floor requires Citry
+- [x] Wait for public `citry-lsp` 0.1.1. Its dependency floor requires Citry
   0.4.1, while Citry Core remains 1.5.0 and the analysis extra remains
   `ty` 0.0.71
   from PyPI.
@@ -608,7 +608,9 @@ performed.
   bytes expanded; SHA-256
   `7f5e7ba9a3a855577f8ac5a510829d3e557be97289aa6de5357739d9fe2226c9`.
   The qualification build's inventory is authoritative because VSIX ZIP
-  timestamps make a later rebuild byte-different.
+  timestamps make a later rebuild byte-different. This pre-Dependabot artifact
+  is now superseded by the Prettier 3.9.6 bundle update, so the final VSIX must
+  be rebuilt and requalified.
 - [x] Add exact VSIX metadata/source/member/size/path validation, safe retained
   artifact promotion, byte inventory, and qualification/promotion provenance.
 - [ ] Load the extracted VSIX in a clean VS Code 1.101.0 profile against a
@@ -619,7 +621,7 @@ performed.
   The local macOS arm64 smoke passed, including provider selection and
   repeated-command idempotence. The full component fixture also requires plain
   HTML quotes and canonical triple-quoted JavaScript/CSS host framing.
-- [ ] Publish Citry 0.4.1 with the Python host-framing fix, then publish
+- [x] Publish Citry 0.4.1 with the Python host-framing fix, then publish
   `citry-lsp` 0.1.1 with `citry[analysis-ty]>=0.4.1,<0.5`, before qualifying
   the public extension artifact.
 - [x] Add `vscode--citry--publish.yml`. Manual runs can only qualify; a

@@ -14,9 +14,8 @@ Nothing else needs to be added to the LSP runtime package. Installing citry-lsp 
 
 pytest and pytest-lsp are development dependencies only.
 
-Citry 0.4.0, citry-core 1.5.0, and citry-lsp 0.1.0 are published. Citry 0.4.1
-and citry-lsp 0.1.1 are prepared as the formatter patch pair. Install and start
-the server in the project environment:
+Citry 0.4.1, citry-core 1.5.0, and citry-lsp 0.1.1 are published. Install and
+start the server in the project environment:
 
 python -m pip install citry-lsp
 citry-lsp
@@ -43,7 +42,7 @@ In VS Code, select the repository’s .venv Python interpreter. If automatic int
 
 Then verify:
 
-- Run Citry: Show Language Server Status. It should report registry, the selected interpreter, your app spec, Citry 0.4.0, and protocol 1.
+- Run Citry: Show Language Server Status. It should report registry, the selected interpreter, your app spec, Citry 0.4.1, and protocol 1.
 - Open a component’s Python file. Its template, js, and css multiline strings should be highlighted.
 - Introduce an unmatched or malformed tag and check for a precise diagnostic.
 - Type <c- and check component completion.
