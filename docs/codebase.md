@@ -907,6 +907,43 @@ at `https://github.com/citry-dev/citry/blob/main/...`. The
 `published_readme_links` validator enforces this, so a relative path fails the
 gate rather than shipping.
 
+#### Recording Marketplace demo GIFs
+
+The first VS Code release used this practical macOS workflow. It favors crisp,
+readable editor text over the smallest possible file:
+
+1. Record the editor with macOS Screen Recording or QuickTime Player. Hide
+   notifications and avoid personal paths, branch names, SSH host/user names,
+   tokens, and unrelated editor chrome before recording when possible.
+2. Import the recording into DaVinci Resolve on its own timeline. Set the
+   timeline resolution to the recording's native resolution before editing so
+   text is not resampled prematurely.
+3. Cut idle sections and speed up slow interactions where useful. The clip
+   should demonstrate one outcome without making the cursor difficult to
+   follow.
+4. In **Deliver**, export as GIF at the timeline resolution and frame rate with
+   a 128-color palette.
+5. If Resolve emits an unnecessarily high frame rate (the first clips used 18
+   FPS), open the GIF in Preview, show the individual frames, and remove every
+   second frame. Replay the result to confirm the timing still reads naturally;
+   depending on the stored frame delays, deletion may also speed up the clip.
+   GIFs store frame-to-frame changes rather than behaving like a simple stack
+   of independent images, so halving the frame count can reduce bytes by much
+   more than half.
+6. If the result is still too large, render again at two-thirds of the original
+   width and height. Half-size editor captures were too blurry in the first
+   release; two-thirds retained readable code while cutting substantially more
+   data.
+7. For last-resort redaction, Preview can edit individual frames: paste the
+   same opaque rectangle over the sensitive region in every frame. Scrub the
+   entire GIF afterward so no single transition leaks the covered content.
+
+Keep each Marketplace GIF below roughly 5 MiB when practical, but do not trade
+away code readability merely to hit the target. Store the source GIFs under the
+extension's `images/` directory, reference them through absolute raw GitHub
+URLs, and exclude them from the VSIX because they are listing media rather than
+runtime assets.
+
 #### The parts that are not in the repository
 
 A GitHub organisation profile picture and a repository social-preview image can
@@ -1759,7 +1796,23 @@ Microsoft accepts a verified-publisher application only after the public
 extension and eligible domain have met its six-month requirements. Track the
 earliest date from the actual Marketplace publication, not from repository
 preparation. [Issue #84](https://github.com/citry-dev/citry/issues/84) owns that
-follow-up for the first Citry release.
+follow-up for the first Citry release. The Marketplace domain challenge for
+this publisher uses a TXT name shaped like
+`_visual-studio-marketplace-citry-dev.citry.dev`. DNS control panels commonly
+append the managed zone automatically: in Namecheap's host field enter only
+`_visual-studio-marketplace-citry-dev`, not the full hostname, or the record is
+silently created at `...citry.dev.citry.dev`. Before retrying Microsoft's
+check, query the intended FQDN and, when debugging propagation, query the
+authoritative nameserver directly:
+
+```console
+dig TXT _visual-studio-marketplace-citry-dev.citry.dev
+dig +short NS citry.dev
+dig @<authoritative-nameserver> TXT _visual-studio-marketplace-citry-dev.citry.dev
+```
+
+Do not record the challenge value in the repository; use the current value
+shown in the publisher portal.
 
 - Rust crates are not published to crates.io; they are an internal implementation detail surfaced through the Python packages.
 - The root `pyproject.toml` is never published (no build-system; `Private :: Do Not Upload`).

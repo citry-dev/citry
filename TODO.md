@@ -20,9 +20,8 @@ start the server in the project environment:
 python -m pip install citry-lsp
 citry-lsp
 
-The remaining release order is:
-
-1. Publish the VS Code extension when ready.
+Citry for VS Code 0.1.0 is published to Visual Studio Marketplace and Open VSX.
+The matching GitHub Release carries the exact qualified VSIX.
 
 ## Testing the VS Code integration
 

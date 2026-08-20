@@ -21,8 +21,8 @@ or deploying anything.
   canonical JavaScript/CSS host framing.
 - [x] Released `citry-ui` **0.1.0** on 2026-08-19 as an early-access release
   intended to generate real-world feedback.
-- [ ] Publish the VS Code extension `citry-dev.citry` **0.1.0** after
-  `citry-lsp` is installable.
+- [x] Published the VS Code extension `citry-dev.citry` **0.1.0** on
+  2026-08-20 after `citry-lsp` became installable.
 - [ ] Once the new Python artifacts exist, update the playground's complete,
   compatible runtime tuple and sweep all current version constraints, pins,
   examples, tests, and release documentation across the repository.
@@ -36,7 +36,7 @@ or deploying anything.
 | `pygments-citry` | PyPI 0.2.0 | tagged and released at `pygments-citry@0.2.0` | 0.2.0 complete |
 | `citry-lsp` | PyPI 0.1.1 | tagged and released at `citry-lsp@0.1.1` | 0.1.1 formatter patch complete |
 | `citry-ui` | PyPI 0.1.0 | tagged and released at `citry-ui@0.1.0` | 0.1.0 early access complete |
-| `citry-dev.citry` | not found on VS Marketplace or Open VSX | 0.1.0 | 0.1.0 first release |
+| `citry-dev.citry` | VS Marketplace and Open VSX 0.1.0 | tagged and released at `vscode-citry@0.1.0` | 0.1.0 complete |
 
 The Rust crates and JavaScript/protocol packages currently marked `0.0.0`, as
 well as internal Rust crate version numbers, are not automatically part of
@@ -557,9 +557,8 @@ Post-release CI follow-up on 2026-08-19:
 
 ### Stage 1: pre-publish preparation
 
-**Status: code, package, media, public-package prerequisites, and publisher
-setup are complete. Final qualification is pending.** No extension tag,
-registry publish, or extension GitHub Release has been performed.
+**Status: complete on 2026-08-20.** The same qualified universal VSIX is public
+on Visual Studio Marketplace and Open VSX and attached to the GitHub Release.
 
 - [x] Wait for public `citry-lsp` 0.1.1. Its dependency floor requires Citry
   0.4.1, while Citry Core remains 1.5.0 and the analysis extra remains
@@ -599,7 +598,7 @@ registry publish, or extension GitHub Release has been performed.
   be rebuilt and requalified.
 - [x] Add exact VSIX metadata/source/member/size/path validation, safe retained
   artifact promotion, byte inventory, and qualification/promotion provenance.
-- [ ] Load the extracted VSIX in a clean VS Code 1.101.0 profile against a
+- [x] Load the extracted VSIX in a clean VS Code 1.101.0 profile against a
   clean public `citry-lsp==0.1.1` install, require real `c-if`, `c-for`, and
   `c-slot` completions, and format untidy embedded JavaScript and CSS through
   the exact hash-pinned Prettier 12.4.0 extension. The smoke also selects a
@@ -627,10 +626,10 @@ registry publish, or extension GitHub Release has been performed.
 
 ### Stage 2: update `main` and qualify
 
-- [ ] Promote the named Phase 7 files through the clean `main` worktree,
+- [x] Promote the named Phase 7 files through the clean `main` worktree,
   inspect the diff, commit, and push normally. Keep the original `review`
   branch pointer, index, and working files unchanged.
-- [ ] Manually run `vscode--citry--publish.yml` on the exact release commit and
+- [x] Manually run `vscode--citry--publish.yml` on the exact release commit and
   retain `verified-vscode-citry-extension` for that commit.
 
 ### Stage 3: configure publishers, tag, and publish
@@ -649,11 +648,19 @@ registry publish, or extension GitHub Release has been performed.
   but the namespace creator is already a contributor and can publish.
 - [x] Configure the `vscode-marketplaces` environment to allow
   `vscode-citry@*` tags and retain any desired approval gate.
-- [ ] Create and push annotated tag `vscode-citry@0.1.0` at the exact qualified
+- [x] Create and push annotated tag `vscode-citry@0.1.0` at the exact qualified
   `main` commit and let it upload the same VSIX to both registries.
-- [ ] Verify both public listing/install pages, the GitHub Release, and a clean
-  registry install. Then update the public docs from their current
-  pre-availability wording and links during the docs/site phase.
+- [x] Verify both public registry package endpoints and the GitHub Release, then
+  update the public docs from their pre-availability wording and links.
+
+**Release evidence:** qualification
+[run 32386637089](https://github.com/citry-dev/citry/actions/runs/32386637089)
+retained and attested the artifact for commit `7d115e07`; tag promotion
+[run 32386904887](https://github.com/citry-dev/citry/actions/runs/32386904887)
+published those bytes to both registries and created the
+[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.0).
+The release VSIX is 359,430 bytes with SHA-256
+`7d8ff6a69ff63a954037368d4ad3af507aee3c325f1ce3e9c79efe8484c2f7be`.
 
 ## 8. Promote the new playground runtime tuple
 

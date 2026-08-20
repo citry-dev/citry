@@ -12,9 +12,21 @@ process for each workspace folder. Formatter commands edit definite template,
 JavaScript, and CSS sections while leaving Fluent and the selected Python
 formatter unchanged.
 
-`citry-lsp` 0.1.0 is public on PyPI. The extension's 0.1.0 release is prepared
-but is not yet listed in Visual Studio Marketplace or Open VSX; the extension
-installation path below becomes available when both listings are live.
+`citry-lsp` 0.1.1 is public on PyPI, and the extension's 0.1.0 release is
+available from Visual Studio Marketplace, Open VSX, and the matching GitHub
+Release.
+
+## See it in action
+
+Citry completes registered components and their inputs without leaving the
+Python file:
+
+<c-image src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/autocomplete.gif" alt="Citry component autocomplete inside an inline Python template" width="960" />
+
+Hover hints explain template values, while references and navigation connect
+them to their Python definitions:
+
+<c-image src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/refs_hints.gif" alt="Citry hover hints and references connecting a template to Python" width="960" />
 
 ## Install the language server
 
@@ -28,9 +40,12 @@ Keeping the server in the project environment lets it import the registered
 component catalog. An isolated server can still check syntax, but it cannot
 know the application's component names, inputs, or slots.
 
-Once 0.1.0 is listed, install **Citry** from the Visual Studio Marketplace.
-Cursor, Windsurf, VSCodium, and other compatible desktop forks can use the
-matching Open VSX release.
+Install **Citry** from the
+[Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=citry-dev.citry)
+or [Open VSX](https://open-vsx.org/extension/citry-dev/citry). Cursor, Windsurf,
+VSCodium, and other compatible desktop forks can use the Open VSX release. The
+same qualified VSIX is attached to the
+[GitHub Release](https://github.com/citry-dev/citry/releases/tag/vscode-citry%400.1.0).
 
 ## Select the registry target
 
@@ -241,6 +256,11 @@ The command palette exposes only two Citry formatting commands:
 - **Citry: Format at Cursor** formats only the direct literal body containing
   the cursor.
 
+Formatting expands Citry/HTML structure and formats embedded JavaScript and
+CSS while preserving readable Python triple-quoted strings:
+
+<c-image src="https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/formatting.gif" alt="Citry formatting an inline template, JavaScript, and CSS inside a Python component" width="960" />
+
 The commands do not format `messages` blocks or standalone `.ftl` files.
 Fluent syntax highlighting is available in both places, but Citry does not yet
 define a Fluent formatting contract.
@@ -269,24 +289,14 @@ Code's standard formatter and format-on-save:
 }
 ```
 
-Citry sends each JavaScript or CSS region to an immutable standalone document
-and asks VS Code's public formatter command for edits. In VS Code 1.93 this is
-the first applicable
-non-empty formatter result; the API does not identify the provider or
-guarantee that it is the configured default. Citry reports this honestly as
-the `vscode-first-result` mechanism. A missing provider leaves the region
-unchanged and writes a notice to the Citry output channel.
-
-VS Code's built-in CSS formatter accepts these virtual documents. Its built-in
-JavaScript/TypeScript formatter does not, so JavaScript formatting currently
-requires an installed formatter that accepts non-file virtual documents;
-Prettier is the recommended compatible option. This affects formatting only,
-not embedded JavaScript highlighting, completion, hover, or definitions. The
-CLI uses its explicit native Biome adapter instead of an editor formatter.
-
-```console
-code --install-extension esbenp.prettier-vscode
-```
+Citry includes Prettier for deterministic embedded JavaScript and CSS
+formatting. If
+[Prettier for VS Code](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
+is installed and selected for that language, Citry uses its dedicated action so
+your workspace Prettier configuration applies. Otherwise it uses bundled
+Prettier 3.9.6 with Citry's canonical two-space indentation. Your default
+formatters for standalone JavaScript and CSS files remain unchanged. The CLI
+uses its explicit native Biome adapter.
 
 Whitespace-sensitive multiline literals/comments and position-sensitive
 hashbang, `@charset`, or BOM bodies are also left unchanged rather than being
@@ -414,10 +424,9 @@ setting.
 - Embedded CSS and JavaScript receive highlighting, completion, hover, and
   formatting through VS Code providers, but Citry cannot request their
   diagnostics through VS Code's public API.
-- The built-in CSS formatter accepts Citry's virtual documents, but the
-  built-in JavaScript/TypeScript formatter does not. Install Prettier or another
-  formatter that accepts non-file virtual documents for embedded JavaScript
-  formatting.
+- Embedded JavaScript and CSS use bundled Prettier 3.9.6 unless Prettier for VS
+  Code is installed and selected for that language. Other editor formatters do
+  not replace that fallback.
 - Each embedded provider pass is bounded to 30 seconds. VS Code does not expose
   cancellation for the underlying public formatter command, so Citry discards
   any result that arrives after that bound.
