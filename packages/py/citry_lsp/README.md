@@ -101,7 +101,7 @@ operation. Stale or malformed client responses produce no edit.
 
 ## Compatibility
 
-The server advertises language-server version 0.1.0, Citry 0.4.x, component
+The server advertises language-server version 0.1.1, Citry 0.4.x, component
 catalog v1, and client protocol v1. It refuses incompatible client protocols or
 Citry series instead of returning results based on a contract it does not
 understand.

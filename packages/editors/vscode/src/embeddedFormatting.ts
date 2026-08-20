@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { FORMAT_CANCELLED, FORMAT_STALE_DOCUMENT } from "./diagnosticCatalog.js";
 
 export type EmbeddedFormattingLanguage = "javascript" | "css";
@@ -59,7 +61,7 @@ export interface EmbeddedFormattingResponse {
 export interface EmbeddedFormatterInvocation {
 	region: EmbeddedFormattingRegion;
 	source: string;
-	pass: 1 | 2;
+	pass: 1 | 2 | 3;
 	signal: AbortSignal;
 }
 
@@ -92,22 +94,30 @@ export function embeddedFormattingOptions(tabSize: unknown, insertSpaces: unknow
 	};
 }
 
-/** Build one pass-independent virtual-document identity for a formatter region. */
+/** Build one stable, content-addressed identity for an immutable source snapshot. */
 export function embeddedFormattingDocumentIdentity(
 	params: EmbeddedFormattingParams,
 	region: EmbeddedFormattingRegion,
-	session: string,
+	source: string,
 ): EmbeddedFormattingDocumentIdentity {
 	const extension = region.language === "javascript" ? "js" : "css";
+	// Some providers cache by path while VS Code can order equally applicable
+	// providers by URI. Content addressing makes changed bytes distinct while
+	// keeping identical bytes on one stable provider-selection identity.
+	const digest = createHash("sha256")
+		.update(params.textDocument.uri)
+		.update("\0")
+		.update(region.language)
+		.update("\0")
+		.update(source)
+		.digest("hex");
+	const regionSegment = encodeURIComponent(region.id);
 	return {
 		authority: region.language,
-		path: `/document.${extension}`,
+		path: `/${regionSegment}/${digest}/document.${extension}`,
 		query: new URLSearchParams({
-			session,
-			plan: params.planId,
 			region: region.id,
 			source: params.textDocument.uri,
-			version: String(params.textDocument.version),
 		}).toString(),
 	};
 }
@@ -233,41 +243,73 @@ async function formatRegion(
 	if (formatted === region.virtualSource) {
 		return unchanged(planId, region.id);
 	}
-	const secondProtectedRanges = remapProtectedRanges(
-		region.virtualSource,
-		formatted,
-		firstEdits,
-		region.protectedRanges,
-	);
-
-	let secondEdits: readonly ProviderTextEdit[] | undefined;
 	try {
-		secondEdits = await executeFormatterWithTimeout({ region, source: formatted, pass: 2 }, environment);
-		assertCurrent(params, environment);
+		let protectedRanges = remapProtectedRanges(region.virtualSource, formatted, firstEdits, region.protectedRanges);
+		let candidate = formatted;
+		for (const pass of [2, 3] as const) {
+			let edits: readonly ProviderTextEdit[] | undefined;
+			try {
+				edits = await executeFormatterWithTimeout({ region, source: candidate, pass }, environment);
+				assertCurrent(params, environment);
+			} catch (error) {
+				if (error instanceof EmbeddedFormattingStaleError || error instanceof EmbeddedFormattingCancelledError) {
+					throw error;
+				}
+				return failed(planId, region.id, `${ordinal(pass)} formatter pass failed: ${errorMessage(error)}`);
+			}
+			if (edits === undefined) {
+				// VS Code collapses an empty provider edit list to undefined. The
+				// first pass already proved availability, so this is a fixed point.
+				return formattedResult(planId, region.id, candidate);
+			}
+
+			let next: string;
+			try {
+				next = applyProviderTextEdits(candidate, edits, protectedRanges);
+				validateDelimiterConstraints(next, region);
+			} catch (error) {
+				return failed(planId, region.id, `${ordinal(pass)} formatter pass was invalid: ${errorMessage(error)}`);
+			}
+			if (next === candidate) {
+				return formattedResult(planId, region.id, candidate);
+			}
+			if (pass === 3) {
+				return failed(planId, region.id, idempotenceFailureDetail(candidate, next, edits.length));
+			}
+			protectedRanges = remapProtectedRanges(candidate, next, edits, protectedRanges);
+			candidate = next;
+		}
 	} catch (error) {
 		if (error instanceof EmbeddedFormattingStaleError || error instanceof EmbeddedFormattingCancelledError) {
 			throw error;
 		}
-		return failed(planId, region.id, `second formatter pass failed: ${errorMessage(error)}`);
+		return failed(planId, region.id, `formatter fixed-point validation failed: ${errorMessage(error)}`);
 	}
-	if (secondEdits === undefined) {
-		return failed(planId, region.id, "the formatter became unavailable during its idempotence check");
-	}
+	return failed(planId, region.id, "formatter fixed-point validation ended unexpectedly");
+}
 
-	try {
-		const second = applyProviderTextEdits(formatted, secondEdits, secondProtectedRanges);
-		validateDelimiterConstraints(second, region);
-		if (second !== formatted) {
-			return failed(planId, region.id, "the formatter did not reach an idempotent result after two passes");
-		}
-	} catch (error) {
-		return failed(planId, region.id, `second formatter pass was invalid: ${errorMessage(error)}`);
+function idempotenceFailureDetail(first: string, second: string, editCount: number): string {
+	let offset = 0;
+	while (offset < first.length && offset < second.length && first[offset] === second[offset]) {
+		offset += 1;
 	}
+	return (
+		"the formatter did not reach an idempotent result after three passes " +
+		`(pass three returned ${editCount} edit${editCount === 1 ? "" : "s"}; ` +
+		`first difference at UTF-16 offset ${offset}; lengths ${first.length} and ${second.length})`
+	);
+}
+
+function ordinal(pass: 2 | 3): "second" | "third" {
+	return pass === 2 ? "second" : "third";
+}
+
+function formattedResult(planId: string, regionId: string, text: string): EmbeddedFormattingResult {
 	return {
 		planId,
-		regionId: region.id,
+		regionId,
 		status: "formatted",
-		text: formatted,
+		text,
 		provider: null,
 	};
 }

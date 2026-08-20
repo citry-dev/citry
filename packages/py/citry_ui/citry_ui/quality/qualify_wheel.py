@@ -97,6 +97,8 @@ EXPECTED_RUNTIME_FILES = {
     "citry_ui/components/cnative_select/cnative_select.py",
     "citry_ui/components/cnavigation_menu/__init__.py",
     "citry_ui/components/cnavigation_menu/cnavigation_menu.py",
+    "citry_ui/components/cnumber_input/__init__.py",
+    "citry_ui/components/cnumber_input/cnumber_input.py",
     "citry_ui/components/cpagination/__init__.py",
     "citry_ui/components/cpagination/cpagination.py",
     "citry_ui/components/cpopover/__init__.py",

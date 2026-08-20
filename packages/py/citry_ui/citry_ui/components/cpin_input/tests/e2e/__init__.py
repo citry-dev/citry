@@ -1,0 +1,1 @@
+"""CPinInput browser tests."""

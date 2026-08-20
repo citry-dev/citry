@@ -1,0 +1,1 @@
+"""DateInput quality scenario."""

@@ -1,0 +1,1 @@
+"""Rating browser tests."""

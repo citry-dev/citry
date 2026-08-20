@@ -80,6 +80,7 @@ from citry.ext.events.config import Events
 from citry.ext.i18n import (
     CurrencyFormat,
     DateFormat,
+    DateFormatFields,
     DateInput,
     DateParseResult,
     DateSegments,
@@ -229,6 +230,7 @@ __all__ = [
     "Const",
     "CurrencyFormat",
     "DateFormat",
+    "DateFormatFields",
     "DateInput",
     "DateParseResult",
     "DateSegments",

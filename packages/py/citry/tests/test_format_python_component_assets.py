@@ -120,7 +120,7 @@ def test_two_pass_formats_template_embedded_regions_and_direct_assets_atomically
 
     assert "const answer = 1;" in result.source
     assert 'js = """const direct = 1;"""' in result.source
-    assert 'css = """.card {\n  color: red;\n}"""' in result.source
+    assert 'css = """\n      .card {\n        color: red;\n      }\n    """' in result.source
     assert result.changed_component_assets == (
         ("Card", PythonComponentAssetKind.TEMPLATE),
         ("Card", PythonComponentAssetKind.JS),
@@ -130,16 +130,41 @@ def test_two_pass_formats_template_embedded_regions_and_direct_assets_atomically
     assert format_python_component_assets(result.source, provider=_format_request).source == result.source
 
 
-def test_direct_js_and_css_do_not_receive_template_host_framing() -> None:
+def test_multiline_direct_js_and_css_receive_canonical_host_framing() -> None:
     source = _component_source(
-        '    js = """const  value=1;"""\n    css = """.card{color:red}"""\n',
+        '    js = """$component(() => {const value=1;run(value);});"""\n'
+        '    css = """.card{color:red}.tag--active{color:blue}"""\n',
     )
 
-    result = format_python_component_assets(source, provider=_format_request)
+    def provider(request: object) -> EmbeddedFormatResult:
+        text = (
+            "$component(() => {\n  const value = 1;\n  run(value);\n});\n"
+            if request.language is EmbeddedLanguage.JAVASCRIPT  # type: ignore[attr-defined]
+            else ".card {\n  color: red;\n}\n.tag--active {\n  color: blue;\n}\n"
+        )
+        return EmbeddedFormatResult.formatted(
+            request.plan_id,  # type: ignore[attr-defined]
+            request.id,  # type: ignore[attr-defined]
+            text,
+            "prettier@3.7.4",
+        )
 
-    assert 'js = """const value = 1;"""' in result.source
-    assert 'css = """.card {\n  color: red;\n}"""' in result.source
-    assert 'css = """\n' not in result.source
+    result = format_python_component_assets(source, provider=provider)
+
+    assert (
+        'js = """\n      $component(() => {\n        const value = 1;\n        run(value);\n      });\n    """'
+    ) in result.source
+    assert (
+        'css = """\n'
+        "      .card {\n"
+        "        color: red;\n"
+        "      }\n"
+        "      .tag--active {\n"
+        "        color: blue;\n"
+        "      }\n"
+        '    """'
+    ) in result.source
+    assert format_python_component_assets(result.source, provider=provider).source == result.source
 
 
 @pytest.mark.parametrize(
@@ -172,12 +197,31 @@ def test_direct_assets_encode_provider_output_in_existing_literal(
 
     result = format_python_component_assets(source, provider=provider)
     expected = provider_text.replace("\r\n", "\n").replace("\r", "\n")
+    if literal.lstrip("ruRU").startswith(('"""', "'''")) and "\n" in expected:
+        expected = f"\n{expected.rstrip(chr(10))}\n"
 
     ast.parse(result.source)
     discovery = discover_python_component_assets(result.source)
     assert discovery.regions[0].source_map.template_source == expected
     if host_newline != "\n":
         assert result.source.replace(host_newline, "").find("\n") == -1
+
+
+def test_multiline_triple_double_asset_keeps_ordinary_javascript_quotes_plain() -> None:
+    source = _component_source('    js = """const  label="value";"""\n')
+
+    def provider(request: object) -> EmbeddedFormatResult:
+        return EmbeddedFormatResult.formatted(
+            request.plan_id,  # type: ignore[attr-defined]
+            request.id,  # type: ignore[attr-defined]
+            'const label = "value";\n',
+            "prettier@3.7.4",
+        )
+
+    result = format_python_component_assets(source, provider=provider)
+
+    assert 'const label = "value";' in result.source
+    assert '\\"value\\"' not in result.source
 
 
 @pytest.mark.parametrize("delimiter", ['"""', "'''"])

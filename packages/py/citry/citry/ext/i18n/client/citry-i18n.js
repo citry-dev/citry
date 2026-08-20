@@ -1204,6 +1204,34 @@
     if (length === "medium") return { day: "numeric", month: "short", year: "numeric" };
     return { day: "numeric", month: "long", year: "numeric" };
   }
+  function dateOptions(fields, length) {
+    const widths = dateTimeOptions(length);
+    const weekday = length === "short" ? "narrow" : length === "medium" ? "short" : "long";
+    switch (fields) {
+      case "year":
+        return { year: widths.year };
+      case "month":
+        return { month: widths.month };
+      case "day":
+        return { day: widths.day };
+      case "weekday":
+        return { weekday };
+      case "year_month":
+        return { month: widths.month, year: widths.year };
+      case "month_day":
+        return { day: widths.day, month: widths.month };
+      case "day_weekday":
+        return { day: widths.day, weekday };
+      case "month_day_weekday":
+        return { day: widths.day, month: widths.month, weekday };
+      case "year_month_day":
+        return widths;
+      case "year_month_day_weekday":
+        return { ...widths, weekday };
+      default:
+        return fail("I18N_FORMAT_INVALID", "a date profile has invalid fields.");
+    }
+  }
   function wallTimeOptions(length) {
     if (length !== "short" && length !== "medium" && length !== "long") {
       fail("I18N_FORMAT_INVALID", "a temporal profile has an invalid length.");
@@ -1227,7 +1255,8 @@
       date(value, rawOptions) {
         const options = formatOptions(rawOptions, "date");
         const spec = profile("date", options.format);
-        return new Intl.DateTimeFormat(locale(), { ...dateTimeOptions(spec.length), timeZone: "UTC" }).format(
+        exactKeys(spec, ["fields", "input", "length"], `date format ${options.format}`);
+        return new Intl.DateTimeFormat(locale(), { ...dateOptions(spec.fields, spec.length), timeZone: "UTC" }).format(
           dateValue(value)
         );
       },

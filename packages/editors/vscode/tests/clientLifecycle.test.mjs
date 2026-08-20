@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { RestartCoordinator, stopLanguageClient, WatchedFileChangeBatcher } from "../out/tests/clientLifecycle.mjs";
+import {
+	RestartCoordinator,
+	stopLanguageClient,
+	supportsLanguageServerVersion,
+	WatchedFileChangeBatcher,
+} from "../out/tests/clientLifecycle.mjs";
 
 function deferred() {
 	let resolve;
@@ -54,6 +59,14 @@ test("coalesces Python watcher bursts by URI", () => {
 		],
 	]);
 	batcher.dispose();
+});
+
+test("accepts only the companion 0.1 language-server line", () => {
+	assert.equal(supportsLanguageServerVersion("0.1.0"), true);
+	assert.equal(supportsLanguageServerVersion("0.1.7+local"), true);
+	assert.equal(supportsLanguageServerVersion("0.2.0"), false);
+	assert.equal(supportsLanguageServerVersion("1.0.0"), false);
+	assert.equal(supportsLanguageServerVersion("not-a-version"), false);
 });
 
 test("terminates a language server that misses the graceful stop deadline", async () => {

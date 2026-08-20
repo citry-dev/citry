@@ -2,6 +2,13 @@
 
 All notable changes to `citry-lsp` are documented here.
 
+## [0.1.1] - 2026-08-20
+
+### Fixed
+
+- Formatted triple-quoted component assets now keep ordinary quotes and use
+  readable, host-relative multiline JavaScript and CSS framing.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added

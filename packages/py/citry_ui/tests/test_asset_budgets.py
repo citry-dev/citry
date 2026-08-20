@@ -19,16 +19,16 @@ def test_complete_component_catalog_stays_inside_compressed_asset_budgets() -> N
     catalog = asset_report()["catalog"]
 
     assert catalog["javascript"] == {
-        "sha256": "b094f8784feea6a46769c029c12fe0177e41b7490f306acec556a065ffb7c27d",
-        "raw": 860_594,
-        "gzip": 162_564,
-        "brotli": 116_820,
+        "sha256": "f52d5b8e0910b380bfeb15413a008160ddb51893586619e7f42fe2b0d5b5f148",
+        "raw": 931_875,
+        "gzip": 174_653,
+        "brotli": 126_213,
     }
     assert catalog["css"] == {
-        "sha256": "f2806359ebdf9751cbf33ccc0b3afcfa9180aabebdb879f70be117ec3ade527e",
-        "raw": 297_478,
-        "gzip": 35_877,
-        "brotli": 28_241,
+        "sha256": "88dab541edf4f08b6712d4b531c96004e97b59dbece326485df253ddd12410f5",
+        "raw": 323_806,
+        "gzip": 39_177,
+        "brotli": 30_765,
     }
     assert catalog["limits"] == {
         "javascript": {"raw": 960 * 1024, "gzip": 192 * 1024, "brotli": 128 * 1024},

@@ -1,0 +1,10 @@
+schema_version: 1
+previews:
+  - basic
+  - alphanumeric
+  - controlled
+  - forms
+  - masked
+  - separator
+  - locales
+  - states

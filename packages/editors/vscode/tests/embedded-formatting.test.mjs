@@ -20,15 +20,17 @@ test("uses valid language-scoped editor indentation and safe fallbacks", () => {
 	assert.deepEqual(embeddedFormattingOptions(0, false), { tabSize: 2, insertSpaces: false });
 });
 
-test("uses one stable virtual-document identity for both formatter passes", () => {
-	const first = embeddedFormattingDocumentIdentity(params(), region(), "session-1");
-	const second = embeddedFormattingDocumentIdentity(params(), region(), "session-1");
-	const laterRequest = embeddedFormattingDocumentIdentity(params(), region(), "session-2");
+test("content-addresses immutable virtual documents across passes and requests", () => {
+	const first = embeddedFormattingDocumentIdentity(params(), region(), "const  answer=41+1;");
+	const second = embeddedFormattingDocumentIdentity(params(), region(), "const answer = 41 + 1;\n");
+	const repeated = embeddedFormattingDocumentIdentity(params(), region(), "const  answer=41+1;");
+	const otherSource = embeddedFormattingDocumentIdentity(params(), region(), "const other = 42;\n");
 
-	assert.deepEqual(second, first);
-	assert.notDeepEqual(laterRequest, first);
-	assert.equal(first.path, "/document.js");
-	assert.equal(new URLSearchParams(first.query).has("pass"), false);
+	assert.deepEqual(repeated, first);
+	assert.notDeepEqual(second, first);
+	assert.notDeepEqual(otherSource, first);
+	assert.match(first.path, /^\/python-component-asset-0-0\/[a-f0-9]{64}\/document\.js$/);
+	assert.equal(new URLSearchParams(first.query).get("source"), document.uri);
 });
 
 function region(overrides = {}) {
@@ -88,6 +90,45 @@ test("returns an idempotent two-pass result without inventing provider identity"
 			},
 		],
 	});
+});
+
+test("accepts VS Code's zero-edit second-pass response", async () => {
+	const response = await formatEmbeddedDocuments(params(), {
+		currentDocumentVersion: () => 7,
+		executeFormatter: async ({ source, pass }) =>
+			pass === 1 ? [wholeDocumentEdit(source, "const answer = 41 + 1;\n")] : undefined,
+	});
+
+	assert.deepEqual(response.results, [
+		{
+			planId: "sha256:plan",
+			regionId: "python-component-asset-0-0",
+			status: "formatted",
+			text: "const answer = 41 + 1;\n",
+			provider: null,
+		},
+	]);
+});
+
+test("accepts a fixed point after provider activation changes the second result", async () => {
+	const calls = [];
+	const response = await formatEmbeddedDocuments(params(), {
+		currentDocumentVersion: () => 7,
+		executeFormatter: async ({ source, pass }) => {
+			calls.push([source, pass]);
+			if (pass === 1) {
+				return [wholeDocumentEdit(source, "function answer() {\n  return 42;\n}\n")];
+			}
+			if (pass === 2) {
+				return [wholeDocumentEdit(source, "function answer() {\n    return 42;\n}\n")];
+			}
+			return undefined;
+		},
+	});
+
+	assert.equal(calls.length, 3);
+	assert.equal(response.results[0].status, "formatted");
+	assert.equal(response.results[0].text, "function answer() {\n    return 42;\n}\n");
 });
 
 test("consumes every applicable shared embedded formatter case", async () => {
@@ -211,16 +252,14 @@ test("request cancellation aborts the current invocation and starts no later pas
 	assert.deepEqual(calls, [["python-component-asset-0-0", 1]]);
 });
 
-test("rejects a non-idempotent second provider result", async () => {
+test("rejects provider output that keeps changing through the third pass", async () => {
 	const response = await formatEmbeddedDocuments(params(), {
 		currentDocumentVersion: () => 7,
-		executeFormatter: async ({ source, pass }) => [
-			wholeDocumentEdit(source, pass === 1 ? "let answer = 42;" : "let answer = 43;"),
-		],
+		executeFormatter: async ({ source, pass }) => [wholeDocumentEdit(source, `let answer = ${41 + pass};`)],
 	});
 
 	assert.equal(response.results[0].status, "error");
-	assert.match(response.results[0].message, /idempotent/);
+	assert.match(response.results[0].message, /idempotent result after three passes/);
 	assert.equal(response.results[0].text, undefined);
 });
 

@@ -1142,14 +1142,15 @@ Currently, releases are managed manually:
 3. **Update the package's owning changelog** with release notes. Use the root
    `CHANGELOG.md` only for `citry`; auxiliary packages use the `CHANGELOG.md`
    in their own package directory.
-4. **Qualify the package** by manually running its publish workflow on the
+4. **Qualify the package or extension** by manually running its publish workflow on the
    exact release commit on `main` and waiting for the complete distribution
    gate. Citry Core, Citry, citry-lsp, citry-ui, and pygments-citry all retain
-   those checked artifacts; the tag promotes that run's exact bytes.
+   those checked artifacts. The VS Code extension does the same for its one
+   VSIX; the tag promotes that run's exact bytes.
 5. **Create the git tag** matching that version: `git tag -a citry-core@1.3.0 -m "Release citry-core@1.3.0"` (use the matching `citry@...` or `pygments-citry@...` name for another package)
 6. **Push the tag**: `git push origin citry-core@1.3.0`
 
-Pushing the tag triggers the package's publish workflow and verifies that the
+Pushing the tag triggers the artifact's publish workflow and verifies that the
 tag matches the package version. Each Python package tag promotes exact bytes
 from a successful qualification of the same `main` commit. A
 `citry@X.Y.Z` tag also triggers the documentation release workflow that builds,
@@ -1159,6 +1160,10 @@ Review the snapshot procedure and first-release blockers in
 pushing a Citry release tag. **Release ordering**: citry depends on
 `citry-core`, so when bumping both, publish `citry-core` first and let it reach
 PyPI before tagging `citry`.
+
+The VS Code extension uses `vscode-citry@<version>`, waits for its compatible
+`citry-lsp` release to be public, and publishes to Visual Studio Marketplace,
+Open VSX, and a GitHub Release from its own extension workflow.
 
 The packages are versioned and released **independently on purpose**, so each
 can ship on its own cadence. The ordering rule applies when `citry` and
@@ -1466,6 +1471,11 @@ run builds, tests, and retains the distributions for one exact `main` commit;
 the `<package>@<version>` tag can publish only those qualified bytes and then
 creates the matching GitHub Release.
 
+The VS Code extension follows the same boundary in
+`vscode--citry--publish.yml`: manual dispatch qualifies one VSIX, while a
+`vscode-citry@<version>` tag can only promote the retained VSIX for that exact
+`main` commit.
+
 **PyPI auth is Trusted Publishing (OIDC), not a stored API token.** The release jobs carry `id-token: write` and target a GitHub environment named `pypi`; PyPI verifies the workflow's OIDC identity, so there is no secret to keep. Before a package's first publish, configure a PyPI **publisher** (a *pending publisher* if the project does not exist yet) with:
 
 - PyPI project name (`citry-core`, `citry`, `citry-lsp`, `citry-ui`, or
@@ -1572,7 +1582,7 @@ metadata, license, console-entry-point, and `RECORD` inventories. It rebuilds
 the source distribution outside the checkout and installs the wheel with only
 public binary dependencies on CPython 3.10 through 3.14.
 
-The installed-wheel smoke imports every shipped module, verifies Citry 0.4.x,
+The installed-wheel smoke imports every shipped module, verifies Citry 0.4.1+,
 `pygls` 2.1.1, and `ty` 0.0.69, checks `citry-lsp --help`, and starts the stdio
 server with closed input. This proves that a clean install resolves the public
 `citry[analysis-ty]` dependency without reading another workspace package.
@@ -1619,6 +1629,117 @@ For the first release, create a pending PyPI Trusted Publisher with project
 `citry-ui`, owner `citry-dev`, repository `citry`, workflow
 `py--citry-ui--publish.yml`, and environment `pypi`. Configure the GitHub
 `pypi` environment to permit `citry-ui@*` tags.
+
+### VS Code extension development and distribution qualification
+
+The extension lives in `packages/editors/vscode/`. From the repository root,
+install the locked Node workspace and run its checks or create a development
+VSIX with:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm --dir packages/editors/vscode run check
+pnpm --dir packages/editors/vscode run package
+```
+
+`engines.vscode`, `@types/vscode`, the esbuild Node target, and `@types/node`
+describe one compatibility decision and move together. The 0.1.0 floor is VS
+Code 1.101.0, whose extension host embeds Node 22: the manifest uses
+`^1.101.0`, the editor types are 1.101.0, the bundle targets `node22`, and the
+Node types stay on 22.x. Raising only one value can either compile against an
+unavailable editor/Node API or emit syntax the oldest supported host cannot
+run.
+
+This is a desktop and remote **workspace** extension. It starts
+`python -m citry_lsp` in each file-backed workspace and therefore has no
+`browser` entry point and does not claim VS Code for the Web support. The one
+universal VSIX contains no native binary; compatible desktop forks can use
+`citry.python` when they do not expose Microsoft's Python extension API.
+
+The Marketplace listing takes its public links from `package.json`: the
+extension-specific guide is the homepage, the repository link names this
+package's monorepo directory, bugs go to GitHub Issues, questions go to GitHub
+Discussions, and the sponsor button uses the project's existing GitHub
+Sponsors page. Keep the PNG icon at least 128x128. README screenshots and GIFs
+use absolute HTTPS URLs to committed files and stay outside the VSIX; the
+Marketplace fetches those URLs when it renders the listing.
+
+Run `vscode--citry--publish.yml` manually on the exact `main` commit intended
+for release. The qualification installs the locked Node workspace, runs the
+TypeScript/Biome/101 Node checks, builds the VSIX, and applies
+`scripts/verify_vscode_citry_distribution.py`. That verifier requires the
+complete 16-member archive: manifests, README/changelog/support/license/icon,
+five grammars, two language configurations, and the one bundled extension
+module.
+It rejects source, tests, dependencies, source maps, local build paths,
+unexpected metadata or targets, duplicate/unsafe members, and archives over
+the stated compressed and expanded size caps. `release-inventory.json`
+records the exact filename, byte size, SHA-256, and member list.
+
+The qualification then downloads VS Code 1.101.0 into a clean test profile,
+installs public `citry-lsp==0.1.1` and its public dependencies into a fresh
+Python 3.14 environment, and loads the extracted qualified VSIX. It requires
+real `c-if`, `c-for`, and `c-slot` completions from the server, then formats
+deliberately untidy embedded JavaScript and CSS twice through an exact,
+hash-pinned Prettier VS Code extension. The smoke selects a different
+standalone CSS formatter to exercise Citry's bundled Prettier fallback. The
+full component fixture must retain plain HTML quotes and canonical
+triple-quoted JavaScript/CSS host framing. The second command must be byte
+idempotent. This proves the oldest declared editor host, the public package
+install, and the virtual-document formatter bridge work together. The verified
+bundle is attested and retained for 14 days.
+
+After qualification succeeds, push `vscode-citry@<version>` at that exact
+commit. The tag run requires the commit to remain on `main`, selects the
+successful manual run by repository, branch, and full SHA, verifies GitHub's
+artifact digest, safely extracts and rechecks the VSIX, and uploads those same
+qualified bytes to both registries. It never rebuilds at the tag boundary.
+The GitHub Release carries the VSIX, exact-byte inventory, qualification
+provenance, and public-registry verification.
+
+First-release registry setup is external to the repository:
+
+- Create or confirm the `citry-dev` publisher in
+  [Visual Studio Marketplace](https://marketplace.visualstudio.com/manage/publishers/)
+  and give the publishing identity Contributor access. The pinned
+  `@vscode/vsce` 3.9.2 client does not yet expose GitHub OIDC publishing, so
+  the initial workflow uses a narrowly scoped Azure DevOps PAT with Marketplace
+  **Manage** permission in the `VSCE_PAT` secret. Global Azure DevOps PATs are
+  [retired on 1 December 2026](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#_publishing-extensions),
+  so migrate this workflow to a released Entra/OIDC path before then.
+  GitHub OIDC uses the same trust model as PyPI Trusted Publishing: the
+  registry trusts one repository/workflow identity and exchanges GitHub's
+  short-lived identity token for a publish credential. The Marketplace policy,
+  token audience, and client are separate from PyPI. The
+  [`vscode-vsce` repository](https://github.com/microsoft/vscode-vsce#trusted-publishing)
+  documents `vsce publish --oidc`, but neither the published 3.9.2 release nor
+  the 3.9.3 prerelease exposes that flag as of 2026-08-19. Recheck stable
+  releases before qualification; use the reviewed stable client rather than an
+  unreleased repository revision. The currently released secretless route is
+  Entra workload identity with `--azure-credential`, which requires the
+  additional Azure identity and federation setup described by Microsoft.
+- For [Open VSX](https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions),
+  sign the Eclipse Publisher Agreement, create or claim the `citry-dev`
+  namespace, generate an access token, verify that it can publish to that
+  namespace, and store it as `OVSX_PAT`. The release invokes the exact
+  command-level `ovsx@1.1.1` version only in the publishing job so routine
+  workspace installs do not carry the registry client.
+- Put both secrets in a protected GitHub environment named
+  `vscode-marketplaces`. Permit `vscode-citry@*` deployment refs and retain any
+  desired approval rule. Do not put these credentials in repository-level
+  plaintext or a local release script.
+
+Both registry clients use `--skip-duplicate` only to recover from a partial
+two-registry publish. A rerun still selects and verifies the original
+qualification artifact, so it can finish the missing registry without building
+different bytes. The workflow polls the exact Marketplace package endpoint and
+Open VSX version API before creating the GitHub Release.
+
+Microsoft accepts a verified-publisher application only after the public
+extension and eligible domain have met its six-month requirements. Track the
+earliest date from the actual Marketplace publication, not from repository
+preparation. [Issue #84](https://github.com/citry-dev/citry/issues/84) owns that
+follow-up for the first Citry release.
 
 - Rust crates are not published to crates.io; they are an internal implementation detail surfaced through the Python packages.
 - The root `pyproject.toml` is never published (no build-system; `Private :: Do Not Upload`).

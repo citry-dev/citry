@@ -1,3 +1,6 @@
+// src/embeddedFormatting.ts
+import { createHash } from "node:crypto";
+
 // src/diagnosticCatalog.ts
 var FORMAT_STALE_DOCUMENT = "citry.format.stale-document";
 var FORMAT_CANCELLED = "citry.format.cancelled";
@@ -11,17 +14,16 @@ function embeddedFormattingOptions(tabSize, insertSpaces) {
     insertSpaces: typeof insertSpaces === "boolean" ? insertSpaces : true
   };
 }
-function embeddedFormattingDocumentIdentity(params, region, session) {
+function embeddedFormattingDocumentIdentity(params, region, source) {
   const extension = region.language === "javascript" ? "js" : "css";
+  const digest = createHash("sha256").update(params.textDocument.uri).update("\0").update(region.language).update("\0").update(source).digest("hex");
+  const regionSegment = encodeURIComponent(region.id);
   return {
     authority: region.language,
-    path: `/document.${extension}`,
+    path: `/${regionSegment}/${digest}/document.${extension}`,
     query: new URLSearchParams({
-      session,
-      plan: params.planId,
       region: region.id,
-      source: params.textDocument.uri,
-      version: String(params.textDocument.version)
+      source: params.textDocument.uri
     }).toString()
   };
 }
@@ -119,39 +121,63 @@ async function formatRegion(planId, region, params, environment) {
   if (formatted === region.virtualSource) {
     return unchanged(planId, region.id);
   }
-  const secondProtectedRanges = remapProtectedRanges(
-    region.virtualSource,
-    formatted,
-    firstEdits,
-    region.protectedRanges
-  );
-  let secondEdits;
   try {
-    secondEdits = await executeFormatterWithTimeout({ region, source: formatted, pass: 2 }, environment);
-    assertCurrent(params, environment);
+    let protectedRanges = remapProtectedRanges(region.virtualSource, formatted, firstEdits, region.protectedRanges);
+    let candidate = formatted;
+    for (const pass of [2, 3]) {
+      let edits;
+      try {
+        edits = await executeFormatterWithTimeout({ region, source: candidate, pass }, environment);
+        assertCurrent(params, environment);
+      } catch (error) {
+        if (error instanceof EmbeddedFormattingStaleError || error instanceof EmbeddedFormattingCancelledError) {
+          throw error;
+        }
+        return failed(planId, region.id, `${ordinal(pass)} formatter pass failed: ${errorMessage(error)}`);
+      }
+      if (edits === void 0) {
+        return formattedResult(planId, region.id, candidate);
+      }
+      let next;
+      try {
+        next = applyProviderTextEdits(candidate, edits, protectedRanges);
+        validateDelimiterConstraints(next, region);
+      } catch (error) {
+        return failed(planId, region.id, `${ordinal(pass)} formatter pass was invalid: ${errorMessage(error)}`);
+      }
+      if (next === candidate) {
+        return formattedResult(planId, region.id, candidate);
+      }
+      if (pass === 3) {
+        return failed(planId, region.id, idempotenceFailureDetail(candidate, next, edits.length));
+      }
+      protectedRanges = remapProtectedRanges(candidate, next, edits, protectedRanges);
+      candidate = next;
+    }
   } catch (error) {
     if (error instanceof EmbeddedFormattingStaleError || error instanceof EmbeddedFormattingCancelledError) {
       throw error;
     }
-    return failed(planId, region.id, `second formatter pass failed: ${errorMessage(error)}`);
+    return failed(planId, region.id, `formatter fixed-point validation failed: ${errorMessage(error)}`);
   }
-  if (secondEdits === void 0) {
-    return failed(planId, region.id, "the formatter became unavailable during its idempotence check");
+  return failed(planId, region.id, "formatter fixed-point validation ended unexpectedly");
+}
+function idempotenceFailureDetail(first, second, editCount) {
+  let offset = 0;
+  while (offset < first.length && offset < second.length && first[offset] === second[offset]) {
+    offset += 1;
   }
-  try {
-    const second = applyProviderTextEdits(formatted, secondEdits, secondProtectedRanges);
-    validateDelimiterConstraints(second, region);
-    if (second !== formatted) {
-      return failed(planId, region.id, "the formatter did not reach an idempotent result after two passes");
-    }
-  } catch (error) {
-    return failed(planId, region.id, `second formatter pass was invalid: ${errorMessage(error)}`);
-  }
+  return `the formatter did not reach an idempotent result after three passes (pass three returned ${editCount} edit${editCount === 1 ? "" : "s"}; first difference at UTF-16 offset ${offset}; lengths ${first.length} and ${second.length})`;
+}
+function ordinal(pass) {
+  return pass === 2 ? "second" : "third";
+}
+function formattedResult(planId, regionId, text) {
   return {
     planId,
-    regionId: region.id,
+    regionId,
     status: "formatted",
-    text: formatted,
+    text,
     provider: null
   };
 }

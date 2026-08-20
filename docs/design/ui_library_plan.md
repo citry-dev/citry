@@ -1,8 +1,8 @@
 # Plan: the Citry UI component library
 
 **Status (2026-08-19): `citry-ui` 0.1.0 is publicly available as an early-access
-release. The source-development catalog contains 55 documented component
-families and 101 registered definitions, including compound-family
+release. The source-development catalog contains 60 documented component
+families and 107 registered definitions, including compound-family
 declarations and private renderers; its contracts remain alpha rather than
 stable.**
 

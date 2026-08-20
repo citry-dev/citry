@@ -424,7 +424,7 @@ from citry.ext.i18n import make_context
 
 assert importlib.metadata.version("citry-ui") == "__VERSION__"
 assert citry_ui.__version__ == "__VERSION__"
-assert len(citry_ui.COMPONENTS) == 101
+assert len(citry_ui.COMPONENTS) == 107
 assert importlib.resources.files("citry_ui").joinpath("py.typed").is_file()
 assert importlib.util.find_spec("citry_ui.quality") is None
 assert importlib.util.find_spec("citry_ui.components.ctabs.tests") is None

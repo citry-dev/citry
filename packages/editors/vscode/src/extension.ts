@@ -1,4 +1,9 @@
+import { execFile } from "node:child_process";
 import { PythonExtension } from "@vscode/python-extension";
+import * as prettierBabel from "prettier/plugins/babel";
+import * as prettierEstree from "prettier/plugins/estree";
+import * as prettierPostcss from "prettier/plugins/postcss";
+import * as prettier from "prettier/standalone";
 import * as vscode from "vscode";
 import {
 	DidChangeWatchedFilesNotification,
@@ -10,7 +15,12 @@ import {
 	SettingMonitor,
 } from "vscode-languageclient/node";
 import { browserProjectionCandidateAt } from "./browserRouting.js";
-import { RestartCoordinator, stopLanguageClient, WatchedFileChangeBatcher } from "./clientLifecycle.js";
+import {
+	RestartCoordinator,
+	stopLanguageClient,
+	supportsLanguageServerVersion,
+	WatchedFileChangeBatcher,
+} from "./clientLifecycle.js";
 import { advanceExpressionCompletionRetrigger, advanceTagCompletionRetrigger } from "./completionRetrigger.js";
 import { FORMAT_PROVIDER_INVALID, FORMAT_STALE_DOCUMENT } from "./diagnosticCatalog.js";
 import {
@@ -24,7 +34,6 @@ import {
 	type EmbeddedFormattingParams,
 	type EmbeddedFormattingResponse,
 	embeddedFormattingDocumentIdentity,
-	embeddedFormattingOptions,
 	formatEmbeddedDocuments,
 	type ProviderTextEdit,
 } from "./embeddedFormatting.js";
@@ -60,6 +69,8 @@ const formatEmbeddedMethod = "citry/formatEmbedded";
 const embeddedScheme = "citry-embedded";
 const browserScheme = "citry-browser";
 const embeddedFormattingScheme = "citry-embedded-format";
+const prettierExtensionId = "esbenp.prettier-vscode";
+const prettierCodeActionKind = vscode.CodeActionKind.SourceFixAll.append("prettier");
 const nativeHtmlAttributeHoverProjection = "native-html-attribute-hover";
 const sourceFormatKind = vscode.CodeActionKind.Source.append("format.citry");
 
@@ -158,6 +169,7 @@ let formatterOutput: vscode.OutputChannel;
 let performanceOutput: vscode.OutputChannel;
 let lastQuietFormattingFailure: string | undefined;
 const activeEmbeddedFormatting = new Set<string>();
+const reportedServerSetupFailures = new Set<string>();
 const browserProjectionResponses = new Map<string, BrowserProjectionResponse | null>();
 const htmlProjectionResponses = new Map<string, ProviderProjectionResponse | null>();
 let projectionGeneration = 0;
@@ -379,6 +391,14 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		setUnavailableStatus(errorMessage(error));
 		return;
 	}
+	try {
+		await probeLanguageServer(python, folder.uri.fsPath);
+	} catch (error) {
+		const message = `Citry could not use citry-lsp with ${python}. ${errorMessage(error)}`;
+		setUnavailableStatus(message);
+		notifyServerSetupFailure(folder, message);
+		return;
+	}
 	const configuration = vscode.workspace.getConfiguration("citry", folder.uri);
 	const app = configuration.get<string>("app", "").trim() || null;
 	const serverOptions: ServerOptions = {
@@ -468,6 +488,40 @@ async function startFolder(folder: vscode.WorkspaceFolder): Promise<void> {
 		return;
 	}
 	updateStatusBar();
+}
+
+async function probeLanguageServer(python: string, cwd: string): Promise<void> {
+	const version = await new Promise<string>((resolve, reject) => {
+		execFile(
+			python,
+			["-I", "-c", 'import importlib.metadata; print(importlib.metadata.version("citry-lsp"))'],
+			{ cwd, timeout: 10_000, windowsHide: true, maxBuffer: 1024 },
+			(error, stdout) => {
+				if (error !== null) {
+					reject(new Error('Install it in that environment with `python -m pip install "citry-lsp>=0.1,<0.2"`.'));
+					return;
+				}
+				resolve(stdout.trim());
+			},
+		);
+	});
+	if (!supportsLanguageServerVersion(version)) {
+		throw new Error(`Found citry-lsp ${version || "with no version"}; this extension requires citry-lsp 0.1.x.`);
+	}
+}
+
+function notifyServerSetupFailure(folder: vscode.WorkspaceFolder, message: string): void {
+	const key = `${folder.uri.toString()}\0${message}`;
+	if (reportedServerSetupFailures.has(key)) {
+		return;
+	}
+	reportedServerSetupFailures.add(key);
+	void vscode.window.showWarningMessage(message, "Open setup guide").then((choice) => {
+		if (choice === "Open setup guide") {
+			return vscode.env.openExternal(vscode.Uri.parse("https://citry.dev/ide/vscode/"));
+		}
+		return undefined;
+	});
 }
 
 function handleCompletionChange(event: vscode.TextDocumentChangeEvent): void {
@@ -811,7 +865,6 @@ async function handleEmbeddedFormatting(
 		throw new Error(`${FORMAT_PROVIDER_INVALID}: recursive embedded formatting request refused`);
 	}
 	activeEmbeddedFormatting.add(key);
-	const formattingSession = embeddedFormattingDocuments.createSession();
 	const cancellation = new AbortController();
 	if (token.isCancellationRequested) {
 		cancellation.abort();
@@ -820,14 +873,14 @@ async function handleEmbeddedFormatting(
 	try {
 		const response = await formatEmbeddedDocuments(params, {
 			currentDocumentVersion: currentDocumentVersion,
-			executeFormatter: (invocation) => embeddedFormattingDocuments.execute(invocation, params, formattingSession),
+			executeFormatter: (invocation) => embeddedFormattingDocuments.execute(invocation, params),
 			cancellationSignal: cancellation.signal,
 		});
 		for (const result of response.results) {
 			const language = params.regions.find((region) => region.id === result.regionId)?.language ?? "embedded";
 			const detail = result.message === undefined ? "" : `: ${result.message}`;
 			formatterOutput.appendLine(
-				`${language} ${result.regionId}: ${result.status} via vscode-first-result (provider identity unavailable)${detail}`,
+				`${language} ${result.regionId}: ${result.status} via vscode-first-result (provider identity is not carried by protocol v1)${detail}`,
 			);
 		}
 		return response;
@@ -1035,17 +1088,9 @@ class BrowserContentProvider implements vscode.TextDocumentContentProvider, vsco
 
 class EmbeddedFormattingContentProvider implements vscode.TextDocumentContentProvider, vscode.Disposable {
 	private readonly sources = new Map<string, string>();
-	private readonly changes = new vscode.EventEmitter<vscode.Uri>();
-	private nextSession = 0;
-	readonly onDidChange = this.changes.event;
-
-	createSession(): string {
-		this.nextSession += 1;
-		return String(this.nextSession);
-	}
 
 	dispose(): void {
-		this.changes.dispose();
+		this.sources.clear();
 	}
 
 	provideTextDocumentContent(uri: vscode.Uri): string {
@@ -1055,12 +1100,11 @@ class EmbeddedFormattingContentProvider implements vscode.TextDocumentContentPro
 	async execute(
 		invocation: EmbeddedFormatterInvocation,
 		params: EmbeddedFormattingParams,
-		session: string,
 	): Promise<readonly ProviderTextEdit[] | undefined> {
 		if (invocation.signal.aborted) {
 			throw new Error("embedded formatter invocation was cancelled");
 		}
-		const identity = embeddedFormattingDocumentIdentity(params, invocation.region, session);
+		const identity = embeddedFormattingDocumentIdentity(params, invocation.region, invocation.source);
 		const uri = vscode.Uri.from({
 			scheme: embeddedFormattingScheme,
 			...identity,
@@ -1086,15 +1130,11 @@ class EmbeddedFormattingContentProvider implements vscode.TextDocumentContentPro
 				uri: sourceUri,
 				languageId: document.languageId,
 			});
-			const options = embeddedFormattingOptions(editor.get("tabSize"), editor.get("insertSpaces"));
 			if (invocation.signal.aborted) {
 				throw new Error("embedded formatter invocation was cancelled");
 			}
-			const result = await vscode.commands.executeCommand<readonly vscode.TextEdit[] | undefined>(
-				"vscode.executeFormatDocumentProvider",
-				document.uri,
-				options,
-			);
+			const selectedPrettier = await this.executePrettier(document, editor, invocation.signal);
+			const result = selectedPrettier ?? (await this.executeBundledPrettier(document, invocation.signal));
 			return result?.map((edit) => ({
 				range: {
 					start: { line: edit.range.start.line, character: edit.range.start.character },
@@ -1108,40 +1148,73 @@ class EmbeddedFormattingContentProvider implements vscode.TextDocumentContentPro
 		}
 	}
 
-	private async openDocument(uri: vscode.Uri, source: string, signal: AbortSignal): Promise<vscode.TextDocument> {
-		const key = uri.toString();
-		this.sources.set(key, source);
-		let document = await vscode.workspace.openTextDocument(uri);
+	private async executePrettier(
+		document: vscode.TextDocument,
+		editor: vscode.WorkspaceConfiguration,
+		signal: AbortSignal,
+	): Promise<readonly vscode.TextEdit[] | null> {
+		const prettier = vscode.extensions.getExtension(prettierExtensionId);
+		const defaultFormatter = editor.get<string | null>("defaultFormatter");
+		if (prettier === undefined || (typeof defaultFormatter === "string" && defaultFormatter !== prettierExtensionId)) {
+			return null;
+		}
+		await prettier.activate();
 		if (signal.aborted) {
 			throw new Error("embedded formatter invocation was cancelled");
 		}
-		if (document.getText() === source) {
-			return document;
+		const documentRange = new vscode.Range(document.positionAt(0), document.positionAt(document.getText().length));
+		const actions = await vscode.commands.executeCommand<readonly vscode.CodeAction[] | undefined>(
+			"vscode.executeCodeActionProvider",
+			document.uri,
+			documentRange,
+			prettierCodeActionKind.value,
+		);
+		if (signal.aborted) {
+			throw new Error("embedded formatter invocation was cancelled");
 		}
-		document = await new Promise<vscode.TextDocument>((resolve, reject) => {
-			let documentSubscription: vscode.Disposable | undefined;
-			const finish = (value: vscode.TextDocument | Error): void => {
-				documentSubscription?.dispose();
-				signal.removeEventListener("abort", cancel);
-				if (value instanceof Error) {
-					reject(value);
-				} else {
-					resolve(value);
-				}
-			};
-			const cancel = (): void => finish(new Error("embedded formatter invocation was cancelled"));
-			documentSubscription = vscode.workspace.onDidChangeTextDocument((event) => {
-				if (event.document.uri.toString() === key && event.document.getText() === source) {
-					finish(event.document);
-				}
-			});
-			signal.addEventListener("abort", cancel, { once: true });
-			if (signal.aborted) {
-				cancel();
-				return;
+		for (const action of actions ?? []) {
+			if (action.kind?.value !== prettierCodeActionKind.value) {
+				continue;
 			}
-			this.changes.fire(uri);
+			return action.edit?.get(document.uri) ?? [];
+		}
+		return [];
+	}
+
+	private async executeBundledPrettier(
+		document: vscode.TextDocument,
+		signal: AbortSignal,
+	): Promise<readonly vscode.TextEdit[]> {
+		const source = document.getText();
+		const isCss = document.languageId === "css";
+		const formatted = await prettier.format(source, {
+			parser: isCss ? "css" : "babel",
+			plugins: isCss ? [prettierPostcss] : [prettierBabel, prettierEstree],
+			tabWidth: 2,
+			useTabs: false,
+			endOfLine: "auto",
 		});
+		if (signal.aborted) {
+			throw new Error("embedded formatter invocation was cancelled");
+		}
+		if (formatted === source) {
+			return [];
+		}
+		return [
+			vscode.TextEdit.replace(new vscode.Range(document.positionAt(0), document.positionAt(source.length)), formatted),
+		];
+	}
+
+	private async openDocument(uri: vscode.Uri, source: string, signal: AbortSignal): Promise<vscode.TextDocument> {
+		const key = uri.toString();
+		this.sources.set(key, source);
+		const document = await vscode.workspace.openTextDocument(uri);
+		if (signal.aborted) {
+			throw new Error("embedded formatter invocation was cancelled");
+		}
+		if (document.getText() !== source) {
+			throw new Error("embedded formatter virtual-document identity returned a stale snapshot");
+		}
 		return document;
 	}
 }

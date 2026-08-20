@@ -56,6 +56,27 @@ citry-ui-tags-input-required = Tags cannot be empty
 citry-ui-tags-input-invalid = That tag is invalid
 citry-ui-tags-input-unfinished = Add or clear the unfinished tag before submitting
 
+### citry_ui.components.cnumber_input.cnumber_input.CNumberInput
+citry-ui-number-input-decrement = Decrease value
+citry-ui-number-input-increment = Increase value
+citry-ui-number-input-required = Enter a number.
+citry-ui-number-input-invalid = Enter a valid number.
+# @param {str} $min - Locale-formatted inclusive minimum.
+citry-ui-number-input-minimum = Enter a value of at least { $min }.
+# @param {str} $max - Locale-formatted inclusive maximum.
+citry-ui-number-input-maximum = Enter a value of at most { $max }.
+# @param {str} $step - Locale-formatted exact step.
+citry-ui-number-input-step = Enter a value in increments of { $step }.
+
+### citry_ui.components.cslider.cslider.CRangeSlider
+citry-ui-range-slider-lower = Lower value
+citry-ui-range-slider-upper = Upper value
+
+### citry_ui.components.crating.crating.CRating
+# @param {str} $value - Locale-formatted exact rating choice.
+# @param {str} $max - Locale-formatted maximum rating.
+citry-ui-rating-value = { $value } out of { $max }
+
 ### citry_ui.components.cprogress.cprogress.CProgress
 # @param {str} $label - Progress label.
 # @param {str} $value - Locale-formatted current value.

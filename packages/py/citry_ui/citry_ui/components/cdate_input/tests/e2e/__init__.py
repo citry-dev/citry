@@ -1,0 +1,1 @@
+"""CDateInput browser tests."""

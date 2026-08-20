@@ -36,6 +36,11 @@ export interface PendingFileChange<T> {
 	type: T;
 }
 
+/** The 0.1 client and server share protocol version 1. */
+export function supportsLanguageServerVersion(version: string): boolean {
+	return /^0\.1\.\d+(?:[+.-][0-9A-Za-z.-]+)?$/.test(version);
+}
+
 /** Collect save bursts into one watched-files notification per workspace. */
 export class WatchedFileChangeBatcher<T> {
 	private readonly pending = new Map<string, T>();

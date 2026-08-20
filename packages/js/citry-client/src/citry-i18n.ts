@@ -591,6 +591,36 @@ function dateTimeOptions(length: unknown): Intl.DateTimeFormatOptions {
   return { day: "numeric", month: "long", year: "numeric" };
 }
 
+function dateOptions(fields: unknown, length: unknown): Intl.DateTimeFormatOptions {
+  const widths = dateTimeOptions(length);
+  const weekday: Intl.DateTimeFormatOptions["weekday"] =
+    length === "short" ? "narrow" : length === "medium" ? "short" : "long";
+  switch (fields) {
+    case "year":
+      return { year: widths.year };
+    case "month":
+      return { month: widths.month };
+    case "day":
+      return { day: widths.day };
+    case "weekday":
+      return { weekday };
+    case "year_month":
+      return { month: widths.month, year: widths.year };
+    case "month_day":
+      return { day: widths.day, month: widths.month };
+    case "day_weekday":
+      return { day: widths.day, weekday };
+    case "month_day_weekday":
+      return { day: widths.day, month: widths.month, weekday };
+    case "year_month_day":
+      return widths;
+    case "year_month_day_weekday":
+      return { ...widths, weekday };
+    default:
+      return fail("I18N_FORMAT_INVALID", "a date profile has invalid fields.");
+  }
+}
+
 function wallTimeOptions(length: unknown): Intl.DateTimeFormatOptions {
   if (length !== "short" && length !== "medium" && length !== "long") {
     fail("I18N_FORMAT_INVALID", "a temporal profile has an invalid length.");
@@ -616,7 +646,8 @@ function createFormatter(internal: Omit<ProviderInternal, "service">): I18nForma
     date(value: DateFields, rawOptions: FormatOptions): string {
       const options = formatOptions(rawOptions, "date");
       const spec = profile("date", options.format);
-      return new Intl.DateTimeFormat(locale(), { ...dateTimeOptions(spec.length), timeZone: "UTC" }).format(
+      exactKeys(spec, ["fields", "input", "length"], `date format ${options.format}`);
+      return new Intl.DateTimeFormat(locale(), { ...dateOptions(spec.fields, spec.length), timeZone: "UTC" }).format(
         dateValue(value),
       );
     },

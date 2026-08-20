@@ -39,6 +39,18 @@ AXE_INCOMPLETE_DISPOSITIONS = {
             ),
             manual_task="assistive-technology",
         ),
+        AxeIncompleteDisposition(
+            rule="form-field-multiple-labels",
+            reason=(
+                "Axe requests human judgment for Rating's first native radio: CField labels the whole "
+                "group through its control ID while the radio's wrapping label names that exact score."
+            ),
+            automated_evidence=(
+                "Rating server and browser tests prove the root group label, one exact value label per radio, "
+                "native radio keyboard behavior, and the Field label relationship."
+            ),
+            manual_task="assistive-technology",
+        ),
     )
 }
 

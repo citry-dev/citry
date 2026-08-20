@@ -7,7 +7,7 @@ VS Code highlighting, `citry check` provides parser-grade batch validation
 with an explicitly bounded static fallback, and the companion language server
 plus VS Code client provide the implemented editor intelligence. The VS Code
 extension remains release-prepared rather than published. `citry-lsp` 0.1.0
-is published. `pygments-citry` 0.1.2 is
+is published and 0.1.1 is release-prepared. `pygments-citry` 0.1.2 is
 published, with 0.2.0 release-prepared. The original design is the
 synthesis of a research and design-panel process: five recon reports,
 three competing design drafts, and two adversarial judge verdicts, all in

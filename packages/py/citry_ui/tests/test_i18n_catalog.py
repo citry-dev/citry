@@ -58,7 +58,7 @@ def test_component_messages_generate_the_source_catalog() -> None:
     component_catalog = root.joinpath("locales", "en-US", "citry-ui.ftl").read_text(encoding="utf-8")
 
     assert component_catalog == render_component_catalog(citry_ui.COMPONENTS)
-    assert len(_catalog_outputs()) == 46
+    assert len(_catalog_outputs()) == 56
 
 
 def test_component_source_messages_are_the_final_class_member() -> None:
@@ -131,7 +131,9 @@ def test_every_catalog_message_resolves_through_the_configured_package() -> None
         "action_label": "Undo",
         "label": "Upload",
         "max": "8",
+        "min": "1",
         "page": "3",
+        "step": "0.5",
         "title": "Saved",
         "value": "alpha",
     }
@@ -209,5 +211,8 @@ def test_package_format_profiles_load_from_source_and_compiled_artifacts() -> No
         extension = app.extensions.get_extension("i18n")
         formatter = extension.for_context(extension.make_context(locale="en-US")).format
 
+        assert formatter.number(Decimal("1234.5"), format="citry-ui-number-input") == "1,234.5"
         assert formatter.number(Decimal("1234.5"), format="citry-ui-pagination-page") == "1,234.5"
+        assert formatter.number(Decimal("1234.5"), format="citry-ui-slider") == "1,234.5"
+        assert formatter.number(Decimal("3.5"), format="citry-ui-rating") == "3.5"
         assert formatter.number(Decimal(8), format="citry-ui-tags-input-maximum") == "8"

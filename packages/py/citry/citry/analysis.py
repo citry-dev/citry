@@ -1165,7 +1165,11 @@ class PythonTemplateSourceMap:
     def _rewrite_replacements(self, formatted: str) -> tuple[_HostReplacement, ...]:
         part = self._require_rewrite_literal()
 
-        if self._normalization_changed:
+        assignment_indent = _line_indent_at(self._host_source, part.literal_start)
+        has_canonical_multiline_framing = (
+            len(part.delimiter) == 3 and formatted.startswith("\n") and formatted.endswith(f"\n{assignment_indent}")
+        )
+        if self._normalization_changed or has_canonical_multiline_framing:
             return self._rewrite_complete_literal(formatted)
 
         replacements: list[_HostReplacement] = []
@@ -1209,7 +1213,7 @@ class PythonTemplateSourceMap:
         return text if newline == "\n" else text.replace("\n", newline)
 
     def _canonicalize_multiline_framing(self, formatted: str) -> str:
-        """Indent multiline triple-string content relative to its assignment."""
+        """Indent multiline triple-string asset content relative to its assignment."""
         part = self._require_rewrite_literal()
         if len(part.delimiter) != 3 or "\n" not in formatted:
             return formatted
@@ -2308,6 +2312,8 @@ def finish_python_component_assets(
                         code=FORMAT_PROVIDER_UNAVAILABLE,
                     )
                 notices.append(direct_notice)
+            else:
+                formatted = prepared.region.source_map._canonicalize_multiline_framing(formatted)
             if result.status is EmbeddedResultStatus.FORMATTED and result.provider is not None:
                 providers.add(result.provider)
 
@@ -2855,10 +2861,32 @@ def _encode_literal_body(text: str, *, prefix: str, delimiter: str, newline: str
     for codepoint in range(14, 32):
         encoded = encoded.replace(chr(codepoint), f"\\x{codepoint:02x}")
     encoded = encoded.replace(chr(127), "\\x7f")
-    encoded = encoded.replace(delimiter[0], f"\\{delimiter[0]}")
     if len(delimiter) == 1:
+        encoded = encoded.replace(delimiter[0], f"\\{delimiter[0]}")
         return encoded.replace("\n", "\\n").replace("\r", "\\r")
+    encoded = _escape_triple_delimiter_runs(encoded, delimiter[0])
     return encoded.replace("\n", newline)
+
+
+def _escape_triple_delimiter_runs(source: str, quote: str) -> str:
+    """Escape only quote bytes that could terminate a triple-quoted literal."""
+    result: list[str] = []
+    index = 0
+    while index < len(source):
+        if source[index] != quote:
+            result.append(source[index])
+            index += 1
+            continue
+        end = index + 1
+        while end < len(source) and source[end] == quote:
+            end += 1
+        run_length = end - index
+        for run_index in range(run_length):
+            is_run_break = (run_index + 1) % 3 == 0
+            is_literal_tail = end == len(source) and run_index == run_length - 1
+            result.append(f"\\{quote}" if is_run_break or is_literal_tail else quote)
+        index = end
+    return "".join(result)
 
 
 def _line_indent_at(source: str, offset: int) -> str:

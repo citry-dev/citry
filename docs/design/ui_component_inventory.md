@@ -1,8 +1,8 @@
 # Citry UI component inventory
 
-**Status (2026-08-12): provisional Phase 8 inventory for the current
-source-development catalog. The worktree contains 55 component-family
-directories and documentation entries and 101 registered definitions,
+**Status (2026-08-19): provisional Phase 8 inventory for the current
+source-development catalog. The worktree contains 60 component-family
+directories and documentation entries and 107 registered definitions,
 including compound-family declarations and private renderers.**
 This document orders component work while publication waits for compatible
 `citry` and `citry_core` releases. It does not freeze the v1 public contract,
@@ -108,7 +108,7 @@ previews, and structured API reference generation.
 
 ### 3.1 Subsequent source-development passes
 
-The following 21 families have since joined the source-development baseline.
+The following 26 families have since joined the source-development baseline.
 Each has live runtime source, a component specification, family-owned public
 documentation and structured reference, docs-catalog projection, and contract
 coverage. Family-specific human, assistive-technology, device, browser, and
@@ -121,6 +121,7 @@ in this table.
 | Carousel | `CCarousel`, `CCarouselSlide` |
 | CommandPalette | `CCommandPalette` and its command/group records |
 | ContextMenu | `CContextMenu` over the Menu declaration family |
+| DateInput | `CDateInput` |
 | Disclosure | `CDisclosure` |
 | Editable | `CEditable` |
 | FileInput | `CFileInput`, `CDropTarget` |
@@ -129,10 +130,14 @@ in this table.
 | Listbox | `CListbox`, `CListboxOption`, `CListboxGroup` |
 | MultiSelect | `CMultiSelect` and option/group records |
 | NavigationMenu | `CNavigationMenu`, `CNavigationMenuItem`, `CNavigationMenuLink` |
+| NumberInput | `CNumberInput` |
+| Rating | `CRating` |
+| PinInput | `CPinInput` |
 | ScrollArea | `CScrollArea` |
 | Select | `CSelect` and option/group records |
 | SplitButton | `CSplitButton` |
 | Splitter | `CSplitter`, `CSplitterPanel` |
+| Slider and RangeSlider | `CSlider`, `CRangeSlider` |
 | Stepper | `CStepper`, `CStep` |
 | Tag | `CTagGroup`, `CTag` |
 | TagsInput | `CTagsInput`, `CTagsInputMessages` |
@@ -419,7 +424,7 @@ depends on lessons from the completed batch and final Phase 8 scope.
 |---|---|---:|---|
 | Foundations | Reset and cascade layers; typography and native content styles; global semantic tokens, component defaults, density, motion, and responsive vocabulary | Theme/tokens 9/12; typography/native content 6/12 | Card and the existing families supply the current surface, elevation, shape, spacing, and responsive evidence. Global aliases and reset/layer policy remain foundation work unless an application/component earns a public job. |
 | Actions | Application command composition beyond the current Button, SplitButton, Menu, and CommandPalette boundaries | Group/toggle 10/12 | Advance only when an application job is not served by the implemented command families. |
-| Forms | NumberInput, Slider/Range, Rating, PinInput | NumberInput 10/12; Slider/Rating 11/12 | Numeric and pointer controls need parsing, stepping, locale boundaries, keyboard, touch, and controlled-state research. |
+| Forms | Further specialized form controls beyond NumberInput, Slider/RangeSlider, Rating, PinInput, and DateInput | Rating 11/12; calendar/date/time 8/12 | The current advanced form families have completed their value, native-form, localization where applicable, keyboard, paste/autofill where applicable, structured-reference, preview, and focused browser passes. Calendar, picker, time, and range work proceeds through its separately ratified contracts. |
 | Navigation | NavList/NavLink, Menu, application navigation | Menu 11/12; app navigation 7/12 | Pagination and Menu are implemented. Route awareness stays with applications or host integrations. |
 | Feedback | Further notification services beyond Tag, Toast, Alert, and Progress | Badge 9/12; Toast 10/12 | The visible and declarative feedback families are implemented. An imperative global service or richer queue must earn a separate lifecycle contract. |
 | Overlays | Additional overlay jobs beyond AlertDialog, Dialog, Drawer, Popover, Tooltip, Menu, ContextMenu, CommandPalette, and HoverCard | 10 to 11/12 for the main families | The platform-first private foundation and current overlay families are implemented. Persistent navigation remains a layout job. |
@@ -433,7 +438,7 @@ depends on lessons from the completed batch and final Phase 8 scope.
 
 | Work | Stage | Gate or boundary |
 |---|---|---|
-| Date, time, calendar, date range, and locale-sensitive number controls | Next general-suite research and implementation | Use the implemented core server formatting/parsing, locale, calendar, direction, and time-zone contracts. Each family must ratify its browser editing and server/browser agreement, but generic browser temporal parsing is not an entry gate. |
+| Calendar, custom date picker, time, date range, and locale-sensitive number controls | Active general-suite research and implementation after native DateInput | Use the implemented core server formatting/parsing, locale, calendar, direction, and time-zone contracts. Each family must ratify its browser editing and server/browser agreement, but generic browser temporal parsing is not an entry gate. |
 | Upload transport and storage around FileInput and DropTarget | Companion work | Native file selection and drop are implemented. Upload transport, storage, previews, cancellation, retry, and server validation form a larger security and lifecycle product. |
 | Sortable and editable collections, virtual windows, and infinite loading | Later | Identity, focus, drag, async, and server replacement behavior need a dedicated collection contract. |
 | Stateful DataTable or DataGrid | Companion candidate | Spreadsheet navigation, column models, editing, grouping, aggregation, pinning, virtualization, export, and server query protocols exceed semantic Table. |

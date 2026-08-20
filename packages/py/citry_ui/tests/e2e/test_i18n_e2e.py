@@ -52,6 +52,16 @@ citry-ui-tags-input-remove = Odebrat { $value }
 citry-ui-toast-region = Oznámení
 citry-ui-toast-dismiss = Zavřít { $title }
 citry-ui-progress-value-text = { $label }: { $value } z { $max }
+citry-ui-number-input-decrement = Snížit hodnotu
+citry-ui-number-input-increment = Zvýšit hodnotu
+citry-ui-number-input-required = Zadejte číslo.
+citry-ui-number-input-invalid = Zadejte platné číslo.
+citry-ui-number-input-minimum = Zadejte hodnotu alespoň { $min }.
+citry-ui-number-input-maximum = Zadejte hodnotu nejvýše { $max }.
+citry-ui-number-input-step = Zadejte hodnotu v krocích po { $step }.
+citry-ui-range-slider-lower = Dolní hodnota
+citry-ui-range-slider-upper = Horní hodnota
+citry-ui-rating-value = { $value } z { $max }
 """.lstrip(),
         "ar-EG": """
 citry-ui-breadcrumbs-label = مسار التنقل
@@ -65,6 +75,16 @@ citry-ui-tags-input-remove = إزالة { $value }
 citry-ui-toast-region = الإشعارات
 citry-ui-toast-dismiss = إغلاق { $title }
 citry-ui-progress-value-text = { $label }: { $value } من { $max }
+citry-ui-number-input-decrement = خفض القيمة
+citry-ui-number-input-increment = زيادة القيمة
+citry-ui-number-input-required = أدخل رقمًا.
+citry-ui-number-input-invalid = أدخل رقمًا صالحًا.
+citry-ui-number-input-minimum = أدخل قيمة لا تقل عن { $min }.
+citry-ui-number-input-maximum = أدخل قيمة لا تزيد عن { $max }.
+citry-ui-number-input-step = أدخل قيمة بزيادات قدرها { $step }.
+citry-ui-range-slider-lower = القيمة الدنيا
+citry-ui-range-slider-upper = القيمة العليا
+citry-ui-rating-value = { $value } من { $max }
 """.lstrip(),
     }
     for locale, content in translations.items():
@@ -100,6 +120,22 @@ def _page(app: Citry) -> str:
                   c-attrs="{'id': 'progress'}"
                   $c-props="{label: progressLabel, value: progressValue}"
                 />
+                <c-CNumberInput
+                  id="number-input"
+                  name="amount"
+                  value="1234.5"
+                  step="0.1"
+                  c-input_attrs="{'aria-label':'Measurement'}"
+                />
+                <c-CRangeSlider
+                  id="range"
+                  c-value="('1234.5', '5678.5')"
+                  min="0"
+                  max="10000"
+                  step="0.5"
+                  show_value="always"
+                />
+                <c-CRating id="rating-i18n" label="Article rating" value="3.5" precision="0.5" />
                 <c-CPagination
                   c-pages="5"
                   c-page="2"
@@ -196,6 +232,10 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
     page.wait_for_function(
         """() => document.querySelector('#progress')?.hasAttribute('data-citry-progress-initialized')
           && document.querySelector('#pagination')?.hasAttribute('data-citry-pagination-initialized')
+          && document.querySelector('#number-input')?.closest('[data-citry-ui-part=number-input]')
+            ?.hasAttribute('data-citry-number-input-initialized')
+          && document.querySelector('#range-root')?.hasAttribute('data-citry-slider-initialized')
+          && document.querySelector('#rating-i18n-root')?.hasAttribute('data-citry-rating-initialized')
           && document.querySelector('#combobox-root')?.hasAttribute('data-citry-combobox-initialized')
           && document.querySelector('#tags')?.closest('[data-citry-ui-part=tags-input]')
             ?.hasAttribute('data-citry-tags-input-initialized')
@@ -205,6 +245,13 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
     assert page.locator("#breadcrumbs").get_attribute("aria-label") == "Breadcrumbs"
     assert page.locator("#breadcrumbs-override").get_attribute("aria-label") == "Custom breadcrumbs"
     assert _plain(page.locator("#progress").text_content()) == "Processed: 25 of 100"
+    assert page.locator("#number-input").input_value() == "1,234.5"
+    assert page.locator("#number-input-transport").input_value() == "1234.5"
+    assert page.locator("#range-lower-label").text_content() == "Lower value"
+    assert page.locator("#range-upper-label").text_content() == "Upper value"
+    assert page.locator('#range-root [role="slider"]').nth(0).get_attribute("aria-valuetext") == "1,234.5"
+    rating_label = '#rating-i18n-root [data-value="3.5"] [data-citry-ui-part="choice-label"]'
+    assert _plain(page.locator(rating_label).text_content()) == "3.5 out of 5"
     assert _label(page, '#pagination [data-kind="page"][data-page="2"]') == "Page 2"
     assert page.locator("#combobox-root [data-citry-combobox-trigger]").get_attribute("aria-label") == "Show options"
     assert _label(page, '.cui-tags-input:has(#tags) [data-citry-ui-part="remove"]') == "Remove alpha"
@@ -232,16 +279,34 @@ def test_catalog_defaults_follow_values_locales_and_rtl_but_overrides_stay_fixed
     assert page.locator("#breadcrumbs").get_attribute("aria-label") == "Drobečková navigace"
     assert page.locator("#breadcrumbs-override").get_attribute("aria-label") == "Custom breadcrumbs"
     assert _plain(page.locator("#progress").text_content()) == "Reviewed: 50 z 100"
+    assert page.locator("#number-input").input_value().replace("\u00a0", " ") == "1 234,5"
+    assert _label(page, '.cui-number-input:has(#number-input) [data-citry-ui-part="increment"]') == (
+        "Zvýšit hodnotu"
+    )
+    assert page.locator("#range-lower-label").text_content() == "Dolní hodnota"
+    assert page.locator("#range-upper-label").text_content() == "Horní hodnota"
+    assert page.locator('#range-root [role="slider"]').nth(0).get_attribute("aria-valuetext").replace(
+        "\u00a0", " "
+    ) == "1 234,5"
+    assert _plain(page.locator(rating_label).text_content()) == "3,5 z 5"
     assert _label(page, '#pagination [data-kind="page"][data-page="3"]') == "Strana 3"
     assert page.locator("#combobox-root [data-citry-combobox-trigger]").get_attribute("aria-label") == "Skrýt možnosti"
     assert _label(page, '.cui-tags-input:has(#tags) [data-value="beta"][data-citry-ui-part="remove"]') == (
         "Odebrat beta"
     )
     assert _label(page, '#toasts [data-citry-toast-id="saved"] [data-citry-toast-dismiss]') == "Zavřít Updated"
+    page.locator("#number-input").press("ArrowUp")
+    assert page.locator("#number-input-transport").input_value() == "1234.6"
 
     page.evaluate("async () => Alpine.evaluate(document.querySelector('#switch-ar'), '$i18n').switchLocale('ar-EG')")
     page.wait_for_function("document.querySelector('main')?.lang === 'ar-EG'")
     assert page.locator("main").get_attribute("dir") == "rtl"
     assert page.locator("#breadcrumbs").get_attribute("aria-label") == "مسار التنقل"
+    assert page.locator("#number-input").input_value() == "\u0661\u066c\u0662\u0663\u0664\u066b\u0666"
+    assert _label(page, '.cui-number-input:has(#number-input) [data-citry-ui-part="decrement"]') == "خفض القيمة"
+    assert page.locator("#range-lower-label").text_content() == "القيمة الدنيا"
+    assert page.locator("#range-upper-label").text_content() == "القيمة العليا"
+    assert page.locator('#range-root [role="slider"]').nth(0).get_attribute("aria-valuetext") == "١٬٢٣٤٫٥"  # noqa: RUF001
+    assert _plain(page.locator(rating_label).text_content()) == "٣٫٥ من ٥"  # noqa: RUF001
     assert _label(page, '#pagination [data-kind="page"][data-page="3"]') == "الصفحة ٣"
     assert errors == []

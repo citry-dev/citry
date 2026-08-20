@@ -332,14 +332,20 @@ version, and effective options are selected. The CLI uses only an explicitly
 configured, named adapter and reports unavailable embedded providers instead
 of searching `PATH`.
 
-VS Code 1.93 exposes no public headless API for invoking the configured
+VS Code exposes no public headless API for invoking an arbitrary configured
 `editor.defaultFormatter` and learning its identity. The public
-`vscode.executeFormatDocumentProvider` command returns edits from the first
-applicable provider result in registry order and returns no provider metadata.
-M3 therefore reports this editor mechanism honestly as `vscode-first-result`,
-with provider identity/version unknown. It must not claim default-formatter
-parity. A future formatter-specific adapter may provide stronger selection and
-identity guarantees without changing the core plan/result boundary.
+`vscode.executeFormatDocumentProvider` command walks registry order until one
+provider returns edits and returns no provider metadata. When multiple
+formatters disagree, repeated calls can therefore alternate between their
+outputs. When the Prettier extension is installed and selected for a language,
+Citry uses its public `source.fixAll.prettier` action; this chooses one provider
+without editing the visible document. When another standalone formatter is
+selected or the extension is absent, Citry uses its bundled Prettier 3.7.4
+adapter with canonical two-space indentation. It never sends embedded assets
+through the ambiguous generic command. Protocol v1 retains the
+`vscode-first-result` compatibility label and cannot carry either selected
+adapter's identity, so it must not claim default-formatter parity or a provider
+identity. A future protocol revision may expose the stronger selection proof.
 
 M2 uses vendored Ruff 0.16.2 at git pin `5b48a04097`, reported as
 `ruff@0.16.2+5b48a04097`. It targets Python 3.10, preserves quote style, uses
@@ -351,7 +357,7 @@ region unchanged. Once `{{ ... }}` uses multiline framing, later fixed-point
 passes retain that framing while reformatting its Python body; this monotonic
 rule prevents column-dependent wrap/unwrap cycles between adjacent
 interpolations. M3 editor delegation may be asynchronous, so its embedded
-requests and results form a two-pass plan rather than a synchronous Rust
+requests and results use a prepare/finish plan rather than a synchronous Rust
 callback. This also lets the server reject stale document versions before
 composing edits.
 
@@ -593,12 +599,12 @@ The last two lines remain observably different. M1 never turns the first into
 the second or vice versa.
 
 Python triple-quoted host literals use canonical host framing whenever the
-formatted template is multiline. The opening delimiter remains on the
-assignment line, template content starts on the next line at two spaces beyond
-the assignment indentation, and the closing delimiter occupies its own line
-at the assignment indentation. Citry nesting adds two spaces relative to that
-template base. A formatted template that remains single-line retains inline
-delimiter framing.
+formatted template or direct JavaScript/CSS asset is multiline. The opening
+delimiter remains on the assignment line, asset content starts on the next
+line at two spaces beyond the assignment indentation, and the closing
+delimiter occupies its own line at the assignment indentation. Citry,
+JavaScript, and CSS nesting adds two spaces relative to that asset base. A
+formatted asset that remains single-line retains inline delimiter framing.
 
 This host rule deliberately may introduce or normalize root whitespace in the
 decoded template value. It is the Python-source counterpart of M1 structural
@@ -751,21 +757,19 @@ delegated. MIME parameters are significant here, so a value such as
 speculation rules, and data-block MIME types are never sent to a JavaScript
 formatter. An omitted, bare, empty, or exact `text/css` style type is CSS.
 
-In VS Code, Citry requests formatting through the public standalone
-JavaScript/CSS provider command using one stable virtual-document identity per
-region. The content provider refreshes that document between immutable pass
-snapshots, so both idempotence passes retain the same URI, language, selector,
-and configuration scope. Because that API cannot prove the configured default provider or its
-identity, capability output names the `vscode-first-result` mechanism rather
-than a fabricated provider. When no provider returns a non-empty raw result,
-VS Code returns no result; Citry leaves the region unchanged and contributes a
-capability notice. If VS Code instead returns an empty edit list after
-minimizing a provider's non-empty raw result, Citry classifies the region as
-unchanged. Batch formatting uses only an explicitly configured compatible
-provider; it never searches `PATH` and
-silently chooses a tool. Provider edits are mapped back only after virtual
-document version, plan identity, delimiter, protected-range, and host-literal
-checks pass.
+In VS Code, Citry gives every immutable JavaScript/CSS source snapshot a
+content-addressed virtual-document path. Changed bytes cannot reuse a
+provider's stale cached document, while identical bytes retain one stable
+identity across later checks and commands. When the Prettier extension is the
+selected language formatter, Citry requests its exact public source action.
+Otherwise its bundled Prettier 3.7.4 adapter formats the immutable source with
+canonical two-space indentation. An empty result after a non-empty pass is a
+fixed point. Citry validates up to three results and refuses output that keeps
+changing.
+Batch formatting uses only an explicitly configured compatible provider; it
+never searches `PATH` and silently chooses a tool. Provider edits are mapped
+back only after virtual document version, plan identity, delimiter,
+protected-range, and host-literal checks pass.
 
 The Citry/HTML printer always owns the outer `script` or `style` tag and its
 indentation. Eligible embedded output is reindented as one block; the lexical
@@ -1005,9 +1009,12 @@ the source-preserving template pass, the selected provider owns the complete
 decoded asset, so Citry escapes its output back into the existing quote kind.
 Provider CRLF and lone-CR output first normalize to logical LF. Single-quoted
 hosts encode logical newlines as escapes, while triple-quoted hosts use the
-Python file's physical newline. Raw literals are accepted only when the exact
-provider result is representable without changing their decoded value. The
-decoded asset must equal the accepted provider result after rewriting.
+Python file's physical newline and the canonical framing from section 6.3.
+Ordinary quote characters remain authored directly; Citry escapes only quote
+runs that could terminate the existing triple delimiter. Raw literals are
+accepted only when the provider result and canonical boundary whitespace are
+representable without changing the normalized asset value. Provider-owned
+interior bytes remain exact after host indentation is normalized.
 Document scope is atomic across all selected asset kinds; cursor scope targets
 only the containing definite asset. An unavailable provider under M3
 `available` mode leaves its region unchanged with a notice, while invalid
@@ -1301,15 +1308,16 @@ citry/formatEmbedded
 ```
 
 During a standard or custom Citry formatting request, a capable client receives
-immutable virtual JavaScript/CSS pass snapshots under one stable region URI,
-stable region and plan IDs, the
-original document version, half-open UTF-16 protected ranges, and delimiter
-constraints. It returns one explicitly classified result per region and
-provider identity/version only when those values are knowable. The server
-validates the echoed IDs, rejects missing, extra, duplicate, malformed, or
-stale results, composes accepted results with the Citry plan, reparses the final
-template and Python host, and returns one edit only if the document version is
-still current. Clients without the capability receive M1/M2 formatting and an
+immutable JavaScript/CSS pass snapshots. The client gives each distinct source
+snapshot a content-addressed virtual-document path while keeping stable region
+and plan IDs, the original document version, half-open UTF-16 protected ranges,
+and delimiter constraints.
+It returns one explicitly classified result per region and provider
+identity/version only when those values are knowable. The server validates the
+echoed IDs, rejects missing, extra, duplicate, malformed, or stale results,
+composes accepted results with the Citry plan, reparses the final template and
+Python host, and returns one edit only if the document version is still current.
+Clients without the capability receive M1/M2 formatting and an
 embedded-provider notice.
 
 This is an additive, unreleased protocol-v1 capability. Both the LSP and VS
@@ -1353,21 +1361,17 @@ ineligible. Standard formatting and format-on-save are registered only for
 formatter. The narrower `citry/formatTemplates` protocol request remains
 available to other clients but is not exposed as a VS Code command.
 
-JavaScript/CSS delegation calls VS Code's public standalone formatting
-command. In VS Code 1.93 that means the first applicable non-empty provider
-result, which is not guaranteed to be `editor.defaultFormatter`; Citry reports
-the `vscode-first-result` mechanism and unknown provider identity. Citry does
-not apply fallback style rules. Users who need deterministic bytes use the
-explicit batch adapter, and future editor-specific adapters may provide exact
-default-provider selection.
+JavaScript/CSS delegation prefers Prettier's public source action when the
+extension is installed and selected for that language. Otherwise Citry uses a
+bundled Prettier 3.7.4 adapter with canonical two-space indentation. It never
+calls VS Code's generic command, which can alternate between Prettier and a
+built-in formatter. The user's standalone-language default remains untouched.
+Protocol v1 reports the `vscode-first-result` compatibility mechanism and no
+provider identity in both cases. Users who need deterministic batch bytes use
+the explicit batch adapter.
 
-The built-in CSS formatter accepts Citry's custom virtual-document scheme, but
-the built-in JavaScript/TypeScript formatter does not. JavaScript formatting
-therefore currently requires an installed formatter that registers for
-non-file virtual documents; Prettier is the recommended compatible option.
-This is a temporary editor-compatibility limitation, not a requirement of the
-formatter architecture or CLI. Highlighting and editor intelligence use a
-separate embedded-language route and do not depend on this formatter selector.
+Highlighting and editor intelligence use a separate embedded-language route
+and do not depend on this formatter selector.
 
 ### 12.2 Save behavior
 
@@ -1415,8 +1419,9 @@ were formatted.
 The server gives each callback an explicit JSON-RPC request ID. Timeout or
 caller cancellation sends `$/cancelRequest`; the VS Code handler propagates
 its cancellation token into the active virtual document, discards late output,
-and starts no later pass or region. Under `vscode-first-result`, a client result
-must keep provider identity absent or null because VS Code cannot prove it.
+and starts no later pass or region. Under protocol v1's
+`vscode-first-result` compatibility label, a client result keeps provider
+identity absent or null even when its formatter-specific adapter knows it.
 
 On-save failure does not block saving. It makes no formatter edit and records
 the reason in the Citry output channel; repetitive unchanged errors are
@@ -1754,11 +1759,11 @@ order should follow real formatter usage and failure reports:
   language and map edits back to authored source. This includes Alpine
   expressions, browser props, and extension-defined event mini-languages; a
   generic JavaScript formatter must not guess their grammar.
-- Give editor clients stronger provider selection when their API permits it.
-  The initial VS Code adapter honestly reports `vscode-first-result` because
-  the public command neither guarantees the configured default formatter nor
-  reveals provider identity. A formatter-specific adapter may later provide a
-  stable identity, version, options, and default-provider contract.
+- Extend the editor protocol so formatter-specific adapters can report the
+  stable identity, version, options, and selection proof they already know.
+  Protocol v1 retains `vscode-first-result` and a null identity for wire
+  compatibility, including when the VS Code client selects Prettier through
+  its public source action.
 - Add further explicit batch providers behind the same executable authority,
   identity, timeout, and validation rules as the Biome adapter. Provider names
   must select a designed adapter rather than an arbitrary command line. A

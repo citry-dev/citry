@@ -319,8 +319,8 @@ def test_python_component_assets_use_one_atomic_two_pass_plan() -> None:
     assert result["kind"] == "edit"
     formatted = _new_text(result)
     assert "const nested = 1;" in formatted
-    assert 'js = """const direct = 1;\n"""' in formatted
-    assert 'css = """.card {\n  color: red;\n}\n"""' in formatted
+    assert 'js = """\n      const direct = 1;\n    """' in formatted
+    assert 'css = """\n      .card {\n        color: red;\n      }\n    """' in formatted
     assert result["providers"] == []
     assert result["notices"] == []
 

@@ -9,6 +9,8 @@ test("packaging always compiles the current extension source", async () => {
 	const manifest = JSON.parse(await readFile(manifestUrl, "utf8"));
 
 	assert.match(manifest.scripts.prepackage, /pnpm run compile/);
+	assert.match(manifest.scripts.compile, /--minify/);
+	assert.equal(manifest.dependencies.prettier, "3.7.4");
 });
 
 test("formatter commands and native save integration are contributed", async () => {
@@ -62,8 +64,14 @@ test("one extension-owned formatter routes all VS Code workspaces", async () => 
 	);
 	assert.match(
 		source,
-		/const options = embeddedFormattingOptions[\s\S]*?if \(invocation\.signal\.aborted\)[\s\S]*?const result = await vscode\.commands\.executeCommand/,
+		/const selectedPrettier = await this\.executePrettier[\s\S]*?selectedPrettier \?\?[\s\S]*?this\.executeBundledPrettier/,
 	);
+	assert.match(source, /vscode\.executeCodeActionProvider[\s\S]*?prettierCodeActionKind\.value/);
+	assert.match(
+		source,
+		/prettier\.format[\s\S]*?prettierPostcss[\s\S]*?prettierBabel[\s\S]*?prettierEstree[\s\S]*?tabWidth: 2[\s\S]*?useTabs: false/,
+	);
+	assert.doesNotMatch(source, /vscode\.executeFormatDocumentProvider/);
 });
 
 test("CSS data intelligence activates and routes CSS files through the workspace client", async () => {

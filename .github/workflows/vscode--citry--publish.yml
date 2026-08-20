@@ -1,0 +1,345 @@
+# Qualify and publish the universal Citry VS Code extension.
+#
+# A manual main-branch run builds and smoke-tests one exact VSIX. Pushing
+# vscode-citry@<version> at that commit promotes those same bytes to both
+# extension registries; a manual run can never enter the publishing job.
+name: Publish Citry for VS Code
+
+on:
+  push:
+    tags:
+      - "vscode-citry@*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  EXTENSION_DIR: packages/editors/vscode
+  NODE_VERSION: "22"
+  PUBLIC_CITRY_LSP_VERSION: "0.1.1"
+  PRETTIER_VSCODE_VERSION: "12.4.0"
+  PRETTIER_VSCODE_SHA256: "46d22a567b35ebe5bdffd7280457742cd67e65d7e1b250bb775ab2be86479a42"
+
+jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.package-version.outputs.version }}
+      filename: ${{ steps.package-version.outputs.filename }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify tag matches the extension version
+        id: package-version
+        run: |
+          pkg_version=$(node -p "require('./$EXTENSION_DIR/package.json').version")
+          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+          echo "filename=citry-dev.citry-$pkg_version.vsix" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_REF" != refs/tags/* ]]; then
+            exit 0
+          fi
+          tag_version="${GITHUB_REF_NAME#vscode-citry@}"
+          echo "tag version: $tag_version, extension version: $pkg_version"
+          if [ "$tag_version" != "$pkg_version" ]; then
+            echo "::error::tag '$tag_version' does not match package.json version '$pkg_version'"
+            exit 1
+          fi
+
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: verify-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install the locked Node workspace
+        run: pnpm install --frozen-lockfile
+      - name: Run the extension checks
+        run: pnpm --dir "$EXTENSION_DIR" run check
+      - name: Build the exact VSIX
+        run: |
+          pnpm --dir "$EXTENSION_DIR" run package
+          mv "$EXTENSION_DIR/dist/citry.vsix" "$EXTENSION_DIR/dist/${{ needs.verify-version.outputs.filename }}"
+          python scripts/verify_vscode_citry_distribution.py --dist-dir "$EXTENSION_DIR/dist"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: raw-vscode-citry-extension
+          path: ${{ env.EXTENSION_DIR }}/dist/${{ needs.verify-version.outputs.filename }}
+          if-no-files-found: error
+
+  smoke-installed-extension:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [verify-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - name: Install the locked Node workspace
+        run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v8
+        with:
+          name: raw-vscode-citry-extension
+          path: dist
+      - name: Verify the downloaded VSIX
+        run: python scripts/verify_vscode_citry_distribution.py --dist-dir dist
+      - name: Install the public language server in a clean environment
+        run: |
+          python -m venv "$RUNNER_TEMP/citry-vscode-python"
+          "$RUNNER_TEMP/citry-vscode-python/bin/python" -m pip install --disable-pip-version-check \
+            "citry-lsp==$PUBLIC_CITRY_LSP_VERSION"
+          "$RUNNER_TEMP/citry-vscode-python/bin/python" -I - <<'PY'
+          import importlib.metadata
+          import os
+
+          import citry_lsp
+
+          assert importlib.metadata.version("citry-lsp") == os.environ["PUBLIC_CITRY_LSP_VERSION"]
+          assert citry_lsp.__file__ is not None
+          PY
+      - name: Extract the verified extension
+        run: |
+          mkdir "$RUNNER_TEMP/citry-vsix" "$RUNNER_TEMP/citry-vscode-workspace" \
+            "$RUNNER_TEMP/citry-vscode-missing-server" "$RUNNER_TEMP/prettier-vscode"
+          unzip -q "dist/${{ needs.verify-version.outputs.filename }}" -d "$RUNNER_TEMP/citry-vsix"
+      - name: Install the exact formatter used by the embedded-language smoke
+        run: |
+          curl --fail --location --silent --show-error --compressed \
+            "https://marketplace.visualstudio.com/_apis/public/gallery/publishers/esbenp/vsextensions/prettier-vscode/$PRETTIER_VSCODE_VERSION/vspackage" \
+            --output "$RUNNER_TEMP/prettier-vscode.vsix"
+          echo "$PRETTIER_VSCODE_SHA256  $RUNNER_TEMP/prettier-vscode.vsix" | sha256sum --check
+          unzip -q "$RUNNER_TEMP/prettier-vscode.vsix" -d "$RUNNER_TEMP/prettier-vscode"
+          node - <<'NODE'
+          const manifest = require(`${process.env.RUNNER_TEMP}/prettier-vscode/extension/package.json`);
+          if (
+            manifest.publisher !== "esbenp" ||
+            manifest.name !== "prettier-vscode" ||
+            manifest.version !== process.env.PRETTIER_VSCODE_VERSION
+          ) {
+            throw new Error("downloaded formatter identity does not match the qualification pin");
+          }
+          NODE
+      - name: Exercise the installed VSIX against public citry-lsp
+        env:
+          CITRY_VSCODE_EXTENSION_DIR: ${{ runner.temp }}/citry-vsix/extension
+          CITRY_VSCODE_PRETTIER_EXTENSION_DIR: ${{ runner.temp }}/prettier-vscode/extension
+          CITRY_VSCODE_SMOKE_FORMATTING: "1"
+          CITRY_VSCODE_SMOKE_PYTHON: ${{ runner.temp }}/citry-vscode-python/bin/python
+          CITRY_VSCODE_SMOKE_WORKSPACE: ${{ runner.temp }}/citry-vscode-workspace
+        run: xvfb-run -a node "$EXTENSION_DIR/tests/integration/run.mjs"
+      - name: Exercise the missing-server setup path
+        env:
+          CITRY_VSCODE_EXTENSION_DIR: ${{ runner.temp }}/citry-vsix/extension
+          CITRY_VSCODE_EXPECT_UNAVAILABLE: "1"
+          CITRY_VSCODE_SMOKE_PYTHON: ${{ runner.temp }}/citry-python-does-not-exist
+          CITRY_VSCODE_SMOKE_WORKSPACE: ${{ runner.temp }}/citry-vscode-missing-server
+        run: xvfb-run -a node "$EXTENSION_DIR/tests/integration/run.mjs"
+
+  verify-extension:
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+    needs: [verify-version, build, smoke-installed-extension]
+    runs-on: ubuntu-latest
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: raw-vscode-citry-extension
+          path: dist
+      - name: Verify and stage the closed release artifact
+        run: >-
+          python scripts/verify_vscode_citry_distribution.py
+          --dist-dir dist
+          --stage-output-dir verified
+      - name: Attest the qualified VSIX
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            verified/*.vsix
+            verified/release-inventory.json
+      - name: Upload the only bundle a tag may promote
+        uses: actions/upload-artifact@v7
+        with:
+          name: verified-vscode-citry-extension
+          path: verified
+          if-no-files-found: error
+          retention-days: 14
+
+  select-qualification:
+    name: Select the exact main-commit qualification
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    needs: verify-version
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    outputs:
+      run_id: ${{ steps.select.outputs.run_id }}
+      run_url: ${{ steps.select.outputs.run_url }}
+      artifact_id: ${{ steps.select.outputs.artifact_id }}
+      artifact_digest: ${{ steps.select.outputs.artifact_digest }}
+      head_sha: ${{ steps.select.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Record the peeled tag commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Find a successful qualification for this commit
+        id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python scripts/select_citry_core_qualification.py
+          --repository "$GITHUB_REPOSITORY"
+          --commit "${{ steps.commit.outputs.sha }}"
+          --workflow vscode--citry--publish.yml
+          --artifact-name verified-vscode-citry-extension
+          --github-output "$GITHUB_OUTPUT"
+
+  release:
+    name: Promote qualified bytes to both extension registries
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') }}
+    needs: [verify-version, select-qualification]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: vscode-citry-registry-release
+      cancel-in-progress: false
+    environment: vscode-marketplaces
+    env:
+      EXTENSION_VERSION: ${{ needs.verify-version.outputs.version }}
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
+      OVSX_PAT: ${{ secrets.OVSX_PAT }}
+    permissions:
+      actions: read
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require the qualified commit to remain on main
+        run: |
+          test "$(git rev-parse HEAD)" = "${{ needs.select-qualification.outputs.head_sha }}"
+          git fetch --no-tags origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor HEAD origin/main
+      - name: Download the immutable qualification archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail --location --silent --show-error \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/actions/artifacts/${{ needs.select-qualification.outputs.artifact_id }}/zip" \
+            --output qualification.zip
+      - name: Verify GitHub's digest and the qualified VSIX again
+        run: >-
+          python scripts/verify_vscode_citry_distribution.py
+          --promote-archive qualification.zip
+          --artifact-digest '${{ needs.select-qualification.outputs.artifact_digest }}'
+          --promotion-output-dir verified
+      - name: Record the promoted qualification
+        run: |
+          jq -n \
+            --arg run_id '${{ needs.select-qualification.outputs.run_id }}' \
+            --arg run_url '${{ needs.select-qualification.outputs.run_url }}' \
+            --arg artifact_digest '${{ needs.select-qualification.outputs.artifact_digest }}' \
+            --arg head_sha '${{ needs.select-qualification.outputs.head_sha }}' \
+            '{run_id: $run_id, run_url: $run_url, artifact_digest: $artifact_digest, head_sha: $head_sha}' \
+            > verified/qualification-provenance.json
+      - name: Require registry credentials and a new GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test -n "$VSCE_PAT" || { echo "::error::VSCE_PAT is not configured"; exit 1; }
+          test -n "$OVSX_PAT" || { echo "::error::OVSX_PAT is not configured"; exit 1; }
+          release_status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --header "Accept: application/vnd.github+json" \
+            --header "Authorization: Bearer $GH_TOKEN" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/tags/$GITHUB_REF_NAME")
+          if [ "$release_status" != "404" ]; then
+            echo "::error::expected GitHub Release $GITHUB_REF_NAME to be absent; HTTP $release_status"
+            exit 1
+          fi
+      - name: Set up pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install the locked Visual Studio Marketplace client
+        run: pnpm install --frozen-lockfile
+      - name: Publish the qualified VSIX to Visual Studio Marketplace
+        run: >-
+          pnpm --dir "$EXTENSION_DIR" exec vsce publish
+          --packagePath "$GITHUB_WORKSPACE/verified/${{ needs.verify-version.outputs.filename }}"
+          --skip-duplicate
+      - name: Publish the same VSIX to Open VSX
+        run: >-
+          pnpm dlx ovsx@1.1.1 -p "$OVSX_PAT" publish
+          "$GITHUB_WORKSPACE/verified/${{ needs.verify-version.outputs.filename }}"
+          --skip-duplicate
+      - name: Verify both public registry versions
+        run: |
+          marketplace_url="https://marketplace.visualstudio.com/_apis/public/gallery/publishers/citry-dev/vsextensions/citry/$EXTENSION_VERSION/vspackage"
+          open_vsx_url="https://open-vsx.org/api/citry-dev/citry/$EXTENSION_VERSION"
+          for attempt in $(seq 1 20); do
+            marketplace_status=$(curl --location --silent --show-error --output /dev/null --write-out '%{http_code}' "$marketplace_url")
+            open_vsx_status=$(curl --silent --show-error --output open-vsx.json --write-out '%{http_code}' "$open_vsx_url")
+            if [ "$marketplace_status" = "200" ] && [ "$open_vsx_status" = "200" ]; then
+              test "$(jq -r '.namespace' open-vsx.json)" = "citry-dev"
+              test "$(jq -r '.name' open-vsx.json)" = "citry"
+              test "$(jq -r '.version' open-vsx.json)" = "$EXTENSION_VERSION"
+              jq -n \
+                --arg marketplace "$marketplace_url" \
+                --arg open_vsx "$open_vsx_url" \
+                --arg version "$EXTENSION_VERSION" \
+                '{version: $version, visual_studio_marketplace: $marketplace, open_vsx: $open_vsx}' \
+                > verified/registry-verification.json
+              exit 0
+            fi
+            echo "registry propagation attempt $attempt: marketplace=$marketplace_status open-vsx=$open_vsx_status"
+            sleep 15
+          done
+          echo "::error::extension version did not become public in both registries"
+          exit 1
+      - name: Attest the promotion of the qualified bytes
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            verified/*.vsix
+            verified/release-inventory.json
+            verified/qualification-provenance.json
+            verified/registry-verification.json
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          verified/*.vsix
+          verified/release-inventory.json
+          verified/qualification-provenance.json
+          verified/registry-verification.json
+          --repo "$GITHUB_REPOSITORY"
+          --title "$GITHUB_REF_NAME"
+          --generate-notes

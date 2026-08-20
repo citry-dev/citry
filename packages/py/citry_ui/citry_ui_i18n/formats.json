@@ -1,1 +1,1 @@
-{"number":{"citry-ui-pagination-page":{"input":{"notation":"decimal"}},"citry-ui-progress-value":{"input":{"notation":"decimal"}},"citry-ui-tags-input-maximum":{"input":{"notation":"decimal"}}}}
+{"number":{"citry-ui-number-input":{"input":{"notation":"decimal"}},"citry-ui-pagination-page":{"input":{"notation":"decimal"}},"citry-ui-progress-value":{"input":{"notation":"decimal"}},"citry-ui-rating":{"input":{"notation":"decimal"}},"citry-ui-slider":{"input":{"notation":"decimal"}},"citry-ui-tags-input-maximum":{"input":{"notation":"decimal"}}}}

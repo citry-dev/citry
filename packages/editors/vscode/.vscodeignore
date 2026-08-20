@@ -3,7 +3,10 @@ biome.json
 tests/**
 src/**
 out/tests/**
+out/*.map
 tsconfig.json
 node_modules/**
 dist/**
 *.vsix
+images/**
+!images/icon.png

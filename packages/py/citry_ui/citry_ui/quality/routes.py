@@ -24,6 +24,7 @@ from citry_ui.components.ccheckbox.quality.scenario import checkbox_states_compo
 from citry_ui.components.ccombobox.quality.scenario import combobox_states_component
 from citry_ui.components.ccommand_palette.quality.scenario import command_palette_states_component
 from citry_ui.components.ccontext_menu.quality.scenario import context_menu_states_component
+from citry_ui.components.cdate_input.quality.scenario import date_input_states_component
 from citry_ui.components.cdialog.quality.scenario import dialog_states_component
 from citry_ui.components.cdisclosure.quality.scenario import disclosure_states_component
 from citry_ui.components.cdivider.quality.scenario import divider_states_component
@@ -43,13 +44,17 @@ from citry_ui.components.cmenu.quality.scenario import menu_states_component
 from citry_ui.components.cmulti_select.quality.scenario import multi_select_states_component
 from citry_ui.components.cnative_select.quality.scenario import native_select_states_component
 from citry_ui.components.cnavigation_menu.quality.scenario import navigation_menu_states_component
+from citry_ui.components.cnumber_input.quality.scenario import number_input_states_component
 from citry_ui.components.cpagination.quality.scenario import pagination_states_component
+from citry_ui.components.cpin_input.quality.scenario import pin_input_states_component
 from citry_ui.components.cpopover.quality.scenario import popover_states_component
 from citry_ui.components.cprogress.quality.scenario import progress_states_component
 from citry_ui.components.cradio.quality.scenario import radio_states_component
+from citry_ui.components.crating.quality.scenario import rating_states_component
 from citry_ui.components.cscroll_area.quality.scenario import scroll_area_states_component
 from citry_ui.components.cselect.quality.scenario import select_states_component
 from citry_ui.components.cskeleton.quality.scenario import skeleton_states_component
+from citry_ui.components.cslider.quality.scenario import slider_states_component
 from citry_ui.components.cspinner.quality.scenario import spinner_states_component
 from citry_ui.components.csplitbutton.quality.scenario import split_button_states_component
 from citry_ui.components.csplitter.quality.scenario import splitter_states_component
@@ -129,6 +134,11 @@ _SCENARIO_FACTORIES = {
     "select.states": select_states_component,
     "multi-select.states": multi_select_states_component,
     "tags-input.states": tags_input_states_component,
+    "number-input.states": number_input_states_component,
+    "slider.states": slider_states_component,
+    "rating.states": rating_states_component,
+    "pin-input.states": pin_input_states_component,
+    "date-input.states": date_input_states_component,
     "editable.states": editable_states_component,
     "tree.states": tree_states_component,
     "workflow.repeatable-contacts": repeatable_contacts_component,

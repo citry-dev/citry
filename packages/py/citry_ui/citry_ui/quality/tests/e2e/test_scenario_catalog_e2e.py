@@ -194,6 +194,18 @@ def _activate_representative_state(page: Any, scenario_id: str) -> None:
     if scenario_id == "pagination.states":
         page.locator('[data-citry-ui-part="pagination"]').nth(1).get_by_role("button", name="Next page").click()
         return
+    if scenario_id == "slider.states":
+        page.locator('[data-quality-states~="single"] [role="slider"]').press("ArrowRight")
+        return
+    if scenario_id == "rating.states":
+        page.locator('[data-quality-states~="required"] input[value="3"]').click(force=True)
+        return
+    if scenario_id == "pin-input.states":
+        page.get_by_role("textbox", name="Required verification code").fill("012345")
+        return
+    if scenario_id == "date-input.states":
+        page.get_by_label("Required arrival date").fill("2026-08-21")
+        return
     if scenario_id == "workflow.repeatable-contacts":
         page.get_by_role("button", name="Add contact").click()
         return

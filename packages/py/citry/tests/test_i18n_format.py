@@ -47,6 +47,15 @@ def formats() -> FormatRegistry:
         currency={"money": CurrencyFormat()},
         date={
             "short": DateFormat(length="medium"),
+            "year": DateFormat(fields="year", length="long"),
+            "month": DateFormat(fields="month", length="long"),
+            "day": DateFormat(fields="day", length="short"),
+            "weekday": DateFormat(fields="weekday", length="long"),
+            "year-month": DateFormat(fields="year_month", length="long"),
+            "month-day": DateFormat(fields="month_day", length="medium"),
+            "day-weekday": DateFormat(fields="day_weekday", length="long"),
+            "month-day-weekday": DateFormat(fields="month_day_weekday", length="long"),
+            "full-date": DateFormat(fields="year_month_day_weekday", length="long"),
             "date-text": DateFormat(
                 length="short",
                 input=DateInput(mode="strict_text"),
@@ -182,6 +191,30 @@ def test_date_relative_time_and_list_use_named_profiles() -> None:
     assert spanish.list(["España", "Suiza", "Italia"], format="conjunction") == (
         "\u2068España\u2069, \u2068Suiza\u2069 e \u2068Italia\u2069"
     )
+
+
+def test_date_profiles_select_exact_calendar_fields() -> None:
+    i18n = configured_app().extensions.get_extension("i18n")
+    formatter = i18n.for_context(i18n.make_context(locale="en-US")).format
+    value = date(2026, 8, 19)
+
+    assert formatter.date(value, format="year") == "2026"
+    assert formatter.date(value, format="month") == "August"
+    assert formatter.date(value, format="day") == "19"
+    assert formatter.date(value, format="weekday") == "Wednesday"
+    assert formatter.date(value, format="year-month") == "August 2026"
+    assert formatter.date(value, format="month-day") == "Aug 19"
+    assert formatter.date(value, format="day-weekday") == "19 Wednesday"
+    assert formatter.date(value, format="month-day-weekday") == "Wednesday, August 19"
+    assert formatter.date(value, format="full-date") == "Wednesday, August 19, 2026"
+
+
+def test_date_input_rejects_display_only_field_subsets() -> None:
+    with pytest.raises(ValueError, match="requires fields='year_month_day'"):
+        DateFormat(fields="year_month", input=DateInput(mode="strict_text"))
+
+    with pytest.raises(ValueError, match="unsupported value"):
+        DateFormat(fields="quarter")  # type: ignore[arg-type]
 
 
 def test_time_is_wall_clock_only_and_datetime_converts_an_instant_with_pinned_tzdata() -> None:

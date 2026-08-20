@@ -22,6 +22,7 @@ from .extension import I18nService as I18nService
 from .formats import (
     CurrencyFormat,
     DateFormat,
+    DateFormatFields,
     DateInput,
     DateTimeFormat,
     DateTimeInput,
@@ -40,6 +41,7 @@ from .formats import (
 __all__ = [
     "CurrencyFormat",
     "DateFormat",
+    "DateFormatFields",
     "DateInput",
     "DateParseResult",
     "DateSegments",

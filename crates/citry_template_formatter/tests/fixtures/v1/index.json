@@ -926,7 +926,7 @@
       "id": "python-hosts.framing.crlf-wrapped-tag",
       "category": "framing",
       "input_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"<c-CButton class=\\\"primary\\\" c-disabled=\\\"not enabled\\\" aria-label=\\\"Save changes to the current profile and return to the account overview\\\"></c-CButton>\"\"\"\r\n",
-      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n      <c-CButton\r\n        class=\\\"primary\\\"\r\n        c-disabled=\\\"not enabled\\\"\r\n        aria-label=\\\"Save changes to the current profile and return to the account overview\\\"\r\n      ></c-CButton>\r\n    \"\"\"\r\n",
+      "expected_text": "from citry import Component\r\n\r\nclass Card(Component):\r\n    template = \"\"\"\r\n      <c-CButton\r\n        class=\"primary\"\r\n        c-disabled=\"not enabled\"\r\n        aria-label=\"Save changes to the current profile and return to the account overview\"\r\n      ></c-CButton>\r\n    \"\"\"\r\n",
       "features": ["python-host-crlf", "python-host-framing", "preferred-width"]
     },
     {

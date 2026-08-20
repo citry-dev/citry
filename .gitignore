@@ -97,6 +97,7 @@ jspm_packages/
 lhsite/
 link-check-site/
 .lighthouseci/
+.vscode-test/
 
 # Claude Code: per-user local overrides (operating rules and shared
 # settings/hooks ARE tracked: CLAUDE.md, AGENTS.md, .claude/settings.json,

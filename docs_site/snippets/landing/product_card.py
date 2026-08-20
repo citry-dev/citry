@@ -14,22 +14,22 @@ class ProductCard(Component):
         pass
 
     class Events:
-        def like(self, state):
+        def like(self, state: ProductCard.State):
             return ProductCard(
                 tags=state.tags,
                 likes=state.likes + 1,
             )
 
-    def template_data(self, kwargs, slots):
+    def template_data(self, kwargs: Kwargs, slots: Slots):
         return {
             "likes": kwargs.likes,
             "tags": kwargs.tags,
         }
 
-    def js_data(self, kwargs, slots):
+    def js_data(self, kwargs: Kwargs, slots: Slots):
         return {"likes": kwargs.likes}
 
-    def css_data(self, kwargs, slots):
+    def css_data(self, kwargs: Kwargs, slots: Slots):
         return {"accent": kwargs.accent}
 
     template = """

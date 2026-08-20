@@ -131,7 +131,7 @@ def test_package_exposes_one_explicit_ordered_component_library():
     assert manifest.name == "citry-ui"
     assert manifest.components == COMPONENTS
     assert manifest.required_extensions == ()
-    assert len(COMPONENTS) == 101
+    assert len(COMPONENTS) == 107
     assert all(issubclass(definition, LibraryComponent) for definition in COMPONENTS)
     assert all(not issubclass(definition, Component) for definition in COMPONENTS)
     assert tuple(definition.__name__ for definition in COMPONENTS) == (
@@ -199,6 +199,12 @@ def test_package_exposes_one_explicit_ordered_component_library():
         "CContextMenu",
         "CMultiSelect",
         "CTagsInput",
+        "CNumberInput",
+        "CSlider",
+        "CRangeSlider",
+        "CRating",
+        "CPinInput",
+        "CDateInput",
         "CProgress",
         "CPagination",
         "CPopover",
@@ -339,7 +345,12 @@ def test_component_schemas_and_source_modules_are_separate_from_core_plumbing():
         "citry_ui.components.cmulti_select.cmulti_select",
         "citry_ui.components.ctags_input.ctags_input",
         "citry_ui.components.cnavigation_menu.cnavigation_menu",
-        "citry_ui.components.cmenu.cmenu",
+        "citry_ui.components.cnumber_input.cnumber_input",
+        "citry_ui.components.cslider.cslider",
+        "citry_ui.components.crating.crating",
+            "citry_ui.components.cpin_input.cpin_input",
+            "citry_ui.components.cdate_input.cdate_input",
+            "citry_ui.components.cmenu.cmenu",
         "citry_ui.components.ccard.ccard",
         "citry_ui.components.ctable.ctable",
         "citry_ui.components.ctabs.ctabs",

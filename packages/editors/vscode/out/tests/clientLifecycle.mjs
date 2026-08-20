@@ -27,6 +27,9 @@ var RestartCoordinator = class {
     }
   }
 };
+function supportsLanguageServerVersion(version) {
+  return /^0\.1\.\d+(?:[+.-][0-9A-Za-z.-]+)?$/.test(version);
+}
 var WatchedFileChangeBatcher = class {
   constructor(send, delayMs = 100) {
     this.send = send;
@@ -85,5 +88,6 @@ async function stopLanguageClient(client, timeoutMs = 2e3) {
 export {
   RestartCoordinator,
   WatchedFileChangeBatcher,
-  stopLanguageClient
+  stopLanguageClient,
+  supportsLanguageServerVersion
 };

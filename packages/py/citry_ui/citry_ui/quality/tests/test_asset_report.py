@@ -753,29 +753,34 @@ def test_asset_report_is_deterministic_and_covers_every_family():
         "select",
         "multi-select",
         "tags-input",
+        "number-input",
+        "slider",
+        "rating",
+        "pin-input",
+        "date-input",
         "navigation-menu",
         "editable",
     ]
     assert first["catalog"] == {
         "javascript": {
-            "sha256": "b094f8784feea6a46769c029c12fe0177e41b7490f306acec556a065ffb7c27d",
-            "raw": 860_594,
-            "gzip": 162_564,
-            "brotli": 116_820,
+                "sha256": "f52d5b8e0910b380bfeb15413a008160ddb51893586619e7f42fe2b0d5b5f148",
+                "raw": 931_875,
+                "gzip": 174_653,
+                "brotli": 126_213,
         },
         "css": {
-            "sha256": "f2806359ebdf9751cbf33ccc0b3afcfa9180aabebdb879f70be117ec3ade527e",
-            "raw": 297_478,
-            "gzip": 35_877,
-            "brotli": 28_241,
+                "sha256": "88dab541edf4f08b6712d4b531c96004e97b59dbece326485df253ddd12410f5",
+                "raw": 323_806,
+                "gzip": 39_177,
+                "brotli": 30_765,
         },
         "limits": {
             "javascript": {"raw": 983_040, "gzip": 196_608, "brotli": 131_072},
             "css": {"raw": 344_064, "gzip": 40_960, "brotli": 32_768},
         },
         "headroom": {
-            "javascript": {"raw": 122_446, "gzip": 34_044, "brotli": 14_252},
-            "css": {"raw": 46_586, "gzip": 5_083, "brotli": 4_527},
+                "javascript": {"raw": 51_165, "gzip": 21_955, "brotli": 4_859},
+                "css": {"raw": 20_258, "gzip": 1_783, "brotli": 2_003},
         },
     }
     assert first["families"]["table"]["javascript"] == {"raw": 0, "gzip": 0, "brotli": 0}
@@ -787,6 +792,10 @@ def test_asset_report_is_deterministic_and_covers_every_family():
     assert first["families"]["split-button"]["javascript"]["raw"] > 0
     assert first["families"]["toggle"]["javascript"]["raw"] > 0
     assert first["families"]["pagination"]["javascript"]["raw"] > 0
+    assert first["families"]["number-input"]["javascript"]["raw"] > 0
+    assert first["families"]["slider"]["javascript"]["raw"] > 0
+    assert first["families"]["pin-input"]["javascript"]["raw"] > 0
+    assert first["families"]["date-input"]["javascript"]["raw"] > 0
     assert first["families"]["popover"]["javascript"]["raw"] > 0
     assert first["families"]["drawer"]["javascript"]["raw"] > 0
     assert first["families"]["tooltip"]["javascript"]["raw"] > 0

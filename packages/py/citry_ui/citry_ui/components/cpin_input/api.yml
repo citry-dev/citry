@@ -1,0 +1,167 @@
+schema_version: 1
+family: pin-input
+
+components:
+  - CPinInput
+
+inputs:
+  - id: cpin-input-server-inputs
+    component: CPinInput
+    channel: server
+    column_widths: [fit, 18rem, 13rem, auto]
+    entries:
+      - {id: value, name: value, type: str, default: {kind: literal, value: ''}, effect: Sets the initial exact string and preserves leading zeroes.}
+      - {id: name, name: name, type: 'str | None', default: {kind: literal, value: null}, effect: Sets the native Form field name.}
+      - {id: form, name: form, type: 'str | None', default: {kind: literal, value: null}, effect: Associates the native input with an external Form ID.}
+      - {id: id, name: id, type: 'str | None', default: {kind: generated}, effect: Sets the native input ID and bases the root ID.}
+      - {id: length, name: length, type: int, default: {kind: literal, value: 6}, effect: Sets one through thirty-two characters cells maxlength and exact validity.}
+      - {id: type, name: type, type: {display: CPinInputType, interfaces: [CPinInputType]}, default: {kind: literal, value: numeric}, effect: Chooses the ASCII numeric alphabetic or alphanumeric token alphabet.}
+      - {id: required, name: required, type: 'bool | None', default: {kind: literal, value: null}, effect: Enables exact-length native required validity outside Field.}
+      - {id: disabled, name: disabled, type: 'bool | None', default: {kind: literal, value: null}, effect: Blocks focus edits and Form submission outside Field.}
+      - {id: readonly, name: readonly, type: 'bool | None', default: {kind: literal, value: null}, effect: Preserves focus selection and submission while blocking edits outside Field.}
+      - {id: invalid, name: invalid, type: 'bool | None', default: {kind: literal, value: null}, effect: Reflects application invalid state outside Field.}
+      - {id: mask, name: mask, type: bool, default: {kind: literal, value: false}, effect: Replaces filled visual cells with bullets without changing the value.}
+      - {id: one-time-code, name: one_time_code, type: bool, default: {kind: literal, value: true}, effect: Emits one-time-code autocomplete unless input_attrs supplies another token.}
+      - {id: placeholder, name: placeholder, type: 'one-code-point str | None', default: {kind: literal, value: ○}, effect: Supplies the caller-authored empty-cell marker.}
+      - {id: attached, name: attached, type: bool, default: {kind: literal, value: false}, effect: Joins adjacent visual cells.}
+      - {id: separator-after, name: separator_after, type: 'Sequence[int] | None', default: {kind: literal, value: null}, effect: Selects zero-based boundaries after which the separator slot renders.}
+      - {id: label, name: label, type: 'str | None', default: {kind: literal, value: null}, effect: Names a standalone native input; use the Field label slot inside Field.}
+      - {id: size, name: size, type: {display: CPinInputSize, interfaces: [CPinInputSize]}, default: {kind: literal, value: md}, effect: Selects coordinated cell sizing.}
+      - {id: variant, name: variant, type: {display: CPinInputVariant, interfaces: [CPinInputVariant]}, default: {kind: literal, value: outline}, effect: Selects cell surface treatment.}
+      - {id: class, name: class_, type: {display: 'CClassValue | None', interfaces: [CClassValue]}, default: {kind: literal, value: null}, effect: Adds classes to the root and merges with attrs.}
+      - {id: style, name: style, type: {display: 'CStyleValue | None', interfaces: [CStyleValue]}, default: {kind: literal, value: null}, effect: Adds styles to the root and merges with attrs.}
+      - {id: attrs, name: attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied allowed root attributes without replacing owned state or identity.}
+      - {id: input-attrs, name: input_attrs, type: 'Mapping[str, object] | None', default: {kind: literal, value: null}, effect: Adds copied native attributes including accessible naming descriptions autocomplete and dir without replacing owned behavior.}
+
+  - id: cpin-input-client-inputs
+    component: CPinInput
+    channel: client
+    entries:
+      - {id: value, name: value, type: string, omitted: Releases control to the last uncontrolled value., effect: Controls the exact accepted token string.}
+      - {id: required, name: required, type: boolean, omitted: Uses server or Field state., effect: Controls standalone exact-length validity.}
+      - {id: disabled, name: disabled, type: boolean, omitted: Uses server or owner state., effect: Controls editing focus and Form participation.}
+      - {id: readonly, name: readonly, type: boolean, omitted: Uses server or owner state., effect: Controls focusable nonmutable submission.}
+      - {id: invalid, name: invalid, type: boolean, omitted: Uses server or Field state., effect: Controls application invalid state.}
+      - {id: mask, name: mask, type: boolean, omitted: Uses the server value., effect: Controls visual masking.}
+      - {id: variant, name: variant, type: {display: CPinInputVariant, interfaces: [CPinInputVariant]}, omitted: Uses the server value., effect: Controls surface treatment.}
+      - {id: size, name: size, type: {display: CPinInputSize, interfaces: [CPinInputSize]}, omitted: Uses the server value., effect: Controls coordinated sizing.}
+      - {id: on-value-change, name: onValueChange, type: function, omitted: No value callback., effect: Receives each accepted user edit or reset request.}
+      - {id: on-complete, name: onComplete, type: function, omitted: No completion callback., effect: Receives transitions to a complete accepted token.}
+      - {id: on-value-invalid, name: onValueInvalid, type: function, omitted: No rejection callback., effect: Receives discarded characters and their input source.}
+      - {id: on-focus-change, name: onFocusChange, type: function, omitted: No focus callback., effect: Receives native focus entry and exit.}
+
+slots:
+  - id: cpin-input-slots
+    component: CPinInput
+    entries:
+      - {id: separator, name: separator, required: false, cardinality: Once per separator_after boundary., data: {display: '{index: int}', interfaces: [CPinInputSeparatorSlotData]}, fallback: Empty visual separator., purpose: Renders caller-authored presentation between selected cells.}
+
+events:
+  - id: cpin-input-events
+    component: CPinInput
+    entries:
+      - {id: on-value-change, name: onValueChange, signature: {display: '(value: string, detail: CPinInputValueChangeDetail) => void', interfaces: [CPinInputValueChangeDetail]}, trigger: An accepted edit or Form reset requests a different value., detail: {display: '{value, previousValue, controlled, source, sourceEvent}', interfaces: [CPinInputValueChangeDetail]}, behavior: Uncontrolled state commits first; controlled state is request-only.}
+      - {id: on-complete, name: onComplete, signature: {display: '(value: string, detail: CPinInputCompleteDetail) => void', interfaces: [CPinInputCompleteDetail]}, trigger: Accepted input transitions to the exact configured length., detail: {display: '{value, controlled, source, sourceEvent}', interfaces: [CPinInputCompleteDetail]}, behavior: Reports completion without automatically submitting.}
+      - {id: on-value-invalid, name: onValueInvalid, signature: {display: '(detail: CPinInputInvalidDetail) => void', interfaces: [CPinInputInvalidDetail]}, trigger: One edit contains disallowed or overflow characters., detail: {display: '{value, rejected, source, sourceEvent}', interfaces: [CPinInputInvalidDetail]}, behavior: Reports plain rejected text after filtering it from the value.}
+      - {id: on-focus-change, name: onFocusChange, signature: {display: '(focused: boolean, detail: CPinInputFocusChangeDetail) => void', interfaces: [CPinInputFocusChangeDetail]}, trigger: The native text input focuses or blurs., detail: {display: '{focused, sourceEvent}', interfaces: [CPinInputFocusChangeDetail]}, behavior: Runs after focus reflection changes.}
+
+methods: []
+
+css:
+  - id: cpin-input-css-variables
+    component: CPinInput
+    entries:
+      - {id: cell-size, name: --cui-pin-input-cell-size, type: length, purpose: Visual cell inline and block size., default: Size-dependent 2.75rem.}
+      - {id: gap, name: --cui-pin-input-gap, type: length, purpose: Space between separate cells., default: 0.5rem}
+      - {id: separator-gap, name: --cui-pin-input-separator-gap, type: length, purpose: Extra space for a separator boundary., default: 0.4rem}
+      - {id: border-color, name: --cui-pin-input-border-color, type: color, purpose: Outline cell border., default: Mixed CanvasText.}
+      - {id: focus-color, name: --cui-pin-input-focus-color, type: color, purpose: Active-cell focus ring., default: Highlight}
+      - {id: invalid-color, name: --cui-pin-input-invalid-color, type: color, purpose: Invalid border treatment., default: Theme danger color.}
+      - {id: background, name: --cui-pin-input-background, type: color, purpose: Cell surface., default: Canvas}
+      - {id: color, name: --cui-pin-input-color, type: color, purpose: Entered character color., default: CanvasText}
+      - {id: placeholder-color, name: --cui-pin-input-placeholder-color, type: color, purpose: Empty-cell marker color., default: Muted CanvasText.}
+      - {id: radius, name: --cui-pin-input-radius, type: length, purpose: Cell corner radius., default: 0.5rem}
+      - {id: disabled-opacity, name: --cui-pin-input-disabled-opacity, type: number, purpose: Disabled treatment opacity., default: 0.58}
+
+attributes:
+  - id: cpin-input-root-attributes
+    component: CPinInput
+    entries:
+      - {id: data-required, name: data-required, element: Root div, type: present | absent, meaning: Mirrors effective requiredness.}
+      - {id: data-disabled, name: data-disabled, element: Root div, type: present | absent, meaning: Mirrors effective disabledness.}
+      - {id: data-readonly, name: data-readonly, element: Root div, type: present | absent, meaning: Mirrors effective readonly state.}
+      - {id: data-invalid, name: data-invalid, element: Root div, type: present | absent, meaning: Mirrors effective application or native invalidity.}
+      - {id: data-focused, name: data-focused, element: Root div, type: present | absent, meaning: Marks native input focus.}
+      - {id: data-filled, name: data-filled, element: Root div, type: present | absent, meaning: Marks any accepted character.}
+      - {id: data-complete, name: data-complete, element: Root div, type: present | absent, meaning: Marks an accepted exact-length value.}
+      - {id: data-attached, name: data-attached, element: Root div, type: present | absent, meaning: Marks joined cell styling.}
+      - {id: data-variant, name: data-variant, element: Root div, type: {display: CPinInputVariant, interfaces: [CPinInputVariant]}, meaning: Mirrors surface treatment.}
+      - {id: data-size, name: data-size, element: Root div, type: {display: CPinInputSize, interfaces: [CPinInputSize]}, meaning: Mirrors coordinated sizing.}
+  - id: cpin-input-cell-attributes
+    component: CPinInput
+    entries:
+      - {id: data-active, name: data-active, element: Visual cell, type: present | absent, meaning: Marks the logical native selection or insertion cell.}
+      - {id: data-filled, name: data-filled, element: Visual cell, type: present | absent, meaning: Marks an accepted character.}
+      - {id: data-masked, name: data-masked, element: Visual cell, type: present | absent, meaning: Marks a character currently displayed as a bullet.}
+
+selectors:
+  - id: cpin-input-selectors
+    component: CPinInput
+    entries:
+      - {id: pin-input, selector: '[data-citry-ui-part="pin-input"]', element: Root div, purpose: State reflections and root customization destination.}
+      - {id: input, selector: '[data-citry-ui-part="input"]', element: Native text input, purpose: Owns semantics focus editing validation Form value and input_attrs.}
+      - {id: cells, selector: '[data-citry-ui-part="cells"]', element: Aria-hidden presentation span, purpose: Contains the segmented visual display.}
+      - {id: cell, selector: '[data-citry-ui-part="cell"]', element: Visual cell span, purpose: Displays one accepted position and receives pointer selection.}
+      - {id: character, selector: '[data-citry-ui-part="character"]', element: Character span, purpose: Displays entered masked or placeholder content.}
+      - {id: caret, selector: '[data-citry-ui-part="caret"]', element: Decorative caret span, purpose: Marks an active empty insertion cell.}
+      - {id: separator, selector: '[data-citry-ui-part="separator"]', element: Visual separator span, purpose: Hosts the caller separator slot at selected boundaries.}
+
+interfaces:
+  - id: cpin-input-aliases
+    kind: aliases
+    entries:
+      - {id: type, name: CPinInputType, definition: 'Literal["numeric", "alphabetic", "alphanumeric"]'}
+      - {id: size, name: CPinInputSize, definition: 'Literal["sm", "md", "lg"]'}
+      - {id: variant, name: CPinInputVariant, definition: 'Literal["outline", "subtle"]'}
+      - {id: change-source, name: CPinInputChangeSource, definition: 'Literal["input", "paste", "autofill", "composition", "reset"]'}
+      - {id: invalid-source, name: CPinInputInvalidSource, definition: 'Literal["input", "paste", "autofill", "composition"]'}
+      - {id: class-value, name: CClassValue, definition: 'str | Mapping[str, bool] | Sequence[CClassValue]'}
+      - {id: style-value, name: CStyleValue, definition: 'str | Mapping[str, object] | Sequence[CStyleValue]'}
+  - id: cpin-input-separator-slot-data
+    kind: record
+    name: CPinInputSeparatorSlotData
+    entries:
+      - {id: index, name: index, type: int, meaning: Zero-based cell index after which this separator renders.}
+  - id: cpin-input-value-change-detail
+    kind: record
+    name: CPinInputValueChangeDetail
+    entries:
+      - {id: value, name: value, type: string, meaning: Requested accepted token.}
+      - {id: previous-value, name: previousValue, type: string, meaning: Effective token before the request.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns committed state.}
+      - {id: source, name: source, type: {display: CPinInputChangeSource, interfaces: [CPinInputChangeSource]}, meaning: Edit or reset source.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native event when one exists.}
+  - id: cpin-input-complete-detail
+    kind: record
+    name: CPinInputCompleteDetail
+    entries:
+      - {id: value, name: value, type: string, meaning: Complete accepted token.}
+      - {id: controlled, name: controlled, type: boolean, meaning: Whether client value owns committed state.}
+      - {id: source, name: source, type: {display: CPinInputChangeSource, interfaces: [CPinInputChangeSource]}, meaning: Completion source.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native event.}
+  - id: cpin-input-invalid-detail
+    kind: record
+    name: CPinInputInvalidDetail
+    entries:
+      - {id: value, name: value, type: string, meaning: Accepted filtered token.}
+      - {id: rejected, name: rejected, type: string, meaning: Discarded plain characters.}
+      - {id: source, name: source, type: {display: CPinInputInvalidSource, interfaces: [CPinInputInvalidSource]}, meaning: Rejected edit source.}
+      - {id: source-event, name: sourceEvent, type: 'object | null', meaning: Native input event.}
+  - id: cpin-input-focus-change-detail
+    kind: record
+    name: CPinInputFocusChangeDetail
+    entries:
+      - {id: focused, name: focused, type: boolean, meaning: Current native focus state.}
+      - {id: source-event, name: sourceEvent, type: object, meaning: Native focus or blur event.}
+
+translations: []

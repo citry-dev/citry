@@ -12,9 +12,9 @@ process for each workspace folder. Formatter commands edit definite template,
 JavaScript, and CSS sections while leaving Fluent and the selected Python
 formatter unchanged.
 
-The extension and `citry-lsp` are implemented in the repository. Their public
-registry releases are part of the Citry 0.4.0 beta, so the installation
-commands below become the public path when those artifacts are available.
+`citry-lsp` 0.1.0 is public on PyPI. The extension's 0.1.0 release is prepared
+but is not yet listed in Visual Studio Marketplace or Open VSX; the extension
+installation path below becomes available when both listings are live.
 
 ## Install the language server
 
@@ -28,8 +28,9 @@ Keeping the server in the project environment lets it import the registered
 component catalog. An isolated server can still check syntax, but it cannot
 know the application's component names, inputs, or slots.
 
-Install **Citry** from the Visual Studio Marketplace. Cursor, Windsurf,
-VSCodium, and other compatible forks will use the matching Open VSX release.
+Once 0.1.0 is listed, install **Citry** from the Visual Studio Marketplace.
+Cursor, Windsurf, VSCodium, and other compatible desktop forks can use the
+matching Open VSX release.
 
 ## Select the registry target
 

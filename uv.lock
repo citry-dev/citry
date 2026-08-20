@@ -264,7 +264,7 @@ wheels = [
 
 [[package]]
 name = "citry"
-version = "0.4.0"
+version = "0.4.1"
 source = { editable = "packages/py/citry" }
 dependencies = [
     { name = "citry-core" },
@@ -363,7 +363,7 @@ dev = [
 
 [[package]]
 name = "citry-lsp"
-version = "0.1.0"
+version = "0.1.1"
 source = { editable = "packages/py/citry_lsp" }
 dependencies = [
     { name = "citry", extra = ["analysis-ty"] },

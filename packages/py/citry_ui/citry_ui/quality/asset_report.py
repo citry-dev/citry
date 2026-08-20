@@ -104,6 +104,11 @@ _FAMILY_COMPONENTS = {
     "select": frozenset({"CSelect"}),
     "multi-select": frozenset({"CMultiSelect"}),
     "tags-input": frozenset({"CTagsInput"}),
+    "number-input": frozenset({"CNumberInput"}),
+    "slider": frozenset({"CSlider", "CRangeSlider"}),
+    "rating": frozenset({"CRating"}),
+    "pin-input": frozenset({"CPinInput"}),
+    "date-input": frozenset({"CDateInput"}),
     "navigation-menu": frozenset({"CNavigationMenu", "CNavigationMenuLink", "CNavigationMenuItem"}),
     "editable": frozenset({"CEditable"}),
 }

@@ -1,0 +1,11 @@
+schema_version: 1
+previews:
+  - basic
+  - range
+  - exact-decimals
+  - controlled
+  - marks
+  - vertical
+  - locales
+  - forms
+  - states

@@ -233,6 +233,19 @@ def test_single_quoted_literal_remains_single_quoted_when_no_newline_is_needed()
     assert "template = '<div class=\"row\"></div>'" in result.source
 
 
+def test_multiline_triple_double_literal_does_not_escape_ordinary_html_quotes() -> None:
+    source = _component_source(
+        '"""\n      <main><input type = "text" aria-label = "Name" /></main>\n    """',
+    )
+
+    result = format_python_templates(source)
+
+    assert 'type="text"' in result.source
+    assert 'aria-label="Name"' in result.source
+    assert '\\"text\\"' not in result.source
+    assert '\\"Name\\"' not in result.source
+
+
 def test_unchanged_escape_outside_rewrite_hunks_is_preserved() -> None:
     source = _component_source('"""line\\n<div  class = "row" ></div>"""')
 

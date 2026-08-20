@@ -9,6 +9,32 @@ from hashlib import sha256
 from types import MappingProxyType
 from typing import Literal, cast
 
+DateFormatFields = Literal[
+    "year",
+    "month",
+    "day",
+    "weekday",
+    "year_month",
+    "month_day",
+    "day_weekday",
+    "month_day_weekday",
+    "year_month_day",
+    "year_month_day_weekday",
+]
+
+_DATE_FORMAT_FIELDS = {
+    "year",
+    "month",
+    "day",
+    "weekday",
+    "year_month",
+    "month_day",
+    "day_weekday",
+    "month_day_weekday",
+    "year_month_day",
+    "year_month_day_weekday",
+}
+
 
 @dataclass(frozen=True, slots=True)
 class NumberInput:
@@ -109,19 +135,25 @@ class DateFormat:
     Format a date and optionally accept input through the same profile.
 
     Attributes:
+        fields: The exact calendar fields included in display output.
         length: The locale-sensitive display length.
         input: The strict editing rule. ``None`` keeps the profile display-only.
 
     """
 
+    fields: DateFormatFields = "year_month_day"
     length: Literal["short", "medium", "long"] = "medium"
     input: DateInput | None = None
 
     def __post_init__(self) -> None:
+        if self.fields not in _DATE_FORMAT_FIELDS:
+            raise ValueError(f"DateFormat fields has an unsupported value {self.fields!r}.")
         if self.length not in {"short", "medium", "long"}:
             raise ValueError(f"DateFormat length must be 'short', 'medium', or 'long'; got {self.length!r}.")
         if self.input is not None and type(self.input) is not DateInput:
             raise TypeError(f"DateFormat input must be DateInput or None, got {type(self.input).__name__}.")
+        if self.input is not None and self.fields != "year_month_day":
+            raise ValueError("DateFormat input requires fields='year_month_day'.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -359,6 +391,7 @@ class FormatRegistry:
             "currency": {name: {} for name in sorted(self.currency)},
             "date": {
                 name: {
+                    "fields": profile.fields,
                     "length": profile.length,
                     "input": (
                         None
@@ -488,7 +521,7 @@ def format_registry_from_wire(value: object, *, source: str) -> FormatRegistry:
 
     date: dict[str, DateFormat] = {}
     for raw_name, raw_profile in profiles("date").items():
-        name, profile = record("date", raw_name, raw_profile, {"length", "input"})
+        name, profile = record("date", raw_name, raw_profile, {"fields", "length", "input"})
         raw_input = profile.get("input")
         if raw_input is None:
             parsed_input = None
@@ -500,6 +533,7 @@ def format_registry_from_wire(value: object, *, source: str) -> FormatRegistry:
         else:
             raise ValueError(f"{source}.date.{name}.input has an unsupported shape.")
         date[name] = DateFormat(
+            fields=cast("DateFormatFields", profile.get("fields", "year_month_day")),
             length=cast("Literal['short', 'medium', 'long']", profile.get("length", "medium")),
             input=parsed_input,
         )

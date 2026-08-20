@@ -1269,6 +1269,8 @@ enum PercentAffix {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DateProfile {
+    #[serde(default)]
+    fields: DateFields,
     length: DateLength,
     #[serde(default)]
     input: Option<DateInputProfile>,
@@ -1287,6 +1289,22 @@ struct DateInputProfile {
 enum DateInputMode {
     StrictText,
     Segments,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum DateFields {
+    Year,
+    Month,
+    Day,
+    Weekday,
+    YearMonth,
+    MonthDay,
+    DayWeekday,
+    MonthDayWeekday,
+    #[default]
+    YearMonthDay,
+    YearMonthDayWeekday,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -1653,26 +1671,47 @@ impl FormatRegistry {
         let locale = parse_locale(locale)?;
         let value = Date::try_new_iso(year, month, day)
             .map_err(|error| Failure::new("I18N_DATE_VALUE", error.to_string()))?;
-        let result = match spec.length {
-            DateLength::Short => {
-                DateTimeFormatter::try_new(locale.clone().into(), fieldsets::YMD::short())
+        macro_rules! format_fields {
+            ($fields:ident) => {{
+                match spec.length {
+                    DateLength::Short => DateTimeFormatter::try_new(
+                        locale.clone().into(),
+                        fieldsets::$fields::short(),
+                    )
                     .map_err(|error| format_error("date", profile, error))?
                     .format(&value)
                     .write_to_string()
-                    .into_owned()
-            }
-            DateLength::Medium => {
-                DateTimeFormatter::try_new(locale.clone().into(), fieldsets::YMD::medium())
+                    .into_owned(),
+                    DateLength::Medium => DateTimeFormatter::try_new(
+                        locale.clone().into(),
+                        fieldsets::$fields::medium(),
+                    )
                     .map_err(|error| format_error("date", profile, error))?
                     .format(&value)
                     .write_to_string()
-                    .into_owned()
-            }
-            DateLength::Long => DateTimeFormatter::try_new(locale.into(), fieldsets::YMD::long())
-                .map_err(|error| format_error("date", profile, error))?
-                .format(&value)
-                .write_to_string()
-                .into_owned(),
+                    .into_owned(),
+                    DateLength::Long => DateTimeFormatter::try_new(
+                        locale.clone().into(),
+                        fieldsets::$fields::long(),
+                    )
+                    .map_err(|error| format_error("date", profile, error))?
+                    .format(&value)
+                    .write_to_string()
+                    .into_owned(),
+                }
+            }};
+        }
+        let result = match spec.fields {
+            DateFields::Year => format_fields!(Y),
+            DateFields::Month => format_fields!(M),
+            DateFields::Day => format_fields!(D),
+            DateFields::Weekday => format_fields!(E),
+            DateFields::YearMonth => format_fields!(YM),
+            DateFields::MonthDay => format_fields!(MD),
+            DateFields::DayWeekday => format_fields!(DE),
+            DateFields::MonthDayWeekday => format_fields!(MDE),
+            DateFields::YearMonthDay => format_fields!(YMD),
+            DateFields::YearMonthDayWeekday => format_fields!(YMDE),
         };
         Ok(result)
     }
@@ -2442,6 +2481,12 @@ fn require_date_input<'a>(
     expected: DateInputMode,
 ) -> Result<(&'a DateProfile, &'a DateInputProfile), Failure> {
     let date = require_profile(profiles, "date", profile)?;
+    if date.fields != DateFields::YearMonthDay {
+        return Err(Failure::new(
+            "I18N_DATE_INPUT_FIELDS",
+            format!("date format profile {profile:?} must use year_month_day fields for input"),
+        ));
+    }
     let Some(input) = &date.input else {
         return Err(Failure::new(
             "I18N_DATE_INPUT_MODE",
@@ -2580,6 +2625,7 @@ mod tests {
                 (
                     "date-text".to_owned(),
                     DateProfile {
+                        fields: DateFields::YearMonthDay,
                         length: DateLength::Short,
                         input: Some(DateInputProfile {
                             mode: DateInputMode::StrictText,
@@ -2590,6 +2636,7 @@ mod tests {
                 (
                     "date-text-long".to_owned(),
                     DateProfile {
+                        fields: DateFields::YearMonthDay,
                         length: DateLength::Long,
                         input: Some(DateInputProfile {
                             mode: DateInputMode::StrictText,
@@ -2600,6 +2647,7 @@ mod tests {
                 (
                     "date-window".to_owned(),
                     DateProfile {
+                        fields: DateFields::YearMonthDay,
                         length: DateLength::Short,
                         input: Some(DateInputProfile {
                             mode: DateInputMode::StrictText,
@@ -2610,6 +2658,7 @@ mod tests {
                 (
                     "date-segments".to_owned(),
                     DateProfile {
+                        fields: DateFields::YearMonthDay,
                         length: DateLength::Long,
                         input: Some(DateInputProfile {
                             mode: DateInputMode::Segments,
@@ -3213,6 +3262,7 @@ mod tests {
             date: BTreeMap::from([(
                 "broken".to_owned(),
                 DateProfile {
+                    fields: DateFields::YearMonthDay,
                     length: DateLength::Short,
                     input: Some(DateInputProfile {
                         mode: DateInputMode::StrictText,

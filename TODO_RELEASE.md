@@ -1,6 +1,6 @@
 # Citry beta release tracker
 
-Updated: 2026-08-19
+Updated: 2026-08-20
 
 This file is the working checklist for the next public release set. It records
 release intent; checking it in does not itself authorize publishing, tagging,
@@ -16,6 +16,9 @@ or deploying anything.
 - [x] Released `pygments-citry` **0.2.0** on 2026-08-19, including the Fluent
   syntax support.
 - [x] Released `citry-lsp` **0.1.0** on 2026-08-19.
+- [ ] Release `citry` **0.4.1** and `citry-lsp` **0.1.1** so editor
+  formatting keeps ordinary triple-quoted asset quotes and uses canonical
+  JavaScript/CSS host framing.
 - [x] Released `citry-ui` **0.1.0** on 2026-08-19 as an early-access release
   intended to generate real-world feedback.
 - [ ] Publish the VS Code extension `citry-dev.citry` **0.1.0** after
@@ -552,20 +555,116 @@ Post-release CI follow-up on 2026-08-19:
 
 ## 7. Publish the VS Code extension 0.1.0
 
-- [ ] Publish only after `citry-lsp` 0.1.0 is publicly installable, because the
-  extension launches that external executable rather than bundling it.
-- [ ] Confirm the `citry-dev` publisher identity and extension ownership in
-  both Visual Studio Marketplace and Open VSX.
-- [ ] Add/document the publishing procedure, secrets, and unique tag scheme.
-  Marketplace and Open VSX generally require their own publisher tokens.
-- [ ] Finalize the extension changelog, installation docs, dependency/error
-  UX, metadata, icon, license, links, and supported platform story.
-- [ ] Build one exact `.vsix`, inspect its file list, smoke-test it in a clean
-  VS Code profile with public `citry-lsp`, and publish those same bytes to both
-  registries.
-- [ ] Verify both public listing/install pages and update docs links. The live
-  docs currently advertise VS Code installation even though the extension was
-  not found in either registry during the audit.
+### Stage 1: pre-publish preparation
+
+**Status: code and package preparation complete on 2026-08-19; demo media is
+still pending.** No `main` update, workflow dispatch, publisher/environment
+change, tag, registry publish, GitHub Release, or docs deployment was
+performed.
+
+- [ ] Wait for public `citry-lsp` 0.1.1. Its dependency floor requires Citry
+  0.4.1, while Citry Core remains 1.5.0 and the analysis extra remains
+  `ty` 0.0.69
+  from PyPI.
+- [x] Keep the extension identity `citry-dev.citry`, version 0.1.0, and unique
+  tag `vscode-citry@0.1.0`.
+- [x] Replace the implementation-history changelog with six skimmable user
+  outcomes and prepare a progressive Marketplace README: benefits, install,
+  project connection, common editing/formatting paths, troubleshooting,
+  requirements, and support.
+- [x] Finalize registry metadata and the 256x256 PNG icon. The extension is
+  explicitly free and categorized for programming languages, formatting, and
+  linting. Its manifest links directly to the VS Code guide, monorepo package,
+  issue tracker, GitHub Discussions, and the existing GitHub Sponsors page;
+  `SUPPORT.md` gives the same support and private security-reporting routes.
+- [ ] Add user-captured product media before qualification. Use the following
+  brief so each clip demonstrates one outcome and remains readable in the
+  Marketplace column:
+  - `template-intelligence.gif` (required, 12-15 seconds): in one inline
+    Python component, trigger a `<c-*>` completion, hover a typed template
+    value, use Go to Definition to return to Python, then introduce one unknown
+    component prop so the diagnostic and quick explanation appear.
+  - `browser-intelligence.gif` (recommended, 10-12 seconds): hover a `JsData`
+    name inside an Alpine expression, navigate to the Python declaration, then
+    complete a literal `@c-click` handler and navigate to its `Events` method.
+  - `safe-formatting.gif` (recommended, 8-10 seconds): run **Citry: Format at
+    Cursor** on untidy inline template/JavaScript/CSS and show that the
+    surrounding Python remains unchanged.
+  Record at 1280x720 or 1440x900, use a 16-18 px editor font, crop to the
+  useful editor area, keep each GIF under 5 MiB when practical, and remove
+  personal paths, branch names, tokens, notifications, and unrelated
+  extensions. Commit the source media under `packages/editors/vscode/images/`,
+  reference it from the Marketplace README with an absolute raw GitHub URL,
+  and keep it out of the VSIX because the listing loads the committed URL.
+- [x] Document the supported platform story honestly: desktop VS Code 1.101+
+  and compatible desktop/remote workspace hosts. The extension is not a VS
+  Code for the Web extension because it starts a Python workspace process.
+- [x] Probe for a compatible `citry-lsp` 0.1.x before starting the language
+  client, avoiding the low-level connection failure and giving a direct setup
+  action when the server is missing or incompatible.
+- [x] Build and inspect the closed universal VSIX. Removing the development
+  source map and minifying the bundled runtime produced 16 members, 359,936
+  bytes compressed and 1,348,497
+  bytes expanded; SHA-256
+  `7f5e7ba9a3a855577f8ac5a510829d3e557be97289aa6de5357739d9fe2226c9`.
+  The qualification build's inventory is authoritative because VSIX ZIP
+  timestamps make a later rebuild byte-different.
+- [x] Add exact VSIX metadata/source/member/size/path validation, safe retained
+  artifact promotion, byte inventory, and qualification/promotion provenance.
+- [ ] Load the extracted VSIX in a clean VS Code 1.101.0 profile against a
+  clean public `citry-lsp==0.1.1` install, require real `c-if`, `c-for`, and
+  `c-slot` completions, and format untidy embedded JavaScript and CSS through
+  the exact hash-pinned Prettier 12.4.0 extension. The smoke also selects a
+  different standalone CSS formatter to qualify the bundled Prettier fallback.
+  The local macOS arm64 smoke passed, including provider selection and
+  repeated-command idempotence. The full component fixture also requires plain
+  HTML quotes and canonical triple-quoted JavaScript/CSS host framing.
+- [ ] Publish Citry 0.4.1 with the Python host-framing fix, then publish
+  `citry-lsp` 0.1.1 with `citry[analysis-ty]>=0.4.1,<0.5`, before qualifying
+  the public extension artifact.
+- [x] Add `vscode--citry--publish.yml`. Manual runs can only qualify; a
+  `vscode-citry@*` tag can promote only the retained artifact for its exact
+  `main` commit to Visual Studio Marketplace, Open VSX, and a GitHub Release.
+- [x] Attach the exact qualified `.vsix`, byte inventory, qualification
+  provenance, and registry verification to the GitHub Release. The tag job
+  creates that release only after both registry versions are public.
+- [x] Document the external publisher, secret, environment, partial-retry, and
+  PAT-to-Entra/OIDC migration procedure in `docs/codebase.md`.
+- [x] Create [issue #84](https://github.com/citry-dev/citry/issues/84) to apply
+  for verified-publisher status after the Marketplace listing has been public
+  for six months. Its provisional review date is 2027-02-19 and must move if
+  the actual publication date is later.
+- [x] Confirm both registry entries are absent immediately before preparation:
+  Visual Studio Marketplace and Open VSX returned 404 for `citry-dev.citry`.
+
+### Stage 2: update `main` and qualify
+
+- [ ] Promote the named Phase 7 files through the clean `main` worktree,
+  inspect the diff, commit, and push normally. Keep the original `review`
+  branch pointer, index, and working files unchanged.
+- [ ] Manually run `vscode--citry--publish.yml` on the exact release commit and
+  retain `verified-vscode-citry-extension` for that commit.
+
+### Stage 3: configure publishers, tag, and publish
+
+- [ ] Confirm or create the `citry-dev` publisher in Visual Studio Marketplace,
+  create a Marketplace Manage PAT, and store it as `VSCE_PAT` in the protected
+  `vscode-marketplaces` GitHub environment. Replace this temporary PAT route
+  before global Azure DevOps PAT retirement on 2026-12-01.
+- [ ] Recheck the published `@vscode/vsce` client before release. When a stable,
+  reviewed version exposes `vsce publish --oidc`, configure the Marketplace
+  trusted-publishing policy and remove `VSCE_PAT`; do not build the release
+  boundary from an unreleased repository revision.
+- [ ] Sign the Eclipse Publisher Agreement, create/claim the `citry-dev` Open
+  VSX namespace, verify an Open VSX token for it, and store that token as
+  `OVSX_PAT` in the same GitHub environment.
+- [ ] Configure the `vscode-marketplaces` environment to allow
+  `vscode-citry@*` tags and retain any desired approval gate.
+- [ ] Create and push annotated tag `vscode-citry@0.1.0` at the exact qualified
+  `main` commit and let it upload the same VSIX to both registries.
+- [ ] Verify both public listing/install pages, the GitHub Release, and a clean
+  registry install. Then update the public docs from their current
+  pre-availability wording and links during the docs/site phase.
 
 ## 8. Promote the new playground runtime tuple
 
@@ -574,8 +673,9 @@ compatible public-artifact tuple. It currently pins Citry 0.3.1 and
 `citry-core` 1.4.0 with immutable wheel URLs. A normal deployed build does not
 silently substitute workspace packages.
 
-- [x] Wait until `citry-core` 1.5.0, `citry` 0.4.0, and—if enabling UI examples
-  live—`citry-ui` 0.1.0 are publicly downloadable.
+- [x] Wait until `citry-core` 1.5.0 and `citry` 0.4.0 are publicly
+  downloadable. `citry-ui` 0.1.0 must also be public before enabling live UI
+  examples.
 - [ ] Update the entire tuple together: Pyodide/Python if intentionally
   changing it; Citry/core/UI versions; immutable wheel URLs; integrity and
   metadata fields; and compatibility notes.

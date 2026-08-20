@@ -1,5 +1,14 @@
 # Release notes
 
+## v0.4.1
+
+_20 Aug 2026_
+
+### Fixed
+
+- Triple-quoted inline assets now keep ordinary quotes and use readable,
+  host-relative multiline framing for formatted JavaScript and CSS.
+
 ## v0.4.0
 
 _Beta release · 18 Aug 2026_
