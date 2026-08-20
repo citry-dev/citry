@@ -536,7 +536,7 @@ import citry_lsp
 
 assert importlib.metadata.version("citry-lsp") == "__VERSION__"
 assert importlib.metadata.version("pygls") == "2.1.1"
-assert importlib.metadata.version("ty") == "0.0.69"
+assert importlib.metadata.version("ty") == "0.0.71"
 citry_version = tuple(int(part) for part in importlib.metadata.version("citry").split(".")[:3])
 assert (0, 4, 1) <= citry_version < (0, 5, 0), citry_version
 assert citry_lsp.SERVER_VERSION == "__VERSION__"

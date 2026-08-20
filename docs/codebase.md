@@ -1583,7 +1583,7 @@ the source distribution outside the checkout and installs the wheel with only
 public binary dependencies on CPython 3.10 through 3.14.
 
 The installed-wheel smoke imports every shipped module, verifies Citry 0.4.1+,
-`pygls` 2.1.1, and `ty` 0.0.69, checks `citry-lsp --help`, and starts the stdio
+`pygls` 2.1.1, and `ty` 0.0.71, checks `citry-lsp --help`, and starts the stdio
 server with closed input. This proves that a clean install resolves the public
 `citry[analysis-ty]` dependency without reading another workspace package.
 

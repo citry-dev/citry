@@ -10,7 +10,7 @@ test("packaging always compiles the current extension source", async () => {
 
 	assert.match(manifest.scripts.prepackage, /pnpm run compile/);
 	assert.match(manifest.scripts.compile, /--minify/);
-	assert.equal(manifest.dependencies.prettier, "3.7.4");
+	assert.equal(manifest.dependencies.prettier, "3.9.6");
 });
 
 test("formatter commands and native save integration are contributed", async () => {

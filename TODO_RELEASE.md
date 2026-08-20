@@ -327,7 +327,7 @@ pip install "citry[analysis-ty]"
 ```
 
 installs Citry plus the pinned `ty` Python type checker (currently
-`ty==0.0.69`). Citry's language-analysis tooling can invoke `ty` to understand
+`ty==0.0.71`). Citry's language-analysis tooling can invoke `ty` to understand
 Python expression types. `citry-lsp` requests this extra because it uses that
 analysis for editor diagnostics/completions. Ordinary Citry runtime users do
 not need the extra. For the beta, verify that the `ty` pin still works on the
@@ -564,7 +564,7 @@ performed.
 
 - [ ] Wait for public `citry-lsp` 0.1.1. Its dependency floor requires Citry
   0.4.1, while Citry Core remains 1.5.0 and the analysis extra remains
-  `ty` 0.0.69
+  `ty` 0.0.71
   from PyPI.
 - [x] Keep the extension identity `citry-dev.citry`, version 0.1.0, and unique
   tag `vscode-citry@0.1.0`.

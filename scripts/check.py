@@ -124,7 +124,7 @@ def _phases(profile: CheckProfile = "full") -> list[tuple[str, list[str]]]:
         # reproducible; this assumes `pnpm install` has run, the way the rest of
         # the gate assumes `uv sync`. The flags reproduce the pinned
         # invocation verified in docs/design/events_research/typing-lab-report.md
-        # (pyright 1.1.411, --pythonversion 3.13, and --pythonpath at the repo venv
+        # (pyright 1.1.413, --pythonversion 3.13, and --pythonpath at the repo venv
         # python so pyright resolves citry from the same environment mypy uses).
         # Scoped to the typing contract test only; whole-package pyright is a
         # separate decision.

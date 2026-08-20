@@ -179,7 +179,7 @@ formatting. If
 [Prettier for VS Code](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
 is installed and selected for that language, Citry uses its dedicated action so
 your Prettier configuration applies. Otherwise it uses its bundled Prettier
-3.7.4 adapter with Citry's canonical two-space indentation. Multiline Python
+3.9.6 adapter with Citry's canonical two-space indentation. Multiline Python
 assets keep readable triple-quote framing instead of escaping ordinary HTML
 quotes or placing provider output against the opening delimiter. Your default
 formatters for standalone JavaScript and CSS files remain unchanged.

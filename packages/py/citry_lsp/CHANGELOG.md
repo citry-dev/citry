@@ -9,6 +9,10 @@ All notable changes to `citry-lsp` are documented here.
 - Formatted triple-quoted component assets now keep ordinary quotes and use
   readable, host-relative multiline JavaScript and CSS framing.
 
+### Changed
+
+- Python expression analysis now uses `ty` 0.0.71.
+
 ## [0.1.0] - 2026-08-19
 
 ### Added
