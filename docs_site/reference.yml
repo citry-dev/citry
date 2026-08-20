@@ -258,6 +258,7 @@ categories:
       - citry.PercentParseResult
       - citry.CurrencyFormat
       - citry.DateFormat
+      - citry.DateFormatFields
       - citry.DateInput
       - citry.DateSegments
       - citry.DateParseResult
