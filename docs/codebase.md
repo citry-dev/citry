@@ -1697,37 +1697,57 @@ qualified bytes to both registries. It never rebuilds at the tag boundary.
 The GitHub Release carries the VSIX, exact-byte inventory, qualification
 provenance, and public-registry verification.
 
-First-release registry setup is external to the repository:
+First-release registry setup is external to the repository. Complete it before
+creating the tag; manual qualification does not need either publishing secret.
 
-- Create or confirm the `citry-dev` publisher in
-  [Visual Studio Marketplace](https://marketplace.visualstudio.com/manage/publishers/)
-  and give the publishing identity Contributor access. The pinned
-  `@vscode/vsce` 3.9.2 client does not yet expose GitHub OIDC publishing, so
-  the initial workflow uses a narrowly scoped Azure DevOps PAT with Marketplace
-  **Manage** permission in the `VSCE_PAT` secret. Global Azure DevOps PATs are
-  [retired on 1 December 2026](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#_publishing-extensions),
-  so migrate this workflow to a released Entra/OIDC path before then.
-  GitHub OIDC uses the same trust model as PyPI Trusted Publishing: the
-  registry trusts one repository/workflow identity and exchanges GitHub's
-  short-lived identity token for a publish credential. The Marketplace policy,
-  token audience, and client are separate from PyPI. The
-  [`vscode-vsce` repository](https://github.com/microsoft/vscode-vsce#trusted-publishing)
-  documents `vsce publish --oidc`, but neither the published 3.9.2 release nor
-  the 3.9.3 prerelease exposes that flag as of 2026-08-19. Recheck stable
-  releases before qualification; use the reviewed stable client rather than an
-  unreleased repository revision. The currently released secretless route is
-  Entra workload identity with `--azure-credential`, which requires the
-  additional Azure identity and federation setup described by Microsoft.
-- For [Open VSX](https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions),
-  sign the Eclipse Publisher Agreement, create or claim the `citry-dev`
-  namespace, generate an access token, verify that it can publish to that
-  namespace, and store it as `OVSX_PAT`. The release invokes the exact
-  command-level `ovsx@1.1.1` version only in the publishing job so routine
-  workspace installs do not carry the registry client.
-- Put both secrets in a protected GitHub environment named
-  `vscode-marketplaces`. Permit `vscode-citry@*` deployment refs and retain any
-  desired approval rule. Do not put these credentials in repository-level
-  plaintext or a local release script.
+#### Visual Studio Marketplace identity and credential
+
+1. Sign in to [Manage Publishers & Extensions](https://marketplace.visualstudio.com/manage/publishers/)
+   with the Microsoft account that will own releases. Create or confirm the
+   publisher ID `citry-dev` (display name `Citry.dev`) and ensure that account
+   is an Owner or Contributor. The immutable ID must match `package.json`.
+2. In [Azure DevOps](https://dev.azure.com/), open **User settings -> Personal
+   access tokens -> New Token**. This is an Azure DevOps PAT, not a GitHub PAT.
+   Select **All accessible organizations**, the shortest practical expiration,
+   **Custom defined** scopes, then **Marketplace -> Manage** and no unrelated
+   scopes. Copy the value when it is shown; it cannot be recovered later.
+3. Open the repository's [GitHub environment settings](https://github.com/citry-dev/citry/settings/environments),
+   select `vscode-marketplaces`, and add the value as the environment secret
+   `VSCE_PAT`. Do not use a repository-level secret, commit it, paste it into an
+   issue/chat, or put it in a local release command.
+
+The release currently pins `@vscode/vsce` 3.9.2. As checked on 2026-08-20, that
+is the latest stable release and supports `--azure-credential`, but not the
+GitHub-native `publish --oidc` command documented on the unreleased
+[`vscode-vsce` main branch](https://github.com/microsoft/vscode-vsce#trusted-publishing).
+The first Citry release therefore uses the narrowly scoped `VSCE_PAT`. Global
+Azure DevOps PATs are
+[retired on 1 December 2026](https://code.visualstudio.com/api/working-with-extensions/publishing-extension#secure-automated-publishing-to-visual-studio-marketplace),
+so migrate to a reviewed stable OIDC client when available, or implement
+Microsoft's fuller Entra workload-identity flow with `--azure-credential`.
+Neither route reuses the PyPI trusted-publisher configuration.
+
+#### Open VSX identity and credential
+
+1. Create an Eclipse account whose GitHub username matches the GitHub identity
+   used at Open VSX. Sign in to [Open VSX](https://open-vsx.org/), link the
+   Eclipse account from profile settings, and sign the Eclipse **Publisher
+   Agreement** (not the separate Contributor Agreement).
+2. From Open VSX **Settings -> Access Tokens**, create a token dedicated to this
+   GitHub Actions environment and copy it when shown. Follow the
+   [Open VSX publishing guide](https://github.com/eclipse-openvsx/openvsx/wiki/Publishing-Extensions)
+   to create the `citry-dev` namespace. The creator is immediately a namespace
+   contributor and can publish; the separate public ownership claim controls
+   whether the namespace is shown as verified and may remain pending.
+3. Store the token in the same `vscode-marketplaces` GitHub environment as
+   `OVSX_PAT`. The workflow invokes the exact command-level `ovsx@1.1.1`
+   version only in the publishing job, so routine workspace installs do not
+   carry the registry client.
+
+In that GitHub environment, choose **Selected branches and tags**, allow the
+tag pattern `vscode-citry@*`, and retain any desired reviewer gate. The tag job
+fails closed if either secret or the deployment policy is missing. Rotate or
+revoke tokens after suspected exposure and before their configured expiry.
 
 Both registry clients use `--skip-duplicate` only to recover from a partial
 two-registry publish. A rerun still selects and verifies the original

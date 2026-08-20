@@ -17,6 +17,18 @@ errors, Python and Alpine expressions inside HTML, and more.
 - Pretty-print HTML/JS/CSS inside Python files.
 - Standalone Citry Template `.citry-html` and Fluent `.ftl` language modes.
 
+## See it in action
+
+Citry completes components and their inputs directly inside the Python file,
+using the application registry selected for the workspace:
+
+![Citry component autocomplete inside an inline Python template](https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/autocomplete.gif)
+
+Hover hints explain the value under the cursor, while references and navigation
+connect template and browser expressions back to their Python definitions:
+
+![Citry hover hints and references connecting a template to Python](https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/refs_hints.gif)
+
 ## Install
 
 Install **Citry** from the
@@ -148,6 +160,11 @@ The command palette provides:
   `css` region in the current Python file, or the whole standalone template.
 - **Citry: Format at Cursor** - format only the direct component region under
   the cursor.
+
+Formatting expands Citry/HTML structure and formats embedded JavaScript and
+CSS while preserving readable Python triple-quoted strings:
+
+![Citry formatting an inline template, JavaScript, and CSS inside a Python component](https://raw.githubusercontent.com/citry-dev/citry/main/packages/editors/vscode/images/formatting.gif)
 
 The extension leaves Python and Fluent formatting to their selected tools. A
 standalone Citry Template can use normal format-on-save:

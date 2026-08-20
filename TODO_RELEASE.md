@@ -557,10 +557,9 @@ Post-release CI follow-up on 2026-08-19:
 
 ### Stage 1: pre-publish preparation
 
-**Status: code and package preparation complete; the public Citry 0.4.1 and
-citry-lsp 0.1.1 prerequisites are live. Demo media, final qualification, and
-publisher setup are still pending.** No extension tag, registry publish, or
-extension GitHub Release has been performed.
+**Status: code, package, media, public-package prerequisites, and publisher
+setup are complete. Final qualification is pending.** No extension tag,
+registry publish, or extension GitHub Release has been performed.
 
 - [x] Wait for public `citry-lsp` 0.1.1. Its dependency floor requires Citry
   0.4.1, while Citry Core remains 1.5.0 and the analysis extra remains
@@ -577,25 +576,12 @@ extension GitHub Release has been performed.
   linting. Its manifest links directly to the VS Code guide, monorepo package,
   issue tracker, GitHub Discussions, and the existing GitHub Sponsors page;
   `SUPPORT.md` gives the same support and private security-reporting routes.
-- [ ] Add user-captured product media before qualification. Use the following
-  brief so each clip demonstrates one outcome and remains readable in the
-  Marketplace column:
-  - `template-intelligence.gif` (required, 12-15 seconds): in one inline
-    Python component, trigger a `<c-*>` completion, hover a typed template
-    value, use Go to Definition to return to Python, then introduce one unknown
-    component prop so the diagnostic and quick explanation appear.
-  - `browser-intelligence.gif` (recommended, 10-12 seconds): hover a `JsData`
-    name inside an Alpine expression, navigate to the Python declaration, then
-    complete a literal `@c-click` handler and navigate to its `Events` method.
-  - `safe-formatting.gif` (recommended, 8-10 seconds): run **Citry: Format at
-    Cursor** on untidy inline template/JavaScript/CSS and show that the
-    surrounding Python remains unchanged.
-  Record at 1280x720 or 1440x900, use a 16-18 px editor font, crop to the
-  useful editor area, keep each GIF under 5 MiB when practical, and remove
-  personal paths, branch names, tokens, notifications, and unrelated
-  extensions. Commit the source media under `packages/editors/vscode/images/`,
-  reference it from the Marketplace README with an absolute raw GitHub URL,
-  and keep it out of the VSIX because the listing loads the committed URL.
+- [x] Add three user-captured product clips: `autocomplete.gif`,
+  `refs_hints.gif`, and `formatting.gif`. Each is under 5 MiB, contains no
+  personal path/branch/token, lives under `packages/editors/vscode/images/`,
+  and is referenced by absolute raw GitHub URL from the Marketplace README.
+  The docs guide embeds the same committed URLs. Keep the clips out of the
+  VSIX because both listings load the committed media directly.
 - [x] Document the supported platform story honestly: desktop VS Code 1.101+
   and compatible desktop/remote workspace hosts. The extension is not a VS
   Code for the Web extension because it starts a Python workspace process.
@@ -649,18 +635,19 @@ extension GitHub Release has been performed.
 
 ### Stage 3: configure publishers, tag, and publish
 
-- [ ] Confirm or create the `citry-dev` publisher in Visual Studio Marketplace,
+- [x] Confirm or create the `citry-dev` publisher in Visual Studio Marketplace,
   create a Marketplace Manage PAT, and store it as `VSCE_PAT` in the protected
   `vscode-marketplaces` GitHub environment. Replace this temporary PAT route
   before global Azure DevOps PAT retirement on 2026-12-01.
-- [ ] Recheck the published `@vscode/vsce` client before release. When a stable,
+- [x] Recheck the published `@vscode/vsce` client before release. When a stable,
   reviewed version exposes `vsce publish --oidc`, configure the Marketplace
   trusted-publishing policy and remove `VSCE_PAT`; do not build the release
   boundary from an unreleased repository revision.
-- [ ] Sign the Eclipse Publisher Agreement, create/claim the `citry-dev` Open
+- [x] Sign the Eclipse Publisher Agreement, create/claim the `citry-dev` Open
   VSX namespace, verify an Open VSX token for it, and store that token as
-  `OVSX_PAT` in the same GitHub environment.
-- [ ] Configure the `vscode-marketplaces` environment to allow
+  `OVSX_PAT` in the same GitHub environment. The ownership claim is pending,
+  but the namespace creator is already a contributor and can publish.
+- [x] Configure the `vscode-marketplaces` environment to allow
   `vscode-citry@*` tags and retain any desired approval gate.
 - [ ] Create and push annotated tag `vscode-citry@0.1.0` at the exact qualified
   `main` commit and let it upload the same VSIX to both registries.
